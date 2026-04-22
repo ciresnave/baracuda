@@ -1,6 +1,6 @@
 [package]
 name = "baracuda-curand-sys"
-version = "0.1.0"
+version = "0.0.1-alpha.1"
 description = "Raw FFI bindings and dynamic loader for NVIDIA cuRAND."
 edition.workspace = true
 rust-version.workspace = true

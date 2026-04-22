@@ -1,6 +1,6 @@
 [package]
 name = "baracuda-cudnn"
-version = "0.1.0"
+version = "0.0.1-alpha.1"
 description = "Safe Rust wrappers for NVIDIA cuDNN (classic API; activations at v0.1)."
 edition.workspace = true
 rust-version.workspace = true
