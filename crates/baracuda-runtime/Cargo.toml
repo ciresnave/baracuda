@@ -1,0 +1,25 @@
+[package]
+name = "baracuda-runtime"
+version = "0.1.0"
+description = "Safe Rust wrappers for the CUDA Runtime API (devices, streams, events, managed memory, kernel launch via the library API)."
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[features]
+default = []
+# Zero-cost interop with `baracuda-driver`. Enabled when the umbrella's
+# `driver + runtime` bundle is active.
+driver-interop = ["dep:baracuda-driver"]
+
+[dependencies]
+baracuda-types.workspace = true
+baracuda-core.workspace = true
+baracuda-cuda-sys.workspace = true
+baracuda-driver = { workspace = true, optional = true }
+thiserror.workspace = true

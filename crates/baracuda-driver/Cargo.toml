@@ -1,0 +1,28 @@
+[package]
+name = "baracuda-driver"
+version = "0.1.0"
+description = "Safe Rust wrappers for the CUDA Driver API (devices, contexts, streams, events, memory, kernels, graphs)."
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[features]
+default = []
+async = ["dep:futures-core"]
+
+[dependencies]
+baracuda-types.workspace = true
+baracuda-core.workspace = true
+baracuda-cuda-sys.workspace = true
+thiserror.workspace = true
+futures-core = { workspace = true, optional = true }
+
+[dev-dependencies]
+# `wave2_smoke` uses NVRTC to compile a fixture kernel at test time,
+# avoiding hand-written PTX fragility.
+baracuda-nvrtc.workspace = true

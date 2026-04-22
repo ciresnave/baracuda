@@ -1,0 +1,19 @@
+[package]
+name = "baracuda-tensorrt"
+version = "0.1.0"
+description = "Safe Rust API for NVIDIA TensorRT runtime inference."
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories = ["api-bindings"]
+
+[dependencies]
+baracuda-core.workspace = true
+baracuda-types.workspace = true
+baracuda-cuda-sys.workspace = true
+baracuda-tensorrt-sys.workspace = true
+thiserror.workspace = true

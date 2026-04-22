@@ -1,0 +1,21 @@
+[package]
+name = "baracuda-cutensor"
+version = "0.1.0"
+description = "Safe Rust wrappers for NVIDIA cuTENSOR. Scaffolding at v0.1."
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[dependencies]
+baracuda-types.workspace = true
+baracuda-core.workspace = true
+baracuda-cutensor-sys.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+baracuda-runtime.workspace = true

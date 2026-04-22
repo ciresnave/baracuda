@@ -1,0 +1,18 @@
+[package]
+name = "baracuda-cudf"
+version = "0.1.0"
+description = "Safe Rust API skeleton for NVIDIA RAPIDS cuDF (GPU DataFrames)."
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories = ["api-bindings"]
+
+[dependencies]
+baracuda-core.workspace = true
+baracuda-types.workspace = true
+baracuda-cudf-sys.workspace = true
+thiserror.workspace = true

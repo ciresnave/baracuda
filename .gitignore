@@ -1,0 +1,57 @@
+# ---- Rust build output ---------------------------------------------------
+/target
+**/target
+**/*.rs.bk
+
+# Cargo-generated files
+Cargo.lock.user
+
+# ---- Editor / IDE scratch ------------------------------------------------
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# macOS, Windows scratch files
+.DS_Store
+Thumbs.db
+
+# ---- Coverage / profiling artifacts --------------------------------------
+# rustc instrumentation-based coverage drops these in every crate when
+# RUSTFLAGS=-Cinstrument-coverage is set. They are not source.
+*.profraw
+*.profdata
+*.gcda
+*.gcno
+coverage/
+lcov.info
+
+# Cargo-llvm-cov output
+/.coverage/
+
+# ---- Benchmarks / flamegraphs --------------------------------------------
+flamegraph.svg
+perf.data
+perf.data.old
+criterion/
+
+# ---- NVIDIA tooling working files ----------------------------------------
+# nsys / ncu / nvprof session dumps that might end up next to examples.
+*.nsys-rep
+*.qdrep
+*.qdstrm
+*.ncu-rep
+*.sqlite
+
+# Raw PTX that's generated at build time (handwritten ones live in repo)
+*.ptx.generated
+
+# ---- Secrets / env --------------------------------------------------------
+.env
+.env.local
+.env.*.local
+
+# ---- OS / build-tool cruft -----------------------------------------------
+*.log
+/tmp/

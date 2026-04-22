@@ -1,0 +1,25 @@
+[package]
+name = "baracuda-types"
+version = "0.1.0"
+description = "Shared type vocabulary for the baracuda CUDA stack (Half/BFloat16/Complex, DeviceRepr, CudaVersion, Feature, CudaStatus)."
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[features]
+default = []
+derive = ["dep:baracuda-types-derive"]
+half-crate = ["dep:half"]
+num-complex-crate = ["dep:num-complex"]
+bytemuck = ["dep:bytemuck"]
+
+[dependencies]
+baracuda-types-derive = { workspace = true, optional = true }
+half = { workspace = true, optional = true }
+num-complex = { workspace = true, optional = true }
+bytemuck = { workspace = true, optional = true }

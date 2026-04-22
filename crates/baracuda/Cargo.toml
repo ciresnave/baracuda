@@ -1,0 +1,101 @@
+[package]
+name = "baracuda"
+version = "0.1.0"
+description = "Idiomatic Rust wrappers for the NVIDIA CUDA stack (Driver API, Runtime API, NVRTC, cuBLAS, cuDNN, NCCL, NVML, ...). Umbrella crate."
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[features]
+# Defaults: both main CUDA APIs available.
+default = ["driver", "runtime"]
+
+# Core APIs.
+driver = ["dep:baracuda-driver"]
+runtime = ["dep:baracuda-runtime"]
+
+# Zero-cost driver↔runtime interop is enabled whenever both sides are on.
+driver-runtime-interop = ["baracuda-runtime?/driver-interop"]
+
+# Compilation.
+nvrtc = ["dep:baracuda-nvrtc"]
+nvjitlink = ["dep:baracuda-nvjitlink"]
+
+# Math libraries.
+cublas = ["dep:baracuda-cublas", "driver"]
+curand = ["dep:baracuda-curand", "driver"]
+cufft = ["dep:baracuda-cufft", "driver"]
+cusparse = ["dep:baracuda-cusparse", "driver"]
+cusolver = ["dep:baracuda-cusolver", "driver"]
+
+# Deep learning.
+cudnn = ["dep:baracuda-cudnn", "driver"]
+nccl = ["dep:baracuda-nccl", "driver"]
+tensorrt = ["dep:baracuda-tensorrt"]
+
+# Data / RAPIDS.
+cudf = ["dep:baracuda-cudf"]
+
+# Imaging / IO.
+npp = ["dep:baracuda-npp", "driver"]
+nvjpeg = ["dep:baracuda-nvjpeg", "driver"]
+nvcomp = ["dep:baracuda-nvcomp"]
+cvcuda = ["dep:baracuda-cvcuda"]
+
+# System tooling.
+nvml = ["dep:baracuda-nvml"]
+cufile = ["dep:baracuda-cufile"]
+
+# Cross-cutting: async (futures-core Future impl on events).
+async = ["baracuda-driver?/async"]
+
+# Curated bundles.
+math = ["cublas", "curand", "cufft", "cusparse", "cusolver"]
+imaging = ["npp", "nvjpeg", "cvcuda"]
+ml = [
+    "driver",
+    "runtime",
+    "nvrtc",
+    "nvjitlink",
+    "math",
+    "cudnn",
+    "nccl",
+    "tensorrt",
+]
+full = ["ml", "imaging", "nvcomp", "nvml", "cufile", "cudf"]
+
+[dependencies]
+baracuda-driver = { workspace = true, optional = true }
+baracuda-runtime = { workspace = true, optional = true }
+baracuda-nvrtc = { workspace = true, optional = true }
+baracuda-nvjitlink = { workspace = true, optional = true }
+baracuda-cublas = { workspace = true, optional = true }
+baracuda-curand = { workspace = true, optional = true }
+baracuda-cufft = { workspace = true, optional = true }
+baracuda-cusparse = { workspace = true, optional = true }
+baracuda-cusolver = { workspace = true, optional = true }
+baracuda-cudnn = { workspace = true, optional = true }
+baracuda-nccl = { workspace = true, optional = true }
+baracuda-tensorrt = { workspace = true, optional = true }
+baracuda-cudf = { workspace = true, optional = true }
+baracuda-npp = { workspace = true, optional = true }
+baracuda-nvjpeg = { workspace = true, optional = true }
+baracuda-nvcomp = { workspace = true, optional = true }
+baracuda-cvcuda = { workspace = true, optional = true }
+baracuda-nvml = { workspace = true, optional = true }
+baracuda-cufile = { workspace = true, optional = true }
+baracuda-types.workspace = true
+
+[dev-dependencies]
+# Examples that embed NVRTC use the safe crate by path; downstream
+# consumers don't pay for it unless they opt in via the `nvrtc` feature.
+baracuda-nvrtc.workspace = true
+
+[[example]]
+name = "matmul_cublas"
+required-features = ["cublas", "curand"]

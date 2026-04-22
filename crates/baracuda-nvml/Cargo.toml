@@ -1,0 +1,18 @@
+[package]
+name = "baracuda-nvml"
+version = "0.1.0"
+description = "Safe Rust wrappers for the NVIDIA Management Library (NVML) — driver-bundled GPU monitoring."
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[dependencies]
+baracuda-types.workspace = true
+baracuda-core.workspace = true
+baracuda-nvml-sys.workspace = true
+thiserror.workspace = true

@@ -1,0 +1,20 @@
+[package]
+name = "baracuda-cublas"
+version = "0.1.0"
+description = "Safe Rust wrappers for NVIDIA cuBLAS (classic BLAS, Lt, Xt)."
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[dependencies]
+baracuda-types.workspace = true
+baracuda-core.workspace = true
+baracuda-cuda-sys.workspace = true
+baracuda-cublas-sys.workspace = true
+baracuda-driver.workspace = true
+thiserror.workspace = true

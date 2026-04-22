@@ -1,0 +1,30 @@
+[package]
+name = "baracuda-examples"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[[bin]]
+name = "cutensor_matmul"
+path = "cutensor_matmul.rs"
+
+[[bin]]
+name = "nvcomp_lz4_roundtrip"
+path = "nvcomp_lz4_roundtrip.rs"
+
+[[bin]]
+name = "cvcuda_resize_pipeline"
+path = "cvcuda_resize_pipeline.rs"
+
+[[bin]]
+name = "cufile_gds_copy"
+path = "cufile_gds_copy.rs"
+
+[dependencies]
+baracuda-runtime = { path = "../crates/baracuda-runtime" }
+baracuda-cutensor = { path = "../crates/baracuda-cutensor" }
+baracuda-cutensor-sys = { path = "../crates/baracuda-cutensor-sys" }
+baracuda-nvcomp = { path = "../crates/baracuda-nvcomp" }
+baracuda-nvcomp-sys = { path = "../crates/baracuda-nvcomp-sys" }
+baracuda-cvcuda = { path = "../crates/baracuda-cvcuda" }
+baracuda-cufile = { path = "../crates/baracuda-cufile" }

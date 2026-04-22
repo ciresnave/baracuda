@@ -1,0 +1,24 @@
+[package]
+name = "baracuda-nvml-sys"
+version = "0.1.0"
+description = "Raw FFI bindings and dynamic loader for the NVIDIA Management Library (NVML)."
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories = ["external-ffi-bindings"]
+
+[features]
+default = []
+bindgen = ["baracuda-build/bindgen"]
+
+[dependencies]
+baracuda-core.workspace = true
+baracuda-types.workspace = true
+libloading.workspace = true
+
+[build-dependencies]
+baracuda-build.workspace = true

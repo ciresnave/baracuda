@@ -1,0 +1,98 @@
+[workspace]
+resolver = "2"
+members = ["crates/*", "xtask", "examples"]
+
+[workspace.package]
+edition = "2021"
+rust-version = "1.75"
+license = "MIT OR Apache-2.0"
+authors = ["The baracuda contributors"]
+repository = "https://github.com/ciresnave/baracuda"
+homepage = "https://github.com/ciresnave/baracuda"
+keywords = ["cuda", "gpu", "nvidia", "driver", "runtime"]
+categories = ["api-bindings", "external-ffi-bindings", "hardware-support"]
+# Cargo uses `.gitignore` for publish-tarball filtering when the workspace
+# lives in a git repo — so per-crate `exclude` lists are only needed when a
+# source file doesn't belong in the tarball *but does* belong in the repo.
+# None of our crates currently need that distinction.
+
+[workspace.dependencies]
+# Internal crates (path + version so we can publish independently)
+baracuda = { version = "0.1.0", path = "crates/baracuda" }
+baracuda-types = { version = "0.1.0", path = "crates/baracuda-types" }
+baracuda-types-derive = { version = "0.1.0", path = "crates/baracuda-types-derive" }
+baracuda-core = { version = "0.1.0", path = "crates/baracuda-core" }
+baracuda-build = { version = "0.1.0", path = "crates/baracuda-build" }
+baracuda-cuda-sys = { version = "0.1.0", path = "crates/baracuda-cuda-sys" }
+baracuda-driver = { version = "0.1.0", path = "crates/baracuda-driver" }
+baracuda-runtime = { version = "0.1.0", path = "crates/baracuda-runtime" }
+baracuda-nvrtc-sys = { version = "0.1.0", path = "crates/baracuda-nvrtc-sys" }
+baracuda-nvrtc = { version = "0.1.0", path = "crates/baracuda-nvrtc" }
+baracuda-cublas-sys = { version = "0.1.0", path = "crates/baracuda-cublas-sys" }
+baracuda-cublas = { version = "0.1.0", path = "crates/baracuda-cublas" }
+baracuda-curand-sys = { version = "0.1.0", path = "crates/baracuda-curand-sys" }
+baracuda-curand = { version = "0.1.0", path = "crates/baracuda-curand" }
+baracuda-nvjitlink-sys = { version = "0.1.0", path = "crates/baracuda-nvjitlink-sys" }
+baracuda-nvjitlink = { version = "0.1.0", path = "crates/baracuda-nvjitlink" }
+baracuda-cufft-sys = { version = "0.1.0", path = "crates/baracuda-cufft-sys" }
+baracuda-cufft = { version = "0.1.0", path = "crates/baracuda-cufft" }
+baracuda-cusparse-sys = { version = "0.1.0", path = "crates/baracuda-cusparse-sys" }
+baracuda-cusparse = { version = "0.1.0", path = "crates/baracuda-cusparse" }
+baracuda-cusolver-sys = { version = "0.1.0", path = "crates/baracuda-cusolver-sys" }
+baracuda-cusolver = { version = "0.1.0", path = "crates/baracuda-cusolver" }
+baracuda-cudnn-sys = { version = "0.1.0", path = "crates/baracuda-cudnn-sys" }
+baracuda-cudnn = { version = "0.1.0", path = "crates/baracuda-cudnn" }
+baracuda-nccl-sys = { version = "0.1.0", path = "crates/baracuda-nccl-sys" }
+baracuda-nccl = { version = "0.1.0", path = "crates/baracuda-nccl" }
+baracuda-nvml-sys = { version = "0.1.0", path = "crates/baracuda-nvml-sys" }
+baracuda-nvml = { version = "0.1.0", path = "crates/baracuda-nvml" }
+baracuda-nvjpeg-sys = { version = "0.1.0", path = "crates/baracuda-nvjpeg-sys" }
+baracuda-nvjpeg = { version = "0.1.0", path = "crates/baracuda-nvjpeg" }
+baracuda-npp-sys = { version = "0.1.0", path = "crates/baracuda-npp-sys" }
+baracuda-npp = { version = "0.1.0", path = "crates/baracuda-npp" }
+baracuda-nvcomp-sys = { version = "0.1.0", path = "crates/baracuda-nvcomp-sys" }
+baracuda-nvcomp = { version = "0.1.0", path = "crates/baracuda-nvcomp" }
+baracuda-cvcuda-sys = { version = "0.1.0", path = "crates/baracuda-cvcuda-sys" }
+baracuda-cvcuda = { version = "0.1.0", path = "crates/baracuda-cvcuda" }
+baracuda-cufile-sys = { version = "0.1.0", path = "crates/baracuda-cufile-sys" }
+baracuda-cufile = { version = "0.1.0", path = "crates/baracuda-cufile" }
+baracuda-cupti-sys = { version = "0.1.0", path = "crates/baracuda-cupti-sys" }
+baracuda-cupti = { version = "0.1.0", path = "crates/baracuda-cupti" }
+baracuda-cutensor-sys = { version = "0.1.0", path = "crates/baracuda-cutensor-sys" }
+baracuda-cutensor = { version = "0.1.0", path = "crates/baracuda-cutensor" }
+baracuda-tensorrt-sys = { version = "0.1.0", path = "crates/baracuda-tensorrt-sys" }
+baracuda-tensorrt = { version = "0.1.0", path = "crates/baracuda-tensorrt" }
+baracuda-cudf-sys = { version = "0.1.0", path = "crates/baracuda-cudf-sys" }
+baracuda-cudf = { version = "0.1.0", path = "crates/baracuda-cudf" }
+
+# External crates used across the workspace
+libloading = "0.8"
+thiserror = "1"
+
+# Build-time crates
+bindgen = "0.69"
+cc = "1"
+
+# Proc-macro toolbox
+proc-macro2 = "1"
+quote = "1"
+syn = { version = "2", features = ["full"] }
+
+# Optional adapter crates
+half = { version = "2", default-features = false }
+num-complex = { version = "0.4", default-features = false }
+bytemuck = { version = "1", default-features = false }
+
+# Async plumbing (no runtime)
+futures-core = { version = "0.3", default-features = false }
+
+# Test plumbing
+trybuild = "1"
+proptest = "1"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+
+[profile.bench]
+lto = "thin"

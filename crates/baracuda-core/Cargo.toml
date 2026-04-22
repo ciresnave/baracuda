@@ -1,0 +1,17 @@
+[package]
+name = "baracuda-core"
+version = "0.1.0"
+description = "Runtime machinery shared across baracuda crates: Error plumbing, dynamic loader, stream-mode config, platform helpers."
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[dependencies]
+baracuda-types.workspace = true
+libloading.workspace = true
+thiserror.workspace = true

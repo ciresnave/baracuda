@@ -1,0 +1,25 @@
+[package]
+name = "baracuda-tensorrt-sys"
+version = "0.1.0"
+description = "Raw FFI bindings and dynamic loader for NVIDIA TensorRT (C API)."
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories = ["external-ffi-bindings"]
+
+[features]
+default = []
+bindgen = ["baracuda-build/bindgen"]
+
+[dependencies]
+baracuda-core.workspace = true
+baracuda-types.workspace = true
+baracuda-cuda-sys.workspace = true
+libloading.workspace = true
+
+[build-dependencies]
+baracuda-build.workspace = true
