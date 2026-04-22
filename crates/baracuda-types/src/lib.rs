@@ -18,18 +18,22 @@
 #![warn(missing_debug_implementations)]
 
 pub mod device_repr;
+pub mod host_slice;
 pub mod kernel_arg;
 pub mod numeric;
 pub mod status;
 pub mod stream_mode;
 pub mod version;
+pub mod zero_bits;
 
 pub use device_repr::DeviceRepr;
+pub use host_slice::HostSlice;
 pub use kernel_arg::KernelArg;
 pub use numeric::{BFloat16, Complex32, Complex64, Half};
 pub use status::CudaStatus;
 pub use stream_mode::StreamMode;
 pub use version::{supports, CudaVersion, Feature};
+pub use zero_bits::ValidAsZeroBits;
 
 /// `#[derive(DeviceRepr)]` — attribute macro re-exported from
 /// `baracuda-types-derive` when the `derive` feature is enabled.

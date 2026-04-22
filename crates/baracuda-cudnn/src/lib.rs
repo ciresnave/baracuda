@@ -97,10 +97,18 @@ pub fn version() -> Result<usize> {
 /// Element dtype for a tensor.
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum DType {
+    /// Single-precision 32-bit floating point.
     F32,
+    /// Double-precision 64-bit floating point.
     F64,
+    /// IEEE 754 half-precision (16-bit) floating point.
     F16,
+    /// Brain half-precision (16-bit) floating point.
     BF16,
+    /// 8-bit signed integer (quantized inference).
+    I8,
+    /// 32-bit signed integer (integer accumulators).
+    I32,
 }
 
 impl DType {
@@ -110,8 +118,55 @@ impl DType {
             DType::F64 => cudnnDataType_t::Double,
             DType::F16 => cudnnDataType_t::Half,
             DType::BF16 => cudnnDataType_t::BFloat16,
+            DType::I8 => cudnnDataType_t::Int8,
+            DType::I32 => cudnnDataType_t::Int32,
         }
     }
+}
+
+/// Trait mapping Rust element types to their cuDNN [`DType`] tag.
+///
+/// Lets generic code accept "a tensor of T" and recover the cuDNN dtype
+/// with `T::DTYPE`, instead of threading a `DType` argument through every
+/// call. Useful for tensor-descriptor builders:
+///
+/// ```no_run
+/// use baracuda_cudnn::{CudnnDataType, DType, TensorDescriptor, TensorFormat};
+///
+/// fn make_nchw<T: CudnnDataType>(n: i32, c: i32, h: i32, w: i32)
+///     -> baracuda_cudnn::Result<TensorDescriptor>
+/// {
+///     TensorDescriptor::new_4d(TensorFormat::Nchw, T::DTYPE, n, c, h, w)
+/// }
+///
+/// let desc = make_nchw::<f32>(1, 3, 224, 224)?;
+/// # Ok::<(), baracuda_cudnn::Error>(())
+/// ```
+///
+/// Implementors: `f32`, `f64`, [`baracuda_types::Half`],
+/// [`baracuda_types::BFloat16`], `i8`, `i32`.
+pub trait CudnnDataType: DeviceRepr + Copy + 'static {
+    /// The [`DType`] tag cuDNN uses for this scalar type.
+    const DTYPE: DType;
+}
+
+impl CudnnDataType for f32 {
+    const DTYPE: DType = DType::F32;
+}
+impl CudnnDataType for f64 {
+    const DTYPE: DType = DType::F64;
+}
+impl CudnnDataType for baracuda_types::Half {
+    const DTYPE: DType = DType::F16;
+}
+impl CudnnDataType for baracuda_types::BFloat16 {
+    const DTYPE: DType = DType::BF16;
+}
+impl CudnnDataType for i8 {
+    const DTYPE: DType = DType::I8;
+}
+impl CudnnDataType for i32 {
+    const DTYPE: DType = DType::I32;
 }
 
 /// Memory layout for a 4-D tensor.

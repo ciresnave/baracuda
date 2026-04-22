@@ -1,6 +1,6 @@
 [package]
 name = "baracuda-nvml-sys"
-version = "0.0.1-alpha.1"
+version = "0.0.1-alpha.2"
 description = "Raw FFI bindings and dynamic loader for the NVIDIA Management Library (NVML)."
 edition.workspace = true
 rust-version.workspace = true

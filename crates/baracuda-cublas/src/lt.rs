@@ -1,12 +1,18 @@
 //! cuBLASLt — the descriptor-based, heuristic-tuned GEMM API.
 //!
+//! # Fused activations / epilogues
+//!
+//! Besides raw matmul, cuBLASLt can fuse a small post-op into the output —
+//! the "epilogue". Use [`Activation`] + [`MatmulDesc::set_activation`] to
+//! request one; the bias-fused variants additionally require
+//! [`MatmulDesc::set_bias_pointer`].
+//!
 //! Typical flow:
 //!
 //! ```no_run
 //! use baracuda_cublas::lt::{LtHandle, MatmulDesc, MatrixLayout, MatmulPreference};
-//! use baracuda_cublas_sys::functions::{
-//!     cublasComputeType_t, cudaDataType_t, cublasOperation_t,
-//! };
+//! use baracuda_cublas_sys::cublasOperation_t;
+//! use baracuda_cublas_sys::functions::{cublasComputeType_t, cudaDataType_t};
 //!
 //! # fn demo() -> baracuda_cublas::Result<()> {
 //! let lt = LtHandle::new()?;
@@ -40,6 +46,41 @@ use baracuda_cublas_sys::loader::cublas_lt;
 use baracuda_driver::Stream;
 
 use crate::error::{check, Result};
+
+/// cuBLASLt epilogue selector — the fused post-op applied to the matmul
+/// output, tagged by the integer values NVIDIA's `cublasLtEpilogue_t` uses.
+///
+/// Bias-fused variants (`ReluBias`, `GeluBias`, `DReluBias`, `DGeluBias`)
+/// additionally require a bias vector — set it via
+/// [`MatmulDesc::set_bias_pointer`] before [`matmul`].
+#[repr(i32)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum Activation {
+    /// No epilogue; plain `alpha * A * B + beta * C`.
+    Identity = 1,
+    /// ReLU: `max(0, x)`.
+    Relu = 2,
+    /// Bias + ReLU (bias vector via [`MatmulDesc::set_bias_pointer`]).
+    ReluBias = 6,
+    /// Plain bias: `x + bias`.
+    Bias = 4,
+    /// GELU (erf-based).
+    Gelu = 16,
+    /// Bias + GELU.
+    GeluBias = 20,
+    /// GELU with auxiliary output (for backward pass).
+    GeluAux = 48,
+    /// Bias + GELU + auxiliary output.
+    GeluAuxBias = 52,
+    /// Derivative ReLU (backward).
+    DRelu = 8,
+    /// Derivative ReLU + bias-gradient.
+    DReluBias = 136,
+    /// Derivative GELU.
+    DGelu = 128,
+    /// Derivative GELU + bias-gradient.
+    DGeluBias = 160,
+}
 
 /// Owned cuBLASLt handle.
 #[derive(Debug)]
@@ -113,6 +154,13 @@ impl MatmulDesc {
 
     pub fn set_epilogue(&self, epilogue: i32) -> Result<()> {
         self.set_attr(cublasLtMatmulDescAttributes_t::Epilogue, &epilogue)
+    }
+
+    /// Typed wrapper over [`set_epilogue`](Self::set_epilogue) — pass an
+    /// [`Activation`] directly. Equivalent to
+    /// `desc.set_epilogue(activation as i32)`.
+    pub fn set_activation(&self, activation: Activation) -> Result<()> {
+        self.set_epilogue(activation as i32)
     }
 
     pub fn set_bias_pointer(&self, ptr: *const c_void) -> Result<()> {

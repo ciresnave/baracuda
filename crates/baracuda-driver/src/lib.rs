@@ -79,8 +79,8 @@ pub use graph::{instantiate_flags, CaptureMode, Graph, GraphExec, GraphNode};
 pub use init::{init, version};
 pub use launch::{Dim3, LaunchBuilder};
 pub use memory::{
-    mem_get_info, DeviceBuffer, DeviceSlice, DeviceSliceMut, ManagedAttach, ManagedBuffer,
-    MemAdvise,
+    mem_get_info, DeviceBuffer, DevicePtr, DevicePtrMut, DeviceSlice, DeviceSliceMut,
+    ManagedAttach, ManagedBuffer, MemAdvise,
 };
 pub use module::{Function, Module};
 pub use stream::Stream;

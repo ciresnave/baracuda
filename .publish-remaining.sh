@@ -1,18 +1,34 @@
 #!/usr/bin/env bash
 # Resume the crates.io publish chain once the "new crates per day" rate
-# limit resets (retry-after: 2026-04-22 18:37:22 GMT, roughly 24h after the
-# initial attempt).
+# limit resets (retry-after: 2026-04-22 18:37:22 GMT, roughly 24h after
+# the initial attempt).
+#
+# Since this session added new API (ValidAsZeroBits / HostSlice on
+# baracuda-types, DevicePtr traits on baracuda-driver, cuBLASLt
+# Activation enum, CudnnDataType trait, NVRTC CompileOptions struct) the
+# workspace is now at 0.0.1-alpha.2. The five already-published crates
+# at 0.0.1-alpha.1 need to be re-published at the new version before
+# their dependents can build against it.
 #
 # Run from the repo root. Each publish auto-waits for index propagation
 # before returning, so there's no need for explicit sleeps.
 #
-# If you hit the rate limit again mid-chain, note which crate failed and
-# re-run starting from that crate onward.
+# If you hit the rate limit mid-chain, note which crate failed and
+# re-run starting from that crate onward by editing the arrays below.
 
 set -e
 
-# -sys crates (only depend on baracuda-core/types/cuda-sys, which are
-# already on crates.io).
+# Foundation crates that were already published at alpha.1 — re-publish at
+# alpha.2 so dependents resolve cleanly.
+FOUNDATION=(
+    baracuda-types-derive
+    baracuda-types
+    baracuda-build
+    baracuda-core
+    baracuda-cuda-sys
+)
+
+# -sys crates (only depend on baracuda-core/types/cuda-sys).
 SYS_CRATES=(
     baracuda-nvrtc-sys
     baracuda-nvjitlink-sys
@@ -35,13 +51,13 @@ SYS_CRATES=(
     baracuda-cudf-sys
 )
 
-# Safe crates depend on their -sys and on the foundation. Driver +
-# Runtime first, then everything else in parallel-ish order.
+# Safe-API core.
 SAFE_FOUNDATION=(
     baracuda-driver
     baracuda-runtime
 )
 
+# Safe wrappers for each library.
 SAFE_CRATES=(
     baracuda-nvrtc
     baracuda-nvjitlink
@@ -64,7 +80,7 @@ SAFE_CRATES=(
     baracuda-cudf
 )
 
-# Umbrella crate last — depends on (optionally) everything above.
+# Umbrella crate last — depends (optionally) on everything above.
 UMBRELLA=baracuda
 
 publish() {
@@ -73,9 +89,10 @@ publish() {
     cargo publish -p "$crate"
 }
 
-for c in "${SYS_CRATES[@]}";        do publish "$c"; done
-for c in "${SAFE_FOUNDATION[@]}";   do publish "$c"; done
-for c in "${SAFE_CRATES[@]}";       do publish "$c"; done
+for c in "${FOUNDATION[@]}";      do publish "$c"; done
+for c in "${SYS_CRATES[@]}";       do publish "$c"; done
+for c in "${SAFE_FOUNDATION[@]}";  do publish "$c"; done
+for c in "${SAFE_CRATES[@]}";      do publish "$c"; done
 publish "$UMBRELLA"
 
-echo "=== all 37 remaining crates published ==="
+echo "=== all 42 crates published at 0.0.1-alpha.2 ==="

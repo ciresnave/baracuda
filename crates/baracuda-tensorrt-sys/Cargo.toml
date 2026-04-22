@@ -1,6 +1,6 @@
 [package]
 name = "baracuda-tensorrt-sys"
-version = "0.0.1-alpha.1"
+version = "0.0.1-alpha.2"
 description = "Raw FFI bindings and dynamic loader for NVIDIA TensorRT (C API)."
 edition.workspace = true
 rust-version.workspace = true

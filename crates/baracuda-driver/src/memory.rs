@@ -700,3 +700,141 @@ impl<'a, T: DeviceRepr> DeviceSliceMut<'a, T> {
         self.ptr
     }
 }
+
+// ============================================================================
+// DevicePtr / DevicePtrMut — generic device-pointer trait surface
+// ============================================================================
+
+/// Anything that can be read as a `[T]` on the device.
+///
+/// This is the abstraction over [`DeviceBuffer<T>`], [`DeviceSlice<'_, T>`],
+/// and (via [`DevicePtrMut`]) [`DeviceSliceMut<'_, T>`] — letting generic code
+/// accept any of them without fighting the type system.
+///
+/// Typical usage:
+///
+/// ```no_run
+/// use baracuda_driver::{DevicePtr, DeviceBuffer, DeviceSlice};
+/// use baracuda_types::DeviceRepr;
+///
+/// fn sum_elements<T: DeviceRepr, P: DevicePtr<T>>(buf: &P) -> usize {
+///     // You get len() + device_ptr() for free; deeper ops go through
+///     // the concrete type via `buf.device_ptr()`.
+///     buf.len()
+/// }
+/// ```
+///
+/// # Safety
+///
+/// `device_ptr()` returns an opaque [`CUdeviceptr`]. Any dereference is
+/// `unsafe` as always. Implementors must guarantee the pointer is live for
+/// at least `len() * size_of::<T>()` bytes.
+pub unsafe trait DevicePtr<T: DeviceRepr> {
+    /// Raw device pointer to element 0.
+    fn device_ptr(&self) -> CUdeviceptr;
+
+    /// Number of `T` elements visible through this pointer.
+    fn len(&self) -> usize;
+
+    /// `true` if [`len`](Self::len) is 0.
+    #[inline]
+    fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    /// Size in bytes (`len * size_of::<T>()`).
+    #[inline]
+    fn byte_size(&self) -> usize {
+        self.len() * core::mem::size_of::<T>()
+    }
+}
+
+/// A [`DevicePtr`] that supports writes.
+///
+/// Implementors must hold a unique reference to the underlying storage for
+/// the pointer's lifetime — e.g. `&mut DeviceBuffer<T>` or
+/// [`DeviceSliceMut<'_, T>`]. This gives the trait the same borrow-checker
+/// properties as `&mut [T]`.
+pub unsafe trait DevicePtrMut<T: DeviceRepr>: DevicePtr<T> {
+    /// Raw mutable device pointer.
+    fn device_ptr_mut(&mut self) -> CUdeviceptr;
+}
+
+// ---- Impls on the owned + borrowed device types -------------------------
+
+unsafe impl<T: DeviceRepr> DevicePtr<T> for DeviceBuffer<T> {
+    #[inline]
+    fn device_ptr(&self) -> CUdeviceptr {
+        self.ptr
+    }
+    #[inline]
+    fn len(&self) -> usize {
+        self.len
+    }
+}
+
+unsafe impl<T: DeviceRepr> DevicePtrMut<T> for DeviceBuffer<T> {
+    #[inline]
+    fn device_ptr_mut(&mut self) -> CUdeviceptr {
+        self.ptr
+    }
+}
+
+unsafe impl<'a, T: DeviceRepr> DevicePtr<T> for DeviceSlice<'a, T> {
+    #[inline]
+    fn device_ptr(&self) -> CUdeviceptr {
+        self.ptr
+    }
+    #[inline]
+    fn len(&self) -> usize {
+        self.len
+    }
+}
+
+unsafe impl<'a, T: DeviceRepr> DevicePtr<T> for DeviceSliceMut<'a, T> {
+    #[inline]
+    fn device_ptr(&self) -> CUdeviceptr {
+        self.ptr
+    }
+    #[inline]
+    fn len(&self) -> usize {
+        self.len
+    }
+}
+
+unsafe impl<'a, T: DeviceRepr> DevicePtrMut<T> for DeviceSliceMut<'a, T> {
+    #[inline]
+    fn device_ptr_mut(&mut self) -> CUdeviceptr {
+        self.ptr
+    }
+}
+
+// References delegate transparently.
+unsafe impl<T: DeviceRepr, P: DevicePtr<T> + ?Sized> DevicePtr<T> for &P {
+    #[inline]
+    fn device_ptr(&self) -> CUdeviceptr {
+        (**self).device_ptr()
+    }
+    #[inline]
+    fn len(&self) -> usize {
+        (**self).len()
+    }
+}
+
+unsafe impl<T: DeviceRepr, P: DevicePtr<T> + ?Sized> DevicePtr<T> for &mut P {
+    #[inline]
+    fn device_ptr(&self) -> CUdeviceptr {
+        (**self).device_ptr()
+    }
+    #[inline]
+    fn len(&self) -> usize {
+        (**self).len()
+    }
+}
+
+unsafe impl<T: DeviceRepr, P: DevicePtrMut<T> + ?Sized> DevicePtrMut<T> for &mut P {
+    #[inline]
+    fn device_ptr_mut(&mut self) -> CUdeviceptr {
+        (**self).device_ptr_mut()
+    }
+}
