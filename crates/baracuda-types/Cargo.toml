@@ -17,9 +17,14 @@ derive = ["dep:baracuda-types-derive"]
 half-crate = ["dep:half"]
 num-complex-crate = ["dep:num-complex"]
 bytemuck = ["dep:bytemuck"]
+# Opt-in support for the `float8` crate's 8-bit floating-point types
+# (F8E4M3, F8E5M2). Adds DeviceRepr + ValidAsZeroBits; &T: KernelArg
+# falls out of the existing blanket impl for any T: DeviceRepr.
+f8-crate = ["dep:float8"]
 
 [dependencies]
 baracuda-types-derive = { workspace = true, optional = true }
 half = { workspace = true, optional = true }
 num-complex = { workspace = true, optional = true }
 bytemuck = { workspace = true, optional = true }
+float8 = { workspace = true, optional = true }

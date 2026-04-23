@@ -18,6 +18,7 @@
 #![warn(missing_debug_implementations)]
 
 pub mod device_repr;
+pub mod external_impls;
 pub mod host_slice;
 pub mod kernel_arg;
 pub mod numeric;

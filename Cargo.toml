@@ -82,6 +82,7 @@ syn = { version = "2", features = ["full"] }
 half = { version = "2", default-features = false }
 num-complex = { version = "0.4", default-features = false }
 bytemuck = { version = "1", default-features = false }
+float8 = { version = "0.7", default-features = false }
 
 # Async plumbing (no runtime)
 futures-core = { version = "0.3", default-features = false }
