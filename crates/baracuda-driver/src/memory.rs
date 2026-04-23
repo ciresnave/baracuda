@@ -9,7 +9,7 @@ use core::marker::PhantomData;
 use core::mem::size_of;
 
 use baracuda_cuda_sys::{driver, CUdeviceptr};
-use baracuda_types::DeviceRepr;
+use baracuda_types::{DeviceRepr, KernelArg};
 
 use crate::context::Context;
 use crate::error::{check, Result};
@@ -836,5 +836,87 @@ unsafe impl<T: DeviceRepr, P: DevicePtrMut<T> + ?Sized> DevicePtrMut<T> for &mut
     #[inline]
     fn device_ptr_mut(&mut self) -> CUdeviceptr {
         (**self).device_ptr_mut()
+    }
+}
+
+// ============================================================================
+// KernelArg auto-marshalling for DeviceBuffer / DeviceSlice / DeviceSliceMut
+// ============================================================================
+//
+// CUDA kernels receive device buffers as raw `T*` pointers, and
+// `cuLaunchKernel` expects an array of `void**` — i.e. each argument slot
+// must point to the pointer value. baracuda's DeviceBuffer/DeviceSlice
+// already store a `CUdeviceptr` inline, so the safest thing is to return
+// a pointer *into* the buffer/slice itself; the returned pointer stays
+// valid as long as the `&DeviceBuffer` / `&DeviceSlice` reference does,
+// which Rust's borrow checker already enforces for kernel launches.
+
+// SAFETY: `&self.ptr` points to a live `CUdeviceptr` owned by the
+// DeviceBuffer; it remains valid for as long as the `&self` borrow does,
+// which spans the kernel launch. CUDA reads the pointer value during
+// submission and never writes it back through this slot.
+unsafe impl<T: DeviceRepr> KernelArg for &DeviceBuffer<T> {
+    #[inline]
+    fn as_kernel_arg_ptr(&self) -> *mut c_void {
+        &self.ptr as *const CUdeviceptr as *mut c_void
+    }
+}
+
+unsafe impl<T: DeviceRepr> KernelArg for &mut DeviceBuffer<T> {
+    #[inline]
+    fn as_kernel_arg_ptr(&self) -> *mut c_void {
+        &self.ptr as *const CUdeviceptr as *mut c_void
+    }
+}
+
+unsafe impl<'a, T: DeviceRepr> KernelArg for &DeviceSlice<'a, T> {
+    #[inline]
+    fn as_kernel_arg_ptr(&self) -> *mut c_void {
+        &self.ptr as *const CUdeviceptr as *mut c_void
+    }
+}
+
+unsafe impl<'a, T: DeviceRepr> KernelArg for &DeviceSliceMut<'a, T> {
+    #[inline]
+    fn as_kernel_arg_ptr(&self) -> *mut c_void {
+        &self.ptr as *const CUdeviceptr as *mut c_void
+    }
+}
+
+unsafe impl<'a, T: DeviceRepr> KernelArg for &mut DeviceSliceMut<'a, T> {
+    #[inline]
+    fn as_kernel_arg_ptr(&self) -> *mut c_void {
+        &self.ptr as *const CUdeviceptr as *mut c_void
+    }
+}
+
+#[cfg(test)]
+mod kernel_arg_tests {
+    //! Host-only: verify the returned pointer points to the CUdeviceptr
+    //! actually stored inside the buffer/slice, so kernels see the right
+    //! device address. We don't need a GPU to check this — we fabricate
+    //! a DeviceSlice with PhantomData and inspect its bytes.
+
+    use super::*;
+    use core::mem::size_of;
+
+    #[test]
+    fn slice_kernel_arg_points_at_ptr_field() {
+        let slice: DeviceSlice<'_, f32> = DeviceSlice {
+            ptr: CUdeviceptr(0xDEAD_BEEF_u64),
+            len: 42,
+            _marker: PhantomData,
+        };
+        let kernel_arg = (&slice).as_kernel_arg_ptr();
+        // The returned pointer should point to a u64 = 0xDEADBEEF.
+        unsafe {
+            let as_u64 = *(kernel_arg as *const u64);
+            assert_eq!(as_u64, 0xDEAD_BEEF);
+        }
+        // And the pointer must live inside the slice struct itself.
+        let slice_start = &slice as *const _ as usize;
+        let slice_end = slice_start + size_of::<DeviceSlice<'_, f32>>();
+        let arg_addr = kernel_arg as usize;
+        assert!((slice_start..slice_end).contains(&arg_addr));
     }
 }
