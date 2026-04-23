@@ -177,6 +177,32 @@ impl Stream {
         self.inner.handle
     }
 
+    /// Device-to-device async copy scheduled on this stream.
+    ///
+    /// Sugar over [`DeviceBuffer::copy_to_device_async`] with the borrows
+    /// flipped the way the call-site usually wants them: the destination
+    /// buffer is taken by `&mut`, so the borrow checker will catch
+    /// aliasing bugs at compile time. `src.len()` must equal `dst.len()`.
+    ///
+    /// ```no_run
+    /// # use baracuda_driver::{Context, Device, DeviceBuffer, Stream};
+    /// # use baracuda_types::DeviceRepr;
+    /// # fn demo() -> baracuda_driver::Result<()> {
+    /// let ctx = Context::new(&Device::get(0)?)?;
+    /// let stream = Stream::new(&ctx)?;
+    /// let src: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, 1024)?;
+    /// let mut dst: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, 1024)?;
+    /// stream.memcpy_dtod(&src, &mut dst)?;
+    /// # Ok(()) }
+    /// ```
+    pub fn memcpy_dtod<T: baracuda_types::DeviceRepr>(
+        &self,
+        src: &crate::memory::DeviceBuffer<T>,
+        dst: &mut crate::memory::DeviceBuffer<T>,
+    ) -> Result<()> {
+        src.copy_to_device_async(dst, self)
+    }
+
     /// Return the driver-assigned 64-bit ID for this stream. Useful for
     /// correlating CUPTI traces against baracuda streams.
     pub fn id(&self) -> Result<u64> {

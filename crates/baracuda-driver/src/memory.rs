@@ -7,6 +7,7 @@
 use core::ffi::c_void;
 use core::marker::PhantomData;
 use core::mem::size_of;
+use core::ops::Range;
 
 use baracuda_cuda_sys::{driver, CUdeviceptr};
 use baracuda_types::{DeviceRepr, KernelArg};
@@ -250,6 +251,53 @@ impl<T: DeviceRepr> DeviceBuffer<T> {
         DeviceSliceMut {
             ptr: self.ptr,
             len: self.len,
+            _marker: PhantomData,
+        }
+    }
+
+    /// Borrow a sub-range of the buffer as an immutable [`DeviceSlice`].
+    ///
+    /// Panics if the range is out of bounds or inverted. Element indices
+    /// are used — the byte offset is `range.start * size_of::<T>()`.
+    ///
+    /// ```no_run
+    /// # use baracuda_driver::{Context, Device, DeviceBuffer};
+    /// # fn demo() -> baracuda_driver::Result<()> {
+    /// let ctx = Context::new(&Device::get(0)?)?;
+    /// let buf: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, 1024)?;
+    /// let first_half = buf.slice(0..512);
+    /// let tail = buf.slice(512..1024);
+    /// # let _ = (first_half, tail); Ok(()) }
+    /// ```
+    #[inline]
+    pub fn slice(&self, range: Range<usize>) -> DeviceSlice<'_, T> {
+        assert!(
+            range.start <= range.end && range.end <= self.len,
+            "DeviceBuffer::slice({}..{}) out of bounds for len {}",
+            range.start,
+            range.end,
+            self.len,
+        );
+        DeviceSlice {
+            ptr: CUdeviceptr(self.ptr.0 + (range.start * size_of::<T>()) as u64),
+            len: range.end - range.start,
+            _marker: PhantomData,
+        }
+    }
+
+    /// Mutable counterpart of [`slice`](Self::slice).
+    #[inline]
+    pub fn slice_mut(&mut self, range: Range<usize>) -> DeviceSliceMut<'_, T> {
+        assert!(
+            range.start <= range.end && range.end <= self.len,
+            "DeviceBuffer::slice_mut({}..{}) out of bounds for len {}",
+            range.start,
+            range.end,
+            self.len,
+        );
+        DeviceSliceMut {
+            ptr: CUdeviceptr(self.ptr.0 + (range.start * size_of::<T>()) as u64),
+            len: range.end - range.start,
             _marker: PhantomData,
         }
     }
@@ -668,6 +716,23 @@ impl<'a, T: DeviceRepr> DeviceSlice<'a, T> {
     pub fn as_raw(&self) -> CUdeviceptr {
         self.ptr
     }
+
+    /// Borrow a sub-range. Panics on out-of-bounds / inverted ranges.
+    #[inline]
+    pub fn slice(&self, range: Range<usize>) -> DeviceSlice<'_, T> {
+        assert!(
+            range.start <= range.end && range.end <= self.len,
+            "DeviceSlice::slice({}..{}) out of bounds for len {}",
+            range.start,
+            range.end,
+            self.len,
+        );
+        DeviceSlice {
+            ptr: CUdeviceptr(self.ptr.0 + (range.start * size_of::<T>()) as u64),
+            len: range.end - range.start,
+            _marker: PhantomData,
+        }
+    }
 }
 
 /// Mutable view into a range of a [`DeviceBuffer`].
@@ -698,6 +763,40 @@ impl<'a, T: DeviceRepr> DeviceSliceMut<'a, T> {
     #[inline]
     pub fn as_raw(&self) -> CUdeviceptr {
         self.ptr
+    }
+
+    /// Borrow a sub-range immutably. Panics on out-of-bounds / inverted.
+    #[inline]
+    pub fn slice(&self, range: Range<usize>) -> DeviceSlice<'_, T> {
+        assert!(
+            range.start <= range.end && range.end <= self.len,
+            "DeviceSliceMut::slice({}..{}) out of bounds for len {}",
+            range.start,
+            range.end,
+            self.len,
+        );
+        DeviceSlice {
+            ptr: CUdeviceptr(self.ptr.0 + (range.start * size_of::<T>()) as u64),
+            len: range.end - range.start,
+            _marker: PhantomData,
+        }
+    }
+
+    /// Borrow a sub-range mutably.
+    #[inline]
+    pub fn slice_mut(&mut self, range: Range<usize>) -> DeviceSliceMut<'_, T> {
+        assert!(
+            range.start <= range.end && range.end <= self.len,
+            "DeviceSliceMut::slice_mut({}..{}) out of bounds for len {}",
+            range.start,
+            range.end,
+            self.len,
+        );
+        DeviceSliceMut {
+            ptr: CUdeviceptr(self.ptr.0 + (range.start * size_of::<T>()) as u64),
+            len: range.end - range.start,
+            _marker: PhantomData,
+        }
     }
 }
 
@@ -887,6 +986,52 @@ unsafe impl<'a, T: DeviceRepr> KernelArg for &mut DeviceSliceMut<'a, T> {
     #[inline]
     fn as_kernel_arg_ptr(&self) -> *mut c_void {
         &self.ptr as *const CUdeviceptr as *mut c_void
+    }
+}
+
+#[cfg(test)]
+mod slice_tests {
+    //! Host-only: verify slice / slice_mut bounds math without a GPU.
+    use super::*;
+
+    fn fake_slice<T: DeviceRepr>(ptr: u64, len: usize) -> DeviceSlice<'static, T> {
+        DeviceSlice {
+            ptr: CUdeviceptr(ptr),
+            len,
+            _marker: PhantomData,
+        }
+    }
+
+    #[test]
+    fn slice_offsets_ptr_by_element_bytes() {
+        let s: DeviceSlice<'_, f32> = fake_slice(0x1000, 16);
+        let sub = s.slice(4..12);
+        assert_eq!(sub.len(), 8);
+        assert_eq!(sub.as_raw().0, 0x1000 + 4 * 4); // 4 elements * 4 bytes/f32
+    }
+
+    #[test]
+    fn slice_of_slice_stays_correct() {
+        let s: DeviceSlice<'_, f64> = fake_slice(0x2000, 100);
+        let mid = s.slice(10..90);
+        let inner = mid.slice(5..15);
+        assert_eq!(inner.len(), 10);
+        // 10 + 5 = 15 from start, each f64 = 8 bytes.
+        assert_eq!(inner.as_raw().0, 0x2000 + 15 * 8);
+    }
+
+    #[test]
+    #[should_panic(expected = "out of bounds")]
+    fn slice_end_past_len_panics() {
+        let s: DeviceSlice<'_, u8> = fake_slice(0, 10);
+        let _ = s.slice(0..11);
+    }
+
+    #[test]
+    #[should_panic(expected = "out of bounds")]
+    fn slice_inverted_range_panics() {
+        let s: DeviceSlice<'_, u8> = fake_slice(0, 10);
+        let _ = s.slice(5..3);
     }
 }
 

@@ -98,6 +98,14 @@ impl Handle {
     pub fn as_raw(&self) -> cublasHandle_t {
         self.inner.handle
     }
+
+    /// Alias for [`as_raw`](Self::as_raw). Matches the spelling cudarc
+    /// uses (`CudaBlas::handle()`) so code migrating from there needs no
+    /// rename.
+    #[inline]
+    pub fn handle(&self) -> cublasHandle_t {
+        self.inner.handle
+    }
 }
 
 impl Drop for HandleInner {
