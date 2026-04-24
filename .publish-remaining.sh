@@ -125,42 +125,72 @@ sleep_until() {
     sleep "$sleep_for"
 }
 
+# Strip any `baracuda-*` lines from the [dev-dependencies] section of
+# a crate's Cargo.toml. Writes to a fresh file; caller swaps it in.
+strip_dev_deps() {
+    local src=$1
+    local dst=$2
+    awk '
+        /^\[dev-dependencies(\..*)?\]/ { in_dev=1; print; next }
+        /^\[/                         { in_dev=0; print; next }
+        in_dev && /^baracuda-/        { next }
+        { print }
+    ' "$src" > "$dst"
+}
+
 # Publish a single crate, retrying past any 429s. Returns cargo's exit
-# status on non-rate-limit failures. Automatically falls back to
-# `--no-verify` when the failure is a dev-dep cycle with another
-# baracuda crate that isn't yet on crates.io.
+# status on non-rate-limit failures. Automatically strips `baracuda-*`
+# dev-dep lines when the failure is a dev-dep cycle with another
+# baracuda crate that isn't yet on crates.io, then restores the
+# original Cargo.toml.
 try_publish() {
     local crate=$1
-    local extra_args=()
+    local cargo_toml="crates/$crate/Cargo.toml"
+    local backup="$cargo_toml.bak.$$"
+    local dev_deps_stripped=0
+    # Safety net: if we die mid-publish (Ctrl-C, hard crash, etc.), restore.
+    cleanup() {
+        if (( dev_deps_stripped == 1 )) && [[ -f $backup ]]; then
+            mv "$backup" "$cargo_toml"
+            echo ">> restored $cargo_toml" >&2
+        fi
+    }
+    trap cleanup RETURN INT TERM
+
     while :; do
-        echo "=== publishing $crate ${extra_args[*]}==="
+        echo "=== publishing $crate $([[ $dev_deps_stripped -eq 1 ]] && echo '(dev-deps stripped)')==="
+        local extra_args=()
+        if (( dev_deps_stripped == 1 )); then
+            extra_args+=(--allow-dirty)
+        fi
         local log status
-        # Capture combined stdout+stderr while also showing it live.
         log=$(cargo publish -p "$crate" "${extra_args[@]}" 2>&1 | tee /dev/stderr)
         status=${PIPESTATUS[0]}
         if (( status == 0 )); then
+            trap - RETURN INT TERM
+            cleanup
             return 0
         fi
-        # 429 → sleep and retry.
+        # 429 → sleep and retry (the stripped state, if any, persists).
         local retry_after
         retry_after=$(sed -n 's/.*Please try again after \(.*GMT\).*/\1/p' <<< "$log" | head -n1)
         if [[ -n $retry_after ]]; then
             sleep_until "$retry_after"
             continue
         fi
-        # "no matching package named `baracuda-...` found" → dev-dep cycle,
-        # retry with --no-verify.  We detect any missing baracuda-* package
-        # since they'll all be on crates.io eventually; skipping local
-        # re-compile against a not-yet-published sibling is safe because
-        # the workspace build already verified the crate compiles.
-        if [[ " ${extra_args[*]-} " != *" --no-verify "* ]] && \
+        # Dev-dep cycle with an unpublished baracuda crate → strip & retry.
+        if (( dev_deps_stripped == 0 )) && \
            grep -q 'no matching package named `baracuda-' <<< "$log"; then
             echo ">> $crate has a dev-dep cycle on an unpublished baracuda crate;" \
-                 "retrying with --no-verify" >&2
-            extra_args+=(--no-verify)
+                 "stripping baracuda-* lines from [dev-dependencies] and retrying" >&2
+            cp "$cargo_toml" "$backup"
+            strip_dev_deps "$backup" "$cargo_toml"
+            dev_deps_stripped=1
             continue
         fi
         echo "!! $crate failed (exit $status) with a non-rate-limit error; aborting" >&2
+        trap - RETURN INT TERM
+        cleanup
         return "$status"
     done
 }
