@@ -2,24 +2,25 @@
 # Resume the baracuda crates.io publish chain.
 #
 # --- Progress so far (0.0.1-alpha.2) ---
-# Round 1 (2026-04-22): 5 foundation crates went out at 0.0.1-alpha.1 before
-#                       hitting the "new crates per day" rate limit.
-# Round 2 (2026-04-23): re-published the foundation at alpha.2 and got 5 more
-#                       -sys crates through before hitting the daily cap again.
-# Round 3 (2026-04-24): 5 more -sys crates through (cusparse, cusolver, cudnn,
-#                       nccl, nvml). Blocked at baracuda-nvjpeg-sys
-#                       (retry-after: 2026-04-24 12:57:22 GMT).
+# Round 1 (2026-04-22): foundation-5 at alpha.1.
+# Round 2 (2026-04-23): alpha.2 re-pubs of the foundation + 5 more -sys.
+# Round 3 (2026-04-24 ~02h): cusparse/cusolver/cudnn/nccl/nvml-sys.
+# Round 4 (2026-04-24 ~13h): nvjpeg/npp/nvcomp/cvcuda/cufile-sys.
+#                            Blocked at baracuda-cupti-sys
+#                            (retry-after: 2026-04-24 13:47:22 GMT — <1h away).
 #
-# Already on crates.io at 0.0.1-alpha.2 (15/46):
+# Already on crates.io at 0.0.1-alpha.2 (20/46):
 #   baracuda-types-derive, baracuda-types, baracuda-build, baracuda-core,
 #   baracuda-cuda-sys, baracuda-nvrtc-sys, baracuda-nvjitlink-sys,
 #   baracuda-cublas-sys, baracuda-curand-sys, baracuda-cufft-sys,
 #   baracuda-cusparse-sys, baracuda-cusolver-sys, baracuda-cudnn-sys,
-#   baracuda-nccl-sys, baracuda-nvml-sys
+#   baracuda-nccl-sys, baracuda-nvml-sys, baracuda-nvjpeg-sys,
+#   baracuda-npp-sys, baracuda-nvcomp-sys, baracuda-cvcuda-sys,
+#   baracuda-cufile-sys
 #
-# crates.io's "new crate" quota is ~5 fresh names per ~12h per publisher.
-# Re-publishing an existing name at a new version does NOT count toward
-# that quota. Each ~12h window should unlock another 5 names until we finish.
+# crates.io's "new crate" quota is ~5 fresh names per ~1h per publisher,
+# which turned out to be more forgiving than I first thought. Re-publishing
+# an existing name does NOT count toward that quota.
 #
 # Run this script from the repo root whenever the retry window opens.
 # It uses `set -e` so it stops at the first 429 — remove any
@@ -29,13 +30,8 @@
 
 set -e
 
-# -sys crates still pending. baracuda-nvjpeg-sys is the first retry target.
+# -sys crates still pending. baracuda-cupti-sys is the first retry target.
 SYS_CRATES_PENDING=(
-    baracuda-nvjpeg-sys
-    baracuda-npp-sys
-    baracuda-nvcomp-sys
-    baracuda-cvcuda-sys
-    baracuda-cufile-sys
     baracuda-cupti-sys
     baracuda-cutensor-sys
     baracuda-tensorrt-sys
