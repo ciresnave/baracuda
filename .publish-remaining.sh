@@ -1,40 +1,35 @@
 #!/usr/bin/env bash
-# Resume the crates.io publish chain once the "new crates per day" rate
-# limit resets (retry-after: 2026-04-22 18:37:22 GMT, roughly 24h after
-# the initial attempt).
+# Resume the baracuda crates.io publish chain.
 #
-# Since this session added new API (ValidAsZeroBits / HostSlice on
-# baracuda-types, DevicePtr traits on baracuda-driver, cuBLASLt
-# Activation enum, CudnnDataType trait, NVRTC CompileOptions struct) the
-# workspace is now at 0.0.1-alpha.2. The five already-published crates
-# at 0.0.1-alpha.1 need to be re-published at the new version before
-# their dependents can build against it.
+# --- Progress so far (0.0.1-alpha.2) ---
+# Round 1 (2026-04-22): 5 foundation crates went out at 0.0.1-alpha.1 before
+#                       hitting the "new crates per day" rate limit.
+# Round 2 (2026-04-23): re-published the foundation at alpha.2 and got 5 more
+#                       -sys crates through before hitting the daily cap again.
+#                       Rate-limiter then blocked at baracuda-cusparse-sys
+#                       (retry-after: 2026-04-24 02:27:22 GMT).
 #
-# Run from the repo root. Each publish auto-waits for index propagation
-# before returning, so there's no need for explicit sleeps.
+# Already on crates.io at 0.0.1-alpha.2:
+#   baracuda-types-derive, baracuda-types, baracuda-build, baracuda-core,
+#   baracuda-cuda-sys, baracuda-nvrtc-sys, baracuda-nvjitlink-sys,
+#   baracuda-cublas-sys, baracuda-curand-sys, baracuda-cufft-sys
 #
-# If you hit the rate limit mid-chain, note which crate failed and
-# re-run starting from that crate onward by editing the arrays below.
+# crates.io's "new crate" quota is ~5-10 fresh names per 24h per publisher.
+# Re-publishing an existing name at a new version does NOT count toward
+# that quota (which is why round 2 got through 5 foundation re-pubs
+# *plus* 5 genuinely-new -sys crates). So each calendar day should
+# unlock 5-10 more of the remaining names.
+#
+# Run this script from the repo root whenever the retry window opens.
+# It uses `set -e` so it stops at the first 429 — remove any
+# successfully-published crates from the arrays below before the next
+# run, or request a quota bump at:
+#   https://github.com/rust-lang/crates.io/issues/new?template=rate_limit_increase.yml
 
 set -e
 
-# Foundation crates that were already published at alpha.1 — re-publish at
-# alpha.2 so dependents resolve cleanly.
-FOUNDATION=(
-    baracuda-types-derive
-    baracuda-types
-    baracuda-build
-    baracuda-core
-    baracuda-cuda-sys
-)
-
-# -sys crates (only depend on baracuda-core/types/cuda-sys).
-SYS_CRATES=(
-    baracuda-nvrtc-sys
-    baracuda-nvjitlink-sys
-    baracuda-cublas-sys
-    baracuda-curand-sys
-    baracuda-cufft-sys
+# -sys crates still pending. baracuda-cusparse-sys is the first retry target.
+SYS_CRATES_PENDING=(
     baracuda-cusparse-sys
     baracuda-cusolver-sys
     baracuda-cudnn-sys
@@ -57,7 +52,7 @@ SAFE_FOUNDATION=(
     baracuda-runtime
 )
 
-# Safe wrappers for each library.
+# Safe wrappers — publish only once their matching -sys crate is live.
 SAFE_CRATES=(
     baracuda-nvrtc
     baracuda-nvjitlink
@@ -89,10 +84,9 @@ publish() {
     cargo publish -p "$crate"
 }
 
-for c in "${FOUNDATION[@]}";      do publish "$c"; done
-for c in "${SYS_CRATES[@]}";       do publish "$c"; done
-for c in "${SAFE_FOUNDATION[@]}";  do publish "$c"; done
-for c in "${SAFE_CRATES[@]}";      do publish "$c"; done
+for c in "${SYS_CRATES_PENDING[@]}"; do publish "$c"; done
+for c in "${SAFE_FOUNDATION[@]}";     do publish "$c"; done
+for c in "${SAFE_CRATES[@]}";         do publish "$c"; done
 publish "$UMBRELLA"
 
-echo "=== all 42 crates published at 0.0.1-alpha.2 ==="
+echo "=== all remaining baracuda crates published at 0.0.1-alpha.2 ==="
