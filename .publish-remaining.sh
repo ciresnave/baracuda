@@ -126,26 +126,42 @@ sleep_until() {
 }
 
 # Publish a single crate, retrying past any 429s. Returns cargo's exit
-# status on non-rate-limit failures.
+# status on non-rate-limit failures. Automatically falls back to
+# `--no-verify` when the failure is a dev-dep cycle with another
+# baracuda crate that isn't yet on crates.io.
 try_publish() {
     local crate=$1
+    local extra_args=()
     while :; do
-        echo "=== publishing $crate ==="
+        echo "=== publishing $crate ${extra_args[*]}==="
         local log status
         # Capture combined stdout+stderr while also showing it live.
-        log=$(cargo publish -p "$crate" 2>&1 | tee /dev/stderr)
+        log=$(cargo publish -p "$crate" "${extra_args[@]}" 2>&1 | tee /dev/stderr)
         status=${PIPESTATUS[0]}
         if (( status == 0 )); then
             return 0
         fi
-        # Look for the crates.io 429 retry-after string.
+        # 429 → sleep and retry.
         local retry_after
         retry_after=$(sed -n 's/.*Please try again after \(.*GMT\).*/\1/p' <<< "$log" | head -n1)
-        if [[ -z $retry_after ]]; then
-            echo "!! $crate failed (exit $status) with a non-rate-limit error; aborting" >&2
-            return "$status"
+        if [[ -n $retry_after ]]; then
+            sleep_until "$retry_after"
+            continue
         fi
-        sleep_until "$retry_after"
+        # "no matching package named `baracuda-...` found" → dev-dep cycle,
+        # retry with --no-verify.  We detect any missing baracuda-* package
+        # since they'll all be on crates.io eventually; skipping local
+        # re-compile against a not-yet-published sibling is safe because
+        # the workspace build already verified the crate compiles.
+        if [[ " ${extra_args[*]-} " != *" --no-verify "* ]] && \
+           grep -q 'no matching package named `baracuda-' <<< "$log"; then
+            echo ">> $crate has a dev-dep cycle on an unpublished baracuda crate;" \
+                 "retrying with --no-verify" >&2
+            extra_args+=(--no-verify)
+            continue
+        fi
+        echo "!! $crate failed (exit $status) with a non-rate-limit error; aborting" >&2
+        return "$status"
     done
 }
 
