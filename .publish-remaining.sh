@@ -6,19 +6,20 @@
 #                       hitting the "new crates per day" rate limit.
 # Round 2 (2026-04-23): re-published the foundation at alpha.2 and got 5 more
 #                       -sys crates through before hitting the daily cap again.
-#                       Rate-limiter then blocked at baracuda-cusparse-sys
-#                       (retry-after: 2026-04-24 02:27:22 GMT).
+# Round 3 (2026-04-24): 5 more -sys crates through (cusparse, cusolver, cudnn,
+#                       nccl, nvml). Blocked at baracuda-nvjpeg-sys
+#                       (retry-after: 2026-04-24 12:57:22 GMT).
 #
-# Already on crates.io at 0.0.1-alpha.2:
+# Already on crates.io at 0.0.1-alpha.2 (15/46):
 #   baracuda-types-derive, baracuda-types, baracuda-build, baracuda-core,
 #   baracuda-cuda-sys, baracuda-nvrtc-sys, baracuda-nvjitlink-sys,
-#   baracuda-cublas-sys, baracuda-curand-sys, baracuda-cufft-sys
+#   baracuda-cublas-sys, baracuda-curand-sys, baracuda-cufft-sys,
+#   baracuda-cusparse-sys, baracuda-cusolver-sys, baracuda-cudnn-sys,
+#   baracuda-nccl-sys, baracuda-nvml-sys
 #
-# crates.io's "new crate" quota is ~5-10 fresh names per 24h per publisher.
+# crates.io's "new crate" quota is ~5 fresh names per ~12h per publisher.
 # Re-publishing an existing name at a new version does NOT count toward
-# that quota (which is why round 2 got through 5 foundation re-pubs
-# *plus* 5 genuinely-new -sys crates). So each calendar day should
-# unlock 5-10 more of the remaining names.
+# that quota. Each ~12h window should unlock another 5 names until we finish.
 #
 # Run this script from the repo root whenever the retry window opens.
 # It uses `set -e` so it stops at the first 429 — remove any
@@ -28,13 +29,8 @@
 
 set -e
 
-# -sys crates still pending. baracuda-cusparse-sys is the first retry target.
+# -sys crates still pending. baracuda-nvjpeg-sys is the first retry target.
 SYS_CRATES_PENDING=(
-    baracuda-cusparse-sys
-    baracuda-cusolver-sys
-    baracuda-cudnn-sys
-    baracuda-nccl-sys
-    baracuda-nvml-sys
     baracuda-nvjpeg-sys
     baracuda-npp-sys
     baracuda-nvcomp-sys
