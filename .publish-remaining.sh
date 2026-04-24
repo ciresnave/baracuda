@@ -1,52 +1,55 @@
 #!/usr/bin/env bash
-# Resume the baracuda crates.io publish chain.
+# Auto-publish baracuda to crates.io.
 #
-# --- Progress so far (0.0.1-alpha.2) ---
-# Round 1 (2026-04-22): foundation-5 at alpha.1.
-# Round 2 (2026-04-23): alpha.2 re-pubs of the foundation + 5 more -sys.
-# Round 3 (2026-04-24 ~02h): cusparse/cusolver/cudnn/nccl/nvml-sys.
-# Round 4 (2026-04-24 ~13h): nvjpeg/npp/nvcomp/cvcuda/cufile-sys.
-# Round 5 (2026-04-24 ~13:45h): cupti-sys only — blocked at
-#                               baracuda-cutensor-sys
-#                               (retry-after: 2026-04-24 13:57:22 GMT
-#                               — 10 min away).
+# Start it once — it will:
+#   1. Walk the dependency-ordered list of 46 crates.
+#   2. Skip any crate whose version is already on crates.io.
+#   3. Call `cargo publish -p <crate>` on the next pending one.
+#   4. If crates.io responds 429, parse the retry-after timestamp,
+#      sleep until it passes (+ 30 s slack), and retry the same crate.
+#   5. If `cargo publish` fails for any other reason, print the log and
+#      exit with the underlying exit code.
 #
-# Already on crates.io at 0.0.1-alpha.2 (21/46):
-#   baracuda-types-derive, baracuda-types, baracuda-build, baracuda-core,
-#   baracuda-cuda-sys, baracuda-nvrtc-sys, baracuda-nvjitlink-sys,
-#   baracuda-cublas-sys, baracuda-curand-sys, baracuda-cufft-sys,
-#   baracuda-cusparse-sys, baracuda-cusolver-sys, baracuda-cudnn-sys,
-#   baracuda-nccl-sys, baracuda-nvml-sys, baracuda-nvjpeg-sys,
-#   baracuda-npp-sys, baracuda-nvcomp-sys, baracuda-cvcuda-sys,
-#   baracuda-cufile-sys, baracuda-cupti-sys
+# Hit Ctrl-C at any time to stop cleanly. Re-running picks up where it
+# left off because already-published crates are detected via the sparse
+# index (no local state file needed).
 #
-# The rate-limit window is a sliding one — it can re-open after just
-# 10 minutes when the previous round uploaded fewer new names. Re-running
-# this script every time the retry-after passes is the expected flow.
-#
-# Run this script from the repo root whenever the retry window opens.
-# It uses `set -e` so it stops at the first 429 — remove any
-# successfully-published crates from the arrays below before the next
-# run, or request a quota bump at:
-#   https://github.com/rust-lang/crates.io/issues/new?template=rate_limit_increase.yml
+# Requires: bash 4+, curl, GNU `date -d` (default on Linux / macOS /
+# Git Bash on Windows).
 
-set -e
+set -u -o pipefail
 
-# -sys crates still pending. baracuda-cutensor-sys is the first retry target.
-SYS_CRATES_PENDING=(
+VERSION="0.0.1-alpha.2"
+
+# Dependency-ordered list. Foundation → -sys crates → safe foundation
+# (driver, runtime) → safe wrappers → umbrella.
+ALL_CRATES=(
+    baracuda-types-derive
+    baracuda-types
+    baracuda-build
+    baracuda-core
+    baracuda-cuda-sys
+    baracuda-nvrtc-sys
+    baracuda-nvjitlink-sys
+    baracuda-cublas-sys
+    baracuda-curand-sys
+    baracuda-cufft-sys
+    baracuda-cusparse-sys
+    baracuda-cusolver-sys
+    baracuda-cudnn-sys
+    baracuda-nccl-sys
+    baracuda-nvml-sys
+    baracuda-nvjpeg-sys
+    baracuda-npp-sys
+    baracuda-nvcomp-sys
+    baracuda-cvcuda-sys
+    baracuda-cufile-sys
+    baracuda-cupti-sys
     baracuda-cutensor-sys
     baracuda-tensorrt-sys
     baracuda-cudf-sys
-)
-
-# Safe-API core.
-SAFE_FOUNDATION=(
     baracuda-driver
     baracuda-runtime
-)
-
-# Safe wrappers — publish only once their matching -sys crate is live.
-SAFE_CRATES=(
     baracuda-nvrtc
     baracuda-nvjitlink
     baracuda-cublas
@@ -66,20 +69,111 @@ SAFE_CRATES=(
     baracuda-cutensor
     baracuda-tensorrt
     baracuda-cudf
+    baracuda
 )
 
-# Umbrella crate last — depends (optionally) on everything above.
-UMBRELLA=baracuda
-
-publish() {
-    local crate=$1
-    echo "=== publishing $crate ==="
-    cargo publish -p "$crate"
+# Map a crate name to its sparse-index path.
+# crates.io layout:
+#   1-char  → "1/<name>"
+#   2-char  → "2/<name>"
+#   3-char  → "3/<first>/<name>"
+#   4+-char → "<first-two>/<next-two>/<name>"
+sparse_index_path() {
+    local name=$1
+    local n=${#name}
+    case $n in
+        1) printf '1/%s' "$name" ;;
+        2) printf '2/%s' "$name" ;;
+        3) printf '3/%s/%s' "${name:0:1}" "$name" ;;
+        *) printf '%s/%s/%s' "${name:0:2}" "${name:2:2}" "$name" ;;
+    esac
 }
 
-for c in "${SYS_CRATES_PENDING[@]}"; do publish "$c"; done
-for c in "${SAFE_FOUNDATION[@]}";     do publish "$c"; done
-for c in "${SAFE_CRATES[@]}";         do publish "$c"; done
-publish "$UMBRELLA"
+# Returns 0 if <crate> <version> is already on crates.io, 1 otherwise.
+already_published() {
+    local crate=$1
+    local version=$2
+    local path
+    path=$(sparse_index_path "$crate")
+    local url="https://index.crates.io/$path"
+    local body
+    # --fail-with-body so a 404 returns 22; curl exits 0 on 200 only.
+    if body=$(curl -sS --fail "$url" 2>/dev/null); then
+        grep -q "\"vers\":\"$version\"" <<< "$body"
+        return $?
+    fi
+    return 1
+}
 
-echo "=== all remaining baracuda crates published at 0.0.1-alpha.2 ==="
+# Sleep until the timestamp in stdin ("Fri, 24 Apr 2026 13:57:22 GMT"
+# or similar), with a 30-second slack buffer. Clamps to [15, 3600] s
+# for safety.
+sleep_until() {
+    local ts=$1
+    local target_epoch
+    if ! target_epoch=$(date -d "$ts" +%s 2>/dev/null); then
+        echo ">> couldn't parse '$ts'; defaulting to 60s sleep" >&2
+        sleep 60
+        return
+    fi
+    local now_epoch sleep_for
+    now_epoch=$(date +%s)
+    sleep_for=$(( target_epoch - now_epoch + 30 ))
+    if (( sleep_for < 15 )); then sleep_for=15; fi
+    if (( sleep_for > 3600 )); then sleep_for=3600; fi
+    echo ">> rate-limited; sleeping ${sleep_for}s (until $ts + 30s slack)"
+    sleep "$sleep_for"
+}
+
+# Publish a single crate, retrying past any 429s. Returns cargo's exit
+# status on non-rate-limit failures.
+try_publish() {
+    local crate=$1
+    while :; do
+        echo "=== publishing $crate ==="
+        local log status
+        # Capture combined stdout+stderr while also showing it live.
+        log=$(cargo publish -p "$crate" 2>&1 | tee /dev/stderr)
+        status=${PIPESTATUS[0]}
+        if (( status == 0 )); then
+            return 0
+        fi
+        # Look for the crates.io 429 retry-after string.
+        local retry_after
+        retry_after=$(sed -n 's/.*Please try again after \(.*GMT\).*/\1/p' <<< "$log" | head -n1)
+        if [[ -z $retry_after ]]; then
+            echo "!! $crate failed (exit $status) with a non-rate-limit error; aborting" >&2
+            return "$status"
+        fi
+        sleep_until "$retry_after"
+    done
+}
+
+# ---- main --------------------------------------------------------------
+
+published_count=0
+skipped_count=0
+remaining_count=0
+
+for crate in "${ALL_CRATES[@]}"; do
+    if already_published "$crate" "$VERSION"; then
+        echo "-- $crate v$VERSION already on crates.io; skipping"
+        (( skipped_count++ )) || true
+        continue
+    fi
+    (( remaining_count++ )) || true
+done
+
+echo ">> $skipped_count already published, $remaining_count to go."
+echo
+
+for crate in "${ALL_CRATES[@]}"; do
+    if already_published "$crate" "$VERSION"; then
+        continue
+    fi
+    try_publish "$crate" || exit $?
+    (( published_count++ )) || true
+done
+
+echo
+echo "=== done: $published_count crates published this run, all ${#ALL_CRATES[@]} baracuda crates are now live at v$VERSION ==="
