@@ -11,6 +11,13 @@ homepage.workspace = true
 keywords.workspace = true
 categories.workspace = true
 
+[features]
+default = []
+# Opt-in NcclScalar impls for `half::f16` and `half::bf16`. Transitively
+# enables `baracuda-types`'s half-crate feature so DeviceRepr is in
+# place on these types.
+half-crate = ["dep:half", "baracuda-types/half-crate"]
+
 [dependencies]
 baracuda-types.workspace = true
 baracuda-core.workspace = true
@@ -18,3 +25,4 @@ baracuda-cuda-sys.workspace = true
 baracuda-nccl-sys.workspace = true
 baracuda-driver.workspace = true
 thiserror.workspace = true
+half = { workspace = true, optional = true }

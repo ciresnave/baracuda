@@ -341,6 +341,7 @@ dependencies = [
  "baracuda-driver",
  "baracuda-nccl-sys",
  "baracuda-types",
+ "half",
  "thiserror",
 ]
 

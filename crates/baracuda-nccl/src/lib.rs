@@ -79,8 +79,41 @@ impl_nccl_scalar!(u64, Uint64);
 impl_nccl_scalar!(f32, Float32);
 impl_nccl_scalar!(f64, Float64);
 
+// Half-precision types from the `half` crate. Gated on `half-crate`
+// (which transitively pulls in `baracuda-types/half-crate` so the
+// `DeviceRepr` supertrait is already satisfied).
+#[cfg(feature = "half-crate")]
+impl_nccl_scalar!(half::f16, Float16);
+#[cfg(feature = "half-crate")]
+impl_nccl_scalar!(half::bf16, BFloat16);
+
 mod sealed {
+    /// Seal so only baracuda-authorized types implement `NcclScalar`.
+    /// Extra impls under feature gates are added directly on the sealed
+    /// trait in the parent module via `impl_nccl_scalar!`.
     pub trait Sealed {}
+}
+
+#[cfg(all(test, feature = "half-crate"))]
+mod half_scalar_tests {
+    use super::*;
+
+    #[test]
+    fn half_types_are_nccl_scalars() {
+        fn require_scalar<T: NcclScalar>() -> ncclDataType_t {
+            T::raw()
+        }
+        assert_eq!(
+            require_scalar::<half::f16>(),
+            ncclDataType_t::Float16,
+            "half::f16 must map to ncclFloat16"
+        );
+        assert_eq!(
+            require_scalar::<half::bf16>(),
+            ncclDataType_t::BFloat16,
+            "half::bf16 must map to ncclBfloat16"
+        );
+    }
 }
 
 /// A 128-byte opaque identifier for establishing a multi-process NCCL
