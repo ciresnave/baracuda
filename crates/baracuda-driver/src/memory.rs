@@ -45,17 +45,28 @@ impl<T: DeviceRepr> core::fmt::Debug for DeviceBuffer<T> {
 
 impl<T: DeviceRepr> DeviceBuffer<T> {
     /// Allocate an uninitialized buffer of `len` elements on the given context's device.
+    ///
+    /// `len == 0` (or a zero-sized `T`) short-circuits: CUDA rejects 0-byte
+    /// allocations with `CUDA_ERROR_INVALID_VALUE`, so we produce a sentinel
+    /// null-pointer buffer. [`Drop`] knows to skip the free on such buffers,
+    /// and every copy method below treats `len == 0` as a no-op.
     pub fn new(context: &Context, len: usize) -> Result<Self> {
-        context.set_current()?;
-        let d = driver()?;
-        let cu = d.cu_mem_alloc()?;
         let bytes = len
             .checked_mul(size_of::<T>())
             .expect("overflow computing allocation size");
+        if bytes == 0 {
+            return Ok(Self {
+                ptr: CUdeviceptr(0),
+                len,
+                context: context.clone(),
+                _marker: PhantomData,
+            });
+        }
+        context.set_current()?;
+        let d = driver()?;
+        let cu = d.cu_mem_alloc()?;
         let mut ptr = CUdeviceptr(0);
-        // SAFETY: `ptr` is writable; `bytes` is the requested allocation size.
-        // CUDA rejects 0-byte allocations with CUDA_ERROR_INVALID_VALUE, which
-        // we surface to the caller.
+        // SAFETY: `ptr` is writable; `bytes > 0` so cuMemAlloc is happy.
         check(unsafe { cu(&mut ptr, bytes) })?;
         Ok(Self {
             ptr,
@@ -73,12 +84,20 @@ impl<T: DeviceRepr> DeviceBuffer<T> {
     /// in stream order. Use [`free_async`](Self::free_async) to reclaim
     /// on the same stream, or let `Drop` reclaim synchronously.
     pub fn new_async(context: &Context, len: usize, stream: &Stream) -> Result<Self> {
-        context.set_current()?;
-        let d = driver()?;
-        let cu = d.cu_mem_alloc_async()?;
         let bytes = len
             .checked_mul(size_of::<T>())
             .expect("overflow computing allocation size");
+        if bytes == 0 {
+            return Ok(Self {
+                ptr: CUdeviceptr(0),
+                len,
+                context: context.clone(),
+                _marker: PhantomData,
+            });
+        }
+        context.set_current()?;
+        let d = driver()?;
+        let cu = d.cu_mem_alloc_async()?;
         let mut ptr = CUdeviceptr(0);
         // SAFETY: `ptr` writable; `stream` is live.
         check(unsafe { cu(&mut ptr, bytes, stream.as_raw()) })?;
@@ -105,17 +124,22 @@ impl<T: DeviceRepr> DeviceBuffer<T> {
         check(unsafe { cu(ptr, stream.as_raw()) })
     }
 
-    /// Allocate and fill with zero bytes.
+    /// Allocate and fill with zero bytes. Zero-length allocations are a
+    /// no-op (no `cuMemsetD8` call is issued).
     pub fn zeros(context: &Context, len: usize) -> Result<Self> {
         let buf = Self::new(context, len)?;
+        let bytes = len * size_of::<T>();
+        if bytes == 0 {
+            return Ok(buf);
+        }
         let d = driver()?;
         let cu = d.cu_memset_d8()?;
-        let bytes = len * size_of::<T>();
         check(unsafe { cu(buf.ptr, 0, bytes) })?;
         Ok(buf)
     }
 
-    /// Allocate and copy `src` synchronously from host memory.
+    /// Allocate and copy `src` synchronously from host memory. Empty
+    /// slices produce a sentinel zero-length buffer (no CUDA calls).
     pub fn from_slice(context: &Context, src: &[T]) -> Result<Self> {
         let buf = Self::new(context, src.len())?;
         buf.copy_from_host(src)?;
@@ -123,6 +147,7 @@ impl<T: DeviceRepr> DeviceBuffer<T> {
     }
 
     /// Synchronous H2D copy. `src.len()` must equal `self.len()`.
+    /// No-op when the buffer is empty — no `cuMemcpy` is issued.
     pub fn copy_from_host(&self, src: &[T]) -> Result<()> {
         assert_eq!(
             src.len(),
@@ -131,15 +156,19 @@ impl<T: DeviceRepr> DeviceBuffer<T> {
             src.len(),
             self.len
         );
+        let bytes = self.len * size_of::<T>();
+        if bytes == 0 {
+            return Ok(());
+        }
         let d = driver()?;
         let cu = d.cu_memcpy_htod()?;
-        let bytes = self.len * size_of::<T>();
         // SAFETY: `self.ptr` is a valid device pointer for `bytes` bytes;
         // `src.as_ptr()` is valid for reads of `bytes` bytes.
         check(unsafe { cu(self.ptr, src.as_ptr() as *const c_void, bytes) })
     }
 
     /// Synchronous D2H copy. `dst.len()` must equal `self.len()`.
+    /// No-op on empty buffers.
     pub fn copy_to_host(&self, dst: &mut [T]) -> Result<()> {
         assert_eq!(
             dst.len(),
@@ -148,19 +177,25 @@ impl<T: DeviceRepr> DeviceBuffer<T> {
             dst.len(),
             self.len
         );
+        let bytes = self.len * size_of::<T>();
+        if bytes == 0 {
+            return Ok(());
+        }
         let d = driver()?;
         let cu = d.cu_memcpy_dtoh()?;
-        let bytes = self.len * size_of::<T>();
         // SAFETY: mirror of `copy_from_host`; `dst` is valid for writes.
         check(unsafe { cu(dst.as_mut_ptr() as *mut c_void, self.ptr, bytes) })
     }
 
-    /// Asynchronous H2D copy on `stream`.
+    /// Asynchronous H2D copy on `stream`. No-op on empty buffers.
     pub fn copy_from_host_async(&self, src: &[T], stream: &Stream) -> Result<()> {
         assert_eq!(src.len(), self.len);
+        let bytes = self.len * size_of::<T>();
+        if bytes == 0 {
+            return Ok(());
+        }
         let d = driver()?;
         let cu = d.cu_memcpy_htod_async()?;
-        let bytes = self.len * size_of::<T>();
         check(unsafe {
             cu(
                 self.ptr,
@@ -171,12 +206,15 @@ impl<T: DeviceRepr> DeviceBuffer<T> {
         })
     }
 
-    /// Asynchronous D2H copy on `stream`.
+    /// Asynchronous D2H copy on `stream`. No-op on empty buffers.
     pub fn copy_to_host_async(&self, dst: &mut [T], stream: &Stream) -> Result<()> {
         assert_eq!(dst.len(), self.len);
+        let bytes = self.len * size_of::<T>();
+        if bytes == 0 {
+            return Ok(());
+        }
         let d = driver()?;
         let cu = d.cu_memcpy_dtoh_async()?;
-        let bytes = self.len * size_of::<T>();
         check(unsafe {
             cu(
                 dst.as_mut_ptr() as *mut c_void,
@@ -188,20 +226,27 @@ impl<T: DeviceRepr> DeviceBuffer<T> {
     }
 
     /// Device-to-device copy into another buffer of the same length.
+    /// No-op on empty buffers.
     pub fn copy_to_device(&self, dst: &DeviceBuffer<T>) -> Result<()> {
         assert_eq!(dst.len, self.len);
+        let bytes = self.len * size_of::<T>();
+        if bytes == 0 {
+            return Ok(());
+        }
         let d = driver()?;
         let cu = d.cu_memcpy_dtod()?;
-        let bytes = self.len * size_of::<T>();
         check(unsafe { cu(dst.ptr, self.ptr, bytes) })
     }
 
-    /// Asynchronous device-to-device copy on `stream`.
+    /// Asynchronous device-to-device copy on `stream`. No-op on empty buffers.
     pub fn copy_to_device_async(&self, dst: &DeviceBuffer<T>, stream: &Stream) -> Result<()> {
         assert_eq!(dst.len, self.len);
+        let bytes = self.len * size_of::<T>();
+        if bytes == 0 {
+            return Ok(());
+        }
         let d = driver()?;
         let cu = d.cu_memcpy_dtod_async()?;
-        let bytes = self.len * size_of::<T>();
         check(unsafe { cu(dst.ptr, self.ptr, bytes, stream.as_raw()) })
     }
 
