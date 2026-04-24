@@ -82,5 +82,6 @@ pub use memory::{
     mem_get_info, DeviceBuffer, DevicePtr, DevicePtrMut, DeviceSlice, DeviceSliceMut,
     ManagedAttach, ManagedBuffer, MemAdvise,
 };
+pub use pinned::{PinnedBuffer, PinnedRegistration};
 pub use module::{Function, Module};
 pub use stream::Stream;

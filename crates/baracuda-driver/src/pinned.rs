@@ -65,13 +65,28 @@ impl<T: DeviceRepr> PinnedBuffer<T> {
 
     /// Allocate `len` pinned elements, passing `flags` to `cuMemHostAlloc`
     /// (see the [`flags`] module).
+    ///
+    /// Zero-length allocations (`len == 0` or a zero-sized `T`) short-circuit:
+    /// CUDA rejects 0-byte `cuMemHostAlloc` with a null pointer, which would
+    /// make [`Deref`]'s `slice::from_raw_parts(null, 0)` unsound. Instead we
+    /// use a dangling-but-aligned pointer (the same trick `Vec::new()` uses
+    /// internally), skip the CUDA call entirely, and [`Drop`] recognizes
+    /// the sentinel and skips `cuMemFreeHost`.
     pub fn with_flags(context: &Context, len: usize, flags: u32) -> Result<Self> {
-        context.set_current()?;
-        let d = driver()?;
-        let cu = d.cu_mem_host_alloc()?;
         let bytes = len
             .checked_mul(size_of::<T>())
             .expect("overflow in PinnedBuffer byte count");
+        if bytes == 0 {
+            return Ok(Self {
+                ptr: core::ptr::NonNull::<T>::dangling().as_ptr(),
+                len,
+                context: context.clone(),
+                _marker: core::marker::PhantomData,
+            });
+        }
+        context.set_current()?;
+        let d = driver()?;
+        let cu = d.cu_mem_host_alloc()?;
         let mut p: *mut c_void = core::ptr::null_mut();
         check(unsafe { cu(&mut p, bytes, flags) })?;
         Ok(Self {
@@ -85,7 +100,14 @@ impl<T: DeviceRepr> PinnedBuffer<T> {
     /// Retrieve the device-visible pointer corresponding to this host
     /// allocation. Requires the buffer was created with the `DEVICEMAP`
     /// flag (or the process has `CU_CTX_MAP_HOST` enabled).
+    ///
+    /// On an empty buffer, returns `CUdeviceptr(0)` — there's no real
+    /// allocation to map. This mirrors [`crate::DeviceBuffer`]'s null
+    /// sentinel for zero-length device buffers.
     pub fn device_ptr(&self) -> Result<CUdeviceptr> {
+        if self.len == 0 {
+            return Ok(CUdeviceptr(0));
+        }
         let d = driver()?;
         let cu = d.cu_mem_host_get_device_pointer()?;
         let mut dptr = CUdeviceptr(0);
@@ -93,8 +115,13 @@ impl<T: DeviceRepr> PinnedBuffer<T> {
         Ok(dptr)
     }
 
-    /// Query the flags the pinned allocation was created with.
+    /// Query the flags the pinned allocation was created with. On an
+    /// empty buffer, returns `0` since there's no real allocation to
+    /// query.
     pub fn flags(&self) -> Result<u32> {
+        if self.len == 0 {
+            return Ok(0);
+        }
         let d = driver()?;
         let cu = d.cu_mem_host_get_flags()?;
         let mut flags: core::ffi::c_uint = 0;
@@ -136,7 +163,10 @@ impl<T: DeviceRepr> DerefMut for PinnedBuffer<T> {
 
 impl<T: DeviceRepr> Drop for PinnedBuffer<T> {
     fn drop(&mut self) {
-        if self.ptr.is_null() {
+        // Zero-length buffers use `NonNull::dangling()` as a sentinel —
+        // there's nothing to free. We also guard against a null ptr just
+        // in case some future constructor stores one.
+        if self.len == 0 || self.ptr.is_null() {
             return;
         }
         if let Ok(d) = driver() {

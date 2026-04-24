@@ -5,7 +5,7 @@
 //! ignored by default. Run with `BARACUDA_GPU_TESTS=1` on a machine with
 //! a working NVIDIA driver.
 
-use baracuda_driver::{Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, PinnedBuffer, Stream};
 
 #[test]
 #[ignore = "requires an NVIDIA GPU"]
@@ -54,4 +54,39 @@ fn nonempty_buffer_still_works_after_short_circuit_additions() {
     let mut back = vec![0.0f32; host.len()];
     buf.copy_to_host(&mut back).unwrap();
     assert_eq!(host, back);
+}
+
+#[test]
+#[ignore = "requires an NVIDIA GPU"]
+fn zero_length_pinned_buffer_is_sound() {
+    // cuMemHostAlloc(0) returns a null pointer; without the short-circuit,
+    // PinnedBuffer's Deref would trigger UB in slice::from_raw_parts.
+    // Construct an empty PinnedBuffer, deref it, and verify it round-trips.
+    baracuda_driver::init().unwrap();
+    let device = Device::get(0).unwrap();
+    let ctx = Context::new(&device).unwrap();
+
+    let empty: PinnedBuffer<f32> = PinnedBuffer::new(&ctx, 0).unwrap();
+    assert_eq!(empty.len(), 0);
+    assert!(empty.is_empty());
+
+    // Deref must be sound — slice::from_raw_parts(dangling, 0) is OK.
+    let slice: &[f32] = &empty;
+    assert_eq!(slice.len(), 0);
+
+    // device_ptr / flags degrade gracefully.
+    assert_eq!(empty.device_ptr().unwrap().0, 0);
+    assert_eq!(empty.flags().unwrap(), 0);
+}
+
+#[test]
+#[ignore = "requires an NVIDIA GPU"]
+fn nonempty_pinned_buffer_still_works() {
+    baracuda_driver::init().unwrap();
+    let device = Device::get(0).unwrap();
+    let ctx = Context::new(&device).unwrap();
+
+    let mut pinned: PinnedBuffer<f32> = PinnedBuffer::new(&ctx, 4).unwrap();
+    pinned.copy_from_slice(&[1.0, 2.0, 3.0, 4.0]);
+    assert_eq!(&pinned[..], &[1.0, 2.0, 3.0, 4.0]);
 }
