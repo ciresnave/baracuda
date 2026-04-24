@@ -6,21 +6,23 @@
 # Round 2 (2026-04-23): alpha.2 re-pubs of the foundation + 5 more -sys.
 # Round 3 (2026-04-24 ~02h): cusparse/cusolver/cudnn/nccl/nvml-sys.
 # Round 4 (2026-04-24 ~13h): nvjpeg/npp/nvcomp/cvcuda/cufile-sys.
-#                            Blocked at baracuda-cupti-sys
-#                            (retry-after: 2026-04-24 13:47:22 GMT — <1h away).
+# Round 5 (2026-04-24 ~13:45h): cupti-sys only — blocked at
+#                               baracuda-cutensor-sys
+#                               (retry-after: 2026-04-24 13:57:22 GMT
+#                               — 10 min away).
 #
-# Already on crates.io at 0.0.1-alpha.2 (20/46):
+# Already on crates.io at 0.0.1-alpha.2 (21/46):
 #   baracuda-types-derive, baracuda-types, baracuda-build, baracuda-core,
 #   baracuda-cuda-sys, baracuda-nvrtc-sys, baracuda-nvjitlink-sys,
 #   baracuda-cublas-sys, baracuda-curand-sys, baracuda-cufft-sys,
 #   baracuda-cusparse-sys, baracuda-cusolver-sys, baracuda-cudnn-sys,
 #   baracuda-nccl-sys, baracuda-nvml-sys, baracuda-nvjpeg-sys,
 #   baracuda-npp-sys, baracuda-nvcomp-sys, baracuda-cvcuda-sys,
-#   baracuda-cufile-sys
+#   baracuda-cufile-sys, baracuda-cupti-sys
 #
-# crates.io's "new crate" quota is ~5 fresh names per ~1h per publisher,
-# which turned out to be more forgiving than I first thought. Re-publishing
-# an existing name does NOT count toward that quota.
+# The rate-limit window is a sliding one — it can re-open after just
+# 10 minutes when the previous round uploaded fewer new names. Re-running
+# this script every time the retry-after passes is the expected flow.
 #
 # Run this script from the repo root whenever the retry window opens.
 # It uses `set -e` so it stops at the first 429 — remove any
@@ -30,9 +32,8 @@
 
 set -e
 
-# -sys crates still pending. baracuda-cupti-sys is the first retry target.
+# -sys crates still pending. baracuda-cutensor-sys is the first retry target.
 SYS_CRATES_PENDING=(
-    baracuda-cupti-sys
     baracuda-cutensor-sys
     baracuda-tensorrt-sys
     baracuda-cudf-sys
