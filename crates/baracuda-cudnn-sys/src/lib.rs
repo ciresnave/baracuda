@@ -325,6 +325,116 @@ pub enum cudnnBackendAttributeType_t {
     RngUniform = 28,
 }
 
+// ---- new enums for v7 algorithm selection / convolution math / norm ------
+
+/// Math type for a convolution descriptor — controls tensor-core usage.
+#[repr(i32)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum cudnnMathType_t {
+    DefaultMath = 0,
+    /// Allow tensor-core math (Volta+).
+    TensorOpMath = 1,
+    /// Allow tensor-core math with implicit f16/bf16 down-conversion.
+    TensorOpMathAllowConversion = 2,
+    /// Strict FMA-only math.
+    FmaMath = 3,
+}
+
+/// Filter / bias reorder selector for INT8 quantized inference.
+#[repr(i32)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum cudnnReorderType_t {
+    DefaultReorder = 0,
+    NoReorder = 1,
+}
+
+/// Generic-normalization mode (cuDNN 8+).
+#[repr(i32)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum cudnnNormMode_t {
+    PerActivation = 0,
+    PerChannel = 1,
+}
+
+/// Generic-normalization algorithm.
+#[repr(i32)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum cudnnNormAlgo_t {
+    Standard = 0,
+    Persist = 1,
+}
+
+/// Optional fused op for normalization (None / Activation / Add+Activation).
+#[repr(i32)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum cudnnNormOps_t {
+    Norm = 0,
+    NormActivation = 1,
+    NormAddActivation = 2,
+}
+
+/// Optional fused op for batch-normalization Ex (mirrors cudnnBatchNormOps_t).
+#[repr(i32)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum cudnnBatchNormOps_t {
+    Bn = 0,
+    BnActivation = 1,
+    BnAddActivation = 2,
+}
+
+/// `cudnnDeterminism_t` — distinguishes deterministic vs non-deterministic
+/// algorithm choices in `*AlgoPerf_t`.
+#[repr(i32)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum cudnnDeterminism_t {
+    NonDeterministic = 0,
+    Deterministic = 1,
+}
+
+/// Result row from `cudnnFindConvolutionForwardAlgorithm` /
+/// `cudnnGetConvolutionForwardAlgorithm_v7`.
+#[repr(C)]
+#[derive(Copy, Clone, Debug)]
+pub struct cudnnConvolutionFwdAlgoPerf_t {
+    pub algo: cudnnConvolutionFwdAlgo_t,
+    pub status: cudnnStatus_t,
+    pub time: f32,
+    pub memory: usize,
+    pub determinism: cudnnDeterminism_t,
+    pub math_type: cudnnMathType_t,
+    pub reserved: [c_int; 3],
+}
+
+#[repr(C)]
+#[derive(Copy, Clone, Debug)]
+pub struct cudnnConvolutionBwdDataAlgoPerf_t {
+    pub algo: cudnnConvolutionBwdDataAlgo_t,
+    pub status: cudnnStatus_t,
+    pub time: f32,
+    pub memory: usize,
+    pub determinism: cudnnDeterminism_t,
+    pub math_type: cudnnMathType_t,
+    pub reserved: [c_int; 3],
+}
+
+#[repr(C)]
+#[derive(Copy, Clone, Debug)]
+pub struct cudnnConvolutionBwdFilterAlgoPerf_t {
+    pub algo: cudnnConvolutionBwdFilterAlgo_t,
+    pub status: cudnnStatus_t,
+    pub time: f32,
+    pub memory: usize,
+    pub determinism: cudnnDeterminism_t,
+    pub math_type: cudnnMathType_t,
+    pub reserved: [c_int; 3],
+}
+
+// ---- new opaque descriptors --------------------------------------------------
+
+pub type cudnnTensorTransformDescriptor_t = *mut c_void;
+pub type cudnnAttnDescriptor_t = *mut c_void;
+pub type cudnnSeqDataDescriptor_t = *mut c_void;
+
 // ---- status ---------------------------------------------------------------
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
@@ -1090,6 +1200,728 @@ pub type PFN_cudnnSpatialTfSamplerForward = unsafe extern "C" fn(
     y: *mut c_void,
 ) -> cudnnStatus_t;
 
+// ==========================================================================
+// Tier 1 — convolution + activation + reduction misc gaps
+// ==========================================================================
+
+pub type PFN_cudnnSetConvolutionGroupCount = unsafe extern "C" fn(
+    desc: cudnnConvolutionDescriptor_t,
+    group_count: c_int,
+) -> cudnnStatus_t;
+pub type PFN_cudnnGetConvolutionGroupCount = unsafe extern "C" fn(
+    desc: cudnnConvolutionDescriptor_t,
+    group_count: *mut c_int,
+) -> cudnnStatus_t;
+
+pub type PFN_cudnnSetConvolutionMathType = unsafe extern "C" fn(
+    desc: cudnnConvolutionDescriptor_t,
+    math_type: cudnnMathType_t,
+) -> cudnnStatus_t;
+pub type PFN_cudnnGetConvolutionMathType = unsafe extern "C" fn(
+    desc: cudnnConvolutionDescriptor_t,
+    math_type: *mut cudnnMathType_t,
+) -> cudnnStatus_t;
+
+pub type PFN_cudnnSetConvolutionReorderType = unsafe extern "C" fn(
+    desc: cudnnConvolutionDescriptor_t,
+    reorder_type: cudnnReorderType_t,
+) -> cudnnStatus_t;
+pub type PFN_cudnnGetConvolutionReorderType = unsafe extern "C" fn(
+    desc: cudnnConvolutionDescriptor_t,
+    reorder_type: *mut cudnnReorderType_t,
+) -> cudnnStatus_t;
+
+pub type PFN_cudnnReorderFilterAndBias = unsafe extern "C" fn(
+    handle: cudnnHandle_t,
+    filter_desc: cudnnFilterDescriptor_t,
+    reorder_type: cudnnReorderType_t,
+    filter_data: *const c_void,
+    reordered_filter_data: *mut c_void,
+    reorder_bias: c_int,
+    bias_data: *const c_void,
+    reordered_bias_data: *mut c_void,
+) -> cudnnStatus_t;
+
+pub type PFN_cudnnConvolutionBiasActivationForward = unsafe extern "C" fn(
+    handle: cudnnHandle_t,
+    alpha1: *const c_void,
+    x_desc: cudnnTensorDescriptor_t,
+    x: *const c_void,
+    w_desc: cudnnFilterDescriptor_t,
+    w: *const c_void,
+    conv_desc: cudnnConvolutionDescriptor_t,
+    algo: cudnnConvolutionFwdAlgo_t,
+    workspace: *mut c_void,
+    workspace_size: usize,
+    alpha2: *const c_void,
+    z_desc: cudnnTensorDescriptor_t,
+    z: *const c_void,
+    bias_desc: cudnnTensorDescriptor_t,
+    bias: *const c_void,
+    activation_desc: cudnnActivationDescriptor_t,
+    y_desc: cudnnTensorDescriptor_t,
+    y: *mut c_void,
+) -> cudnnStatus_t;
+
+pub type PFN_cudnnActivationBackward = unsafe extern "C" fn(
+    handle: cudnnHandle_t,
+    activation_desc: cudnnActivationDescriptor_t,
+    alpha: *const c_void,
+    y_desc: cudnnTensorDescriptor_t,
+    y: *const c_void,
+    dy_desc: cudnnTensorDescriptor_t,
+    dy: *const c_void,
+    x_desc: cudnnTensorDescriptor_t,
+    x: *const c_void,
+    beta: *const c_void,
+    dx_desc: cudnnTensorDescriptor_t,
+    dx: *mut c_void,
+) -> cudnnStatus_t;
+
+pub type PFN_cudnnSetActivationDescriptorSwishBeta = unsafe extern "C" fn(
+    desc: cudnnActivationDescriptor_t,
+    swish_beta: c_double,
+) -> cudnnStatus_t;
+pub type PFN_cudnnGetActivationDescriptorSwishBeta = unsafe extern "C" fn(
+    desc: cudnnActivationDescriptor_t,
+    swish_beta: *mut c_double,
+) -> cudnnStatus_t;
+
+pub type PFN_cudnnLRNCrossChannelBackward = unsafe extern "C" fn(
+    handle: cudnnHandle_t,
+    norm_desc: cudnnLRNDescriptor_t,
+    lrn_mode: c_int,
+    alpha: *const c_void,
+    y_desc: cudnnTensorDescriptor_t,
+    y: *const c_void,
+    dy_desc: cudnnTensorDescriptor_t,
+    dy: *const c_void,
+    x_desc: cudnnTensorDescriptor_t,
+    x: *const c_void,
+    beta: *const c_void,
+    dx_desc: cudnnTensorDescriptor_t,
+    dx: *mut c_void,
+) -> cudnnStatus_t;
+
+pub type PFN_cudnnDivisiveNormalizationForward = unsafe extern "C" fn(
+    handle: cudnnHandle_t,
+    norm_desc: cudnnLRNDescriptor_t,
+    mode: c_int,
+    alpha: *const c_void,
+    x_desc: cudnnTensorDescriptor_t,
+    x: *const c_void,
+    means: *const c_void,
+    temp: *mut c_void,
+    temp2: *mut c_void,
+    beta: *const c_void,
+    y_desc: cudnnTensorDescriptor_t,
+    y: *mut c_void,
+) -> cudnnStatus_t;
+
+pub type PFN_cudnnDivisiveNormalizationBackward = unsafe extern "C" fn(
+    handle: cudnnHandle_t,
+    norm_desc: cudnnLRNDescriptor_t,
+    mode: c_int,
+    alpha: *const c_void,
+    x_desc: cudnnTensorDescriptor_t,
+    x: *const c_void,
+    means: *const c_void,
+    dy: *const c_void,
+    temp: *mut c_void,
+    temp2: *mut c_void,
+    beta: *const c_void,
+    d_xdmeans_desc: cudnnTensorDescriptor_t,
+    dx: *mut c_void,
+    d_means: *mut c_void,
+) -> cudnnStatus_t;
+
+pub type PFN_cudnnGetReductionIndicesSize = unsafe extern "C" fn(
+    handle: cudnnHandle_t,
+    desc: cudnnReduceTensorDescriptor_t,
+    a_desc: cudnnTensorDescriptor_t,
+    c_desc: cudnnTensorDescriptor_t,
+    size_in_bytes: *mut usize,
+) -> cudnnStatus_t;
+
+// 4-D tensor / filter readback + strided-Set.
+
+pub type PFN_cudnnSetTensor4dDescriptorEx = unsafe extern "C" fn(
+    desc: cudnnTensorDescriptor_t,
+    data_type: cudnnDataType_t,
+    n: c_int,
+    c: c_int,
+    h: c_int,
+    w: c_int,
+    n_stride: c_int,
+    c_stride: c_int,
+    h_stride: c_int,
+    w_stride: c_int,
+) -> cudnnStatus_t;
+
+pub type PFN_cudnnGetTensor4dDescriptor = unsafe extern "C" fn(
+    desc: cudnnTensorDescriptor_t,
+    data_type: *mut cudnnDataType_t,
+    n: *mut c_int,
+    c: *mut c_int,
+    h: *mut c_int,
+    w: *mut c_int,
+    n_stride: *mut c_int,
+    c_stride: *mut c_int,
+    h_stride: *mut c_int,
+    w_stride: *mut c_int,
+) -> cudnnStatus_t;
+
+pub type PFN_cudnnGetFilter4dDescriptor = unsafe extern "C" fn(
+    desc: cudnnFilterDescriptor_t,
+    data_type: *mut cudnnDataType_t,
+    format: *mut cudnnTensorFormat_t,
+    k: *mut c_int,
+    c: *mut c_int,
+    h: *mut c_int,
+    w: *mut c_int,
+) -> cudnnStatus_t;
+
+// Dropout descriptor save/restore.
+
+pub type PFN_cudnnGetDropoutDescriptor = unsafe extern "C" fn(
+    desc: cudnnDropoutDescriptor_t,
+    handle: cudnnHandle_t,
+    dropout: *mut f32,
+    states: *mut *mut c_void,
+    seed: *mut u64,
+) -> cudnnStatus_t;
+
+pub type PFN_cudnnRestoreDropoutDescriptor = unsafe extern "C" fn(
+    desc: cudnnDropoutDescriptor_t,
+    handle: cudnnHandle_t,
+    dropout: f32,
+    states: *mut c_void,
+    state_size: usize,
+    seed: u64,
+) -> cudnnStatus_t;
+
+// ==========================================================================
+// Tier 2 — algorithm finders / pickers (v7)
+// ==========================================================================
+
+pub type PFN_cudnnGetConvolutionForwardAlgorithm_v7 = unsafe extern "C" fn(
+    handle: cudnnHandle_t,
+    src_desc: cudnnTensorDescriptor_t,
+    filter_desc: cudnnFilterDescriptor_t,
+    conv_desc: cudnnConvolutionDescriptor_t,
+    dst_desc: cudnnTensorDescriptor_t,
+    requested_algo_count: c_int,
+    returned_algo_count: *mut c_int,
+    perf_results: *mut cudnnConvolutionFwdAlgoPerf_t,
+) -> cudnnStatus_t;
+
+pub type PFN_cudnnFindConvolutionForwardAlgorithm = unsafe extern "C" fn(
+    handle: cudnnHandle_t,
+    src_desc: cudnnTensorDescriptor_t,
+    filter_desc: cudnnFilterDescriptor_t,
+    conv_desc: cudnnConvolutionDescriptor_t,
+    dst_desc: cudnnTensorDescriptor_t,
+    requested_algo_count: c_int,
+    returned_algo_count: *mut c_int,
+    perf_results: *mut cudnnConvolutionFwdAlgoPerf_t,
+) -> cudnnStatus_t;
+
+pub type PFN_cudnnFindConvolutionForwardAlgorithmEx = unsafe extern "C" fn(
+    handle: cudnnHandle_t,
+    src_desc: cudnnTensorDescriptor_t,
+    src: *const c_void,
+    filter_desc: cudnnFilterDescriptor_t,
+    filter: *const c_void,
+    conv_desc: cudnnConvolutionDescriptor_t,
+    dst_desc: cudnnTensorDescriptor_t,
+    dst: *mut c_void,
+    requested_algo_count: c_int,
+    returned_algo_count: *mut c_int,
+    perf_results: *mut cudnnConvolutionFwdAlgoPerf_t,
+    workspace: *mut c_void,
+    workspace_size: usize,
+) -> cudnnStatus_t;
+
+pub type PFN_cudnnGetConvolutionBackwardDataAlgorithm_v7 = unsafe extern "C" fn(
+    handle: cudnnHandle_t,
+    filter_desc: cudnnFilterDescriptor_t,
+    diff_desc: cudnnTensorDescriptor_t,
+    conv_desc: cudnnConvolutionDescriptor_t,
+    grad_desc: cudnnTensorDescriptor_t,
+    requested_algo_count: c_int,
+    returned_algo_count: *mut c_int,
+    perf_results: *mut cudnnConvolutionBwdDataAlgoPerf_t,
+) -> cudnnStatus_t;
+
+pub type PFN_cudnnFindConvolutionBackwardDataAlgorithm = unsafe extern "C" fn(
+    handle: cudnnHandle_t,
+    filter_desc: cudnnFilterDescriptor_t,
+    diff_desc: cudnnTensorDescriptor_t,
+    conv_desc: cudnnConvolutionDescriptor_t,
+    grad_desc: cudnnTensorDescriptor_t,
+    requested_algo_count: c_int,
+    returned_algo_count: *mut c_int,
+    perf_results: *mut cudnnConvolutionBwdDataAlgoPerf_t,
+) -> cudnnStatus_t;
+
+pub type PFN_cudnnGetConvolutionBackwardFilterAlgorithm_v7 = unsafe extern "C" fn(
+    handle: cudnnHandle_t,
+    src_desc: cudnnTensorDescriptor_t,
+    diff_desc: cudnnTensorDescriptor_t,
+    conv_desc: cudnnConvolutionDescriptor_t,
+    grad_desc: cudnnFilterDescriptor_t,
+    requested_algo_count: c_int,
+    returned_algo_count: *mut c_int,
+    perf_results: *mut cudnnConvolutionBwdFilterAlgoPerf_t,
+) -> cudnnStatus_t;
+
+pub type PFN_cudnnFindConvolutionBackwardFilterAlgorithm = unsafe extern "C" fn(
+    handle: cudnnHandle_t,
+    src_desc: cudnnTensorDescriptor_t,
+    diff_desc: cudnnTensorDescriptor_t,
+    conv_desc: cudnnConvolutionDescriptor_t,
+    grad_desc: cudnnFilterDescriptor_t,
+    requested_algo_count: c_int,
+    returned_algo_count: *mut c_int,
+    perf_results: *mut cudnnConvolutionBwdFilterAlgoPerf_t,
+) -> cudnnStatus_t;
+
+// ==========================================================================
+// Tier 3 — BatchNorm "Ex" + generic Normalization API
+// ==========================================================================
+
+pub type PFN_cudnnGetBatchNormalizationForwardTrainingExWorkspaceSize =
+    unsafe extern "C" fn(
+        handle: cudnnHandle_t,
+        mode: cudnnBatchNormMode_t,
+        bn_ops: cudnnBatchNormOps_t,
+        x_desc: cudnnTensorDescriptor_t,
+        z_desc: cudnnTensorDescriptor_t,
+        y_desc: cudnnTensorDescriptor_t,
+        bn_scale_bias_mean_var_desc: cudnnTensorDescriptor_t,
+        activation_desc: cudnnActivationDescriptor_t,
+        size_in_bytes: *mut usize,
+    ) -> cudnnStatus_t;
+
+pub type PFN_cudnnGetBatchNormalizationBackwardExWorkspaceSize =
+    unsafe extern "C" fn(
+        handle: cudnnHandle_t,
+        mode: cudnnBatchNormMode_t,
+        bn_ops: cudnnBatchNormOps_t,
+        x_desc: cudnnTensorDescriptor_t,
+        y_desc: cudnnTensorDescriptor_t,
+        dy_desc: cudnnTensorDescriptor_t,
+        dz_desc: cudnnTensorDescriptor_t,
+        dx_desc: cudnnTensorDescriptor_t,
+        d_bn_scale_bias_desc: cudnnTensorDescriptor_t,
+        activation_desc: cudnnActivationDescriptor_t,
+        size_in_bytes: *mut usize,
+    ) -> cudnnStatus_t;
+
+pub type PFN_cudnnGetBatchNormalizationTrainingExReserveSpaceSize =
+    unsafe extern "C" fn(
+        handle: cudnnHandle_t,
+        mode: cudnnBatchNormMode_t,
+        bn_ops: cudnnBatchNormOps_t,
+        activation_desc: cudnnActivationDescriptor_t,
+        x_desc: cudnnTensorDescriptor_t,
+        size_in_bytes: *mut usize,
+    ) -> cudnnStatus_t;
+
+pub type PFN_cudnnBatchNormalizationForwardTrainingEx = unsafe extern "C" fn(
+    handle: cudnnHandle_t,
+    mode: cudnnBatchNormMode_t,
+    bn_ops: cudnnBatchNormOps_t,
+    alpha: *const c_void,
+    beta: *const c_void,
+    x_desc: cudnnTensorDescriptor_t,
+    x: *const c_void,
+    z_desc: cudnnTensorDescriptor_t,
+    z: *const c_void,
+    y_desc: cudnnTensorDescriptor_t,
+    y: *mut c_void,
+    bn_scale_bias_mean_var_desc: cudnnTensorDescriptor_t,
+    bn_scale: *const c_void,
+    bn_bias: *const c_void,
+    exponential_average_factor: c_double,
+    result_running_mean: *mut c_void,
+    result_running_variance: *mut c_void,
+    epsilon: c_double,
+    save_mean: *mut c_void,
+    save_inv_variance: *mut c_void,
+    activation_desc: cudnnActivationDescriptor_t,
+    workspace: *mut c_void,
+    workspace_size: usize,
+    reserve_space: *mut c_void,
+    reserve_space_size: usize,
+) -> cudnnStatus_t;
+
+pub type PFN_cudnnBatchNormalizationBackwardEx = unsafe extern "C" fn(
+    handle: cudnnHandle_t,
+    mode: cudnnBatchNormMode_t,
+    bn_ops: cudnnBatchNormOps_t,
+    alpha_data_diff: *const c_void,
+    beta_data_diff: *const c_void,
+    alpha_param_diff: *const c_void,
+    beta_param_diff: *const c_void,
+    x_desc: cudnnTensorDescriptor_t,
+    x: *const c_void,
+    y_desc: cudnnTensorDescriptor_t,
+    y: *const c_void,
+    dy_desc: cudnnTensorDescriptor_t,
+    dy: *const c_void,
+    dz_desc: cudnnTensorDescriptor_t,
+    dz: *mut c_void,
+    dx_desc: cudnnTensorDescriptor_t,
+    dx: *mut c_void,
+    d_bn_scale_bias_desc: cudnnTensorDescriptor_t,
+    bn_scale: *const c_void,
+    bn_bias: *const c_void,
+    d_bn_scale_result: *mut c_void,
+    d_bn_bias_result: *mut c_void,
+    epsilon: c_double,
+    saved_mean: *const c_void,
+    saved_inv_variance: *const c_void,
+    activation_desc: cudnnActivationDescriptor_t,
+    workspace: *mut c_void,
+    workspace_size: usize,
+    reserve_space: *mut c_void,
+    reserve_space_size: usize,
+) -> cudnnStatus_t;
+
+// Generic Normalization API (cuDNN 8+).
+
+pub type PFN_cudnnNormalizationForwardInference = unsafe extern "C" fn(
+    handle: cudnnHandle_t,
+    mode: cudnnNormMode_t,
+    norm_ops: cudnnNormOps_t,
+    algo: cudnnNormAlgo_t,
+    alpha: *const c_void,
+    beta: *const c_void,
+    x_desc: cudnnTensorDescriptor_t,
+    x: *const c_void,
+    norm_scale_bias_desc: cudnnTensorDescriptor_t,
+    norm_scale: *const c_void,
+    norm_bias: *const c_void,
+    norm_mean_var_desc: cudnnTensorDescriptor_t,
+    estimated_mean: *const c_void,
+    estimated_variance: *const c_void,
+    z_desc: cudnnTensorDescriptor_t,
+    z: *const c_void,
+    activation_desc: cudnnActivationDescriptor_t,
+    y_desc: cudnnTensorDescriptor_t,
+    y: *mut c_void,
+    epsilon: c_double,
+    group_count: c_int,
+) -> cudnnStatus_t;
+
+pub type PFN_cudnnGetNormalizationForwardTrainingWorkspaceSize =
+    unsafe extern "C" fn(
+        handle: cudnnHandle_t,
+        mode: cudnnNormMode_t,
+        norm_ops: cudnnNormOps_t,
+        algo: cudnnNormAlgo_t,
+        x_desc: cudnnTensorDescriptor_t,
+        z_desc: cudnnTensorDescriptor_t,
+        y_desc: cudnnTensorDescriptor_t,
+        norm_scale_bias_desc: cudnnTensorDescriptor_t,
+        activation_desc: cudnnActivationDescriptor_t,
+        norm_mean_var_desc: cudnnTensorDescriptor_t,
+        size_in_bytes: *mut usize,
+        group_count: c_int,
+    ) -> cudnnStatus_t;
+
+pub type PFN_cudnnGetNormalizationBackwardWorkspaceSize = unsafe extern "C" fn(
+    handle: cudnnHandle_t,
+    mode: cudnnNormMode_t,
+    norm_ops: cudnnNormOps_t,
+    algo: cudnnNormAlgo_t,
+    x_desc: cudnnTensorDescriptor_t,
+    y_desc: cudnnTensorDescriptor_t,
+    dy_desc: cudnnTensorDescriptor_t,
+    dz_desc: cudnnTensorDescriptor_t,
+    dx_desc: cudnnTensorDescriptor_t,
+    d_norm_scale_bias_desc: cudnnTensorDescriptor_t,
+    activation_desc: cudnnActivationDescriptor_t,
+    norm_mean_var_desc: cudnnTensorDescriptor_t,
+    size_in_bytes: *mut usize,
+    group_count: c_int,
+) -> cudnnStatus_t;
+
+pub type PFN_cudnnGetNormalizationTrainingReserveSpaceSize =
+    unsafe extern "C" fn(
+        handle: cudnnHandle_t,
+        mode: cudnnNormMode_t,
+        norm_ops: cudnnNormOps_t,
+        algo: cudnnNormAlgo_t,
+        activation_desc: cudnnActivationDescriptor_t,
+        x_desc: cudnnTensorDescriptor_t,
+        size_in_bytes: *mut usize,
+        group_count: c_int,
+    ) -> cudnnStatus_t;
+
+pub type PFN_cudnnNormalizationForwardTraining = unsafe extern "C" fn(
+    handle: cudnnHandle_t,
+    mode: cudnnNormMode_t,
+    norm_ops: cudnnNormOps_t,
+    algo: cudnnNormAlgo_t,
+    alpha: *const c_void,
+    beta: *const c_void,
+    x_desc: cudnnTensorDescriptor_t,
+    x: *const c_void,
+    norm_scale_bias_desc: cudnnTensorDescriptor_t,
+    norm_scale: *const c_void,
+    norm_bias: *const c_void,
+    exponential_average_factor: c_double,
+    norm_mean_var_desc: cudnnTensorDescriptor_t,
+    result_running_mean: *mut c_void,
+    result_running_variance: *mut c_void,
+    epsilon: c_double,
+    save_mean: *mut c_void,
+    save_inv_variance: *mut c_void,
+    activation_desc: cudnnActivationDescriptor_t,
+    z_desc: cudnnTensorDescriptor_t,
+    z: *const c_void,
+    y_desc: cudnnTensorDescriptor_t,
+    y: *mut c_void,
+    workspace: *mut c_void,
+    workspace_size: usize,
+    reserve_space: *mut c_void,
+    reserve_space_size: usize,
+    group_count: c_int,
+) -> cudnnStatus_t;
+
+pub type PFN_cudnnNormalizationBackward = unsafe extern "C" fn(
+    handle: cudnnHandle_t,
+    mode: cudnnNormMode_t,
+    norm_ops: cudnnNormOps_t,
+    algo: cudnnNormAlgo_t,
+    alpha_data_diff: *const c_void,
+    beta_data_diff: *const c_void,
+    alpha_param_diff: *const c_void,
+    beta_param_diff: *const c_void,
+    x_desc: cudnnTensorDescriptor_t,
+    x: *const c_void,
+    y_desc: cudnnTensorDescriptor_t,
+    y: *const c_void,
+    dy_desc: cudnnTensorDescriptor_t,
+    dy: *const c_void,
+    dz_desc: cudnnTensorDescriptor_t,
+    dz: *mut c_void,
+    dx_desc: cudnnTensorDescriptor_t,
+    dx: *mut c_void,
+    d_norm_scale_bias_desc: cudnnTensorDescriptor_t,
+    norm_scale: *const c_void,
+    norm_bias: *const c_void,
+    d_norm_scale: *mut c_void,
+    d_norm_bias: *mut c_void,
+    epsilon: c_double,
+    norm_mean_var_desc: cudnnTensorDescriptor_t,
+    saved_mean: *const c_void,
+    saved_inv_variance: *const c_void,
+    activation_desc: cudnnActivationDescriptor_t,
+    workspace: *mut c_void,
+    workspace_size: usize,
+    reserve_space: *mut c_void,
+    reserve_space_size: usize,
+    group_count: c_int,
+) -> cudnnStatus_t;
+
+// ==========================================================================
+// Tier 4 — RNN v8 modernization
+// ==========================================================================
+
+pub type PFN_cudnnSetRNNDescriptor_v8 = unsafe extern "C" fn(
+    rnn_desc: cudnnRNNDescriptor_t,
+    algo: cudnnRNNAlgo_t,
+    cell_mode: cudnnRNNMode_t,
+    bias_mode: c_int,
+    dir_mode: cudnnDirectionMode_t,
+    input_mode: cudnnRNNInputMode_t,
+    data_type: cudnnDataType_t,
+    math_prec: cudnnDataType_t,
+    math_type: cudnnMathType_t,
+    input_size: i32,
+    hidden_size: i32,
+    proj_size: i32,
+    num_layers: i32,
+    dropout_desc: cudnnDropoutDescriptor_t,
+    aux_flags: u32,
+) -> cudnnStatus_t;
+
+pub type PFN_cudnnBuildRNNDynamic = unsafe extern "C" fn(
+    handle: cudnnHandle_t,
+    rnn_desc: cudnnRNNDescriptor_t,
+    mini_batch: c_int,
+) -> cudnnStatus_t;
+
+pub type PFN_cudnnGetRNNTempSpaceSizes = unsafe extern "C" fn(
+    handle: cudnnHandle_t,
+    rnn_desc: cudnnRNNDescriptor_t,
+    fwd_mode: c_int,
+    x_desc: cudnnRNNDataDescriptor_t,
+    work_space_size: *mut usize,
+    reserve_space_size: *mut usize,
+) -> cudnnStatus_t;
+
+pub type PFN_cudnnGetRNNWeightSpaceSize = unsafe extern "C" fn(
+    handle: cudnnHandle_t,
+    rnn_desc: cudnnRNNDescriptor_t,
+    weight_space_size: *mut usize,
+) -> cudnnStatus_t;
+
+pub type PFN_cudnnGetRNNWeightParams = unsafe extern "C" fn(
+    handle: cudnnHandle_t,
+    rnn_desc: cudnnRNNDescriptor_t,
+    pseudo_layer: i32,
+    weight_space_size: usize,
+    weight_space: *const c_void,
+    lin_layer_id: i32,
+    m_desc: cudnnTensorDescriptor_t,
+    m_addr: *mut *mut c_void,
+    b_desc: cudnnTensorDescriptor_t,
+    b_addr: *mut *mut c_void,
+) -> cudnnStatus_t;
+
+// ==========================================================================
+// Tier 5 — Multi-head attention
+// ==========================================================================
+
+pub type PFN_cudnnCreateAttnDescriptor =
+    unsafe extern "C" fn(desc: *mut cudnnAttnDescriptor_t) -> cudnnStatus_t;
+pub type PFN_cudnnDestroyAttnDescriptor =
+    unsafe extern "C" fn(desc: cudnnAttnDescriptor_t) -> cudnnStatus_t;
+
+pub type PFN_cudnnSetAttnDescriptor = unsafe extern "C" fn(
+    desc: cudnnAttnDescriptor_t,
+    attn_mode: u32,
+    n_heads: i32,
+    sm_scaler: c_double,
+    data_type: cudnnDataType_t,
+    compute_prec: cudnnDataType_t,
+    math_type: cudnnMathType_t,
+    attn_dropout_desc: cudnnDropoutDescriptor_t,
+    post_dropout_desc: cudnnDropoutDescriptor_t,
+    q_size: i32,
+    k_size: i32,
+    v_size: i32,
+    q_proj_size: i32,
+    k_proj_size: i32,
+    v_proj_size: i32,
+    o_proj_size: i32,
+    qo_max_seq_length: i32,
+    kv_max_seq_length: i32,
+    max_batch_size: i32,
+    max_beam_size: i32,
+) -> cudnnStatus_t;
+
+pub type PFN_cudnnGetMultiHeadAttnBuffers = unsafe extern "C" fn(
+    handle: cudnnHandle_t,
+    attn_desc: cudnnAttnDescriptor_t,
+    weight_size_in_bytes: *mut usize,
+    work_space_size_in_bytes: *mut usize,
+    reserve_space_size_in_bytes: *mut usize,
+) -> cudnnStatus_t;
+
+pub type PFN_cudnnGetMultiHeadAttnWeights = unsafe extern "C" fn(
+    handle: cudnnHandle_t,
+    attn_desc: cudnnAttnDescriptor_t,
+    w_kind: c_int,
+    weight_size_in_bytes: usize,
+    weights: *const c_void,
+    w_desc: cudnnTensorDescriptor_t,
+    w_addr: *mut *mut c_void,
+) -> cudnnStatus_t;
+
+pub type PFN_cudnnMultiHeadAttnForward = unsafe extern "C" fn(
+    handle: cudnnHandle_t,
+    attn_desc: cudnnAttnDescriptor_t,
+    curr_idx: i32,
+    lo_win_idx: *const i32,
+    hi_win_idx: *const i32,
+    dev_seq_lengths_qo: *const i32,
+    dev_seq_lengths_kv: *const i32,
+    q_desc: cudnnSeqDataDescriptor_t,
+    queries: *const c_void,
+    residuals: *const c_void,
+    k_desc: cudnnSeqDataDescriptor_t,
+    keys: *const c_void,
+    v_desc: cudnnSeqDataDescriptor_t,
+    values: *const c_void,
+    o_desc: cudnnSeqDataDescriptor_t,
+    out: *mut c_void,
+    weight_size_in_bytes: usize,
+    weights: *const c_void,
+    work_space_size_in_bytes: usize,
+    work_space: *mut c_void,
+    reserve_space_size_in_bytes: usize,
+    reserve_space: *mut c_void,
+) -> cudnnStatus_t;
+
+pub type PFN_cudnnMultiHeadAttnBackwardData = unsafe extern "C" fn(
+    handle: cudnnHandle_t,
+    attn_desc: cudnnAttnDescriptor_t,
+    lo_win_idx: *const i32,
+    hi_win_idx: *const i32,
+    dev_seq_lengths_dqdo: *const i32,
+    dev_seq_lengths_dkdv: *const i32,
+    do_desc: cudnnSeqDataDescriptor_t,
+    dout: *const c_void,
+    dq_desc: cudnnSeqDataDescriptor_t,
+    dqueries: *mut c_void,
+    queries: *const c_void,
+    dk_desc: cudnnSeqDataDescriptor_t,
+    dkeys: *mut c_void,
+    keys: *const c_void,
+    dv_desc: cudnnSeqDataDescriptor_t,
+    dvalues: *mut c_void,
+    values: *const c_void,
+    weight_size_in_bytes: usize,
+    weights: *const c_void,
+    work_space_size_in_bytes: usize,
+    work_space: *mut c_void,
+    reserve_space_size_in_bytes: usize,
+    reserve_space: *mut c_void,
+) -> cudnnStatus_t;
+
+pub type PFN_cudnnMultiHeadAttnBackwardWeights = unsafe extern "C" fn(
+    handle: cudnnHandle_t,
+    attn_desc: cudnnAttnDescriptor_t,
+    add_grad: c_int,
+    q_desc: cudnnSeqDataDescriptor_t,
+    queries: *const c_void,
+    k_desc: cudnnSeqDataDescriptor_t,
+    keys: *const c_void,
+    v_desc: cudnnSeqDataDescriptor_t,
+    values: *const c_void,
+    do_desc: cudnnSeqDataDescriptor_t,
+    dout: *const c_void,
+    weight_size_in_bytes: usize,
+    weights: *const c_void,
+    dweights: *mut c_void,
+    work_space_size_in_bytes: usize,
+    work_space: *mut c_void,
+    reserve_space_size_in_bytes: usize,
+    reserve_space: *mut c_void,
+) -> cudnnStatus_t;
+
+// SeqDataDescriptor lifetime helpers.
+
+pub type PFN_cudnnCreateSeqDataDescriptor =
+    unsafe extern "C" fn(desc: *mut cudnnSeqDataDescriptor_t) -> cudnnStatus_t;
+pub type PFN_cudnnDestroySeqDataDescriptor =
+    unsafe extern "C" fn(desc: cudnnSeqDataDescriptor_t) -> cudnnStatus_t;
+pub type PFN_cudnnSetSeqDataDescriptor = unsafe extern "C" fn(
+    desc: cudnnSeqDataDescriptor_t,
+    data_type: cudnnDataType_t,
+    nb_dims: c_int,
+    dim_a: *const c_int,
+    axes: *const c_int,
+    seq_length_array_size: usize,
+    seq_length_array: *const c_int,
+    padding_fill: *const c_void,
+) -> cudnnStatus_t;
+
 // ---- loader --------------------------------------------------------------
 
 /// cuDNN's install layout is non-standard — on Windows the DLLs live at
@@ -1358,6 +2190,70 @@ cudnn_fns! {
     cudnn_set_spatial_transformer_nd_descriptor as "cudnnSetSpatialTransformerNdDescriptor": PFN_cudnnSetSpatialTransformerNdDescriptor;
     cudnn_spatial_tf_grid_generator_forward as "cudnnSpatialTfGridGeneratorForward": PFN_cudnnSpatialTfGridGeneratorForward;
     cudnn_spatial_tf_sampler_forward as "cudnnSpatialTfSamplerForward": PFN_cudnnSpatialTfSamplerForward;
+
+    // Tier 1 — convolution + activation + reduction misc
+    cudnn_set_convolution_group_count as "cudnnSetConvolutionGroupCount": PFN_cudnnSetConvolutionGroupCount;
+    cudnn_get_convolution_group_count as "cudnnGetConvolutionGroupCount": PFN_cudnnGetConvolutionGroupCount;
+    cudnn_set_convolution_math_type as "cudnnSetConvolutionMathType": PFN_cudnnSetConvolutionMathType;
+    cudnn_get_convolution_math_type as "cudnnGetConvolutionMathType": PFN_cudnnGetConvolutionMathType;
+    cudnn_set_convolution_reorder_type as "cudnnSetConvolutionReorderType": PFN_cudnnSetConvolutionReorderType;
+    cudnn_get_convolution_reorder_type as "cudnnGetConvolutionReorderType": PFN_cudnnGetConvolutionReorderType;
+    cudnn_reorder_filter_and_bias as "cudnnReorderFilterAndBias": PFN_cudnnReorderFilterAndBias;
+    cudnn_convolution_bias_activation_forward as "cudnnConvolutionBiasActivationForward": PFN_cudnnConvolutionBiasActivationForward;
+    cudnn_activation_backward as "cudnnActivationBackward": PFN_cudnnActivationBackward;
+    cudnn_set_activation_descriptor_swish_beta as "cudnnSetActivationDescriptorSwishBeta": PFN_cudnnSetActivationDescriptorSwishBeta;
+    cudnn_get_activation_descriptor_swish_beta as "cudnnGetActivationDescriptorSwishBeta": PFN_cudnnGetActivationDescriptorSwishBeta;
+    cudnn_lrn_cross_channel_backward as "cudnnLRNCrossChannelBackward": PFN_cudnnLRNCrossChannelBackward;
+    cudnn_divisive_normalization_forward as "cudnnDivisiveNormalizationForward": PFN_cudnnDivisiveNormalizationForward;
+    cudnn_divisive_normalization_backward as "cudnnDivisiveNormalizationBackward": PFN_cudnnDivisiveNormalizationBackward;
+    cudnn_get_reduction_indices_size as "cudnnGetReductionIndicesSize": PFN_cudnnGetReductionIndicesSize;
+    cudnn_set_tensor_4d_descriptor_ex as "cudnnSetTensor4dDescriptorEx": PFN_cudnnSetTensor4dDescriptorEx;
+    cudnn_get_tensor_4d_descriptor as "cudnnGetTensor4dDescriptor": PFN_cudnnGetTensor4dDescriptor;
+    cudnn_get_filter_4d_descriptor as "cudnnGetFilter4dDescriptor": PFN_cudnnGetFilter4dDescriptor;
+    cudnn_get_dropout_descriptor as "cudnnGetDropoutDescriptor": PFN_cudnnGetDropoutDescriptor;
+    cudnn_restore_dropout_descriptor as "cudnnRestoreDropoutDescriptor": PFN_cudnnRestoreDropoutDescriptor;
+
+    // Tier 2 — algorithm finders / pickers (v7)
+    cudnn_get_convolution_forward_algorithm_v7 as "cudnnGetConvolutionForwardAlgorithm_v7": PFN_cudnnGetConvolutionForwardAlgorithm_v7;
+    cudnn_find_convolution_forward_algorithm as "cudnnFindConvolutionForwardAlgorithm": PFN_cudnnFindConvolutionForwardAlgorithm;
+    cudnn_find_convolution_forward_algorithm_ex as "cudnnFindConvolutionForwardAlgorithmEx": PFN_cudnnFindConvolutionForwardAlgorithmEx;
+    cudnn_get_convolution_backward_data_algorithm_v7 as "cudnnGetConvolutionBackwardDataAlgorithm_v7": PFN_cudnnGetConvolutionBackwardDataAlgorithm_v7;
+    cudnn_find_convolution_backward_data_algorithm as "cudnnFindConvolutionBackwardDataAlgorithm": PFN_cudnnFindConvolutionBackwardDataAlgorithm;
+    cudnn_get_convolution_backward_filter_algorithm_v7 as "cudnnGetConvolutionBackwardFilterAlgorithm_v7": PFN_cudnnGetConvolutionBackwardFilterAlgorithm_v7;
+    cudnn_find_convolution_backward_filter_algorithm as "cudnnFindConvolutionBackwardFilterAlgorithm": PFN_cudnnFindConvolutionBackwardFilterAlgorithm;
+
+    // Tier 3 — BatchNorm Ex + generic Normalization
+    cudnn_get_batch_normalization_forward_training_ex_workspace_size as "cudnnGetBatchNormalizationForwardTrainingExWorkspaceSize": PFN_cudnnGetBatchNormalizationForwardTrainingExWorkspaceSize;
+    cudnn_get_batch_normalization_backward_ex_workspace_size as "cudnnGetBatchNormalizationBackwardExWorkspaceSize": PFN_cudnnGetBatchNormalizationBackwardExWorkspaceSize;
+    cudnn_get_batch_normalization_training_ex_reserve_space_size as "cudnnGetBatchNormalizationTrainingExReserveSpaceSize": PFN_cudnnGetBatchNormalizationTrainingExReserveSpaceSize;
+    cudnn_batch_normalization_forward_training_ex as "cudnnBatchNormalizationForwardTrainingEx": PFN_cudnnBatchNormalizationForwardTrainingEx;
+    cudnn_batch_normalization_backward_ex as "cudnnBatchNormalizationBackwardEx": PFN_cudnnBatchNormalizationBackwardEx;
+    cudnn_normalization_forward_inference as "cudnnNormalizationForwardInference": PFN_cudnnNormalizationForwardInference;
+    cudnn_get_normalization_forward_training_workspace_size as "cudnnGetNormalizationForwardTrainingWorkspaceSize": PFN_cudnnGetNormalizationForwardTrainingWorkspaceSize;
+    cudnn_get_normalization_backward_workspace_size as "cudnnGetNormalizationBackwardWorkspaceSize": PFN_cudnnGetNormalizationBackwardWorkspaceSize;
+    cudnn_get_normalization_training_reserve_space_size as "cudnnGetNormalizationTrainingReserveSpaceSize": PFN_cudnnGetNormalizationTrainingReserveSpaceSize;
+    cudnn_normalization_forward_training as "cudnnNormalizationForwardTraining": PFN_cudnnNormalizationForwardTraining;
+    cudnn_normalization_backward as "cudnnNormalizationBackward": PFN_cudnnNormalizationBackward;
+
+    // Tier 4 — RNN v8
+    cudnn_set_rnn_descriptor_v8 as "cudnnSetRNNDescriptor_v8": PFN_cudnnSetRNNDescriptor_v8;
+    cudnn_build_rnn_dynamic as "cudnnBuildRNNDynamic": PFN_cudnnBuildRNNDynamic;
+    cudnn_get_rnn_temp_space_sizes as "cudnnGetRNNTempSpaceSizes": PFN_cudnnGetRNNTempSpaceSizes;
+    cudnn_get_rnn_weight_space_size as "cudnnGetRNNWeightSpaceSize": PFN_cudnnGetRNNWeightSpaceSize;
+    cudnn_get_rnn_weight_params as "cudnnGetRNNWeightParams": PFN_cudnnGetRNNWeightParams;
+
+    // Tier 5 — Multi-head attention
+    cudnn_create_attn_descriptor as "cudnnCreateAttnDescriptor": PFN_cudnnCreateAttnDescriptor;
+    cudnn_destroy_attn_descriptor as "cudnnDestroyAttnDescriptor": PFN_cudnnDestroyAttnDescriptor;
+    cudnn_set_attn_descriptor as "cudnnSetAttnDescriptor": PFN_cudnnSetAttnDescriptor;
+    cudnn_get_multi_head_attn_buffers as "cudnnGetMultiHeadAttnBuffers": PFN_cudnnGetMultiHeadAttnBuffers;
+    cudnn_get_multi_head_attn_weights as "cudnnGetMultiHeadAttnWeights": PFN_cudnnGetMultiHeadAttnWeights;
+    cudnn_multi_head_attn_forward as "cudnnMultiHeadAttnForward": PFN_cudnnMultiHeadAttnForward;
+    cudnn_multi_head_attn_backward_data as "cudnnMultiHeadAttnBackwardData": PFN_cudnnMultiHeadAttnBackwardData;
+    cudnn_multi_head_attn_backward_weights as "cudnnMultiHeadAttnBackwardWeights": PFN_cudnnMultiHeadAttnBackwardWeights;
+    cudnn_create_seq_data_descriptor as "cudnnCreateSeqDataDescriptor": PFN_cudnnCreateSeqDataDescriptor;
+    cudnn_destroy_seq_data_descriptor as "cudnnDestroySeqDataDescriptor": PFN_cudnnDestroySeqDataDescriptor;
+    cudnn_set_seq_data_descriptor as "cudnnSetSeqDataDescriptor": PFN_cudnnSetSeqDataDescriptor;
 }
 
 pub fn cudnn() -> Result<&'static Cudnn, LoaderError> {

@@ -12,15 +12,18 @@
 #![warn(missing_debug_implementations)]
 
 use baracuda_cudnn_sys::{
-    cudnn, cudnnActivationDescriptor_t, cudnnActivationMode_t, cudnnBackendAttributeName_t,
-    cudnnBackendAttributeType_t, cudnnBackendDescriptorType_t, cudnnBackendDescriptor_t,
-    cudnnBatchNormMode_t, cudnnConvolutionBwdDataAlgo_t, cudnnConvolutionBwdFilterAlgo_t,
+    cudnn, cudnnActivationDescriptor_t, cudnnActivationMode_t, cudnnAttnDescriptor_t,
+    cudnnBackendAttributeName_t, cudnnBackendAttributeType_t, cudnnBackendDescriptorType_t,
+    cudnnBackendDescriptor_t, cudnnBatchNormMode_t, cudnnBatchNormOps_t,
+    cudnnConvolutionBwdDataAlgo_t, cudnnConvolutionBwdFilterAlgo_t,
     cudnnConvolutionDescriptor_t, cudnnConvolutionFwdAlgo_t, cudnnConvolutionMode_t,
-    cudnnDataType_t, cudnnDropoutDescriptor_t, cudnnFilterDescriptor_t, cudnnHandle_t,
-    cudnnIndicesType_t, cudnnLRNDescriptor_t, cudnnNanPropagation_t, cudnnOpTensorDescriptor_t,
-    cudnnOpTensorOp_t, cudnnPoolingDescriptor_t, cudnnPoolingMode_t, cudnnReduceTensorDescriptor_t,
-    cudnnReduceTensorIndices_t, cudnnReduceTensorOp_t, cudnnSoftmaxAlgorithm_t, cudnnSoftmaxMode_t,
-    cudnnStatus_t, cudnnTensorDescriptor_t, cudnnTensorFormat_t,
+    cudnnDataType_t, cudnnDropoutDescriptor_t, cudnnFilterDescriptor_t,
+    cudnnHandle_t, cudnnIndicesType_t, cudnnLRNDescriptor_t, cudnnMathType_t, cudnnNanPropagation_t,
+    cudnnNormAlgo_t, cudnnNormMode_t, cudnnNormOps_t, cudnnOpTensorDescriptor_t, cudnnOpTensorOp_t,
+    cudnnPoolingDescriptor_t, cudnnPoolingMode_t, cudnnReduceTensorDescriptor_t,
+    cudnnReduceTensorIndices_t, cudnnReduceTensorOp_t, cudnnReorderType_t,
+    cudnnSeqDataDescriptor_t, cudnnSoftmaxAlgorithm_t, cudnnSoftmaxMode_t, cudnnStatus_t,
+    cudnnTensorDescriptor_t, cudnnTensorFormat_t,
 };
 use baracuda_driver::{DeviceBuffer, Stream};
 use baracuda_types::DeviceRepr;
@@ -563,6 +566,58 @@ impl ConvolutionDescriptor {
             )
         })?;
         Ok((n, c, h, w))
+    }
+
+    /// Set the group count for grouped convolution. The default is 1
+    /// (regular convolution); pass `g > 1` for depthwise / grouped
+    /// variants. Filter shape must match: input C divides g, filter C
+    /// = input C / g.
+    pub fn set_group_count(&self, group_count: i32) -> Result<()> {
+        let cu = cudnn()?;
+        let f = cu.cudnn_set_convolution_group_count()?;
+        check(unsafe { f(self.desc, group_count) })
+    }
+
+    /// Read back the convolution group count.
+    pub fn group_count(&self) -> Result<i32> {
+        let cu = cudnn()?;
+        let f = cu.cudnn_get_convolution_group_count()?;
+        let mut g: core::ffi::c_int = 0;
+        check(unsafe { f(self.desc, &mut g) })?;
+        Ok(g)
+    }
+
+    /// Pick the math type cuDNN uses for this convolution — controls
+    /// whether tensor cores are eligible.
+    pub fn set_math_type(&self, math: MathType) -> Result<()> {
+        let cu = cudnn()?;
+        let f = cu.cudnn_set_convolution_math_type()?;
+        check(unsafe { f(self.desc, math.raw()) })
+    }
+
+    /// Read back the convolution math type.
+    pub fn math_type(&self) -> Result<MathType> {
+        let cu = cudnn()?;
+        let f = cu.cudnn_get_convolution_math_type()?;
+        let mut m = cudnnMathType_t::DefaultMath;
+        check(unsafe { f(self.desc, &mut m) })?;
+        Ok(MathType::from_raw(m))
+    }
+
+    /// Set the filter / bias reorder type for INT8 quantized inference.
+    pub fn set_reorder_type(&self, reorder: ReorderType) -> Result<()> {
+        let cu = cudnn()?;
+        let f = cu.cudnn_set_convolution_reorder_type()?;
+        check(unsafe { f(self.desc, reorder.raw()) })
+    }
+
+    /// Read back the reorder type.
+    pub fn reorder_type(&self) -> Result<ReorderType> {
+        let cu = cudnn()?;
+        let f = cu.cudnn_get_convolution_reorder_type()?;
+        let mut r = cudnnReorderType_t::DefaultReorder;
+        check(unsafe { f(self.desc, &mut r) })?;
+        Ok(ReorderType::from_raw(r))
     }
 
     /// Raw descriptor.
@@ -2006,3 +2061,679 @@ pub fn spatial_tf_sampler<T: DeviceRepr>(
         )
     })
 }
+
+// ============================================================================
+// Tier 1 — math type / reorder type / fused conv+bias+act / activation back
+// ============================================================================
+
+/// Math-type selector for [`ConvolutionDescriptor::set_math_type`] —
+/// controls tensor-core eligibility.
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Default)]
+pub enum MathType {
+    /// Standard FMA-only math; tensor cores not used.
+    #[default]
+    Default,
+    /// Allow tensor-core math (Volta+).
+    TensorOp,
+    /// Allow tensor-core math with implicit half-precision conversion.
+    TensorOpAllowConversion,
+    /// Strict FMA-only.
+    FmaOnly,
+}
+
+impl MathType {
+    pub(crate) fn raw(self) -> cudnnMathType_t {
+        match self {
+            MathType::Default => cudnnMathType_t::DefaultMath,
+            MathType::TensorOp => cudnnMathType_t::TensorOpMath,
+            MathType::TensorOpAllowConversion => cudnnMathType_t::TensorOpMathAllowConversion,
+            MathType::FmaOnly => cudnnMathType_t::FmaMath,
+        }
+    }
+    pub(crate) fn from_raw(raw: cudnnMathType_t) -> Self {
+        match raw {
+            cudnnMathType_t::DefaultMath => MathType::Default,
+            cudnnMathType_t::TensorOpMath => MathType::TensorOp,
+            cudnnMathType_t::TensorOpMathAllowConversion => MathType::TensorOpAllowConversion,
+            cudnnMathType_t::FmaMath => MathType::FmaOnly,
+        }
+    }
+}
+
+/// Filter / bias reorder selector for INT8 quantized inference paths.
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Default)]
+pub enum ReorderType {
+    #[default]
+    Default,
+    None,
+}
+
+impl ReorderType {
+    pub(crate) fn raw(self) -> cudnnReorderType_t {
+        match self {
+            ReorderType::Default => cudnnReorderType_t::DefaultReorder,
+            ReorderType::None => cudnnReorderType_t::NoReorder,
+        }
+    }
+    pub(crate) fn from_raw(raw: cudnnReorderType_t) -> Self {
+        match raw {
+            cudnnReorderType_t::DefaultReorder => ReorderType::Default,
+            cudnnReorderType_t::NoReorder => ReorderType::None,
+        }
+    }
+}
+
+/// Pre-process filter / bias buffers for INT8 inference.
+///
+/// # Safety
+/// Output buffers must have at least the same byte size as the inputs.
+/// `bias_data` / `reordered_bias` may be null when `reorder_bias` is false.
+#[allow(clippy::too_many_arguments)]
+pub unsafe fn reorder_filter_and_bias(
+    handle: &Handle,
+    filter_desc: &FilterDescriptor,
+    reorder: ReorderType,
+    filter_data: *const core::ffi::c_void,
+    reordered_filter: *mut core::ffi::c_void,
+    reorder_bias: bool,
+    bias_data: *const core::ffi::c_void,
+    reordered_bias: *mut core::ffi::c_void,
+) -> Result<()> {
+    let c = cudnn()?;
+    let f = c.cudnn_reorder_filter_and_bias()?;
+    check(f(
+        handle.handle, filter_desc.desc, reorder.raw(),
+        filter_data, reordered_filter,
+        reorder_bias as core::ffi::c_int, bias_data, reordered_bias,
+    ))
+}
+
+/// Fused convolution + bias + activation forward:
+/// `Y = activation(alpha1 * conv(X, W) + alpha2 * Z + bias)`.
+/// `Z` may alias `Y` for in-place residual add.
+#[allow(clippy::too_many_arguments)]
+pub fn convolution_bias_activation_forward<T: DeviceRepr>(
+    handle: &Handle,
+    alpha1: f32,
+    x_desc: &TensorDescriptor, x: &DeviceBuffer<T>,
+    w_desc: &FilterDescriptor, w: &DeviceBuffer<T>,
+    conv: &ConvolutionDescriptor,
+    algo: FwdAlgo,
+    workspace: &mut DeviceBuffer<u8>,
+    alpha2: f32,
+    z_desc: &TensorDescriptor, z: &DeviceBuffer<T>,
+    bias_desc: &TensorDescriptor, bias: &DeviceBuffer<T>,
+    activation: &ActivationDescriptor,
+    y_desc: &TensorDescriptor, y: &mut DeviceBuffer<T>,
+) -> Result<()> {
+    let c = cudnn()?;
+    let cu = c.cudnn_convolution_bias_activation_forward()?;
+    check(unsafe {
+        cu(
+            handle.handle,
+            &alpha1 as *const f32 as *const core::ffi::c_void,
+            x_desc.desc, x.as_raw().0 as *const core::ffi::c_void,
+            w_desc.desc, w.as_raw().0 as *const core::ffi::c_void,
+            conv.desc, algo.raw(),
+            workspace.as_raw().0 as *mut core::ffi::c_void, workspace.byte_size(),
+            &alpha2 as *const f32 as *const core::ffi::c_void,
+            z_desc.desc, z.as_raw().0 as *const core::ffi::c_void,
+            bias_desc.desc, bias.as_raw().0 as *const core::ffi::c_void,
+            activation.desc,
+            y_desc.desc, y.as_raw().0 as *mut core::ffi::c_void,
+        )
+    })
+}
+
+/// `dx = alpha * activation_backward(y, dy, x) + beta * dx`.
+#[allow(clippy::too_many_arguments)]
+pub fn activation_backward<T: DeviceRepr>(
+    handle: &Handle,
+    activation: &ActivationDescriptor,
+    alpha: f32,
+    y_desc: &TensorDescriptor, y: &DeviceBuffer<T>,
+    dy_desc: &TensorDescriptor, dy: &DeviceBuffer<T>,
+    x_desc: &TensorDescriptor, x: &DeviceBuffer<T>,
+    beta: f32,
+    dx_desc: &TensorDescriptor, dx: &mut DeviceBuffer<T>,
+) -> Result<()> {
+    let c = cudnn()?;
+    let cu = c.cudnn_activation_backward()?;
+    check(unsafe {
+        cu(
+            handle.handle, activation.desc,
+            &alpha as *const f32 as *const core::ffi::c_void,
+            y_desc.desc, y.as_raw().0 as *const core::ffi::c_void,
+            dy_desc.desc, dy.as_raw().0 as *const core::ffi::c_void,
+            x_desc.desc, x.as_raw().0 as *const core::ffi::c_void,
+            &beta as *const f32 as *const core::ffi::c_void,
+            dx_desc.desc, dx.as_raw().0 as *mut core::ffi::c_void,
+        )
+    })
+}
+
+/// Cross-channel LRN backward.
+#[allow(clippy::too_many_arguments)]
+pub fn lrn_cross_channel_backward<T: DeviceRepr>(
+    handle: &Handle, lrn: &LrnDescriptor, mode: i32,
+    alpha: f32,
+    y_desc: &TensorDescriptor, y: &DeviceBuffer<T>,
+    dy_desc: &TensorDescriptor, dy: &DeviceBuffer<T>,
+    x_desc: &TensorDescriptor, x: &DeviceBuffer<T>,
+    beta: f32,
+    dx_desc: &TensorDescriptor, dx: &mut DeviceBuffer<T>,
+) -> Result<()> {
+    let c = cudnn()?;
+    let cu = c.cudnn_lrn_cross_channel_backward()?;
+    check(unsafe {
+        cu(
+            handle.handle, lrn.desc, mode,
+            &alpha as *const f32 as *const core::ffi::c_void,
+            y_desc.desc, y.as_raw().0 as *const core::ffi::c_void,
+            dy_desc.desc, dy.as_raw().0 as *const core::ffi::c_void,
+            x_desc.desc, x.as_raw().0 as *const core::ffi::c_void,
+            &beta as *const f32 as *const core::ffi::c_void,
+            dx_desc.desc, dx.as_raw().0 as *mut core::ffi::c_void,
+        )
+    })
+}
+
+/// Bytes of indices buffer required for index-returning reductions.
+pub fn reduction_indices_size(
+    handle: &Handle,
+    reducer: &ReduceTensorDescriptor,
+    a: &TensorDescriptor,
+    c: &TensorDescriptor,
+) -> Result<usize> {
+    let cu = cudnn()?;
+    let q = cu.cudnn_get_reduction_indices_size()?;
+    let mut size = 0usize;
+    check(unsafe { q(handle.handle, reducer.desc, a.desc, c.desc, &mut size) })?;
+    Ok(size)
+}
+
+impl ActivationDescriptor {
+    /// Set the β parameter on a Swish activation.
+    pub fn set_swish_beta(&self, beta: f64) -> Result<()> {
+        let c = cudnn()?;
+        let f = c.cudnn_set_activation_descriptor_swish_beta()?;
+        check(unsafe { f(self.desc, beta) })
+    }
+    /// Read back the Swish β parameter.
+    pub fn swish_beta(&self) -> Result<f64> {
+        let c = cudnn()?;
+        let f = c.cudnn_get_activation_descriptor_swish_beta()?;
+        let mut b: f64 = 0.0;
+        check(unsafe { f(self.desc, &mut b) })?;
+        Ok(b)
+    }
+}
+
+// ============================================================================
+// Tier 2 — Algorithm finders / pickers
+// ============================================================================
+
+pub use baracuda_cudnn_sys::cudnnConvolutionFwdAlgoPerf_t as FwdAlgoPerf;
+pub use baracuda_cudnn_sys::cudnnConvolutionBwdDataAlgoPerf_t as BwdDataAlgoPerf;
+pub use baracuda_cudnn_sys::cudnnConvolutionBwdFilterAlgoPerf_t as BwdFilterAlgoPerf;
+
+/// Heuristic-pick the top-N forward-convolution algorithms (cheap; doesn't run them).
+pub fn get_convolution_forward_algorithm(
+    handle: &Handle,
+    src: &TensorDescriptor, filter: &FilterDescriptor,
+    conv: &ConvolutionDescriptor, dst: &TensorDescriptor,
+    requested: i32,
+) -> Result<Vec<FwdAlgoPerf>> {
+    let cu = cudnn()?;
+    let f = cu.cudnn_get_convolution_forward_algorithm_v7()?;
+    let mut returned: core::ffi::c_int = 0;
+    let mut buf: Vec<FwdAlgoPerf> = Vec::with_capacity(requested as usize);
+    let raw = unsafe {
+        f(handle.handle, src.desc, filter.desc, conv.desc, dst.desc,
+          requested, &mut returned, buf.as_mut_ptr())
+    };
+    check(raw)?;
+    unsafe { buf.set_len(returned as usize); }
+    Ok(buf)
+}
+
+/// Run all candidate forward-convolution algorithms and return measured runtimes.
+pub fn find_convolution_forward_algorithm(
+    handle: &Handle,
+    src: &TensorDescriptor, filter: &FilterDescriptor,
+    conv: &ConvolutionDescriptor, dst: &TensorDescriptor,
+    requested: i32,
+) -> Result<Vec<FwdAlgoPerf>> {
+    let cu = cudnn()?;
+    let f = cu.cudnn_find_convolution_forward_algorithm()?;
+    let mut returned: core::ffi::c_int = 0;
+    let mut buf: Vec<FwdAlgoPerf> = Vec::with_capacity(requested as usize);
+    let raw = unsafe {
+        f(handle.handle, src.desc, filter.desc, conv.desc, dst.desc,
+          requested, &mut returned, buf.as_mut_ptr())
+    };
+    check(raw)?;
+    unsafe { buf.set_len(returned as usize); }
+    Ok(buf)
+}
+
+/// Heuristic-pick backward-data convolution algorithms.
+pub fn get_convolution_backward_data_algorithm(
+    handle: &Handle,
+    filter: &FilterDescriptor, diff: &TensorDescriptor,
+    conv: &ConvolutionDescriptor, grad: &TensorDescriptor,
+    requested: i32,
+) -> Result<Vec<BwdDataAlgoPerf>> {
+    let cu = cudnn()?;
+    let f = cu.cudnn_get_convolution_backward_data_algorithm_v7()?;
+    let mut returned: core::ffi::c_int = 0;
+    let mut buf: Vec<BwdDataAlgoPerf> = Vec::with_capacity(requested as usize);
+    let raw = unsafe {
+        f(handle.handle, filter.desc, diff.desc, conv.desc, grad.desc,
+          requested, &mut returned, buf.as_mut_ptr())
+    };
+    check(raw)?;
+    unsafe { buf.set_len(returned as usize); }
+    Ok(buf)
+}
+
+/// Heuristic-pick backward-filter convolution algorithms.
+pub fn get_convolution_backward_filter_algorithm(
+    handle: &Handle,
+    src: &TensorDescriptor, diff: &TensorDescriptor,
+    conv: &ConvolutionDescriptor, grad: &FilterDescriptor,
+    requested: i32,
+) -> Result<Vec<BwdFilterAlgoPerf>> {
+    let cu = cudnn()?;
+    let f = cu.cudnn_get_convolution_backward_filter_algorithm_v7()?;
+    let mut returned: core::ffi::c_int = 0;
+    let mut buf: Vec<BwdFilterAlgoPerf> = Vec::with_capacity(requested as usize);
+    let raw = unsafe {
+        f(handle.handle, src.desc, diff.desc, conv.desc, grad.desc,
+          requested, &mut returned, buf.as_mut_ptr())
+    };
+    check(raw)?;
+    unsafe { buf.set_len(returned as usize); }
+    Ok(buf)
+}
+
+// ============================================================================
+// Tier 3 — Generic Normalization API enums (cuDNN 8+) + workspace queries
+// ============================================================================
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Default)]
+pub enum NormMode {
+    PerActivation,
+    #[default]
+    PerChannel,
+}
+impl NormMode {
+    fn raw(self) -> cudnnNormMode_t {
+        match self {
+            NormMode::PerActivation => cudnnNormMode_t::PerActivation,
+            NormMode::PerChannel => cudnnNormMode_t::PerChannel,
+        }
+    }
+}
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Default)]
+pub enum NormAlgo {
+    #[default]
+    Standard,
+    Persist,
+}
+impl NormAlgo {
+    fn raw(self) -> cudnnNormAlgo_t {
+        match self {
+            NormAlgo::Standard => cudnnNormAlgo_t::Standard,
+            NormAlgo::Persist => cudnnNormAlgo_t::Persist,
+        }
+    }
+}
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Default)]
+pub enum NormOp {
+    #[default]
+    Norm,
+    NormActivation,
+    NormAddActivation,
+}
+impl NormOp {
+    fn raw(self) -> cudnnNormOps_t {
+        match self {
+            NormOp::Norm => cudnnNormOps_t::Norm,
+            NormOp::NormActivation => cudnnNormOps_t::NormActivation,
+            NormOp::NormAddActivation => cudnnNormOps_t::NormAddActivation,
+        }
+    }
+}
+
+/// Optional fused op for the `*Ex` BatchNorm variants.
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Default)]
+pub enum BnOp {
+    #[default]
+    Bn,
+    BnActivation,
+    BnAddActivation,
+}
+impl BnOp {
+    fn raw(self) -> cudnnBatchNormOps_t {
+        match self {
+            BnOp::Bn => cudnnBatchNormOps_t::Bn,
+            BnOp::BnActivation => cudnnBatchNormOps_t::BnActivation,
+            BnOp::BnAddActivation => cudnnBatchNormOps_t::BnAddActivation,
+        }
+    }
+}
+
+/// Workspace bytes for [`batch_normalization_forward_training_ex`].
+#[allow(clippy::too_many_arguments)]
+pub fn batch_normalization_forward_training_ex_workspace_size(
+    handle: &Handle,
+    mode: BatchNormMode, bn_ops: BnOp,
+    x: &TensorDescriptor, z: &TensorDescriptor, y: &TensorDescriptor,
+    bn_smbv: &TensorDescriptor, activation: &ActivationDescriptor,
+) -> Result<usize> {
+    let cu = cudnn()?;
+    let f = cu.cudnn_get_batch_normalization_forward_training_ex_workspace_size()?;
+    let mut size = 0usize;
+    check(unsafe {
+        f(handle.handle, mode.raw(), bn_ops.raw(),
+          x.desc, z.desc, y.desc, bn_smbv.desc, activation.desc, &mut size)
+    })?;
+    Ok(size)
+}
+
+/// Workspace bytes for [`batch_normalization_backward_ex`].
+#[allow(clippy::too_many_arguments)]
+pub fn batch_normalization_backward_ex_workspace_size(
+    handle: &Handle,
+    mode: BatchNormMode, bn_ops: BnOp,
+    x: &TensorDescriptor, y: &TensorDescriptor, dy: &TensorDescriptor,
+    dz: &TensorDescriptor, dx: &TensorDescriptor,
+    d_bn_scale_bias: &TensorDescriptor, activation: &ActivationDescriptor,
+) -> Result<usize> {
+    let cu = cudnn()?;
+    let f = cu.cudnn_get_batch_normalization_backward_ex_workspace_size()?;
+    let mut size = 0usize;
+    check(unsafe {
+        f(handle.handle, mode.raw(), bn_ops.raw(),
+          x.desc, y.desc, dy.desc, dz.desc, dx.desc,
+          d_bn_scale_bias.desc, activation.desc, &mut size)
+    })?;
+    Ok(size)
+}
+
+/// Reserve-space bytes for the `*Ex` BatchNorm pair.
+pub fn batch_normalization_training_ex_reserve_space_size(
+    handle: &Handle,
+    mode: BatchNormMode, bn_ops: BnOp,
+    activation: &ActivationDescriptor, x: &TensorDescriptor,
+) -> Result<usize> {
+    let cu = cudnn()?;
+    let f = cu.cudnn_get_batch_normalization_training_ex_reserve_space_size()?;
+    let mut size = 0usize;
+    check(unsafe {
+        f(handle.handle, mode.raw(), bn_ops.raw(), activation.desc, x.desc, &mut size)
+    })?;
+    Ok(size)
+}
+
+// ============================================================================
+// Tier 4 — RNN v8 + companion descriptors
+// ============================================================================
+
+/// Owned RNN descriptor.
+pub struct RnnDescriptor {
+    desc: baracuda_cudnn_sys::cudnnRNNDescriptor_t,
+}
+unsafe impl Send for RnnDescriptor {}
+impl core::fmt::Debug for RnnDescriptor {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("RnnDescriptor").field("desc", &self.desc).finish_non_exhaustive()
+    }
+}
+impl RnnDescriptor {
+    pub fn new() -> Result<Self> {
+        let c = cudnn()?;
+        let create = c.cudnn_create_rnn_descriptor()?;
+        let mut desc: baracuda_cudnn_sys::cudnnRNNDescriptor_t = core::ptr::null_mut();
+        check(unsafe { create(&mut desc) })?;
+        Ok(Self { desc })
+    }
+
+    /// Configure with the v8 setup. After this, call
+    /// [`build_rnn_dynamic`] to bind a specific minibatch size.
+    #[allow(clippy::too_many_arguments)]
+    pub fn set_v8(
+        &self,
+        algo: i32, cell_mode: i32, bias_mode: i32,
+        dir_mode: i32, input_mode: i32,
+        data_type: DType, math_prec: DType, math_type: MathType,
+        input_size: i32, hidden_size: i32, proj_size: i32, num_layers: i32,
+        dropout: &DropoutDescriptor, aux_flags: u32,
+    ) -> Result<()> {
+        use baracuda_cudnn_sys::{cudnnDirectionMode_t, cudnnRNNAlgo_t, cudnnRNNInputMode_t, cudnnRNNMode_t};
+        let c = cudnn()?;
+        let f = c.cudnn_set_rnn_descriptor_v8()?;
+        let algo = match algo {
+            0 => cudnnRNNAlgo_t::Standard,
+            1 => cudnnRNNAlgo_t::PersistStatic,
+            2 => cudnnRNNAlgo_t::PersistDynamic,
+            _ => cudnnRNNAlgo_t::PersistStaticSmallH,
+        };
+        let cell = match cell_mode {
+            0 => cudnnRNNMode_t::ReluRnn,
+            1 => cudnnRNNMode_t::TanhRnn,
+            2 => cudnnRNNMode_t::Lstm,
+            _ => cudnnRNNMode_t::Gru,
+        };
+        let dir = if dir_mode == 1 { cudnnDirectionMode_t::Bidirectional } else { cudnnDirectionMode_t::Unidirectional };
+        let im = if input_mode == 1 { cudnnRNNInputMode_t::SkipInput } else { cudnnRNNInputMode_t::LinearInput };
+        check(unsafe {
+            f(self.desc, algo, cell, bias_mode, dir, im,
+              data_type.raw(), math_prec.raw(), math_type.raw(),
+              input_size, hidden_size, proj_size, num_layers,
+              dropout.desc, aux_flags)
+        })
+    }
+
+    #[inline]
+    pub fn as_raw(&self) -> baracuda_cudnn_sys::cudnnRNNDescriptor_t { self.desc }
+}
+impl Drop for RnnDescriptor {
+    fn drop(&mut self) {
+        if let Ok(c) = cudnn() {
+            if let Ok(cu) = c.cudnn_destroy_rnn_descriptor() {
+                let _ = unsafe { cu(self.desc) };
+            }
+        }
+    }
+}
+
+/// Owned RNN-data descriptor used by the v8 RNN forward / backward path.
+pub struct RnnDataDescriptor {
+    desc: baracuda_cudnn_sys::cudnnRNNDataDescriptor_t,
+}
+unsafe impl Send for RnnDataDescriptor {}
+impl core::fmt::Debug for RnnDataDescriptor {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("RnnDataDescriptor").field("desc", &self.desc).finish_non_exhaustive()
+    }
+}
+impl RnnDataDescriptor {
+    pub fn new() -> Result<Self> {
+        let c = cudnn()?;
+        let create = c.cudnn_create_rnn_data_descriptor()?;
+        let mut desc: baracuda_cudnn_sys::cudnnRNNDataDescriptor_t = core::ptr::null_mut();
+        check(unsafe { create(&mut desc) })?;
+        Ok(Self { desc })
+    }
+    #[inline]
+    pub fn as_raw(&self) -> baracuda_cudnn_sys::cudnnRNNDataDescriptor_t { self.desc }
+}
+impl Drop for RnnDataDescriptor {
+    fn drop(&mut self) {
+        if let Ok(c) = cudnn() {
+            if let Ok(cu) = c.cudnn_destroy_rnn_data_descriptor() {
+                let _ = unsafe { cu(self.desc) };
+            }
+        }
+    }
+}
+
+/// Finalize an RNN descriptor for a specific minibatch size.
+pub fn build_rnn_dynamic(handle: &Handle, rnn: &RnnDescriptor, mini_batch: i32) -> Result<()> {
+    let c = cudnn()?;
+    let f = c.cudnn_build_rnn_dynamic()?;
+    check(unsafe { f(handle.handle, rnn.desc, mini_batch) })
+}
+
+/// Returns `(work_space_size, reserve_space_size)`.
+/// `fwd_mode = 0` for inference, `1` for training.
+pub fn rnn_temp_space_sizes(
+    handle: &Handle, rnn: &RnnDescriptor, fwd_mode: i32, x: &RnnDataDescriptor,
+) -> Result<(usize, usize)> {
+    let c = cudnn()?;
+    let f = c.cudnn_get_rnn_temp_space_sizes()?;
+    let (mut ws, mut rs) = (0usize, 0usize);
+    check(unsafe { f(handle.handle, rnn.desc, fwd_mode, x.desc, &mut ws, &mut rs) })?;
+    Ok((ws, rs))
+}
+
+/// Bytes the RNN's weight space needs.
+pub fn rnn_weight_space_size(handle: &Handle, rnn: &RnnDescriptor) -> Result<usize> {
+    let c = cudnn()?;
+    let f = c.cudnn_get_rnn_weight_space_size()?;
+    let mut size = 0usize;
+    check(unsafe { f(handle.handle, rnn.desc, &mut size) })?;
+    Ok(size)
+}
+
+// ============================================================================
+// Tier 5 — Multi-head attention
+// ============================================================================
+
+/// Multi-head attention descriptor.
+pub struct AttnDescriptor {
+    desc: cudnnAttnDescriptor_t,
+}
+unsafe impl Send for AttnDescriptor {}
+impl core::fmt::Debug for AttnDescriptor {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("AttnDescriptor").field("desc", &self.desc).finish_non_exhaustive()
+    }
+}
+impl AttnDescriptor {
+    pub fn new() -> Result<Self> {
+        let c = cudnn()?;
+        let cu = c.cudnn_create_attn_descriptor()?;
+        let mut desc: cudnnAttnDescriptor_t = core::ptr::null_mut();
+        check(unsafe { cu(&mut desc) })?;
+        Ok(Self { desc })
+    }
+
+    /// Configure the descriptor. See `cudnnSetAttnDescriptor` in the
+    /// cuDNN reference for each parameter.
+    #[allow(clippy::too_many_arguments)]
+    pub fn set(
+        &self,
+        attn_mode: u32, n_heads: i32, sm_scaler: f64,
+        data_type: DType, compute_prec: DType, math_type: MathType,
+        attn_dropout: &DropoutDescriptor, post_dropout: &DropoutDescriptor,
+        q_size: i32, k_size: i32, v_size: i32,
+        q_proj_size: i32, k_proj_size: i32, v_proj_size: i32, o_proj_size: i32,
+        qo_max_seq_length: i32, kv_max_seq_length: i32,
+        max_batch_size: i32, max_beam_size: i32,
+    ) -> Result<()> {
+        let c = cudnn()?;
+        let f = c.cudnn_set_attn_descriptor()?;
+        check(unsafe {
+            f(self.desc, attn_mode, n_heads, sm_scaler,
+              data_type.raw(), compute_prec.raw(), math_type.raw(),
+              attn_dropout.desc, post_dropout.desc,
+              q_size, k_size, v_size,
+              q_proj_size, k_proj_size, v_proj_size, o_proj_size,
+              qo_max_seq_length, kv_max_seq_length,
+              max_batch_size, max_beam_size)
+        })
+    }
+
+    #[inline]
+    pub fn as_raw(&self) -> cudnnAttnDescriptor_t { self.desc }
+}
+impl Drop for AttnDescriptor {
+    fn drop(&mut self) {
+        if let Ok(c) = cudnn() {
+            if let Ok(cu) = c.cudnn_destroy_attn_descriptor() {
+                let _ = unsafe { cu(self.desc) };
+            }
+        }
+    }
+}
+
+/// Buffer requirements `(weights, work_space, reserve_space)`.
+pub fn multi_head_attn_buffers(
+    handle: &Handle, attn: &AttnDescriptor,
+) -> Result<(usize, usize, usize)> {
+    let c = cudnn()?;
+    let f = c.cudnn_get_multi_head_attn_buffers()?;
+    let (mut w, mut ws, mut rs) = (0usize, 0usize, 0usize);
+    check(unsafe { f(handle.handle, attn.desc, &mut w, &mut ws, &mut rs) })?;
+    Ok((w, ws, rs))
+}
+
+/// Sequence-data descriptor used by multi-head attention.
+pub struct SeqDataDescriptor {
+    desc: cudnnSeqDataDescriptor_t,
+}
+unsafe impl Send for SeqDataDescriptor {}
+impl core::fmt::Debug for SeqDataDescriptor {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("SeqDataDescriptor").field("desc", &self.desc).finish_non_exhaustive()
+    }
+}
+impl SeqDataDescriptor {
+    pub fn new() -> Result<Self> {
+        let c = cudnn()?;
+        let cu = c.cudnn_create_seq_data_descriptor()?;
+        let mut desc: cudnnSeqDataDescriptor_t = core::ptr::null_mut();
+        check(unsafe { cu(&mut desc) })?;
+        Ok(Self { desc })
+    }
+
+    /// # Safety
+    /// `padding_fill` must point to a value of the descriptor's data type.
+    #[allow(clippy::too_many_arguments)]
+    pub unsafe fn set(
+        &self,
+        data_type: DType,
+        dim_a: &[i32], axes: &[i32], seq_length_array: &[i32],
+        padding_fill: *const core::ffi::c_void,
+    ) -> Result<()> {
+        let c = cudnn()?;
+        let f = c.cudnn_set_seq_data_descriptor()?;
+        check(f(
+            self.desc, data_type.raw(),
+            dim_a.len() as core::ffi::c_int,
+            dim_a.as_ptr(), axes.as_ptr(),
+            seq_length_array.len(), seq_length_array.as_ptr(),
+            padding_fill,
+        ))
+    }
+
+    #[inline]
+    pub fn as_raw(&self) -> cudnnSeqDataDescriptor_t { self.desc }
+}
+impl Drop for SeqDataDescriptor {
+    fn drop(&mut self) {
+        if let Ok(c) = cudnn() {
+            if let Ok(cu) = c.cudnn_destroy_seq_data_descriptor() {
+                let _ = unsafe { cu(self.desc) };
+            }
+        }
+    }
+}
+
+/// Re-exports for callers that want raw type access.
+pub use baracuda_cudnn_sys::{cudnnMathType_t as RawMathType, cudnnReorderType_t as RawReorderType};
