@@ -53,15 +53,21 @@ pub enum ncclDataType_t {
     BFloat16 = 9,
 }
 
-/// NCCL reduction operation.
-#[repr(i32)]
+/// NCCL reduction operation. Modeled as a transparent newtype rather
+/// than a closed enum because [`PFN_ncclRedOpCreatePreMulSum`] returns
+/// custom op IDs (≥ 5) that don't fit a closed Rust enum.
+#[repr(transparent)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
-pub enum ncclRedOp_t {
-    Sum = 0,
-    Prod = 1,
-    Max = 2,
-    Min = 3,
-    Avg = 4,
+#[allow(non_camel_case_types)]
+pub struct ncclRedOp_t(pub i32);
+
+#[allow(non_upper_case_globals)]
+impl ncclRedOp_t {
+    pub const Sum: Self = Self(0);
+    pub const Prod: Self = Self(1);
+    pub const Max: Self = Self(2);
+    pub const Min: Self = Self(3);
+    pub const Avg: Self = Self(4);
 }
 
 // ---- status ---------------------------------------------------------------

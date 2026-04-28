@@ -222,6 +222,53 @@ impl Stream {
         check(unsafe { cu(self.inner.handle, src.inner.handle) })
     }
 
+    /// Make this stream wait for `event` to complete before processing
+    /// any subsequent work. `flags` is typically `0`
+    /// (`CU_EVENT_WAIT_DEFAULT`). Use this for cross-stream
+    /// dependencies — record an event on stream A, then have stream B
+    /// wait on it.
+    pub fn wait_event(&self, event: &crate::Event, flags: u32) -> Result<()> {
+        let d = driver()?;
+        let cu = d.cu_stream_wait_event()?;
+        check(unsafe { cu(self.inner.handle, event.as_raw(), flags) })
+    }
+
+    /// Read a `CUstreamAttrValue` for `attr` from this stream. The
+    /// caller passes a writable buffer big enough for the largest
+    /// attribute value (`CUstreamAttrValue` is up to 48 bytes).
+    /// Use the `CU_STREAM_ATTRIBUTE_*` constants for `attr`.
+    ///
+    /// # Safety
+    ///
+    /// `value_out` must be a writable region matching the layout of the
+    /// `CUstreamAttrValue` variant for `attr`.
+    pub unsafe fn get_attribute(
+        &self,
+        attr: i32,
+        value_out: *mut core::ffi::c_void,
+    ) -> Result<()> {
+        let d = driver()?;
+        let cu = d.cu_stream_get_attribute()?;
+        check(cu(self.inner.handle, attr, value_out))
+    }
+
+    /// Set a `CUstreamAttrValue` on this stream. See [`Self::get_attribute`]
+    /// for the value layout.
+    ///
+    /// # Safety
+    ///
+    /// `value` must point at a properly-initialized `CUstreamAttrValue`
+    /// variant for `attr`.
+    pub unsafe fn set_attribute(
+        &self,
+        attr: i32,
+        value: *const core::ffi::c_void,
+    ) -> Result<()> {
+        let d = driver()?;
+        let cu = d.cu_stream_set_attribute()?;
+        check(cu(self.inner.handle, attr, value))
+    }
+
     /// Associate a managed-memory region with this stream. Pass
     /// `flags = 0` for the default ("one thread").
     pub fn attach_mem_async(

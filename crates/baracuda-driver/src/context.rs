@@ -264,3 +264,71 @@ impl Drop for ContextInner {
         }
     }
 }
+
+/// A retained reference to a device's _primary_ context — the one shared
+/// with the CUDA Runtime API (`cudart`). Use this when you need to mix
+/// driver-API kernels/streams with framework code that relies on the
+/// runtime API (most ML frameworks do).
+///
+/// Each [`PrimaryContext::retain`] bumps a refcount on the device's
+/// primary context; `Drop` calls `cuDevicePrimaryCtxRelease`. The context
+/// itself is destroyed when the refcount hits zero.
+#[derive(Debug)]
+pub struct PrimaryContext {
+    handle: CUcontext,
+    device: Device,
+}
+
+unsafe impl Send for PrimaryContext {}
+unsafe impl Sync for PrimaryContext {}
+
+impl PrimaryContext {
+    /// Increment the refcount on `device`'s primary context and return a
+    /// handle to it. Equivalent to `cuDevicePrimaryCtxRetain`.
+    pub fn retain(device: &Device) -> Result<Self> {
+        init()?;
+        let d = driver()?;
+        let cu = d.cu_device_primary_ctx_retain()?;
+        let mut handle: CUcontext = core::ptr::null_mut();
+        check(unsafe { cu(&mut handle, device.0) })?;
+        Ok(Self {
+            handle,
+            device: *device,
+        })
+    }
+
+    /// Forcibly destroy the primary context on `device`, releasing all
+    /// resources and resetting refcounts. Any outstanding handles
+    /// returned by [`retain`] become dangling — only call this when you
+    /// know nobody else (Runtime API, other libraries) is using the
+    /// primary context. Equivalent to `cuDevicePrimaryCtxReset`.
+    ///
+    /// [`retain`]: Self::retain
+    pub fn reset(device: &Device) -> Result<()> {
+        init()?;
+        let d = driver()?;
+        let cu = d.cu_device_primary_ctx_reset()?;
+        check(unsafe { cu(device.0) })
+    }
+
+    /// Underlying device.
+    pub fn device(&self) -> Device {
+        self.device
+    }
+
+    /// Raw `CUcontext` — same handle the Runtime API would use.
+    #[inline]
+    pub fn as_raw(&self) -> CUcontext {
+        self.handle
+    }
+}
+
+impl Drop for PrimaryContext {
+    fn drop(&mut self) {
+        if let Ok(d) = driver() {
+            if let Ok(cu) = d.cu_device_primary_ctx_release() {
+                let _ = unsafe { cu(self.device.0) };
+            }
+        }
+    }
+}

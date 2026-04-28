@@ -621,6 +621,85 @@ pub fn memset_u32_async(dst: CUdeviceptr, value: u32, count: usize, stream: &Str
     check(unsafe { cu(dst, value, count, stream.as_raw()) })
 }
 
+/// Synchronous 32-bit memset.
+pub fn memset_u32(dst: CUdeviceptr, value: u32, count: usize) -> Result<()> {
+    let d = driver()?;
+    let cu = d.cu_memset_d32()?;
+    check(unsafe { cu(dst, value, count) })
+}
+
+/// 2D pitched 8-bit memset: fill a `width × height` rectangle of bytes
+/// at `dst` (row pitch `pitch`) with `value`.
+pub fn memset_2d_u8(
+    dst: CUdeviceptr,
+    pitch: usize,
+    value: u8,
+    width: usize,
+    height: usize,
+) -> Result<()> {
+    let d = driver()?;
+    let cu = d.cu_memset_d2d8()?;
+    check(unsafe { cu(dst, pitch, value, width, height) })
+}
+
+/// 2D pitched 16-bit memset.
+pub fn memset_2d_u16(
+    dst: CUdeviceptr,
+    pitch: usize,
+    value: u16,
+    width: usize,
+    height: usize,
+) -> Result<()> {
+    let d = driver()?;
+    let cu = d.cu_memset_d2d16()?;
+    check(unsafe { cu(dst, pitch, value, width, height) })
+}
+
+/// 2D pitched 32-bit memset.
+pub fn memset_2d_u32(
+    dst: CUdeviceptr,
+    pitch: usize,
+    value: u32,
+    width: usize,
+    height: usize,
+) -> Result<()> {
+    let d = driver()?;
+    let cu = d.cu_memset_d2d32()?;
+    check(unsafe { cu(dst, pitch, value, width, height) })
+}
+
+/// Generic byte-count copy that works on any pair of CUDA-addressable
+/// pointers (device, unified, host-pinned). Use this when the kind of
+/// memory at each end isn't known at the call site (typical for
+/// runtime-decided unified-memory paths).
+///
+/// # Safety
+///
+/// Both `dst` and `src` must be CUDA-addressable for at least `bytes`
+/// bytes; ranges must not overlap.
+pub unsafe fn memcpy(dst: CUdeviceptr, src: CUdeviceptr, bytes: usize) -> Result<()> {
+    let d = driver()?;
+    let cu = d.cu_memcpy()?;
+    check(cu(dst, src, bytes))
+}
+
+/// Async variant of [`memcpy`] ordered on `stream`.
+///
+/// # Safety
+///
+/// Same buffer rules as [`memcpy`]; additionally `dst` and `src` must
+/// stay valid until the work submitted on `stream` completes.
+pub unsafe fn memcpy_async(
+    dst: CUdeviceptr,
+    src: CUdeviceptr,
+    bytes: usize,
+    stream: &Stream,
+) -> Result<()> {
+    let d = driver()?;
+    let cu = d.cu_memcpy_async()?;
+    check(cu(dst, src, bytes, stream.as_raw()))
+}
+
 // ---- Wave 27: v2 advise/prefetch + VMM reverse lookups ------------------
 
 /// Destination for [`mem_prefetch_v2`] / [`mem_advise_v2`]. Composes the

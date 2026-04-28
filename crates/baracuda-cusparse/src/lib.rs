@@ -24,9 +24,10 @@ use baracuda_driver::{DeviceBuffer, Stream};
 use baracuda_types::{Complex32, Complex64};
 
 pub use baracuda_cusparse_sys::{
-    cusparseCsr2CscAlg_t as Csr2CscAlg, cusparseSDDMMAlg_t as SDDMMAlg,
-    cusparseSpGEMMAlg_t as SpGEMMAlg, cusparseSpMMAlg_t as SpMMAlg, cusparseSpMVAlg_t as SpMVAlg,
-    cusparseSpSMAlg_t as SpSMAlg, cusparseSpSVAlg_t as SpSVAlg,
+    cusparseCsr2CscAlg_t as Csr2CscAlg, cusparseIndexBase_t as IndexBase,
+    cusparseSDDMMAlg_t as SDDMMAlg, cusparseSpGEMMAlg_t as SpGEMMAlg,
+    cusparseSpMMAlg_t as SpMMAlg, cusparseSpMVAlg_t as SpMVAlg, cusparseSpSMAlg_t as SpSMAlg,
+    cusparseSpSVAlg_t as SpSVAlg,
 };
 
 /// Error type for cuSPARSE operations.
@@ -373,6 +374,59 @@ impl<T> SpMat<'_, T> {
         Ok((r, col, nz))
     }
 
+    /// Rebind a CSR descriptor's underlying device pointers without
+    /// rebuilding it. Saves descriptor recreation when the same shape
+    /// is reused with new data.
+    ///
+    /// # Safety
+    ///
+    /// All three pointers must be live device allocations matching the
+    /// original `(rows + 1, nnz, nnz)` element counts and the original
+    /// element types. They must stay valid until the next operation
+    /// on this descriptor completes.
+    pub unsafe fn set_csr_pointers(
+        &self,
+        row_offsets: *mut c_void,
+        col_indices: *mut c_void,
+        values: *mut c_void,
+    ) -> Result<()> {
+        let c = cusparse()?;
+        let cu = c.cusparse_csr_set_pointers()?;
+        check(cu(self.descr, row_offsets, col_indices, values))
+    }
+
+    /// Rebind a CSC descriptor's underlying device pointers.
+    ///
+    /// # Safety
+    ///
+    /// See [`Self::set_csr_pointers`].
+    pub unsafe fn set_csc_pointers(
+        &self,
+        col_offsets: *mut c_void,
+        row_indices: *mut c_void,
+        values: *mut c_void,
+    ) -> Result<()> {
+        let c = cusparse()?;
+        let cu = c.cusparse_csc_set_pointers()?;
+        check(cu(self.descr, col_offsets, row_indices, values))
+    }
+
+    /// Rebind a COO descriptor's underlying device pointers.
+    ///
+    /// # Safety
+    ///
+    /// See [`Self::set_csr_pointers`].
+    pub unsafe fn set_coo_pointers(
+        &self,
+        row_indices: *mut c_void,
+        col_indices: *mut c_void,
+        values: *mut c_void,
+    ) -> Result<()> {
+        let c = cusparse()?;
+        let cu = c.cusparse_coo_set_pointers()?;
+        check(cu(self.descr, row_indices, col_indices, values))
+    }
+
     /// Set the fill-triangle attribute (for triangular solves).
     pub fn set_fill(&self, fill: Fill) -> Result<()> {
         let c = cusparse()?;
@@ -650,6 +704,42 @@ pub fn spmm<T: SparseScalar>(
 ) -> Result<()> {
     let c_api = cusparse()?;
     let cu = c_api.cusparse_spmm()?;
+    check(unsafe {
+        cu(
+            handle.as_raw(),
+            op_a.raw(),
+            op_b.raw(),
+            alpha as *const T as *const c_void,
+            a.descr,
+            b.descr,
+            beta as *const T as *const c_void,
+            c.descr,
+            T::data_type(),
+            alg,
+            workspace.as_raw().0 as *mut c_void,
+        )
+    })
+}
+
+/// One-time preprocessing before [`spmm`]. Pre-computes algorithm-specific
+/// state into `workspace` so subsequent [`spmm`] calls (with the same A
+/// sparsity pattern + dimensions) are faster. Use this when the same
+/// matrix is multiplied many times.
+#[allow(clippy::too_many_arguments)]
+pub fn spmm_preprocess<T: SparseScalar>(
+    handle: &Handle,
+    op_a: Op,
+    op_b: Op,
+    alpha: &T,
+    a: &SpMat<'_, T>,
+    b: &DnMat<'_, T>,
+    beta: &T,
+    c: &mut DnMat<'_, T>,
+    alg: SpMMAlg,
+    workspace: &mut DeviceBuffer<u8>,
+) -> Result<()> {
+    let c_api = cusparse()?;
+    let cu = c_api.cusparse_spmm_preprocess()?;
     check(unsafe {
         cu(
             handle.as_raw(),
@@ -1102,6 +1192,40 @@ pub fn sddmm<T: SparseScalar>(
     })
 }
 
+/// One-time preprocessing before [`sddmm`]. See [`spmm_preprocess`] for
+/// the rationale.
+#[allow(clippy::too_many_arguments)]
+pub fn sddmm_preprocess<T: SparseScalar>(
+    handle: &Handle,
+    op_a: Op,
+    op_b: Op,
+    alpha: &T,
+    a: &DnMat<'_, T>,
+    b: &DnMat<'_, T>,
+    beta: &T,
+    c: &mut SpMat<'_, T>,
+    alg: SDDMMAlg,
+    workspace: &mut DeviceBuffer<u8>,
+) -> Result<()> {
+    let c_api = cusparse()?;
+    let cu = c_api.cusparse_sddmm_preprocess()?;
+    check(unsafe {
+        cu(
+            handle.as_raw(),
+            op_a.raw(),
+            op_b.raw(),
+            alpha as *const T as *const c_void,
+            a.descr,
+            b.descr,
+            beta as *const T as *const c_void,
+            c.descr,
+            T::data_type(),
+            alg,
+            workspace.as_raw().0 as *mut c_void,
+        )
+    })
+}
+
 // ---- Sparse / dense conversions ----------------------------------------
 
 pub fn sparse_to_dense_buffer_size<T: SparseScalar>(
@@ -1180,6 +1304,90 @@ pub fn dense_to_sparse_convert<T: SparseScalar>(
             dn.descr,
             sp.descr,
             0,
+            workspace.as_raw().0 as *mut c_void,
+        )
+    })
+}
+
+/// Workspace size in bytes for [`csr2csc_ex2`].
+#[allow(clippy::too_many_arguments)]
+pub fn csr2csc_ex2_buffer_size<T: SparseScalar + baracuda_types::DeviceRepr>(
+    handle: &Handle,
+    m: i32,
+    n: i32,
+    nnz: i32,
+    csr_val: &DeviceBuffer<T>,
+    csr_row_ptr: &DeviceBuffer<i32>,
+    csr_col_ind: &DeviceBuffer<i32>,
+    csc_val: &mut DeviceBuffer<T>,
+    csc_col_ptr: &mut DeviceBuffer<i32>,
+    csc_row_ind: &mut DeviceBuffer<i32>,
+    copy_values: bool,
+    idx_base: IndexBase,
+    alg: Csr2CscAlg,
+) -> Result<usize> {
+    let c = cusparse()?;
+    let cu = c.cusparse_csr2csc_ex2_buffer_size()?;
+    let mut size = 0usize;
+    check(unsafe {
+        cu(
+            handle.as_raw(),
+            m,
+            n,
+            nnz,
+            csr_val.as_raw().0 as *const c_void,
+            csr_row_ptr.as_raw().0 as *const i32,
+            csr_col_ind.as_raw().0 as *const i32,
+            csc_val.as_raw().0 as *mut c_void,
+            csc_col_ptr.as_raw().0 as *mut i32,
+            csc_row_ind.as_raw().0 as *mut i32,
+            T::data_type(),
+            copy_values as i32,
+            idx_base,
+            alg,
+            &mut size,
+        )
+    })?;
+    Ok(size)
+}
+
+/// Convert a CSR matrix to CSC format using the modern Ex2 entry point —
+/// supports algorithm selection (`alg`) and arbitrary value types.
+#[allow(clippy::too_many_arguments)]
+pub fn csr2csc_ex2<T: SparseScalar + baracuda_types::DeviceRepr>(
+    handle: &Handle,
+    m: i32,
+    n: i32,
+    nnz: i32,
+    csr_val: &DeviceBuffer<T>,
+    csr_row_ptr: &DeviceBuffer<i32>,
+    csr_col_ind: &DeviceBuffer<i32>,
+    csc_val: &mut DeviceBuffer<T>,
+    csc_col_ptr: &mut DeviceBuffer<i32>,
+    csc_row_ind: &mut DeviceBuffer<i32>,
+    copy_values: bool,
+    idx_base: IndexBase,
+    alg: Csr2CscAlg,
+    workspace: &mut DeviceBuffer<u8>,
+) -> Result<()> {
+    let c = cusparse()?;
+    let cu = c.cusparse_csr2csc_ex2()?;
+    check(unsafe {
+        cu(
+            handle.as_raw(),
+            m,
+            n,
+            nnz,
+            csr_val.as_raw().0 as *const c_void,
+            csr_row_ptr.as_raw().0 as *const i32,
+            csr_col_ind.as_raw().0 as *const i32,
+            csc_val.as_raw().0 as *mut c_void,
+            csc_col_ptr.as_raw().0 as *mut i32,
+            csc_row_ind.as_raw().0 as *mut i32,
+            T::data_type(),
+            copy_values as i32,
+            idx_base,
+            alg,
             workspace.as_raw().0 as *mut c_void,
         )
     })

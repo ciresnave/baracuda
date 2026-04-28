@@ -137,6 +137,49 @@ impl Module {
         Ok(mode)
     }
 
+    /// Load a module from a raw image with extra JIT compiler options —
+    /// the typical use is capturing the JIT log when a PTX module
+    /// fails to compile. `options` and `option_values` are parallel
+    /// arrays whose entries follow the `CUjit_option` ABI (see the
+    /// CUDA driver reference). For PTX, the bytes must be a
+    /// null-terminated UTF-8 string.
+    ///
+    /// # Safety
+    ///
+    /// Each `option_value` must point at a value of the type the
+    /// matching `CUjit_option` expects (some are pointers, some are
+    /// integers cast to `*mut c_void`). The arrays must have the same
+    /// length.
+    pub unsafe fn load_data_ex(
+        context: &Context,
+        image: &[u8],
+        options: &mut [i32],
+        option_values: &mut [*mut core::ffi::c_void],
+    ) -> Result<Self> {
+        assert_eq!(
+            options.len(),
+            option_values.len(),
+            "load_data_ex: options and option_values must have the same length"
+        );
+        context.set_current()?;
+        let d = driver()?;
+        let cu = d.cu_module_load_data_ex()?;
+        let mut module: CUmodule = core::ptr::null_mut();
+        check(cu(
+            &mut module,
+            image.as_ptr() as *const c_void,
+            options.len() as core::ffi::c_uint,
+            options.as_mut_ptr(),
+            option_values.as_mut_ptr(),
+        ))?;
+        Ok(Self {
+            inner: Arc::new(ModuleInner {
+                handle: module,
+                context: context.clone(),
+            }),
+        })
+    }
+
     /// The [`Context`] this module was loaded into.
     #[inline]
     pub fn context(&self) -> &Context {

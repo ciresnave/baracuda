@@ -38,6 +38,9 @@ pub enum RedOp {
     Min,
     /// Arithmetic mean. NCCL 2.10+.
     Avg,
+    /// Custom op id returned by [`Communicator::create_pre_mul_sum`].
+    /// NCCL 2.11+.
+    Custom(i32),
 }
 
 impl RedOp {
@@ -48,8 +51,18 @@ impl RedOp {
             RedOp::Max => ncclRedOp_t::Max,
             RedOp::Min => ncclRedOp_t::Min,
             RedOp::Avg => ncclRedOp_t::Avg,
+            RedOp::Custom(id) => ncclRedOp_t(id),
         }
     }
+}
+
+/// Where the scalar passed to [`Communicator::create_pre_mul_sum`] lives.
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum ScalarResidence {
+    /// Scalar pointer is in host memory; NCCL captures the value at call time.
+    Host = 0,
+    /// Scalar pointer is in device memory; NCCL captures it at collective launch.
+    Device = 1,
 }
 
 /// Element type for NCCL buffers. Implemented by baracuda-types primitives
@@ -187,6 +200,30 @@ impl Communicator {
         let cu = n.nccl_comm_init_rank()?;
         let mut handle: ncclComm_t = core::ptr::null_mut();
         check(unsafe { cu(&mut handle, nranks, id.0, rank) })?;
+        Ok(Self { handle })
+    }
+
+    /// Like [`Self::init_rank`] but takes a pointer to a configured
+    /// `ncclConfig_t`. NCCL 2.13+. Pass `core::ptr::null_mut()` for
+    /// defaults — equivalent to [`Self::init_rank`]. The struct shape
+    /// (blocking flag, CGA cluster size, splitShare, netName, …)
+    /// changes between NCCL versions, so we don't model it as a typed
+    /// Rust struct; build it through the C API or as a `[u8; N]`.
+    ///
+    /// # Safety
+    ///
+    /// `config` must be a properly-initialized `ncclConfig_t` for the
+    /// installed NCCL version, or null.
+    pub unsafe fn init_rank_config(
+        nranks: i32,
+        id: UniqueId,
+        rank: i32,
+        config: *mut core::ffi::c_void,
+    ) -> Result<Self> {
+        let n = nccl()?;
+        let cu = n.nccl_comm_init_rank_config()?;
+        let mut handle: ncclComm_t = core::ptr::null_mut();
+        check(cu(&mut handle, nranks, id.0, rank, config))?;
         Ok(Self { handle })
     }
 
@@ -507,6 +544,54 @@ impl Communicator {
         let n = nccl()?;
         let cu = n.nccl_comm_deregister()?;
         check(cu(self.handle, handle))
+    }
+
+    /// Create a custom pre-multiplied-sum reduction op:
+    /// `out = sum_i (scalar * x_i)`. Use the returned [`RedOp::Custom`]
+    /// in any subsequent [`all_reduce`] / [`Communicator::reduce`] /
+    /// [`Communicator::reduce_scatter`] on this communicator.
+    /// Destroy it with [`Self::destroy_red_op`] when you're done.
+    /// NCCL 2.11+.
+    ///
+    /// # Safety
+    ///
+    /// `scalar` must point to a single value of type `T` whose
+    /// residence matches `residence` (host or device memory) and stay
+    /// valid until the next collective using this op completes.
+    pub unsafe fn create_pre_mul_sum<T: NcclScalar>(
+        &self,
+        scalar: *mut core::ffi::c_void,
+        residence: ScalarResidence,
+    ) -> Result<RedOp> {
+        let n = nccl()?;
+        let cu = n.nccl_red_op_create_pre_mul_sum()?;
+        let mut op = ncclRedOp_t(0);
+        check(cu(&mut op, scalar, T::raw(), residence as i32, self.handle))?;
+        Ok(RedOp::Custom(op.0))
+    }
+
+    /// Destroy a custom op previously returned by [`Self::create_pre_mul_sum`].
+    /// NCCL 2.11+. Calling on a built-in op (Sum/Prod/Max/Min/Avg) is a
+    /// no-op error from NCCL — guard against that yourself.
+    pub fn destroy_red_op(&self, op: RedOp) -> Result<()> {
+        let n = nccl()?;
+        let cu = n.nccl_red_op_destroy()?;
+        check(unsafe { cu(op.raw(), self.handle) })
+    }
+
+    /// Most recent error string produced on this communicator.
+    /// NCCL 2.13+. Returns `"unknown"` if the loader can't resolve
+    /// the symbol or the C library returns null.
+    pub fn last_error(&self) -> Result<&'static str> {
+        let n = nccl()?;
+        let cu = n.nccl_get_last_error()?;
+        let p = unsafe { cu(self.handle) };
+        if p.is_null() {
+            return Ok("unknown");
+        }
+        Ok(unsafe { core::ffi::CStr::from_ptr(p) }
+            .to_str()
+            .unwrap_or("unknown"))
     }
 }
 

@@ -144,6 +144,60 @@ impl MatmulDesc {
         })
     }
 
+    fn get_attr<T: Default>(&self, attr: cublasLtMatmulDescAttributes_t) -> Result<T> {
+        let lt = cublas_lt()?;
+        let get = lt.cublas_lt_matmul_desc_get_attribute()?;
+        let mut value = T::default();
+        let mut written: usize = 0;
+        check(unsafe {
+            get(
+                self.raw,
+                attr,
+                &mut value as *mut T as *mut c_void,
+                core::mem::size_of::<T>(),
+                &mut written,
+            )
+        })?;
+        Ok(value)
+    }
+
+    /// Read back the current Op for the A matrix.
+    /// Stored as `cublasOperation_t` (i32 ABI) — see the cuBLASLt reference.
+    pub fn transa(&self) -> Result<i32> {
+        self.get_attr::<i32>(cublasLtMatmulDescAttributes_t::Transa)
+    }
+
+    /// Read back the current Op for the B matrix.
+    pub fn transb(&self) -> Result<i32> {
+        self.get_attr::<i32>(cublasLtMatmulDescAttributes_t::Transb)
+    }
+
+    /// Read back the current epilogue selection.
+    pub fn epilogue(&self) -> Result<i32> {
+        self.get_attr::<i32>(cublasLtMatmulDescAttributes_t::Epilogue)
+    }
+
+    /// Read back the current bias-vector device pointer.
+    pub fn bias_pointer(&self) -> Result<*const c_void> {
+        self.get_attr::<*const c_void>(cublasLtMatmulDescAttributes_t::BiasPointer)
+    }
+
+    /// Generic typed read for any descriptor attribute. The size of `T`
+    /// must match the attribute's expected payload size — the cuBLASLt
+    /// API will return an error otherwise.
+    ///
+    /// # Safety
+    ///
+    /// `T`'s size and layout must match the attribute's documented
+    /// payload (an i32 for most enum-style attributes, a pointer for
+    /// pointer-typed ones).
+    pub unsafe fn get_attribute_raw<T: Default>(
+        &self,
+        attr: cublasLtMatmulDescAttributes_t,
+    ) -> Result<T> {
+        self.get_attr::<T>(attr)
+    }
+
     pub fn set_transa(&self, op: cublasOperation_t) -> Result<()> {
         self.set_attr(cublasLtMatmulDescAttributes_t::Transa, &(op as i32))
     }

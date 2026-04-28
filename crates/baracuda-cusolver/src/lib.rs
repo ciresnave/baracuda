@@ -77,6 +77,19 @@ impl DnHandle {
         check(unsafe { cu(self.handle, stream.as_raw() as _) })
     }
 
+    /// Read back the raw stream pointer this handle is currently bound
+    /// to. Returns a raw `*mut c_void` rather than an owned [`Stream`]
+    /// because the cuSOLVER handle didn't create the stream and isn't
+    /// entitled to destroy it. The pointer aliases `CUstream` /
+    /// `cudaStream_t`.
+    pub fn stream(&self) -> Result<*mut c_void> {
+        let c = cusolver()?;
+        let cu = c.cusolver_dn_get_stream()?;
+        let mut s: *mut c_void = core::ptr::null_mut();
+        check(unsafe { cu(self.handle, &mut s as *mut *mut c_void as *mut _) })?;
+        Ok(s)
+    }
+
     pub fn version() -> Result<i32> {
         let c = cusolver()?;
         let cu = c.cusolver_get_version()?;
@@ -2515,6 +2528,89 @@ pub mod xapi {
             device_bytes,
             host_buf,
             host_bytes,
+            info,
+        ))
+    }
+
+    /// Solve `op(A) X = B` after [`xgetrf`] has factored A. `b`/`ldb`
+    /// describe the right-hand-side matrix; `b` is overwritten with X.
+    ///
+    /// # Safety
+    ///
+    /// `a`, `ipiv`, `b`, and `info` must point to live device memory of
+    /// the sizes implied by `n`, `nrhs`, `lda`, and `ldb`, with element
+    /// types matching `data_type_a` / `data_type_b`.
+    #[allow(clippy::too_many_arguments)]
+    pub unsafe fn xgetrs(
+        handle: &DnHandle,
+        params: &Params,
+        trans: Op,
+        n: i64,
+        nrhs: i64,
+        data_type_a: cudaDataType,
+        a: *const c_void,
+        lda: i64,
+        ipiv: *const i64,
+        data_type_b: cudaDataType,
+        b: *mut c_void,
+        ldb: i64,
+        info: *mut c_int,
+    ) -> Result<()> {
+        let c = cusolver()?;
+        let cu = c.cusolver_dn_xgetrs()?;
+        check(cu(
+            handle.as_raw(),
+            params.raw,
+            trans.raw(),
+            n,
+            nrhs,
+            data_type_a,
+            a,
+            lda,
+            ipiv,
+            data_type_b,
+            b,
+            ldb,
+            info,
+        ))
+    }
+
+    /// Solve `A X = B` after [`xpotrf`] has Cholesky-factored A.
+    /// `b`/`ldb` describe the right-hand-side matrix; `b` is overwritten
+    /// with X.
+    ///
+    /// # Safety
+    ///
+    /// See [`xgetrs`].
+    #[allow(clippy::too_many_arguments)]
+    pub unsafe fn xpotrs(
+        handle: &DnHandle,
+        params: &Params,
+        uplo: Fill,
+        n: i64,
+        nrhs: i64,
+        data_type_a: cudaDataType,
+        a: *const c_void,
+        lda: i64,
+        data_type_b: cudaDataType,
+        b: *mut c_void,
+        ldb: i64,
+        info: *mut c_int,
+    ) -> Result<()> {
+        let c = cusolver()?;
+        let cu = c.cusolver_dn_xpotrs()?;
+        check(cu(
+            handle.as_raw(),
+            params.raw,
+            uplo,
+            n,
+            nrhs,
+            data_type_a,
+            a,
+            lda,
+            data_type_b,
+            b,
+            ldb,
             info,
         ))
     }

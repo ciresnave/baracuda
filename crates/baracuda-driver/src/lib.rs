@@ -71,9 +71,9 @@ pub use array::{
     Array, ArrayFormat, SurfaceObject, TextureAddressMode, TextureDesc, TextureFilterMode,
     TextureObject,
 };
-pub use context::Context;
+pub use context::{Context, PrimaryContext};
 pub use device::Device;
-pub use error::{Error, Result};
+pub use error::{error_name, error_string, Error, Result};
 pub use event::Event;
 pub use graph::{instantiate_flags, CaptureMode, Graph, GraphExec, GraphNode};
 pub use init::{init, version};

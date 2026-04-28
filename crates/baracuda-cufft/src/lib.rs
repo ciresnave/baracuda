@@ -647,3 +647,271 @@ pub fn get_size(plan: cufftHandle) -> Result<usize> {
     check(unsafe { cu(plan, &mut s) })?;
     Ok(s)
 }
+
+// ============================================================================
+// Two-step plan creation: cufftCreate + cufftMakePlan*
+// ============================================================================
+
+/// Generic cuFFT plan that supports the modern two-step creation flow:
+/// [`Plan::create`] gets you a fresh handle, then one of the
+/// `make_plan_*` methods configures the rank and reports the workspace
+/// size — useful when you want to allocate the work area yourself
+/// (call [`set_auto_allocation(false)`] before `make_plan_*`).
+///
+/// Unlike [`Plan1d`] / [`Plan2d`] / [`Plan3d`], this type can hold any
+/// rank, including the batched-many / 64-bit-many forms.
+pub struct Plan {
+    handle: cufftHandle,
+}
+
+unsafe impl Send for Plan {}
+
+impl core::fmt::Debug for Plan {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("Plan")
+            .field("handle", &self.handle)
+            .finish()
+    }
+}
+
+impl Plan {
+    /// Allocate a fresh empty plan. The plan is unusable until you
+    /// finalize it with one of the `make_plan_*` methods.
+    pub fn create() -> Result<Self> {
+        let c = cufft()?;
+        let cu = c.cufft_create()?;
+        let mut plan: cufftHandle = 0;
+        check(unsafe { cu(&mut plan) })?;
+        Ok(Self { handle: plan })
+    }
+
+    /// Finalize as a 1-D plan of length `nx` and `batch` parallel
+    /// transforms. Returns the workspace size in bytes.
+    pub fn make_plan_1d(&self, nx: i32, transform: Transform, batch: i32) -> Result<usize> {
+        let c = cufft()?;
+        let cu = c.cufft_make_plan_1d()?;
+        let mut size: usize = 0;
+        check(unsafe { cu(self.handle, nx, transform.raw(), batch, &mut size) })?;
+        Ok(size)
+    }
+
+    /// Finalize as a 2-D plan. Returns workspace size in bytes.
+    pub fn make_plan_2d(&self, nx: i32, ny: i32, transform: Transform) -> Result<usize> {
+        let c = cufft()?;
+        let cu = c.cufft_make_plan_2d()?;
+        let mut size: usize = 0;
+        check(unsafe { cu(self.handle, nx, ny, transform.raw(), &mut size) })?;
+        Ok(size)
+    }
+
+    /// Finalize as a 3-D plan. Returns workspace size in bytes.
+    pub fn make_plan_3d(
+        &self,
+        nx: i32,
+        ny: i32,
+        nz: i32,
+        transform: Transform,
+    ) -> Result<usize> {
+        let c = cufft()?;
+        let cu = c.cufft_make_plan_3d()?;
+        let mut size: usize = 0;
+        check(unsafe { cu(self.handle, nx, ny, nz, transform.raw(), &mut size) })?;
+        Ok(size)
+    }
+
+    /// Finalize as a generic strided/batched plan. Returns workspace
+    /// size in bytes.
+    ///
+    /// # Safety
+    ///
+    /// `n`, `inembed`, `onembed` must be writable arrays of length
+    /// `rank` (cuFFT mutates them in some versions). Pass null for
+    /// `inembed` / `onembed` to use defaults.
+    #[allow(clippy::too_many_arguments)]
+    pub unsafe fn make_plan_many(
+        &self,
+        rank: i32,
+        n: &mut [i32],
+        inembed: *mut i32,
+        istride: i32,
+        idist: i32,
+        onembed: *mut i32,
+        ostride: i32,
+        odist: i32,
+        transform: Transform,
+        batch: i32,
+    ) -> Result<usize> {
+        assert_eq!(n.len() as i32, rank, "n.len() must equal rank");
+        let c = cufft()?;
+        let cu = c.cufft_make_plan_many()?;
+        let mut size: usize = 0;
+        check(cu(
+            self.handle,
+            rank,
+            n.as_mut_ptr(),
+            inembed,
+            istride,
+            idist,
+            onembed,
+            ostride,
+            odist,
+            transform.raw(),
+            batch,
+            &mut size,
+        ))?;
+        Ok(size)
+    }
+
+    /// 64-bit variant of [`make_plan_many`] — use this when any
+    /// dimension or stride exceeds `i32::MAX`.
+    ///
+    /// # Safety
+    ///
+    /// Same as [`make_plan_many`].
+    #[allow(clippy::too_many_arguments)]
+    pub unsafe fn make_plan_many64(
+        &self,
+        rank: i32,
+        n: &mut [i64],
+        inembed: *mut i64,
+        istride: i64,
+        idist: i64,
+        onembed: *mut i64,
+        ostride: i64,
+        odist: i64,
+        transform: Transform,
+        batch: i64,
+    ) -> Result<usize> {
+        assert_eq!(n.len() as i32, rank, "n.len() must equal rank");
+        let c = cufft()?;
+        let cu = c.cufft_make_plan_many64()?;
+        let mut size: usize = 0;
+        check(cu(
+            self.handle,
+            rank,
+            n.as_mut_ptr(),
+            inembed,
+            istride,
+            idist,
+            onembed,
+            ostride,
+            odist,
+            transform.raw(),
+            batch,
+            &mut size,
+        ))?;
+        Ok(size)
+    }
+
+    /// Bind subsequent exec calls to `stream`.
+    pub fn set_stream(&self, stream: &Stream) -> Result<()> {
+        let c = cufft()?;
+        let cu = c.cufft_set_stream()?;
+        check(unsafe { cu(self.handle, stream.as_raw() as _) })
+    }
+
+    /// Raw `cufftHandle`. Use with care.
+    #[inline]
+    pub fn as_raw(&self) -> cufftHandle {
+        self.handle
+    }
+}
+
+impl Drop for Plan {
+    fn drop(&mut self) {
+        if let Ok(c) = cufft() {
+            if let Ok(cu) = c.cufft_destroy() {
+                let _ = unsafe { cu(self.handle) };
+            }
+        }
+    }
+}
+
+// ============================================================================
+// Callback API (cufftXtSetCallback / Clear / SetCallbackSharedSize)
+// ============================================================================
+
+pub mod callback {
+    //! Pre/post callbacks attached to a cuFFT plan via the `cufftXt*`
+    //! callback entry points. The callback ABI is fixed by NVIDIA: each
+    //! callback receives the input/output element index, a caller-info
+    //! pointer, and the data; see the cuFFT reference for the exact
+    //! signatures by callback type. We expose only the raw setters
+    //! because the function-pointer types are PTX-shaped, not regular
+    //! `extern "C"` functions — they ship as device-side `__device__`
+    //! functions linked into the user's CUBIN.
+    use super::*;
+
+    /// Callback type values from the cuFFT header
+    /// (`cufftXtCallbackType`).
+    #[derive(Copy, Clone, Debug, Eq, PartialEq)]
+    #[repr(i32)]
+    pub enum CallbackType {
+        /// Load callback for complex single precision.
+        LoadComplex = 0,
+        /// Load callback for complex double precision.
+        LoadDoubleComplex = 1,
+        /// Load callback for real single precision.
+        LoadReal = 2,
+        /// Load callback for real double precision.
+        LoadDoubleReal = 3,
+        /// Store callback for complex single precision.
+        StoreComplex = 4,
+        /// Store callback for complex double precision.
+        StoreDoubleComplex = 5,
+        /// Store callback for real single precision.
+        StoreReal = 6,
+        /// Store callback for real double precision.
+        StoreDoubleReal = 7,
+    }
+
+    /// Attach a load/store callback to the plan. `callback_routine` is
+    /// an array of device function pointers — one per GPU for
+    /// multi-GPU plans, otherwise a single-element array.
+    /// `caller_info` is parallel; pass null for "no caller info".
+    ///
+    /// # Safety
+    ///
+    /// `callback_routine[i]` must be a `__device__` function with the
+    /// signature cuFFT expects for `cb_type` (see the cuFFT reference).
+    /// The routine and `caller_info` must outlive every plan exec call.
+    pub unsafe fn set(
+        plan: cufftHandle,
+        callback_routine: &mut [*mut core::ffi::c_void],
+        cb_type: CallbackType,
+        caller_info: &mut [*mut core::ffi::c_void],
+    ) -> Result<()> {
+        assert_eq!(
+            callback_routine.len(),
+            caller_info.len(),
+            "callback_routine and caller_info must have the same length"
+        );
+        let c = cufft()?;
+        let cu = c.cufft_xt_set_callback()?;
+        check(cu(
+            plan,
+            callback_routine.as_mut_ptr(),
+            cb_type as i32,
+            caller_info.as_mut_ptr(),
+        ))
+    }
+
+    /// Detach any previously set callback of `cb_type`.
+    pub fn clear(plan: cufftHandle, cb_type: CallbackType) -> Result<()> {
+        let c = cufft()?;
+        let cu = c.cufft_xt_clear_callback()?;
+        check(unsafe { cu(plan, cb_type as i32) })
+    }
+
+    /// Reserve `shared_size` bytes of dynamic shared memory per kernel
+    /// for the callback. Maximum permissible value is GPU-dependent.
+    pub fn set_shared_size(
+        plan: cufftHandle,
+        cb_type: CallbackType,
+        shared_size: usize,
+    ) -> Result<()> {
+        let c = cufft()?;
+        let cu = c.cufft_xt_set_callback_shared_size()?;
+        check(unsafe { cu(plan, cb_type as i32, shared_size) })
+    }
+}

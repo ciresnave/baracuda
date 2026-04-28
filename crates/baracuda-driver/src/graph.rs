@@ -774,6 +774,22 @@ impl GraphNode {
         check(cu(self.raw, params))
     }
 
+    /// Generic params edit on the template graph — works for any node
+    /// kind (kernel, memcpy, memset, child-graph, host, …) by reading
+    /// the `type_` field of `CUgraphNodeParams` and dispatching to the
+    /// matching internal setter. CUDA 12.3+.
+    ///
+    /// # Safety
+    ///
+    /// The `type_` discriminant in `params` must match the node's
+    /// actual kind, and the union payload must be initialized for that
+    /// type.
+    pub unsafe fn set_params(&self, params: &mut CUgraphNodeParams) -> Result<()> {
+        let d = driver()?;
+        let cu = d.cu_graph_node_set_params()?;
+        check(cu(self.raw, params))
+    }
+
     /// Fetch current memset-node params (memset-node nodes only).
     pub fn memset_params(&self) -> Result<CUDA_MEMSET_NODE_PARAMS> {
         let d = driver()?;
