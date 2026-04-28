@@ -1,6 +1,6 @@
 [package]
 name = "baracuda-types-derive"
-version = "0.0.1-alpha.2"
+version = "0.0.1-alpha.3"
 description = "Proc-macros for baracuda-types (#[derive(DeviceRepr)], #[derive(KernelArg)])."
 edition.workspace = true
 rust-version.workspace = true

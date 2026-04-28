@@ -1,6 +1,6 @@
 [package]
 name = "baracuda"
-version = "0.0.1-alpha.2"
+version = "0.0.1-alpha.3"
 description = "Idiomatic Rust wrappers for the NVIDIA CUDA stack (Driver API, Runtime API, NVRTC, cuBLAS, cuDNN, NCCL, NVML, ...). Umbrella crate."
 edition.workspace = true
 rust-version.workspace = true

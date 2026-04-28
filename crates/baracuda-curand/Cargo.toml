@@ -1,6 +1,6 @@
 [package]
 name = "baracuda-curand"
-version = "0.0.1-alpha.2"
+version = "0.0.1-alpha.3"
 description = "Safe Rust wrappers for NVIDIA cuRAND (pseudo- and quasi-random number generation)."
 edition.workspace = true
 rust-version.workspace = true
