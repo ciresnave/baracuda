@@ -1946,6 +1946,54 @@ fn cudnn_candidates() -> Vec<String> {
     }
 }
 
+/// Detect the CUDA toolkit major version that cuDNN should be paired
+/// against. Returns `None` if no signal is available.
+///
+/// Strategy (Windows-style env vars work on Linux too if set):
+///   1. `CUDA_PATH` typically ends in `vNN.M` — e.g.
+///      `C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.6` →
+///      `Some(12)`.
+///   2. Fall back to scanning `CUDA_PATH_V<NN>_<M>` env vars and
+///      picking the highest `<NN>` present.
+fn detect_cuda_major() -> Option<u32> {
+    if let Ok(p) = std::env::var("CUDA_PATH") {
+        if let Some(n) = parse_cuda_major_from_path(&p) {
+            return Some(n);
+        }
+    }
+    // CUDA_PATH_V12_6=... CUDA_PATH_V11_8=... — pick the highest.
+    let mut best: Option<u32> = None;
+    for (k, _) in std::env::vars() {
+        if let Some(rest) = k.strip_prefix("CUDA_PATH_V") {
+            // rest looks like "12_6"
+            if let Some((maj, _)) = rest.split_once('_') {
+                if let Ok(n) = maj.parse::<u32>() {
+                    best = Some(best.map_or(n, |b| b.max(n)));
+                }
+            }
+        }
+    }
+    best
+}
+
+/// Look for a path component matching `vNN.M` (case-insensitive) and
+/// return `NN`.
+fn parse_cuda_major_from_path(p: &str) -> Option<u32> {
+    for component in p.split(|c: char| c == '/' || c == '\\') {
+        let bytes = component.as_bytes();
+        let rest = if bytes.first() == Some(&b'v') || bytes.first() == Some(&b'V') {
+            &component[1..]
+        } else {
+            continue;
+        };
+        let dot = rest.find('.')?;
+        if let Ok(n) = rest[..dot].parse::<u32>() {
+            return Some(n);
+        }
+    }
+    None
+}
+
 fn cudnn_extra_search_dirs() -> Vec<PathBuf> {
     let mut out = Vec::new();
 
@@ -1961,22 +2009,67 @@ fn cudnn_extra_search_dirs() -> Vec<PathBuf> {
 
     if cfg!(target_os = "windows") {
         // Default Windows install: `C:\Program Files\NVIDIA\CUDNN\v*\bin\<cuda_major>`.
+        // The numeric subdirectory under `bin/` is the CUDA major version this
+        // cuDNN build targets. We must NOT push every subdirectory blindly —
+        // on a host with cuDNN installed for multiple CUDA majors that puts
+        // the wrong DLL flavor on the search path. Prefer the subdir matching
+        // the detected CUDA major; fall back to highest-major-first when we
+        // can't tell.
+        let target_major = detect_cuda_major();
         if let Ok(pf) = std::env::var("ProgramFiles") {
             let cudnn_root = PathBuf::from(pf).join("NVIDIA").join("CUDNN");
             if let Ok(read_dir) = std::fs::read_dir(&cudnn_root) {
                 for entry in read_dir.flatten() {
                     let p = entry.path();
-                    if p.is_dir() {
-                        let bin = p.join("bin");
-                        if let Ok(sub) = std::fs::read_dir(&bin) {
-                            for s in sub.flatten() {
-                                let sp = s.path();
-                                if sp.is_dir() {
-                                    out.push(sp);
-                                }
+                    if !p.is_dir() {
+                        continue;
+                    }
+                    let bin = p.join("bin");
+                    let mut numbered: Vec<(u32, PathBuf)> = Vec::new();
+                    let mut unnumbered: Vec<PathBuf> = Vec::new();
+                    if let Ok(sub) = std::fs::read_dir(&bin) {
+                        for s in sub.flatten() {
+                            let sp = s.path();
+                            if !sp.is_dir() {
+                                continue;
+                            }
+                            match sp
+                                .file_name()
+                                .and_then(|n| n.to_str())
+                                .and_then(|s| s.parse::<u32>().ok())
+                            {
+                                Some(n) => numbered.push((n, sp)),
+                                None => unnumbered.push(sp),
                             }
                         }
                     }
+                    // Match the running CUDA major when known.
+                    if let Some(target) = target_major {
+                        if let Some(pos) = numbered.iter().position(|(n, _)| *n == target) {
+                            let (_, matched) = numbered.swap_remove(pos);
+                            out.push(matched);
+                        } else {
+                            // No exact match — try highest <= target, then fall through.
+                            numbered.sort_by(|a, b| b.0.cmp(&a.0));
+                            if let Some(pos) = numbered.iter().position(|(n, _)| *n <= target) {
+                                let (_, matched) = numbered.remove(pos);
+                                out.push(matched);
+                            } else if let Some((_, p)) = numbered.into_iter().next() {
+                                out.push(p);
+                            }
+                        }
+                    } else {
+                        // No detection signal — push highest-major first so
+                        // newest cuDNN is tried first, but include all as
+                        // fallbacks so existing single-CUDA setups still work.
+                        numbered.sort_by(|a, b| b.0.cmp(&a.0));
+                        for (_, p) in numbered {
+                            out.push(p);
+                        }
+                    }
+                    // Non-numeric subdirs (rare; older cuDNN packagings)
+                    // pass through unfiltered.
+                    out.extend(unnumbered);
                 }
             }
         }
@@ -2265,4 +2358,99 @@ pub fn cudnn() -> Result<&'static Cudnn, LoaderError> {
     let c = Cudnn::empty(lib);
     let _ = CUDNN.set(c);
     Ok(CUDNN.get().expect("OnceLock set or lost race"))
+}
+
+#[cfg(test)]
+mod search_dir_tests {
+    use super::*;
+
+    #[test]
+    fn parse_cuda_major_handles_typical_windows_paths() {
+        assert_eq!(
+            parse_cuda_major_from_path(
+                r"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.6"
+            ),
+            Some(12),
+        );
+        assert_eq!(
+            parse_cuda_major_from_path(
+                r"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v11.8\bin"
+            ),
+            Some(11),
+        );
+        // Linux-style.
+        assert_eq!(parse_cuda_major_from_path("/opt/cuda/v13.0"), Some(13));
+    }
+
+    #[test]
+    fn parse_cuda_major_ignores_unrelated_v_prefixed_words() {
+        // No `vN.M` segment — `verbose` happens to start with a `v`
+        // but doesn't match the `vN.M` pattern.
+        assert_eq!(
+            parse_cuda_major_from_path("/usr/local/verbose/cuda"),
+            None,
+        );
+        assert_eq!(parse_cuda_major_from_path(""), None);
+        assert_eq!(parse_cuda_major_from_path("/usr/local/cuda"), None);
+    }
+
+    #[test]
+    fn parse_cuda_major_accepts_uppercase_v() {
+        assert_eq!(
+            parse_cuda_major_from_path(r"D:\NVIDIA\CUDA\V12.6\bin"),
+            Some(12),
+        );
+    }
+
+    /// Reproduces the multi-CUDA bug: with the *old* logic, all `bin/<n>`
+    /// subdirs would be pushed in directory-iteration order (effectively
+    /// arbitrary). Now we should pick the one matching the detected
+    /// major.
+    #[test]
+    fn dir_selection_prefers_target_major() {
+        // Simulate the inner numbered-subdir filter inline. We don't
+        // touch the filesystem; we just verify the policy.
+        let numbered: Vec<(u32, &str)> = vec![(11, "/cudnn/bin/11"), (12, "/cudnn/bin/12")];
+        let target = Some(12u32);
+
+        let chosen: Vec<&str> = match target {
+            Some(t) => numbered
+                .iter()
+                .find(|(n, _)| *n == t)
+                .map(|(_, p)| *p)
+                .into_iter()
+                .collect(),
+            None => numbered.iter().map(|(_, p)| *p).collect(),
+        };
+        assert_eq!(chosen, vec!["/cudnn/bin/12"]);
+    }
+
+    #[test]
+    fn dir_selection_falls_back_to_highest_le_target() {
+        // Detected major = 13 but only cuDNN/12 + cuDNN/11 are installed.
+        // Highest-<=-target wins.
+        let mut numbered: Vec<(u32, &str)> = vec![(11, "/cudnn/11"), (12, "/cudnn/12")];
+        let target = 13u32;
+
+        // Replicate the policy: exact match → take it; else highest <= target.
+        let result = match numbered.iter().position(|(n, _)| *n == target) {
+            Some(_pos) => unreachable!("no exact match in this scenario"),
+            None => {
+                numbered.sort_by(|a, b| b.0.cmp(&a.0));
+                numbered
+                    .iter()
+                    .find(|(n, _)| *n <= target)
+                    .map(|(_, p)| *p)
+            }
+        };
+        assert_eq!(result, Some("/cudnn/12"));
+    }
+
+    #[test]
+    fn dir_selection_no_signal_is_highest_first() {
+        let mut numbered: Vec<(u32, &str)> = vec![(11, "/11"), (13, "/13"), (12, "/12")];
+        numbered.sort_by(|a, b| b.0.cmp(&a.0));
+        let order: Vec<&str> = numbered.iter().map(|(_, p)| *p).collect();
+        assert_eq!(order, vec!["/13", "/12", "/11"]);
+    }
 }

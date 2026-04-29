@@ -1,6 +1,6 @@
 [package]
 name = "baracuda-driver"
-version = "0.0.1-alpha.4"
+version = "0.0.1-alpha.5"
 description = "Safe Rust wrappers for the CUDA Driver API (devices, contexts, streams, events, memory, kernels, graphs)."
 edition.workspace = true
 rust-version.workspace = true

@@ -1,6 +1,6 @@
 [package]
 name = "baracuda-runtime"
-version = "0.0.1-alpha.4"
+version = "0.0.1-alpha.5"
 description = "Safe Rust wrappers for the CUDA Runtime API (devices, streams, events, managed memory, kernel launch via the library API)."
 edition.workspace = true
 rust-version.workspace = true

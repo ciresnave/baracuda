@@ -1,6 +1,6 @@
 [package]
 name = "baracuda-cupti-sys"
-version = "0.0.1-alpha.4"
+version = "0.0.1-alpha.5"
 description = "Raw FFI bindings and dynamic loader for CUPTI (CUDA Profiling Tools Interface)."
 edition.workspace = true
 rust-version.workspace = true

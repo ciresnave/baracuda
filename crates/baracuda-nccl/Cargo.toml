@@ -1,6 +1,6 @@
 [package]
 name = "baracuda-nccl"
-version = "0.0.1-alpha.4"
+version = "0.0.1-alpha.5"
 description = "Safe Rust wrappers for NVIDIA NCCL (multi-GPU collective communication)."
 edition.workspace = true
 rust-version.workspace = true
