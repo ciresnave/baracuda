@@ -1,6 +1,6 @@
 [package]
 name = "baracuda-cudnn"
-version = "0.0.1-alpha.3"
+version = "0.0.1-alpha.4"
 description = "Safe Rust wrappers for NVIDIA cuDNN (classic API; activations at v0.1)."
 edition.workspace = true
 rust-version.workspace = true
@@ -18,3 +18,10 @@ baracuda-cuda-sys.workspace = true
 baracuda-cudnn-sys.workspace = true
 baracuda-driver.workspace = true
 thiserror.workspace = true
+half = { workspace = true, optional = true }
+
+[features]
+default = []
+# Lets callers use `half::f16` / `half::bf16` directly as `CudnnDataType`.
+# Forwards to `baracuda-types/half-crate` for the underlying `DeviceRepr`.
+half-crate = ["dep:half", "baracuda-types/half-crate"]

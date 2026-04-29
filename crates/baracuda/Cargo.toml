@@ -1,6 +1,6 @@
 [package]
 name = "baracuda"
-version = "0.0.1-alpha.3"
+version = "0.0.1-alpha.4"
 description = "Idiomatic Rust wrappers for the NVIDIA CUDA stack (Driver API, Runtime API, NVRTC, cuBLAS, cuDNN, NCCL, NVML, ...). Umbrella crate."
 edition.workspace = true
 rust-version.workspace = true
@@ -53,6 +53,16 @@ cufile = ["dep:baracuda-cufile"]
 
 # Cross-cutting: async (futures-core Future impl on events).
 async = ["baracuda-driver?/async"]
+
+# Cross-cutting: enable `half::f16` / `half::bf16` interop on every
+# sub-crate that has a `half-crate` feature (currently baracuda-types,
+# baracuda-cudnn, baracuda-nccl). With this on, callers can use
+# `half::f16` end-to-end as a `CudnnDataType` / `NcclScalar`.
+half-crate = [
+    "baracuda-types/half-crate",
+    "baracuda-cudnn?/half-crate",
+    "baracuda-nccl?/half-crate",
+]
 
 # Curated bundles.
 math = ["cublas", "curand", "cufft", "cusparse", "cusolver"]

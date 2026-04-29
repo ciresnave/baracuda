@@ -1,6 +1,6 @@
 [package]
 name = "baracuda-types"
-version = "0.0.1-alpha.3"
+version = "0.0.1-alpha.4"
 description = "Shared type vocabulary for the baracuda CUDA stack (Half/BFloat16/Complex, DeviceRepr, CudaVersion, Feature, CudaStatus)."
 edition.workspace = true
 rust-version.workspace = true

@@ -19,7 +19,7 @@ checksum = "c08606f8c3cbf4ce6ec8e28fb0014a2c086708fe954eaa885384a6165172e7e8"
 
 [[package]]
 name = "baracuda"
-version = "0.0.1-alpha.3"
+version = "0.0.1-alpha.4"
 dependencies = [
  "baracuda-cublas",
  "baracuda-cudf",
@@ -45,14 +45,14 @@ dependencies = [
 
 [[package]]
 name = "baracuda-build"
-version = "0.0.1-alpha.3"
+version = "0.0.1-alpha.4"
 dependencies = [
  "bindgen",
 ]
 
 [[package]]
 name = "baracuda-core"
-version = "0.0.1-alpha.3"
+version = "0.0.1-alpha.4"
 dependencies = [
  "baracuda-types",
  "libloading",
@@ -61,7 +61,7 @@ dependencies = [
 
 [[package]]
 name = "baracuda-cublas"
-version = "0.0.1-alpha.3"
+version = "0.0.1-alpha.4"
 dependencies = [
  "baracuda-core",
  "baracuda-cublas-sys",
@@ -73,7 +73,7 @@ dependencies = [
 
 [[package]]
 name = "baracuda-cublas-sys"
-version = "0.0.1-alpha.3"
+version = "0.0.1-alpha.4"
 dependencies = [
  "baracuda-build",
  "baracuda-core",
@@ -84,7 +84,7 @@ dependencies = [
 
 [[package]]
 name = "baracuda-cuda-sys"
-version = "0.0.1-alpha.3"
+version = "0.0.1-alpha.4"
 dependencies = [
  "baracuda-build",
  "baracuda-core",
@@ -94,7 +94,7 @@ dependencies = [
 
 [[package]]
 name = "baracuda-cudf"
-version = "0.0.1-alpha.3"
+version = "0.0.1-alpha.4"
 dependencies = [
  "baracuda-core",
  "baracuda-cudf-sys",
@@ -104,7 +104,7 @@ dependencies = [
 
 [[package]]
 name = "baracuda-cudf-sys"
-version = "0.0.1-alpha.3"
+version = "0.0.1-alpha.4"
 dependencies = [
  "baracuda-build",
  "baracuda-core",
@@ -115,19 +115,20 @@ dependencies = [
 
 [[package]]
 name = "baracuda-cudnn"
-version = "0.0.1-alpha.3"
+version = "0.0.1-alpha.4"
 dependencies = [
  "baracuda-core",
  "baracuda-cuda-sys",
  "baracuda-cudnn-sys",
  "baracuda-driver",
  "baracuda-types",
+ "half",
  "thiserror",
 ]
 
 [[package]]
 name = "baracuda-cudnn-sys"
-version = "0.0.1-alpha.3"
+version = "0.0.1-alpha.4"
 dependencies = [
  "baracuda-build",
  "baracuda-core",
@@ -138,7 +139,7 @@ dependencies = [
 
 [[package]]
 name = "baracuda-cufft"
-version = "0.0.1-alpha.3"
+version = "0.0.1-alpha.4"
 dependencies = [
  "baracuda-core",
  "baracuda-cuda-sys",
@@ -150,7 +151,7 @@ dependencies = [
 
 [[package]]
 name = "baracuda-cufft-sys"
-version = "0.0.1-alpha.3"
+version = "0.0.1-alpha.4"
 dependencies = [
  "baracuda-build",
  "baracuda-core",
@@ -161,7 +162,7 @@ dependencies = [
 
 [[package]]
 name = "baracuda-cufile"
-version = "0.0.1-alpha.3"
+version = "0.0.1-alpha.4"
 dependencies = [
  "baracuda-core",
  "baracuda-cufile-sys",
@@ -172,7 +173,7 @@ dependencies = [
 
 [[package]]
 name = "baracuda-cufile-sys"
-version = "0.0.1-alpha.3"
+version = "0.0.1-alpha.4"
 dependencies = [
  "baracuda-core",
  "baracuda-types",
@@ -181,7 +182,7 @@ dependencies = [
 
 [[package]]
 name = "baracuda-cupti"
-version = "0.0.1-alpha.3"
+version = "0.0.1-alpha.4"
 dependencies = [
  "baracuda-core",
  "baracuda-cupti-sys",
@@ -191,7 +192,7 @@ dependencies = [
 
 [[package]]
 name = "baracuda-cupti-sys"
-version = "0.0.1-alpha.3"
+version = "0.0.1-alpha.4"
 dependencies = [
  "baracuda-core",
  "baracuda-types",
@@ -200,7 +201,7 @@ dependencies = [
 
 [[package]]
 name = "baracuda-curand"
-version = "0.0.1-alpha.3"
+version = "0.0.1-alpha.4"
 dependencies = [
  "baracuda-core",
  "baracuda-cuda-sys",
@@ -212,7 +213,7 @@ dependencies = [
 
 [[package]]
 name = "baracuda-curand-sys"
-version = "0.0.1-alpha.3"
+version = "0.0.1-alpha.4"
 dependencies = [
  "baracuda-build",
  "baracuda-core",
@@ -223,7 +224,7 @@ dependencies = [
 
 [[package]]
 name = "baracuda-cusolver"
-version = "0.0.1-alpha.3"
+version = "0.0.1-alpha.4"
 dependencies = [
  "baracuda-core",
  "baracuda-cuda-sys",
@@ -235,7 +236,7 @@ dependencies = [
 
 [[package]]
 name = "baracuda-cusolver-sys"
-version = "0.0.1-alpha.3"
+version = "0.0.1-alpha.4"
 dependencies = [
  "baracuda-build",
  "baracuda-core",
@@ -246,7 +247,7 @@ dependencies = [
 
 [[package]]
 name = "baracuda-cusparse"
-version = "0.0.1-alpha.3"
+version = "0.0.1-alpha.4"
 dependencies = [
  "baracuda-core",
  "baracuda-cuda-sys",
@@ -258,7 +259,7 @@ dependencies = [
 
 [[package]]
 name = "baracuda-cusparse-sys"
-version = "0.0.1-alpha.3"
+version = "0.0.1-alpha.4"
 dependencies = [
  "baracuda-build",
  "baracuda-core",
@@ -269,7 +270,7 @@ dependencies = [
 
 [[package]]
 name = "baracuda-cutensor"
-version = "0.0.1-alpha.3"
+version = "0.0.1-alpha.4"
 dependencies = [
  "baracuda-core",
  "baracuda-cutensor-sys",
@@ -280,7 +281,7 @@ dependencies = [
 
 [[package]]
 name = "baracuda-cutensor-sys"
-version = "0.0.1-alpha.3"
+version = "0.0.1-alpha.4"
 dependencies = [
  "baracuda-core",
  "baracuda-types",
@@ -289,7 +290,7 @@ dependencies = [
 
 [[package]]
 name = "baracuda-cvcuda"
-version = "0.0.1-alpha.3"
+version = "0.0.1-alpha.4"
 dependencies = [
  "baracuda-core",
  "baracuda-cvcuda-sys",
@@ -300,7 +301,7 @@ dependencies = [
 
 [[package]]
 name = "baracuda-cvcuda-sys"
-version = "0.0.1-alpha.3"
+version = "0.0.1-alpha.4"
 dependencies = [
  "baracuda-core",
  "baracuda-types",
@@ -309,7 +310,7 @@ dependencies = [
 
 [[package]]
 name = "baracuda-driver"
-version = "0.0.1-alpha.3"
+version = "0.0.1-alpha.4"
 dependencies = [
  "baracuda-core",
  "baracuda-cuda-sys",
@@ -334,7 +335,7 @@ dependencies = [
 
 [[package]]
 name = "baracuda-nccl"
-version = "0.0.1-alpha.3"
+version = "0.0.1-alpha.4"
 dependencies = [
  "baracuda-core",
  "baracuda-cuda-sys",
@@ -347,7 +348,7 @@ dependencies = [
 
 [[package]]
 name = "baracuda-nccl-sys"
-version = "0.0.1-alpha.3"
+version = "0.0.1-alpha.4"
 dependencies = [
  "baracuda-build",
  "baracuda-core",
@@ -358,7 +359,7 @@ dependencies = [
 
 [[package]]
 name = "baracuda-npp"
-version = "0.0.1-alpha.3"
+version = "0.0.1-alpha.4"
 dependencies = [
  "baracuda-core",
  "baracuda-driver",
@@ -369,7 +370,7 @@ dependencies = [
 
 [[package]]
 name = "baracuda-npp-sys"
-version = "0.0.1-alpha.3"
+version = "0.0.1-alpha.4"
 dependencies = [
  "baracuda-build",
  "baracuda-core",
@@ -380,7 +381,7 @@ dependencies = [
 
 [[package]]
 name = "baracuda-nvcomp"
-version = "0.0.1-alpha.3"
+version = "0.0.1-alpha.4"
 dependencies = [
  "baracuda-core",
  "baracuda-nvcomp-sys",
@@ -391,7 +392,7 @@ dependencies = [
 
 [[package]]
 name = "baracuda-nvcomp-sys"
-version = "0.0.1-alpha.3"
+version = "0.0.1-alpha.4"
 dependencies = [
  "baracuda-core",
  "baracuda-types",
@@ -400,7 +401,7 @@ dependencies = [
 
 [[package]]
 name = "baracuda-nvjitlink"
-version = "0.0.1-alpha.3"
+version = "0.0.1-alpha.4"
 dependencies = [
  "baracuda-core",
  "baracuda-driver",
@@ -411,7 +412,7 @@ dependencies = [
 
 [[package]]
 name = "baracuda-nvjitlink-sys"
-version = "0.0.1-alpha.3"
+version = "0.0.1-alpha.4"
 dependencies = [
  "baracuda-build",
  "baracuda-core",
@@ -421,7 +422,7 @@ dependencies = [
 
 [[package]]
 name = "baracuda-nvjpeg"
-version = "0.0.1-alpha.3"
+version = "0.0.1-alpha.4"
 dependencies = [
  "baracuda-core",
  "baracuda-cuda-sys",
@@ -433,7 +434,7 @@ dependencies = [
 
 [[package]]
 name = "baracuda-nvjpeg-sys"
-version = "0.0.1-alpha.3"
+version = "0.0.1-alpha.4"
 dependencies = [
  "baracuda-build",
  "baracuda-core",
@@ -444,7 +445,7 @@ dependencies = [
 
 [[package]]
 name = "baracuda-nvml"
-version = "0.0.1-alpha.3"
+version = "0.0.1-alpha.4"
 dependencies = [
  "baracuda-core",
  "baracuda-nvml-sys",
@@ -454,7 +455,7 @@ dependencies = [
 
 [[package]]
 name = "baracuda-nvml-sys"
-version = "0.0.1-alpha.3"
+version = "0.0.1-alpha.4"
 dependencies = [
  "baracuda-build",
  "baracuda-core",
@@ -464,7 +465,7 @@ dependencies = [
 
 [[package]]
 name = "baracuda-nvrtc"
-version = "0.0.1-alpha.3"
+version = "0.0.1-alpha.4"
 dependencies = [
  "baracuda-core",
  "baracuda-driver",
@@ -475,7 +476,7 @@ dependencies = [
 
 [[package]]
 name = "baracuda-nvrtc-sys"
-version = "0.0.1-alpha.3"
+version = "0.0.1-alpha.4"
 dependencies = [
  "baracuda-build",
  "baracuda-core",
@@ -485,7 +486,7 @@ dependencies = [
 
 [[package]]
 name = "baracuda-runtime"
-version = "0.0.1-alpha.3"
+version = "0.0.1-alpha.4"
 dependencies = [
  "baracuda-core",
  "baracuda-cuda-sys",
@@ -496,7 +497,7 @@ dependencies = [
 
 [[package]]
 name = "baracuda-tensorrt"
-version = "0.0.1-alpha.3"
+version = "0.0.1-alpha.4"
 dependencies = [
  "baracuda-core",
  "baracuda-cuda-sys",
@@ -507,7 +508,7 @@ dependencies = [
 
 [[package]]
 name = "baracuda-tensorrt-sys"
-version = "0.0.1-alpha.3"
+version = "0.0.1-alpha.4"
 dependencies = [
  "baracuda-build",
  "baracuda-core",
@@ -518,7 +519,7 @@ dependencies = [
 
 [[package]]
 name = "baracuda-types"
-version = "0.0.1-alpha.3"
+version = "0.0.1-alpha.4"
 dependencies = [
  "baracuda-types-derive",
  "bytemuck",
@@ -529,7 +530,7 @@ dependencies = [
 
 [[package]]
 name = "baracuda-types-derive"
-version = "0.0.1-alpha.3"
+version = "0.0.1-alpha.4"
 dependencies = [
  "proc-macro2",
  "quote",

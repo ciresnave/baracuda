@@ -172,6 +172,19 @@ impl CudnnDataType for i32 {
     const DTYPE: DType = DType::I32;
 }
 
+// Direct impls on the `half` crate's types so callers can use
+// `half::f16` / `half::bf16` end-to-end without bridging through
+// `baracuda_types::Half` / `BFloat16`. Both directions of `From` are
+// already available in baracuda-types under the same feature.
+#[cfg(feature = "half-crate")]
+impl CudnnDataType for half::f16 {
+    const DTYPE: DType = DType::F16;
+}
+#[cfg(feature = "half-crate")]
+impl CudnnDataType for half::bf16 {
+    const DTYPE: DType = DType::BF16;
+}
+
 /// Memory layout for a 4-D tensor.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Default)]
 pub enum TensorFormat {
@@ -668,6 +681,71 @@ pub fn convolution_forward_workspace_size(
 ///
 /// `workspace` must be at least the size returned by
 /// [`convolution_forward_workspace_size`].
+///
+/// # Example
+///
+/// End-to-end "build descriptors → query workspace → run forward".
+/// The example uses `f32` and a 3×3 convolution with padding 1,
+/// stride 1, dilation 1, no groups.
+///
+/// ```no_run
+/// use baracuda_cudnn::{
+///     convolution_forward, convolution_forward_workspace_size,
+///     ConvMode, ConvolutionDescriptor, DType, FilterDescriptor, FwdAlgo,
+///     Handle, TensorDescriptor, TensorFormat,
+/// };
+/// use baracuda_driver::{Context, Device, DeviceBuffer};
+///
+/// # fn demo() -> Result<(), Box<dyn std::error::Error>> {
+/// let ctx   = Context::new(&Device::get(0)?)?;
+/// let cudnn = Handle::new()?;
+///
+/// // Shapes: NCHW 1×3×32×32 input, 16 output channels, 3×3 kernel, pad 1.
+/// let (n, c, h, w)   = (1, 3, 32, 32);
+/// let (k, kh, kw)    = (16, 3, 3);
+/// let (pad_h, pad_w) = (1, 1);
+/// let (str_h, str_w) = (1, 1);
+/// let (dil_h, dil_w) = (1, 1);
+/// let (out_h, out_w) = (h, w);   // same-size output for pad=1, k=3, str=1
+///
+/// // Note the argument order: TensorDescriptor::new_4d takes
+/// // (format, dtype, n, c, h, w); FilterDescriptor::new_4d takes
+/// // (format, dtype, k, c, kh, kw).
+/// let x_desc = TensorDescriptor::new_4d(TensorFormat::Nchw, DType::F32, n, c, h, w)?;
+/// let w_desc = FilterDescriptor::new_4d(TensorFormat::Nchw, DType::F32, k, c, kh, kw)?;
+/// let y_desc = TensorDescriptor::new_4d(TensorFormat::Nchw, DType::F32, n, k, out_h, out_w)?;
+/// let conv = ConvolutionDescriptor::new_2d(
+///     pad_h, pad_w, str_h, str_w, dil_h, dil_w,
+///     ConvMode::CrossCorrelation, DType::F32,
+/// )?;
+/// // For grouped conv, set the group count after creation:
+/// // conv.set_group_count(groups)?;
+///
+/// // Pick an algorithm. ImplicitGemm is a safe default; for perf, use
+/// // `find_convolution_forward_algorithm` to benchmark on your shapes.
+/// let algo = FwdAlgo::ImplicitGemm;
+///
+/// // Workspace size depends on (descs, algo).
+/// let ws_bytes = convolution_forward_workspace_size(
+///     &cudnn, &x_desc, &w_desc, &conv, &y_desc, algo,
+/// )?;
+///
+/// // Allocate input / weight / output / workspace on the device.
+/// let x_buf:   DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, (n*c*h*w) as usize)?;
+/// let w_buf:   DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, (k*c*kh*kw) as usize)?;
+/// let mut y_buf: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, (n*k*out_h*out_w) as usize)?;
+/// let mut ws: DeviceBuffer<u8> = DeviceBuffer::zeros(&ctx, ws_bytes.max(1))?;
+///
+/// convolution_forward(
+///     &cudnn,
+///     1.0, &x_desc, &x_buf,
+///          &w_desc, &w_buf,
+///     &conv, algo,
+///     &mut ws,
+///     0.0, &y_desc, &mut y_buf,
+/// )?;
+/// # Ok(()) }
+/// ```
 #[allow(clippy::too_many_arguments)]
 pub fn convolution_forward<T: DeviceRepr>(
     handle: &Handle,
