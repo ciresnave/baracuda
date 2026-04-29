@@ -179,8 +179,13 @@ try_publish() {
             continue
         fi
         # Dev-dep cycle with an unpublished baracuda crate → strip & retry.
+        # Two formats appear in cargo's output:
+        #   "no matching package named `baracuda-X`"            (older / fresh index miss)
+        #   "failed to select a version for the requirement     (newer / stale-index miss)
+        #      `baracuda-X = "^0.0.1-alpha.3"` ..."
         if (( dev_deps_stripped == 0 )) && \
-           grep -q 'no matching package named `baracuda-' <<< "$log"; then
+           { grep -q 'no matching package named `baracuda-' <<< "$log" \
+             || grep -q 'failed to select a version for the requirement `baracuda-' <<< "$log" ; }; then
             echo ">> $crate has a dev-dep cycle on an unpublished baracuda crate;" \
                  "stripping baracuda-* lines from [dev-dependencies] and retrying" >&2
             cp "$cargo_toml" "$backup"
