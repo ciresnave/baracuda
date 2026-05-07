@@ -176,7 +176,7 @@ impl Graph {
         block: crate::Dim3,
         shared_mem_bytes: u32,
         args: &mut [*mut core::ffi::c_void],
-    ) -> Result<GraphNode> {
+    ) -> Result<GraphNode> { unsafe {
         use baracuda_cuda_sys::runtime::types::{cudaKernelNodeParams, dim3};
         let r = runtime()?;
         let cu = r.cuda_graph_add_kernel_node()?;
@@ -197,7 +197,7 @@ impl Graph {
         let mut node: cudaGraphNode_t = core::ptr::null_mut();
         check(cu(&mut node, self.inner.handle, dp, dl, &params))?;
         Ok(GraphNode { raw: node })
-    }
+    }}
 
     /// Add a memset node filling `count` 4-byte words at `dst` with `value`.
     pub fn add_memset_u32_node(
@@ -237,7 +237,7 @@ impl Graph {
         dependencies: &[GraphNode],
         fn_: unsafe extern "C" fn(*mut core::ffi::c_void),
         user_data: *mut core::ffi::c_void,
-    ) -> Result<GraphNode> {
+    ) -> Result<GraphNode> { unsafe {
         use baracuda_cuda_sys::runtime::types::cudaHostNodeParams;
         let r = runtime()?;
         let cu = r.cuda_graph_add_host_node()?;
@@ -250,7 +250,7 @@ impl Graph {
         let mut node: cudaGraphNode_t = core::ptr::null_mut();
         check(cu(&mut node, self.inner.handle, dp, dl, &params))?;
         Ok(GraphNode { raw: node })
-    }
+    }}
 
     /// Add a child-graph node.
     pub fn add_child_graph_node(
@@ -343,7 +343,7 @@ impl Graph {
         &self,
         dependencies: &[GraphNode],
         dptr: *mut core::ffi::c_void,
-    ) -> Result<GraphNode> {
+    ) -> Result<GraphNode> { unsafe {
         let r = runtime()?;
         let cu = r.cuda_graph_add_mem_free_node()?;
         let deps: Vec<_> = dependencies.iter().map(|n| n.raw).collect();
@@ -351,7 +351,7 @@ impl Graph {
         let mut node: cudaGraphNode_t = core::ptr::null_mut();
         check(cu(&mut node, self.inner.handle, dp, dl, dptr))?;
         Ok(GraphNode { raw: node })
-    }
+    }}
 
     /// Create a conditional-node handle (CUDA 12.3+). The returned u64
     /// is an opaque driver handle used by `cuGraphAddNode`-style
@@ -391,7 +391,7 @@ impl Graph {
         &self,
         dependencies: &[GraphNode],
         node_params: *mut core::ffi::c_void,
-    ) -> Result<GraphNode> {
+    ) -> Result<GraphNode> { unsafe {
         let r = runtime()?;
         let cu = r.cuda_graph_add_node()?;
         let deps: Vec<_> = dependencies.iter().map(|n| n.raw).collect();
@@ -399,7 +399,7 @@ impl Graph {
         let mut node: cudaGraphNode_t = core::ptr::null_mut();
         check(cu(&mut node, self.inner.handle, dp, dl, node_params))?;
         Ok(GraphNode { raw: node })
-    }
+    }}
 
     /// Add dependency edges `from[i] -> to[i]`.
     pub fn add_dependencies(&self, from: &[GraphNode], to: &[GraphNode]) -> Result<()> {

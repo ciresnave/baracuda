@@ -4,6 +4,18 @@ version = "0.0.0"
 publish = false
 edition = "2021"
 
+[features]
+# Build the forge_hello example. Pulls baracuda-forge into the build script
+# (which invokes nvcc) and baracuda-driver into the runtime side. The bin
+# is gated by `required-features` so non-CUDA developers get a clean
+# `cargo check --workspace` without this feature on.
+forge-hello = []
+
+# Build the cutlass_gemm example. Triggers a CUTLASS template
+# instantiation in baracuda-cutlass-kernels-sys at build time (~30s on
+# first build; cached thereafter via baracuda-forge's SHA-256 cache).
+cutlass-smoke = ["dep:baracuda-cutlass", "dep:half"]
+
 [[bin]]
 name = "cutensor_matmul"
 path = "cutensor_matmul.rs"
@@ -20,11 +32,29 @@ path = "cvcuda_resize_pipeline.rs"
 name = "cufile_gds_copy"
 path = "cufile_gds_copy.rs"
 
+[[bin]]
+name = "forge_hello"
+path = "forge_hello.rs"
+required-features = ["forge-hello"]
+
+[[bin]]
+name = "cutlass_gemm"
+path = "cutlass_gemm.rs"
+required-features = ["cutlass-smoke"]
+
 [dependencies]
 baracuda-runtime = { path = "../crates/baracuda-runtime" }
+baracuda-driver = { path = "../crates/baracuda-driver" }
 baracuda-cutensor = { path = "../crates/baracuda-cutensor" }
 baracuda-cutensor-sys = { path = "../crates/baracuda-cutensor-sys" }
 baracuda-nvcomp = { path = "../crates/baracuda-nvcomp" }
 baracuda-nvcomp-sys = { path = "../crates/baracuda-nvcomp-sys" }
 baracuda-cvcuda = { path = "../crates/baracuda-cvcuda" }
 baracuda-cufile = { path = "../crates/baracuda-cufile" }
+baracuda-cutlass = { path = "../crates/baracuda-cutlass", optional = true }
+half = { workspace = true, optional = true }
+
+[build-dependencies]
+# baracuda-forge is built unconditionally (it's a no-op when forge-hello
+# isn't enabled) so cargo check works whether or not the feature is on.
+baracuda-forge = { path = "../crates/baracuda-forge" }

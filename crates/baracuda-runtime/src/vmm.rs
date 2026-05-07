@@ -38,11 +38,11 @@ pub fn address_reserve(size: usize, alignment: usize, flags: u64) -> Result<*mut
 /// # Safety
 ///
 /// `ptr` / `size` must match a prior [`address_reserve`].
-pub unsafe fn address_free(ptr: *mut c_void, size: usize) -> Result<()> {
+pub unsafe fn address_free(ptr: *mut c_void, size: usize) -> Result<()> { unsafe {
     let r = runtime()?;
     let cu = r.cuda_mem_address_free()?;
     check(cu(ptr, size))
-}
+}}
 
 /// Build the allocation-properties struct for a fresh device-backed
 /// VMM allocation.
@@ -118,13 +118,13 @@ impl MemHandle {
     /// # Safety
     ///
     /// `addr` must be inside a mapped VMM region.
-    pub unsafe fn retain(addr: *mut c_void) -> Result<Self> {
+    pub unsafe fn retain(addr: *mut c_void) -> Result<Self> { unsafe {
         let r = runtime()?;
         let cu = r.cuda_mem_retain_allocation_handle()?;
         let mut h: cudaMemGenericAllocationHandle_t = 0;
         check(cu(&mut h, addr))?;
         Ok(Self { handle: h })
-    }
+    }}
 
     /// Query the properties of the underlying allocation.
     pub fn properties(&self) -> Result<cudaMemAllocationProp> {
@@ -163,22 +163,22 @@ pub unsafe fn map(
     offset: usize,
     handle: &MemHandle,
     flags: u64,
-) -> Result<()> {
+) -> Result<()> { unsafe {
     let r = runtime()?;
     let cu = r.cuda_mem_map()?;
     check(cu(ptr, size, offset, handle.as_raw(), flags))
-}
+}}
 
 /// Unmap `[ptr, ptr + size)`.
 ///
 /// # Safety
 ///
 /// Must match a prior [`map`] call.
-pub unsafe fn unmap(ptr: *mut c_void, size: usize) -> Result<()> {
+pub unsafe fn unmap(ptr: *mut c_void, size: usize) -> Result<()> { unsafe {
     let r = runtime()?;
     let cu = r.cuda_mem_unmap()?;
     check(cu(ptr, size))
-}
+}}
 
 /// Grant the given access rights to a device for a mapped region.
 ///
@@ -190,7 +190,7 @@ pub unsafe fn set_access(
     size: usize,
     device: &Device,
     flags: AccessFlags,
-) -> Result<()> {
+) -> Result<()> { unsafe {
     let r = runtime()?;
     let cu = r.cuda_mem_set_access()?;
     // Reuse `AccessFlags`'s internal mapping — matches cudaMemAccessFlags.
@@ -212,14 +212,14 @@ pub unsafe fn set_access(
         &desc as *const cudaMemAccessDesc as *const c_void,
         1,
     ))
-}
+}}
 
 /// Query access flags for `device` at `ptr`.
 ///
 /// # Safety
 ///
 /// `ptr` must be inside a mapped region.
-pub unsafe fn get_access(ptr: *mut c_void, device: &Device) -> Result<u64> {
+pub unsafe fn get_access(ptr: *mut c_void, device: &Device) -> Result<u64> { unsafe {
     let r = runtime()?;
     let cu = r.cuda_mem_get_access()?;
     let loc = cudaMemLocation {
@@ -233,4 +233,4 @@ pub unsafe fn get_access(ptr: *mut c_void, device: &Device) -> Result<u64> {
         ptr,
     ))?;
     Ok(flags)
-}
+}}

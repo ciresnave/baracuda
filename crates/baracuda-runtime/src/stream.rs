@@ -206,11 +206,11 @@ impl Stream {
         addr: *mut core::ffi::c_void,
         value: u32,
         flags: u32,
-    ) -> Result<()> {
+    ) -> Result<()> { unsafe {
         let r = runtime()?;
         let cu = r.cuda_stream_write_value_32()?;
         check(cu(self.inner.handle, addr, value, flags))
-    }
+    }}
 
     /// # Safety
     ///
@@ -220,11 +220,11 @@ impl Stream {
         addr: *mut core::ffi::c_void,
         value: u64,
         flags: u32,
-    ) -> Result<()> {
+    ) -> Result<()> { unsafe {
         let r = runtime()?;
         let cu = r.cuda_stream_write_value_64()?;
         check(cu(self.inner.handle, addr, value, flags))
-    }
+    }}
 
     /// Block the stream until the 32-bit device memory at `addr` satisfies
     /// the condition selected by `flags` (GEQ / EQ / AND / NOR, optionally
@@ -238,11 +238,11 @@ impl Stream {
         addr: *mut core::ffi::c_void,
         value: u32,
         flags: u32,
-    ) -> Result<()> {
+    ) -> Result<()> { unsafe {
         let r = runtime()?;
         let cu = r.cuda_stream_wait_value_32()?;
         check(cu(self.inner.handle, addr, value, flags))
-    }
+    }}
 
     /// # Safety
     ///
@@ -252,11 +252,11 @@ impl Stream {
         addr: *mut core::ffi::c_void,
         value: u64,
         flags: u32,
-    ) -> Result<()> {
+    ) -> Result<()> { unsafe {
         let r = runtime()?;
         let cu = r.cuda_stream_wait_value_64()?;
         check(cu(self.inner.handle, addr, value, flags))
-    }
+    }}
 
     /// Associate a managed-memory region with this stream
     /// (`cudaStreamAttachMemAsync`). Pass `flags = 0` for the default.
@@ -269,11 +269,11 @@ impl Stream {
         dev_ptr: *mut core::ffi::c_void,
         length: usize,
         flags: u32,
-    ) -> Result<()> {
+    ) -> Result<()> { unsafe {
         let r = runtime()?;
         let cu = r.cuda_stream_attach_mem_async()?;
         check(cu(self.inner.handle, dev_ptr, length, flags))
-    }
+    }}
 
     /// Copy CUDA-managed attributes (access-policy window, sync policy)
     /// from `src` onto `self`.
@@ -297,7 +297,7 @@ impl Stream {
         &self,
         params: &mut [baracuda_cuda_sys::types::CUstreamBatchMemOpParams],
         flags: u32,
-    ) -> Result<()> {
+    ) -> Result<()> { unsafe {
         let r = runtime()?;
         let cu = r.cuda_stream_batch_mem_op()?;
         check(cu(
@@ -306,7 +306,7 @@ impl Stream {
             params.as_mut_ptr(),
             flags,
         ))
-    }
+    }}
 }
 
 impl Drop for StreamInner {

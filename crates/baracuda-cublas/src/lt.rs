@@ -420,7 +420,7 @@ pub unsafe fn matmul(
     workspace: *mut c_void,
     workspace_size: usize,
     stream: Option<&Stream>,
-) -> Result<()> {
+) -> Result<()> { unsafe {
     let lt = cublas_lt()?;
     let f = lt.cublas_lt_matmul()?;
     let stream_raw = stream.map(|s| s.as_raw() as _).unwrap_or(core::ptr::null_mut());
@@ -445,4 +445,4 @@ pub unsafe fn matmul(
         workspace_size,
         stream_raw,
     ))
-}
+}}

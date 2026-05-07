@@ -48,12 +48,12 @@ impl L2Scalar for f32 {
         beta: &f32,
         y: *mut f32,
         incy: i32,
-    ) -> cublasStatus_t {
+    ) -> cublasStatus_t { unsafe {
         match cublas().and_then(|c| c.cublas_sgemv()) {
             Ok(f) => f(handle, trans, m, n, alpha, a, lda, x, incx, beta, y, incy),
             Err(_) => cublasStatus_t::NOT_INITIALIZED,
         }
-    }
+    }}
 }
 
 impl L2Scalar for f64 {
@@ -70,12 +70,12 @@ impl L2Scalar for f64 {
         beta: &f64,
         y: *mut f64,
         incy: i32,
-    ) -> cublasStatus_t {
+    ) -> cublasStatus_t { unsafe {
         match cublas().and_then(|c| c.cublas_dgemv()) {
             Ok(f) => f(handle, trans, m, n, alpha, a, lda, x, incx, beta, y, incy),
             Err(_) => cublasStatus_t::NOT_INITIALIZED,
         }
-    }
+    }}
 }
 
 impl L2Scalar for Complex32 {
@@ -92,7 +92,7 @@ impl L2Scalar for Complex32 {
         beta: &Complex32,
         y: *mut Complex32,
         incy: i32,
-    ) -> cublasStatus_t {
+    ) -> cublasStatus_t { unsafe {
         match cublas().and_then(|c| c.cublas_cgemv()) {
             Ok(f) => f(
                 handle,
@@ -110,7 +110,7 @@ impl L2Scalar for Complex32 {
             ),
             Err(_) => cublasStatus_t::NOT_INITIALIZED,
         }
-    }
+    }}
 }
 
 impl L2Scalar for Complex64 {
@@ -127,7 +127,7 @@ impl L2Scalar for Complex64 {
         beta: &Complex64,
         y: *mut Complex64,
         incy: i32,
-    ) -> cublasStatus_t {
+    ) -> cublasStatus_t { unsafe {
         match cublas().and_then(|c| c.cublas_zgemv()) {
             Ok(f) => f(
                 handle,
@@ -145,7 +145,7 @@ impl L2Scalar for Complex64 {
             ),
             Err(_) => cublasStatus_t::NOT_INITIALIZED,
         }
-    }
+    }}
 }
 
 mod l2_sealed {
@@ -293,12 +293,12 @@ macro_rules! l2_real_impl {
                 beta: &$t,
                 y: *mut $t,
                 incy: i32,
-            ) -> cublasStatus_t {
+            ) -> cublasStatus_t { unsafe {
                 match cublas().and_then(|c| c.$symv()) {
                     Ok(f) => f(h, uplo, n, alpha, a, lda, x, incx, beta, y, incy),
                     Err(_) => cublasStatus_t::NOT_INITIALIZED,
                 }
-            }
+            }}
             unsafe fn trmv_raw(
                 h: cublasHandle_t,
                 uplo: cublasFillMode_t,
@@ -309,12 +309,12 @@ macro_rules! l2_real_impl {
                 lda: i32,
                 x: *mut $t,
                 incx: i32,
-            ) -> cublasStatus_t {
+            ) -> cublasStatus_t { unsafe {
                 match cublas().and_then(|c| c.$trmv()) {
                     Ok(f) => f(h, uplo, trans, diag, n, a, lda, x, incx),
                     Err(_) => cublasStatus_t::NOT_INITIALIZED,
                 }
-            }
+            }}
             unsafe fn trsv_raw(
                 h: cublasHandle_t,
                 uplo: cublasFillMode_t,
@@ -325,12 +325,12 @@ macro_rules! l2_real_impl {
                 lda: i32,
                 x: *mut $t,
                 incx: i32,
-            ) -> cublasStatus_t {
+            ) -> cublasStatus_t { unsafe {
                 match cublas().and_then(|c| c.$trsv()) {
                     Ok(f) => f(h, uplo, trans, diag, n, a, lda, x, incx),
                     Err(_) => cublasStatus_t::NOT_INITIALIZED,
                 }
-            }
+            }}
             unsafe fn ger_raw(
                 h: cublasHandle_t,
                 m: i32,
@@ -342,12 +342,12 @@ macro_rules! l2_real_impl {
                 incy: i32,
                 a: *mut $t,
                 lda: i32,
-            ) -> cublasStatus_t {
+            ) -> cublasStatus_t { unsafe {
                 match cublas().and_then(|c| c.$ger()) {
                     Ok(f) => f(h, m, n, alpha, x, incx, y, incy, a, lda),
                     Err(_) => cublasStatus_t::NOT_INITIALIZED,
                 }
-            }
+            }}
             unsafe fn syr_raw(
                 h: cublasHandle_t,
                 uplo: cublasFillMode_t,
@@ -357,12 +357,12 @@ macro_rules! l2_real_impl {
                 incx: i32,
                 a: *mut $t,
                 lda: i32,
-            ) -> cublasStatus_t {
+            ) -> cublasStatus_t { unsafe {
                 match cublas().and_then(|c| c.$syr()) {
                     Ok(f) => f(h, uplo, n, alpha, x, incx, a, lda),
                     Err(_) => cublasStatus_t::NOT_INITIALIZED,
                 }
-            }
+            }}
         }
     };
 }

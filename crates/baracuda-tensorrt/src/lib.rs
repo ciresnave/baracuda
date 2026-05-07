@@ -88,7 +88,7 @@ impl Runtime {
     /// `logger` must be a valid `nvinfer1::ILogger*` (typically obtained from
     /// C++ or passed through a thin shim). Use [`Runtime::with_null_logger`]
     /// if no logging is desired (TRT allows `nullptr` in recent versions).
-    pub unsafe fn new(logger: sys::trtILogger_t) -> Result<Self> {
+    pub unsafe fn new(logger: sys::trtILogger_t) -> Result<Self> { unsafe {
         let t = sys::tensorrt()?;
         let raw = (t.create_infer_runtime()?)(logger);
         if raw.is_null() {
@@ -97,7 +97,7 @@ impl Runtime {
             });
         }
         Ok(Self { raw })
-    }
+    }}
 
     /// Construct without a logger. Supported on recent TensorRT; older
     /// versions may refuse and return null.
@@ -324,7 +324,18 @@ impl ExecutionContext<'_> {
         Ok(())
     }
 
-    pub fn set_tensor_address(&self, name: &str, addr: *mut c_void) -> Result<()> {
+    /// Bind a device pointer to a named input/output tensor on this
+    /// execution context. The pointer is forwarded to TensorRT's
+    /// `setTensorAddress`, which uses it during `enqueueV3` execution.
+    ///
+    /// # Safety
+    ///
+    /// `addr` must point to device memory that:
+    /// - is large enough for the tensor's bound shape and data type, and
+    /// - remains valid (not freed, not unmapped) for the duration of any
+    ///   `enqueueV3` call that runs after this binding and before the
+    ///   stream completes.
+    pub unsafe fn set_tensor_address(&self, name: &str, addr: *mut c_void) -> Result<()> {
         let t = sys::tensorrt()?;
         let c = CString::new(name)?;
         let ok = unsafe { (t.context_set_tensor_address()?)(self.raw, c.as_ptr(), addr) };
@@ -356,14 +367,14 @@ impl ExecutionContext<'_> {
     ///
     /// # Safety
     /// `stream` must be a valid `cudaStream_t` that outlives the enqueue.
-    pub unsafe fn enqueue_v3(&self, stream: cudaStream_t) -> Result<()> {
+    pub unsafe fn enqueue_v3(&self, stream: cudaStream_t) -> Result<()> { unsafe {
         let t = sys::tensorrt()?;
         let ok = (t.context_enqueue_v3()?)(self.raw, stream);
         if !ok {
             return Err(Error::Call { op: "enqueueV3" });
         }
         Ok(())
-    }
+    }}
 }
 
 impl Drop for ExecutionContext<'_> {

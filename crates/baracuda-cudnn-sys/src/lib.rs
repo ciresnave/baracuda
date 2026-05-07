@@ -1979,7 +1979,7 @@ fn detect_cuda_major() -> Option<u32> {
 /// Look for a path component matching `vNN.M` (case-insensitive) and
 /// return `NN`.
 fn parse_cuda_major_from_path(p: &str) -> Option<u32> {
-    for component in p.split(|c: char| c == '/' || c == '\\') {
+    for component in p.split(['/', '\\']) {
         let bytes = component.as_bytes();
         let rest = if bytes.first() == Some(&b'v') || bytes.first() == Some(&b'V') {
             &component[1..]
@@ -2050,7 +2050,7 @@ fn cudnn_extra_search_dirs() -> Vec<PathBuf> {
                             out.push(matched);
                         } else {
                             // No exact match — try highest <= target, then fall through.
-                            numbered.sort_by(|a, b| b.0.cmp(&a.0));
+                            numbered.sort_by_key(|b| std::cmp::Reverse(b.0));
                             if let Some(pos) = numbered.iter().position(|(n, _)| *n <= target) {
                                 let (_, matched) = numbered.remove(pos);
                                 out.push(matched);
@@ -2062,7 +2062,7 @@ fn cudnn_extra_search_dirs() -> Vec<PathBuf> {
                         // No detection signal — push highest-major first so
                         // newest cuDNN is tried first, but include all as
                         // fallbacks so existing single-CUDA setups still work.
-                        numbered.sort_by(|a, b| b.0.cmp(&a.0));
+                        numbered.sort_by_key(|b| std::cmp::Reverse(b.0));
                         for (_, p) in numbered {
                             out.push(p);
                         }
@@ -2106,7 +2106,15 @@ fn ensure_cudnn_on_path(extra_dirs: &[PathBuf]) {
             } else {
                 format!("{prefix};{existing}")
             };
-            std::env::set_var("PATH", new_path);
+            // SAFETY: `set_var` is unsafe in Rust 2024 because mutating the
+            // process environment races with concurrent reads from any other
+            // thread that calls `getenv`. We're inside a `OnceLock::get_or_init`
+            // so this runs at most once per process, before any cuDNN DLL is
+            // loaded. The only readers we care about (Windows's DLL search
+            // path inside `LoadLibraryExW`) come *after* this initialization.
+            unsafe {
+                std::env::set_var("PATH", new_path);
+            }
         }
     });
 }
@@ -2436,7 +2444,7 @@ mod search_dir_tests {
         let result = match numbered.iter().position(|(n, _)| *n == target) {
             Some(_pos) => unreachable!("no exact match in this scenario"),
             None => {
-                numbered.sort_by(|a, b| b.0.cmp(&a.0));
+                numbered.sort_by_key(|b| std::cmp::Reverse(b.0));
                 numbered
                     .iter()
                     .find(|(n, _)| *n <= target)
@@ -2449,7 +2457,7 @@ mod search_dir_tests {
     #[test]
     fn dir_selection_no_signal_is_highest_first() {
         let mut numbered: Vec<(u32, &str)> = vec![(11, "/11"), (13, "/13"), (12, "/12")];
-        numbered.sort_by(|a, b| b.0.cmp(&a.0));
+        numbered.sort_by_key(|b| std::cmp::Reverse(b.0));
         let order: Vec<&str> = numbered.iter().map(|(_, p)| *p).collect();
         assert_eq!(order, vec!["/13", "/12", "/11"]);
     }

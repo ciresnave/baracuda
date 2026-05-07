@@ -1,0 +1,286 @@
+//! # baracuda-cutlass-kernels-sys
+//!
+//! Raw `extern "C"` entry points for compiled CUTLASS template
+//! instantiations. **You almost certainly want [`baracuda-cutlass`]
+//! instead** — that crate wraps these unsafe calls with typed plans,
+//! lifetime-checked device buffers, and a proper Rust API.
+//!
+//! Functions in this crate take raw `void*` pointers, integer dimensions,
+//! and a `cudaStream_t` cast as `*mut c_void`. They are unsafe because:
+//!
+//! - They dereference the pointer arguments without bounds-checking.
+//! - They assume the pointers are valid device addresses.
+//! - They assume the workspace pointer (when non-null) points to at least
+//!   `workspace_bytes` of writable device memory.
+//! - They assume the stream is a valid CUDA stream owned by the calling
+//!   thread's current context.
+//!
+//! ## Status codes
+//!
+//! All `*_run` and `*_can_implement` functions return an [`i32`] status:
+//! - `0`: success.
+//! - `1`: misaligned operand.
+//! - `2`: invalid problem (e.g. M, N, or K is non-positive).
+//! - `3`: not supported (this kernel doesn't implement the requested shape).
+//! - `4`: workspace too small or null when required.
+//! - `5`: internal CUTLASS error (typically a kernel launch failure).
+//!
+//! [`baracuda-cutlass`]: https://docs.rs/baracuda-cutlass
+
+#![no_std]
+
+use core::ffi::c_void;
+
+// ============================================================================
+// GEMM — RCR layout, sm_80 instantiation
+// ============================================================================
+//
+// Layout convention `RCR`:
+//   A: row-major    [M, K], leading dimension `lda`
+//   B: column-major [K, N], leading dimension `ldb`
+//   C: row-major    [M, N], leading dimension `ldc` (optional; pass null
+//                                                    + beta = 0 to skip)
+//   D: row-major    [M, N], leading dimension `ldd` (always written)
+//
+// Accumulator and alpha/beta scalars are FP32. Identity epilogue only
+// (`D = alpha * AB + beta * C`). The Bias epilogue lands in a follow-up
+// once a `LinearCombinationBias` template instantiation is added; until
+// then there is no `bias` argument and the safe layer's `EpilogueKind`
+// enum has no `Bias` variant.
+
+#[cfg(any(feature = "sm80", feature = "sm90a"))]
+unsafe extern "C" {
+    /// `f16` GEMM, RCR layout, sm_80.
+    ///
+    /// # Safety
+    /// All pointer args must be device-resident (or null where allowed) and
+    /// remain valid for the duration of the launch. `stream` must be a live
+    /// CUDA stream in the current context.
+    pub fn baracuda_cutlass_gemm_f16_rcr_sm80_run(
+        m: i32,
+        n: i32,
+        k: i32,
+        a: *const c_void,
+        lda: i64,
+        b: *const c_void,
+        ldb: i64,
+        c: *const c_void,
+        ldc: i64,
+        d: *mut c_void,
+        ldd: i64,
+        alpha: f32,
+        beta: f32,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// Workspace size in bytes for `f16` RCR sm_80 GEMM at the given problem size.
+    pub fn baracuda_cutlass_gemm_f16_rcr_sm80_workspace_size(m: i32, n: i32, k: i32) -> usize;
+
+    /// Pre-launch implementability check for `f16` RCR sm_80.
+    ///
+    /// Returns `0` when the kernel can launch with the given shape, leading
+    /// dimensions, and pointer alignments; non-zero with the standard
+    /// status-code mapping otherwise. Does not launch a kernel and does
+    /// not require a stream.
+    ///
+    /// # Safety
+    /// Same pointer-validity contract as [`baracuda_cutlass_gemm_f16_rcr_sm80_run`],
+    /// but no device dereferences occur — only host-side checks of pointer
+    /// alignment and the leading-dimension fields.
+    pub fn baracuda_cutlass_gemm_f16_rcr_sm80_can_implement(
+        m: i32,
+        n: i32,
+        k: i32,
+        a: *const c_void,
+        lda: i64,
+        b: *const c_void,
+        ldb: i64,
+        c: *const c_void,
+        ldc: i64,
+        d: *mut c_void,
+        ldd: i64,
+    ) -> i32;
+
+    /// `bf16` GEMM, RCR layout, sm_80.
+    ///
+    /// # Safety
+    /// See [`baracuda_cutlass_gemm_f16_rcr_sm80_run`].
+    pub fn baracuda_cutlass_gemm_bf16_rcr_sm80_run(
+        m: i32,
+        n: i32,
+        k: i32,
+        a: *const c_void,
+        lda: i64,
+        b: *const c_void,
+        ldb: i64,
+        c: *const c_void,
+        ldc: i64,
+        d: *mut c_void,
+        ldd: i64,
+        alpha: f32,
+        beta: f32,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// Workspace size in bytes for `bf16` RCR sm_80 GEMM at the given problem size.
+    pub fn baracuda_cutlass_gemm_bf16_rcr_sm80_workspace_size(m: i32, n: i32, k: i32) -> usize;
+
+    /// Pre-launch implementability check for `bf16` RCR sm_80.
+    ///
+    /// # Safety
+    /// See [`baracuda_cutlass_gemm_f16_rcr_sm80_can_implement`].
+    pub fn baracuda_cutlass_gemm_bf16_rcr_sm80_can_implement(
+        m: i32,
+        n: i32,
+        k: i32,
+        a: *const c_void,
+        lda: i64,
+        b: *const c_void,
+        ldb: i64,
+        c: *const c_void,
+        ldc: i64,
+        d: *mut c_void,
+        ldd: i64,
+    ) -> i32;
+}
+
+// ============================================================================
+// Grouped GEMM — RCR layout, sm_80 instantiation
+// ============================================================================
+//
+// Per-group layout matches the single-GEMM `RCR` case. The safe Rust layer
+// (`baracuda-cutlass`) packs per-group `problem_sizes`, pointer arrays,
+// and leading-dimension arrays into a caller-supplied workspace, then
+// hands us pointers to those packed regions. The CUTLASS internal scratch
+// (size from `*_scratch_bytes`) lives at the tail of the same workspace.
+//
+// `h_problem_sizes` is a HOST pointer to the same `[GemmCoord; G]` data
+// that's also packed into device memory at `d_problem_sizes` — CUTLASS
+// uses the host copy for `sufficient` / tile-count math.
+
+#[cfg(any(feature = "sm80", feature = "sm90a"))]
+unsafe extern "C" {
+    /// Compute the number of threadblocks to launch for an `f16` grouped
+    /// GEMM with the given per-group `(M, N, K)` shapes. CUTLASS chooses
+    /// based on device SM count vs total tile count.
+    ///
+    /// # Safety
+    /// `h_m`, `h_n`, `h_k` must each be valid pointers to at least
+    /// `group_count` `i32`s of host memory.
+    pub fn baracuda_cutlass_grouped_gemm_f16_rcr_sm80_sufficient(
+        h_m: *const i32,
+        h_n: *const i32,
+        h_k: *const i32,
+        group_count: i32,
+    ) -> i32;
+
+    /// CUTLASS-internal scratch bytes needed for the launch.
+    ///
+    /// # Safety
+    /// Same as [`baracuda_cutlass_grouped_gemm_f16_rcr_sm80_sufficient`].
+    pub fn baracuda_cutlass_grouped_gemm_f16_rcr_sm80_scratch_bytes(
+        h_m: *const i32,
+        h_n: *const i32,
+        h_k: *const i32,
+        group_count: i32,
+        threadblock_count: i32,
+    ) -> usize;
+
+    /// Pre-launch implementability check (host-only, no CUDA traffic).
+    ///
+    /// # Safety
+    /// Same as [`baracuda_cutlass_grouped_gemm_f16_rcr_sm80_sufficient`].
+    pub fn baracuda_cutlass_grouped_gemm_f16_rcr_sm80_can_implement(
+        h_m: *const i32,
+        h_n: *const i32,
+        h_k: *const i32,
+        group_count: i32,
+    ) -> i32;
+
+    /// Launch the grouped GEMM.
+    ///
+    /// # Safety
+    /// All `d_*` pointers must be device-resident, in the current context,
+    /// and remain valid for the duration of the launch. `h_problem_sizes`
+    /// must be a host pointer to a `[GemmCoord; group_count]` array (same
+    /// data as `d_problem_sizes`). `scratch` must be at least
+    /// `scratch_bytes` bytes of writable device memory. `stream` must be a
+    /// live CUDA stream.
+    #[allow(clippy::too_many_arguments)]
+    pub fn baracuda_cutlass_grouped_gemm_f16_rcr_sm80_run(
+        group_count: i32,
+        threadblock_count: i32,
+        d_problem_sizes: *const c_void,
+        d_ptr_a: *const c_void,
+        d_ptr_b: *const c_void,
+        d_ptr_c: *const c_void,
+        d_ptr_d: *mut c_void,
+        d_lda: *const c_void,
+        d_ldb: *const c_void,
+        d_ldc: *const c_void,
+        d_ldd: *const c_void,
+        h_problem_sizes: *const c_void,
+        alpha: f32,
+        beta: f32,
+        scratch: *mut c_void,
+        scratch_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `bf16` grouped GEMM — see f16 counterpart for documentation.
+    ///
+    /// # Safety
+    /// Same contract as [`baracuda_cutlass_grouped_gemm_f16_rcr_sm80_sufficient`].
+    pub fn baracuda_cutlass_grouped_gemm_bf16_rcr_sm80_sufficient(
+        h_m: *const i32,
+        h_n: *const i32,
+        h_k: *const i32,
+        group_count: i32,
+    ) -> i32;
+
+    /// # Safety
+    /// Same as [`baracuda_cutlass_grouped_gemm_f16_rcr_sm80_scratch_bytes`].
+    pub fn baracuda_cutlass_grouped_gemm_bf16_rcr_sm80_scratch_bytes(
+        h_m: *const i32,
+        h_n: *const i32,
+        h_k: *const i32,
+        group_count: i32,
+        threadblock_count: i32,
+    ) -> usize;
+
+    /// # Safety
+    /// Same as [`baracuda_cutlass_grouped_gemm_f16_rcr_sm80_can_implement`].
+    pub fn baracuda_cutlass_grouped_gemm_bf16_rcr_sm80_can_implement(
+        h_m: *const i32,
+        h_n: *const i32,
+        h_k: *const i32,
+        group_count: i32,
+    ) -> i32;
+
+    /// # Safety
+    /// Same as [`baracuda_cutlass_grouped_gemm_f16_rcr_sm80_run`].
+    #[allow(clippy::too_many_arguments)]
+    pub fn baracuda_cutlass_grouped_gemm_bf16_rcr_sm80_run(
+        group_count: i32,
+        threadblock_count: i32,
+        d_problem_sizes: *const c_void,
+        d_ptr_a: *const c_void,
+        d_ptr_b: *const c_void,
+        d_ptr_c: *const c_void,
+        d_ptr_d: *mut c_void,
+        d_lda: *const c_void,
+        d_ldb: *const c_void,
+        d_ldc: *const c_void,
+        d_ldd: *const c_void,
+        h_problem_sizes: *const c_void,
+        alpha: f32,
+        beta: f32,
+        scratch: *mut c_void,
+        scratch_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+}

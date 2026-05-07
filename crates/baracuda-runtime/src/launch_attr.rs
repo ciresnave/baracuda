@@ -104,7 +104,7 @@ impl<'s> LaunchExBuilder<'s> {
     ///
     /// `args` must match `kernel`'s C signature in count / order / types
     /// exactly (the marshaling is bytewise).
-    pub unsafe fn launch(mut self, kernel: &Kernel, args: &mut [*mut c_void]) -> Result<()> {
+    pub unsafe fn launch(mut self, kernel: &Kernel, args: &mut [*mut c_void]) -> Result<()> { unsafe {
         if !self.attrs.is_empty() {
             self.config.attrs = self.attrs.as_mut_ptr();
             self.config.num_attrs = self.attrs.len() as core::ffi::c_uint;
@@ -120,5 +120,5 @@ impl<'s> LaunchExBuilder<'s> {
                 args.as_mut_ptr()
             },
         ))
-    }
+    }}
 }

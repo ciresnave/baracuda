@@ -1,0 +1,31 @@
+baracuda-forge
+==============
+
+Portions of this crate are derived from `cudaforge` by Guoqing Bao,
+licensed under MIT OR Apache-2.0:
+
+    https://github.com/guoqingbao/cudaforge
+
+Specifically, the following modules originated in cudaforge and were
+vendored into baracuda-forge with modifications:
+
+    src/builder.rs       — KernelBuilder fluent API (modified: cpp_std() added,
+                           toolkit detection routed through baracuda-build)
+    src/compute_cap.rs   — verbatim
+    src/source.rs        — verbatim
+    src/parallel.rs      — verbatim
+    src/hash.rs          — verbatim (cache filename rebranded)
+    src/dependency.rs    — verbatim (cache directory env var rebranded)
+
+Vendored from upstream commit:
+    aa77db3a20bc4a80bbda1bb954edc93d8848619d  (2026-04-17)
+
+Original copyright:
+    Copyright (c) 2025 Guoqing Bao
+
+The cudaforge author's licenses are reproduced verbatim from the workspace
+LICENSE-MIT and LICENSE-APACHE files at the baracuda repository root, since
+both projects use the same dual-license terms.
+
+We're grateful to Guoqing Bao for releasing cudaforge under permissive terms
+and making the work available to the Rust GPU community.

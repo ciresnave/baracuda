@@ -252,13 +252,13 @@ impl Array {
     /// # Safety
     ///
     /// `handle` must be a live `CUarray`.
-    pub unsafe fn descriptor_of_raw(handle: CUarray) -> Result<CUDA_ARRAY_DESCRIPTOR> {
+    pub unsafe fn descriptor_of_raw(handle: CUarray) -> Result<CUDA_ARRAY_DESCRIPTOR> { unsafe {
         let d = driver()?;
         let cu = d.cu_array_get_descriptor()?;
         let mut desc = CUDA_ARRAY_DESCRIPTOR::default();
         check(cu(&mut desc, handle))?;
         Ok(desc)
-    }
+    }}
 
     /// Synchronous array→host 2-D copy.
     pub fn copy_to_host<T: DeviceRepr>(&self, host: &mut [T]) -> Result<()> {

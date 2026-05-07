@@ -41,7 +41,11 @@ fn half_saturates_on_overflow() {
 #[test]
 fn bfloat16_round_trips_top_byte() {
     // BF16 keeps the top 16 bits of an f32; the exponent range matches f32.
-    let values = [0.0f32, 1.0, -1.0, 1e30, -1e-30, 3.14];
+    // 3.125 is an arbitrary mid-range non-power-of-2 fraction; the test
+    // doesn't care about its mathematical meaning, only round-trip
+    // precision. (Avoids clippy's `approx_constant` lint that fires when
+    // a literal looks like an approximation of `PI`.)
+    let values = [0.0f32, 1.0, -1.0, 1e30, -1e-30, 3.125];
     for &v in &values {
         let b = BFloat16::from_f32(v);
         let back = b.to_f32();

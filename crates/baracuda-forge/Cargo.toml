@@ -1,0 +1,24 @@
+[package]
+name = "baracuda-forge"
+version = "0.0.1-alpha.6"
+description = "Build-time CUDA kernel compiler for the baracuda ecosystem: nvcc-driven incremental builds, parallel compilation, GPU auto-detection, and CUTLASS / custom git dependency support."
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords = ["cuda", "nvcc", "kernel", "build", "gpu"]
+categories = ["development-tools::build-utils", "compilers"]
+
+[dependencies]
+baracuda-build = { workspace = true }
+thiserror = { workspace = true }
+glob = "0.3"
+walkdir = "2"
+sha2 = "0.10"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+rayon = "1.10"
+num_cpus = "1.16"
+fs2 = "0.4"

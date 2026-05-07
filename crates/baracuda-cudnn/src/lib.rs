@@ -1873,11 +1873,11 @@ impl BackendDescriptor {
         ty: cudnnBackendAttributeType_t,
         element_count: i64,
         array_of_elements: *const core::ffi::c_void,
-    ) -> Result<()> {
+    ) -> Result<()> { unsafe {
         let cu = cudnn()?;
         let f = cu.cudnn_backend_set_attribute()?;
         check(f(self.desc, name, ty, element_count, array_of_elements))
-    }
+    }}
 
     pub fn finalize(&mut self) -> Result<()> {
         if self.finalized {
@@ -2216,7 +2216,7 @@ pub unsafe fn reorder_filter_and_bias(
     reorder_bias: bool,
     bias_data: *const core::ffi::c_void,
     reordered_bias: *mut core::ffi::c_void,
-) -> Result<()> {
+) -> Result<()> { unsafe {
     let c = cudnn()?;
     let f = c.cudnn_reorder_filter_and_bias()?;
     check(f(
@@ -2224,7 +2224,7 @@ pub unsafe fn reorder_filter_and_bias(
         filter_data, reordered_filter,
         reorder_bias as core::ffi::c_int, bias_data, reordered_bias,
     ))
-}
+}}
 
 /// Fused convolution + bias + activation forward:
 /// `Y = activation(alpha1 * conv(X, W) + alpha2 * Z + bias)`.
@@ -2788,7 +2788,7 @@ impl SeqDataDescriptor {
         data_type: DType,
         dim_a: &[i32], axes: &[i32], seq_length_array: &[i32],
         padding_fill: *const core::ffi::c_void,
-    ) -> Result<()> {
+    ) -> Result<()> { unsafe {
         let c = cudnn()?;
         let f = c.cudnn_set_seq_data_descriptor()?;
         check(f(
@@ -2798,7 +2798,7 @@ impl SeqDataDescriptor {
             seq_length_array.len(), seq_length_array.as_ptr(),
             padding_fill,
         ))
-    }
+    }}
 
     #[inline]
     pub fn as_raw(&self) -> cudnnSeqDataDescriptor_t { self.desc }
@@ -2844,6 +2844,7 @@ impl TensorDescriptor {
 
     /// Read the 4-D parameters back out: `(dtype, n, c, h, w, n_stride,
     /// c_stride, h_stride, w_stride)`.
+    #[allow(clippy::type_complexity)]
     pub fn get_4d(&self) -> Result<(DType, i32, i32, i32, i32, i32, i32, i32, i32)> {
         let cu = cudnn()?;
         let f = cu.cudnn_get_tensor_4d_descriptor()?;
@@ -2918,11 +2919,11 @@ impl DropoutDescriptor {
     pub unsafe fn restore(
         &self, handle: &Handle, dropout: f32,
         states: *mut core::ffi::c_void, state_size: usize, seed: u64,
-    ) -> Result<()> {
+    ) -> Result<()> { unsafe {
         let cu = cudnn()?;
         let f = cu.cudnn_restore_dropout_descriptor()?;
         check(f(self.desc, handle.handle, dropout, states, state_size, seed))
-    }
+    }}
 }
 
 // ============================================================================
@@ -3249,7 +3250,7 @@ pub unsafe fn get_multi_head_attn_weights(
     weight_size_in_bytes: usize,
     weights: *const core::ffi::c_void,
     w_desc: &TensorDescriptor,
-) -> Result<*mut core::ffi::c_void> {
+) -> Result<*mut core::ffi::c_void> { unsafe {
     let c = cudnn()?;
     let f = c.cudnn_get_multi_head_attn_weights()?;
     let mut addr: *mut core::ffi::c_void = core::ptr::null_mut();
@@ -3258,7 +3259,7 @@ pub unsafe fn get_multi_head_attn_weights(
         w_desc.desc, &mut addr,
     ))?;
     Ok(addr)
-}
+}}
 
 /// Forward multi-head attention. The huge parameter list mirrors cuDNN's
 /// `cudnnMultiHeadAttnForward` exactly; see the cuDNN reference for the
@@ -3285,7 +3286,7 @@ pub unsafe fn multi_head_attn_forward(
     weights: &DeviceBuffer<u8>,
     work_space: &mut DeviceBuffer<u8>,
     reserve_space: &mut DeviceBuffer<u8>,
-) -> Result<()> {
+) -> Result<()> { unsafe {
     let c = cudnn()?;
     let f = c.cudnn_multi_head_attn_forward()?;
     check(f(
@@ -3300,7 +3301,7 @@ pub unsafe fn multi_head_attn_forward(
         work_space.byte_size(), work_space.as_raw().0 as *mut core::ffi::c_void,
         reserve_space.byte_size(), reserve_space.as_raw().0 as *mut core::ffi::c_void,
     ))
-}
+}}
 
 /// Multi-head attention backward — data path (gradients w.r.t. Q/K/V).
 ///
@@ -3324,7 +3325,7 @@ pub unsafe fn multi_head_attn_backward_data(
     weights: &DeviceBuffer<u8>,
     work_space: &mut DeviceBuffer<u8>,
     reserve_space: &mut DeviceBuffer<u8>,
-) -> Result<()> {
+) -> Result<()> { unsafe {
     let c = cudnn()?;
     let f = c.cudnn_multi_head_attn_backward_data()?;
     check(f(
@@ -3339,7 +3340,7 @@ pub unsafe fn multi_head_attn_backward_data(
         work_space.byte_size(), work_space.as_raw().0 as *mut core::ffi::c_void,
         reserve_space.byte_size(), reserve_space.as_raw().0 as *mut core::ffi::c_void,
     ))
-}
+}}
 
 /// Multi-head attention backward — weights path (gradient w.r.t. Q/K/V/O
 /// projection weights). Pass `add_grad = true` to accumulate into
@@ -3360,7 +3361,7 @@ pub unsafe fn multi_head_attn_backward_weights(
     dweights: &mut DeviceBuffer<u8>,
     work_space: &mut DeviceBuffer<u8>,
     reserve_space: &mut DeviceBuffer<u8>,
-) -> Result<()> {
+) -> Result<()> { unsafe {
     let c = cudnn()?;
     let f = c.cudnn_multi_head_attn_backward_weights()?;
     check(f(
@@ -3374,7 +3375,7 @@ pub unsafe fn multi_head_attn_backward_weights(
         work_space.byte_size(), work_space.as_raw().0 as *mut core::ffi::c_void,
         reserve_space.byte_size(), reserve_space.as_raw().0 as *mut core::ffi::c_void,
     ))
-}
+}}
 
 // ============================================================================
 // Tier 4 (cont.) - RNN v8 forward + backward (data + weights)
@@ -3409,7 +3410,7 @@ pub unsafe fn rnn_forward(
     weight_space: &DeviceBuffer<u8>,
     work_space: &mut DeviceBuffer<u8>,
     reserve_space: &mut DeviceBuffer<u8>,
-) -> Result<()> {
+) -> Result<()> { unsafe {
     let c = cudnn()?;
     let f = c.cudnn_rnn_forward()?;
     check(f(
@@ -3422,7 +3423,7 @@ pub unsafe fn rnn_forward(
         work_space.byte_size(),   work_space.as_raw().0 as *mut core::ffi::c_void,
         reserve_space.byte_size(), reserve_space.as_raw().0 as *mut core::ffi::c_void,
     ))
-}
+}}
 
 /// RNN backward — data path (gradients w.r.t. inputs and initial states).
 ///
@@ -3451,7 +3452,7 @@ pub unsafe fn rnn_backward_data_v8(
     weight_space: &DeviceBuffer<u8>,
     work_space: &mut DeviceBuffer<u8>,
     reserve_space: &mut DeviceBuffer<u8>,
-) -> Result<()> {
+) -> Result<()> { unsafe {
     let c = cudnn()?;
     let f = c.cudnn_rnn_backward_data_v8()?;
     check(f(
@@ -3464,7 +3465,7 @@ pub unsafe fn rnn_backward_data_v8(
         work_space.byte_size(),   work_space.as_raw().0 as *mut core::ffi::c_void,
         reserve_space.byte_size(), reserve_space.as_raw().0 as *mut core::ffi::c_void,
     ))
-}
+}}
 
 /// RNN backward — weights path (gradients w.r.t. the weight space).
 /// `add_grad = true` accumulates into `dweight_space` (typical for
@@ -3484,7 +3485,7 @@ pub unsafe fn rnn_backward_weights_v8(
     dweight_space: &mut DeviceBuffer<u8>,
     work_space: &mut DeviceBuffer<u8>,
     reserve_space: &mut DeviceBuffer<u8>,
-) -> Result<()> {
+) -> Result<()> { unsafe {
     let c = cudnn()?;
     let f = c.cudnn_rnn_backward_weights_v8()?;
     check(f(
@@ -3496,4 +3497,4 @@ pub unsafe fn rnn_backward_weights_v8(
         work_space.byte_size(),    work_space.as_raw().0 as *mut core::ffi::c_void,
         reserve_space.byte_size(), reserve_space.as_raw().0 as *mut core::ffi::c_void,
     ))
-}
+}}

@@ -1,0 +1,16 @@
+baracuda-cutlass
+================
+
+API design (plan-based, caller-supplied workspace, RCR-only v0, GEMM +
+grouped GEMM op families, sealed `CutlassElement` trait) was specified by
+the Fuel ML library team during baracuda's Phase 4 design review. The
+team's round-1 review then removed `EpilogueKind::Bias` from the public
+surface — it was advertised but unimplemented — and pushed Bias to "after
+grouped GEMM lands and a real caller asks for it." Today the only shipped
+epilogue is `Identity`. We're grateful for the careful synthesis of
+CUTLASS's actual programming model with Fuel's needs as a downstream
+consumer.
+
+Underlying kernels are compiled by `baracuda-cutlass-kernels-sys` from
+NVIDIA's CUTLASS templates (BSD 3-Clause). See that crate's NOTICE for the
+kernel-level provenance.

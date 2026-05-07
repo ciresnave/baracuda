@@ -94,9 +94,10 @@ impl GreenContext {
     pub fn from_resource(device: &Device, mut resource: CUdevResource) -> Result<Self> {
         let d = driver()?;
         // 1) Pack the resource into a CUdevResourceDesc.
-        let gen = d.cu_dev_resource_generate_desc()?;
+        // (`gen` is a reserved keyword in Rust 2024, so we name this `generate`.)
+        let generate = d.cu_dev_resource_generate_desc()?;
         let mut desc: CUdevResourceDesc = core::ptr::null_mut();
-        check(unsafe { gen(&mut desc, &mut resource, 1) })?;
+        check(unsafe { generate(&mut desc, &mut resource, 1) })?;
         // 2) Actually create the green context.
         let create = d.cu_green_ctx_create()?;
         let mut handle: CUgreenCtx = core::ptr::null_mut();

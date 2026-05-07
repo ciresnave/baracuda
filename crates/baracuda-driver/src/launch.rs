@@ -155,7 +155,7 @@ impl<'f> LaunchBuilder<'f> {
     ///    to manage this.
     /// 3. Grid and block dimensions are within the device's supported
     ///    limits (see [`crate::Device::attribute`]).
-    pub unsafe fn launch(mut self) -> Result<()> {
+    pub unsafe fn launch(mut self) -> Result<()> { unsafe {
         let d = driver()?;
         let cu = d.cu_launch_kernel()?;
         let stream_handle: CUstream = self.stream.map_or(core::ptr::null_mut(), |s| s.as_raw());
@@ -177,7 +177,7 @@ impl<'f> LaunchBuilder<'f> {
             args_ptr,
             core::ptr::null_mut(), // extras — unused; we always pass args via the kernel_params slot
         ))
-    }
+    }}
 
     /// Enqueue the kernel via `cuLaunchKernelEx` (CUDA 12.0+), letting the
     /// caller attach launch attributes (cluster dims, programmatic stream
@@ -193,7 +193,7 @@ impl<'f> LaunchBuilder<'f> {
     pub unsafe fn launch_ex(
         mut self,
         attributes: &mut [baracuda_cuda_sys::types::CUlaunchAttribute],
-    ) -> Result<()> {
+    ) -> Result<()> { unsafe {
         let d = driver()?;
         let cu = d.cu_launch_kernel_ex()?;
         let stream_handle: CUstream = self.stream.map_or(core::ptr::null_mut(), |s| s.as_raw());
@@ -224,5 +224,5 @@ impl<'f> LaunchBuilder<'f> {
             args_ptr,
             core::ptr::null_mut(),
         ))
-    }
+    }}
 }

@@ -299,7 +299,7 @@ pub unsafe fn decode_batched(
     lengths: &mut [usize],
     images: *mut nvjpegImage_t,
     stream: Option<&Stream>,
-) -> Result<()> {
+) -> Result<()> { unsafe {
     assert_eq!(data.len(), lengths.len(), "data/lengths must match in size");
     let n = nvjpeg()?;
     let cu = n.nvjpeg_decode_batched()?;
@@ -312,7 +312,7 @@ pub unsafe fn decode_batched(
         images,
         stream_handle,
     ))
-}
+}}
 
 // ---- encoder --------------------------------------------------------------
 
@@ -442,7 +442,7 @@ pub unsafe fn encode_image(
     width: i32,
     height: i32,
     stream: Option<&Stream>,
-) -> Result<()> {
+) -> Result<()> { unsafe {
     let n = nvjpeg()?;
     let cu = n.nvjpeg_encode_image()?;
     let mut image = nvjpegImage_t::default();
@@ -461,7 +461,7 @@ pub unsafe fn encode_image(
         height,
         stream_handle,
     ))
-}
+}}
 
 /// Pull the encoded JPEG byte stream out of the encoder state. First call
 /// returns the required length; then re-call with a properly-sized buffer.
@@ -549,12 +549,12 @@ impl Decoder {
         state: &State,
         dest: &mut nvjpegImage_t,
         stream: Option<&Stream>,
-    ) -> Result<()> {
+    ) -> Result<()> { unsafe {
         let n = nvjpeg()?;
         let cu = n.nvjpeg_decode_jpeg_device()?;
         let stream_handle = stream.map_or(core::ptr::null_mut(), |s| s.as_raw() as _);
         check(cu(handle.handle, self.raw, state.state, dest, stream_handle))
-    }
+    }}
 
     #[inline]
     pub fn as_raw(&self) -> nvjpegJpegDecoder_t {

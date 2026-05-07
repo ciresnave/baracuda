@@ -1,0 +1,24 @@
+baracuda-cutlass-sys
+====================
+
+The git-fetching strategy in `build.rs` (sparse checkout, file-locked cache
+directory, stale-lock cleanup) is derived from `cudaforge` by Guoqing Bao,
+licensed under MIT OR Apache-2.0:
+
+    https://github.com/guoqingbao/cudaforge
+
+Vendored from upstream commit:
+    aa77db3a20bc4a80bbda1bb954edc93d8848619d  (2026-04-17)
+
+Original copyright:
+    Copyright (c) 2025 Guoqing Bao
+
+The download/cache approach was further informed by the prior `cutlass-sys`
+crate authored by Eric Evans for the baracuda project, which used release-
+tarball downloads with a CARGO_HOME-based persistent cache.
+
+CUTLASS itself is the property of NVIDIA Corporation and is licensed under
+the BSD 3-Clause License. This crate does not redistribute CUTLASS sources;
+it fetches them from https://github.com/NVIDIA/cutlass at build time.
+
+We're grateful to Guoqing Bao for releasing cudaforge under permissive terms.

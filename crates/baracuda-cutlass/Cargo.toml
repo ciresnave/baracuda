@@ -1,0 +1,39 @@
+[package]
+name = "baracuda-cutlass"
+version = "0.0.1-alpha.6"
+description = "Safe Rust wrapper for compiled CUTLASS kernels: plan-based GEMM and grouped GEMM with caller-supplied workspace, typed device-buffer arguments, and capture-safe launch."
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords = ["cuda", "cutlass", "gemm", "gpu", "ml"]
+categories = ["api-bindings", "science"]
+# Same belt-and-suspenders profraw exclude as kernels-sys.
+exclude = ["*.profraw", "target/"]
+
+[features]
+default = ["sm80"]
+
+# Enable Ampere (sm_80) GEMM kernels. Forwarded to the kernels crate.
+sm80 = ["baracuda-cutlass-kernels-sys/sm80"]
+
+# Enable Hopper (sm_90a) GEMM kernels. Mutually exclusive with `cutlass-2-11`.
+sm90a = ["baracuda-cutlass-kernels-sys/sm90a"]
+
+# CUDA 11.4-compatible CUTLASS path. Mutually exclusive with `sm90a`.
+cutlass-2-11 = ["baracuda-cutlass-kernels-sys/cutlass-2-11"]
+
+[dependencies]
+baracuda-cutlass-kernels-sys = { workspace = true }
+baracuda-driver = { workspace = true }
+baracuda-types = { workspace = true, features = ["half-crate"] }
+half = { workspace = true }
+thiserror = { workspace = true }
+
+# Same docs.rs guard as baracuda-cutlass-kernels-sys: avoid the mutually
+# exclusive `sm90a` + `cutlass-2-11` combo that --all-features would pick.
+[package.metadata.docs.rs]
+features = ["sm80"]
+no-default-features = false

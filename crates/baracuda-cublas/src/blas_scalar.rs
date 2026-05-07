@@ -94,7 +94,7 @@ impl BlasScalar for f32 {
         beta: &f32,
         c: *mut f32,
         ldc: i32,
-    ) -> cublasStatus_t {
+    ) -> cublasStatus_t { unsafe {
         let cu = match cublas().and_then(|c| c.cublas_sgemm()) {
             Ok(f) => f,
             Err(_) => return cublasStatus_t::NOT_INITIALIZED,
@@ -102,7 +102,7 @@ impl BlasScalar for f32 {
         cu(
             handle, transa, transb, m, n, k, alpha, a, lda, b, ldb, beta, c, ldc,
         )
-    }
+    }}
 
     unsafe fn axpy_raw(
         handle: cublasHandle_t,
@@ -112,13 +112,13 @@ impl BlasScalar for f32 {
         incx: i32,
         y: *mut f32,
         incy: i32,
-    ) -> cublasStatus_t {
+    ) -> cublasStatus_t { unsafe {
         let cu = match cublas().and_then(|c| c.cublas_saxpy()) {
             Ok(f) => f,
             Err(_) => return cublasStatus_t::NOT_INITIALIZED,
         };
         cu(handle, n, alpha, x, incx, y, incy)
-    }
+    }}
 
     unsafe fn gemm_strided_batched_raw(
         handle: cublasHandle_t,
@@ -139,7 +139,7 @@ impl BlasScalar for f32 {
         ldc: i32,
         stride_c: i64,
         batch_count: i32,
-    ) -> cublasStatus_t {
+    ) -> cublasStatus_t { unsafe {
         let cu = match cublas().and_then(|c| c.cublas_sgemm_strided_batched()) {
             Ok(f) => f,
             Err(_) => return cublasStatus_t::NOT_INITIALIZED,
@@ -164,7 +164,7 @@ impl BlasScalar for f32 {
             stride_c,
             batch_count,
         )
-    }
+    }}
 }
 
 impl BlasScalar for f64 {
@@ -183,7 +183,7 @@ impl BlasScalar for f64 {
         beta: &f64,
         c: *mut f64,
         ldc: i32,
-    ) -> cublasStatus_t {
+    ) -> cublasStatus_t { unsafe {
         let cu = match cublas().and_then(|c| c.cublas_dgemm()) {
             Ok(f) => f,
             Err(_) => return cublasStatus_t::NOT_INITIALIZED,
@@ -191,7 +191,7 @@ impl BlasScalar for f64 {
         cu(
             handle, transa, transb, m, n, k, alpha, a, lda, b, ldb, beta, c, ldc,
         )
-    }
+    }}
 
     unsafe fn axpy_raw(
         handle: cublasHandle_t,
@@ -201,13 +201,13 @@ impl BlasScalar for f64 {
         incx: i32,
         y: *mut f64,
         incy: i32,
-    ) -> cublasStatus_t {
+    ) -> cublasStatus_t { unsafe {
         let cu = match cublas().and_then(|c| c.cublas_daxpy()) {
             Ok(f) => f,
             Err(_) => return cublasStatus_t::NOT_INITIALIZED,
         };
         cu(handle, n, alpha, x, incx, y, incy)
-    }
+    }}
 
     unsafe fn gemm_strided_batched_raw(
         handle: cublasHandle_t,
@@ -228,7 +228,7 @@ impl BlasScalar for f64 {
         ldc: i32,
         stride_c: i64,
         batch_count: i32,
-    ) -> cublasStatus_t {
+    ) -> cublasStatus_t { unsafe {
         let cu = match cublas().and_then(|c| c.cublas_dgemm_strided_batched()) {
             Ok(f) => f,
             Err(_) => return cublasStatus_t::NOT_INITIALIZED,
@@ -253,7 +253,7 @@ impl BlasScalar for f64 {
             stride_c,
             batch_count,
         )
-    }
+    }}
 }
 
 impl BlasScalar for Complex32 {
@@ -272,7 +272,7 @@ impl BlasScalar for Complex32 {
         beta: &Complex32,
         c: *mut Complex32,
         ldc: i32,
-    ) -> cublasStatus_t {
+    ) -> cublasStatus_t { unsafe {
         let cu = match cublas().and_then(|c| c.cublas_cgemm()) {
             Ok(f) => f,
             Err(_) => return cublasStatus_t::NOT_INITIALIZED,
@@ -293,7 +293,7 @@ impl BlasScalar for Complex32 {
             c as *mut cuComplex,
             ldc,
         )
-    }
+    }}
 
     unsafe fn axpy_raw(
         handle: cublasHandle_t,
@@ -303,7 +303,7 @@ impl BlasScalar for Complex32 {
         incx: i32,
         y: *mut Complex32,
         incy: i32,
-    ) -> cublasStatus_t {
+    ) -> cublasStatus_t { unsafe {
         let cu = match cublas().and_then(|c| c.cublas_caxpy()) {
             Ok(f) => f,
             Err(_) => return cublasStatus_t::NOT_INITIALIZED,
@@ -317,7 +317,7 @@ impl BlasScalar for Complex32 {
             y as *mut cuComplex,
             incy,
         )
-    }
+    }}
 
     unsafe fn gemm_strided_batched_raw(
         handle: cublasHandle_t,
@@ -338,7 +338,7 @@ impl BlasScalar for Complex32 {
         ldc: i32,
         stride_c: i64,
         batch_count: i32,
-    ) -> cublasStatus_t {
+    ) -> cublasStatus_t { unsafe {
         let cu = match cublas().and_then(|c| c.cublas_cgemm_strided_batched()) {
             Ok(f) => f,
             Err(_) => return cublasStatus_t::NOT_INITIALIZED,
@@ -363,7 +363,7 @@ impl BlasScalar for Complex32 {
             stride_c,
             batch_count,
         )
-    }
+    }}
 }
 
 impl BlasScalar for Complex64 {
@@ -382,7 +382,7 @@ impl BlasScalar for Complex64 {
         beta: &Complex64,
         c: *mut Complex64,
         ldc: i32,
-    ) -> cublasStatus_t {
+    ) -> cublasStatus_t { unsafe {
         let cu = match cublas().and_then(|c| c.cublas_zgemm()) {
             Ok(f) => f,
             Err(_) => return cublasStatus_t::NOT_INITIALIZED,
@@ -403,7 +403,7 @@ impl BlasScalar for Complex64 {
             c as *mut cuDoubleComplex,
             ldc,
         )
-    }
+    }}
 
     unsafe fn axpy_raw(
         handle: cublasHandle_t,
@@ -413,7 +413,7 @@ impl BlasScalar for Complex64 {
         incx: i32,
         y: *mut Complex64,
         incy: i32,
-    ) -> cublasStatus_t {
+    ) -> cublasStatus_t { unsafe {
         let cu = match cublas().and_then(|c| c.cublas_zaxpy()) {
             Ok(f) => f,
             Err(_) => return cublasStatus_t::NOT_INITIALIZED,
@@ -427,7 +427,7 @@ impl BlasScalar for Complex64 {
             y as *mut cuDoubleComplex,
             incy,
         )
-    }
+    }}
 
     unsafe fn gemm_strided_batched_raw(
         handle: cublasHandle_t,
@@ -448,7 +448,7 @@ impl BlasScalar for Complex64 {
         ldc: i32,
         stride_c: i64,
         batch_count: i32,
-    ) -> cublasStatus_t {
+    ) -> cublasStatus_t { unsafe {
         let cu = match cublas().and_then(|c| c.cublas_zgemm_strided_batched()) {
             Ok(f) => f,
             Err(_) => return cublasStatus_t::NOT_INITIALIZED,
@@ -473,7 +473,7 @@ impl BlasScalar for Complex64 {
             stride_c,
             batch_count,
         )
-    }
+    }}
 }
 
 mod sealed {

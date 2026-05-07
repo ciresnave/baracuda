@@ -335,12 +335,12 @@ macro_rules! real_impl {
                 a: *mut $t,
                 lda: c_int,
                 lwork: *mut c_int,
-            ) -> cusolverStatus_t {
+            ) -> cusolverStatus_t { unsafe {
                 match cusolver().and_then(|c| c.$getrf_buf()) {
                     Ok(f) => f(h, m, n, a, lda, lwork),
                     Err(_) => cusolverStatus_t::NOT_INITIALIZED,
                 }
-            }
+            }}
             unsafe fn getrf(
                 h: cusolverDnHandle_t,
                 m: c_int,
@@ -350,12 +350,12 @@ macro_rules! real_impl {
                 work: *mut $t,
                 ipiv: *mut c_int,
                 info: *mut c_int,
-            ) -> cusolverStatus_t {
+            ) -> cusolverStatus_t { unsafe {
                 match cusolver().and_then(|c| c.$getrf()) {
                     Ok(f) => f(h, m, n, a, lda, work, ipiv, info),
                     Err(_) => cusolverStatus_t::NOT_INITIALIZED,
                 }
-            }
+            }}
             unsafe fn getrs(
                 h: cusolverDnHandle_t,
                 trans: cublasOperation_t,
@@ -367,12 +367,12 @@ macro_rules! real_impl {
                 b: *mut $t,
                 ldb: c_int,
                 info: *mut c_int,
-            ) -> cusolverStatus_t {
+            ) -> cusolverStatus_t { unsafe {
                 match cusolver().and_then(|c| c.$getrs()) {
                     Ok(f) => f(h, trans, n, nrhs, a, lda, ipiv, b, ldb, info),
                     Err(_) => cusolverStatus_t::NOT_INITIALIZED,
                 }
-            }
+            }}
             unsafe fn geqrf_buf(
                 h: cusolverDnHandle_t,
                 m: c_int,
@@ -380,12 +380,12 @@ macro_rules! real_impl {
                 a: *mut $t,
                 lda: c_int,
                 lwork: *mut c_int,
-            ) -> cusolverStatus_t {
+            ) -> cusolverStatus_t { unsafe {
                 match cusolver().and_then(|c| c.$geqrf_buf()) {
                     Ok(f) => f(h, m, n, a, lda, lwork),
                     Err(_) => cusolverStatus_t::NOT_INITIALIZED,
                 }
-            }
+            }}
             unsafe fn geqrf(
                 h: cusolverDnHandle_t,
                 m: c_int,
@@ -396,12 +396,12 @@ macro_rules! real_impl {
                 work: *mut $t,
                 lwork: c_int,
                 info: *mut c_int,
-            ) -> cusolverStatus_t {
+            ) -> cusolverStatus_t { unsafe {
                 match cusolver().and_then(|c| c.$geqrf()) {
                     Ok(f) => f(h, m, n, a, lda, tau, work, lwork, info),
                     Err(_) => cusolverStatus_t::NOT_INITIALIZED,
                 }
-            }
+            }}
             unsafe fn potrf_buf(
                 h: cusolverDnHandle_t,
                 uplo: cublasFillMode_t,
@@ -409,12 +409,12 @@ macro_rules! real_impl {
                 a: *mut $t,
                 lda: c_int,
                 lwork: *mut c_int,
-            ) -> cusolverStatus_t {
+            ) -> cusolverStatus_t { unsafe {
                 match cusolver().and_then(|c| c.$potrf_buf()) {
                     Ok(f) => f(h, uplo, n, a, lda, lwork),
                     Err(_) => cusolverStatus_t::NOT_INITIALIZED,
                 }
-            }
+            }}
             unsafe fn potrf(
                 h: cusolverDnHandle_t,
                 uplo: cublasFillMode_t,
@@ -424,12 +424,12 @@ macro_rules! real_impl {
                 work: *mut $t,
                 lwork: c_int,
                 info: *mut c_int,
-            ) -> cusolverStatus_t {
+            ) -> cusolverStatus_t { unsafe {
                 match cusolver().and_then(|c| c.$potrf()) {
                     Ok(f) => f(h, uplo, n, a, lda, work, lwork, info),
                     Err(_) => cusolverStatus_t::NOT_INITIALIZED,
                 }
-            }
+            }}
             unsafe fn potrs(
                 h: cusolverDnHandle_t,
                 uplo: cublasFillMode_t,
@@ -440,23 +440,23 @@ macro_rules! real_impl {
                 b: *mut $t,
                 ldb: c_int,
                 info: *mut c_int,
-            ) -> cusolverStatus_t {
+            ) -> cusolverStatus_t { unsafe {
                 match cusolver().and_then(|c| c.$potrs()) {
                     Ok(f) => f(h, uplo, n, nrhs, a, lda, b, ldb, info),
                     Err(_) => cusolverStatus_t::NOT_INITIALIZED,
                 }
-            }
+            }}
             unsafe fn gesvd_buf(
                 h: cusolverDnHandle_t,
                 m: c_int,
                 n: c_int,
                 lwork: *mut c_int,
-            ) -> cusolverStatus_t {
+            ) -> cusolverStatus_t { unsafe {
                 match cusolver().and_then(|c| c.$gesvd_buf()) {
                     Ok(f) => f(h, m, n, lwork),
                     Err(_) => cusolverStatus_t::NOT_INITIALIZED,
                 }
-            }
+            }}
             unsafe fn gesvd(
                 h: cusolverDnHandle_t,
                 jobu: u8,
@@ -474,14 +474,14 @@ macro_rules! real_impl {
                 lwork: c_int,
                 rwork: *mut $t,
                 info: *mut c_int,
-            ) -> cusolverStatus_t {
+            ) -> cusolverStatus_t { unsafe {
                 match cusolver().and_then(|c| c.$gesvd()) {
                     Ok(f) => f(
                         h, jobu, jobvt, m, n, a, lda, s, u, ldu, vt, ldvt, work, lwork, rwork, info,
                     ),
                     Err(_) => cusolverStatus_t::NOT_INITIALIZED,
                 }
-            }
+            }}
             unsafe fn syevd_buf(
                 h: cusolverDnHandle_t,
                 jobz: cusolverEigMode_t,
@@ -491,12 +491,12 @@ macro_rules! real_impl {
                 lda: c_int,
                 w: *const $t,
                 lwork: *mut c_int,
-            ) -> cusolverStatus_t {
+            ) -> cusolverStatus_t { unsafe {
                 match cusolver().and_then(|c| c.$syevd_buf()) {
                     Ok(f) => f(h, jobz, uplo, n, a, lda, w, lwork),
                     Err(_) => cusolverStatus_t::NOT_INITIALIZED,
                 }
-            }
+            }}
             unsafe fn syevd(
                 h: cusolverDnHandle_t,
                 jobz: cusolverEigMode_t,
@@ -508,12 +508,12 @@ macro_rules! real_impl {
                 work: *mut $t,
                 lwork: c_int,
                 info: *mut c_int,
-            ) -> cusolverStatus_t {
+            ) -> cusolverStatus_t { unsafe {
                 match cusolver().and_then(|c| c.$syevd()) {
                     Ok(f) => f(h, jobz, uplo, n, a, lda, w, work, lwork, info),
                     Err(_) => cusolverStatus_t::NOT_INITIALIZED,
                 }
-            }
+            }}
         }
     };
 }
@@ -535,12 +535,12 @@ macro_rules! complex_impl {
                 a: *mut $t,
                 lda: c_int,
                 lwork: *mut c_int,
-            ) -> cusolverStatus_t {
+            ) -> cusolverStatus_t { unsafe {
                 match cusolver().and_then(|c| c.$getrf_buf()) {
                     Ok(f) => f(h, m, n, a as *mut $raw, lda, lwork),
                     Err(_) => cusolverStatus_t::NOT_INITIALIZED,
                 }
-            }
+            }}
             unsafe fn getrf(
                 h: cusolverDnHandle_t,
                 m: c_int,
@@ -550,7 +550,7 @@ macro_rules! complex_impl {
                 work: *mut $t,
                 ipiv: *mut c_int,
                 info: *mut c_int,
-            ) -> cusolverStatus_t {
+            ) -> cusolverStatus_t { unsafe {
                 match cusolver().and_then(|c| c.$getrf()) {
                     Ok(f) => f(
                         h,
@@ -564,7 +564,7 @@ macro_rules! complex_impl {
                     ),
                     Err(_) => cusolverStatus_t::NOT_INITIALIZED,
                 }
-            }
+            }}
             unsafe fn getrs(
                 h: cusolverDnHandle_t,
                 trans: cublasOperation_t,
@@ -576,7 +576,7 @@ macro_rules! complex_impl {
                 b: *mut $t,
                 ldb: c_int,
                 info: *mut c_int,
-            ) -> cusolverStatus_t {
+            ) -> cusolverStatus_t { unsafe {
                 match cusolver().and_then(|c| c.$getrs()) {
                     Ok(f) => f(
                         h,
@@ -592,7 +592,7 @@ macro_rules! complex_impl {
                     ),
                     Err(_) => cusolverStatus_t::NOT_INITIALIZED,
                 }
-            }
+            }}
             unsafe fn geqrf_buf(
                 h: cusolverDnHandle_t,
                 m: c_int,
@@ -600,12 +600,12 @@ macro_rules! complex_impl {
                 a: *mut $t,
                 lda: c_int,
                 lwork: *mut c_int,
-            ) -> cusolverStatus_t {
+            ) -> cusolverStatus_t { unsafe {
                 match cusolver().and_then(|c| c.$geqrf_buf()) {
                     Ok(f) => f(h, m, n, a as *mut $raw, lda, lwork),
                     Err(_) => cusolverStatus_t::NOT_INITIALIZED,
                 }
-            }
+            }}
             unsafe fn geqrf(
                 h: cusolverDnHandle_t,
                 m: c_int,
@@ -616,7 +616,7 @@ macro_rules! complex_impl {
                 work: *mut $t,
                 lwork: c_int,
                 info: *mut c_int,
-            ) -> cusolverStatus_t {
+            ) -> cusolverStatus_t { unsafe {
                 match cusolver().and_then(|c| c.$geqrf()) {
                     Ok(f) => f(
                         h,
@@ -631,7 +631,7 @@ macro_rules! complex_impl {
                     ),
                     Err(_) => cusolverStatus_t::NOT_INITIALIZED,
                 }
-            }
+            }}
             unsafe fn potrf_buf(
                 h: cusolverDnHandle_t,
                 uplo: cublasFillMode_t,
@@ -639,12 +639,12 @@ macro_rules! complex_impl {
                 a: *mut $t,
                 lda: c_int,
                 lwork: *mut c_int,
-            ) -> cusolverStatus_t {
+            ) -> cusolverStatus_t { unsafe {
                 match cusolver().and_then(|c| c.$potrf_buf()) {
                     Ok(f) => f(h, uplo, n, a as *mut $raw, lda, lwork),
                     Err(_) => cusolverStatus_t::NOT_INITIALIZED,
                 }
-            }
+            }}
             unsafe fn potrf(
                 h: cusolverDnHandle_t,
                 uplo: cublasFillMode_t,
@@ -654,7 +654,7 @@ macro_rules! complex_impl {
                 work: *mut $t,
                 lwork: c_int,
                 info: *mut c_int,
-            ) -> cusolverStatus_t {
+            ) -> cusolverStatus_t { unsafe {
                 match cusolver().and_then(|c| c.$potrf()) {
                     Ok(f) => f(
                         h,
@@ -668,7 +668,7 @@ macro_rules! complex_impl {
                     ),
                     Err(_) => cusolverStatus_t::NOT_INITIALIZED,
                 }
-            }
+            }}
             unsafe fn potrs(
                 h: cusolverDnHandle_t,
                 uplo: cublasFillMode_t,
@@ -679,7 +679,7 @@ macro_rules! complex_impl {
                 b: *mut $t,
                 ldb: c_int,
                 info: *mut c_int,
-            ) -> cusolverStatus_t {
+            ) -> cusolverStatus_t { unsafe {
                 match cusolver().and_then(|c| c.$potrs()) {
                     Ok(f) => f(
                         h,
@@ -694,18 +694,18 @@ macro_rules! complex_impl {
                     ),
                     Err(_) => cusolverStatus_t::NOT_INITIALIZED,
                 }
-            }
+            }}
             unsafe fn gesvd_buf(
                 h: cusolverDnHandle_t,
                 m: c_int,
                 n: c_int,
                 lwork: *mut c_int,
-            ) -> cusolverStatus_t {
+            ) -> cusolverStatus_t { unsafe {
                 match cusolver().and_then(|c| c.$gesvd_buf()) {
                     Ok(f) => f(h, m, n, lwork),
                     Err(_) => cusolverStatus_t::NOT_INITIALIZED,
                 }
-            }
+            }}
             unsafe fn gesvd(
                 h: cusolverDnHandle_t,
                 jobu: u8,
@@ -723,7 +723,7 @@ macro_rules! complex_impl {
                 lwork: c_int,
                 rwork: *mut $real,
                 info: *mut c_int,
-            ) -> cusolverStatus_t {
+            ) -> cusolverStatus_t { unsafe {
                 match cusolver().and_then(|c| c.$gesvd()) {
                     Ok(f) => f(
                         h,
@@ -745,7 +745,7 @@ macro_rules! complex_impl {
                     ),
                     Err(_) => cusolverStatus_t::NOT_INITIALIZED,
                 }
-            }
+            }}
             unsafe fn syevd_buf(
                 h: cusolverDnHandle_t,
                 jobz: cusolverEigMode_t,
@@ -755,12 +755,12 @@ macro_rules! complex_impl {
                 lda: c_int,
                 w: *const $real,
                 lwork: *mut c_int,
-            ) -> cusolverStatus_t {
+            ) -> cusolverStatus_t { unsafe {
                 match cusolver().and_then(|c| c.$heevd_buf()) {
                     Ok(f) => f(h, jobz, uplo, n, a as *const $raw, lda, w, lwork),
                     Err(_) => cusolverStatus_t::NOT_INITIALIZED,
                 }
-            }
+            }}
             unsafe fn syevd(
                 h: cusolverDnHandle_t,
                 jobz: cusolverEigMode_t,
@@ -772,7 +772,7 @@ macro_rules! complex_impl {
                 work: *mut $t,
                 lwork: c_int,
                 info: *mut c_int,
-            ) -> cusolverStatus_t {
+            ) -> cusolverStatus_t { unsafe {
                 match cusolver().and_then(|c| c.$heevd()) {
                     Ok(f) => f(
                         h,
@@ -788,7 +788,7 @@ macro_rules! complex_impl {
                     ),
                     Err(_) => cusolverStatus_t::NOT_INITIALIZED,
                 }
-            }
+            }}
         }
     };
 }
@@ -2192,7 +2192,7 @@ pub mod mg {
         desc_a: &MatrixDesc,
         array_d_ipiv: *mut *mut c_int,
         compute_type: cudaDataType,
-    ) -> Result<i64> {
+    ) -> Result<i64> { unsafe {
         let mg = cusolver_mg()?;
         let cu = mg.cusolver_mg_getrf_buffer_size()?;
         let mut lwork: i64 = 0;
@@ -2209,7 +2209,7 @@ pub mod mg {
             &mut lwork,
         ))?;
         Ok(lwork)
-    }
+    }}
 
     /// # Safety
     /// Same pointer-array requirements as [`getrf_buffer_size`].
@@ -2227,7 +2227,7 @@ pub mod mg {
         array_d_work: *mut *mut c_void,
         lwork: i64,
         info: &mut [c_int],
-    ) -> Result<()> {
+    ) -> Result<()> { unsafe {
         let mg = cusolver_mg()?;
         let cu = mg.cusolver_mg_getrf()?;
         let _ = alloc_fail::<()>; // silence unused-import in release builds
@@ -2245,7 +2245,7 @@ pub mod mg {
             lwork,
             info.as_mut_ptr(),
         ))
-    }
+    }}
 
     /// Multi-GPU Cholesky buffer-size.
     ///
@@ -2261,7 +2261,7 @@ pub mod mg {
         ja: i32,
         desc_a: &MatrixDesc,
         compute_type: cudaDataType,
-    ) -> Result<i64> {
+    ) -> Result<i64> { unsafe {
         let mg = cusolver_mg()?;
         let cu = mg.cusolver_mg_potrf_buffer_size()?;
         let mut lwork: i64 = 0;
@@ -2277,7 +2277,7 @@ pub mod mg {
             &mut lwork,
         ))?;
         Ok(lwork)
-    }
+    }}
 
     /// # Safety
     /// Same as [`getrf_buffer_size`].
@@ -2294,7 +2294,7 @@ pub mod mg {
         array_d_work: *mut *mut c_void,
         lwork: i64,
         info: &mut [c_int],
-    ) -> Result<()> {
+    ) -> Result<()> { unsafe {
         let mg = cusolver_mg()?;
         let cu = mg.cusolver_mg_potrf()?;
         check(cu(
@@ -2310,7 +2310,7 @@ pub mod mg {
             lwork,
             info.as_mut_ptr(),
         ))
-    }
+    }}
 
     /// Multi-GPU symmetric eigendecomposition buffer-size.
     ///
@@ -2329,7 +2329,7 @@ pub mod mg {
         w: *mut c_void,
         data_type_w: cudaDataType,
         compute_type: cudaDataType,
-    ) -> Result<i64> {
+    ) -> Result<i64> { unsafe {
         let mg = cusolver_mg()?;
         let cu = mg.cusolver_mg_syevd_buffer_size()?;
         let mut lwork: i64 = 0;
@@ -2348,7 +2348,7 @@ pub mod mg {
             &mut lwork,
         ))?;
         Ok(lwork)
-    }
+    }}
 
     /// # Safety
     /// Same as [`getrf_buffer_size`].
@@ -2368,7 +2368,7 @@ pub mod mg {
         array_d_work: *mut *mut c_void,
         lwork: i64,
         info: &mut [c_int],
-    ) -> Result<()> {
+    ) -> Result<()> { unsafe {
         let mg = cusolver_mg()?;
         let cu = mg.cusolver_mg_syevd()?;
         check(cu(
@@ -2387,7 +2387,7 @@ pub mod mg {
             lwork,
             info.as_mut_ptr(),
         ))
-    }
+    }}
 }
 
 // ---- Back-compat: single-precision shortcuts -----------------------------
@@ -2464,8 +2464,17 @@ pub mod xapi {
 
     /// Buffer-size query for generic LU factorization. Returns
     /// `(workspace_bytes_on_device, workspace_bytes_on_host)`.
+    ///
+    /// # Safety
+    ///
+    /// `a` is a raw device pointer passed through to cuSOLVER's
+    /// `cusolverDnXgetrf_bufferSize`. The pointer is not dereferenced by
+    /// this Rust function but the underlying cuSOLVER call may sample
+    /// alignment or layout from it; the caller must ensure it is either
+    /// null or a valid device address for an `m x n` matrix with leading
+    /// dimension `lda` of `data_type_a`.
     #[allow(clippy::too_many_arguments)]
-    pub fn xgetrf_buffer_size(
+    pub unsafe fn xgetrf_buffer_size(
         handle: &DnHandle,
         params: &Params,
         m: i64,
@@ -2495,6 +2504,14 @@ pub mod xapi {
         Ok((dev, host))
     }
 
+    /// Generic LU factorization (`Xgetrf`).
+    ///
+    /// # Safety
+    ///
+    /// All raw device pointers (`a`, `ipiv`, `info`, `dev_workspace`,
+    /// `host_workspace`) must point to allocations of the appropriate type
+    /// and size for the requested `(m, n, data_type_a, compute_type)`,
+    /// and remain live until the call completes on `handle`'s stream.
     #[allow(clippy::too_many_arguments)]
     pub unsafe fn xgetrf(
         handle: &DnHandle,
@@ -2511,7 +2528,7 @@ pub mod xapi {
         host_buf: *mut c_void,
         host_bytes: usize,
         info: *mut c_int,
-    ) -> Result<()> {
+    ) -> Result<()> { unsafe {
         let c = cusolver()?;
         let cu = c.cusolver_dn_xgetrf()?;
         check(cu(
@@ -2530,7 +2547,7 @@ pub mod xapi {
             host_bytes,
             info,
         ))
-    }
+    }}
 
     /// Solve `op(A) X = B` after [`xgetrf`] has factored A. `b`/`ldb`
     /// describe the right-hand-side matrix; `b` is overwritten with X.
@@ -2555,7 +2572,7 @@ pub mod xapi {
         b: *mut c_void,
         ldb: i64,
         info: *mut c_int,
-    ) -> Result<()> {
+    ) -> Result<()> { unsafe {
         let c = cusolver()?;
         let cu = c.cusolver_dn_xgetrs()?;
         check(cu(
@@ -2573,7 +2590,7 @@ pub mod xapi {
             ldb,
             info,
         ))
-    }
+    }}
 
     /// Solve `A X = B` after [`xpotrf`] has Cholesky-factored A.
     /// `b`/`ldb` describe the right-hand-side matrix; `b` is overwritten
@@ -2596,7 +2613,7 @@ pub mod xapi {
         b: *mut c_void,
         ldb: i64,
         info: *mut c_int,
-    ) -> Result<()> {
+    ) -> Result<()> { unsafe {
         let c = cusolver()?;
         let cu = c.cusolver_dn_xpotrs()?;
         check(cu(
@@ -2613,7 +2630,7 @@ pub mod xapi {
             ldb,
             info,
         ))
-    }
+    }}
 }
 
 // ---- Sparse --------------------------------------------------------------
@@ -2684,7 +2701,7 @@ pub mod sparse {
         reorder: i32,
         x: *mut f32,
         singularity: *mut c_int,
-    ) -> Result<()> {
+    ) -> Result<()> { unsafe {
         let c = cusolver()?;
         let cu = c.cusolver_sp_scsrlsvchol()?;
         check(cu(
@@ -2701,7 +2718,7 @@ pub mod sparse {
             x,
             singularity,
         ))
-    }
+    }}
 
     /// Sparse QR solve (least-squares, handles non-SPD systems).
     ///
@@ -2721,7 +2738,7 @@ pub mod sparse {
         reorder: i32,
         x: *mut f32,
         singularity: *mut c_int,
-    ) -> Result<()> {
+    ) -> Result<()> { unsafe {
         let c = cusolver()?;
         let cu = c.cusolver_sp_scsrlsvqr()?;
         check(cu(
@@ -2738,7 +2755,7 @@ pub mod sparse {
             x,
             singularity,
         ))
-    }
+    }}
 }
 
 // ---- Refactor ------------------------------------------------------------

@@ -84,12 +84,12 @@ macro_rules! real_impl {
                 piv: *mut i32,
                 info: *mut i32,
                 batch: i32,
-            ) -> cublasStatus_t {
+            ) -> cublasStatus_t { unsafe {
                 match cublas().and_then(|c| c.$getrf()) {
                     Ok(f) => f(h, n, a, lda, piv, info, batch),
                     Err(_) => cublasStatus_t::NOT_INITIALIZED,
                 }
-            }
+            }}
             unsafe fn getri_batched_raw(
                 h: cublasHandle_t,
                 n: i32,
@@ -100,12 +100,12 @@ macro_rules! real_impl {
                 ldc: i32,
                 info: *mut i32,
                 batch: i32,
-            ) -> cublasStatus_t {
+            ) -> cublasStatus_t { unsafe {
                 match cublas().and_then(|c| c.$getri()) {
                     Ok(f) => f(h, n, a, lda, piv, c_arr, ldc, info, batch),
                     Err(_) => cublasStatus_t::NOT_INITIALIZED,
                 }
-            }
+            }}
             unsafe fn getrs_batched_raw(
                 h: cublasHandle_t,
                 trans: cublasOperation_t,
@@ -118,12 +118,12 @@ macro_rules! real_impl {
                 ldb: i32,
                 info: *mut i32,
                 batch: i32,
-            ) -> cublasStatus_t {
+            ) -> cublasStatus_t { unsafe {
                 match cublas().and_then(|c| c.$getrs()) {
                     Ok(f) => f(h, trans, n, nrhs, a, lda, piv, b, ldb, info, batch),
                     Err(_) => cublasStatus_t::NOT_INITIALIZED,
                 }
-            }
+            }}
             unsafe fn matinv_batched_raw(
                 h: cublasHandle_t,
                 n: i32,
@@ -133,12 +133,12 @@ macro_rules! real_impl {
                 lda_inv: i32,
                 info: *mut i32,
                 batch: i32,
-            ) -> cublasStatus_t {
+            ) -> cublasStatus_t { unsafe {
                 match cublas().and_then(|c| c.$matinv()) {
                     Ok(f) => f(h, n, a, lda, a_inv, lda_inv, info, batch),
                     Err(_) => cublasStatus_t::NOT_INITIALIZED,
                 }
-            }
+            }}
         }
     };
 }
@@ -154,12 +154,12 @@ macro_rules! complex_impl {
                 piv: *mut i32,
                 info: *mut i32,
                 batch: i32,
-            ) -> cublasStatus_t {
+            ) -> cublasStatus_t { unsafe {
                 match cublas().and_then(|c| c.$getrf()) {
                     Ok(f) => f(h, n, a as *const *mut $raw, lda, piv, info, batch),
                     Err(_) => cublasStatus_t::NOT_INITIALIZED,
                 }
-            }
+            }}
             unsafe fn getri_batched_raw(
                 h: cublasHandle_t,
                 n: i32,
@@ -170,7 +170,7 @@ macro_rules! complex_impl {
                 ldc: i32,
                 info: *mut i32,
                 batch: i32,
-            ) -> cublasStatus_t {
+            ) -> cublasStatus_t { unsafe {
                 match cublas().and_then(|c| c.$getri()) {
                     Ok(f) => f(
                         h,
@@ -185,7 +185,7 @@ macro_rules! complex_impl {
                     ),
                     Err(_) => cublasStatus_t::NOT_INITIALIZED,
                 }
-            }
+            }}
             unsafe fn getrs_batched_raw(
                 h: cublasHandle_t,
                 trans: cublasOperation_t,
@@ -198,7 +198,7 @@ macro_rules! complex_impl {
                 ldb: i32,
                 info: *mut i32,
                 batch: i32,
-            ) -> cublasStatus_t {
+            ) -> cublasStatus_t { unsafe {
                 match cublas().and_then(|c| c.$getrs()) {
                     Ok(f) => f(
                         h,
@@ -215,7 +215,7 @@ macro_rules! complex_impl {
                     ),
                     Err(_) => cublasStatus_t::NOT_INITIALIZED,
                 }
-            }
+            }}
             unsafe fn matinv_batched_raw(
                 h: cublasHandle_t,
                 n: i32,
@@ -225,7 +225,7 @@ macro_rules! complex_impl {
                 lda_inv: i32,
                 info: *mut i32,
                 batch: i32,
-            ) -> cublasStatus_t {
+            ) -> cublasStatus_t { unsafe {
                 match cublas().and_then(|c| c.$matinv()) {
                     Ok(f) => f(
                         h,
@@ -239,7 +239,7 @@ macro_rules! complex_impl {
                     ),
                     Err(_) => cublasStatus_t::NOT_INITIALIZED,
                 }
-            }
+            }}
         }
     };
 }
@@ -303,7 +303,7 @@ pub unsafe fn getrf<T: BatchedDirectScalar>(
     pivots: &mut baracuda_driver::DeviceBuffer<i32>,
     info: &mut baracuda_driver::DeviceBuffer<i32>,
     batch: i32,
-) -> Result<()> {
+) -> Result<()> { unsafe {
     check(T::getrf_batched_raw(
         handle.as_raw(),
         n,
@@ -313,7 +313,7 @@ pub unsafe fn getrf<T: BatchedDirectScalar>(
         info.as_raw().0 as *mut i32,
         batch,
     ))
-}
+}}
 
 /// Batched LU solve using pivots from [`getrf`].
 ///
@@ -332,7 +332,7 @@ pub unsafe fn getrs<T: BatchedDirectScalar>(
     ldb: i32,
     info: &mut baracuda_driver::DeviceBuffer<i32>,
     batch: i32,
-) -> Result<()> {
+) -> Result<()> { unsafe {
     check(T::getrs_batched_raw(
         handle.as_raw(),
         trans.raw(),
@@ -346,7 +346,7 @@ pub unsafe fn getrs<T: BatchedDirectScalar>(
         info.as_raw().0 as *mut i32,
         batch,
     ))
-}
+}}
 
 /// Batched inverse from an already-LU-factored matrix (companion to [`getrf`]).
 ///
@@ -363,7 +363,7 @@ pub unsafe fn getri<T: BatchedDirectScalar>(
     ldc: i32,
     info: &mut baracuda_driver::DeviceBuffer<i32>,
     batch: i32,
-) -> Result<()> {
+) -> Result<()> { unsafe {
     check(T::getri_batched_raw(
         handle.as_raw(),
         n,
@@ -375,7 +375,7 @@ pub unsafe fn getri<T: BatchedDirectScalar>(
         info.as_raw().0 as *mut i32,
         batch,
     ))
-}
+}}
 
 /// Direct batched matrix inverse — LU + inverse in a single call, for
 /// matrices up to 32×32 (cuBLAS's documented cap).
@@ -392,7 +392,7 @@ pub unsafe fn matinv<T: BatchedDirectScalar>(
     lda_inv: i32,
     info: &mut baracuda_driver::DeviceBuffer<i32>,
     batch: i32,
-) -> Result<()> {
+) -> Result<()> { unsafe {
     check(T::matinv_batched_raw(
         handle.as_raw(),
         n,
@@ -403,4 +403,4 @@ pub unsafe fn matinv<T: BatchedDirectScalar>(
         info.as_raw().0 as *mut i32,
         batch,
     ))
-}
+}}

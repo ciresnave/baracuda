@@ -155,7 +155,7 @@ impl Module {
         image: &[u8],
         options: &mut [i32],
         option_values: &mut [*mut core::ffi::c_void],
-    ) -> Result<Self> {
+    ) -> Result<Self> { unsafe {
         assert_eq!(
             options.len(),
             option_values.len(),
@@ -178,7 +178,7 @@ impl Module {
                 context: context.clone(),
             }),
         })
-    }
+    }}
 
     /// The [`Context`] this module was loaded into.
     #[inline]

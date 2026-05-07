@@ -99,11 +99,11 @@ pub mod activity {
     pub unsafe fn register_callbacks(
         request_fn: CUpti_BuffersCallbackRequestFunc,
         complete_fn: CUpti_BuffersCallbackCompleteFunc,
-    ) -> Result<()> {
+    ) -> Result<()> { unsafe {
         let c = cupti()?;
         let cu = c.cupti_activity_register_callbacks()?;
         check(cu(request_fn, complete_fn))
-    }
+    }}
 
     /// Walk over activity records in a completed buffer. Returns the
     /// next `*mut CUpti_Activity` pointer, or `None` when exhausted.
@@ -116,7 +116,7 @@ pub mod activity {
         buffer: *mut u8,
         valid_size: usize,
         record_inout: &mut *mut core::ffi::c_void,
-    ) -> Result<bool> {
+    ) -> Result<bool> { unsafe {
         let c = cupti()?;
         let cu = c.cupti_activity_get_next_record()?;
         match cu(buffer, valid_size, record_inout) {
@@ -128,7 +128,7 @@ pub mod activity {
                 Ok(false)
             }
         }
-    }
+    }}
 }
 
 /// Callback API — point-in-time hooks on driver / runtime API calls.
@@ -154,13 +154,13 @@ pub mod callback {
         pub unsafe fn subscribe(
             cb: CUpti_CallbackFunc,
             user_data: *mut core::ffi::c_void,
-        ) -> Result<Self> {
+        ) -> Result<Self> { unsafe {
             let c = cupti()?;
             let cu = c.cupti_subscribe()?;
             let mut h: CUpti_SubscriberHandle = core::ptr::null_mut();
             check(cu(&mut h, cb, user_data))?;
             Ok(Self { handle: h })
-        }
+        }}
 
         /// Enable callbacks for a specific `domain` + `cbid`. Pass
         /// `enable = true` to turn on, `false` to turn off.
@@ -232,13 +232,13 @@ pub mod event {
     impl Group {
         /// # Safety
         /// `ctx` must be a valid `CUcontext` (use [`baracuda_driver::Context::as_raw`]).
-        pub unsafe fn new(ctx: *mut core::ffi::c_void) -> Result<Self> {
+        pub unsafe fn new(ctx: *mut core::ffi::c_void) -> Result<Self> { unsafe {
             let c = cupti()?;
             let cu = c.cupti_event_group_create()?;
             let mut raw: CUpti_EventGroup = core::ptr::null_mut();
             check(cu(ctx, &mut raw, 0))?;
             Ok(Self { raw })
-        }
+        }}
 
         pub fn add(&self, event: CUpti_EventID) -> Result<()> {
             let c = cupti()?;
@@ -322,11 +322,11 @@ pub mod metric {
         attrib: u32,
         size: &mut usize,
         value: *mut core::ffi::c_void,
-    ) -> Result<()> {
+    ) -> Result<()> { unsafe {
         let c = cupti()?;
         let cu = c.cupti_metric_get_attribute()?;
         check(cu(metric, attrib, size, value))
-    }
+    }}
 
     /// Compute a metric's value from collected event values and a time
     /// duration (ns).
@@ -342,7 +342,7 @@ pub mod metric {
         event_values: &mut [u64],
         time_duration_ns: u64,
         metric_value: *mut core::ffi::c_void,
-    ) -> Result<()> {
+    ) -> Result<()> { unsafe {
         assert_eq!(event_ids.len(), event_values.len());
         let c = cupti()?;
         let cu = c.cupti_metric_get_value()?;
@@ -356,7 +356,7 @@ pub mod metric {
             time_duration_ns,
             metric_value,
         ))
-    }
+    }}
 }
 
 /// Modern Profiler Host API. Each call takes a `*mut c_void` params
@@ -367,86 +367,86 @@ pub mod profiler {
 
     /// # Safety
     /// See NVPerf SDK for the expected `params` struct.
-    pub unsafe fn initialize(params: *mut core::ffi::c_void) -> Result<()> {
+    pub unsafe fn initialize(params: *mut core::ffi::c_void) -> Result<()> { unsafe {
         let c = cupti()?;
         check((c.cupti_profiler_initialize()?)(params))
-    }
+    }}
     /// # Safety
     /// See NVPerf SDK.
-    pub unsafe fn deinitialize(params: *mut core::ffi::c_void) -> Result<()> {
+    pub unsafe fn deinitialize(params: *mut core::ffi::c_void) -> Result<()> { unsafe {
         let c = cupti()?;
         check((c.cupti_profiler_deinitialize()?)(params))
-    }
+    }}
     /// # Safety
     /// See NVPerf SDK.
-    pub unsafe fn begin_session(params: *mut core::ffi::c_void) -> Result<()> {
+    pub unsafe fn begin_session(params: *mut core::ffi::c_void) -> Result<()> { unsafe {
         let c = cupti()?;
         check((c.cupti_profiler_begin_session()?)(params))
-    }
+    }}
     /// # Safety
     /// See NVPerf SDK.
-    pub unsafe fn end_session(params: *mut core::ffi::c_void) -> Result<()> {
+    pub unsafe fn end_session(params: *mut core::ffi::c_void) -> Result<()> { unsafe {
         let c = cupti()?;
         check((c.cupti_profiler_end_session()?)(params))
-    }
+    }}
     /// # Safety
     /// See NVPerf SDK.
-    pub unsafe fn set_config(params: *mut core::ffi::c_void) -> Result<()> {
+    pub unsafe fn set_config(params: *mut core::ffi::c_void) -> Result<()> { unsafe {
         let c = cupti()?;
         check((c.cupti_profiler_set_config()?)(params))
-    }
+    }}
     /// # Safety
     /// See NVPerf SDK.
-    pub unsafe fn unset_config(params: *mut core::ffi::c_void) -> Result<()> {
+    pub unsafe fn unset_config(params: *mut core::ffi::c_void) -> Result<()> { unsafe {
         let c = cupti()?;
         check((c.cupti_profiler_unset_config()?)(params))
-    }
+    }}
     /// # Safety
     /// See NVPerf SDK.
-    pub unsafe fn begin_pass(params: *mut core::ffi::c_void) -> Result<()> {
+    pub unsafe fn begin_pass(params: *mut core::ffi::c_void) -> Result<()> { unsafe {
         let c = cupti()?;
         check((c.cupti_profiler_begin_pass()?)(params))
-    }
+    }}
     /// # Safety
     /// See NVPerf SDK.
-    pub unsafe fn end_pass(params: *mut core::ffi::c_void) -> Result<()> {
+    pub unsafe fn end_pass(params: *mut core::ffi::c_void) -> Result<()> { unsafe {
         let c = cupti()?;
         check((c.cupti_profiler_end_pass()?)(params))
-    }
+    }}
     /// # Safety
     /// See NVPerf SDK.
-    pub unsafe fn enable_profiling(params: *mut core::ffi::c_void) -> Result<()> {
+    pub unsafe fn enable_profiling(params: *mut core::ffi::c_void) -> Result<()> { unsafe {
         let c = cupti()?;
         check((c.cupti_profiler_enable_profiling()?)(params))
-    }
+    }}
     /// # Safety
     /// See NVPerf SDK.
-    pub unsafe fn disable_profiling(params: *mut core::ffi::c_void) -> Result<()> {
+    pub unsafe fn disable_profiling(params: *mut core::ffi::c_void) -> Result<()> { unsafe {
         let c = cupti()?;
         check((c.cupti_profiler_disable_profiling()?)(params))
-    }
+    }}
     /// # Safety
     /// See NVPerf SDK.
-    pub unsafe fn push_range(params: *mut core::ffi::c_void) -> Result<()> {
+    pub unsafe fn push_range(params: *mut core::ffi::c_void) -> Result<()> { unsafe {
         let c = cupti()?;
         check((c.cupti_profiler_push_range()?)(params))
-    }
+    }}
     /// # Safety
     /// See NVPerf SDK.
-    pub unsafe fn pop_range(params: *mut core::ffi::c_void) -> Result<()> {
+    pub unsafe fn pop_range(params: *mut core::ffi::c_void) -> Result<()> { unsafe {
         let c = cupti()?;
         check((c.cupti_profiler_pop_range()?)(params))
-    }
+    }}
     /// # Safety
     /// See NVPerf SDK.
-    pub unsafe fn flush_counter_data(params: *mut core::ffi::c_void) -> Result<()> {
+    pub unsafe fn flush_counter_data(params: *mut core::ffi::c_void) -> Result<()> { unsafe {
         let c = cupti()?;
         check((c.cupti_profiler_flush_counter_data()?)(params))
-    }
+    }}
     /// # Safety
     /// See NVPerf SDK.
-    pub unsafe fn get_counter_availability(params: *mut core::ffi::c_void) -> Result<()> {
+    pub unsafe fn get_counter_availability(params: *mut core::ffi::c_void) -> Result<()> { unsafe {
         let c = cupti()?;
         check((c.cupti_profiler_get_counter_availability()?)(params))
-    }
+    }}
 }

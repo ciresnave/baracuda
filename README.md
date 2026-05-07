@@ -172,17 +172,20 @@ loader + smoke coverage, specific ops on request.
 | cuFile           |   ✅    | Driver lifecycle + properties, file-handle register, buffer / stream register, sync + async read / write, BatchIO (setup / submit / poll / cancel / destroy), configurable direct-I/O / cache / pinned-mem limits, op-status error-string helper                                                                                                                                                                                                                                                                                                             |
 | TensorRT         |   🟢    | Runtime-side inference: Runtime, Engine (deserialize + inspect IO / shapes / dtypes + serialize back to bytes), ExecutionContext (with allocation strategy), set input shape, set tensor address, enqueueV3. **Builder side remains C++-only by TensorRT's design** — use `trtexec` or the Python API to produce engine blobs, then load them here.                                                                                                                                                                                                          |
 | cuDF             |   🟡    | Tracks RAPIDS `libcudf_c`'s emerging C ABI — CSV / Parquet I/O, Column, Table, TypeId. Anything not exposed through libcudf\_c itself is bounded by upstream progress.                                                                                                                                                                                                                                                                                                                                                                                       |
+| CUTLASS          |   🟢    | Plan-based `GemmPlan` + `GroupedGemmPlan` (MoE-friendly variable-M-per-group), `f16`/`bf16` × `RCR` × `sm_80`, Identity epilogue, caller-supplied workspace, capture-safe via pinned metadata, host-side `can_implement` for CUTLASS-vs-cuBLAS prelaunch branch. Hopper (`sm_90a`) + Bias deferred — see `crates/baracuda-cutlass`.                                                                                                                                                                                                                            |
 
 ## Examples
 
-| Example                                          | Demonstrates                                    |
-| ------------------------------------------------ | ----------------------------------------------- |
-| [`hello_kernel`](examples/hello_kernel.rs)       | Driver API: load PTX, launch kernel, readback   |
-| [`hello_runtime`](examples/hello_runtime.rs)     | Runtime API: allocation + H2D + D2H             |
-| [`matmul_cublas`](examples/matmul_cublas.rs)     | SGEMM via `baracuda-cublas`                     |
-| [`nvrtc_jit`](examples/nvrtc_jit.rs)             | Compile CUDA C++ at runtime and run it          |
-| [`stream_pipeline`](examples/stream_pipeline.rs) | Overlap H2D / compute / D2H on multiple streams |
-| [`graph_capture`](examples/graph_capture.rs)     | Record and replay a graph                       |
+| Example                                          | Demonstrates                                                          |
+| ------------------------------------------------ | --------------------------------------------------------------------- |
+| [`forge_hello`](examples/forge_hello.rs)         | `baracuda-forge` build-time `.cu` → PTX → load + launch via `baracuda-driver` |
+| [`cutlass_gemm`](examples/cutlass_gemm.rs)       | `baracuda-cutlass` single GEMM + 4-group MoE-shaped grouped GEMM on `f16` RCR sm_80 |
+| [`hello_kernel`](examples/hello_kernel.rs)       | Driver API: load PTX, launch kernel, readback                         |
+| [`hello_runtime`](examples/hello_runtime.rs)     | Runtime API: allocation + H2D + D2H                                   |
+| [`matmul_cublas`](examples/matmul_cublas.rs)     | SGEMM via `baracuda-cublas`                                           |
+| [`nvrtc_jit`](examples/nvrtc_jit.rs)             | Compile CUDA C++ at runtime and run it                                |
+| [`stream_pipeline`](examples/stream_pipeline.rs) | Overlap H2D / compute / D2H on multiple streams                       |
+| [`graph_capture`](examples/graph_capture.rs)     | Record and replay a graph                                             |
 
 ## Comparison
 
@@ -238,6 +241,31 @@ cargo build --workspace
 # GPU-backed integration tests (requires a working NVIDIA driver + CUDA runtime):
 BARACUDA_GPU_TESTS=1 cargo test --workspace -- --ignored
 ```
+
+## Acknowledgments
+
+The [`baracuda-forge`](crates/baracuda-forge) build-time kernel-compiler crate
+is a vendored fork of [`cudaforge`](https://github.com/guoqingbao/cudaforge) by
+**Guoqing Bao**, adapted to baracuda's workspace conventions (shared toolkit
+detection, error-type alignment, C++ standard auto-selection from detected
+CUDA version).
+
+Big thank you to Guoqing for releasing cudaforge under permissive terms and
+giving the Rust GPU community a battle-tested incremental-build story to start
+from. See [`crates/baracuda-forge/NOTICE`](crates/baracuda-forge/NOTICE) for
+the full provenance and the upstream commit hash.
+
+The [`baracuda-cutlass`](crates/baracuda-cutlass) safe wrapper for NVIDIA CUTLASS
+— plan-based GEMM and grouped-GEMM with caller-supplied workspace, capture-safe
+launch, MoE-friendly variable-M-per-group dispatch — was specified by the
+**Fuel ML library team**. They walked through CUTLASS's actual programming
+model versus our needs as a downstream consumer, sketched the API surface
+(`GemmPlan` / `GroupedGemmPlan` / `PreparedGroupedGemm`), and caught real
+correctness bugs in early review rounds. The implementation is baracuda's,
+but the design is theirs. See
+[`crates/baracuda-cutlass/NOTICE`](crates/baracuda-cutlass/NOTICE) and
+[`crates/baracuda-cutlass-kernels-sys/NOTICE`](crates/baracuda-cutlass-kernels-sys/NOTICE)
+for the design lineage.
 
 ## License
 

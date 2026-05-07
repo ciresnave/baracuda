@@ -565,15 +565,15 @@ impl Driver {
     /// `T` must be a function-pointer type whose signature matches the C
     /// declaration of `symbol` in `cuda.h`. The symbol names we pass come
     /// from the macro above and are checked against the NVIDIA docs.
-    unsafe fn resolve<T: Copy>(&self, symbol: &'static str) -> Result<T, LoaderError> {
+    unsafe fn resolve<T: Copy>(&self, symbol: &'static str) -> Result<T, LoaderError> { unsafe {
         if symbol == "cuGetProcAddress" || has_version_suffix(symbol) {
             return self.resolve_via_dlsym(symbol);
         }
         self.resolve_via_get_proc_address(symbol)
-    }
+    }}
 
     /// Direct `dlsym` / `GetProcAddress`; used for `cuGetProcAddress` itself.
-    unsafe fn resolve_via_dlsym<T: Copy>(&self, symbol: &'static str) -> Result<T, LoaderError> {
+    unsafe fn resolve_via_dlsym<T: Copy>(&self, symbol: &'static str) -> Result<T, LoaderError> { unsafe {
         debug_assert_eq!(
             core::mem::size_of::<T>(),
             core::mem::size_of::<*mut ()>(),
@@ -581,7 +581,7 @@ impl Driver {
         );
         let raw: *mut () = self.lib.raw_symbol(symbol)?;
         Ok(core::mem::transmute_copy::<*mut (), T>(&raw))
-    }
+    }}
 
     /// Cached driver-reported CUDA version. Probed once via a direct
     /// `dlsym` on `cuDriverGetVersion`. Falls back to the baracuda floor
@@ -611,7 +611,7 @@ impl Driver {
     unsafe fn resolve_via_get_proc_address<T: Copy>(
         &self,
         symbol: &'static str,
-    ) -> Result<T, LoaderError> {
+    ) -> Result<T, LoaderError> { unsafe {
         debug_assert_eq!(
             core::mem::size_of::<T>(),
             core::mem::size_of::<*mut ()>(),
@@ -649,7 +649,7 @@ impl Driver {
             });
         }
         Ok(core::mem::transmute_copy::<*mut core::ffi::c_void, T>(&pfn))
-    }
+    }}
 }
 
 /// `true` if `sym` ends with `_v<N>` (version pin) or `_ptsz` / `_ptds`

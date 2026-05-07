@@ -87,57 +87,57 @@ impl<T: DeviceRepr> Drop for Pitched3dBuffer<T> {
 ///
 /// Every pointer inside `params` (both array handles and pitched ptrs)
 /// must be valid for the copy region.
-pub unsafe fn memcpy_3d(params: &cudaMemcpy3DParms) -> Result<()> {
+pub unsafe fn memcpy_3d(params: &cudaMemcpy3DParms) -> Result<()> { unsafe {
     let r = runtime()?;
     let cu = r.cuda_memcpy_3d()?;
     check(cu(params as *const cudaMemcpy3DParms as *const c_void))
-}
+}}
 
 /// `cudaMemcpy3DAsync`.
 ///
 /// # Safety
 ///
 /// Same as [`memcpy_3d`]; caller owns synchronization.
-pub unsafe fn memcpy_3d_async(params: &cudaMemcpy3DParms, stream: &Stream) -> Result<()> {
+pub unsafe fn memcpy_3d_async(params: &cudaMemcpy3DParms, stream: &Stream) -> Result<()> { unsafe {
     let r = runtime()?;
     let cu = r.cuda_memcpy_3d_async()?;
     check(cu(
         params as *const cudaMemcpy3DParms as *const c_void,
         stream.as_raw(),
     ))
-}
+}}
 
 /// `cudaMemcpy3DPeer`.
 ///
 /// # Safety
 ///
 /// Same as [`memcpy_3d`]. `params` must include `srcDevice` / `dstDevice`.
-pub unsafe fn memcpy_3d_peer(params: &cudaMemcpy3DParms) -> Result<()> {
+pub unsafe fn memcpy_3d_peer(params: &cudaMemcpy3DParms) -> Result<()> { unsafe {
     let r = runtime()?;
     let cu = r.cuda_memcpy_3d_peer()?;
     check(cu(params as *const cudaMemcpy3DParms as *const c_void))
-}
+}}
 
 /// `cudaMemcpy3DPeerAsync`.
 ///
 /// # Safety
 ///
 /// Same as [`memcpy_3d_peer`].
-pub unsafe fn memcpy_3d_peer_async(params: &cudaMemcpy3DParms, stream: &Stream) -> Result<()> {
+pub unsafe fn memcpy_3d_peer_async(params: &cudaMemcpy3DParms, stream: &Stream) -> Result<()> { unsafe {
     let r = runtime()?;
     let cu = r.cuda_memcpy_3d_peer_async()?;
     check(cu(
         params as *const cudaMemcpy3DParms as *const c_void,
         stream.as_raw(),
     ))
-}
+}}
 
 /// `cudaMemset3D` — fill a 3D region with a byte value.
 ///
 /// # Safety
 ///
 /// `pitched` must cover the `extent` region.
-pub unsafe fn memset_3d(pitched: cudaPitchedPtr, value: i32, extent: cudaExtent) -> Result<()> {
+pub unsafe fn memset_3d(pitched: cudaPitchedPtr, value: i32, extent: cudaExtent) -> Result<()> { unsafe {
     let r = runtime()?;
     let cu = r.cuda_memset_3d()?;
     // Note: the C signature takes cudaPitchedPtr by value, but we pass a
@@ -148,4 +148,4 @@ pub unsafe fn memset_3d(pitched: cudaPitchedPtr, value: i32, extent: cudaExtent)
         value,
         &extent as *const cudaExtent as *const c_void,
     ))
-}
+}}

@@ -231,7 +231,7 @@ impl Graph {
         block: impl Into<Dim3>,
         shared_mem_bytes: u32,
         args: &mut [*mut core::ffi::c_void],
-    ) -> Result<GraphNode> {
+    ) -> Result<GraphNode> { unsafe {
         let d = driver()?;
         let cu = d.cu_graph_add_kernel_node()?;
         let grid = grid.into();
@@ -265,7 +265,7 @@ impl Graph {
             &params,
         ))?;
         Ok(GraphNode { raw: node })
-    }
+    }}
 
     /// Add a 1-D memset node that fills `count` elements starting at `dst`
     /// with the 4-byte pattern `value`. Operates in the graph's parent
@@ -357,7 +357,7 @@ impl Graph {
         dependencies: &[GraphNode],
         fn_: unsafe extern "C" fn(*mut core::ffi::c_void),
         user_data: *mut core::ffi::c_void,
-    ) -> Result<GraphNode> {
+    ) -> Result<GraphNode> { unsafe {
         let d = driver()?;
         let cu = d.cu_graph_add_host_node()?;
         let params = CUDA_HOST_NODE_PARAMS {
@@ -375,7 +375,7 @@ impl Graph {
             &params,
         ))?;
         Ok(GraphNode { raw: node })
-    }
+    }}
 
     /// Add a child-graph node — executes `child` in its entirety when
     /// reached.
@@ -768,11 +768,11 @@ impl GraphNode {
     ///
     /// The caller ensures the new params describe a valid kernel launch
     /// — same kind of invariants as [`crate::LaunchBuilder::launch`].
-    pub unsafe fn set_kernel_params(&self, params: &CUDA_KERNEL_NODE_PARAMS) -> Result<()> {
+    pub unsafe fn set_kernel_params(&self, params: &CUDA_KERNEL_NODE_PARAMS) -> Result<()> { unsafe {
         let d = driver()?;
         let cu = d.cu_graph_kernel_node_set_params()?;
         check(cu(self.raw, params))
-    }
+    }}
 
     /// Generic params edit on the template graph — works for any node
     /// kind (kernel, memcpy, memset, child-graph, host, …) by reading
@@ -784,11 +784,11 @@ impl GraphNode {
     /// The `type_` discriminant in `params` must match the node's
     /// actual kind, and the union payload must be initialized for that
     /// type.
-    pub unsafe fn set_params(&self, params: &mut CUgraphNodeParams) -> Result<()> {
+    pub unsafe fn set_params(&self, params: &mut CUgraphNodeParams) -> Result<()> { unsafe {
         let d = driver()?;
         let cu = d.cu_graph_node_set_params()?;
         check(cu(self.raw, params))
-    }
+    }}
 
     /// Fetch current memset-node params (memset-node nodes only).
     pub fn memset_params(&self) -> Result<CUDA_MEMSET_NODE_PARAMS> {
@@ -850,11 +850,11 @@ impl GraphNode {
     ///
     /// The caller must not use this `GraphNode` (or any dependency-list
     /// reference to it) after calling this function.
-    pub unsafe fn destroy(self) -> Result<()> {
+    pub unsafe fn destroy(self) -> Result<()> { unsafe {
         let d = driver()?;
         let cu = d.cu_graph_destroy_node()?;
         check(cu(self.raw))
-    }
+    }}
 }
 
 /// Re-export of `cuGraphInstantiateWithFlags` flag constants.
@@ -972,11 +972,11 @@ impl GraphExec {
         &self,
         node: GraphNode,
         params: &CUDA_KERNEL_NODE_PARAMS,
-    ) -> Result<()> {
+    ) -> Result<()> { unsafe {
         let d = driver()?;
         let cu = d.cu_graph_exec_kernel_node_set_params()?;
         check(cu(self.inner.handle, node.raw, params))
-    }
+    }}
 
     /// Live-edit a memcpy-node's parameters on the instantiated graph.
     pub fn set_memcpy_node_params(&self, node: GraphNode, params: &CUDA_MEMCPY3D) -> Result<()> {
@@ -1021,7 +1021,7 @@ impl GraphExec {
         node: GraphNode,
         fn_: unsafe extern "C" fn(*mut core::ffi::c_void),
         user_data: *mut core::ffi::c_void,
-    ) -> Result<()> {
+    ) -> Result<()> { unsafe {
         let d = driver()?;
         let cu = d.cu_graph_exec_host_node_set_params()?;
         let params = CUDA_HOST_NODE_PARAMS {
@@ -1029,7 +1029,7 @@ impl GraphExec {
             user_data,
         };
         check(cu(self.inner.handle, node.raw, &params))
-    }
+    }}
 }
 
 impl Drop for GraphExecInner {

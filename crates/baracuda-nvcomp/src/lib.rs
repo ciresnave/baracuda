@@ -65,11 +65,11 @@ pub fn status_string(status: nvcompStatus_t) -> Result<&'static str> {
 /// # Safety
 ///
 /// `props` must point at an `nvcompProperties_t` buffer.
-pub unsafe fn get_properties(props: *mut core::ffi::c_void) -> Result<()> {
+pub unsafe fn get_properties(props: *mut core::ffi::c_void) -> Result<()> { unsafe {
     let n = nvcomp()?;
     let cu = n.nvcomp_get_properties()?;
     check(cu(props))
-}
+}}
 
 pub mod crc32 {
     //! Batched CRC32 checksums (nvCOMP 5+).
@@ -84,22 +84,22 @@ pub mod crc32 {
     pub unsafe fn get_heuristic_conf(
         max_chunk_bytes: usize,
         config_out: *mut c_void,
-    ) -> Result<()> {
+    ) -> Result<()> { unsafe {
         let n = nvcomp()?;
         let cu = n.crc32_get_heuristic_conf()?;
         check(cu(max_chunk_bytes, config_out))
-    }
+    }}
 
     /// Brute-force search for the best config (slower; offline use).
     ///
     /// # Safety
     ///
     /// Same as [`get_heuristic_conf`].
-    pub unsafe fn search_conf(max_chunk_bytes: usize, config_out: *mut c_void) -> Result<()> {
+    pub unsafe fn search_conf(max_chunk_bytes: usize, config_out: *mut c_void) -> Result<()> { unsafe {
         let n = nvcomp()?;
         let cu = n.crc32_search_conf()?;
         check(cu(max_chunk_bytes, config_out))
-    }
+    }}
 
     /// Compute per-chunk CRC32s on `stream`.
     ///
@@ -114,7 +114,7 @@ pub mod crc32 {
         config: *const c_void,
         dev_crc_out: *mut u32,
         stream: *mut c_void,
-    ) -> Result<()> {
+    ) -> Result<()> { unsafe {
         let n = nvcomp()?;
         let cu = n.crc32_async()?;
         check(cu(
@@ -125,7 +125,7 @@ pub mod crc32 {
             dev_crc_out,
             stream,
         ))
-    }
+    }}
 }
 
 /// Query compress-side alignment requirements for any codec that
@@ -138,11 +138,11 @@ pub mod crc32 {
 pub unsafe fn compress_alignment<Opts: Copy>(
     pfn: unsafe extern "C" fn(Opts, *mut nvcompAlignmentRequirements_t) -> nvcompStatus_t,
     opts: Opts,
-) -> Result<nvcompAlignmentRequirements_t> {
+) -> Result<nvcompAlignmentRequirements_t> { unsafe {
     let mut a = nvcompAlignmentRequirements_t::default();
     check(pfn(opts, &mut a))?;
     Ok(a)
-}
+}}
 
 /// Query decompress-side alignment requirements.
 ///
@@ -151,11 +151,11 @@ pub unsafe fn compress_alignment<Opts: Copy>(
 /// Same as [`compress_alignment`].
 pub unsafe fn decompress_alignment(
     pfn: unsafe extern "C" fn(*mut nvcompAlignmentRequirements_t) -> nvcompStatus_t,
-) -> Result<nvcompAlignmentRequirements_t> {
+) -> Result<nvcompAlignmentRequirements_t> { unsafe {
     let mut a = nvcompAlignmentRequirements_t::default();
     check(pfn(&mut a))?;
     Ok(a)
-}
+}}
 
 /// Query per-chunk uncompressed sizes from compressed buffers (v5+
 /// codecs). Shape is shared across LZ4/Snappy/Zstd/GDeflate/Gzip/
@@ -179,7 +179,7 @@ pub unsafe fn get_decompress_size_async(
     dev_uncompressed_bytes_out: *mut usize,
     batch_size: usize,
     stream: *mut c_void,
-) -> Result<()> {
+) -> Result<()> { unsafe {
     check(pfn(
         dev_compressed_ptrs,
         dev_compressed_bytes,
@@ -187,7 +187,7 @@ pub unsafe fn get_decompress_size_async(
         batch_size,
         stream,
     ))
-}
+}}
 
 /// Error type for nvCOMP operations.
 pub type Error = baracuda_core::Error<nvcompStatus_t>;
@@ -236,7 +236,7 @@ pub mod raw {
         dev_compressed_bytes: *mut usize,
         opts: Opts,
         stream: *mut c_void,
-    ) -> Result<()> {
+    ) -> Result<()> { unsafe {
         super::check(pfn(
             dev_uncompressed_ptrs,
             dev_uncompressed_bytes,
@@ -249,7 +249,7 @@ pub mod raw {
             opts,
             stream,
         ))
-    }
+    }}
 
     /// Result-agnostic launch of `decompress_async` for any codec that
     /// follows the standard 10-argument signature.
@@ -277,7 +277,7 @@ pub mod raw {
         dev_uncompressed_ptrs: *const *mut c_void,
         dev_status_ptrs: *mut nvcompStatus_t,
         stream: *mut c_void,
-    ) -> Result<()> {
+    ) -> Result<()> { unsafe {
         super::check(pfn(
             dev_compressed_ptrs,
             dev_compressed_bytes,
@@ -290,7 +290,7 @@ pub mod raw {
             dev_status_ptrs,
             stream,
         ))
-    }
+    }}
 }
 
 /// Macro generating a codec module with the standard set of functions.
@@ -366,7 +366,7 @@ macro_rules! codec_mod {
                 opts: $copts,
                 dev_statuses: *mut nvcompStatus_t,
                 stream: *mut c_void,
-            ) -> Result<()> {
+            ) -> Result<()> { unsafe {
                 let n = nvcomp()?;
                 let cu = n.$compress()?;
                 check(cu(
@@ -382,7 +382,7 @@ macro_rules! codec_mod {
                     dev_statuses,
                     stream,
                 ))
-            }
+            }}
 
             /// Device scratch-buffer size for decompression.
             pub fn decompress_get_temp_size(
@@ -425,7 +425,7 @@ macro_rules! codec_mod {
                 opts: $dopts,
                 dev_status_ptrs: *mut nvcompStatus_t,
                 stream: *mut c_void,
-            ) -> Result<()> {
+            ) -> Result<()> { unsafe {
                 let n = nvcomp()?;
                 let cu = n.$decompress()?;
                 check(cu(
@@ -441,7 +441,7 @@ macro_rules! codec_mod {
                     dev_status_ptrs,
                     stream,
                 ))
-            }
+            }}
         }
     };
 }
@@ -500,7 +500,7 @@ pub mod deflate {
         dev_compressed_bytes: *mut usize,
         opts: nvcompBatchedDeflateOpts_t,
         stream: *mut c_void,
-    ) -> Result<()> {
+    ) -> Result<()> { unsafe {
         let n = nvcomp()?;
         let cu = n.deflate_compress_async()?;
         check(cu(
@@ -515,7 +515,7 @@ pub mod deflate {
             opts,
             stream,
         ))
-    }
+    }}
 
     /// # Safety
     ///
@@ -532,7 +532,7 @@ pub mod deflate {
         dev_uncompressed_ptrs: *const *mut c_void,
         dev_status_ptrs: *mut nvcompStatus_t,
         stream: *mut c_void,
-    ) -> Result<()> {
+    ) -> Result<()> { unsafe {
         let n = nvcomp()?;
         let cu = n.deflate_decompress_async()?;
         check(cu(
@@ -547,7 +547,7 @@ pub mod deflate {
             dev_status_ptrs,
             stream,
         ))
-    }
+    }}
 }
 
 pub mod bitcomp {
@@ -569,7 +569,7 @@ pub mod bitcomp {
         dev_compressed_bytes: *mut usize,
         opts: nvcompBatchedBitcompOpts_t,
         stream: *mut c_void,
-    ) -> Result<()> {
+    ) -> Result<()> { unsafe {
         let n = nvcomp()?;
         let cu = n.bitcomp_compress_async()?;
         check(cu(
@@ -584,7 +584,7 @@ pub mod bitcomp {
             opts,
             stream,
         ))
-    }
+    }}
 
     /// # Safety
     ///
@@ -601,7 +601,7 @@ pub mod bitcomp {
         dev_uncompressed_ptrs: *const *mut c_void,
         dev_status_ptrs: *mut nvcompStatus_t,
         stream: *mut c_void,
-    ) -> Result<()> {
+    ) -> Result<()> { unsafe {
         let n = nvcomp()?;
         let cu = n.bitcomp_decompress_async()?;
         check(cu(
@@ -616,7 +616,7 @@ pub mod bitcomp {
             dev_status_ptrs,
             stream,
         ))
-    }
+    }}
 }
 
 pub mod ans {
@@ -638,7 +638,7 @@ pub mod ans {
         dev_compressed_bytes: *mut usize,
         opts: nvcompBatchedANSOpts_t,
         stream: *mut c_void,
-    ) -> Result<()> {
+    ) -> Result<()> { unsafe {
         let n = nvcomp()?;
         let cu = n.ans_compress_async()?;
         check(cu(
@@ -653,7 +653,7 @@ pub mod ans {
             opts,
             stream,
         ))
-    }
+    }}
 
     /// # Safety
     ///
@@ -670,7 +670,7 @@ pub mod ans {
         dev_uncompressed_ptrs: *const *mut c_void,
         dev_status_ptrs: *mut nvcompStatus_t,
         stream: *mut c_void,
-    ) -> Result<()> {
+    ) -> Result<()> { unsafe {
         let n = nvcomp()?;
         let cu = n.ans_decompress_async()?;
         check(cu(
@@ -685,7 +685,7 @@ pub mod ans {
             dev_status_ptrs,
             stream,
         ))
-    }
+    }}
 }
 
 pub mod cascaded {
@@ -707,7 +707,7 @@ pub mod cascaded {
         dev_compressed_bytes: *mut usize,
         opts: nvcompBatchedCascadedOpts_t,
         stream: *mut c_void,
-    ) -> Result<()> {
+    ) -> Result<()> { unsafe {
         let n = nvcomp()?;
         let cu = n.cascaded_compress_async()?;
         check(cu(
@@ -722,7 +722,7 @@ pub mod cascaded {
             opts,
             stream,
         ))
-    }
+    }}
 
     /// # Safety
     ///
@@ -739,7 +739,7 @@ pub mod cascaded {
         dev_uncompressed_ptrs: *const *mut c_void,
         dev_status_ptrs: *mut nvcompStatus_t,
         stream: *mut c_void,
-    ) -> Result<()> {
+    ) -> Result<()> { unsafe {
         let n = nvcomp()?;
         let cu = n.cascaded_decompress_async()?;
         check(cu(
@@ -754,7 +754,7 @@ pub mod cascaded {
             dev_status_ptrs,
             stream,
         ))
-    }
+    }}
 }
 
 /// Alignment requirements for LZ4 input / output / temp buffers
@@ -789,7 +789,7 @@ pub unsafe fn lz4_get_decompress_size_async(
     dev_uncompressed_bytes_out: *mut usize,
     batch_size: usize,
     stream: *mut c_void,
-) -> Result<()> {
+) -> Result<()> { unsafe {
     let n = nvcomp()?;
     let cu = n.lz4_get_decompress_size_async()?;
     check(cu(
@@ -799,7 +799,7 @@ pub unsafe fn lz4_get_decompress_size_async(
         batch_size,
         stream,
     ))
-}
+}}
 
 /// Same as [`lz4_get_decompress_size_async`] but for Snappy.
 ///
@@ -812,7 +812,7 @@ pub unsafe fn snappy_get_decompress_size_async(
     dev_uncompressed_bytes_out: *mut usize,
     batch_size: usize,
     stream: *mut c_void,
-) -> Result<()> {
+) -> Result<()> { unsafe {
     let n = nvcomp()?;
     let cu = n.snappy_get_decompress_size_async()?;
     check(cu(
@@ -822,7 +822,7 @@ pub unsafe fn snappy_get_decompress_size_async(
         batch_size,
         stream,
     ))
-}
+}}
 
 /// Same as [`lz4_get_decompress_size_async`] but for Zstd.
 ///
@@ -835,7 +835,7 @@ pub unsafe fn zstd_get_decompress_size_async(
     dev_uncompressed_bytes_out: *mut usize,
     batch_size: usize,
     stream: *mut c_void,
-) -> Result<()> {
+) -> Result<()> { unsafe {
     let n = nvcomp()?;
     let cu = n.zstd_get_decompress_size_async()?;
     check(cu(
@@ -845,4 +845,4 @@ pub unsafe fn zstd_get_decompress_size_async(
         batch_size,
         stream,
     ))
-}
+}}

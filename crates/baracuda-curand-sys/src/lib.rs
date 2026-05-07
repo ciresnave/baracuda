@@ -125,26 +125,26 @@ impl CudaStatus for curandStatus_t {
 // ---- function-pointer types ----
 
 pub type PFN_curandCreateGenerator =
-    unsafe extern "C" fn(gen: *mut curandGenerator_t, ty: curandRngType_t) -> curandStatus_t;
+    unsafe extern "C" fn(generator: *mut curandGenerator_t, ty: curandRngType_t) -> curandStatus_t;
 pub type PFN_curandDestroyGenerator =
-    unsafe extern "C" fn(gen: curandGenerator_t) -> curandStatus_t;
+    unsafe extern "C" fn(generator: curandGenerator_t) -> curandStatus_t;
 pub type PFN_curandSetStream =
-    unsafe extern "C" fn(gen: curandGenerator_t, stream: cudaStream_t) -> curandStatus_t;
+    unsafe extern "C" fn(generator: curandGenerator_t, stream: cudaStream_t) -> curandStatus_t;
 pub type PFN_curandSetPseudoRandomGeneratorSeed =
-    unsafe extern "C" fn(gen: curandGenerator_t, seed: u64) -> curandStatus_t;
+    unsafe extern "C" fn(generator: curandGenerator_t, seed: u64) -> curandStatus_t;
 pub type PFN_curandGenerateUniform =
-    unsafe extern "C" fn(gen: curandGenerator_t, out: *mut f32, n: usize) -> curandStatus_t;
+    unsafe extern "C" fn(generator: curandGenerator_t, out: *mut f32, n: usize) -> curandStatus_t;
 pub type PFN_curandGenerateUniformDouble =
-    unsafe extern "C" fn(gen: curandGenerator_t, out: *mut f64, n: usize) -> curandStatus_t;
+    unsafe extern "C" fn(generator: curandGenerator_t, out: *mut f64, n: usize) -> curandStatus_t;
 pub type PFN_curandGenerateNormal = unsafe extern "C" fn(
-    gen: curandGenerator_t,
+    generator: curandGenerator_t,
     out: *mut f32,
     n: usize,
     mean: f32,
     stddev: f32,
 ) -> curandStatus_t;
 pub type PFN_curandGenerateNormalDouble = unsafe extern "C" fn(
-    gen: curandGenerator_t,
+    generator: curandGenerator_t,
     out: *mut f64,
     n: usize,
     mean: f64,
@@ -155,20 +155,20 @@ pub type PFN_curandGetVersion = unsafe extern "C" fn(version: *mut c_int) -> cur
 // ---- Additional generator configuration ----
 
 pub type PFN_curandCreateGeneratorHost = unsafe extern "C" fn(
-    gen: *mut curandGenerator_t,
+    generator: *mut curandGenerator_t,
     ty: curandRngType_t,
 ) -> curandStatus_t;
 
 pub type PFN_curandSetGeneratorOffset =
-    unsafe extern "C" fn(gen: curandGenerator_t, offset: u64) -> curandStatus_t;
+    unsafe extern "C" fn(generator: curandGenerator_t, offset: u64) -> curandStatus_t;
 
 pub type PFN_curandSetGeneratorOrdering = unsafe extern "C" fn(
-    gen: curandGenerator_t,
+    generator: curandGenerator_t,
     order: curandOrdering_t,
 ) -> curandStatus_t;
 
 pub type PFN_curandSetQuasiRandomGeneratorDimensions = unsafe extern "C" fn(
-    gen: curandGenerator_t,
+    generator: curandGenerator_t,
     num_dimensions: u32,
 ) -> curandStatus_t;
 
@@ -194,13 +194,13 @@ pub type PFN_curandGetProperty =
 // ---- Additional integer / uint / float distributions ----
 
 pub type PFN_curandGenerate =
-    unsafe extern "C" fn(gen: curandGenerator_t, out: *mut u32, n: usize) -> curandStatus_t;
+    unsafe extern "C" fn(generator: curandGenerator_t, out: *mut u32, n: usize) -> curandStatus_t;
 
 pub type PFN_curandGenerateLongLong =
-    unsafe extern "C" fn(gen: curandGenerator_t, out: *mut u64, n: usize) -> curandStatus_t;
+    unsafe extern "C" fn(generator: curandGenerator_t, out: *mut u64, n: usize) -> curandStatus_t;
 
 pub type PFN_curandGenerateLogNormal = unsafe extern "C" fn(
-    gen: curandGenerator_t,
+    generator: curandGenerator_t,
     out: *mut f32,
     n: usize,
     mean: f32,
@@ -208,7 +208,7 @@ pub type PFN_curandGenerateLogNormal = unsafe extern "C" fn(
 ) -> curandStatus_t;
 
 pub type PFN_curandGenerateLogNormalDouble = unsafe extern "C" fn(
-    gen: curandGenerator_t,
+    generator: curandGenerator_t,
     out: *mut f64,
     n: usize,
     mean: f64,
@@ -216,14 +216,14 @@ pub type PFN_curandGenerateLogNormalDouble = unsafe extern "C" fn(
 ) -> curandStatus_t;
 
 pub type PFN_curandGeneratePoisson = unsafe extern "C" fn(
-    gen: curandGenerator_t,
+    generator: curandGenerator_t,
     out: *mut u32,
     n: usize,
     lambda: f64,
 ) -> curandStatus_t;
 
 pub type PFN_curandGenerateBinomial = unsafe extern "C" fn(
-    gen: curandGenerator_t,
+    generator: curandGenerator_t,
     out: *mut u32,
     n: usize,
     trials: u32,
@@ -232,7 +232,7 @@ pub type PFN_curandGenerateBinomial = unsafe extern "C" fn(
 
 // ---- Seed generation for pseudo-random generators ----
 
-pub type PFN_curandGenerateSeeds = unsafe extern "C" fn(gen: curandGenerator_t) -> curandStatus_t;
+pub type PFN_curandGenerateSeeds = unsafe extern "C" fn(generator: curandGenerator_t) -> curandStatus_t;
 
 // ---- loader ----
 

@@ -215,13 +215,13 @@ pub mod gl {
     ///
     /// `buffer` must be a live GL buffer in a GL context current on the
     /// calling thread. The buffer must outlive the returned resource.
-    pub unsafe fn register_buffer(buffer: GLuint, flags: u32) -> Result<GraphicsResource> {
+    pub unsafe fn register_buffer(buffer: GLuint, flags: u32) -> Result<GraphicsResource> { unsafe {
         let r = runtime()?;
         let cu = r.cuda_graphics_gl_register_buffer()?;
         let mut res: CUgraphicsResource = core::ptr::null_mut();
         check(cu(&mut res, buffer, flags))?;
         Ok(GraphicsResource::from_raw(res))
-    }
+    }}
 
     /// Register a GL texture / renderbuffer. `target` is the GL binding
     /// target (`GL_TEXTURE_2D`, `GL_RENDERBUFFER`, ...).
@@ -233,13 +233,13 @@ pub mod gl {
         image: GLuint,
         target: GLenum,
         flags: u32,
-    ) -> Result<GraphicsResource> {
+    ) -> Result<GraphicsResource> { unsafe {
         let r = runtime()?;
         let cu = r.cuda_graphics_gl_register_image()?;
         let mut res: CUgraphicsResource = core::ptr::null_mut();
         check(cu(&mut res, image, target, flags))?;
         Ok(GraphicsResource::from_raw(res))
-    }
+    }}
 }
 
 /// Direct3D 9 interop (Windows).
@@ -252,13 +252,13 @@ pub mod d3d9 {
     ///
     /// `adapter_name` must be a live NUL-terminated C string naming a
     /// DXGI adapter.
-    pub unsafe fn get_device(adapter_name: *const core::ffi::c_char) -> Result<i32> {
+    pub unsafe fn get_device(adapter_name: *const core::ffi::c_char) -> Result<i32> { unsafe {
         let r = runtime()?;
         let cu = r.cuda_d3d9_get_device()?;
         let mut dev: core::ffi::c_int = 0;
         check(cu(&mut dev, adapter_name))?;
         Ok(dev)
-    }
+    }}
 
     /// List CUDA devices associated with a D3D9 device.
     ///
@@ -268,7 +268,7 @@ pub mod d3d9 {
     pub unsafe fn get_devices(
         d3d_device: *mut core::ffi::c_void,
         device_list: u32,
-    ) -> Result<Vec<i32>> {
+    ) -> Result<Vec<i32>> { unsafe {
         let r = runtime()?;
         let cu = r.cuda_d3d9_get_devices()?;
         let mut count: core::ffi::c_uint = 0;
@@ -292,7 +292,7 @@ pub mod d3d9 {
         ))?;
         out.truncate(count as usize);
         Ok(out)
-    }
+    }}
 
     /// Register a D3D9 resource (`IDirect3DResource9*`).
     ///
@@ -302,13 +302,13 @@ pub mod d3d9 {
     pub unsafe fn register_resource(
         resource: *mut core::ffi::c_void,
         flags: u32,
-    ) -> Result<GraphicsResource> {
+    ) -> Result<GraphicsResource> { unsafe {
         let r = runtime()?;
         let cu = r.cuda_graphics_d3d9_register_resource()?;
         let mut res: CUgraphicsResource = core::ptr::null_mut();
         check(cu(&mut res, resource, flags))?;
         Ok(GraphicsResource::from_raw(res))
-    }
+    }}
 }
 
 /// Direct3D 10 interop (Windows).
@@ -318,13 +318,13 @@ pub mod d3d10 {
     /// # Safety
     ///
     /// `adapter` must be a valid `IDXGIAdapter*`.
-    pub unsafe fn get_device(adapter: *mut core::ffi::c_void) -> Result<i32> {
+    pub unsafe fn get_device(adapter: *mut core::ffi::c_void) -> Result<i32> { unsafe {
         let r = runtime()?;
         let cu = r.cuda_d3d10_get_device()?;
         let mut dev: core::ffi::c_int = 0;
         check(cu(&mut dev, adapter))?;
         Ok(dev)
-    }
+    }}
 
     /// # Safety
     ///
@@ -332,7 +332,7 @@ pub mod d3d10 {
     pub unsafe fn get_devices(
         d3d_device: *mut core::ffi::c_void,
         device_list: u32,
-    ) -> Result<Vec<i32>> {
+    ) -> Result<Vec<i32>> { unsafe {
         let r = runtime()?;
         let cu = r.cuda_d3d10_get_devices()?;
         let mut count: core::ffi::c_uint = 0;
@@ -356,7 +356,7 @@ pub mod d3d10 {
         ))?;
         out.truncate(count as usize);
         Ok(out)
-    }
+    }}
 
     /// # Safety
     ///
@@ -364,13 +364,13 @@ pub mod d3d10 {
     pub unsafe fn register_resource(
         resource: *mut core::ffi::c_void,
         flags: u32,
-    ) -> Result<GraphicsResource> {
+    ) -> Result<GraphicsResource> { unsafe {
         let r = runtime()?;
         let cu = r.cuda_graphics_d3d10_register_resource()?;
         let mut res: CUgraphicsResource = core::ptr::null_mut();
         check(cu(&mut res, resource, flags))?;
         Ok(GraphicsResource::from_raw(res))
-    }
+    }}
 }
 
 /// Direct3D 11 interop (Windows) — the D3D path most still relevant today.
@@ -380,13 +380,13 @@ pub mod d3d11 {
     /// # Safety
     ///
     /// `adapter` must be a valid `IDXGIAdapter*`.
-    pub unsafe fn get_device(adapter: *mut core::ffi::c_void) -> Result<i32> {
+    pub unsafe fn get_device(adapter: *mut core::ffi::c_void) -> Result<i32> { unsafe {
         let r = runtime()?;
         let cu = r.cuda_d3d11_get_device()?;
         let mut dev: core::ffi::c_int = 0;
         check(cu(&mut dev, adapter))?;
         Ok(dev)
-    }
+    }}
 
     /// # Safety
     ///
@@ -394,7 +394,7 @@ pub mod d3d11 {
     pub unsafe fn get_devices(
         d3d_device: *mut core::ffi::c_void,
         device_list: u32,
-    ) -> Result<Vec<i32>> {
+    ) -> Result<Vec<i32>> { unsafe {
         let r = runtime()?;
         let cu = r.cuda_d3d11_get_devices()?;
         let mut count: core::ffi::c_uint = 0;
@@ -418,7 +418,7 @@ pub mod d3d11 {
         ))?;
         out.truncate(count as usize);
         Ok(out)
-    }
+    }}
 
     /// # Safety
     ///
@@ -426,13 +426,13 @@ pub mod d3d11 {
     pub unsafe fn register_resource(
         resource: *mut core::ffi::c_void,
         flags: u32,
-    ) -> Result<GraphicsResource> {
+    ) -> Result<GraphicsResource> { unsafe {
         let r = runtime()?;
         let cu = r.cuda_graphics_d3d11_register_resource()?;
         let mut res: CUgraphicsResource = core::ptr::null_mut();
         check(cu(&mut res, resource, flags))?;
         Ok(GraphicsResource::from_raw(res))
-    }
+    }}
 }
 
 /// VDPAU interop (Linux video-decode pipelines).
@@ -446,13 +446,13 @@ pub mod vdpau {
     pub unsafe fn get_device(
         vdp_device: *mut core::ffi::c_void,
         vdp_get_proc_address: *mut core::ffi::c_void,
-    ) -> Result<i32> {
+    ) -> Result<i32> { unsafe {
         let r = runtime()?;
         let cu = r.cuda_vdpau_get_device()?;
         let mut dev: core::ffi::c_int = 0;
         check(cu(&mut dev, vdp_device, vdp_get_proc_address))?;
         Ok(dev)
-    }
+    }}
 
     /// Register a VDPAU video surface (decoded frame).
     ///
@@ -463,13 +463,13 @@ pub mod vdpau {
     pub unsafe fn register_video_surface(
         vdp_surface: *mut core::ffi::c_void,
         flags: u32,
-    ) -> Result<GraphicsResource> {
+    ) -> Result<GraphicsResource> { unsafe {
         let r = runtime()?;
         let cu = r.cuda_graphics_vdpau_register_video_surface()?;
         let mut res: CUgraphicsResource = core::ptr::null_mut();
         check(cu(&mut res, vdp_surface, flags))?;
         Ok(GraphicsResource::from_raw(res))
-    }
+    }}
 
     /// Register a VDPAU output surface.
     ///
@@ -479,13 +479,13 @@ pub mod vdpau {
     pub unsafe fn register_output_surface(
         vdp_surface: *mut core::ffi::c_void,
         flags: u32,
-    ) -> Result<GraphicsResource> {
+    ) -> Result<GraphicsResource> { unsafe {
         let r = runtime()?;
         let cu = r.cuda_graphics_vdpau_register_output_surface()?;
         let mut res: CUgraphicsResource = core::ptr::null_mut();
         check(cu(&mut res, vdp_surface, flags))?;
         Ok(GraphicsResource::from_raw(res))
-    }
+    }}
 }
 
 /// EGL interop — Jetson camera / video pipelines via EGLImage + EGLStream.
@@ -499,13 +499,13 @@ pub mod egl {
     /// # Safety
     ///
     /// `image` must be a live `EGLImageKHR`.
-    pub unsafe fn register_image(image: *mut c_void, flags: u32) -> Result<GraphicsResource> {
+    pub unsafe fn register_image(image: *mut c_void, flags: u32) -> Result<GraphicsResource> { unsafe {
         let r = runtime()?;
         let cu = r.cuda_graphics_egl_register_image()?;
         let mut res: CUgraphicsResource = core::ptr::null_mut();
         check(cu(&mut res, image, flags))?;
         Ok(GraphicsResource::from_raw(res))
-    }
+    }}
 
     /// Fill `egl_frame_out` with the `cudaEglFrame` describing the
     /// mapped resource (YUV planes, RGB surface, etc).
@@ -518,24 +518,24 @@ pub mod egl {
         egl_frame_out: *mut c_void,
         index: u32,
         mip_level: u32,
-    ) -> Result<()> {
+    ) -> Result<()> { unsafe {
         let r = runtime()?;
         let cu = r.cuda_graphics_resource_get_mapped_egl_frame()?;
         check(cu(egl_frame_out, resource.as_raw(), index, mip_level))
-    }
+    }}
 
     /// Wrap an `EGLSyncKHR` as a CUDA event.
     ///
     /// # Safety
     ///
     /// `egl_sync` must be a live `EGLSyncKHR`.
-    pub unsafe fn event_from_sync(egl_sync: *mut c_void, flags: u32) -> Result<cudaEvent_t> {
+    pub unsafe fn event_from_sync(egl_sync: *mut c_void, flags: u32) -> Result<cudaEvent_t> { unsafe {
         let r = runtime()?;
         let cu = r.cuda_event_create_from_egl_sync()?;
         let mut event: cudaEvent_t = core::ptr::null_mut();
         check(cu(&mut event, egl_sync, flags))?;
         Ok(event)
-    }
+    }}
 
     /// Connect CUDA as an EGLStream consumer.
     ///
@@ -546,20 +546,20 @@ pub mod egl {
     pub unsafe fn stream_consumer_connect(
         connection: *mut c_void,
         egl_stream: *mut c_void,
-    ) -> Result<()> {
+    ) -> Result<()> { unsafe {
         let r = runtime()?;
         let cu = r.cuda_egl_stream_consumer_connect()?;
         check(cu(connection, egl_stream))
-    }
+    }}
 
     /// # Safety
     ///
     /// `connection` must be a connected consumer.
-    pub unsafe fn stream_consumer_disconnect(connection: *mut c_void) -> Result<()> {
+    pub unsafe fn stream_consumer_disconnect(connection: *mut c_void) -> Result<()> { unsafe {
         let r = runtime()?;
         let cu = r.cuda_egl_stream_consumer_disconnect()?;
         check(cu(connection))
-    }
+    }}
 
     /// # Safety
     ///
@@ -569,13 +569,13 @@ pub mod egl {
         connection: *mut c_void,
         stream_out: *mut baracuda_cuda_sys::runtime::cudaStream_t,
         timeout: u32,
-    ) -> Result<GraphicsResource> {
+    ) -> Result<GraphicsResource> { unsafe {
         let r = runtime()?;
         let cu = r.cuda_egl_stream_consumer_acquire_frame()?;
         let mut res: CUgraphicsResource = core::ptr::null_mut();
         check(cu(connection, &mut res, stream_out, timeout))?;
         Ok(GraphicsResource::from_raw(res))
-    }
+    }}
 
     /// # Safety
     ///
@@ -584,11 +584,11 @@ pub mod egl {
         connection: *mut c_void,
         resource: &GraphicsResource,
         stream_inout: *mut baracuda_cuda_sys::runtime::cudaStream_t,
-    ) -> Result<()> {
+    ) -> Result<()> { unsafe {
         let r = runtime()?;
         let cu = r.cuda_egl_stream_consumer_release_frame()?;
         check(cu(connection, resource.as_raw(), stream_inout))
-    }
+    }}
 
     /// Connect CUDA as an EGLStream producer.
     ///
@@ -600,20 +600,20 @@ pub mod egl {
         egl_stream: *mut c_void,
         width: i32,
         height: i32,
-    ) -> Result<()> {
+    ) -> Result<()> { unsafe {
         let r = runtime()?;
         let cu = r.cuda_egl_stream_producer_connect()?;
         check(cu(connection, egl_stream, width, height))
-    }
+    }}
 
     /// # Safety
     ///
     /// `connection` must be a connected producer.
-    pub unsafe fn stream_producer_disconnect(connection: *mut c_void) -> Result<()> {
+    pub unsafe fn stream_producer_disconnect(connection: *mut c_void) -> Result<()> { unsafe {
         let r = runtime()?;
         let cu = r.cuda_egl_stream_producer_disconnect()?;
         check(cu(connection))
-    }
+    }}
 
     /// Push a frame to the EGLStream.
     ///
@@ -624,11 +624,11 @@ pub mod egl {
         connection: *mut c_void,
         egl_frame: *mut c_void,
         stream_inout: *mut baracuda_cuda_sys::runtime::cudaStream_t,
-    ) -> Result<()> {
+    ) -> Result<()> { unsafe {
         let r = runtime()?;
         let cu = r.cuda_egl_stream_producer_present_frame()?;
         check(cu(connection, egl_frame, stream_inout))
-    }
+    }}
 
     /// Reclaim a previously-presented frame.
     ///
@@ -639,11 +639,11 @@ pub mod egl {
         connection: *mut c_void,
         egl_frame_out: *mut c_void,
         stream_inout: *mut baracuda_cuda_sys::runtime::cudaStream_t,
-    ) -> Result<()> {
+    ) -> Result<()> { unsafe {
         let r = runtime()?;
         let cu = r.cuda_egl_stream_producer_return_frame()?;
         check(cu(connection, egl_frame_out, stream_inout))
-    }
+    }}
 }
 
 /// NvSci interop — query sync-object attributes CUDA expects from
@@ -671,9 +671,9 @@ pub mod nvsci {
         attr_list: *mut core::ffi::c_void,
         device: &Device,
         direction: i32,
-    ) -> Result<()> {
+    ) -> Result<()> { unsafe {
         let r = runtime()?;
         let cu = r.cuda_device_get_nv_sci_sync_attributes()?;
         check(cu(attr_list, device.ordinal(), direction))
-    }
+    }}
 }

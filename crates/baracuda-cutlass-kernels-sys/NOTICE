@@ -1,0 +1,21 @@
+baracuda-cutlass-kernels-sys
+============================
+
+The CUTLASS template instantiations under `kernels/` derive from NVIDIA's
+CUTLASS examples (https://github.com/NVIDIA/cutlass), licensed under
+BSD 3-Clause. CUTLASS itself is not redistributed — its headers are fetched
+at build time by `baracuda-cutlass-sys`.
+
+The crate's API shape, plan-based architecture, and v0 SKU set
+(`{f16, bf16} × RCR × {sm80, sm90a}` with Identity epilogue, grouped GEMM
+as a first-class op with `prepare`/`run` separation and caller-supplied
+workspace) were specified by the Fuel ML library team during baracuda's
+Phase 4 design review. The Bias epilogue was originally planned but
+removed during round-1 review (advertised but unimplemented); per the
+team's roadmap it returns "after grouped GEMM lands and a real caller
+asks for it." Grouped GEMM landed in 4d as the team's high-priority
+deliverable for MoE workloads.
+
+The build-time kernel-compilation infrastructure is provided by
+`baracuda-forge`, which itself derives from `cudaforge` by Guoqing Bao.
+See `crates/baracuda-forge/NOTICE` for that lineage.

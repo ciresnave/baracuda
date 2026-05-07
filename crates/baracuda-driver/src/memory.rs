@@ -482,18 +482,18 @@ impl<T: DeviceRepr> ManagedBuffer<T> {
     /// 1. No concurrent kernel is writing to this buffer.
     /// 2. On discrete GPUs, a relevant synchronize has been issued since
     ///    the last device-side write.
-    pub unsafe fn as_host_slice(&self) -> &[T] {
+    pub unsafe fn as_host_slice(&self) -> &[T] { unsafe {
         core::slice::from_raw_parts(self.ptr.0 as *const T, self.len)
-    }
+    }}
 
     /// Mutable host view. Same safety rules as [`as_host_slice`](Self::as_host_slice).
     ///
     /// # Safety
     ///
     /// The caller must ensure no concurrent device or host access.
-    pub unsafe fn as_host_slice_mut(&mut self) -> &mut [T] {
+    pub unsafe fn as_host_slice_mut(&mut self) -> &mut [T] { unsafe {
         core::slice::from_raw_parts_mut(self.ptr.0 as *mut T, self.len)
-    }
+    }}
 
     /// Number of elements.
     #[inline]
@@ -677,11 +677,11 @@ pub fn memset_2d_u32(
 ///
 /// Both `dst` and `src` must be CUDA-addressable for at least `bytes`
 /// bytes; ranges must not overlap.
-pub unsafe fn memcpy(dst: CUdeviceptr, src: CUdeviceptr, bytes: usize) -> Result<()> {
+pub unsafe fn memcpy(dst: CUdeviceptr, src: CUdeviceptr, bytes: usize) -> Result<()> { unsafe {
     let d = driver()?;
     let cu = d.cu_memcpy()?;
     check(cu(dst, src, bytes))
-}
+}}
 
 /// Async variant of [`memcpy`] ordered on `stream`.
 ///
@@ -694,11 +694,11 @@ pub unsafe fn memcpy_async(
     src: CUdeviceptr,
     bytes: usize,
     stream: &Stream,
-) -> Result<()> {
+) -> Result<()> { unsafe {
     let d = driver()?;
     let cu = d.cu_memcpy_async()?;
     check(cu(dst, src, bytes, stream.as_raw()))
-}
+}}
 
 // ---- Wave 27: v2 advise/prefetch + VMM reverse lookups ------------------
 
@@ -791,11 +791,11 @@ pub unsafe fn get_handle_for_address_range(
     dptr: CUdeviceptr,
     size: usize,
     handle_type: i32,
-) -> Result<()> {
+) -> Result<()> { unsafe {
     let d = driver()?;
     let cu = d.cu_mem_get_handle_for_address_range()?;
     check(cu(handle_out, dptr, size, handle_type, 0))
-}
+}}
 
 impl<T: DeviceRepr> Drop for DeviceBuffer<T> {
     fn drop(&mut self) {
@@ -922,6 +922,28 @@ impl<'a, T: DeviceRepr> DeviceSliceMut<'a, T> {
             _marker: PhantomData,
         }
     }
+
+    /// Asynchronous H2D copy on `stream`. Mirrors [`DeviceBuffer::copy_from_host_async`]
+    /// for slice views — useful when the destination is a sub-range of a
+    /// larger device buffer (e.g. packing CUTLASS grouped-GEMM metadata
+    /// into a caller-supplied workspace).
+    pub fn copy_from_host_async(&self, src: &[T], stream: &Stream) -> Result<()> {
+        assert_eq!(src.len(), self.len);
+        let bytes = self.len * size_of::<T>();
+        if bytes == 0 {
+            return Ok(());
+        }
+        let d = driver()?;
+        let cu = d.cu_memcpy_htod_async()?;
+        check(unsafe {
+            cu(
+                self.ptr,
+                src.as_ptr() as *const c_void,
+                bytes,
+                stream.as_raw(),
+            )
+        })
+    }
 }
 
 // ============================================================================
@@ -978,6 +1000,14 @@ pub unsafe trait DevicePtr<T: DeviceRepr> {
 /// the pointer's lifetime — e.g. `&mut DeviceBuffer<T>` or
 /// [`DeviceSliceMut<'_, T>`]. This gives the trait the same borrow-checker
 /// properties as `&mut [T]`.
+///
+/// # Safety
+///
+/// Implementors must guarantee that `device_ptr_mut` returns a pointer
+/// that is unique for the duration of the `&mut self` borrow — no other
+/// live pointer may alias it. Violating this lets concurrent kernels
+/// observe writes in any order, breaking the borrow-checker contract
+/// `&mut [T]` is meant to mirror.
 pub unsafe trait DevicePtrMut<T: DeviceRepr>: DevicePtr<T> {
     /// Raw mutable device pointer.
     fn device_ptr_mut(&mut self) -> CUdeviceptr;
@@ -1153,6 +1183,9 @@ mod slice_tests {
 
     #[test]
     #[should_panic(expected = "out of bounds")]
+    #[allow(clippy::reversed_empty_ranges)]
+    // Intentionally inverted: this test verifies that `slice` rejects
+    // start > end with the "out of bounds" panic message.
     fn slice_inverted_range_panics() {
         let s: DeviceSlice<'_, u8> = fake_slice(0, 10);
         let _ = s.slice(5..3);

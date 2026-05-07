@@ -25,7 +25,7 @@ use crate::error::{check, Result};
 /// `value` must match the attribute's expected payload (see NVIDIA's
 /// core-dump attribute table). Passing the wrong type yields undefined
 /// behavior.
-pub unsafe fn set_attribute_raw(attr: i32, value: &mut [u8]) -> Result<()> {
+pub unsafe fn set_attribute_raw(attr: i32, value: &mut [u8]) -> Result<()> { unsafe {
     let d = driver()?;
     let cu = d.cu_coredump_set_attribute()?;
     let mut size = value.len();
@@ -34,14 +34,14 @@ pub unsafe fn set_attribute_raw(attr: i32, value: &mut [u8]) -> Result<()> {
         value.as_mut_ptr() as *mut core::ffi::c_void,
         &mut size,
     ))
-}
+}}
 
 /// Per-context coredump attribute — read a raw byte payload.
 ///
 /// # Safety
 ///
 /// `buf` must be sized for the attribute's value type.
-pub unsafe fn get_attribute_raw(attr: i32, buf: &mut [u8]) -> Result<usize> {
+pub unsafe fn get_attribute_raw(attr: i32, buf: &mut [u8]) -> Result<usize> { unsafe {
     let d = driver()?;
     let cu = d.cu_coredump_get_attribute()?;
     let mut size = buf.len();
@@ -51,7 +51,7 @@ pub unsafe fn get_attribute_raw(attr: i32, buf: &mut [u8]) -> Result<usize> {
         &mut size,
     ))?;
     Ok(size)
-}
+}}
 
 /// Globally enable/disable core-dump generation on exception.
 pub fn set_enable_on_exception(enabled: bool) -> Result<()> {
@@ -74,7 +74,7 @@ pub fn enable_on_exception() -> Result<bool> {
 /// # Safety
 ///
 /// Same discipline as [`set_attribute_raw`].
-pub unsafe fn set_attribute_global_raw(attr: i32, value: &mut [u8]) -> Result<()> {
+pub unsafe fn set_attribute_global_raw(attr: i32, value: &mut [u8]) -> Result<()> { unsafe {
     let d = driver()?;
     let cu = d.cu_coredump_set_attribute_global()?;
     let mut size = value.len();
@@ -83,14 +83,14 @@ pub unsafe fn set_attribute_global_raw(attr: i32, value: &mut [u8]) -> Result<()
         value.as_mut_ptr() as *mut core::ffi::c_void,
         &mut size,
     ))
-}
+}}
 
 /// Global (process-wide) variant of [`get_attribute_raw`].
 ///
 /// # Safety
 ///
 /// `buf` must be sized for the attribute's value type.
-pub unsafe fn get_attribute_global_raw(attr: i32, buf: &mut [u8]) -> Result<usize> {
+pub unsafe fn get_attribute_global_raw(attr: i32, buf: &mut [u8]) -> Result<usize> { unsafe {
     let d = driver()?;
     let cu = d.cu_coredump_get_attribute_global()?;
     let mut size = buf.len();
@@ -100,7 +100,7 @@ pub unsafe fn get_attribute_global_raw(attr: i32, buf: &mut [u8]) -> Result<usiz
         &mut size,
     ))?;
     Ok(size)
-}
+}}
 
 /// `cuFlushGPUDirectRDMAWrites` — flush any outstanding GPUDirect-RDMA
 /// writes to the given scope.

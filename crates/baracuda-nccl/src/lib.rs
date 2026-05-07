@@ -219,13 +219,13 @@ impl Communicator {
         id: UniqueId,
         rank: i32,
         config: *mut core::ffi::c_void,
-    ) -> Result<Self> {
+    ) -> Result<Self> { unsafe {
         let n = nccl()?;
         let cu = n.nccl_comm_init_rank_config()?;
         let mut handle: ncclComm_t = core::ptr::null_mut();
         check(cu(&mut handle, nranks, id.0, rank, config))?;
         Ok(Self { handle })
-    }
+    }}
 
     /// Number of ranks in the communicator.
     pub fn nranks(&self) -> Result<i32> {
@@ -527,24 +527,24 @@ impl Communicator {
         &self,
         dev_ptr: *mut core::ffi::c_void,
         size: usize,
-    ) -> Result<*mut core::ffi::c_void> {
+    ) -> Result<*mut core::ffi::c_void> { unsafe {
         let n = nccl()?;
         let cu = n.nccl_comm_register()?;
         let mut handle: *mut core::ffi::c_void = core::ptr::null_mut();
         check(cu(self.handle, dev_ptr, size, &mut handle))?;
         Ok(handle)
-    }
+    }}
 
     /// Deregister a previously-registered buffer.
     ///
     /// # Safety
     ///
     /// `handle` must come from a [`Self::register`] call on this comm.
-    pub unsafe fn deregister(&self, handle: *mut core::ffi::c_void) -> Result<()> {
+    pub unsafe fn deregister(&self, handle: *mut core::ffi::c_void) -> Result<()> { unsafe {
         let n = nccl()?;
         let cu = n.nccl_comm_deregister()?;
         check(cu(self.handle, handle))
-    }
+    }}
 
     /// Create a custom pre-multiplied-sum reduction op:
     /// `out = sum_i (scalar * x_i)`. Use the returned [`RedOp::Custom`]
@@ -562,13 +562,13 @@ impl Communicator {
         &self,
         scalar: *mut core::ffi::c_void,
         residence: ScalarResidence,
-    ) -> Result<RedOp> {
+    ) -> Result<RedOp> { unsafe {
         let n = nccl()?;
         let cu = n.nccl_red_op_create_pre_mul_sum()?;
         let mut op = ncclRedOp_t(0);
         check(cu(&mut op, scalar, T::raw(), residence as i32, self.handle))?;
         Ok(RedOp::Custom(op.0))
-    }
+    }}
 
     /// Destroy a custom op previously returned by [`Self::create_pre_mul_sum`].
     /// NCCL 2.11+. Calling on a built-in op (Sum/Prod/Max/Min/Avg) is a

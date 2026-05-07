@@ -342,7 +342,7 @@ impl TextureObject {
         res_desc: &cudaResourceDesc,
         tex_desc: &cudaTextureDesc,
         view_desc: Option<&cudaResourceViewDesc>,
-    ) -> Result<Self> {
+    ) -> Result<Self> { unsafe {
         let r = runtime()?;
         let cu = r.cuda_create_texture_object()?;
         let mut obj: cudaTextureObject_t = 0;
@@ -359,7 +359,7 @@ impl TextureObject {
             handle: obj,
             _backing: None,
         })
-    }
+    }}
 
     #[inline]
     pub fn as_raw(&self) -> cudaTextureObject_t {

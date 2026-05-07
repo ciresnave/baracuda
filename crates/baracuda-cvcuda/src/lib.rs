@@ -151,7 +151,7 @@ impl Resize {
         input: &Tensor,
         output: &Tensor,
         interp: Interpolation,
-    ) -> Result<()> {
+    ) -> Result<()> { unsafe {
         let c = cvcuda()?;
         let cu = c.resize_submit()?;
         check(cu(
@@ -161,7 +161,7 @@ impl Resize {
             output.as_raw(),
             interp.raw(),
         ))
-    }
+    }}
 }
 
 /// Color-conversion operator.
@@ -193,7 +193,7 @@ impl CvtColor {
         input: &Tensor,
         output: &Tensor,
         code: i32,
-    ) -> Result<()> {
+    ) -> Result<()> { unsafe {
         let c = cvcuda()?;
         let cu = c.cvt_color_submit()?;
         check(cu(
@@ -203,7 +203,7 @@ impl CvtColor {
             output.as_raw(),
             code,
         ))
-    }
+    }}
 }
 
 /// Convert-to operator (`output = alpha * input + beta`, with dtype change).
@@ -235,7 +235,7 @@ impl ConvertTo {
         output: &Tensor,
         alpha: f64,
         beta: f64,
-    ) -> Result<()> {
+    ) -> Result<()> { unsafe {
         let c = cvcuda()?;
         let cu = c.convert_to_submit()?;
         check(cu(
@@ -246,7 +246,7 @@ impl ConvertTo {
             alpha,
             beta,
         ))
-    }
+    }}
 }
 
 /// Flip operator. `flip_code`: 0 = vertical, 1 = horizontal, -1 = both.
@@ -275,7 +275,7 @@ impl Flip {
         input: &Tensor,
         output: &Tensor,
         flip_code: i32,
-    ) -> Result<()> {
+    ) -> Result<()> { unsafe {
         let c = cvcuda()?;
         let cu = c.flip_submit()?;
         check(cu(
@@ -285,7 +285,7 @@ impl Flip {
             output.as_raw(),
             flip_code,
         ))
-    }
+    }}
 }
 
 /// Normalize operator (ML pre-processing: `(x - base) * scale` + tweaks).
@@ -322,7 +322,7 @@ impl Normalize {
         shift: f32,
         epsilon: f32,
         flags: u32,
-    ) -> Result<()> {
+    ) -> Result<()> { unsafe {
         let c = cvcuda()?;
         let cu = c.normalize_submit()?;
         check(cu(
@@ -337,7 +337,7 @@ impl Normalize {
             epsilon,
             flags,
         ))
-    }
+    }}
 }
 
 // ------------------------------------------------------------------
@@ -414,7 +414,7 @@ impl PillowResize {
         input: &Tensor,
         output: &Tensor,
         interp: Interpolation,
-    ) -> Result<()> {
+    ) -> Result<()> { unsafe {
         let c = cvcuda()?;
         let cu = c.pillow_resize_submit()?;
         check(cu(
@@ -424,7 +424,7 @@ impl PillowResize {
             output.as_raw(),
             interp.raw(),
         ))
-    }
+    }}
 }
 
 simple_op! {
@@ -450,7 +450,7 @@ impl WarpAffine {
         flags: i32,
         border_mode: i32,
         border_value: &[f32; 4],
-    ) -> Result<()> {
+    ) -> Result<()> { unsafe {
         let c = cvcuda()?;
         let cu = c.warp_affine_submit()?;
         check(cu(
@@ -463,7 +463,7 @@ impl WarpAffine {
             border_mode,
             border_value.as_ptr(),
         ))
-    }
+    }}
 }
 
 simple_op! {
@@ -485,7 +485,7 @@ impl WarpPerspective {
         flags: i32,
         border_mode: i32,
         border_value: &[f32; 4],
-    ) -> Result<()> {
+    ) -> Result<()> { unsafe {
         let c = cvcuda()?;
         let cu = c.warp_perspective_submit()?;
         check(cu(
@@ -498,7 +498,7 @@ impl WarpPerspective {
             border_mode,
             border_value.as_ptr(),
         ))
-    }
+    }}
 }
 
 simple_op! {
@@ -523,7 +523,7 @@ impl Remap {
         align_corners: bool,
         border_mode: i32,
         border_value: &[f32; 4],
-    ) -> Result<()> {
+    ) -> Result<()> { unsafe {
         let c = cvcuda()?;
         let cu = c.remap_submit()?;
         check(cu(
@@ -539,7 +539,7 @@ impl Remap {
             border_mode,
             border_value.as_ptr(),
         ))
-    }
+    }}
 }
 
 simple_op! {
@@ -559,7 +559,7 @@ impl Rotate {
         angle_deg: f64,
         shift: &[f64; 2],
         interp: Interpolation,
-    ) -> Result<()> {
+    ) -> Result<()> { unsafe {
         let c = cvcuda()?;
         let cu = c.rotate_submit()?;
         check(cu(
@@ -571,7 +571,7 @@ impl Rotate {
             shift.as_ptr(),
             interp.raw(),
         ))
-    }
+    }}
 }
 
 simple_op! {
@@ -589,7 +589,7 @@ impl CenterCrop {
         input: &Tensor,
         output: &Tensor,
         crop_size: NVCVSize2D,
-    ) -> Result<()> {
+    ) -> Result<()> { unsafe {
         let c = cvcuda()?;
         let cu = c.center_crop_submit()?;
         check(cu(
@@ -599,7 +599,7 @@ impl CenterCrop {
             output.as_raw(),
             crop_size,
         ))
-    }
+    }}
 }
 
 simple_op! {
@@ -619,7 +619,7 @@ impl CustomCrop {
         input: &Tensor,
         output: &Tensor,
         rect: &[i32; 4],
-    ) -> Result<()> {
+    ) -> Result<()> { unsafe {
         let c = cvcuda()?;
         let cu = c.custom_crop_submit()?;
         check(cu(
@@ -629,7 +629,7 @@ impl CustomCrop {
             output.as_raw(),
             rect.as_ptr(),
         ))
-    }
+    }}
 }
 
 simple_op! {
@@ -651,7 +651,7 @@ impl CopyMakeBorder {
         left: i32,
         border_mode: i32,
         border_value: &[f32; 4],
-    ) -> Result<()> {
+    ) -> Result<()> { unsafe {
         let c = cvcuda()?;
         let cu = c.copy_make_border_submit()?;
         check(cu(
@@ -664,7 +664,7 @@ impl CopyMakeBorder {
             border_mode,
             border_value.as_ptr(),
         ))
-    }
+    }}
 }
 
 simple_op! {
@@ -681,11 +681,11 @@ impl Reformat {
         stream: *mut c_void,
         input: &Tensor,
         output: &Tensor,
-    ) -> Result<()> {
+    ) -> Result<()> { unsafe {
         let c = cvcuda()?;
         let cu = c.reformat_submit()?;
         check(cu(self.raw(), stream, input.as_raw(), output.as_raw()))
-    }
+    }}
 }
 
 // ---------------------- Filters ----------------------
@@ -707,7 +707,7 @@ impl Gaussian {
         kernel_size: NVCVSize2D,
         sigma: NVCVFloat2,
         border_mode: i32,
-    ) -> Result<()> {
+    ) -> Result<()> { unsafe {
         let c = cvcuda()?;
         let cu = c.gaussian_submit()?;
         check(cu(
@@ -719,7 +719,7 @@ impl Gaussian {
             sigma,
             border_mode,
         ))
-    }
+    }}
 }
 
 simple_op! {
@@ -737,7 +737,7 @@ impl MedianBlur {
         input: &Tensor,
         output: &Tensor,
         kernel_size: NVCVSize2D,
-    ) -> Result<()> {
+    ) -> Result<()> { unsafe {
         let c = cvcuda()?;
         let cu = c.median_blur_submit()?;
         check(cu(
@@ -747,7 +747,7 @@ impl MedianBlur {
             output.as_raw(),
             kernel_size,
         ))
-    }
+    }}
 }
 
 simple_op! {
@@ -768,7 +768,7 @@ impl AverageBlur {
         kernel_size: NVCVSize2D,
         anchor: NVCVSize2D,
         border_mode: i32,
-    ) -> Result<()> {
+    ) -> Result<()> { unsafe {
         let c = cvcuda()?;
         let cu = c.average_blur_submit()?;
         check(cu(
@@ -780,7 +780,7 @@ impl AverageBlur {
             anchor,
             border_mode,
         ))
-    }
+    }}
 }
 
 simple_op! {
@@ -800,7 +800,7 @@ impl Laplacian {
         ksize: i32,
         scale: f32,
         border_mode: i32,
-    ) -> Result<()> {
+    ) -> Result<()> { unsafe {
         let c = cvcuda()?;
         let cu = c.laplacian_submit()?;
         check(cu(
@@ -812,7 +812,7 @@ impl Laplacian {
             scale,
             border_mode,
         ))
-    }
+    }}
 }
 
 simple_op! {
@@ -834,7 +834,7 @@ impl BilateralFilter {
         sigma_color: f32,
         sigma_space: f32,
         border_mode: i32,
-    ) -> Result<()> {
+    ) -> Result<()> { unsafe {
         let c = cvcuda()?;
         let cu = c.bilateral_filter_submit()?;
         check(cu(
@@ -847,7 +847,7 @@ impl BilateralFilter {
             sigma_space,
             border_mode,
         ))
-    }
+    }}
 }
 
 simple_op! {
@@ -867,7 +867,7 @@ impl MotionBlur {
         kernel_size: NVCVSize2D,
         angle: f32,
         border_mode: i32,
-    ) -> Result<()> {
+    ) -> Result<()> { unsafe {
         let c = cvcuda()?;
         let cu = c.motion_blur_submit()?;
         check(cu(
@@ -879,7 +879,7 @@ impl MotionBlur {
             angle,
             border_mode,
         ))
-    }
+    }}
 }
 
 simple_op! {
@@ -899,7 +899,7 @@ impl Conv2D {
         kernel: &Tensor,
         anchor: NVCVSize2D,
         border_mode: i32,
-    ) -> Result<()> {
+    ) -> Result<()> { unsafe {
         let c = cvcuda()?;
         let cu = c.conv2d_submit()?;
         check(cu(
@@ -911,7 +911,7 @@ impl Conv2D {
             anchor,
             border_mode,
         ))
-    }
+    }}
 }
 
 simple_op! {
@@ -932,7 +932,7 @@ impl BoxFilter {
         kernel_size: NVCVSize2D,
         anchor: NVCVSize2D,
         border_mode: i32,
-    ) -> Result<()> {
+    ) -> Result<()> { unsafe {
         let c = cvcuda()?;
         let cu = c.box_filter_submit()?;
         check(cu(
@@ -944,7 +944,7 @@ impl BoxFilter {
             anchor,
             border_mode,
         ))
-    }
+    }}
 }
 
 // ---------------------- Morphology ----------------------
@@ -970,7 +970,7 @@ impl Morphology {
         anchor: NVCVSize2D,
         iteration: i32,
         border_mode: i32,
-    ) -> Result<()> {
+    ) -> Result<()> { unsafe {
         let c = cvcuda()?;
         let cu = c.morphology_submit()?;
         check(cu(
@@ -985,7 +985,7 @@ impl Morphology {
             iteration,
             border_mode,
         ))
-    }
+    }}
 }
 
 // ---------------------- Edge / Stat ----------------------
@@ -1009,7 +1009,7 @@ impl Canny {
         threshold_high: f64,
         aperture_size: i32,
         l2_gradient: bool,
-    ) -> Result<()> {
+    ) -> Result<()> { unsafe {
         let c = cvcuda()?;
         let cu = c.canny_submit()?;
         check(cu(
@@ -1022,7 +1022,7 @@ impl Canny {
             aperture_size,
             l2_gradient,
         ))
-    }
+    }}
 }
 
 simple_op! {
@@ -1040,7 +1040,7 @@ impl Histogram {
         input: &Tensor,
         mask: &Tensor,
         histogram: &Tensor,
-    ) -> Result<()> {
+    ) -> Result<()> { unsafe {
         let c = cvcuda()?;
         let cu = c.histogram_submit()?;
         check(cu(
@@ -1050,7 +1050,7 @@ impl Histogram {
             mask.as_raw(),
             histogram.as_raw(),
         ))
-    }
+    }}
 }
 
 simple_op! {
@@ -1067,11 +1067,11 @@ impl HistogramEq {
         stream: *mut c_void,
         input: &Tensor,
         output: &Tensor,
-    ) -> Result<()> {
+    ) -> Result<()> { unsafe {
         let c = cvcuda()?;
         let cu = c.histogram_eq_submit()?;
         check(cu(self.raw(), stream, input.as_raw(), output.as_raw()))
-    }
+    }}
 }
 
 simple_op! {
@@ -1094,7 +1094,7 @@ impl MinMaxLoc {
         max_val: &Tensor,
         max_loc: &Tensor,
         num_max: &Tensor,
-    ) -> Result<()> {
+    ) -> Result<()> { unsafe {
         let c = cvcuda()?;
         let cu = c.min_max_loc_submit()?;
         check(cu(
@@ -1108,7 +1108,7 @@ impl MinMaxLoc {
             max_loc.as_raw(),
             num_max.as_raw(),
         ))
-    }
+    }}
 }
 
 // ---------------------- Thresholds ----------------------
@@ -1140,7 +1140,7 @@ impl Threshold {
         output: &Tensor,
         thresh: &Tensor,
         maxval: &Tensor,
-    ) -> Result<()> {
+    ) -> Result<()> { unsafe {
         let c = cvcuda()?;
         let cu = c.threshold_submit()?;
         check(cu(
@@ -1151,7 +1151,7 @@ impl Threshold {
             thresh.as_raw(),
             maxval.as_raw(),
         ))
-    }
+    }}
 }
 
 /// Adaptive threshold operator.
@@ -1185,7 +1185,7 @@ impl AdaptiveThreshold {
         threshold_type: u32,
         block_size: i32,
         c_scalar: f64,
-    ) -> Result<()> {
+    ) -> Result<()> { unsafe {
         let lib = cvcuda()?;
         let cu = lib.adaptive_threshold_submit()?;
         check(cu(
@@ -1199,7 +1199,7 @@ impl AdaptiveThreshold {
             block_size,
             c_scalar,
         ))
-    }
+    }}
 }
 
 // ---------------------- Color ----------------------
@@ -1219,7 +1219,7 @@ impl ColorTwist {
         input: &Tensor,
         output: &Tensor,
         twist: &Tensor,
-    ) -> Result<()> {
+    ) -> Result<()> { unsafe {
         let c = cvcuda()?;
         let cu = c.color_twist_submit()?;
         check(cu(
@@ -1229,7 +1229,7 @@ impl ColorTwist {
             output.as_raw(),
             twist.as_raw(),
         ))
-    }
+    }}
 }
 
 simple_op! {
@@ -1251,7 +1251,7 @@ impl BrightnessContrast {
         contrast: &Tensor,
         brightness_shift: &Tensor,
         contrast_center: &Tensor,
-    ) -> Result<()> {
+    ) -> Result<()> { unsafe {
         let c = cvcuda()?;
         let cu = c.brightness_contrast_submit()?;
         check(cu(
@@ -1264,7 +1264,7 @@ impl BrightnessContrast {
             brightness_shift.as_raw(),
             contrast_center.as_raw(),
         ))
-    }
+    }}
 }
 
 /// Gamma-correction operator.
@@ -1293,7 +1293,7 @@ impl GammaContrast {
         input: &Tensor,
         output: &Tensor,
         gamma: &Tensor,
-    ) -> Result<()> {
+    ) -> Result<()> { unsafe {
         let c = cvcuda()?;
         let cu = c.gamma_contrast_submit()?;
         check(cu(
@@ -1303,7 +1303,7 @@ impl GammaContrast {
             output.as_raw(),
             gamma.as_raw(),
         ))
-    }
+    }}
 }
 
 // ---------------------- Composite / channel ----------------------
@@ -1324,7 +1324,7 @@ impl Composite {
         background: &Tensor,
         fg_mask: &Tensor,
         output: &Tensor,
-    ) -> Result<()> {
+    ) -> Result<()> { unsafe {
         let c = cvcuda()?;
         let cu = c.composite_submit()?;
         check(cu(
@@ -1335,7 +1335,7 @@ impl Composite {
             fg_mask.as_raw(),
             output.as_raw(),
         ))
-    }
+    }}
 }
 
 simple_op! {
@@ -1352,11 +1352,11 @@ impl Stack {
         stream: *mut c_void,
         input_batch: *mut c_void,
         output: &Tensor,
-    ) -> Result<()> {
+    ) -> Result<()> { unsafe {
         let c = cvcuda()?;
         let cu = c.stack_submit()?;
         check(cu(self.raw(), stream, input_batch, output.as_raw()))
-    }
+    }}
 }
 
 simple_op! {
@@ -1374,7 +1374,7 @@ impl ChannelReorder {
         input: &Tensor,
         output: &Tensor,
         order: &[i32],
-    ) -> Result<()> {
+    ) -> Result<()> { unsafe {
         let c = cvcuda()?;
         let cu = c.channel_reorder_submit()?;
         check(cu(
@@ -1385,7 +1385,7 @@ impl ChannelReorder {
             order.as_ptr(),
             order.len() as i32,
         ))
-    }
+    }}
 }
 
 // ---------------------- Misc ----------------------
@@ -1423,7 +1423,7 @@ impl Erase {
         random: bool,
         seed: u32,
         inplace: bool,
-    ) -> Result<()> {
+    ) -> Result<()> { unsafe {
         let c = cvcuda()?;
         let cu = c.erase_submit()?;
         check(cu(
@@ -1439,7 +1439,7 @@ impl Erase {
             seed,
             inplace,
         ))
-    }
+    }}
 }
 
 /// Mask-based inpainting.
@@ -1469,7 +1469,7 @@ impl Inpaint {
         masks: &Tensor,
         output: &Tensor,
         inpaint_radius: f64,
-    ) -> Result<()> {
+    ) -> Result<()> { unsafe {
         let c = cvcuda()?;
         let cu = c.inpaint_submit()?;
         check(cu(
@@ -1480,7 +1480,7 @@ impl Inpaint {
             output.as_raw(),
             inpaint_radius,
         ))
-    }
+    }}
 }
 
 simple_op! {
@@ -1502,7 +1502,7 @@ impl AddWeighted {
         beta: f64,
         gamma: f64,
         output: &Tensor,
-    ) -> Result<()> {
+    ) -> Result<()> { unsafe {
         let c = cvcuda()?;
         let cu = c.add_weighted_submit()?;
         check(cu(
@@ -1515,7 +1515,7 @@ impl AddWeighted {
             gamma,
             output.as_raw(),
         ))
-    }
+    }}
 }
 
 simple_op! {
@@ -1535,7 +1535,7 @@ impl NonMaxSuppression {
         scores: &Tensor,
         score_threshold: f32,
         iou_threshold: f32,
-    ) -> Result<()> {
+    ) -> Result<()> { unsafe {
         let c = cvcuda()?;
         let cu = c.non_max_suppression_submit()?;
         check(cu(
@@ -1547,7 +1547,7 @@ impl NonMaxSuppression {
             score_threshold,
             iou_threshold,
         ))
-    }
+    }}
 }
 
 /// PadAndStack — pad a VarShape batch into a fixed-shape tensor.
@@ -1575,7 +1575,7 @@ impl PadAndStack {
         left: &Tensor,
         border_mode: i32,
         border_value: f32,
-    ) -> Result<()> {
+    ) -> Result<()> { unsafe {
         let c = cvcuda()?;
         let cu = c.pad_and_stack_submit()?;
         check(cu(
@@ -1588,7 +1588,7 @@ impl PadAndStack {
             border_mode,
             border_value,
         ))
-    }
+    }}
 }
 
 // ------------------------------------------------------------------
@@ -1614,7 +1614,7 @@ impl Pad {
         left: i32,
         border_mode: i32,
         border_value: &[f32; 4],
-    ) -> Result<()> {
+    ) -> Result<()> { unsafe {
         let c = cvcuda()?;
         let cu = c.pad_submit()?;
         check(cu(
@@ -1627,7 +1627,7 @@ impl Pad {
             border_mode,
             border_value.as_ptr(),
         ))
-    }
+    }}
 }
 
 simple_op! {
@@ -1651,7 +1651,7 @@ impl JointBilateralFilter {
         sigma_color: f32,
         sigma_space: f32,
         border_mode: i32,
-    ) -> Result<()> {
+    ) -> Result<()> { unsafe {
         let c = cvcuda()?;
         let cu = c.joint_bilateral_filter_submit()?;
         check(cu(
@@ -1665,7 +1665,7 @@ impl JointBilateralFilter {
             sigma_space,
             border_mode,
         ))
-    }
+    }}
 }
 
 /// Connected-component labeling.
@@ -1708,7 +1708,7 @@ impl Label {
         connectivity: i32,
         assign_labels: i32,
         mask_type: i32,
-    ) -> Result<()> {
+    ) -> Result<()> { unsafe {
         let c = cvcuda()?;
         let cu = c.label_submit()?;
         check(cu(
@@ -1727,7 +1727,7 @@ impl Label {
             assign_labels,
             mask_type,
         ))
-    }
+    }}
 }
 
 /// Find contours of binary regions.
@@ -1756,7 +1756,7 @@ impl FindContours {
         input: &Tensor,
         points: &Tensor,
         num_points: &Tensor,
-    ) -> Result<()> {
+    ) -> Result<()> { unsafe {
         let c = cvcuda()?;
         let cu = c.find_contours_submit()?;
         check(cu(
@@ -1766,7 +1766,7 @@ impl FindContours {
             points.as_raw(),
             num_points.as_raw(),
         ))
-    }
+    }}
 }
 
 /// Minimum-area rectangle around each contour.
@@ -1796,7 +1796,7 @@ impl MinAreaRect {
         output: &Tensor,
         num_points_in_contour: &Tensor,
         total_contours: i32,
-    ) -> Result<()> {
+    ) -> Result<()> { unsafe {
         let c = cvcuda()?;
         let cu = c.min_area_rect_submit()?;
         check(cu(
@@ -1807,7 +1807,7 @@ impl MinAreaRect {
             num_points_in_contour.as_raw(),
             total_contours,
         ))
-    }
+    }}
 }
 
 simple_op! {
@@ -1829,7 +1829,7 @@ impl BndBox {
         input: &Tensor,
         output: &Tensor,
         bboxes: *const c_void,
-    ) -> Result<()> {
+    ) -> Result<()> { unsafe {
         let c = cvcuda()?;
         let cu = c.bndbox_submit()?;
         check(cu(
@@ -1839,7 +1839,7 @@ impl BndBox {
             output.as_raw(),
             bboxes,
         ))
-    }
+    }}
 }
 
 simple_op! {
@@ -1859,7 +1859,7 @@ impl Osd {
         input: &Tensor,
         output: &Tensor,
         elements: *const c_void,
-    ) -> Result<()> {
+    ) -> Result<()> { unsafe {
         let c = cvcuda()?;
         let cu = c.osd_submit()?;
         check(cu(
@@ -1869,7 +1869,7 @@ impl Osd {
             output.as_raw(),
             elements,
         ))
-    }
+    }}
 }
 
 /// Random-resized-crop — the PyTorch-style augmentation.
@@ -1916,7 +1916,7 @@ impl RandomResizedCrop {
         input: &Tensor,
         output: &Tensor,
         interp: Interpolation,
-    ) -> Result<()> {
+    ) -> Result<()> { unsafe {
         let c = cvcuda()?;
         let cu = c.random_resized_crop_submit()?;
         check(cu(
@@ -1926,7 +1926,7 @@ impl RandomResizedCrop {
             output.as_raw(),
             interp.raw(),
         ))
-    }
+    }}
 }
 
 /// Gaussian noise.
@@ -1959,7 +1959,7 @@ impl GaussianNoise {
         sigma: &Tensor,
         per_channel: bool,
         seed: u64,
-    ) -> Result<()> {
+    ) -> Result<()> { unsafe {
         let c = cvcuda()?;
         let cu = c.gaussian_noise_submit()?;
         check(cu(
@@ -1972,7 +1972,7 @@ impl GaussianNoise {
             per_channel,
             seed,
         ))
-    }
+    }}
 }
 
 /// Rhomboid noise.
@@ -2002,7 +2002,7 @@ impl RhomboidNoise {
         output: &Tensor,
         beta: &Tensor,
         seed: u64,
-    ) -> Result<()> {
+    ) -> Result<()> { unsafe {
         let c = cvcuda()?;
         let cu = c.rhomboid_noise_submit()?;
         check(cu(
@@ -2013,7 +2013,7 @@ impl RhomboidNoise {
             beta.as_raw(),
             seed,
         ))
-    }
+    }}
 }
 
 /// Salt-and-pepper noise.
@@ -2046,7 +2046,7 @@ impl SaltAndPepperNoise {
         pepper_prob: &Tensor,
         per_channel: bool,
         seed: u64,
-    ) -> Result<()> {
+    ) -> Result<()> { unsafe {
         let c = cvcuda()?;
         let cu = c.salt_and_pepper_noise_submit()?;
         check(cu(
@@ -2059,7 +2059,7 @@ impl SaltAndPepperNoise {
             per_channel,
             seed,
         ))
-    }
+    }}
 }
 
 simple_op! {
@@ -2078,7 +2078,7 @@ impl AdvCvtColor {
         output: &Tensor,
         code: i32,
         spec: i32,
-    ) -> Result<()> {
+    ) -> Result<()> { unsafe {
         let c = cvcuda()?;
         let cu = c.adv_cvt_color_submit()?;
         check(cu(
@@ -2089,7 +2089,7 @@ impl AdvCvtColor {
             code,
             spec,
         ))
-    }
+    }}
 }
 
 /// SIFT — scale-invariant feature transform keypoint extractor.
@@ -2146,7 +2146,7 @@ impl Sift {
         edge_threshold: f32,
         init_sigma: f32,
         flags: i32,
-    ) -> Result<()> {
+    ) -> Result<()> { unsafe {
         let c = cvcuda()?;
         let cu = c.sift_submit()?;
         check(cu(
@@ -2163,7 +2163,7 @@ impl Sift {
             init_sigma,
             flags,
         ))
-    }
+    }}
 }
 
 simple_op! {
@@ -2185,7 +2185,7 @@ impl HQResize {
         mag_interp: Interpolation,
         antialias: bool,
         roi: *const c_void,
-    ) -> Result<()> {
+    ) -> Result<()> { unsafe {
         let c = cvcuda()?;
         let cu = c.hq_resize_submit()?;
         check(cu(
@@ -2198,7 +2198,7 @@ impl HQResize {
             antialias,
             roi,
         ))
-    }
+    }}
 }
 
 // ------------------------------------------------------------------
@@ -2230,7 +2230,7 @@ impl CropFlipNormalizeReformat {
         shift: f32,
         epsilon: f32,
         flags: u32,
-    ) -> Result<()> {
+    ) -> Result<()> { unsafe {
         let c = cvcuda()?;
         let cu = c.crop_flip_normalize_reformat_submit()?;
         check(cu(
@@ -2248,7 +2248,7 @@ impl CropFlipNormalizeReformat {
             epsilon,
             flags,
         ))
-    }
+    }}
 }
 
 simple_op! {
@@ -2271,7 +2271,7 @@ impl GuidedFilter {
         radius: i32,
         eps: f32,
         border_mode: i32,
-    ) -> Result<()> {
+    ) -> Result<()> { unsafe {
         let c = cvcuda()?;
         let cu = c.guided_filter_submit()?;
         check(cu(
@@ -2284,7 +2284,7 @@ impl GuidedFilter {
             eps,
             border_mode,
         ))
-    }
+    }}
 }
 
 /// Pairwise feature-descriptor matcher (e.g. for SIFT output).
@@ -2322,7 +2322,7 @@ impl PairwiseMatcher {
         cross_check: bool,
         match_per_point: i32,
         norm_type: i32,
-    ) -> Result<()> {
+    ) -> Result<()> { unsafe {
         let c = cvcuda()?;
         let cu = c.pairwise_matcher_submit()?;
         check(cu(
@@ -2339,7 +2339,7 @@ impl PairwiseMatcher {
             match_per_point,
             norm_type,
         ))
-    }
+    }}
 }
 
 simple_op! {
@@ -2357,7 +2357,7 @@ impl HausdorffDistance {
         set1: &Tensor,
         set2: &Tensor,
         output: &Tensor,
-    ) -> Result<()> {
+    ) -> Result<()> { unsafe {
         let c = cvcuda()?;
         let cu = c.hausdorff_distance_submit()?;
         check(cu(
@@ -2367,7 +2367,7 @@ impl HausdorffDistance {
             set2.as_raw(),
             output.as_raw(),
         ))
-    }
+    }}
 }
 
 simple_op! {
@@ -2395,7 +2395,7 @@ impl ResizeCropConvertReformat {
         offset: f32,
         cast_to_f32: bool,
         src_cast_to_f32: bool,
-    ) -> Result<()> {
+    ) -> Result<()> { unsafe {
         let c = cvcuda()?;
         let cu = c.resize_crop_convert_reformat_submit()?;
         check(cu(
@@ -2412,7 +2412,7 @@ impl ResizeCropConvertReformat {
             cast_to_f32,
             src_cast_to_f32,
         ))
-    }
+    }}
 }
 
 simple_op! {
@@ -2435,7 +2435,7 @@ impl RotateBatch {
         angle_deg: &Tensor,
         shift: &Tensor,
         interp: Interpolation,
-    ) -> Result<()> {
+    ) -> Result<()> { unsafe {
         let c = cvcuda()?;
         let cu = c.rotate_batch_submit()?;
         check(cu(
@@ -2447,7 +2447,7 @@ impl RotateBatch {
             shift.as_raw(),
             interp.raw(),
         ))
-    }
+    }}
 }
 
 simple_op! {
@@ -2471,7 +2471,7 @@ impl WarpAffineBatch {
         flags: i32,
         border_mode: i32,
         border_value: &[f32; 4],
-    ) -> Result<()> {
+    ) -> Result<()> { unsafe {
         let c = cvcuda()?;
         let cu = c.warp_affine_batch_submit()?;
         check(cu(
@@ -2484,7 +2484,7 @@ impl WarpAffineBatch {
             border_mode,
             border_value.as_ptr(),
         ))
-    }
+    }}
 }
 
 simple_op! {
@@ -2502,7 +2502,7 @@ impl ResizeVarShape {
         input_batch: *mut c_void,
         output_batch: *mut c_void,
         interp: Interpolation,
-    ) -> Result<()> {
+    ) -> Result<()> { unsafe {
         let c = cvcuda()?;
         let cu = c.resize_var_shape_submit()?;
         check(cu(
@@ -2512,5 +2512,5 @@ impl ResizeVarShape {
             output_batch,
             interp.raw(),
         ))
-    }
+    }}
 }

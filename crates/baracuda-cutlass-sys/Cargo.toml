@@ -1,0 +1,27 @@
+[package]
+name = "baracuda-cutlass-sys"
+version = "0.0.1-alpha.6"
+description = "Header acquisition for NVIDIA CUTLASS as a baracuda workspace dependency. Sparse-checkout fetch with file-locked caching; emits cargo:include for downstream build.rs consumers."
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords = ["cuda", "cutlass", "gpu", "ffi", "headers"]
+categories = ["external-ffi-bindings", "science"]
+links = "cutlass"
+build = "build.rs"
+# Same belt-and-suspenders profraw exclude as the other cutlass crates.
+exclude = ["*.profraw", "target/"]
+
+[features]
+default = []
+# Pin CUTLASS to the 2.11.x line that supports CUDA 11.4. Without this
+# feature, baracuda-cutlass-sys defaults to CUTLASS 4.x (CUDA 12+).
+cutlass-2-11 = []
+
+[dependencies]
+
+[build-dependencies]
+fs2 = "0.4"

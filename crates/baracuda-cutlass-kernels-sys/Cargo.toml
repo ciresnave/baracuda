@@ -1,0 +1,50 @@
+[package]
+name = "baracuda-cutlass-kernels-sys"
+version = "0.0.1-alpha.6"
+description = "Compiled CUTLASS template instantiations for the baracuda ecosystem. Hosts curated .cu kernel sources, builds them via baracuda-forge, exposes extern \"C\" entry points for the safe baracuda-cutlass crate."
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords = ["cuda", "cutlass", "gemm", "kernel", "ffi"]
+categories = ["external-ffi-bindings", "science"]
+links = "baracuda_cutlass_kernels"
+build = "build.rs"
+# Belt-and-suspenders: even though .gitignore catches these, cargo's
+# packager has been observed to include `.profraw` coverage files
+# (instrumented test runs leave them in the crate dir). Explicit exclude
+# guarantees they never ship to crates.io.
+exclude = ["*.profraw", "target/"]
+
+[features]
+# Default to Ampere (sm_80) — runs on Ampere, Ada (RTX 40-series), and as
+# forward-compatible fallback on Hopper if `sm90a` isn't enabled.
+default = ["sm80"]
+
+# Build the sm_80 (Ampere / Ada) kernel set.
+sm80 = []
+
+# Build the sm_90a (Hopper async) kernel set. Mutually exclusive with
+# `cutlass-2-11`: Hopper-specialized kernels live on the CUTLASS 4.x line.
+sm90a = []
+
+# Pin the upstream CUTLASS headers to the CUDA-11.4-compatible 2.11 line.
+# Mutually exclusive with `sm90a`. Forwards to baracuda-cutlass-sys's
+# feature of the same name.
+cutlass-2-11 = ["baracuda-cutlass-sys/cutlass-2-11"]
+
+[dependencies]
+# Re-export the headers crate so consumers don't have to add it themselves.
+baracuda-cutlass-sys = { workspace = true }
+
+[build-dependencies]
+baracuda-forge = { workspace = true }
+
+# docs.rs uses --all-features by default, which would enable both `sm90a`
+# and `cutlass-2-11` — those are mutually exclusive (build.rs panics).
+# Tell docs.rs to use only the default `sm80` feature.
+[package.metadata.docs.rs]
+features = ["sm80"]
+no-default-features = false

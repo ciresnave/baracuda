@@ -54,6 +54,23 @@
 //! [`types`] (always available, no feature flag) exposes `Half`,
 //! `BFloat16`, `Complex32`, `Complex64`, `DeviceRepr`, `CudaVersion`,
 //! etc. — the types shared across every safe crate.
+//!
+//! # Building your own kernels
+//!
+//! `baracuda` wraps the runtime side of CUDA — *launching* kernels, managing
+//! memory, calling library APIs. To *compile* your own `.cu` files into a
+//! linkable library or PTX from `build.rs`, add the sibling crate
+//! `baracuda-forge` to your `[build-dependencies]`. It handles nvcc
+//! invocation, incremental rebuilds, parallel compilation, and CUTLASS
+//! integration.
+//!
+//! # Acknowledgments
+//!
+//! `baracuda-forge` is a vendored fork of [`cudaforge`] by Guoqing Bao,
+//! adapted to baracuda's workspace conventions. Big thanks to Guoqing for
+//! releasing cudaforge under permissive terms.
+//!
+//! [`cudaforge`]: https://github.com/guoqingbao/cudaforge
 
 #![warn(missing_debug_implementations)]
 

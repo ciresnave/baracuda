@@ -104,7 +104,7 @@ macro_rules! real_impl {
                 beta: &$t,
                 c: *mut $t,
                 ldc: usize,
-            ) -> cublasStatus_t {
+            ) -> cublasStatus_t { unsafe {
                 match cublas().and_then(|c| c.$xt()) {
                     Ok(f) => f(
                         h,
@@ -124,7 +124,7 @@ macro_rules! real_impl {
                     ),
                     Err(_) => cublasStatus_t::NOT_INITIALIZED,
                 }
-            }
+            }}
         }
     };
 }
@@ -147,7 +147,7 @@ macro_rules! complex_impl {
                 beta: &$t,
                 c: *mut $t,
                 ldc: usize,
-            ) -> cublasStatus_t {
+            ) -> cublasStatus_t { unsafe {
                 match cublas().and_then(|c| c.$xt()) {
                     Ok(f) => f(
                         h,
@@ -167,7 +167,7 @@ macro_rules! complex_impl {
                     ),
                     Err(_) => cublasStatus_t::NOT_INITIALIZED,
                 }
-            }
+            }}
         }
     };
 }
@@ -207,7 +207,7 @@ pub unsafe fn gemm<T: XtScalar>(
     beta: T,
     c: *mut T,
     ldc: usize,
-) -> Result<()> {
+) -> Result<()> { unsafe {
     let status = T::xt_gemm_raw(
         handle.as_raw(),
         transa,
@@ -225,5 +225,5 @@ pub unsafe fn gemm<T: XtScalar>(
         ldc,
     );
     check(status)
-}
+}}
 

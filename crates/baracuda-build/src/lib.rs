@@ -38,6 +38,10 @@ pub struct CudaInstall {
     pub include: PathBuf,
     /// `$root/lib64` (Linux) or `$root/lib/x64` (Windows), whichever exists.
     pub lib: PathBuf,
+    /// `$root/bin/nvcc[.exe]` if present. `None` for runtime-only installs
+    /// that ship the libraries but no compiler (rare on a normal toolkit
+    /// install but possible in stripped Docker images).
+    pub nvcc: Option<PathBuf>,
 }
 
 /// Emit `cargo:rerun-if-env-changed=` lines for every env var the detector looks at.
@@ -99,12 +103,28 @@ fn probe_root(root: &Path) -> Option<CudaInstall> {
     }
     let lib = pick_lib_dir(root)?;
     let version = read_cuda_h_version(&include.join("cuda.h"));
+    let nvcc = pick_nvcc(root);
     Some(CudaInstall {
         root: root.to_path_buf(),
         version,
         include,
         lib,
+        nvcc,
     })
+}
+
+fn pick_nvcc(root: &Path) -> Option<PathBuf> {
+    let exe = if cfg!(target_os = "windows") {
+        "nvcc.exe"
+    } else {
+        "nvcc"
+    };
+    let p = root.join("bin").join(exe);
+    if p.is_file() {
+        Some(p)
+    } else {
+        None
+    }
 }
 
 fn pick_lib_dir(root: &Path) -> Option<PathBuf> {
@@ -154,6 +174,66 @@ pub fn find_library(install: &CudaInstall, stem: &str) -> Option<PathBuf> {
         let p = install.lib.join(name);
         if p.exists() {
             return Some(p);
+        }
+    }
+    None
+}
+
+/// Locate `nvcc` on the system, in this order:
+///
+/// 1. `$NVCC` environment variable (if it points at an existing file).
+/// 2. The `nvcc` field of [`detect_cuda`]'s result.
+/// 3. The first `nvcc[.exe]` found by walking `$PATH`.
+///
+/// Returns `None` when no compiler is found. Used by `baracuda-forge` for
+/// kernel compilation; the runtime `-sys` crates don't need this.
+pub fn find_nvcc() -> Option<PathBuf> {
+    if let Ok(raw) = std::env::var("NVCC") {
+        let p = PathBuf::from(raw);
+        if p.is_file() {
+            return Some(p);
+        }
+    }
+
+    if let Some(install) = detect_cuda() {
+        if let Some(nvcc) = install.nvcc {
+            return Some(nvcc);
+        }
+    }
+
+    let exe = if cfg!(target_os = "windows") {
+        "nvcc.exe"
+    } else {
+        "nvcc"
+    };
+    if let Some(path_var) = std::env::var_os("PATH") {
+        for dir in std::env::split_paths(&path_var) {
+            let candidate = dir.join(exe);
+            if candidate.is_file() {
+                return Some(candidate);
+            }
+        }
+    }
+
+    None
+}
+
+/// Parse `nvcc --version` stdout into `(major, minor)`.
+///
+/// nvcc prints a line like `Cuda compilation tools, release 12.6, V12.6.85`;
+/// this returns `Some((12, 6))` for that input. Returns `None` if no
+/// `release X.Y` token is found.
+pub fn parse_nvcc_version(stdout: &str) -> Option<(u32, u32)> {
+    for line in stdout.lines() {
+        if let Some(rest) = line.split_once("release ").map(|(_, r)| r) {
+            let token: String = rest
+                .chars()
+                .take_while(|c| c.is_ascii_digit() || *c == '.')
+                .collect();
+            let mut parts = token.split('.');
+            let major = parts.next()?.parse().ok()?;
+            let minor = parts.next().unwrap_or("0").parse().ok()?;
+            return Some((major, minor));
         }
     }
     None
@@ -222,5 +302,22 @@ mod tests {
     fn missing_root_returns_none() {
         let missing = PathBuf::from("/definitely-not-a-cuda-install-yolo");
         assert!(probe_root(&missing).is_none());
+    }
+
+    #[test]
+    fn parse_nvcc_version_extracts_major_minor() {
+        let out = "nvcc: NVIDIA (R) Cuda compiler driver\nCopyright (c) 2005-2024 NVIDIA Corporation\nBuilt on Some_Date\nCuda compilation tools, release 12.6, V12.6.85\nBuild cuda_12.6.r12.6/compiler.34714021_0\n";
+        assert_eq!(parse_nvcc_version(out), Some((12, 6)));
+    }
+
+    #[test]
+    fn parse_nvcc_version_handles_minor_zero() {
+        let out = "Cuda compilation tools, release 11, V11.0.0\n";
+        assert_eq!(parse_nvcc_version(out), Some((11, 0)));
+    }
+
+    #[test]
+    fn parse_nvcc_version_returns_none_for_unrelated_output() {
+        assert_eq!(parse_nvcc_version("hello world"), None);
     }
 }

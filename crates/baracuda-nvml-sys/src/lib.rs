@@ -352,7 +352,7 @@ pub type PFN_nvmlDeviceGetPciInfo_v3 = unsafe extern "C" fn(
 
 pub type PFN_nvmlDeviceGetCurrPcieLinkGeneration = unsafe extern "C" fn(
     device: nvmlDevice_t,
-    gen: *mut c_uint,
+    generation: *mut c_uint,
 ) -> nvmlReturn_t;
 
 pub type PFN_nvmlDeviceGetCurrPcieLinkWidth = unsafe extern "C" fn(

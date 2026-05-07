@@ -9,9 +9,9 @@
 //! let ctx = Context::new(&device)?;
 //! let mut buf: DeviceBuffer<f32> = DeviceBuffer::new(&ctx, 1024)?;
 //!
-//! let mut gen = Generator::new(RngKind::Default)?;
-//! gen.seed(0xDEAD_BEEF)?;
-//! gen.uniform(&mut buf)?;
+//! let mut rng = Generator::new(RngKind::Default)?;
+//! rng.seed(0xDEAD_BEEF)?;
+//! rng.uniform(&mut buf)?;
 //! # Ok(()) }
 //! ```
 

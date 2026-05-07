@@ -90,66 +90,66 @@ impl L1Scalar for f32 {
         y: *const f32,
         iy: i32,
         r: *mut f32,
-    ) -> cublasStatus_t {
+    ) -> cublasStatus_t { unsafe {
         match cublas().and_then(|c| c.cublas_sdot()) {
             Ok(f) => f(h, n, x, ix, y, iy, r),
             Err(_) => cublasStatus_t::NOT_INITIALIZED,
         }
-    }
-    unsafe fn scal_raw(h: cublasHandle_t, n: i32, a: &f32, x: *mut f32, ix: i32) -> cublasStatus_t {
+    }}
+    unsafe fn scal_raw(h: cublasHandle_t, n: i32, a: &f32, x: *mut f32, ix: i32) -> cublasStatus_t { unsafe {
         match cublas().and_then(|c| c.cublas_sscal()) {
             Ok(f) => f(h, n, a, x, ix),
             Err(_) => cublasStatus_t::NOT_INITIALIZED,
         }
-    }
+    }}
     unsafe fn nrm2_raw(
         h: cublasHandle_t,
         n: i32,
         x: *const f32,
         ix: i32,
         r: *mut f32,
-    ) -> cublasStatus_t {
+    ) -> cublasStatus_t { unsafe {
         match cublas().and_then(|c| c.cublas_snrm2()) {
             Ok(f) => f(h, n, x, ix, r),
             Err(_) => cublasStatus_t::NOT_INITIALIZED,
         }
-    }
+    }}
     unsafe fn asum_raw(
         h: cublasHandle_t,
         n: i32,
         x: *const f32,
         ix: i32,
         r: *mut f32,
-    ) -> cublasStatus_t {
+    ) -> cublasStatus_t { unsafe {
         match cublas().and_then(|c| c.cublas_sasum()) {
             Ok(f) => f(h, n, x, ix, r),
             Err(_) => cublasStatus_t::NOT_INITIALIZED,
         }
-    }
+    }}
     unsafe fn iamax_raw(
         h: cublasHandle_t,
         n: i32,
         x: *const f32,
         ix: i32,
         r: *mut i32,
-    ) -> cublasStatus_t {
+    ) -> cublasStatus_t { unsafe {
         match cublas().and_then(|c| c.cublas_isamax()) {
             Ok(f) => f(h, n, x, ix, r),
             Err(_) => cublasStatus_t::NOT_INITIALIZED,
         }
-    }
+    }}
     unsafe fn iamin_raw(
         h: cublasHandle_t,
         n: i32,
         x: *const f32,
         ix: i32,
         r: *mut i32,
-    ) -> cublasStatus_t {
+    ) -> cublasStatus_t { unsafe {
         match cublas().and_then(|c| c.cublas_isamin()) {
             Ok(f) => f(h, n, x, ix, r),
             Err(_) => cublasStatus_t::NOT_INITIALIZED,
         }
-    }
+    }}
     unsafe fn copy_raw(
         h: cublasHandle_t,
         n: i32,
@@ -157,12 +157,12 @@ impl L1Scalar for f32 {
         ix: i32,
         y: *mut f32,
         iy: i32,
-    ) -> cublasStatus_t {
+    ) -> cublasStatus_t { unsafe {
         match cublas().and_then(|c| c.cublas_scopy()) {
             Ok(f) => f(h, n, x, ix, y, iy),
             Err(_) => cublasStatus_t::NOT_INITIALIZED,
         }
-    }
+    }}
 }
 
 impl L1Scalar for f64 {
@@ -174,66 +174,66 @@ impl L1Scalar for f64 {
         y: *const f64,
         iy: i32,
         r: *mut f64,
-    ) -> cublasStatus_t {
+    ) -> cublasStatus_t { unsafe {
         match cublas().and_then(|c| c.cublas_ddot()) {
             Ok(f) => f(h, n, x, ix, y, iy, r),
             Err(_) => cublasStatus_t::NOT_INITIALIZED,
         }
-    }
-    unsafe fn scal_raw(h: cublasHandle_t, n: i32, a: &f64, x: *mut f64, ix: i32) -> cublasStatus_t {
+    }}
+    unsafe fn scal_raw(h: cublasHandle_t, n: i32, a: &f64, x: *mut f64, ix: i32) -> cublasStatus_t { unsafe {
         match cublas().and_then(|c| c.cublas_dscal()) {
             Ok(f) => f(h, n, a, x, ix),
             Err(_) => cublasStatus_t::NOT_INITIALIZED,
         }
-    }
+    }}
     unsafe fn nrm2_raw(
         h: cublasHandle_t,
         n: i32,
         x: *const f64,
         ix: i32,
         r: *mut f64,
-    ) -> cublasStatus_t {
+    ) -> cublasStatus_t { unsafe {
         match cublas().and_then(|c| c.cublas_dnrm2()) {
             Ok(f) => f(h, n, x, ix, r),
             Err(_) => cublasStatus_t::NOT_INITIALIZED,
         }
-    }
+    }}
     unsafe fn asum_raw(
         h: cublasHandle_t,
         n: i32,
         x: *const f64,
         ix: i32,
         r: *mut f64,
-    ) -> cublasStatus_t {
+    ) -> cublasStatus_t { unsafe {
         match cublas().and_then(|c| c.cublas_dasum()) {
             Ok(f) => f(h, n, x, ix, r),
             Err(_) => cublasStatus_t::NOT_INITIALIZED,
         }
-    }
+    }}
     unsafe fn iamax_raw(
         h: cublasHandle_t,
         n: i32,
         x: *const f64,
         ix: i32,
         r: *mut i32,
-    ) -> cublasStatus_t {
+    ) -> cublasStatus_t { unsafe {
         match cublas().and_then(|c| c.cublas_idamax()) {
             Ok(f) => f(h, n, x, ix, r),
             Err(_) => cublasStatus_t::NOT_INITIALIZED,
         }
-    }
+    }}
     unsafe fn iamin_raw(
         h: cublasHandle_t,
         n: i32,
         x: *const f64,
         ix: i32,
         r: *mut i32,
-    ) -> cublasStatus_t {
+    ) -> cublasStatus_t { unsafe {
         match cublas().and_then(|c| c.cublas_idamin()) {
             Ok(f) => f(h, n, x, ix, r),
             Err(_) => cublasStatus_t::NOT_INITIALIZED,
         }
-    }
+    }}
     unsafe fn copy_raw(
         h: cublasHandle_t,
         n: i32,
@@ -241,12 +241,12 @@ impl L1Scalar for f64 {
         ix: i32,
         y: *mut f64,
         iy: i32,
-    ) -> cublasStatus_t {
+    ) -> cublasStatus_t { unsafe {
         match cublas().and_then(|c| c.cublas_dcopy()) {
             Ok(f) => f(h, n, x, ix, y, iy),
             Err(_) => cublasStatus_t::NOT_INITIALIZED,
         }
-    }
+    }}
 }
 
 mod l1_sealed {

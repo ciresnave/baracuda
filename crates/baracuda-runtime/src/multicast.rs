@@ -84,7 +84,7 @@ impl MulticastObject {
         mem_offset: usize,
         size: usize,
         flags: u64,
-    ) -> Result<()> {
+    ) -> Result<()> { unsafe {
         let r = runtime()?;
         let cu = r.cuda_multicast_bind_mem()?;
         check(cu(
@@ -95,7 +95,7 @@ impl MulticastObject {
             size,
             flags,
         ))
-    }
+    }}
 
     /// Bind a device address (instead of a handle).
     ///
@@ -108,11 +108,11 @@ impl MulticastObject {
         mem_ptr: *mut c_void,
         size: usize,
         flags: u64,
-    ) -> Result<()> {
+    ) -> Result<()> { unsafe {
         let r = runtime()?;
         let cu = r.cuda_multicast_bind_addr()?;
         check(cu(self.handle, mc_offset, mem_ptr, size, flags))
-    }
+    }}
 
     /// Unbind the region `[mc_offset, mc_offset + size)` from `device`.
     pub fn unbind(&self, device: &Device, mc_offset: usize, size: usize) -> Result<()> {

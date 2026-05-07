@@ -389,11 +389,11 @@ impl<T> SpMat<'_, T> {
         row_offsets: *mut c_void,
         col_indices: *mut c_void,
         values: *mut c_void,
-    ) -> Result<()> {
+    ) -> Result<()> { unsafe {
         let c = cusparse()?;
         let cu = c.cusparse_csr_set_pointers()?;
         check(cu(self.descr, row_offsets, col_indices, values))
-    }
+    }}
 
     /// Rebind a CSC descriptor's underlying device pointers.
     ///
@@ -405,11 +405,11 @@ impl<T> SpMat<'_, T> {
         col_offsets: *mut c_void,
         row_indices: *mut c_void,
         values: *mut c_void,
-    ) -> Result<()> {
+    ) -> Result<()> { unsafe {
         let c = cusparse()?;
         let cu = c.cusparse_csc_set_pointers()?;
         check(cu(self.descr, col_offsets, row_indices, values))
-    }
+    }}
 
     /// Rebind a COO descriptor's underlying device pointers.
     ///
@@ -421,11 +421,11 @@ impl<T> SpMat<'_, T> {
         row_indices: *mut c_void,
         col_indices: *mut c_void,
         values: *mut c_void,
-    ) -> Result<()> {
+    ) -> Result<()> { unsafe {
         let c = cusparse()?;
         let cu = c.cusparse_coo_set_pointers()?;
         check(cu(self.descr, row_indices, col_indices, values))
-    }
+    }}
 
     /// Set the fill-triangle attribute (for triangular solves).
     pub fn set_fill(&self, fill: Fill) -> Result<()> {
@@ -787,6 +787,12 @@ impl Drop for SpGEMMPlan {
 
 /// Phase 1: work-estimation. The caller provides `buffer1` whose size is
 /// returned in `size1`; pass `null` the first time, then allocate & re-call.
+///
+/// # Safety
+///
+/// `buffer1` must be either null (size-query mode) or a valid device
+/// pointer to at least `*size1` bytes of writable scratch memory that
+/// remains live for the duration of the underlying cuSPARSE call.
 #[allow(clippy::too_many_arguments)]
 pub unsafe fn spgemm_work_estimation<T: SparseScalar>(
     handle: &Handle,
@@ -801,7 +807,7 @@ pub unsafe fn spgemm_work_estimation<T: SparseScalar>(
     plan: &SpGEMMPlan,
     size1: &mut usize,
     buffer1: *mut c_void,
-) -> Result<()> {
+) -> Result<()> { unsafe {
     let c_api = cusparse()?;
     let cu = c_api.cusparse_spgemm_work_estimation()?;
     check(cu(
@@ -819,9 +825,15 @@ pub unsafe fn spgemm_work_estimation<T: SparseScalar>(
         size1,
         buffer1,
     ))
-}
+}}
 
 /// Phase 2: compute. Same two-step pattern for `buffer2`.
+///
+/// # Safety
+///
+/// `buffer2` must be either null (size-query mode) or a valid device
+/// pointer to at least `*size2` bytes of writable scratch memory that
+/// remains live for the duration of the underlying cuSPARSE call.
 #[allow(clippy::too_many_arguments)]
 pub unsafe fn spgemm_compute<T: SparseScalar>(
     handle: &Handle,
@@ -836,7 +848,7 @@ pub unsafe fn spgemm_compute<T: SparseScalar>(
     plan: &SpGEMMPlan,
     size2: &mut usize,
     buffer2: *mut c_void,
-) -> Result<()> {
+) -> Result<()> { unsafe {
     let c_api = cusparse()?;
     let cu = c_api.cusparse_spgemm_compute()?;
     check(cu(
@@ -854,7 +866,7 @@ pub unsafe fn spgemm_compute<T: SparseScalar>(
         size2,
         buffer2,
     ))
-}
+}}
 
 /// Phase 3: write output arrays into the pre-populated output `SpMat`.
 #[allow(clippy::too_many_arguments)]

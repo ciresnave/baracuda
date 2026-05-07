@@ -76,7 +76,7 @@ impl ExternalMemory {
     pub unsafe fn import(
         context: &Context,
         desc: &CUDA_EXTERNAL_MEMORY_HANDLE_DESC,
-    ) -> Result<Self> {
+    ) -> Result<Self> { unsafe {
         context.set_current()?;
         let d = driver()?;
         let cu = d.cu_import_external_memory()?;
@@ -88,7 +88,7 @@ impl ExternalMemory {
                 context: context.clone(),
             }),
         })
-    }
+    }}
 
     /// Expose a subregion of the external memory as a device pointer.
     /// The returned pointer is valid until this `ExternalMemory` drops.
@@ -165,7 +165,7 @@ impl ExternalSemaphore {
     pub unsafe fn import(
         context: &Context,
         desc: &CUDA_EXTERNAL_SEMAPHORE_HANDLE_DESC,
-    ) -> Result<Self> {
+    ) -> Result<Self> { unsafe {
         context.set_current()?;
         let d = driver()?;
         let cu = d.cu_import_external_semaphore()?;
@@ -177,7 +177,7 @@ impl ExternalSemaphore {
                 context: context.clone(),
             }),
         })
-    }
+    }}
 
     /// Enqueue a signal of fence value `value` on `stream` for timeline /
     /// D3D12 fence semaphores.

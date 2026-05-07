@@ -27,10 +27,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut d_b: DeviceBuffer<f32> = DeviceBuffer::new(&ctx, k * n)?;
     let mut d_c: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, m * n)?;
 
-    let gen = Generator::new(RngKind::Philox4_32_10)?;
-    gen.seed(0xDEAD_BEEF)?;
-    gen.uniform(&mut d_a)?;
-    gen.uniform(&mut d_b)?;
+    let rng = Generator::new(RngKind::Philox4_32_10)?;
+    rng.seed(0xDEAD_BEEF)?;
+    rng.uniform(&mut d_a)?;
+    rng.uniform(&mut d_b)?;
 
     gemm(
         &handle,

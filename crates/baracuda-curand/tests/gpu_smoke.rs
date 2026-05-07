@@ -49,9 +49,9 @@ fn normal_has_expected_statistics() {
     let n = 8192;
     let mut d_buf: DeviceBuffer<f32> = DeviceBuffer::new(&ctx, n).unwrap();
 
-    let gen = Generator::new(RngKind::Philox4_32_10).unwrap();
-    gen.seed(0xCAFE_BABE).unwrap();
-    gen.normal(&mut d_buf, 0.0, 1.0).unwrap();
+    let rng = Generator::new(RngKind::Philox4_32_10).unwrap();
+    rng.seed(0xCAFE_BABE).unwrap();
+    rng.normal(&mut d_buf, 0.0, 1.0).unwrap();
     let mut samples = vec![0.0f32; n];
     d_buf.copy_to_host(&mut samples).unwrap();
 

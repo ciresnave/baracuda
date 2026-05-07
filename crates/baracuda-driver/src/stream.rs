@@ -246,11 +246,11 @@ impl Stream {
         &self,
         attr: i32,
         value_out: *mut core::ffi::c_void,
-    ) -> Result<()> {
+    ) -> Result<()> { unsafe {
         let d = driver()?;
         let cu = d.cu_stream_get_attribute()?;
         check(cu(self.inner.handle, attr, value_out))
-    }
+    }}
 
     /// Set a `CUstreamAttrValue` on this stream. See [`Self::get_attribute`]
     /// for the value layout.
@@ -263,11 +263,11 @@ impl Stream {
         &self,
         attr: i32,
         value: *const core::ffi::c_void,
-    ) -> Result<()> {
+    ) -> Result<()> { unsafe {
         let d = driver()?;
         let cu = d.cu_stream_set_attribute()?;
         check(cu(self.inner.handle, attr, value))
-    }
+    }}
 
     /// Associate a managed-memory region with this stream. Pass
     /// `flags = 0` for the default ("one thread").

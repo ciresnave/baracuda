@@ -194,11 +194,11 @@ pub mod image {
         dst: *mut f32,
         dst_step: i32,
         size: NppiSize,
-    ) -> Result<()> {
+    ) -> Result<()> { unsafe {
         let l = nppial()?;
         let cu = l.nppi_add_32f_c1r()?;
         check(cu(src1, src1_step, src2, src2_step, dst, dst_step, size))
-    }
+    }}
 
     /// `dst = src1 * src2` for 32f single-channel images.
     ///
@@ -214,11 +214,11 @@ pub mod image {
         dst: *mut f32,
         dst_step: i32,
         size: NppiSize,
-    ) -> Result<()> {
+    ) -> Result<()> { unsafe {
         let l = nppial()?;
         let cu = l.nppi_mul_32f_c1r()?;
         check(cu(src1, src1_step, src2, src2_step, dst, dst_step, size))
-    }
+    }}
 
     /// `dst = (src1 + src2) >> scale_factor` for 8u single-channel.
     ///
@@ -235,7 +235,7 @@ pub mod image {
         dst_step: i32,
         size: NppiSize,
         scale_factor: i32,
-    ) -> Result<()> {
+    ) -> Result<()> { unsafe {
         let l = nppial()?;
         let cu = l.nppi_add_8u_c1r_sfs()?;
         check(cu(
@@ -248,7 +248,7 @@ pub mod image {
             size,
             scale_factor,
         ))
-    }
+    }}
 
     /// 8u single-channel image resize with the given interpolation mode.
     ///
@@ -267,7 +267,7 @@ pub mod image {
         dst_size: NppiSize,
         dst_rect: NppiRect,
         interpolation: i32,
-    ) -> Result<()> {
+    ) -> Result<()> { unsafe {
         let l = nppig()?;
         let cu = l.nppi_resize_8u_c1r()?;
         check(cu(
@@ -281,7 +281,7 @@ pub mod image {
             dst_rect,
             interpolation,
         ))
-    }
+    }}
 
     /// 32f single-channel image resize.
     ///
@@ -299,7 +299,7 @@ pub mod image {
         dst_size: NppiSize,
         dst_rect: NppiRect,
         interpolation: i32,
-    ) -> Result<()> {
+    ) -> Result<()> { unsafe {
         let l = nppig()?;
         let cu = l.nppi_resize_32f_c1r()?;
         check(cu(
@@ -313,7 +313,7 @@ pub mod image {
             dst_rect,
             interpolation,
         ))
-    }
+    }}
 
     /// Convert a packed RGB-8u image to single-channel grayscale.
     ///
@@ -328,11 +328,11 @@ pub mod image {
         dst: *mut u8,
         dst_step: i32,
         size: NppiSize,
-    ) -> Result<()> {
+    ) -> Result<()> { unsafe {
         let l = nppicc()?;
         let cu = l.nppi_rgb_to_gray_8u_c3c1r()?;
         check(cu(src, src_step, dst, dst_step, size))
-    }
+    }}
 
     /// Same as [`rgb_to_gray_8u`] but BGR order (OpenCV convention).
     ///
@@ -345,11 +345,11 @@ pub mod image {
         dst: *mut u8,
         dst_step: i32,
         size: NppiSize,
-    ) -> Result<()> {
+    ) -> Result<()> { unsafe {
         let l = nppicc()?;
         let cu = l.nppi_bgr_to_gray_8u_c3c1r()?;
         check(cu(src, src_step, dst, dst_step, size))
-    }
+    }}
 
     /// Apply an averaging (box) filter of size `mask_size`.
     ///
@@ -366,11 +366,11 @@ pub mod image {
         dst_roi: NppiSize,
         mask_size: NppiSize,
         anchor: NppiPoint,
-    ) -> Result<()> {
+    ) -> Result<()> { unsafe {
         let l = nppif()?;
         let cu = l.nppi_filter_box_8u_c1r()?;
         check(cu(src, src_step, dst, dst_step, dst_roi, mask_size, anchor))
-    }
+    }}
 
     /// Report the device-scratch buffer size required by
     /// [`sum_32f_c1r`] for an image of size `roi`.
@@ -396,11 +396,11 @@ pub mod image {
         roi: NppiSize,
         sum_out: *mut f64,
         scratch: *mut u8,
-    ) -> Result<()> {
+    ) -> Result<()> { unsafe {
         let l = nppist()?;
         let cu = l.nppi_sum_32f_c1r()?;
         check(cu(src, src_step, roi, scratch, sum_out))
-    }
+    }}
 }
 
 // Deprecated top-level alias.

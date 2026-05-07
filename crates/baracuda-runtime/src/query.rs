@@ -182,7 +182,7 @@ pub fn device_properties(device: &Device) -> Result<DeviceProperties> {
 ///
 /// `func_symbol` must be a valid CUDA kernel symbol address. Passing
 /// garbage causes undefined behavior inside the driver.
-pub unsafe fn func_attributes(func_symbol: *const core::ffi::c_void) -> Result<cudaFuncAttributes> {
+pub unsafe fn func_attributes(func_symbol: *const core::ffi::c_void) -> Result<cudaFuncAttributes> { unsafe {
     let r = runtime()?;
     let cu = r.cuda_func_get_attributes()?;
     let mut attrs = cudaFuncAttributes::default();
@@ -191,4 +191,4 @@ pub unsafe fn func_attributes(func_symbol: *const core::ffi::c_void) -> Result<c
         func_symbol,
     ))?;
     Ok(attrs)
-}
+}}

@@ -19,15 +19,22 @@
 
 set -u -o pipefail
 
-VERSION="0.0.1-alpha.5"
+VERSION="0.0.1-alpha.6"
 
 # Dependency-ordered list. Foundation → -sys crates → safe foundation
 # (driver, runtime) → safe wrappers → umbrella.
+#
+# alpha.6 adds 4 new crates: baracuda-forge (build-time kernel compiler,
+# vendored from cudaforge) sits next to baracuda-build; baracuda-cutlass-sys
+# (header acquisition) is independent; baracuda-cutlass-kernels-sys
+# (compiled CUTLASS instantiations) needs both cutlass-sys + forge first;
+# baracuda-cutlass (safe wrapper) needs kernels-sys + driver + types.
 ALL_CRATES=(
     baracuda-types-derive
     baracuda-types
     baracuda-build
     baracuda-core
+    baracuda-forge
     baracuda-cuda-sys
     baracuda-nvrtc-sys
     baracuda-nvjitlink-sys
@@ -48,6 +55,8 @@ ALL_CRATES=(
     baracuda-cutensor-sys
     baracuda-tensorrt-sys
     baracuda-cudf-sys
+    baracuda-cutlass-sys
+    baracuda-cutlass-kernels-sys
     baracuda-driver
     baracuda-runtime
     baracuda-nvrtc
@@ -69,6 +78,7 @@ ALL_CRATES=(
     baracuda-cutensor
     baracuda-tensorrt
     baracuda-cudf
+    baracuda-cutlass
     baracuda
 )
 

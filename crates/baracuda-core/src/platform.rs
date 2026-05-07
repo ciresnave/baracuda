@@ -240,10 +240,17 @@ mod tests {
 
     #[test]
     fn search_paths_include_env() {
-        std::env::set_var("CUDA_PATH", "/tmp/test-cuda-path");
+        // SAFETY: tests in this module run single-threaded (no `#[test]`
+        // crate-level concurrency reads CUDA_PATH while we mutate it).
+        unsafe {
+            std::env::set_var("CUDA_PATH", "/tmp/test-cuda-path");
+        }
         let paths = library_search_paths();
         let has = paths.iter().any(|p| p.starts_with("/tmp/test-cuda-path"));
-        std::env::remove_var("CUDA_PATH");
+        // SAFETY: see set_var above.
+        unsafe {
+            std::env::remove_var("CUDA_PATH");
+        }
         assert!(
             has,
             "CUDA_PATH environment should show up in the search list"
