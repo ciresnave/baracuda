@@ -19,7 +19,7 @@
 
 set -u -o pipefail
 
-VERSION="0.0.1-alpha.6"
+VERSION="0.0.1-alpha.7"
 
 # Dependency-ordered list. Foundation → -sys crates → safe foundation
 # (driver, runtime) → safe wrappers → umbrella.
