@@ -7,16 +7,23 @@ caller-supplied workspace, typed device-buffer arguments, and capture-safe
 launches. It sits above [`baracuda-cutlass-kernels-sys`] (the compiled
 kernels) and below framework integration crates like Fuel's `fuel-cublaslt`.
 
-## v0 scope
+## Scope
 
-- **Op families**: `GemmPlan` (single GEMM), `GroupedGemmPlan` +
+- **Op families**: `GemmPlan` (single GEMM), `BatchedGemmPlan`
+  (uniform-shape batched GEMM), `GroupedGemmPlan` +
   `PreparedGroupedGemm` (variable-M-per-group, MoE-friendly).
-- **Element types**: `half::f16`, `half::bf16`.
-- **Layout**: `RCR` only — `A` row-major `[M,K]`, `B` column-major `[K,N]`,
-  `C/D` row-major `[M,N]`, `f32` accumulation, `f32` α/β.
-- **Epilogues**: `Identity` only. (`Bias` was deferred during the Fuel team
-  design review — it'll return when the corresponding kernel instantiation
-  ships, alongside the `bias` field on `GemmArgs` / `GroupedProblem`.)
+- **Element types**: `half::f16`, `half::bf16`, and `f32` (routed through
+  TF32 tensor cores at ~10-bit mantissa precision —
+  see [`PrecisionGuarantee::math_precision`]).
+- **Layouts**: `RCR` (A row-major, B column-major, C/D row-major) and
+  `RRR` (all three operands row-major — natural for activation@weight
+  matmul without a transpose pass). `f32` ships RCR only today.
+- **Epilogues**: `Identity` only. (`Bias` is intentionally deferred:
+  the right implementation needs the `GemmUniversalWithBroadcast`
+  template — a pre-broadcast workaround would cost an extra memory
+  pass and undermine the reason to fuse bias in the first place. It'll
+  return when that template lands, alongside the `bias` field on
+  `GemmArgs`.)
 - **Architectures**: `sm_80` shipped today (runs on Ampere, Ada, and
   forward-compatibly on Hopper). `sm_90a` selection wiring is in place;
   the Hopper-specialized kernels themselves land when Hopper hardware is
@@ -25,6 +32,16 @@ kernels) and below framework integration crates like Fuel's `fuel-cublaslt`.
   `Workspace::Borrowed(DeviceSliceMut<u8>)`. Plans never own device memory.
   Grouped GEMM additionally packs its per-group metadata into the front of
   the workspace via async H2D, with CUTLASS's internal scratch at the tail.
+
+### Kernel SKU coverage
+
+| API              | Layout × Element                                    |
+|------------------|-----------------------------------------------------|
+| `GemmPlan`       | `Rcr × {F16, Bf16, F32(TF32)}`, `Rrr × {F16, Bf16}` |
+| `BatchedGemmPlan`| `Rcr × {F16, Bf16}`                                 |
+| `GroupedGemmPlan`| `Rcr × {F16, Bf16}`                                 |
+
+All on `sm_80` (Ampere); `sm_90a` deferred until Hopper validation.
 
 ## Why plan-based, not handle-based?
 

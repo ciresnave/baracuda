@@ -24,6 +24,7 @@ pub trait CutlassElement: DeviceRepr + sealed::Sealed + Copy + 'static {
 
 impl sealed::Sealed for f16 {}
 impl sealed::Sealed for bf16 {}
+impl sealed::Sealed for f32 {}
 
 impl CutlassElement for f16 {
     const KIND: ElementKind = ElementKind::F16;
@@ -31,6 +32,14 @@ impl CutlassElement for f16 {
 
 impl CutlassElement for bf16 {
     const KIND: ElementKind = ElementKind::Bf16;
+}
+
+/// `f32` GEMM routes through TF32 tensor cores — see
+/// [`PrecisionGuarantee::math_precision`] (returns
+/// [`MathPrecision::Tf32`]). Inputs are full F32; the math instruction
+/// reduces to TF32 (10-bit mantissa) and accumulates into F32.
+impl CutlassElement for f32 {
+    const KIND: ElementKind = ElementKind::F32;
 }
 
 /// Runtime tag for a [`CutlassElement`].
@@ -107,16 +116,21 @@ pub struct PrecisionGuarantee {
 
 
 /// Layout SKU. Describes the row/column orientation of A, B, C, and D.
-///
-/// v0 supports only [`LayoutSku::Rcr`].
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 pub enum LayoutSku {
     /// `A` row-major `[M, K]`, `B` column-major `[K, N]`, `C/D` row-major `[M, N]`.
     ///
-    /// This is the most useful ML layout: a row-major weight tensor stored
-    /// as `[N, K]` can be passed as logical column-major `B` without a
+    /// Useful when a row-major weight tensor stored as `[N, K]` is
+    /// reinterpreted as logical column-major `B = [K, N]` without a
     /// transpose copy.
     Rcr,
+    /// `A` row-major `[M, K]`, `B` row-major `[K, N]`, `C/D` row-major `[M, N]`.
+    ///
+    /// The natural shape for activation-row-major @ weight-row-major
+    /// matmul (the typical ML graph layout). No transpose pass needed
+    /// before launch — both operands stored in their native row-major
+    /// form.
+    Rrr,
 }
 
 /// Compute capability bucket the selected kernel was compiled for.
@@ -225,7 +239,9 @@ pub struct GemmDescriptor {
 pub struct GemmArgs<'a, T: CutlassElement> {
     /// Left input. Row-major `[M, K]`.
     pub a: MatrixRef<'a, T>,
-    /// Right input. Column-major `[K, N]`.
+    /// Right input. Layout depends on the descriptor's [`LayoutSku`]:
+    /// column-major `[K, N]` for [`LayoutSku::Rcr`], row-major `[K, N]`
+    /// for [`LayoutSku::Rrr`].
     pub b: MatrixRef<'a, T>,
     /// Optional accumulation source. Row-major `[M, N]`.
     pub c: Option<MatrixRef<'a, T>>,
@@ -235,6 +251,60 @@ pub struct GemmArgs<'a, T: CutlassElement> {
     pub alpha: f32,
     /// Multiplier on `c`. Forced to `0.0` internally when `c` is `None`,
     /// so callers don't need to pre-zero it for the no-accumulate case.
+    pub beta: f32,
+}
+
+/// Problem shape and configuration handed to
+/// [`BatchedGemmPlan::select`](crate::BatchedGemmPlan::select).
+///
+/// All batches share the same `(M, N, K)` and per-batch operands are
+/// addressed by adding `i * stride_*` (in elements) to the base
+/// pointer — see [`BatchedGemmArgs`]. For variable-shape grouped
+/// problems use [`GroupedGemmPlan`](crate::GroupedGemmPlan) instead.
+#[derive(Copy, Clone, Debug)]
+pub struct BatchedGemmDescriptor {
+    /// Output row count (per batch).
+    pub m: i32,
+    /// Output column count (per batch).
+    pub n: i32,
+    /// Reduction depth (per batch).
+    pub k: i32,
+    /// Number of batches launched in a single kernel invocation.
+    pub batch_count: i32,
+    /// Layout SKU. v1 supports only [`LayoutSku::Rcr`].
+    pub layout: LayoutSku,
+    /// Epilogue kind. v1 supports only [`EpilogueKind::Identity`].
+    pub epilogue: EpilogueKind,
+}
+
+/// Per-launch arguments for a
+/// [`BatchedGemmPlan::run`](crate::BatchedGemmPlan::run) call.
+///
+/// `stride_*` fields are in **elements**, not bytes — matching CUTLASS's
+/// `GemmBatched` API. Pass `0` for stride if the same matrix should be
+/// reused across all batches (broadcast).
+#[derive(Debug)]
+pub struct BatchedGemmArgs<'a, T: CutlassElement> {
+    /// Left input — base pointer for batch 0.
+    pub a: MatrixRef<'a, T>,
+    /// Element offset between consecutive A batches.
+    pub stride_a: i64,
+    /// Right input — base pointer for batch 0.
+    pub b: MatrixRef<'a, T>,
+    /// Element offset between consecutive B batches.
+    pub stride_b: i64,
+    /// Optional accumulation source.
+    pub c: Option<MatrixRef<'a, T>>,
+    /// Element offset between consecutive C batches. Ignored when `c` is `None`.
+    pub stride_c: i64,
+    /// Output — base pointer for batch 0.
+    pub d: MatrixMut<'a, T>,
+    /// Element offset between consecutive D batches.
+    pub stride_d: i64,
+    /// α multiplier (shared across batches).
+    pub alpha: f32,
+    /// β multiplier (shared across batches). Forced to `0.0` internally
+    /// when `c` is `None`.
     pub beta: f32,
 }
 

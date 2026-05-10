@@ -90,11 +90,16 @@ fn collect_kernel_files() -> Vec<&'static str> {
     if cfg!(any(feature = "sm80", feature = "sm90a")) {
         // sm_80 kernels (also runs forward-compatibly on Ada and Hopper).
         if cfg!(feature = "sm80") {
-            if std::path::Path::new("kernels/gemm_rcr_sm80.cu").exists() {
-                kernels.push("gemm_rcr_sm80.cu");
-            }
-            if std::path::Path::new("kernels/grouped_gemm_rcr_sm80.cu").exists() {
-                kernels.push("grouped_gemm_rcr_sm80.cu");
+            for f in &[
+                "gemm_rcr_sm80.cu",
+                "gemm_rrr_sm80.cu",
+                "gemm_tf32_rcr_sm80.cu",
+                "gemm_batched_rcr_sm80.cu",
+                "grouped_gemm_rcr_sm80.cu",
+            ] {
+                if std::path::Path::new(&format!("kernels/{f}")).exists() {
+                    kernels.push(*f);
+                }
             }
         }
         // sm_90a kernels deferred until Hopper hardware available for

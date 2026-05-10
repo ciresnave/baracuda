@@ -7,9 +7,9 @@ use baracuda_driver::{Context, PinnedBuffer, Stream};
 
 use crate::error::{status_to_result, Error, Result};
 use crate::types::{
-    ArchSku, CutlassElement, ElementKind, EpilogueKind, GemmArgs, GemmDescriptor, GemmSku,
-    GroupedPlanPreference, GroupedProblem, GroupedScheduleMode, LayoutSku, PlanPreference,
-    PrecisionGuarantee, Workspace,
+    ArchSku, BatchedGemmArgs, BatchedGemmDescriptor, CutlassElement, ElementKind, EpilogueKind,
+    GemmArgs, GemmDescriptor, GemmSku, GroupedPlanPreference, GroupedProblem, GroupedScheduleMode,
+    LayoutSku, PlanPreference, PrecisionGuarantee, Workspace,
 };
 
 // ============================================================================
@@ -17,12 +17,19 @@ use crate::types::{
 // ============================================================================
 
 mod dispatch {
-    use super::ElementKind;
+    use super::{ElementKind, LayoutSku};
     use core::ffi::c_void;
 
+    /// Single-GEMM dispatch on sm_80 — selects per `(layout, kind)`.
+    ///
+    /// SKU coverage (status 3 = not implemented):
+    ///   - Rcr × {F16, Bf16, F32(via TF32)} ✓
+    ///   - Rrr × {F16, Bf16}                ✓
+    ///   - Rrr × F32                        ✗
     #[cfg(feature = "sm80")]
     #[allow(clippy::too_many_arguments)]
-    pub(super) unsafe fn gemm_rcr_sm80_run(
+    pub(super) unsafe fn gemm_sm80_run(
+        layout: LayoutSku,
         kind: ElementKind,
         m: i32,
         n: i32,
@@ -42,74 +49,74 @@ mod dispatch {
         stream: *mut c_void,
     ) -> i32 {
         use baracuda_cutlass_kernels_sys as k_sys;
-        match kind {
-            ElementKind::F16 => unsafe {
+        match (layout, kind) {
+            (LayoutSku::Rcr, ElementKind::F16) => unsafe {
                 k_sys::baracuda_cutlass_gemm_f16_rcr_sm80_run(
-                    m,
-                    n,
-                    k,
-                    a,
-                    lda,
-                    b,
-                    ldb,
-                    c,
-                    ldc,
-                    d,
-                    ldd,
-                    alpha,
-                    beta,
-                    workspace,
-                    workspace_bytes,
-                    stream,
+                    m, n, k, a, lda, b, ldb, c, ldc, d, ldd,
+                    alpha, beta, workspace, workspace_bytes, stream,
                 )
             },
-            ElementKind::Bf16 => unsafe {
+            (LayoutSku::Rcr, ElementKind::Bf16) => unsafe {
                 k_sys::baracuda_cutlass_gemm_bf16_rcr_sm80_run(
-                    m,
-                    n,
-                    k,
-                    a,
-                    lda,
-                    b,
-                    ldb,
-                    c,
-                    ldc,
-                    d,
-                    ldd,
-                    alpha,
-                    beta,
-                    workspace,
-                    workspace_bytes,
-                    stream,
+                    m, n, k, a, lda, b, ldb, c, ldc, d, ldd,
+                    alpha, beta, workspace, workspace_bytes, stream,
                 )
             },
-            // F32 input kernels haven't shipped yet (planned for the
-            // alpha.9 follow-up). Unreachable today because
-            // `CutlassElement` is sealed and only F16 / Bf16 implement it,
-            // but we return status 3 ("not supported") as a defensive
-            // soft-fail in case a future trait impl arrives without a
-            // matching kernel.
-            ElementKind::F32 => 3,
+            (LayoutSku::Rcr, ElementKind::F32) => unsafe {
+                k_sys::baracuda_cutlass_gemm_tf32_rcr_sm80_run(
+                    m, n, k, a, lda, b, ldb, c, ldc, d, ldd,
+                    alpha, beta, workspace, workspace_bytes, stream,
+                )
+            },
+            (LayoutSku::Rrr, ElementKind::F16) => unsafe {
+                k_sys::baracuda_cutlass_gemm_f16_rrr_sm80_run(
+                    m, n, k, a, lda, b, ldb, c, ldc, d, ldd,
+                    alpha, beta, workspace, workspace_bytes, stream,
+                )
+            },
+            (LayoutSku::Rrr, ElementKind::Bf16) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bf16_rrr_sm80_run(
+                    m, n, k, a, lda, b, ldb, c, ldc, d, ldd,
+                    alpha, beta, workspace, workspace_bytes, stream,
+                )
+            },
+            (LayoutSku::Rrr, ElementKind::F32) => 3,
         }
     }
 
     #[cfg(feature = "sm80")]
-    pub(super) fn gemm_rcr_sm80_workspace_size(kind: ElementKind, m: i32, n: i32, k: i32) -> usize {
+    pub(super) fn gemm_sm80_workspace_size(
+        layout: LayoutSku,
+        kind: ElementKind,
+        m: i32,
+        n: i32,
+        k: i32,
+    ) -> usize {
         use baracuda_cutlass_kernels_sys as k_sys;
-        match kind {
-            ElementKind::F16 => unsafe {
+        match (layout, kind) {
+            (LayoutSku::Rcr, ElementKind::F16) => unsafe {
                 k_sys::baracuda_cutlass_gemm_f16_rcr_sm80_workspace_size(m, n, k)
             },
-            ElementKind::Bf16 => unsafe {
+            (LayoutSku::Rcr, ElementKind::Bf16) => unsafe {
                 k_sys::baracuda_cutlass_gemm_bf16_rcr_sm80_workspace_size(m, n, k)
             },
-            ElementKind::F32 => 0,
+            (LayoutSku::Rcr, ElementKind::F32) => unsafe {
+                k_sys::baracuda_cutlass_gemm_tf32_rcr_sm80_workspace_size(m, n, k)
+            },
+            (LayoutSku::Rrr, ElementKind::F16) => unsafe {
+                k_sys::baracuda_cutlass_gemm_f16_rrr_sm80_workspace_size(m, n, k)
+            },
+            (LayoutSku::Rrr, ElementKind::Bf16) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bf16_rrr_sm80_workspace_size(m, n, k)
+            },
+            (LayoutSku::Rrr, ElementKind::F32) => 0,
         }
     }
 
     #[cfg(feature = "sm80")]
     #[allow(clippy::too_many_arguments)]
-    pub(super) unsafe fn gemm_rcr_sm80_can_implement(
+    pub(super) unsafe fn gemm_sm80_can_implement(
+        layout: LayoutSku,
         kind: ElementKind,
         m: i32,
         n: i32,
@@ -124,18 +131,171 @@ mod dispatch {
         ldd: i64,
     ) -> i32 {
         use baracuda_cutlass_kernels_sys as k_sys;
-        match kind {
-            ElementKind::F16 => unsafe {
+        match (layout, kind) {
+            (LayoutSku::Rcr, ElementKind::F16) => unsafe {
                 k_sys::baracuda_cutlass_gemm_f16_rcr_sm80_can_implement(
                     m, n, k, a, lda, b, ldb, c, ldc, d, ldd,
                 )
             },
-            ElementKind::Bf16 => unsafe {
+            (LayoutSku::Rcr, ElementKind::Bf16) => unsafe {
                 k_sys::baracuda_cutlass_gemm_bf16_rcr_sm80_can_implement(
                     m, n, k, a, lda, b, ldb, c, ldc, d, ldd,
                 )
             },
-            ElementKind::F32 => 3,
+            (LayoutSku::Rcr, ElementKind::F32) => unsafe {
+                k_sys::baracuda_cutlass_gemm_tf32_rcr_sm80_can_implement(
+                    m, n, k, a, lda, b, ldb, c, ldc, d, ldd,
+                )
+            },
+            (LayoutSku::Rrr, ElementKind::F16) => unsafe {
+                k_sys::baracuda_cutlass_gemm_f16_rrr_sm80_can_implement(
+                    m, n, k, a, lda, b, ldb, c, ldc, d, ldd,
+                )
+            },
+            (LayoutSku::Rrr, ElementKind::Bf16) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bf16_rrr_sm80_can_implement(
+                    m, n, k, a, lda, b, ldb, c, ldc, d, ldd,
+                )
+            },
+            (LayoutSku::Rrr, ElementKind::F32) => 3,
+        }
+    }
+
+    // ---------- batched GEMM, sm_80 ----------
+    //
+    // SKU coverage (status 3 = not implemented):
+    //   - Rcr × {F16, Bf16}            ✓
+    //   - Rcr × F32, all Rrr           ✗
+
+    #[cfg(feature = "sm80")]
+    #[allow(clippy::too_many_arguments)]
+    pub(super) unsafe fn batched_gemm_sm80_run(
+        layout: LayoutSku,
+        kind: ElementKind,
+        m: i32,
+        n: i32,
+        k: i32,
+        a: *const c_void,
+        lda: i64,
+        stride_a: i64,
+        b: *const c_void,
+        ldb: i64,
+        stride_b: i64,
+        c: *const c_void,
+        ldc: i64,
+        stride_c: i64,
+        d: *mut c_void,
+        ldd: i64,
+        stride_d: i64,
+        alpha: f32,
+        beta: f32,
+        batch_count: i32,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32 {
+        use baracuda_cutlass_kernels_sys as k_sys;
+        match (layout, kind) {
+            (LayoutSku::Rcr, ElementKind::F16) => unsafe {
+                k_sys::baracuda_cutlass_gemm_batched_f16_rcr_sm80_run(
+                    m, n, k,
+                    a, lda, stride_a,
+                    b, ldb, stride_b,
+                    c, ldc, stride_c,
+                    d, ldd, stride_d,
+                    alpha, beta,
+                    batch_count,
+                    workspace, workspace_bytes,
+                    stream,
+                )
+            },
+            (LayoutSku::Rcr, ElementKind::Bf16) => unsafe {
+                k_sys::baracuda_cutlass_gemm_batched_bf16_rcr_sm80_run(
+                    m, n, k,
+                    a, lda, stride_a,
+                    b, ldb, stride_b,
+                    c, ldc, stride_c,
+                    d, ldd, stride_d,
+                    alpha, beta,
+                    batch_count,
+                    workspace, workspace_bytes,
+                    stream,
+                )
+            },
+            _ => 3,
+        }
+    }
+
+    #[cfg(feature = "sm80")]
+    pub(super) fn batched_gemm_sm80_workspace_size(
+        layout: LayoutSku,
+        kind: ElementKind,
+        m: i32,
+        n: i32,
+        k: i32,
+        batch_count: i32,
+    ) -> usize {
+        use baracuda_cutlass_kernels_sys as k_sys;
+        match (layout, kind) {
+            (LayoutSku::Rcr, ElementKind::F16) => unsafe {
+                k_sys::baracuda_cutlass_gemm_batched_f16_rcr_sm80_workspace_size(
+                    m, n, k, batch_count,
+                )
+            },
+            (LayoutSku::Rcr, ElementKind::Bf16) => unsafe {
+                k_sys::baracuda_cutlass_gemm_batched_bf16_rcr_sm80_workspace_size(
+                    m, n, k, batch_count,
+                )
+            },
+            _ => 0,
+        }
+    }
+
+    #[cfg(feature = "sm80")]
+    #[allow(clippy::too_many_arguments)]
+    pub(super) unsafe fn batched_gemm_sm80_can_implement(
+        layout: LayoutSku,
+        kind: ElementKind,
+        m: i32,
+        n: i32,
+        k: i32,
+        a: *const c_void,
+        lda: i64,
+        stride_a: i64,
+        b: *const c_void,
+        ldb: i64,
+        stride_b: i64,
+        c: *const c_void,
+        ldc: i64,
+        stride_c: i64,
+        d: *mut c_void,
+        ldd: i64,
+        stride_d: i64,
+        batch_count: i32,
+    ) -> i32 {
+        use baracuda_cutlass_kernels_sys as k_sys;
+        match (layout, kind) {
+            (LayoutSku::Rcr, ElementKind::F16) => unsafe {
+                k_sys::baracuda_cutlass_gemm_batched_f16_rcr_sm80_can_implement(
+                    m, n, k,
+                    a, lda, stride_a,
+                    b, ldb, stride_b,
+                    c, ldc, stride_c,
+                    d, ldd, stride_d,
+                    batch_count,
+                )
+            },
+            (LayoutSku::Rcr, ElementKind::Bf16) => unsafe {
+                k_sys::baracuda_cutlass_gemm_batched_bf16_rcr_sm80_can_implement(
+                    m, n, k,
+                    a, lda, stride_a,
+                    b, ldb, stride_b,
+                    c, ldc, stride_c,
+                    d, ldd, stride_d,
+                    batch_count,
+                )
+            },
+            _ => 3,
         }
     }
 
@@ -268,42 +428,47 @@ mod dispatch {
 ///
 /// Assumes `rows >= 1` and `cols >= 1` (callers go through
 /// [`check_descriptor`] which rejects non-positive dimensions first).
-fn min_elements_rcr_a(rows: i32, cols: i32, ld: i64) -> Option<usize> {
-    // Row-major [M, K]: element A[i, j] is at offset i*ld + j.
-    // Maximum addressable index = (M - 1) * ld + (K - 1), so the buffer
-    // must hold (M - 1) * ld + K elements. Accepts padded leading
-    // dimensions (ld > K) without rejecting valid slabs.
+fn min_elements_row_major(rows: i32, cols: i32, ld: i64) -> Option<usize> {
+    // [rows, cols] row-major: element [i, j] at offset i*ld + j.
+    // Maximum addressable index = (rows - 1) * ld + (cols - 1), so the
+    // buffer must hold (rows - 1) * ld + cols elements. Accepts padded
+    // leading dimensions (ld > cols) without rejecting valid slabs.
     let r = (rows - 1) as i64;
     let needed = r.checked_mul(ld)?.checked_add(cols as i64)?;
     usize::try_from(needed).ok()
 }
 
-fn min_elements_rcr_b(rows: i32, cols: i32, ld: i64) -> Option<usize> {
-    // Column-major [K, N]: element B[i, j] is at offset j*ld + i.
-    // Maximum addressable index = (N - 1) * ld + (K - 1), so the buffer
-    // must hold (N - 1) * ld + K elements. Here `rows` is K, `cols` is N.
+fn min_elements_col_major(rows: i32, cols: i32, ld: i64) -> Option<usize> {
+    // [rows, cols] column-major: element [i, j] at offset j*ld + i.
+    // Maximum addressable index = (cols - 1) * ld + (rows - 1).
     let c = (cols - 1) as i64;
     let needed = c.checked_mul(ld)?.checked_add(rows as i64)?;
     usize::try_from(needed).ok()
 }
 
+// Compatibility shims for the buffer-size tests below — they document
+// the per-operand layout (A row-major, B column-major for Rcr, C/D
+// row-major) so we keep separate names for clarity.
+#[cfg(test)]
+fn min_elements_rcr_a(rows: i32, cols: i32, ld: i64) -> Option<usize> {
+    min_elements_row_major(rows, cols, ld)
+}
+#[cfg(test)]
+fn min_elements_rcr_b(rows: i32, cols: i32, ld: i64) -> Option<usize> {
+    min_elements_col_major(rows, cols, ld)
+}
+#[cfg(test)]
 fn min_elements_rcr_cd(rows: i32, cols: i32, ld: i64) -> Option<usize> {
-    // Row-major [M, N]: element [i, j] at offset i*ld + j.
-    // Maximum addressable = (M - 1) * ld + (N - 1).
-    let r = (rows - 1) as i64;
-    let needed = r.checked_mul(ld)?.checked_add(cols as i64)?;
-    usize::try_from(needed).ok()
+    min_elements_row_major(rows, cols, ld)
 }
 
 fn check_descriptor(desc: &GemmDescriptor) -> Result<()> {
     if desc.m <= 0 || desc.n <= 0 || desc.k <= 0 {
         return Err(Error::InvalidProblem("M, N, K must all be positive"));
     }
-    if desc.layout != LayoutSku::Rcr {
-        return Err(Error::Unsupported(
-            "v0 only implements LayoutSku::Rcr",
-        ));
-    }
+    // All shipped layouts (Rcr, Rrr) and epilogues (Identity) are
+    // accepted by select; per-(layout, kind) implementability is
+    // dispatched at run time to the kernel's own can_implement.
     Ok(())
 }
 
@@ -322,11 +487,22 @@ fn check_args<T: CutlassElement>(desc: &GemmDescriptor, args: &GemmArgs<'_, T>) 
             return Err(Error::InvalidProblem("C shape doesn't match descriptor (M, N)"));
         }
     }
+    // A is row-major in both Rcr and Rrr — leading dim along the K axis.
     if args.a.ld < desc.k as i64 {
         return Err(Error::InvalidProblem("A leading dimension must be >= K"));
     }
-    if args.b.ld < desc.k as i64 {
-        return Err(Error::InvalidProblem("B leading dimension must be >= K"));
+    // B's leading-dim minor depends on layout:
+    //   Rcr: column-major [K, N], ld is along the K axis (rows).
+    //   Rrr: row-major    [K, N], ld is along the N axis (cols).
+    let b_min_ld = match desc.layout {
+        LayoutSku::Rcr => desc.k as i64,
+        LayoutSku::Rrr => desc.n as i64,
+    };
+    if args.b.ld < b_min_ld {
+        return Err(Error::InvalidProblem(match desc.layout {
+            LayoutSku::Rcr => "B leading dimension must be >= K (column-major Rcr layout)",
+            LayoutSku::Rrr => "B leading dimension must be >= N (row-major Rrr layout)",
+        }));
     }
     if args.d.ld < desc.n as i64 {
         return Err(Error::InvalidProblem("D leading dimension must be >= N"));
@@ -337,7 +513,7 @@ fn check_args<T: CutlassElement>(desc: &GemmDescriptor, args: &GemmArgs<'_, T>) 
         }
     }
 
-    let need_a = min_elements_rcr_a(args.a.rows, args.a.cols, args.a.ld)
+    let need_a = min_elements_row_major(args.a.rows, args.a.cols, args.a.ld)
         .ok_or(Error::InvalidProblem("A storage size overflow"))?;
     if args.a.data.len() < need_a {
         return Err(Error::BufferTooSmall {
@@ -345,15 +521,18 @@ fn check_args<T: CutlassElement>(desc: &GemmDescriptor, args: &GemmArgs<'_, T>) 
             got: args.a.data.len(),
         });
     }
-    let need_b = min_elements_rcr_b(args.b.rows, args.b.cols, args.b.ld)
-        .ok_or(Error::InvalidProblem("B storage size overflow"))?;
+    let need_b = match desc.layout {
+        LayoutSku::Rcr => min_elements_col_major(args.b.rows, args.b.cols, args.b.ld),
+        LayoutSku::Rrr => min_elements_row_major(args.b.rows, args.b.cols, args.b.ld),
+    }
+    .ok_or(Error::InvalidProblem("B storage size overflow"))?;
     if args.b.data.len() < need_b {
         return Err(Error::BufferTooSmall {
             needed: need_b,
             got: args.b.data.len(),
         });
     }
-    let need_d = min_elements_rcr_cd(args.d.rows, args.d.cols, args.d.ld)
+    let need_d = min_elements_row_major(args.d.rows, args.d.cols, args.d.ld)
         .ok_or(Error::InvalidProblem("D storage size overflow"))?;
     if args.d.data.len() < need_d {
         return Err(Error::BufferTooSmall {
@@ -362,7 +541,7 @@ fn check_args<T: CutlassElement>(desc: &GemmDescriptor, args: &GemmArgs<'_, T>) 
         });
     }
     if let Some(c) = &args.c {
-        let need_c = min_elements_rcr_cd(c.rows, c.cols, c.ld)
+        let need_c = min_elements_row_major(c.rows, c.cols, c.ld)
             .ok_or(Error::InvalidProblem("C storage size overflow"))?;
         if c.data.len() < need_c {
             return Err(Error::BufferTooSmall {
@@ -446,7 +625,8 @@ impl<T: CutlassElement> GemmPlan<T> {
         let status = match self.sku.arch {
             #[cfg(feature = "sm80")]
             ArchSku::Sm80 => unsafe {
-                dispatch::gemm_rcr_sm80_can_implement(
+                dispatch::gemm_sm80_can_implement(
+                    self.sku.layout,
                     T::KIND,
                     self.desc.m,
                     self.desc.n,
@@ -484,9 +664,13 @@ impl<T: CutlassElement> GemmPlan<T> {
     pub fn workspace_size(&self) -> usize {
         match self.sku.arch {
             #[cfg(feature = "sm80")]
-            ArchSku::Sm80 => {
-                dispatch::gemm_rcr_sm80_workspace_size(T::KIND, self.desc.m, self.desc.n, self.desc.k)
-            }
+            ArchSku::Sm80 => dispatch::gemm_sm80_workspace_size(
+                self.sku.layout,
+                T::KIND,
+                self.desc.m,
+                self.desc.n,
+                self.desc.k,
+            ),
             #[cfg(not(feature = "sm80"))]
             ArchSku::Sm80 => 0,
             ArchSku::Sm90a => 0,
@@ -562,7 +746,8 @@ impl<T: CutlassElement> GemmPlan<T> {
         let status = match self.sku.arch {
             #[cfg(feature = "sm80")]
             ArchSku::Sm80 => unsafe {
-                dispatch::gemm_rcr_sm80_run(
+                dispatch::gemm_sm80_run(
+                    self.sku.layout,
                     T::KIND,
                     self.desc.m,
                     self.desc.n,
@@ -591,6 +776,358 @@ impl<T: CutlassElement> GemmPlan<T> {
             ArchSku::Sm90a => {
                 return Err(Error::Unsupported(
                     "sm90a kernels not yet implemented (Phase 4c)",
+                ));
+            }
+        };
+
+        status_to_result(status)
+    }
+}
+
+// ============================================================================
+// BatchedGemmPlan — uniform-shape batched GEMM
+// ============================================================================
+//
+// All batches share `(M, N, K)`; per-batch operands are addressed by
+// adding `i * stride_*` (in elements) to the base pointer. For
+// variable-shape grouped problems use `GroupedGemmPlan` instead.
+//
+// v1 coverage: Rcr layout, F16 / Bf16 elements, sm_80, Identity epilogue.
+
+fn check_batched_descriptor(desc: &BatchedGemmDescriptor) -> Result<()> {
+    if desc.m <= 0 || desc.n <= 0 || desc.k <= 0 {
+        return Err(Error::InvalidProblem("M, N, K must all be positive"));
+    }
+    if desc.batch_count <= 0 {
+        return Err(Error::InvalidProblem("batch_count must be positive"));
+    }
+    if desc.epilogue != EpilogueKind::Identity {
+        return Err(Error::Unsupported(
+            "BatchedGemmPlan v1 supports only EpilogueKind::Identity",
+        ));
+    }
+    Ok(())
+}
+
+fn check_batched_args<T: CutlassElement>(
+    desc: &BatchedGemmDescriptor,
+    args: &BatchedGemmArgs<'_, T>,
+) -> Result<()> {
+    // Per-batch shape validation matches the single-GEMM path; strides
+    // are validated by checking that the last batch's max-addressable
+    // element fits within each base buffer.
+    if args.a.rows != desc.m || args.a.cols != desc.k {
+        return Err(Error::InvalidProblem("A shape doesn't match descriptor (M, K)"));
+    }
+    if args.b.rows != desc.k || args.b.cols != desc.n {
+        return Err(Error::InvalidProblem("B shape doesn't match descriptor (K, N)"));
+    }
+    if args.d.rows != desc.m || args.d.cols != desc.n {
+        return Err(Error::InvalidProblem("D shape doesn't match descriptor (M, N)"));
+    }
+    if let Some(c) = &args.c {
+        if c.rows != desc.m || c.cols != desc.n {
+            return Err(Error::InvalidProblem("C shape doesn't match descriptor (M, N)"));
+        }
+    }
+    if args.a.ld < desc.k as i64 {
+        return Err(Error::InvalidProblem("A leading dimension must be >= K"));
+    }
+    let b_min_ld = match desc.layout {
+        LayoutSku::Rcr => desc.k as i64,
+        LayoutSku::Rrr => desc.n as i64,
+    };
+    if args.b.ld < b_min_ld {
+        return Err(Error::InvalidProblem("B leading dimension too small for layout"));
+    }
+    if args.d.ld < desc.n as i64 {
+        return Err(Error::InvalidProblem("D leading dimension must be >= N"));
+    }
+    if let Some(c) = &args.c {
+        if c.ld < desc.n as i64 {
+            return Err(Error::InvalidProblem("C leading dimension must be >= N"));
+        }
+    }
+
+    // Per-batch element footprint = single-batch min + (batch - 1) * stride.
+    // Stride 0 means "broadcast same matrix across all batches" — the
+    // single-batch min is the only constraint there.
+    fn need_for_batches(
+        per_batch_min: usize,
+        stride: i64,
+        batch_count: i32,
+    ) -> Option<usize> {
+        if batch_count <= 1 || stride == 0 {
+            return Some(per_batch_min);
+        }
+        let extra = stride.checked_mul((batch_count - 1) as i64)?;
+        let extra = usize::try_from(extra).ok()?;
+        per_batch_min.checked_add(extra)
+    }
+
+    let a_per = min_elements_row_major(args.a.rows, args.a.cols, args.a.ld)
+        .ok_or(Error::InvalidProblem("A storage size overflow"))?;
+    let need_a = need_for_batches(a_per, args.stride_a, desc.batch_count)
+        .ok_or(Error::InvalidProblem("A batched storage size overflow"))?;
+    if args.a.data.len() < need_a {
+        return Err(Error::BufferTooSmall {
+            needed: need_a,
+            got: args.a.data.len(),
+        });
+    }
+
+    let b_per = match desc.layout {
+        LayoutSku::Rcr => min_elements_col_major(args.b.rows, args.b.cols, args.b.ld),
+        LayoutSku::Rrr => min_elements_row_major(args.b.rows, args.b.cols, args.b.ld),
+    }
+    .ok_or(Error::InvalidProblem("B storage size overflow"))?;
+    let need_b = need_for_batches(b_per, args.stride_b, desc.batch_count)
+        .ok_or(Error::InvalidProblem("B batched storage size overflow"))?;
+    if args.b.data.len() < need_b {
+        return Err(Error::BufferTooSmall {
+            needed: need_b,
+            got: args.b.data.len(),
+        });
+    }
+
+    let d_per = min_elements_row_major(args.d.rows, args.d.cols, args.d.ld)
+        .ok_or(Error::InvalidProblem("D storage size overflow"))?;
+    let need_d = need_for_batches(d_per, args.stride_d, desc.batch_count)
+        .ok_or(Error::InvalidProblem("D batched storage size overflow"))?;
+    if args.d.data.len() < need_d {
+        return Err(Error::BufferTooSmall {
+            needed: need_d,
+            got: args.d.data.len(),
+        });
+    }
+
+    if let Some(c) = &args.c {
+        let c_per = min_elements_row_major(c.rows, c.cols, c.ld)
+            .ok_or(Error::InvalidProblem("C storage size overflow"))?;
+        let need_c = need_for_batches(c_per, args.stride_c, desc.batch_count)
+            .ok_or(Error::InvalidProblem("C batched storage size overflow"))?;
+        if c.data.len() < need_c {
+            return Err(Error::BufferTooSmall {
+                needed: need_c,
+                got: c.data.len(),
+            });
+        }
+    }
+    Ok(())
+}
+
+/// Plan for a uniform-shape batched GEMM launch.
+///
+/// All batches share `(M, N, K)`. Plans hold host-side selection
+/// metadata only — no device memory, cheap to clone, `Send + Sync`.
+///
+/// See [`GroupedGemmPlan`] for the variable-shape (per-group) case.
+#[derive(Debug)]
+pub struct BatchedGemmPlan<T: CutlassElement> {
+    desc: BatchedGemmDescriptor,
+    sku: GemmSku,
+    _element: PhantomData<T>,
+}
+
+impl<T: CutlassElement> BatchedGemmPlan<T> {
+    /// Pick a kernel for `desc`.
+    ///
+    /// Returns [`Error::Unsupported`] when the requested
+    /// `(layout, element)` combination has no shipped batched kernel
+    /// (today: anything other than `Rcr × {F16, Bf16}`).
+    pub fn select(
+        stream: &Stream,
+        desc: &BatchedGemmDescriptor,
+        pref: PlanPreference,
+    ) -> Result<Self> {
+        check_batched_descriptor(desc)?;
+        let one_off_desc = GemmDescriptor {
+            m: desc.m,
+            n: desc.n,
+            k: desc.k,
+            layout: desc.layout,
+            epilogue: desc.epilogue,
+        };
+        let arch = pick_arch(stream, &one_off_desc, pref)?;
+        // v1 coverage gate: only Rcr × {F16, Bf16} have batched kernels.
+        match (desc.layout, T::KIND) {
+            (LayoutSku::Rcr, ElementKind::F16) | (LayoutSku::Rcr, ElementKind::Bf16) => {}
+            _ => {
+                return Err(Error::Unsupported(
+                    "BatchedGemmPlan v1 only ships Rcr × {F16, Bf16} on sm_80",
+                ));
+            }
+        }
+        let sku = GemmSku {
+            arch,
+            layout: desc.layout,
+            epilogue: desc.epilogue,
+            element: T::KIND,
+        };
+        Ok(Self {
+            desc: *desc,
+            sku,
+            _element: PhantomData,
+        })
+    }
+
+    /// Validate that this plan can launch with `args`. See
+    /// [`GemmPlan::can_implement`] for the two-stage host + kernel check.
+    pub fn can_implement(&self, args: &BatchedGemmArgs<'_, T>) -> Result<()> {
+        check_batched_args(&self.desc, args)?;
+
+        let a_ptr = args.a.data.as_raw().0 as *const c_void;
+        let b_ptr = args.b.data.as_raw().0 as *const c_void;
+        let d_ptr = args.d.data.as_raw().0 as *mut c_void;
+        let (c_ptr, ldc, stride_c) = match &args.c {
+            Some(c) => (c.data.as_raw().0 as *const c_void, c.ld, args.stride_c),
+            None => (core::ptr::null(), 0i64, 0i64),
+        };
+
+        let status = match self.sku.arch {
+            #[cfg(feature = "sm80")]
+            ArchSku::Sm80 => unsafe {
+                dispatch::batched_gemm_sm80_can_implement(
+                    self.sku.layout,
+                    T::KIND,
+                    self.desc.m,
+                    self.desc.n,
+                    self.desc.k,
+                    a_ptr,
+                    args.a.ld,
+                    args.stride_a,
+                    b_ptr,
+                    args.b.ld,
+                    args.stride_b,
+                    c_ptr,
+                    ldc,
+                    stride_c,
+                    d_ptr,
+                    args.d.ld,
+                    args.stride_d,
+                    self.desc.batch_count,
+                )
+            },
+            #[cfg(not(feature = "sm80"))]
+            ArchSku::Sm80 => {
+                return Err(Error::Unsupported(
+                    "sm80 selected but the `sm80` feature isn't enabled",
+                ));
+            }
+            ArchSku::Sm90a => {
+                return Err(Error::Unsupported(
+                    "sm90a batched kernels not yet shipped",
+                ));
+            }
+        };
+
+        status_to_result(status)
+    }
+
+    /// Bytes of device scratch this plan needs at `run` time.
+    pub fn workspace_size(&self) -> usize {
+        match self.sku.arch {
+            #[cfg(feature = "sm80")]
+            ArchSku::Sm80 => dispatch::batched_gemm_sm80_workspace_size(
+                self.sku.layout,
+                T::KIND,
+                self.desc.m,
+                self.desc.n,
+                self.desc.k,
+                self.desc.batch_count,
+            ),
+            #[cfg(not(feature = "sm80"))]
+            ArchSku::Sm80 => 0,
+            ArchSku::Sm90a => 0,
+        }
+    }
+
+    /// Identity of the kernel this plan chose.
+    pub fn sku(&self) -> GemmSku {
+        self.sku
+    }
+
+    /// Numerical guarantees this plan's kernel provides.
+    pub fn precision_guarantee(&self) -> PrecisionGuarantee {
+        PrecisionGuarantee::for_sku(self.sku)
+    }
+
+    /// Launch the batched kernel.
+    pub fn run(
+        &self,
+        stream: &Stream,
+        workspace: Workspace<'_>,
+        args: BatchedGemmArgs<'_, T>,
+    ) -> Result<()> {
+        self.can_implement(&args)?;
+
+        let needed = self.workspace_size();
+        let (ws_ptr, ws_bytes): (*mut c_void, usize) = match workspace {
+            Workspace::None => {
+                if needed != 0 {
+                    return Err(Error::WorkspaceTooSmall { needed, got: 0 });
+                }
+                (core::ptr::null_mut(), 0)
+            }
+            Workspace::Borrowed(slice) => {
+                if slice.len() < needed {
+                    return Err(Error::WorkspaceTooSmall {
+                        needed,
+                        got: slice.len(),
+                    });
+                }
+                (slice.as_raw().0 as *mut c_void, slice.len())
+            }
+        };
+
+        let a_ptr = args.a.data.as_raw().0 as *const c_void;
+        let b_ptr = args.b.data.as_raw().0 as *const c_void;
+        let d_ptr = args.d.data.as_raw().0 as *mut c_void;
+        let (c_ptr, ldc, stride_c) = match &args.c {
+            Some(c) => (c.data.as_raw().0 as *const c_void, c.ld, args.stride_c),
+            None => (core::ptr::null(), 0i64, 0i64),
+        };
+        let beta_eff = if args.c.is_some() { args.beta } else { 0.0 };
+        let stream_raw = stream.as_raw();
+
+        let status = match self.sku.arch {
+            #[cfg(feature = "sm80")]
+            ArchSku::Sm80 => unsafe {
+                dispatch::batched_gemm_sm80_run(
+                    self.sku.layout,
+                    T::KIND,
+                    self.desc.m,
+                    self.desc.n,
+                    self.desc.k,
+                    a_ptr,
+                    args.a.ld,
+                    args.stride_a,
+                    b_ptr,
+                    args.b.ld,
+                    args.stride_b,
+                    c_ptr,
+                    ldc,
+                    stride_c,
+                    d_ptr,
+                    args.d.ld,
+                    args.stride_d,
+                    args.alpha,
+                    beta_eff,
+                    self.desc.batch_count,
+                    ws_ptr,
+                    ws_bytes,
+                    stream_raw,
+                )
+            },
+            #[cfg(not(feature = "sm80"))]
+            ArchSku::Sm80 => {
+                return Err(Error::Unsupported(
+                    "sm80 selected but the `sm80` feature isn't enabled",
+                ));
+            }
+            ArchSku::Sm90a => {
+                return Err(Error::Unsupported(
+                    "sm90a batched kernels not yet shipped",
                 ));
             }
         };

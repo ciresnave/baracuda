@@ -149,6 +149,305 @@ unsafe extern "C" {
 }
 
 // ============================================================================
+// GEMM — RRR layout, sm_80 instantiation
+// ============================================================================
+//
+// Layout convention `RRR`:
+//   A: row-major [M, K], leading dimension `lda`
+//   B: row-major [K, N], leading dimension `ldb`
+//   C: row-major [M, N], leading dimension `ldc` (optional; null + beta = 0)
+//   D: row-major [M, N], leading dimension `ldd`
+//
+// Same accumulator (FP32), epilogue (Identity), and status-code mapping as
+// the RCR variant. This is the natural shape for activations stored
+// row-major and weights stored row-major (no transpose copy).
+
+#[cfg(any(feature = "sm80", feature = "sm90a"))]
+unsafe extern "C" {
+    /// `f16` GEMM, RRR layout, sm_80.
+    ///
+    /// # Safety
+    /// See [`baracuda_cutlass_gemm_f16_rcr_sm80_run`].
+    pub fn baracuda_cutlass_gemm_f16_rrr_sm80_run(
+        m: i32,
+        n: i32,
+        k: i32,
+        a: *const c_void,
+        lda: i64,
+        b: *const c_void,
+        ldb: i64,
+        c: *const c_void,
+        ldc: i64,
+        d: *mut c_void,
+        ldd: i64,
+        alpha: f32,
+        beta: f32,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// Workspace size in bytes for `f16` RRR sm_80 GEMM.
+    pub fn baracuda_cutlass_gemm_f16_rrr_sm80_workspace_size(m: i32, n: i32, k: i32) -> usize;
+
+    /// Pre-launch implementability check for `f16` RRR sm_80.
+    ///
+    /// # Safety
+    /// See [`baracuda_cutlass_gemm_f16_rcr_sm80_can_implement`].
+    pub fn baracuda_cutlass_gemm_f16_rrr_sm80_can_implement(
+        m: i32,
+        n: i32,
+        k: i32,
+        a: *const c_void,
+        lda: i64,
+        b: *const c_void,
+        ldb: i64,
+        c: *const c_void,
+        ldc: i64,
+        d: *mut c_void,
+        ldd: i64,
+    ) -> i32;
+
+    /// `bf16` GEMM, RRR layout, sm_80.
+    ///
+    /// # Safety
+    /// See [`baracuda_cutlass_gemm_f16_rcr_sm80_run`].
+    pub fn baracuda_cutlass_gemm_bf16_rrr_sm80_run(
+        m: i32,
+        n: i32,
+        k: i32,
+        a: *const c_void,
+        lda: i64,
+        b: *const c_void,
+        ldb: i64,
+        c: *const c_void,
+        ldc: i64,
+        d: *mut c_void,
+        ldd: i64,
+        alpha: f32,
+        beta: f32,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// Workspace size in bytes for `bf16` RRR sm_80 GEMM.
+    pub fn baracuda_cutlass_gemm_bf16_rrr_sm80_workspace_size(m: i32, n: i32, k: i32) -> usize;
+
+    /// Pre-launch implementability check for `bf16` RRR sm_80.
+    ///
+    /// # Safety
+    /// See [`baracuda_cutlass_gemm_f16_rcr_sm80_can_implement`].
+    pub fn baracuda_cutlass_gemm_bf16_rrr_sm80_can_implement(
+        m: i32,
+        n: i32,
+        k: i32,
+        a: *const c_void,
+        lda: i64,
+        b: *const c_void,
+        ldb: i64,
+        c: *const c_void,
+        ldc: i64,
+        d: *mut c_void,
+        ldd: i64,
+    ) -> i32;
+}
+
+// ============================================================================
+// GEMM — TF32 (f32 input via TF32 tensor cores), RCR layout, sm_80
+// ============================================================================
+//
+// Inputs are IEEE 754 binary32 stored in device memory. The math
+// instruction reduces inputs to TF32 (10-bit mantissa, 8-bit exponent)
+// and accumulates into FP32. Faster than full-F32 SIMT GEMM at the cost
+// of ~10-bit math precision — analogous to cuBLAS's
+// `CUBLAS_COMPUTE_32F_FAST_TF32`.
+
+#[cfg(any(feature = "sm80", feature = "sm90a"))]
+unsafe extern "C" {
+    /// `f32` GEMM via TF32 tensor cores, RCR layout, sm_80.
+    ///
+    /// # Safety
+    /// See [`baracuda_cutlass_gemm_f16_rcr_sm80_run`].
+    pub fn baracuda_cutlass_gemm_tf32_rcr_sm80_run(
+        m: i32,
+        n: i32,
+        k: i32,
+        a: *const c_void,
+        lda: i64,
+        b: *const c_void,
+        ldb: i64,
+        c: *const c_void,
+        ldc: i64,
+        d: *mut c_void,
+        ldd: i64,
+        alpha: f32,
+        beta: f32,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// Workspace size in bytes for the `tf32` RCR sm_80 GEMM.
+    pub fn baracuda_cutlass_gemm_tf32_rcr_sm80_workspace_size(m: i32, n: i32, k: i32) -> usize;
+
+    /// Pre-launch implementability check for `tf32` RCR sm_80.
+    ///
+    /// # Safety
+    /// See [`baracuda_cutlass_gemm_f16_rcr_sm80_can_implement`].
+    pub fn baracuda_cutlass_gemm_tf32_rcr_sm80_can_implement(
+        m: i32,
+        n: i32,
+        k: i32,
+        a: *const c_void,
+        lda: i64,
+        b: *const c_void,
+        ldb: i64,
+        c: *const c_void,
+        ldc: i64,
+        d: *mut c_void,
+        ldd: i64,
+    ) -> i32;
+}
+
+// ============================================================================
+// Batched GEMM — uniform-shape, RCR layout, sm_80 instantiation
+// ============================================================================
+//
+// All batches share the same (M, N, K). Per-tensor `stride_*` (in
+// elements, not bytes) gives the offset between batch slabs. Layout
+// matches the single-GEMM RCR case. This is the natural fit for
+// equal-batch attention / repeated linear layers; for variable-shape
+// per-group problems use the grouped-GEMM API.
+
+#[cfg(any(feature = "sm80", feature = "sm90a"))]
+unsafe extern "C" {
+    /// `f16` batched GEMM, RCR layout, sm_80.
+    ///
+    /// # Safety
+    /// See [`baracuda_cutlass_gemm_f16_rcr_sm80_run`]. Each batch's
+    /// operand pointers are derived from base + `i * stride_*`; all
+    /// derived addresses must be device-resident in the current context.
+    #[allow(clippy::too_many_arguments)]
+    pub fn baracuda_cutlass_gemm_batched_f16_rcr_sm80_run(
+        m: i32,
+        n: i32,
+        k: i32,
+        a: *const c_void,
+        lda: i64,
+        stride_a: i64,
+        b: *const c_void,
+        ldb: i64,
+        stride_b: i64,
+        c: *const c_void,
+        ldc: i64,
+        stride_c: i64,
+        d: *mut c_void,
+        ldd: i64,
+        stride_d: i64,
+        alpha: f32,
+        beta: f32,
+        batch_count: i32,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// Workspace bytes needed by the `f16` batched RCR sm_80 GEMM.
+    pub fn baracuda_cutlass_gemm_batched_f16_rcr_sm80_workspace_size(
+        m: i32,
+        n: i32,
+        k: i32,
+        batch_count: i32,
+    ) -> usize;
+
+    /// Pre-launch implementability check for `f16` batched RCR sm_80.
+    ///
+    /// # Safety
+    /// See [`baracuda_cutlass_gemm_f16_rcr_sm80_can_implement`].
+    #[allow(clippy::too_many_arguments)]
+    pub fn baracuda_cutlass_gemm_batched_f16_rcr_sm80_can_implement(
+        m: i32,
+        n: i32,
+        k: i32,
+        a: *const c_void,
+        lda: i64,
+        stride_a: i64,
+        b: *const c_void,
+        ldb: i64,
+        stride_b: i64,
+        c: *const c_void,
+        ldc: i64,
+        stride_c: i64,
+        d: *mut c_void,
+        ldd: i64,
+        stride_d: i64,
+        batch_count: i32,
+    ) -> i32;
+
+    /// `bf16` batched GEMM, RCR layout, sm_80.
+    ///
+    /// # Safety
+    /// See [`baracuda_cutlass_gemm_batched_f16_rcr_sm80_run`].
+    #[allow(clippy::too_many_arguments)]
+    pub fn baracuda_cutlass_gemm_batched_bf16_rcr_sm80_run(
+        m: i32,
+        n: i32,
+        k: i32,
+        a: *const c_void,
+        lda: i64,
+        stride_a: i64,
+        b: *const c_void,
+        ldb: i64,
+        stride_b: i64,
+        c: *const c_void,
+        ldc: i64,
+        stride_c: i64,
+        d: *mut c_void,
+        ldd: i64,
+        stride_d: i64,
+        alpha: f32,
+        beta: f32,
+        batch_count: i32,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// Workspace bytes needed by the `bf16` batched RCR sm_80 GEMM.
+    pub fn baracuda_cutlass_gemm_batched_bf16_rcr_sm80_workspace_size(
+        m: i32,
+        n: i32,
+        k: i32,
+        batch_count: i32,
+    ) -> usize;
+
+    /// Pre-launch implementability check for `bf16` batched RCR sm_80.
+    ///
+    /// # Safety
+    /// See [`baracuda_cutlass_gemm_f16_rcr_sm80_can_implement`].
+    #[allow(clippy::too_many_arguments)]
+    pub fn baracuda_cutlass_gemm_batched_bf16_rcr_sm80_can_implement(
+        m: i32,
+        n: i32,
+        k: i32,
+        a: *const c_void,
+        lda: i64,
+        stride_a: i64,
+        b: *const c_void,
+        ldb: i64,
+        stride_b: i64,
+        c: *const c_void,
+        ldc: i64,
+        stride_c: i64,
+        d: *mut c_void,
+        ldd: i64,
+        stride_d: i64,
+        batch_count: i32,
+    ) -> i32;
+}
+
+// ============================================================================
 // Grouped GEMM — RCR layout, sm_80 instantiation
 // ============================================================================
 //

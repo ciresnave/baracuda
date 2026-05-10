@@ -55,9 +55,10 @@ pub mod plan;
 pub mod types;
 
 pub use error::{Error, Result};
-pub use plan::{GemmPlan, GroupedGemmPlan, PreparedGroupedGemm};
+pub use plan::{BatchedGemmPlan, GemmPlan, GroupedGemmPlan, PreparedGroupedGemm};
 pub use types::{
-    ArchSku, CutlassElement, ElementKind, EpilogueKind, GemmArgs, GemmDescriptor, GemmSku,
-    GroupedPlanPreference, GroupedProblem, GroupedScheduleMode, LayoutSku, MathPrecision,
-    MatrixMut, MatrixRef, PlanPreference, PrecisionGuarantee, VectorRef, Workspace,
+    ArchSku, BatchedGemmArgs, BatchedGemmDescriptor, CutlassElement, ElementKind, EpilogueKind,
+    GemmArgs, GemmDescriptor, GemmSku, GroupedPlanPreference, GroupedProblem, GroupedScheduleMode,
+    LayoutSku, MathPrecision, MatrixMut, MatrixRef, PlanPreference, PrecisionGuarantee, VectorRef,
+    Workspace,
 };
