@@ -94,6 +94,7 @@ fn collect_kernel_files() -> Vec<&'static str> {
                 "gemm_rcr_sm80.cu",
                 "gemm_rcr_sm80_bias.cu",
                 "gemm_rrr_sm80.cu",
+                "gemm_rrr_sm80_bias.cu",
                 "gemm_tf32_rcr_sm80.cu",
                 "gemm_batched_rcr_sm80.cu",
                 "grouped_gemm_rcr_sm80.cu",

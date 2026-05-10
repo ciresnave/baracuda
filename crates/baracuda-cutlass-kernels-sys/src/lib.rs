@@ -593,6 +593,276 @@ unsafe extern "C" {
 }
 
 // ============================================================================
+// GEMM — bias-fused (with optional activation), RRR layout, sm_80
+// ============================================================================
+//
+// Mirror of the RCR bias family but with `B` row-major rather than
+// column-major. Computes
+// `D = activation(alpha*AB + beta*C + bias_broadcast(N))` in a single
+// fused kernel pass. Symbol naming mirrors the RCR set, with `_rrr_`
+// in place of `_rcr_`. 24 entry points total (4 flavors × 2 dtypes ×
+// 3 ops).
+
+#[cfg(any(feature = "sm80", feature = "sm90a"))]
+unsafe extern "C" {
+    // ---- plain bias (Identity activation) -------------------------------
+
+    /// `f16` bias-fused GEMM, RRR layout, sm_80.
+    /// # Safety
+    /// See [`baracuda_cutlass_gemm_bias_f16_rcr_sm80_run`].
+    #[allow(clippy::too_many_arguments)]
+    pub fn baracuda_cutlass_gemm_bias_f16_rrr_sm80_run(
+        m: i32, n: i32, k: i32,
+        a: *const c_void, lda: i64,
+        b: *const c_void, ldb: i64,
+        c: *const c_void, ldc: i64,
+        d: *mut c_void, ldd: i64,
+        bias: *const c_void,
+        alpha: f32, beta: f32,
+        workspace: *mut c_void, workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    pub fn baracuda_cutlass_gemm_bias_f16_rrr_sm80_workspace_size(
+        m: i32, n: i32, k: i32,
+    ) -> usize;
+
+    /// # Safety
+    /// See [`baracuda_cutlass_gemm_f16_rcr_sm80_can_implement`].
+    pub fn baracuda_cutlass_gemm_bias_f16_rrr_sm80_can_implement(
+        m: i32, n: i32, k: i32,
+        a: *const c_void, lda: i64,
+        b: *const c_void, ldb: i64,
+        c: *const c_void, ldc: i64,
+        d: *mut c_void, ldd: i64,
+        bias: *const c_void,
+    ) -> i32;
+
+    /// `bf16` bias-fused GEMM, RRR layout, sm_80.
+    /// # Safety
+    /// See [`baracuda_cutlass_gemm_bias_f16_rcr_sm80_run`].
+    #[allow(clippy::too_many_arguments)]
+    pub fn baracuda_cutlass_gemm_bias_bf16_rrr_sm80_run(
+        m: i32, n: i32, k: i32,
+        a: *const c_void, lda: i64,
+        b: *const c_void, ldb: i64,
+        c: *const c_void, ldc: i64,
+        d: *mut c_void, ldd: i64,
+        bias: *const c_void,
+        alpha: f32, beta: f32,
+        workspace: *mut c_void, workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    pub fn baracuda_cutlass_gemm_bias_bf16_rrr_sm80_workspace_size(
+        m: i32, n: i32, k: i32,
+    ) -> usize;
+
+    /// # Safety
+    /// See [`baracuda_cutlass_gemm_f16_rcr_sm80_can_implement`].
+    pub fn baracuda_cutlass_gemm_bias_bf16_rrr_sm80_can_implement(
+        m: i32, n: i32, k: i32,
+        a: *const c_void, lda: i64,
+        b: *const c_void, ldb: i64,
+        c: *const c_void, ldc: i64,
+        d: *mut c_void, ldd: i64,
+        bias: *const c_void,
+    ) -> i32;
+
+    // ---- bias + ReLU activation ---------------------------------------
+
+    /// `f16` bias+ReLU GEMM, RRR layout, sm_80.
+    /// # Safety
+    /// See [`baracuda_cutlass_gemm_bias_f16_rcr_sm80_run`].
+    #[allow(clippy::too_many_arguments)]
+    pub fn baracuda_cutlass_gemm_bias_relu_f16_rrr_sm80_run(
+        m: i32, n: i32, k: i32,
+        a: *const c_void, lda: i64,
+        b: *const c_void, ldb: i64,
+        c: *const c_void, ldc: i64,
+        d: *mut c_void, ldd: i64,
+        bias: *const c_void,
+        alpha: f32, beta: f32,
+        workspace: *mut c_void, workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    pub fn baracuda_cutlass_gemm_bias_relu_f16_rrr_sm80_workspace_size(
+        m: i32, n: i32, k: i32,
+    ) -> usize;
+
+    /// # Safety
+    /// See [`baracuda_cutlass_gemm_f16_rcr_sm80_can_implement`].
+    pub fn baracuda_cutlass_gemm_bias_relu_f16_rrr_sm80_can_implement(
+        m: i32, n: i32, k: i32,
+        a: *const c_void, lda: i64,
+        b: *const c_void, ldb: i64,
+        c: *const c_void, ldc: i64,
+        d: *mut c_void, ldd: i64,
+        bias: *const c_void,
+    ) -> i32;
+
+    /// `bf16` bias+ReLU GEMM, RRR layout, sm_80.
+    /// # Safety
+    /// See [`baracuda_cutlass_gemm_bias_f16_rcr_sm80_run`].
+    #[allow(clippy::too_many_arguments)]
+    pub fn baracuda_cutlass_gemm_bias_relu_bf16_rrr_sm80_run(
+        m: i32, n: i32, k: i32,
+        a: *const c_void, lda: i64,
+        b: *const c_void, ldb: i64,
+        c: *const c_void, ldc: i64,
+        d: *mut c_void, ldd: i64,
+        bias: *const c_void,
+        alpha: f32, beta: f32,
+        workspace: *mut c_void, workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    pub fn baracuda_cutlass_gemm_bias_relu_bf16_rrr_sm80_workspace_size(
+        m: i32, n: i32, k: i32,
+    ) -> usize;
+
+    /// # Safety
+    /// See [`baracuda_cutlass_gemm_f16_rcr_sm80_can_implement`].
+    pub fn baracuda_cutlass_gemm_bias_relu_bf16_rrr_sm80_can_implement(
+        m: i32, n: i32, k: i32,
+        a: *const c_void, lda: i64,
+        b: *const c_void, ldb: i64,
+        c: *const c_void, ldc: i64,
+        d: *mut c_void, ldd: i64,
+        bias: *const c_void,
+    ) -> i32;
+
+    // ---- bias + GELU activation (exact, erf-based) --------------------
+
+    /// `f16` bias+GELU GEMM, RRR layout, sm_80.
+    /// # Safety
+    /// See [`baracuda_cutlass_gemm_bias_f16_rcr_sm80_run`].
+    #[allow(clippy::too_many_arguments)]
+    pub fn baracuda_cutlass_gemm_bias_gelu_f16_rrr_sm80_run(
+        m: i32, n: i32, k: i32,
+        a: *const c_void, lda: i64,
+        b: *const c_void, ldb: i64,
+        c: *const c_void, ldc: i64,
+        d: *mut c_void, ldd: i64,
+        bias: *const c_void,
+        alpha: f32, beta: f32,
+        workspace: *mut c_void, workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    pub fn baracuda_cutlass_gemm_bias_gelu_f16_rrr_sm80_workspace_size(
+        m: i32, n: i32, k: i32,
+    ) -> usize;
+
+    /// # Safety
+    /// See [`baracuda_cutlass_gemm_f16_rcr_sm80_can_implement`].
+    pub fn baracuda_cutlass_gemm_bias_gelu_f16_rrr_sm80_can_implement(
+        m: i32, n: i32, k: i32,
+        a: *const c_void, lda: i64,
+        b: *const c_void, ldb: i64,
+        c: *const c_void, ldc: i64,
+        d: *mut c_void, ldd: i64,
+        bias: *const c_void,
+    ) -> i32;
+
+    /// `bf16` bias+GELU GEMM, RRR layout, sm_80.
+    /// # Safety
+    /// See [`baracuda_cutlass_gemm_bias_f16_rcr_sm80_run`].
+    #[allow(clippy::too_many_arguments)]
+    pub fn baracuda_cutlass_gemm_bias_gelu_bf16_rrr_sm80_run(
+        m: i32, n: i32, k: i32,
+        a: *const c_void, lda: i64,
+        b: *const c_void, ldb: i64,
+        c: *const c_void, ldc: i64,
+        d: *mut c_void, ldd: i64,
+        bias: *const c_void,
+        alpha: f32, beta: f32,
+        workspace: *mut c_void, workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    pub fn baracuda_cutlass_gemm_bias_gelu_bf16_rrr_sm80_workspace_size(
+        m: i32, n: i32, k: i32,
+    ) -> usize;
+
+    /// # Safety
+    /// See [`baracuda_cutlass_gemm_f16_rcr_sm80_can_implement`].
+    pub fn baracuda_cutlass_gemm_bias_gelu_bf16_rrr_sm80_can_implement(
+        m: i32, n: i32, k: i32,
+        a: *const c_void, lda: i64,
+        b: *const c_void, ldb: i64,
+        c: *const c_void, ldc: i64,
+        d: *mut c_void, ldd: i64,
+        bias: *const c_void,
+    ) -> i32;
+
+    // ---- bias + SiLU activation ---------------------------------------
+
+    /// `f16` bias+SiLU GEMM, RRR layout, sm_80.
+    /// # Safety
+    /// See [`baracuda_cutlass_gemm_bias_f16_rcr_sm80_run`].
+    #[allow(clippy::too_many_arguments)]
+    pub fn baracuda_cutlass_gemm_bias_silu_f16_rrr_sm80_run(
+        m: i32, n: i32, k: i32,
+        a: *const c_void, lda: i64,
+        b: *const c_void, ldb: i64,
+        c: *const c_void, ldc: i64,
+        d: *mut c_void, ldd: i64,
+        bias: *const c_void,
+        alpha: f32, beta: f32,
+        workspace: *mut c_void, workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    pub fn baracuda_cutlass_gemm_bias_silu_f16_rrr_sm80_workspace_size(
+        m: i32, n: i32, k: i32,
+    ) -> usize;
+
+    /// # Safety
+    /// See [`baracuda_cutlass_gemm_f16_rcr_sm80_can_implement`].
+    pub fn baracuda_cutlass_gemm_bias_silu_f16_rrr_sm80_can_implement(
+        m: i32, n: i32, k: i32,
+        a: *const c_void, lda: i64,
+        b: *const c_void, ldb: i64,
+        c: *const c_void, ldc: i64,
+        d: *mut c_void, ldd: i64,
+        bias: *const c_void,
+    ) -> i32;
+
+    /// `bf16` bias+SiLU GEMM, RRR layout, sm_80.
+    /// # Safety
+    /// See [`baracuda_cutlass_gemm_bias_f16_rcr_sm80_run`].
+    #[allow(clippy::too_many_arguments)]
+    pub fn baracuda_cutlass_gemm_bias_silu_bf16_rrr_sm80_run(
+        m: i32, n: i32, k: i32,
+        a: *const c_void, lda: i64,
+        b: *const c_void, ldb: i64,
+        c: *const c_void, ldc: i64,
+        d: *mut c_void, ldd: i64,
+        bias: *const c_void,
+        alpha: f32, beta: f32,
+        workspace: *mut c_void, workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    pub fn baracuda_cutlass_gemm_bias_silu_bf16_rrr_sm80_workspace_size(
+        m: i32, n: i32, k: i32,
+    ) -> usize;
+
+    /// # Safety
+    /// See [`baracuda_cutlass_gemm_f16_rcr_sm80_can_implement`].
+    pub fn baracuda_cutlass_gemm_bias_silu_bf16_rrr_sm80_can_implement(
+        m: i32, n: i32, k: i32,
+        a: *const c_void, lda: i64,
+        b: *const c_void, ldb: i64,
+        c: *const c_void, ldc: i64,
+        d: *mut c_void, ldd: i64,
+        bias: *const c_void,
+    ) -> i32;
+}
+
+// ============================================================================
 // GEMM — TF32 (f32 input via TF32 tensor cores), RCR layout, sm_80
 // ============================================================================
 //
