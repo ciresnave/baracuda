@@ -143,18 +143,22 @@ pub enum ArchSku {
 }
 
 /// Epilogue applied after the matrix-multiply accumulation.
-///
-/// v0 ships only [`Identity`](EpilogueKind::Identity). The `Bias` variant
-/// was removed during the Fuel team's design review because the safe API
-/// would silently drop bias values until the corresponding kernel
-/// instantiation lands. Once a `LinearCombinationBias` kernel ships in a
-/// follow-up sub-phase, this enum will gain a `Bias` variant — and the
-/// `bias` field will return to [`GemmArgs`] / [`GroupedProblem`] — at the
-/// same time.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 pub enum EpilogueKind {
-    /// `D = α · (A · B) + β · C` (no activation).
+    /// `D = α · (A · B) + β · C` (no activation, no bias).
     Identity,
+    /// `D = α · (A · B) + β · C + bias_broadcast(N)`. The bias vector
+    /// has length `N` (one element per output column) and is broadcast
+    /// across rows. Fused into the epilogue (single memory pass) via
+    /// `cutlass::gemm::device::GemmUniversalWithBroadcast`.
+    ///
+    /// When the descriptor's epilogue is `Bias`, [`GemmArgs::bias`] must
+    /// be `Some`; conversely, if the epilogue is `Identity`, `bias`
+    /// must be `None`. v1 ships kernels for `Rcr × {F16, Bf16}` only —
+    /// other layout/element combinations return
+    /// [`Error::Unsupported`](crate::Error::Unsupported) at
+    /// [`GemmPlan::select`](crate::GemmPlan::select).
+    Bias,
 }
 
 /// Caller-supplied workspace for a launch.
@@ -235,6 +239,10 @@ pub struct GemmDescriptor {
 /// as `0`) and the kernel computes `D = α · A · B`. When `Some`, the
 /// kernel computes `D = α · A · B + β · C` — including the
 /// `c.data == d.data` case for in-place accumulation.
+///
+/// `bias` is required iff the descriptor's epilogue is
+/// [`EpilogueKind::Bias`], in which case the kernel computes
+/// `D = α · A · B + β · C + bias_broadcast(N)`.
 #[derive(Debug)]
 pub struct GemmArgs<'a, T: CutlassElement> {
     /// Left input. Row-major `[M, K]`.
@@ -247,6 +255,11 @@ pub struct GemmArgs<'a, T: CutlassElement> {
     pub c: Option<MatrixRef<'a, T>>,
     /// Output. Row-major `[M, N]`.
     pub d: MatrixMut<'a, T>,
+    /// Optional bias vector. Required (`Some`) when the descriptor's
+    /// epilogue is [`EpilogueKind::Bias`]; must be `None` for
+    /// [`EpilogueKind::Identity`]. Length-`N`, contiguous (stride 1)
+    /// device memory; broadcast across rows of `D`.
+    pub bias: Option<VectorRef<'a, T>>,
     /// Multiplier on the matrix-multiply accumulator.
     pub alpha: f32,
     /// Multiplier on `c`. Forced to `0.0` internally when `c` is `None`,

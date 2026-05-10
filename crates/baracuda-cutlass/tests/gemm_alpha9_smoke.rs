@@ -140,6 +140,7 @@ fn rrr_round_trip_f16(m: i32, n: i32, k: i32) {
         b: MatrixRef { data: dev_b.as_slice(), rows: k, cols: n, ld: n as i64 },
         c: None,
         d: MatrixMut { data: dev_d.as_slice_mut(), rows: m, cols: n, ld: n as i64 },
+        bias: None,
         alpha: 1.0, beta: 0.0,
     };
 
@@ -201,6 +202,7 @@ fn rrr_round_trip_bf16(m: i32, n: i32, k: i32) {
         b: MatrixRef { data: dev_b.as_slice(), rows: k, cols: n, ld: n as i64 },
         c: None,
         d: MatrixMut { data: dev_d.as_slice_mut(), rows: m, cols: n, ld: n as i64 },
+        bias: None,
         alpha: 1.0, beta: 0.0,
     };
     plan.can_implement(&args).expect("can_implement");
@@ -278,6 +280,7 @@ fn tf32_round_trip(m: i32, n: i32, k: i32) {
         b: MatrixRef { data: dev_b.as_slice(), rows: k, cols: n, ld: k as i64 },
         c: None,
         d: MatrixMut { data: dev_d.as_slice_mut(), rows: m, cols: n, ld: n as i64 },
+        bias: None,
         alpha: 1.0, beta: 0.0,
     };
     plan.can_implement(&args).expect("can_implement");

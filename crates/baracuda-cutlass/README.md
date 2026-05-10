@@ -18,12 +18,12 @@ kernels) and below framework integration crates like Fuel's `fuel-cublaslt`.
 - **Layouts**: `RCR` (A row-major, B column-major, C/D row-major) and
   `RRR` (all three operands row-major — natural for activation@weight
   matmul without a transpose pass). `f32` ships RCR only today.
-- **Epilogues**: `Identity` only. (`Bias` is intentionally deferred:
-  the right implementation needs the `GemmUniversalWithBroadcast`
-  template — a pre-broadcast workaround would cost an extra memory
-  pass and undermine the reason to fuse bias in the first place. It'll
-  return when that template lands, alongside the `bias` field on
-  `GemmArgs`.)
+- **Epilogues**: `Identity` and `Bias`. `Bias` computes
+  `D = α·A·B + β·C + bias_broadcast(N)` in a single fused kernel pass
+  via `cutlass::gemm::device::GemmUniversalWithBroadcast` +
+  `LinearCombinationBiasElementwise`. The bias vector has length `N`
+  (one element per output column) and must be contiguous (stride 1).
+  `GemmArgs::bias` is required iff `descriptor.epilogue == Bias`.
 - **Architectures**: `sm_80` shipped today (runs on Ampere, Ada, and
   forward-compatibly on Hopper). `sm_90a` selection wiring is in place;
   the Hopper-specialized kernels themselves land when Hopper hardware is
@@ -35,11 +35,12 @@ kernels) and below framework integration crates like Fuel's `fuel-cublaslt`.
 
 ### Kernel SKU coverage
 
-| API              | Layout × Element                                    |
-|------------------|-----------------------------------------------------|
-| `GemmPlan`       | `Rcr × {F16, Bf16, F32(TF32)}`, `Rrr × {F16, Bf16}` |
-| `BatchedGemmPlan`| `Rcr × {F16, Bf16}`                                 |
-| `GroupedGemmPlan`| `Rcr × {F16, Bf16}`                                 |
+| API                       | Layout × Element                                    |
+|---------------------------|-----------------------------------------------------|
+| `GemmPlan` (Identity)     | `Rcr × {F16, Bf16, F32(TF32)}`, `Rrr × {F16, Bf16}` |
+| `GemmPlan` (Bias)         | `Rcr × {F16, Bf16}`                                 |
+| `BatchedGemmPlan`         | `Rcr × {F16, Bf16}`                                 |
+| `GroupedGemmPlan`         | `Rcr × {F16, Bf16}`                                 |
 
 All on `sm_80` (Ampere); `sm_90a` deferred until Hopper validation.
 
@@ -83,6 +84,7 @@ let args = GemmArgs::<f16> {
     b: MatrixRef { data: dev_b.as_slice(), rows: k, cols: n, ld: k as i64 },
     c: None,
     d: MatrixMut { data: dev_d.as_slice_mut(), rows: m, cols: n, ld: n as i64 },
+    bias: None,
     alpha: 1.0,
     beta: 0.0,
 };

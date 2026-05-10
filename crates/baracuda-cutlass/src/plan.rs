@@ -20,6 +20,106 @@ mod dispatch {
     use super::{ElementKind, LayoutSku};
     use core::ffi::c_void;
 
+    /// Single-GEMM dispatch on sm_80 with bias-fused epilogue.
+    ///
+    /// SKU coverage today: `Rcr × {F16, Bf16}` only. Everything else
+    /// returns status 3 (not implemented). The non-bias path lives in
+    /// [`gemm_sm80_run`].
+    #[cfg(feature = "sm80")]
+    #[allow(clippy::too_many_arguments)]
+    pub(super) unsafe fn gemm_bias_sm80_run(
+        layout: LayoutSku,
+        kind: ElementKind,
+        m: i32,
+        n: i32,
+        k: i32,
+        a: *const c_void,
+        lda: i64,
+        b: *const c_void,
+        ldb: i64,
+        c: *const c_void,
+        ldc: i64,
+        d: *mut c_void,
+        ldd: i64,
+        bias: *const c_void,
+        alpha: f32,
+        beta: f32,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32 {
+        use baracuda_cutlass_kernels_sys as k_sys;
+        match (layout, kind) {
+            (LayoutSku::Rcr, ElementKind::F16) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_f16_rcr_sm80_run(
+                    m, n, k, a, lda, b, ldb, c, ldc, d, ldd,
+                    bias, alpha, beta, workspace, workspace_bytes, stream,
+                )
+            },
+            (LayoutSku::Rcr, ElementKind::Bf16) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_bf16_rcr_sm80_run(
+                    m, n, k, a, lda, b, ldb, c, ldc, d, ldd,
+                    bias, alpha, beta, workspace, workspace_bytes, stream,
+                )
+            },
+            _ => 3,
+        }
+    }
+
+    #[cfg(feature = "sm80")]
+    pub(super) fn gemm_bias_sm80_workspace_size(
+        layout: LayoutSku,
+        kind: ElementKind,
+        m: i32,
+        n: i32,
+        k: i32,
+    ) -> usize {
+        use baracuda_cutlass_kernels_sys as k_sys;
+        match (layout, kind) {
+            (LayoutSku::Rcr, ElementKind::F16) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_f16_rcr_sm80_workspace_size(m, n, k)
+            },
+            (LayoutSku::Rcr, ElementKind::Bf16) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_bf16_rcr_sm80_workspace_size(m, n, k)
+            },
+            _ => 0,
+        }
+    }
+
+    #[cfg(feature = "sm80")]
+    #[allow(clippy::too_many_arguments)]
+    pub(super) unsafe fn gemm_bias_sm80_can_implement(
+        layout: LayoutSku,
+        kind: ElementKind,
+        m: i32,
+        n: i32,
+        k: i32,
+        a: *const c_void,
+        lda: i64,
+        b: *const c_void,
+        ldb: i64,
+        c: *const c_void,
+        ldc: i64,
+        d: *mut c_void,
+        ldd: i64,
+        bias: *const c_void,
+    ) -> i32 {
+        use baracuda_cutlass_kernels_sys as k_sys;
+        match (layout, kind) {
+            (LayoutSku::Rcr, ElementKind::F16) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_f16_rcr_sm80_can_implement(
+                    m, n, k, a, lda, b, ldb, c, ldc, d, ldd, bias,
+                )
+            },
+            (LayoutSku::Rcr, ElementKind::Bf16) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_bf16_rcr_sm80_can_implement(
+                    m, n, k, a, lda, b, ldb, c, ldc, d, ldd, bias,
+                )
+            },
+            _ => 3,
+        }
+    }
+
     /// Single-GEMM dispatch on sm_80 — selects per `(layout, kind)`.
     ///
     /// SKU coverage (status 3 = not implemented):
@@ -473,6 +573,39 @@ fn check_descriptor(desc: &GemmDescriptor) -> Result<()> {
 }
 
 fn check_args<T: CutlassElement>(desc: &GemmDescriptor, args: &GemmArgs<'_, T>) -> Result<()> {
+    // Epilogue / bias must agree: Identity → bias must be None,
+    // Bias → bias must be Some and have length N.
+    match (desc.epilogue, &args.bias) {
+        (EpilogueKind::Identity, Some(_)) => {
+            return Err(Error::InvalidProblem(
+                "args.bias must be None when descriptor.epilogue is Identity",
+            ));
+        }
+        (EpilogueKind::Bias, None) => {
+            return Err(Error::InvalidProblem(
+                "args.bias is required when descriptor.epilogue is Bias",
+            ));
+        }
+        (EpilogueKind::Identity, None) | (EpilogueKind::Bias, Some(_)) => {}
+    }
+    if let Some(bias) = &args.bias {
+        if bias.len != desc.n {
+            return Err(Error::InvalidProblem(
+                "bias vector length must equal N",
+            ));
+        }
+        if bias.stride != 1 {
+            return Err(Error::Unsupported(
+                "bias vector must be contiguous (stride 1) — strided bias not supported",
+            ));
+        }
+        if bias.data.len() < desc.n as usize {
+            return Err(Error::BufferTooSmall {
+                needed: desc.n as usize,
+                got: bias.data.len(),
+            });
+        }
+    }
     if args.a.rows != desc.m || args.a.cols != desc.k {
         return Err(Error::InvalidProblem("A shape doesn't match descriptor (M, K)"));
     }
@@ -585,6 +718,19 @@ impl<T: CutlassElement> GemmPlan<T> {
     /// *available*; the device cap decides what to *use*.
     pub fn select(stream: &Stream, desc: &GemmDescriptor, pref: PlanPreference) -> Result<Self> {
         check_descriptor(desc)?;
+        // Bias-fused kernels ship for `Rcr × {F16, Bf16}` only today.
+        // Reject other combinations here so callers don't get a runtime
+        // status 3 deep inside the launch path.
+        if desc.epilogue == EpilogueKind::Bias {
+            match (desc.layout, T::KIND) {
+                (LayoutSku::Rcr, ElementKind::F16) | (LayoutSku::Rcr, ElementKind::Bf16) => {}
+                _ => {
+                    return Err(Error::Unsupported(
+                        "EpilogueKind::Bias is implemented only for Rcr × {F16, Bf16} on sm_80 today",
+                    ));
+                }
+            }
+        }
         let arch = pick_arch(stream, desc, pref)?;
         let sku = GemmSku {
             arch,
@@ -621,10 +767,15 @@ impl<T: CutlassElement> GemmPlan<T> {
             Some(c) => (c.data.as_raw().0 as *const c_void, c.ld),
             None => (core::ptr::null(), 0i64),
         };
+        let bias_ptr = args
+            .bias
+            .as_ref()
+            .map(|b| b.data.as_raw().0 as *const c_void)
+            .unwrap_or(core::ptr::null());
 
-        let status = match self.sku.arch {
+        let status = match (self.sku.arch, self.sku.epilogue) {
             #[cfg(feature = "sm80")]
-            ArchSku::Sm80 => unsafe {
+            (ArchSku::Sm80, EpilogueKind::Identity) => unsafe {
                 dispatch::gemm_sm80_can_implement(
                     self.sku.layout,
                     T::KIND,
@@ -641,13 +792,32 @@ impl<T: CutlassElement> GemmPlan<T> {
                     args.d.ld,
                 )
             },
+            #[cfg(feature = "sm80")]
+            (ArchSku::Sm80, EpilogueKind::Bias) => unsafe {
+                dispatch::gemm_bias_sm80_can_implement(
+                    self.sku.layout,
+                    T::KIND,
+                    self.desc.m,
+                    self.desc.n,
+                    self.desc.k,
+                    a_ptr,
+                    args.a.ld,
+                    b_ptr,
+                    args.b.ld,
+                    c_ptr,
+                    ldc,
+                    d_ptr,
+                    args.d.ld,
+                    bias_ptr,
+                )
+            },
             #[cfg(not(feature = "sm80"))]
-            ArchSku::Sm80 => {
+            (ArchSku::Sm80, _) => {
                 return Err(Error::Unsupported(
                     "sm80 selected but the `sm80` feature isn't enabled",
                 ));
             }
-            ArchSku::Sm90a => {
+            (ArchSku::Sm90a, _) => {
                 return Err(Error::Unsupported(
                     "sm90a kernels not yet shipped (deferred until Hopper hardware available for validation)",
                 ));
@@ -662,9 +832,17 @@ impl<T: CutlassElement> GemmPlan<T> {
     /// Returns 0 when the kernel's launch is workspace-free; pass
     /// [`Workspace::None`] in that case.
     pub fn workspace_size(&self) -> usize {
-        match self.sku.arch {
+        match (self.sku.arch, self.sku.epilogue) {
             #[cfg(feature = "sm80")]
-            ArchSku::Sm80 => dispatch::gemm_sm80_workspace_size(
+            (ArchSku::Sm80, EpilogueKind::Identity) => dispatch::gemm_sm80_workspace_size(
+                self.sku.layout,
+                T::KIND,
+                self.desc.m,
+                self.desc.n,
+                self.desc.k,
+            ),
+            #[cfg(feature = "sm80")]
+            (ArchSku::Sm80, EpilogueKind::Bias) => dispatch::gemm_bias_sm80_workspace_size(
                 self.sku.layout,
                 T::KIND,
                 self.desc.m,
@@ -672,8 +850,8 @@ impl<T: CutlassElement> GemmPlan<T> {
                 self.desc.k,
             ),
             #[cfg(not(feature = "sm80"))]
-            ArchSku::Sm80 => 0,
-            ArchSku::Sm90a => 0,
+            (ArchSku::Sm80, _) => 0,
+            (ArchSku::Sm90a, _) => 0,
         }
     }
 
@@ -735,6 +913,11 @@ impl<T: CutlassElement> GemmPlan<T> {
             Some(c) => (c.data.as_raw().0 as *const c_void, c.ld),
             None => (core::ptr::null(), 0i64),
         };
+        let bias_ptr = args
+            .bias
+            .as_ref()
+            .map(|b| b.data.as_raw().0 as *const c_void)
+            .unwrap_or(core::ptr::null());
         // When the caller passes c = None, force beta = 0 at the safe
         // layer. The kernel internally substitutes D for the C operand to
         // satisfy CUTLASS's non-null pointer contract, so a non-zero beta
@@ -743,9 +926,9 @@ impl<T: CutlassElement> GemmPlan<T> {
         let beta_eff = if args.c.is_some() { args.beta } else { 0.0 };
         let stream_raw = stream.as_raw();
 
-        let status = match self.sku.arch {
+        let status = match (self.sku.arch, self.sku.epilogue) {
             #[cfg(feature = "sm80")]
-            ArchSku::Sm80 => unsafe {
+            (ArchSku::Sm80, EpilogueKind::Identity) => unsafe {
                 dispatch::gemm_sm80_run(
                     self.sku.layout,
                     T::KIND,
@@ -767,13 +950,37 @@ impl<T: CutlassElement> GemmPlan<T> {
                     stream_raw,
                 )
             },
+            #[cfg(feature = "sm80")]
+            (ArchSku::Sm80, EpilogueKind::Bias) => unsafe {
+                dispatch::gemm_bias_sm80_run(
+                    self.sku.layout,
+                    T::KIND,
+                    self.desc.m,
+                    self.desc.n,
+                    self.desc.k,
+                    a_ptr,
+                    args.a.ld,
+                    b_ptr,
+                    args.b.ld,
+                    c_ptr,
+                    ldc,
+                    d_ptr,
+                    args.d.ld,
+                    bias_ptr,
+                    args.alpha,
+                    beta_eff,
+                    ws_ptr,
+                    ws_bytes,
+                    stream_raw,
+                )
+            },
             #[cfg(not(feature = "sm80"))]
-            ArchSku::Sm80 => {
+            (ArchSku::Sm80, _) => {
                 return Err(Error::Unsupported(
                     "sm80 selected but the `sm80` feature isn't enabled",
                 ));
             }
-            ArchSku::Sm90a => {
+            (ArchSku::Sm90a, _) => {
                 return Err(Error::Unsupported(
                     "sm90a kernels not yet implemented (Phase 4c)",
                 ));

@@ -121,6 +121,7 @@ fn run_one_f16(m: i32, n: i32, k: i32) {
             cols: n,
             ld: n as i64,
         },
+        bias: None,
         alpha: 1.0,
         beta: 0.0,
     };
@@ -216,6 +217,7 @@ fn run_one_bf16(m: i32, n: i32, k: i32) {
             cols: n,
             ld: n as i64,
         },
+        bias: None,
         alpha: 1.0,
         beta: 0.0,
     };
@@ -315,6 +317,7 @@ fn can_implement_accepts_aligned_problem() {
             cols: n,
             ld: n as i64,
         },
+        bias: None,
         alpha: 1.0,
         beta: 0.0,
     };
@@ -378,6 +381,7 @@ fn can_implement_rejects_misaligned_k() {
             cols: n,
             ld: n as i64,
         },
+        bias: None,
         alpha: 1.0,
         beta: 0.0,
     };
@@ -481,6 +485,7 @@ fn null_c_with_nonzero_beta_overwrites_d() {
             cols: n,
             ld: n as i64,
         },
+        bias: None,
         alpha: 1.0,
         beta: 7.0, // intentionally nonzero — must be ignored when c = None
     };

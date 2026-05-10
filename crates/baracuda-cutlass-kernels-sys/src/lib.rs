@@ -149,6 +149,124 @@ unsafe extern "C" {
 }
 
 // ============================================================================
+// GEMM — bias-fused, RCR layout, sm_80 instantiation
+// ============================================================================
+//
+// Computes `D = alpha*AB + beta*C + bias_broadcast(N)` in a single
+// kernel pass via `cutlass::gemm::device::GemmUniversalWithBroadcast` +
+// `LinearCombinationBiasElementwise`. The bias vector has length `N`
+// (one element per output column) and is broadcast across rows. Layout
+// matches the standard RCR variant (A row-major, B column-major, C/D
+// row-major).
+
+#[cfg(any(feature = "sm80", feature = "sm90a"))]
+unsafe extern "C" {
+    /// `f16` bias-fused GEMM, RCR layout, sm_80.
+    ///
+    /// # Safety
+    /// All pointer args must be device-resident. `bias` must be a
+    /// device-resident length-`n` vector. See
+    /// [`baracuda_cutlass_gemm_f16_rcr_sm80_run`] for the rest.
+    #[allow(clippy::too_many_arguments)]
+    pub fn baracuda_cutlass_gemm_bias_f16_rcr_sm80_run(
+        m: i32,
+        n: i32,
+        k: i32,
+        a: *const c_void,
+        lda: i64,
+        b: *const c_void,
+        ldb: i64,
+        c: *const c_void,
+        ldc: i64,
+        d: *mut c_void,
+        ldd: i64,
+        bias: *const c_void,
+        alpha: f32,
+        beta: f32,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// Workspace bytes needed by the `f16` bias-fused RCR sm_80 GEMM.
+    pub fn baracuda_cutlass_gemm_bias_f16_rcr_sm80_workspace_size(
+        m: i32,
+        n: i32,
+        k: i32,
+    ) -> usize;
+
+    /// Pre-launch implementability check for `f16` bias RCR sm_80.
+    ///
+    /// # Safety
+    /// See [`baracuda_cutlass_gemm_f16_rcr_sm80_can_implement`].
+    pub fn baracuda_cutlass_gemm_bias_f16_rcr_sm80_can_implement(
+        m: i32,
+        n: i32,
+        k: i32,
+        a: *const c_void,
+        lda: i64,
+        b: *const c_void,
+        ldb: i64,
+        c: *const c_void,
+        ldc: i64,
+        d: *mut c_void,
+        ldd: i64,
+        bias: *const c_void,
+    ) -> i32;
+
+    /// `bf16` bias-fused GEMM, RCR layout, sm_80.
+    ///
+    /// # Safety
+    /// See [`baracuda_cutlass_gemm_bias_f16_rcr_sm80_run`].
+    #[allow(clippy::too_many_arguments)]
+    pub fn baracuda_cutlass_gemm_bias_bf16_rcr_sm80_run(
+        m: i32,
+        n: i32,
+        k: i32,
+        a: *const c_void,
+        lda: i64,
+        b: *const c_void,
+        ldb: i64,
+        c: *const c_void,
+        ldc: i64,
+        d: *mut c_void,
+        ldd: i64,
+        bias: *const c_void,
+        alpha: f32,
+        beta: f32,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// Workspace bytes needed by the `bf16` bias-fused RCR sm_80 GEMM.
+    pub fn baracuda_cutlass_gemm_bias_bf16_rcr_sm80_workspace_size(
+        m: i32,
+        n: i32,
+        k: i32,
+    ) -> usize;
+
+    /// Pre-launch implementability check for `bf16` bias RCR sm_80.
+    ///
+    /// # Safety
+    /// See [`baracuda_cutlass_gemm_f16_rcr_sm80_can_implement`].
+    pub fn baracuda_cutlass_gemm_bias_bf16_rcr_sm80_can_implement(
+        m: i32,
+        n: i32,
+        k: i32,
+        a: *const c_void,
+        lda: i64,
+        b: *const c_void,
+        ldb: i64,
+        c: *const c_void,
+        ldc: i64,
+        d: *mut c_void,
+        ldd: i64,
+        bias: *const c_void,
+    ) -> i32;
+}
+
+// ============================================================================
 // GEMM — RRR layout, sm_80 instantiation
 // ============================================================================
 //
