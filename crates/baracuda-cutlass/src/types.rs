@@ -143,22 +143,81 @@ pub enum ArchSku {
 }
 
 /// Epilogue applied after the matrix-multiply accumulation.
+///
+/// The four `Bias*` variants share one kernel family: they all fuse the
+/// bias add into the output epilogue via
+/// `cutlass::gemm::device::GemmUniversalWithBroadcast`, and additionally
+/// apply the named activation function before the store. `BiasRelu`,
+/// `BiasGelu`, and `BiasSilu` therefore deliver the full
+/// `y = activation(W·x + b)` transformer-Linear pipeline in a single
+/// kernel pass — no extra memory traffic vs plain `Bias`.
+///
+/// [`GemmArgs::bias`] is required (`Some`) for any `Bias*` variant and
+/// must be `None` for `Identity`. See [`EpilogueKind::requires_bias`]
+/// and [`EpilogueKind::activation`].
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 pub enum EpilogueKind {
     /// `D = α · (A · B) + β · C` (no activation, no bias).
     Identity,
     /// `D = α · (A · B) + β · C + bias_broadcast(N)`. The bias vector
     /// has length `N` (one element per output column) and is broadcast
-    /// across rows. Fused into the epilogue (single memory pass) via
-    /// `cutlass::gemm::device::GemmUniversalWithBroadcast`.
-    ///
-    /// When the descriptor's epilogue is `Bias`, [`GemmArgs::bias`] must
-    /// be `Some`; conversely, if the epilogue is `Identity`, `bias`
-    /// must be `None`. v1 ships kernels for `Rcr × {F16, Bf16}` only —
-    /// other layout/element combinations return
-    /// [`Error::Unsupported`](crate::Error::Unsupported) at
-    /// [`GemmPlan::select`](crate::GemmPlan::select).
+    /// across rows. v1 ships kernels for `Rcr × {F16, Bf16}` only.
     Bias,
+    /// `D = relu(α · (A · B) + β · C + bias_broadcast(N))`.
+    /// `relu(x) = max(x, 0)`. Same SKU coverage as [`Bias`](Self::Bias).
+    BiasRelu,
+    /// `D = gelu(α · (A · B) + β · C + bias_broadcast(N))` using the
+    /// exact (erf-based) GELU — matches PyTorch's default `nn.GELU()`.
+    /// For the `'tanh'` approximation file a follow-up; not yet shipped.
+    /// Same SKU coverage as [`Bias`](Self::Bias).
+    BiasGelu,
+    /// `D = silu(α · (A · B) + β · C + bias_broadcast(N))` where
+    /// `silu(x) = x · sigmoid(x)`. Also known as Swish-1.
+    /// Same SKU coverage as [`Bias`](Self::Bias).
+    BiasSilu,
+}
+
+impl EpilogueKind {
+    /// `true` if [`GemmArgs::bias`] must be `Some` for this epilogue.
+    /// Equivalent to "any `Bias*` variant".
+    #[inline]
+    pub const fn requires_bias(self) -> bool {
+        matches!(
+            self,
+            Self::Bias | Self::BiasRelu | Self::BiasGelu | Self::BiasSilu,
+        )
+    }
+
+    /// Activation function this epilogue applies after the linear
+    /// combination, if any.
+    ///
+    /// Returns `None` for [`Identity`](Self::Identity) and
+    /// [`Bias`](Self::Bias) (both apply no activation); returns the
+    /// corresponding [`ActivationKind`] for the `Bias*Activation`
+    /// variants.
+    #[inline]
+    pub const fn activation(self) -> Option<ActivationKind> {
+        match self {
+            Self::Identity | Self::Bias => None,
+            Self::BiasRelu => Some(ActivationKind::Relu),
+            Self::BiasGelu => Some(ActivationKind::Gelu),
+            Self::BiasSilu => Some(ActivationKind::Silu),
+        }
+    }
+}
+
+/// Activation functions implemented by the `Bias*Activation`
+/// [`EpilogueKind`] variants. Surfaced for telemetry and selector
+/// logic; the kernel selection itself is driven by the enum variant.
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
+pub enum ActivationKind {
+    /// `relu(x) = max(x, 0)`.
+    Relu,
+    /// Exact (erf-based) Gaussian Error Linear Unit. Matches
+    /// PyTorch's default `nn.GELU()`.
+    Gelu,
+    /// `silu(x) = x · sigmoid(x)`. Also known as Swish-1.
+    Silu,
 }
 
 /// Caller-supplied workspace for a launch.

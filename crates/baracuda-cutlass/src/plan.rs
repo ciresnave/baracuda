@@ -20,16 +20,20 @@ mod dispatch {
     use super::{ElementKind, LayoutSku};
     use core::ffi::c_void;
 
-    /// Single-GEMM dispatch on sm_80 with bias-fused epilogue.
+    use super::EpilogueKind;
+
+    /// Single-GEMM dispatch on sm_80 with a bias-family epilogue (Bias,
+    /// BiasRelu, BiasGelu, BiasSilu).
     ///
-    /// SKU coverage today: `Rcr × {F16, Bf16}` only. Everything else
-    /// returns status 3 (not implemented). The non-bias path lives in
-    /// [`gemm_sm80_run`].
+    /// SKU coverage today: `Rcr × {F16, Bf16}` for every bias-family
+    /// epilogue. Everything else returns status 3 (not implemented).
+    /// The non-bias path lives in [`gemm_sm80_run`].
     #[cfg(feature = "sm80")]
     #[allow(clippy::too_many_arguments)]
     pub(super) unsafe fn gemm_bias_sm80_run(
         layout: LayoutSku,
         kind: ElementKind,
+        epilogue: EpilogueKind,
         m: i32,
         n: i32,
         k: i32,
@@ -49,15 +53,51 @@ mod dispatch {
         stream: *mut c_void,
     ) -> i32 {
         use baracuda_cutlass_kernels_sys as k_sys;
-        match (layout, kind) {
-            (LayoutSku::Rcr, ElementKind::F16) => unsafe {
+        match (layout, kind, epilogue) {
+            (LayoutSku::Rcr, ElementKind::F16, EpilogueKind::Bias) => unsafe {
                 k_sys::baracuda_cutlass_gemm_bias_f16_rcr_sm80_run(
                     m, n, k, a, lda, b, ldb, c, ldc, d, ldd,
                     bias, alpha, beta, workspace, workspace_bytes, stream,
                 )
             },
-            (LayoutSku::Rcr, ElementKind::Bf16) => unsafe {
+            (LayoutSku::Rcr, ElementKind::Bf16, EpilogueKind::Bias) => unsafe {
                 k_sys::baracuda_cutlass_gemm_bias_bf16_rcr_sm80_run(
+                    m, n, k, a, lda, b, ldb, c, ldc, d, ldd,
+                    bias, alpha, beta, workspace, workspace_bytes, stream,
+                )
+            },
+            (LayoutSku::Rcr, ElementKind::F16, EpilogueKind::BiasRelu) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_relu_f16_rcr_sm80_run(
+                    m, n, k, a, lda, b, ldb, c, ldc, d, ldd,
+                    bias, alpha, beta, workspace, workspace_bytes, stream,
+                )
+            },
+            (LayoutSku::Rcr, ElementKind::Bf16, EpilogueKind::BiasRelu) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_relu_bf16_rcr_sm80_run(
+                    m, n, k, a, lda, b, ldb, c, ldc, d, ldd,
+                    bias, alpha, beta, workspace, workspace_bytes, stream,
+                )
+            },
+            (LayoutSku::Rcr, ElementKind::F16, EpilogueKind::BiasGelu) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_gelu_f16_rcr_sm80_run(
+                    m, n, k, a, lda, b, ldb, c, ldc, d, ldd,
+                    bias, alpha, beta, workspace, workspace_bytes, stream,
+                )
+            },
+            (LayoutSku::Rcr, ElementKind::Bf16, EpilogueKind::BiasGelu) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_gelu_bf16_rcr_sm80_run(
+                    m, n, k, a, lda, b, ldb, c, ldc, d, ldd,
+                    bias, alpha, beta, workspace, workspace_bytes, stream,
+                )
+            },
+            (LayoutSku::Rcr, ElementKind::F16, EpilogueKind::BiasSilu) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_silu_f16_rcr_sm80_run(
+                    m, n, k, a, lda, b, ldb, c, ldc, d, ldd,
+                    bias, alpha, beta, workspace, workspace_bytes, stream,
+                )
+            },
+            (LayoutSku::Rcr, ElementKind::Bf16, EpilogueKind::BiasSilu) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_silu_bf16_rcr_sm80_run(
                     m, n, k, a, lda, b, ldb, c, ldc, d, ldd,
                     bias, alpha, beta, workspace, workspace_bytes, stream,
                 )
@@ -70,17 +110,36 @@ mod dispatch {
     pub(super) fn gemm_bias_sm80_workspace_size(
         layout: LayoutSku,
         kind: ElementKind,
+        epilogue: EpilogueKind,
         m: i32,
         n: i32,
         k: i32,
     ) -> usize {
         use baracuda_cutlass_kernels_sys as k_sys;
-        match (layout, kind) {
-            (LayoutSku::Rcr, ElementKind::F16) => unsafe {
+        match (layout, kind, epilogue) {
+            (LayoutSku::Rcr, ElementKind::F16, EpilogueKind::Bias) => unsafe {
                 k_sys::baracuda_cutlass_gemm_bias_f16_rcr_sm80_workspace_size(m, n, k)
             },
-            (LayoutSku::Rcr, ElementKind::Bf16) => unsafe {
+            (LayoutSku::Rcr, ElementKind::Bf16, EpilogueKind::Bias) => unsafe {
                 k_sys::baracuda_cutlass_gemm_bias_bf16_rcr_sm80_workspace_size(m, n, k)
+            },
+            (LayoutSku::Rcr, ElementKind::F16, EpilogueKind::BiasRelu) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_relu_f16_rcr_sm80_workspace_size(m, n, k)
+            },
+            (LayoutSku::Rcr, ElementKind::Bf16, EpilogueKind::BiasRelu) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_relu_bf16_rcr_sm80_workspace_size(m, n, k)
+            },
+            (LayoutSku::Rcr, ElementKind::F16, EpilogueKind::BiasGelu) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_gelu_f16_rcr_sm80_workspace_size(m, n, k)
+            },
+            (LayoutSku::Rcr, ElementKind::Bf16, EpilogueKind::BiasGelu) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_gelu_bf16_rcr_sm80_workspace_size(m, n, k)
+            },
+            (LayoutSku::Rcr, ElementKind::F16, EpilogueKind::BiasSilu) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_silu_f16_rcr_sm80_workspace_size(m, n, k)
+            },
+            (LayoutSku::Rcr, ElementKind::Bf16, EpilogueKind::BiasSilu) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_silu_bf16_rcr_sm80_workspace_size(m, n, k)
             },
             _ => 0,
         }
@@ -91,6 +150,7 @@ mod dispatch {
     pub(super) unsafe fn gemm_bias_sm80_can_implement(
         layout: LayoutSku,
         kind: ElementKind,
+        epilogue: EpilogueKind,
         m: i32,
         n: i32,
         k: i32,
@@ -105,14 +165,44 @@ mod dispatch {
         bias: *const c_void,
     ) -> i32 {
         use baracuda_cutlass_kernels_sys as k_sys;
-        match (layout, kind) {
-            (LayoutSku::Rcr, ElementKind::F16) => unsafe {
+        match (layout, kind, epilogue) {
+            (LayoutSku::Rcr, ElementKind::F16, EpilogueKind::Bias) => unsafe {
                 k_sys::baracuda_cutlass_gemm_bias_f16_rcr_sm80_can_implement(
                     m, n, k, a, lda, b, ldb, c, ldc, d, ldd, bias,
                 )
             },
-            (LayoutSku::Rcr, ElementKind::Bf16) => unsafe {
+            (LayoutSku::Rcr, ElementKind::Bf16, EpilogueKind::Bias) => unsafe {
                 k_sys::baracuda_cutlass_gemm_bias_bf16_rcr_sm80_can_implement(
+                    m, n, k, a, lda, b, ldb, c, ldc, d, ldd, bias,
+                )
+            },
+            (LayoutSku::Rcr, ElementKind::F16, EpilogueKind::BiasRelu) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_relu_f16_rcr_sm80_can_implement(
+                    m, n, k, a, lda, b, ldb, c, ldc, d, ldd, bias,
+                )
+            },
+            (LayoutSku::Rcr, ElementKind::Bf16, EpilogueKind::BiasRelu) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_relu_bf16_rcr_sm80_can_implement(
+                    m, n, k, a, lda, b, ldb, c, ldc, d, ldd, bias,
+                )
+            },
+            (LayoutSku::Rcr, ElementKind::F16, EpilogueKind::BiasGelu) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_gelu_f16_rcr_sm80_can_implement(
+                    m, n, k, a, lda, b, ldb, c, ldc, d, ldd, bias,
+                )
+            },
+            (LayoutSku::Rcr, ElementKind::Bf16, EpilogueKind::BiasGelu) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_gelu_bf16_rcr_sm80_can_implement(
+                    m, n, k, a, lda, b, ldb, c, ldc, d, ldd, bias,
+                )
+            },
+            (LayoutSku::Rcr, ElementKind::F16, EpilogueKind::BiasSilu) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_silu_f16_rcr_sm80_can_implement(
+                    m, n, k, a, lda, b, ldb, c, ldc, d, ldd, bias,
+                )
+            },
+            (LayoutSku::Rcr, ElementKind::Bf16, EpilogueKind::BiasSilu) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_silu_bf16_rcr_sm80_can_implement(
                     m, n, k, a, lda, b, ldb, c, ldc, d, ldd, bias,
                 )
             },
@@ -573,20 +663,21 @@ fn check_descriptor(desc: &GemmDescriptor) -> Result<()> {
 }
 
 fn check_args<T: CutlassElement>(desc: &GemmDescriptor, args: &GemmArgs<'_, T>) -> Result<()> {
-    // Epilogue / bias must agree: Identity → bias must be None,
-    // Bias → bias must be Some and have length N.
-    match (desc.epilogue, &args.bias) {
-        (EpilogueKind::Identity, Some(_)) => {
+    // Epilogue / bias must agree: any Bias* variant needs bias = Some,
+    // Identity needs bias = None.
+    match (desc.epilogue.requires_bias(), &args.bias) {
+        (false, Some(_)) => {
             return Err(Error::InvalidProblem(
                 "args.bias must be None when descriptor.epilogue is Identity",
             ));
         }
-        (EpilogueKind::Bias, None) => {
+        (true, None) => {
             return Err(Error::InvalidProblem(
-                "args.bias is required when descriptor.epilogue is Bias",
+                "args.bias is required when descriptor.epilogue is in the Bias family \
+                 (Bias / BiasRelu / BiasGelu / BiasSilu)",
             ));
         }
-        (EpilogueKind::Identity, None) | (EpilogueKind::Bias, Some(_)) => {}
+        (false, None) | (true, Some(_)) => {}
     }
     if let Some(bias) = &args.bias {
         if bias.len != desc.n {
@@ -718,15 +809,16 @@ impl<T: CutlassElement> GemmPlan<T> {
     /// *available*; the device cap decides what to *use*.
     pub fn select(stream: &Stream, desc: &GemmDescriptor, pref: PlanPreference) -> Result<Self> {
         check_descriptor(desc)?;
-        // Bias-fused kernels ship for `Rcr × {F16, Bf16}` only today.
-        // Reject other combinations here so callers don't get a runtime
-        // status 3 deep inside the launch path.
-        if desc.epilogue == EpilogueKind::Bias {
+        // Bias-family kernels (Bias / BiasRelu / BiasGelu / BiasSilu)
+        // all ship for `Rcr × {F16, Bf16}` only today. Reject other
+        // combinations here so callers don't get a runtime status 3
+        // deep inside the launch path.
+        if desc.epilogue.requires_bias() {
             match (desc.layout, T::KIND) {
                 (LayoutSku::Rcr, ElementKind::F16) | (LayoutSku::Rcr, ElementKind::Bf16) => {}
                 _ => {
                     return Err(Error::Unsupported(
-                        "EpilogueKind::Bias is implemented only for Rcr × {F16, Bf16} on sm_80 today",
+                        "Bias-family epilogues are implemented only for Rcr × {F16, Bf16} on sm_80 today",
                     ));
                 }
             }
@@ -773,9 +865,10 @@ impl<T: CutlassElement> GemmPlan<T> {
             .map(|b| b.data.as_raw().0 as *const c_void)
             .unwrap_or(core::ptr::null());
 
-        let status = match (self.sku.arch, self.sku.epilogue) {
+        let bias_family = self.sku.epilogue.requires_bias();
+        let status = match (self.sku.arch, bias_family) {
             #[cfg(feature = "sm80")]
-            (ArchSku::Sm80, EpilogueKind::Identity) => unsafe {
+            (ArchSku::Sm80, false) => unsafe {
                 dispatch::gemm_sm80_can_implement(
                     self.sku.layout,
                     T::KIND,
@@ -793,10 +886,11 @@ impl<T: CutlassElement> GemmPlan<T> {
                 )
             },
             #[cfg(feature = "sm80")]
-            (ArchSku::Sm80, EpilogueKind::Bias) => unsafe {
+            (ArchSku::Sm80, true) => unsafe {
                 dispatch::gemm_bias_sm80_can_implement(
                     self.sku.layout,
                     T::KIND,
+                    self.sku.epilogue,
                     self.desc.m,
                     self.desc.n,
                     self.desc.k,
@@ -832,9 +926,10 @@ impl<T: CutlassElement> GemmPlan<T> {
     /// Returns 0 when the kernel's launch is workspace-free; pass
     /// [`Workspace::None`] in that case.
     pub fn workspace_size(&self) -> usize {
-        match (self.sku.arch, self.sku.epilogue) {
+        let bias_family = self.sku.epilogue.requires_bias();
+        match (self.sku.arch, bias_family) {
             #[cfg(feature = "sm80")]
-            (ArchSku::Sm80, EpilogueKind::Identity) => dispatch::gemm_sm80_workspace_size(
+            (ArchSku::Sm80, false) => dispatch::gemm_sm80_workspace_size(
                 self.sku.layout,
                 T::KIND,
                 self.desc.m,
@@ -842,9 +937,10 @@ impl<T: CutlassElement> GemmPlan<T> {
                 self.desc.k,
             ),
             #[cfg(feature = "sm80")]
-            (ArchSku::Sm80, EpilogueKind::Bias) => dispatch::gemm_bias_sm80_workspace_size(
+            (ArchSku::Sm80, true) => dispatch::gemm_bias_sm80_workspace_size(
                 self.sku.layout,
                 T::KIND,
+                self.sku.epilogue,
                 self.desc.m,
                 self.desc.n,
                 self.desc.k,
@@ -926,9 +1022,10 @@ impl<T: CutlassElement> GemmPlan<T> {
         let beta_eff = if args.c.is_some() { args.beta } else { 0.0 };
         let stream_raw = stream.as_raw();
 
-        let status = match (self.sku.arch, self.sku.epilogue) {
+        let bias_family = self.sku.epilogue.requires_bias();
+        let status = match (self.sku.arch, bias_family) {
             #[cfg(feature = "sm80")]
-            (ArchSku::Sm80, EpilogueKind::Identity) => unsafe {
+            (ArchSku::Sm80, false) => unsafe {
                 dispatch::gemm_sm80_run(
                     self.sku.layout,
                     T::KIND,
@@ -951,10 +1048,11 @@ impl<T: CutlassElement> GemmPlan<T> {
                 )
             },
             #[cfg(feature = "sm80")]
-            (ArchSku::Sm80, EpilogueKind::Bias) => unsafe {
+            (ArchSku::Sm80, true) => unsafe {
                 dispatch::gemm_bias_sm80_run(
                     self.sku.layout,
                     T::KIND,
+                    self.sku.epilogue,
                     self.desc.m,
                     self.desc.n,
                     self.desc.k,

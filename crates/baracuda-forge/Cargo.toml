@@ -1,6 +1,6 @@
 [package]
 name = "baracuda-forge"
-version = "0.0.1-alpha.10"
+version = "0.0.1-alpha.11"
 description = "Build-time CUDA kernel compiler for the baracuda ecosystem: nvcc-driven incremental builds, parallel compilation, GPU auto-detection, and CUTLASS / custom git dependency support."
 edition.workspace = true
 rust-version.workspace = true
