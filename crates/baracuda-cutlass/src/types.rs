@@ -34,13 +34,77 @@ impl CutlassElement for bf16 {
 }
 
 /// Runtime tag for a [`CutlassElement`].
+///
+/// Includes variants for element types that don't yet have a
+/// [`CutlassElement`] impl (e.g. `F32`) so that
+/// [`PrecisionGuarantee::accumulator`] can name them without a
+/// cross-version churn when the corresponding input-side kernels land.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 pub enum ElementKind {
     /// IEEE 754 binary16.
     F16,
     /// Brain-float 16.
     Bf16,
+    /// IEEE 754 binary32. No `CutlassElement` impl yet (the f32 input
+    /// kernel lands in a follow-up alpha); used today only as the
+    /// accumulator tag in [`PrecisionGuarantee`].
+    F32,
 }
+
+/// Math precision used by the FMA / tensor-core instruction.
+///
+/// Distinct from the *input* element type because tensor cores can take
+/// inputs at one precision and reduce through an instruction at a
+/// different precision (most notably TF32: F32 inputs, 10-bit-mantissa
+/// math).
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
+pub enum MathPrecision {
+    /// IEEE 754 binary16 multiply-add.
+    F16,
+    /// Brain-float 16 multiply-add.
+    Bf16,
+    /// TensorFloat-32 (10-bit mantissa) multiply-add. Inputs are stored
+    /// as F32 but reduced through TF32 tensor cores.
+    Tf32,
+    /// IEEE 754 binary32 multiply-add (CUDA cores, no tensor cores).
+    F32,
+}
+
+/// Numerical guarantees a CUTLASS GEMM kernel provides.
+///
+/// Surfaces the salient numerical properties consumers (e.g. Fuel's
+/// per-decision-point alternatives layer) need to decide whether a
+/// kernel SKU satisfies an op's precision contract — without having to
+/// re-derive them from the README per kernel.
+///
+/// All fields are intentionally cheap to compare so this struct can be
+/// hashed into selection / autotuner caches.
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
+pub struct PrecisionGuarantee {
+    /// Bit-precision used inside the math instruction.
+    pub math_precision: MathPrecision,
+    /// Element type of the multiply-accumulate accumulator. All current
+    /// kernels accumulate into F32 regardless of input dtype.
+    pub accumulator: ElementKind,
+    /// Whether the kernel produces bit-identical results across runs on
+    /// the same hardware with the same inputs.
+    ///
+    /// `false` for tensor-core kernels (F16, BF16, TF32) because the
+    /// warp-level reduction order isn't fixed by the spec — adjacent
+    /// runs can differ in the last bit even with the same inputs.
+    /// `true` for SIMT F32.
+    pub bit_stable_on_same_hardware: bool,
+    /// Whether the kernel produces bit-identical results across runs
+    /// from a single thread within a process — i.e. it has no internal
+    /// nondeterminism (no atomic accumulation across blocks, no random
+    /// tile-schedule decisions).
+    ///
+    /// All current kernels are deterministic in this sense; the
+    /// distinction from `bit_stable_on_same_hardware` is about
+    /// cross-driver-version stability on the same input.
+    pub deterministic: bool,
+}
+
 
 /// Layout SKU. Describes the row/column orientation of A, B, C, and D.
 ///
@@ -261,4 +325,31 @@ pub struct GemmSku {
     pub epilogue: EpilogueKind,
     /// Element type the kernel operates on.
     pub element: ElementKind,
+}
+
+impl PrecisionGuarantee {
+    /// Numerical guarantees for the kernel identified by `sku`.
+    ///
+    /// Pure host-side lookup; returns the same value for the same SKU
+    /// across calls. The mapping is part of the public contract: a
+    /// stable SKU implies a stable precision guarantee.
+    pub fn for_sku(sku: GemmSku) -> Self {
+        // All shipped kernels accumulate into F32 and use tensor cores.
+        // None use cross-block atomics, so all are deterministic.
+        // Tensor-core warp-reduction order isn't pinned by the spec, so
+        // cross-driver bit-stability is not guaranteed.
+        let math_precision = match sku.element {
+            ElementKind::F16 => MathPrecision::F16,
+            ElementKind::Bf16 => MathPrecision::Bf16,
+            // Reserved for the f32-input kernel: routes through TF32
+            // tensor cores under the hood (not full F32 SIMT).
+            ElementKind::F32 => MathPrecision::Tf32,
+        };
+        Self {
+            math_precision,
+            accumulator: ElementKind::F32,
+            bit_stable_on_same_hardware: false,
+            deterministic: true,
+        }
+    }
 }

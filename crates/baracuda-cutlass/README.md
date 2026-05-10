@@ -113,6 +113,64 @@ CUTLASS for the threadblock count + scratch size. `run` uploads the
 metadata to the start of the workspace via async H2D and launches the
 grouped kernel using the remainder as CUTLASS internal scratch.
 
+## Integration notes
+
+### Calling from a byte-storage substrate
+
+Frameworks that store all device tensors as `DeviceBuffer<u8>` (e.g.
+Fuel's unified-binding-table dispatch path) can construct typed
+`MatrixRef` / `MatrixMut` views without copying or transmuting:
+
+```rust,no_run
+use baracuda_cutlass::{MatrixMut, MatrixRef};
+use baracuda_driver::DeviceBuffer;
+use half::bf16;
+
+# fn demo(byte_a: &DeviceBuffer<u8>, byte_d: &mut DeviceBuffer<u8>) {
+let m = 128i32; let n = 128i32; let k = 128i32;
+let a_view: MatrixRef<bf16> = MatrixRef {
+    data: byte_a.view_as::<bf16>(),
+    rows: m, cols: k, ld: k as i64,
+};
+let d_view: MatrixMut<bf16> = MatrixMut {
+    data: byte_d.view_as_mut::<bf16>(),
+    rows: m, cols: n, ld: n as i64,
+};
+# let _ = (a_view, d_view); }
+```
+
+[`DeviceBuffer<u8>::view_as`](baracuda_driver::DeviceBuffer::view_as)
+asserts byte-count divisibility and reuses the buffer's existing
+allocation — no copy, no `unsafe` at the consumer site. For non-baracuda
+allocations, the lower-level
+[`DeviceSlice::from_raw_parts`](baracuda_driver::DeviceSlice::from_raw_parts)
+escape hatch is available.
+
+### Sharing a stream across launchers
+
+A consumer that holds an `Arc<Stream>` (e.g. one stream per device,
+shared across many kernel launches) can pass it to `plan.run` directly
+via `Arc::as_ref` — the `&Stream` borrow shape is the same as for an
+owned `Stream`:
+
+```rust,no_run
+# use std::sync::Arc;
+# use baracuda_driver::Stream;
+# fn demo(shared: Arc<Stream>) {
+// `shared.run(...)` — Arc<Stream> auto-derefs to &Stream at the
+// call site; no extra Stream::new per launcher needed.
+# let _ = shared.as_ref(); }
+```
+
+### Mapping kernels to precision guarantees
+
+For consumers maintaining a per-decision-point alternatives table
+(picking between cuBLAS and CUTLASS at a given precision contract),
+[`GemmPlan::precision_guarantee`] (and the grouped equivalent) returns
+a `PrecisionGuarantee` value — math-instruction precision, accumulator
+type, bit-stability and determinism flags — without re-derivation from
+per-kernel docs.
+
 ## Acknowledgments
 
 API specification by the Fuel ML library team. Underlying CUTLASS by NVIDIA.

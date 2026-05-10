@@ -348,6 +348,73 @@ impl<T: DeviceRepr> DeviceBuffer<T> {
     }
 }
 
+impl DeviceBuffer<u8> {
+    /// Reinterpret the byte buffer as an immutable typed [`DeviceSlice<'_, U>`].
+    ///
+    /// The recommended primitive for layering safe typed APIs over a
+    /// byte-shaped storage substrate — e.g. a unified-binding table that
+    /// stores all device tensors as `DeviceBuffer<u8>` and only acquires
+    /// element types at the edges where it calls into typed CUDA
+    /// libraries.
+    ///
+    /// Alignment is guaranteed: `cuMemAlloc` returns 256-byte-aligned
+    /// pointers, which satisfies any `U: DeviceRepr` we ship today and
+    /// any reasonable user type.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the buffer's byte length isn't an integer multiple of
+    /// `size_of::<U>()`. Zero-sized `U` produces a zero-length view.
+    #[inline]
+    pub fn view_as<U: DeviceRepr>(&self) -> DeviceSlice<'_, U> {
+        let elem = size_of::<U>();
+        if elem == 0 {
+            return DeviceSlice {
+                ptr: self.ptr,
+                len: 0,
+                _marker: PhantomData,
+            };
+        }
+        assert!(
+            self.len % elem == 0,
+            "DeviceBuffer<u8>::view_as: byte length {} not divisible by size_of::<{}>() = {}",
+            self.len,
+            core::any::type_name::<U>(),
+            elem,
+        );
+        DeviceSlice {
+            ptr: self.ptr,
+            len: self.len / elem,
+            _marker: PhantomData,
+        }
+    }
+
+    /// Mutable counterpart of [`view_as`](Self::view_as).
+    #[inline]
+    pub fn view_as_mut<U: DeviceRepr>(&mut self) -> DeviceSliceMut<'_, U> {
+        let elem = size_of::<U>();
+        if elem == 0 {
+            return DeviceSliceMut {
+                ptr: self.ptr,
+                len: 0,
+                _marker: PhantomData,
+            };
+        }
+        assert!(
+            self.len % elem == 0,
+            "DeviceBuffer<u8>::view_as_mut: byte length {} not divisible by size_of::<{}>() = {}",
+            self.len,
+            core::any::type_name::<U>(),
+            elem,
+        );
+        DeviceSliceMut {
+            ptr: self.ptr,
+            len: self.len / elem,
+            _marker: PhantomData,
+        }
+    }
+}
+
 // ---- Unified (managed) memory --------------------------------------------
 
 /// Attach-mode for [`ManagedBuffer::new_with_flags`].
@@ -841,6 +908,38 @@ impl<'a, T: DeviceRepr> DeviceSlice<'a, T> {
         self.ptr
     }
 
+    /// Construct a [`DeviceSlice`] from a raw device pointer and element count.
+    ///
+    /// The lower-level escape hatch backing
+    /// [`DeviceBuffer::view_as`](DeviceBuffer::view_as) — use this when
+    /// the source buffer is not a baracuda `DeviceBuffer` (e.g. a
+    /// pointer received from a foreign CUDA library, or a byte-shaped
+    /// storage substrate that erases the original buffer type at the
+    /// boundary).
+    ///
+    /// # Safety
+    ///
+    /// The caller must guarantee:
+    ///
+    /// 1. `ptr` points to at least `len * size_of::<T>()` bytes of
+    ///    device memory in the calling thread's current CUDA context.
+    /// 2. The pointer is properly aligned for `T`. `cuMemAlloc` returns
+    ///    256-byte-aligned pointers, but sub-slicing with a non-multiple
+    ///    element offset can reduce alignment.
+    /// 3. The pointed-to region remains live, with no concurrent
+    ///    mutation through any other path, for the lifetime `'b`.
+    /// 4. The contents are a valid bit-pattern for `T` (trivially true
+    ///    for `T: DeviceRepr` since all `DeviceRepr` types have no
+    ///    invalid bit patterns).
+    #[inline]
+    pub unsafe fn from_raw_parts<'b>(ptr: CUdeviceptr, len: usize) -> DeviceSlice<'b, T> {
+        DeviceSlice {
+            ptr,
+            len,
+            _marker: PhantomData,
+        }
+    }
+
     /// Borrow a sub-range. Panics on out-of-bounds / inverted ranges.
     #[inline]
     pub fn slice(&self, range: Range<usize>) -> DeviceSlice<'_, T> {
@@ -887,6 +986,28 @@ impl<'a, T: DeviceRepr> DeviceSliceMut<'a, T> {
     #[inline]
     pub fn as_raw(&self) -> CUdeviceptr {
         self.ptr
+    }
+
+    /// Construct a [`DeviceSliceMut`] from a raw device pointer and element count.
+    ///
+    /// Mutable counterpart of [`DeviceSlice::from_raw_parts`].
+    ///
+    /// # Safety
+    ///
+    /// All requirements of [`DeviceSlice::from_raw_parts`] apply, with
+    /// the additional unique-access guarantee:
+    ///
+    /// - No other reference (mutable or shared) may alias the
+    ///   pointed-to region for the lifetime `'b`. This includes any
+    ///   `DeviceSlice<'_, U>` constructed from the same underlying
+    ///   storage, even at a different element type.
+    #[inline]
+    pub unsafe fn from_raw_parts<'b>(ptr: CUdeviceptr, len: usize) -> DeviceSliceMut<'b, T> {
+        DeviceSliceMut {
+            ptr,
+            len,
+            _marker: PhantomData,
+        }
     }
 
     /// Borrow a sub-range immutably. Panics on out-of-bounds / inverted.
@@ -1189,6 +1310,26 @@ mod slice_tests {
     fn slice_inverted_range_panics() {
         let s: DeviceSlice<'_, u8> = fake_slice(0, 10);
         let _ = s.slice(5..3);
+    }
+
+    // ---- from_raw_parts -----------------------------------------------------
+
+    #[test]
+    fn from_raw_parts_preserves_ptr_and_len() {
+        // SAFETY: host-only inspection, no dereference. The pointer is
+        // never read or written.
+        let s: DeviceSlice<'static, f32> =
+            unsafe { DeviceSlice::from_raw_parts(CUdeviceptr(0x4000), 32) };
+        assert_eq!(s.as_raw().0, 0x4000);
+        assert_eq!(s.len(), 32);
+    }
+
+    #[test]
+    fn from_raw_parts_mut_preserves_ptr_and_len() {
+        let s: DeviceSliceMut<'static, u32> =
+            unsafe { DeviceSliceMut::from_raw_parts(CUdeviceptr(0x8000), 64) };
+        assert_eq!(s.as_raw().0, 0x8000);
+        assert_eq!(s.len(), 64);
     }
 }
 

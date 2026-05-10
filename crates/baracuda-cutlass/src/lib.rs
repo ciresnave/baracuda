@@ -58,6 +58,6 @@ pub use error::{Error, Result};
 pub use plan::{GemmPlan, GroupedGemmPlan, PreparedGroupedGemm};
 pub use types::{
     ArchSku, CutlassElement, ElementKind, EpilogueKind, GemmArgs, GemmDescriptor, GemmSku,
-    GroupedPlanPreference, GroupedProblem, GroupedScheduleMode, LayoutSku, MatrixMut, MatrixRef,
-    PlanPreference, VectorRef, Workspace,
+    GroupedPlanPreference, GroupedProblem, GroupedScheduleMode, LayoutSku, MathPrecision,
+    MatrixMut, MatrixRef, PlanPreference, PrecisionGuarantee, VectorRef, Workspace,
 };

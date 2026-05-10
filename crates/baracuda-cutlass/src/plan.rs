@@ -9,7 +9,7 @@ use crate::error::{status_to_result, Error, Result};
 use crate::types::{
     ArchSku, CutlassElement, ElementKind, EpilogueKind, GemmArgs, GemmDescriptor, GemmSku,
     GroupedPlanPreference, GroupedProblem, GroupedScheduleMode, LayoutSku, PlanPreference,
-    Workspace,
+    PrecisionGuarantee, Workspace,
 };
 
 // ============================================================================
@@ -83,6 +83,13 @@ mod dispatch {
                     stream,
                 )
             },
+            // F32 input kernels haven't shipped yet (planned for the
+            // alpha.9 follow-up). Unreachable today because
+            // `CutlassElement` is sealed and only F16 / Bf16 implement it,
+            // but we return status 3 ("not supported") as a defensive
+            // soft-fail in case a future trait impl arrives without a
+            // matching kernel.
+            ElementKind::F32 => 3,
         }
     }
 
@@ -96,6 +103,7 @@ mod dispatch {
             ElementKind::Bf16 => unsafe {
                 k_sys::baracuda_cutlass_gemm_bf16_rcr_sm80_workspace_size(m, n, k)
             },
+            ElementKind::F32 => 0,
         }
     }
 
@@ -127,6 +135,7 @@ mod dispatch {
                     m, n, k, a, lda, b, ldb, c, ldc, d, ldd,
                 )
             },
+            ElementKind::F32 => 3,
         }
     }
 
@@ -148,6 +157,7 @@ mod dispatch {
             ElementKind::Bf16 => unsafe {
                 k_sys::baracuda_cutlass_grouped_gemm_bf16_rcr_sm80_sufficient(h_m, h_n, h_k, group_count)
             },
+            ElementKind::F32 => 0,
         }
     }
 
@@ -172,6 +182,7 @@ mod dispatch {
                     h_m, h_n, h_k, group_count, threadblock_count,
                 )
             },
+            ElementKind::F32 => 0,
         }
     }
 
@@ -191,6 +202,7 @@ mod dispatch {
             ElementKind::Bf16 => unsafe {
                 k_sys::baracuda_cutlass_grouped_gemm_bf16_rcr_sm80_can_implement(h_m, h_n, h_k, group_count)
             },
+            ElementKind::F32 => 3,
         }
     }
 
@@ -242,6 +254,7 @@ mod dispatch {
                     stream,
                 )
             },
+            ElementKind::F32 => 3,
         }
     }
 }
@@ -483,6 +496,17 @@ impl<T: CutlassElement> GemmPlan<T> {
     /// Identity of the kernel this plan chose.
     pub fn sku(&self) -> GemmSku {
         self.sku
+    }
+
+    /// Numerical guarantees this plan's kernel provides.
+    ///
+    /// Convenience for [`PrecisionGuarantee::for_sku`] applied to this
+    /// plan's SKU. Useful for callers that maintain a per-decision-point
+    /// alternatives table (e.g. picking between cuBLAS and CUTLASS for a
+    /// given precision contract) without having to re-derive the
+    /// guarantees from per-kernel documentation.
+    pub fn precision_guarantee(&self) -> PrecisionGuarantee {
+        PrecisionGuarantee::for_sku(self.sku)
     }
 
     /// Launch the kernel.
@@ -774,6 +798,13 @@ impl<T: CutlassElement> GroupedGemmPlan<T> {
     /// Identity of the kernel this plan chose.
     pub fn sku(&self) -> GemmSku {
         self.sku
+    }
+
+    /// Numerical guarantees this plan's kernel provides.
+    ///
+    /// See [`GemmPlan::precision_guarantee`] for usage.
+    pub fn precision_guarantee(&self) -> PrecisionGuarantee {
+        PrecisionGuarantee::for_sku(self.sku)
     }
 
     /// Schedule mode this plan was selected with.
