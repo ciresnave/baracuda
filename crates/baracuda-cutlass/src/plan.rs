@@ -151,6 +151,31 @@ mod dispatch {
                     bias, alpha, beta, workspace, workspace_bytes, stream,
                 )
             },
+            // ---- TF32 path (Rcr × F32) ----
+            (LayoutSku::Rcr, ElementKind::F32, EpilogueKind::Bias) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_tf32_rcr_sm80_run(
+                    m, n, k, a, lda, b, ldb, c, ldc, d, ldd,
+                    bias, alpha, beta, workspace, workspace_bytes, stream,
+                )
+            },
+            (LayoutSku::Rcr, ElementKind::F32, EpilogueKind::BiasRelu) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_relu_tf32_rcr_sm80_run(
+                    m, n, k, a, lda, b, ldb, c, ldc, d, ldd,
+                    bias, alpha, beta, workspace, workspace_bytes, stream,
+                )
+            },
+            (LayoutSku::Rcr, ElementKind::F32, EpilogueKind::BiasGelu) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_gelu_tf32_rcr_sm80_run(
+                    m, n, k, a, lda, b, ldb, c, ldc, d, ldd,
+                    bias, alpha, beta, workspace, workspace_bytes, stream,
+                )
+            },
+            (LayoutSku::Rcr, ElementKind::F32, EpilogueKind::BiasSilu) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_silu_tf32_rcr_sm80_run(
+                    m, n, k, a, lda, b, ldb, c, ldc, d, ldd,
+                    bias, alpha, beta, workspace, workspace_bytes, stream,
+                )
+            },
             _ => 3,
         }
     }
@@ -213,6 +238,18 @@ mod dispatch {
             },
             (LayoutSku::Rrr, ElementKind::Bf16, EpilogueKind::BiasSilu) => unsafe {
                 k_sys::baracuda_cutlass_gemm_bias_silu_bf16_rrr_sm80_workspace_size(m, n, k)
+            },
+            (LayoutSku::Rcr, ElementKind::F32, EpilogueKind::Bias) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_tf32_rcr_sm80_workspace_size(m, n, k)
+            },
+            (LayoutSku::Rcr, ElementKind::F32, EpilogueKind::BiasRelu) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_relu_tf32_rcr_sm80_workspace_size(m, n, k)
+            },
+            (LayoutSku::Rcr, ElementKind::F32, EpilogueKind::BiasGelu) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_gelu_tf32_rcr_sm80_workspace_size(m, n, k)
+            },
+            (LayoutSku::Rcr, ElementKind::F32, EpilogueKind::BiasSilu) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_silu_tf32_rcr_sm80_workspace_size(m, n, k)
             },
             _ => 0,
         }
@@ -316,6 +353,26 @@ mod dispatch {
             },
             (LayoutSku::Rrr, ElementKind::Bf16, EpilogueKind::BiasSilu) => unsafe {
                 k_sys::baracuda_cutlass_gemm_bias_silu_bf16_rrr_sm80_can_implement(
+                    m, n, k, a, lda, b, ldb, c, ldc, d, ldd, bias,
+                )
+            },
+            (LayoutSku::Rcr, ElementKind::F32, EpilogueKind::Bias) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_tf32_rcr_sm80_can_implement(
+                    m, n, k, a, lda, b, ldb, c, ldc, d, ldd, bias,
+                )
+            },
+            (LayoutSku::Rcr, ElementKind::F32, EpilogueKind::BiasRelu) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_relu_tf32_rcr_sm80_can_implement(
+                    m, n, k, a, lda, b, ldb, c, ldc, d, ldd, bias,
+                )
+            },
+            (LayoutSku::Rcr, ElementKind::F32, EpilogueKind::BiasGelu) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_gelu_tf32_rcr_sm80_can_implement(
+                    m, n, k, a, lda, b, ldb, c, ldc, d, ldd, bias,
+                )
+            },
+            (LayoutSku::Rcr, ElementKind::F32, EpilogueKind::BiasSilu) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_silu_tf32_rcr_sm80_can_implement(
                     m, n, k, a, lda, b, ldb, c, ldc, d, ldd, bias,
                 )
             },
@@ -923,18 +980,21 @@ impl<T: CutlassElement> GemmPlan<T> {
     pub fn select(stream: &Stream, desc: &GemmDescriptor, pref: PlanPreference) -> Result<Self> {
         check_descriptor(desc)?;
         // Bias-family kernels (Bias / BiasRelu / BiasGelu / BiasSilu)
-        // ship for `{Rcr, Rrr} × {F16, Bf16}` today. Reject other
-        // combinations here so callers don't get a runtime status 3
-        // deep inside the launch path.
+        // ship today for:
+        //   - `{Rcr, Rrr} × {F16, Bf16}` (f16/bf16 tile, 8 elements-per-access)
+        //   - `Rcr × F32` (TF32 tile, 4 elements-per-access)
+        // Reject other combinations here so callers don't get a runtime
+        // status 3 deep inside the launch path.
         if desc.epilogue.requires_bias() {
             match (desc.layout, T::KIND) {
                 (LayoutSku::Rcr, ElementKind::F16)
                 | (LayoutSku::Rcr, ElementKind::Bf16)
+                | (LayoutSku::Rcr, ElementKind::F32)
                 | (LayoutSku::Rrr, ElementKind::F16)
                 | (LayoutSku::Rrr, ElementKind::Bf16) => {}
                 _ => {
                     return Err(Error::Unsupported(
-                        "Bias-family epilogues are implemented only for {Rcr, Rrr} × {F16, Bf16} on sm_80 today",
+                        "Bias-family epilogues are implemented for {Rcr, Rrr} × {F16, Bf16} and Rcr × F32 (TF32) on sm_80 today",
                     ));
                 }
             }

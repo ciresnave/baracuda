@@ -39,12 +39,12 @@ kernels) and below framework integration crates like Fuel's `fuel-cublaslt`.
 
 ### Kernel SKU coverage
 
-| API                                                | Layout × Element                                    |
-|----------------------------------------------------|-----------------------------------------------------|
-| `GemmPlan` (Identity)                              | `Rcr × {F16, Bf16, F32(TF32)}`, `Rrr × {F16, Bf16}` |
-| `GemmPlan` (Bias / BiasRelu / BiasGelu / BiasSilu) | `{Rcr, Rrr} × {F16, Bf16}`                          |
-| `BatchedGemmPlan`                                  | `Rcr × {F16, Bf16}`                                 |
-| `GroupedGemmPlan`                                  | `Rcr × {F16, Bf16}`                                 |
+| API                                                | Layout × Element                                                  |
+|----------------------------------------------------|-------------------------------------------------------------------|
+| `GemmPlan` (Identity)                              | `Rcr × {F16, Bf16, F32(TF32)}`, `Rrr × {F16, Bf16}`               |
+| `GemmPlan` (Bias / BiasRelu / BiasGelu / BiasSilu) | `Rcr × {F16, Bf16, F32(TF32)}`, `Rrr × {F16, Bf16}`               |
+| `BatchedGemmPlan`                                  | `Rcr × {F16, Bf16}`                                               |
+| `GroupedGemmPlan`                                  | `Rcr × {F16, Bf16}`                                               |
 
 All on `sm_80` (Ampere); `sm_90a` deferred until Hopper validation.
 
