@@ -27,6 +27,20 @@ fn main() {
     println!("cargo:rerun-if-env-changed=CUTLASS_DIR");
     println!("cargo:rerun-if-env-changed=BARACUDA_CUTLASS_COMMIT");
     println!("cargo:rerun-if-env-changed=BARACUDA_CUTLASS_HOME");
+    println!("cargo:rerun-if-env-changed=DOCS_RS");
+
+    // docs.rs has no network access and a read-only $HOME, so the normal
+    // git-sparse-checkout path is impossible. Short-circuit to an empty
+    // include dir under OUT_DIR — rustdoc only needs the Rust sources to
+    // compile, and downstream build scripts gate their nvcc invocations
+    // on DOCS_RS in the same way.
+    if env::var_os("DOCS_RS").is_some() {
+        if let Err(e) = run_docs_rs_stub() {
+            eprintln!("baracuda-cutlass-sys: docs.rs stub failed: {e}");
+            std::process::exit(1);
+        }
+        return;
+    }
 
     if let Err(e) = run() {
         eprintln!("\n========================================");
@@ -41,6 +55,18 @@ fn main() {
         eprintln!("========================================\n");
         std::process::exit(1);
     }
+}
+
+fn run_docs_rs_stub() -> Result<(), String> {
+    let out_dir = env::var("OUT_DIR")
+        .map_err(|_| "OUT_DIR must be set by cargo".to_string())?;
+    let include = PathBuf::from(&out_dir).join("cutlass-stub-include");
+    fs::create_dir_all(&include)
+        .map_err(|e| format!("create stub include dir {}: {e}", include.display()))?;
+
+    println!("cargo:warning=baracuda-cutlass-sys: DOCS_RS=1 detected; emitting empty include stub (no CUTLASS fetch).");
+    emit_cargo_keys(&PathBuf::from(&out_dir), &include, "docs.rs-stub");
+    Ok(())
 }
 
 fn run() -> Result<(), String> {

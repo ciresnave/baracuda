@@ -251,6 +251,63 @@ fn gemm_capture_replay_tf32_rcr_identity() {
     }
 }
 
+#[test]
+#[ignore]
+fn gemm_capture_replay_tf32_rrr_identity() {
+    init().unwrap();
+    let device = Device::get(0).unwrap();
+    let ctx = Context::new(&device).unwrap();
+    let stream = Stream::new(&ctx).unwrap();
+
+    let (m, n, k) = (64i32, 64i32, 32i32);
+    let host_a: Vec<f32> = (0..(m * k)).map(|i| ((i as f32) * 0.01).sin()).collect();
+    let host_b: Vec<f32> = (0..(k * n)).map(|i| ((i as f32) * 0.013).cos()).collect();
+    let mut expected = vec![0.0f32; (m * n) as usize];
+    cpu_gemm_rrr_f32(m as usize, n as usize, k as usize, &host_a, &host_b, &mut expected);
+
+    let dev_a = DeviceBuffer::from_slice(&ctx, &host_a).unwrap();
+    let dev_b = DeviceBuffer::from_slice(&ctx, &host_b).unwrap();
+    let mut dev_d: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, (m * n) as usize).unwrap();
+
+    let desc = GemmDescriptor { m, n, k, layout: LayoutSku::Rrr, epilogue: EpilogueKind::Identity };
+    let plan = GemmPlan::<f32>::select(&stream, &desc, PlanPreference::default()).unwrap();
+
+    let graph = stream
+        .capture(CaptureMode::ThreadLocal, |s| {
+            let args = GemmArgs::<f32> {
+                a: MatrixRef { data: dev_a.as_slice(), rows: m, cols: k, ld: k as i64 },
+                // RRR: B row-major, leading dim N.
+                b: MatrixRef { data: dev_b.as_slice(), rows: k, cols: n, ld: n as i64 },
+                c: None,
+                d: MatrixMut { data: dev_d.as_slice_mut(), rows: m, cols: n, ld: n as i64 },
+                bias: None,
+                alpha: 1.0, beta: 0.0,
+            };
+            plan.run(s, Workspace::None, args).expect("run inside capture");
+            Ok(())
+        })
+        .expect("capture failed");
+
+    let exec = graph.instantiate().expect("instantiate");
+    let tol = (k as f32) * 5e-4;
+    for r in 0..2 {
+        let zeros = vec![0.0f32; dev_d.len()];
+        dev_d.copy_from_host(&zeros).unwrap();
+        exec.launch(&stream).expect("graph launch");
+        stream.synchronize().unwrap();
+        let mut out = vec![0.0f32; dev_d.len()];
+        dev_d.copy_to_host(&mut out).unwrap();
+        let mut max_rel = 0.0f32;
+        for (got, want) in out.iter().zip(expected.iter()) {
+            let denom = want.abs().max(1.0);
+            let rel = (got - want).abs() / denom;
+            if rel > max_rel { max_rel = rel; }
+        }
+        assert!(max_rel < tol, "TF32 RRR replay #{r}: max rel err {max_rel} > tol {tol}");
+        println!("TF32 Rrr Identity replay #{r}: max rel err {max_rel} (tol {tol}) ✅");
+    }
+}
+
 // ---- 4. Bias-fused single GEMM (covers the bias_ptr capture path) ----
 
 #[test]

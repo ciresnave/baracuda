@@ -12,12 +12,18 @@ kernels) and below framework integration crates like Fuel's `fuel-cublaslt`.
 - **Op families**: `GemmPlan` (single GEMM), `BatchedGemmPlan`
   (uniform-shape batched GEMM), `GroupedGemmPlan` +
   `PreparedGroupedGemm` (variable-M-per-group, MoE-friendly).
-- **Element types**: `half::f16`, `half::bf16`, and `f32` (routed through
-  TF32 tensor cores at ~10-bit mantissa precision —
-  see [`PrecisionGuarantee::math_precision`]).
+- **Element types**: `half::f16`, `half::bf16`, `f32` (routed through
+  TF32 tensor cores at ~10-bit mantissa precision),
+  [`F32Strict`](crate::F32Strict) (full IEEE 754 binary32 via SIMT CUDA
+  cores — bit-stable, no tensor-core warp-reduction nondeterminism),
+  and `f64` (DGEMM via Ampere FP64 tensor cores). See
+  [`PrecisionGuarantee::math_precision`] and
+  [`ScalarType`](crate::ScalarType) for the per-element math precision
+  and alpha/beta scalar mapping.
 - **Layouts**: `RCR` (A row-major, B column-major, C/D row-major) and
   `RRR` (all three operands row-major — natural for activation@weight
-  matmul without a transpose pass). `f32` ships RCR only today.
+  matmul without a transpose pass). All shipped element types ship both
+  layouts; layout is a per-launch choice on `GemmDescriptor`.
 - **Epilogues**: `Identity`, `Bias`, `BiasRelu`, `BiasGelu`, `BiasSilu`.
   The `Bias*` family computes
   `D = activation(α·A·B + β·C + bias_broadcast(N))` in a single fused
@@ -39,12 +45,25 @@ kernels) and below framework integration crates like Fuel's `fuel-cublaslt`.
 
 ### Kernel SKU coverage
 
-| API                                                | Layout × Element                                                  |
-|----------------------------------------------------|-------------------------------------------------------------------|
-| `GemmPlan` (Identity)                              | `Rcr × {F16, Bf16, F32(TF32)}`, `Rrr × {F16, Bf16}`               |
-| `GemmPlan` (Bias / BiasRelu / BiasGelu / BiasSilu) | `Rcr × {F16, Bf16, F32(TF32)}`, `Rrr × {F16, Bf16}`               |
-| `BatchedGemmPlan`                                  | `Rcr × {F16, Bf16}`                                               |
-| `GroupedGemmPlan`                                  | `Rcr × {F16, Bf16}`                                               |
+| API                                                | Layout × Element                                                                                              |
+|----------------------------------------------------|---------------------------------------------------------------------------------------------------------------|
+| `GemmPlan` (Identity)                              | `{Rcr, Rrr} × {F16, Bf16, F32 (TF32), F32Strict (SIMT), F64 (DGEMM)}`                                         |
+| `GemmPlan` (Bias / BiasRelu / BiasGelu / BiasSilu) | `{Rcr, Rrr} × {F16, Bf16, F32 (TF32), F32Strict (SIMT), F64 (DGEMM)}`                                         |
+| `BatchedGemmPlan`                                  | `Rcr × {F16, Bf16}`                                                                                           |
+| `GroupedGemmPlan`                                  | `Rcr × {F16, Bf16}`                                                                                           |
+
+**Per-element scalar (alpha / beta) types:**
+
+| Element       | `T::Scalar` | Notes                                                            |
+|---------------|-------------|------------------------------------------------------------------|
+| `f16`         | `f32`       | Tensor-core math, F32 accumulator                                |
+| `bf16`        | `f32`       | Tensor-core math, F32 accumulator                                |
+| `f32`         | `f32`       | TF32 tensor-core math (10-bit mantissa), F32 accumulator         |
+| `F32Strict`   | `f32`       | SIMT full-precision math, F32 accumulator, bit-stable            |
+| `f64`         | `f64`       | DGEMM tensor-core math, F64 accumulator                          |
+
+Int / quantized dtypes (`s8`/`u8`/`s4`/`u4`/`b1`) are planned follow-ups
+and not yet shipped.
 
 All on `sm_80` (Ampere); `sm_90a` deferred until Hopper validation.
 

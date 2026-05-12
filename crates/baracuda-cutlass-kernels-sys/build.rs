@@ -18,6 +18,19 @@ use std::path::PathBuf;
 fn main() {
     println!("cargo:rerun-if-changed=build.rs");
     println!("cargo:rerun-if-changed=kernels");
+    println!("cargo:rerun-if-env-changed=DOCS_RS");
+
+    // docs.rs has no nvcc and no network. baracuda-cutlass-sys already
+    // emits a stub include path in DOCS_RS mode; mirror that here by
+    // skipping kernel compilation entirely. The Rust source compiles
+    // fine — the unresolved extern "C" symbols are only needed at link
+    // time, which docs.rs doesn't perform.
+    if env::var_os("DOCS_RS").is_some() {
+        println!(
+            "cargo:warning=baracuda-cutlass-kernels-sys: DOCS_RS=1 detected; skipping nvcc build."
+        );
+        return;
+    }
 
     if cfg!(all(feature = "sm90a", feature = "cutlass-2-11")) {
         panic!(
@@ -51,6 +64,9 @@ fn main() {
     let mut builder = KernelBuilder::new()
         .source_files(kernels.iter().map(|k| format!("kernels/{k}")))
         .include_path(&cutlass_include)
+        // Vendored CUTLASS partial-specialization headers (e.g. the SIMT
+        // broadcast-epilogue routing for f32-SIMT bias kernels).
+        .include_path("kernels/include")
         .out_dir(&out_dir);
 
     if let Ok(root) = env::var("DEP_CUTLASS_ROOT") {
@@ -97,6 +113,16 @@ fn collect_kernel_files() -> Vec<&'static str> {
                 "gemm_rrr_sm80_bias.cu",
                 "gemm_tf32_rcr_sm80.cu",
                 "gemm_tf32_rcr_sm80_bias.cu",
+                "gemm_tf32_rrr_sm80.cu",
+                "gemm_tf32_rrr_sm80_bias.cu",
+                "gemm_f32_simt_rcr_sm80.cu",
+                "gemm_f32_simt_rcr_sm80_bias.cu",
+                "gemm_f32_simt_rrr_sm80.cu",
+                "gemm_f32_simt_rrr_sm80_bias.cu",
+                "gemm_f64_rcr_sm80.cu",
+                "gemm_f64_rcr_sm80_bias.cu",
+                "gemm_f64_rrr_sm80.cu",
+                "gemm_f64_rrr_sm80_bias.cu",
                 "gemm_batched_rcr_sm80.cu",
                 "grouped_gemm_rcr_sm80.cu",
             ] {

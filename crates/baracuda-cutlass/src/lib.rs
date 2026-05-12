@@ -59,7 +59,7 @@ pub use error::{Error, Result};
 pub use plan::{BatchedGemmPlan, GemmPlan, GroupedGemmPlan, PreparedGroupedGemm};
 pub use types::{
     ActivationKind, ArchSku, BatchedGemmArgs, BatchedGemmDescriptor, CutlassElement, ElementKind,
-    EpilogueKind, GemmArgs, GemmDescriptor, GemmSku, GroupedPlanPreference, GroupedProblem,
-    GroupedScheduleMode, LayoutSku, MathPrecision, MatrixMut, MatrixRef, PlanPreference,
-    PrecisionGuarantee, VectorRef, Workspace,
+    EpilogueKind, F32Strict, GemmArgs, GemmDescriptor, GemmSku, GroupedPlanPreference,
+    GroupedProblem, GroupedScheduleMode, LayoutSku, MathPrecision, MatrixMut, MatrixRef,
+    PlanPreference, PrecisionGuarantee, ScalarType, VectorRef, Workspace,
 };

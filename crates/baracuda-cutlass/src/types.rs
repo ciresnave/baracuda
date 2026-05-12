@@ -12,52 +12,150 @@ mod sealed {
     pub trait Sealed {}
 }
 
-/// Element types supported by the v0 CUTLASS kernel set.
+mod scalar_sealed {
+    pub trait Sealed {}
+}
+
+/// Sealed marker for the alpha/beta scalar type a [`CutlassElement`] uses.
 ///
-/// Implemented for `half::f16` and `half::bf16`. Sealed to prevent
-/// downstream `impl`s — adding a new dtype requires shipping a new kernel
-/// instantiation in `baracuda-cutlass-kernels-sys`.
+/// `f32` for f16/bf16/f32/[`F32Strict`] kernels (epilogue compute runs at
+/// f32). `f64` for f64 kernels. Sealed to keep the kernel-side dispatch
+/// closed — adding a new scalar type requires shipping new C ABI
+/// signatures in `baracuda-cutlass-kernels-sys`.
+pub trait ScalarType: scalar_sealed::Sealed + Copy + Default + PartialEq + 'static {
+    /// Discriminant used by the plan layer to dispatch to f32-scalar vs
+    /// f64-scalar FFI entry points.
+    const IS_F64: bool;
+
+    /// Convert to `f32`. Used by the plan layer to feed the f32-scalar
+    /// FFI dispatchers when `IS_F64` is `false` (round-trip is lossless
+    /// because the underlying type IS `f32` in that branch). When called
+    /// on the `f64` impl this is a narrowing cast — only callers that
+    /// gate on `IS_F64 == false` should reach it.
+    #[doc(hidden)]
+    fn to_f32(self) -> f32;
+
+    /// Convert to `f64`. Used by the plan layer to feed the f64-scalar
+    /// FFI dispatchers when `IS_F64` is `true`. Lossless from both
+    /// underlying types.
+    #[doc(hidden)]
+    fn to_f64(self) -> f64;
+}
+
+impl scalar_sealed::Sealed for f32 {}
+impl scalar_sealed::Sealed for f64 {}
+
+impl ScalarType for f32 {
+    const IS_F64: bool = false;
+    #[inline] fn to_f32(self) -> f32 { self }
+    #[inline] fn to_f64(self) -> f64 { self as f64 }
+}
+impl ScalarType for f64 {
+    const IS_F64: bool = true;
+    #[inline] fn to_f32(self) -> f32 { self as f32 }
+    #[inline] fn to_f64(self) -> f64 { self }
+}
+
+/// Element types supported by the CUTLASS kernel set.
+///
+/// Sealed to prevent downstream `impl`s — adding a new dtype requires
+/// shipping a new kernel instantiation in `baracuda-cutlass-kernels-sys`.
+///
+/// `f32` and [`F32Strict`] are both implementations of this trait and
+/// differ only in the math precision used inside the kernel:
+/// - `f32` → TF32 tensor cores (10-bit mantissa, ~tensor-core-throughput)
+/// - [`F32Strict`] → SIMT CUDA cores (full IEEE 754 binary32, bit-stable)
+///
+/// Both store inputs as IEEE 754 binary32; the choice of math op is
+/// driven by which Rust type the caller picks.
 pub trait CutlassElement: DeviceRepr + sealed::Sealed + Copy + 'static {
     /// Runtime tag for this element type.
     const KIND: ElementKind;
+    /// Scalar type used for the kernel's alpha / beta parameters (and
+    /// the epilogue compute type). `f32` for f16/bf16/f32/[`F32Strict`]
+    /// — the epilogue runs at f32 to match the F32 accumulator. `f64`
+    /// for [`prim@f64`] — the DGEMM path uses an F64 accumulator and
+    /// f64 alpha/beta.
+    type Scalar: ScalarType;
 }
 
 impl sealed::Sealed for f16 {}
 impl sealed::Sealed for bf16 {}
 impl sealed::Sealed for f32 {}
+impl sealed::Sealed for F32Strict {}
+impl sealed::Sealed for f64 {}
 
 impl CutlassElement for f16 {
     const KIND: ElementKind = ElementKind::F16;
+    type Scalar = f32;
 }
 
 impl CutlassElement for bf16 {
     const KIND: ElementKind = ElementKind::Bf16;
+    type Scalar = f32;
 }
 
 /// `f32` GEMM routes through TF32 tensor cores — see
 /// [`PrecisionGuarantee::math_precision`] (returns
 /// [`MathPrecision::Tf32`]). Inputs are full F32; the math instruction
-/// reduces to TF32 (10-bit mantissa) and accumulates into F32.
+/// reduces to TF32 (10-bit mantissa) and accumulates into F32. Use
+/// [`F32Strict`] instead when bit-stable, full-precision IEEE 754
+/// binary32 math is required.
 impl CutlassElement for f32 {
     const KIND: ElementKind = ElementKind::F32;
+    type Scalar = f32;
+}
+
+/// `f64` GEMM via Ampere FP64 tensor cores (DGEMM). Full IEEE 754
+/// binary64 inputs, accumulator, and scalars. Analogous to cuBLAS's
+/// `CUBLAS_COMPUTE_64F`.
+impl CutlassElement for f64 {
+    const KIND: ElementKind = ElementKind::F64;
+    type Scalar = f64;
+}
+
+/// Strict-precision f32 element marker.
+///
+/// `#[repr(transparent)]` wrapper around `f32`. Identical memory layout
+/// to a plain `f32` device buffer — a `DeviceBuffer<f32>` can be
+/// reinterpreted as a `DeviceBuffer<F32Strict>` via `view_as` without
+/// copying. The wrapper exists purely to drive kernel selection at the
+/// Rust type level: choosing `GemmPlan::<F32Strict>` routes the launch
+/// through the SIMT (CUDA-cores) GEMM kernels, while
+/// `GemmPlan::<f32>` routes through the TF32 tensor-core kernels.
+///
+/// Numerical contract: full IEEE 754 binary32 multiply-add throughout
+/// (no tensor-core warp-reduction nondeterminism). See
+/// [`PrecisionGuarantee`] returned by [`crate::GemmPlan::precision_guarantee`].
+#[repr(transparent)]
+#[derive(Copy, Clone, Debug, Default, PartialEq, PartialOrd)]
+pub struct F32Strict(pub f32);
+
+// SAFETY: F32Strict is #[repr(transparent)] around f32, which is itself
+// DeviceRepr. Same ABI, same Copy + 'static bounds.
+unsafe impl DeviceRepr for F32Strict {}
+
+impl CutlassElement for F32Strict {
+    const KIND: ElementKind = ElementKind::F32Strict;
+    type Scalar = f32;
 }
 
 /// Runtime tag for a [`CutlassElement`].
-///
-/// Includes variants for element types that don't yet have a
-/// [`CutlassElement`] impl (e.g. `F32`) so that
-/// [`PrecisionGuarantee::accumulator`] can name them without a
-/// cross-version churn when the corresponding input-side kernels land.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 pub enum ElementKind {
     /// IEEE 754 binary16.
     F16,
     /// Brain-float 16.
     Bf16,
-    /// IEEE 754 binary32. No `CutlassElement` impl yet (the f32 input
-    /// kernel lands in a follow-up alpha); used today only as the
-    /// accumulator tag in [`PrecisionGuarantee`].
+    /// IEEE 754 binary32 inputs reduced through TF32 tensor cores
+    /// (10-bit mantissa). Maps to the `f32` Rust type.
     F32,
+    /// IEEE 754 binary32 inputs reduced through SIMT CUDA cores at full
+    /// f32 precision. Maps to the [`F32Strict`] wrapper type. Bit-stable
+    /// on the same hardware.
+    F32Strict,
+    /// IEEE 754 binary64. Maps to the [`prim@f64`] Rust type.
+    F64,
 }
 
 /// Math precision used by the FMA / tensor-core instruction.
@@ -77,6 +175,9 @@ pub enum MathPrecision {
     Tf32,
     /// IEEE 754 binary32 multiply-add (CUDA cores, no tensor cores).
     F32,
+    /// IEEE 754 binary64 multiply-add via Ampere FP64 tensor cores
+    /// (DGEMM).
+    F64,
 }
 
 /// Numerical guarantees a CUTLASS GEMM kernel provides.
@@ -161,7 +262,9 @@ pub enum EpilogueKind {
     Identity,
     /// `D = α · (A · B) + β · C + bias_broadcast(N)`. The bias vector
     /// has length `N` (one element per output column) and is broadcast
-    /// across rows. v1 ships kernels for `Rcr × {F16, Bf16}` only.
+    /// across rows. Shipped for `{Rcr, Rrr} × {F16, Bf16, F32 (TF32),
+    /// F32Strict (SIMT), F64 (DGEMM)}` on sm_80; the same coverage
+    /// applies to every other `Bias*` variant.
     Bias,
     /// `D = relu(α · (A · B) + β · C + bias_broadcast(N))`.
     /// `relu(x) = max(x, 0)`. Same SKU coverage as [`Bias`](Self::Bias).
@@ -319,11 +422,13 @@ pub struct GemmArgs<'a, T: CutlassElement> {
     /// [`EpilogueKind::Identity`]. Length-`N`, contiguous (stride 1)
     /// device memory; broadcast across rows of `D`.
     pub bias: Option<VectorRef<'a, T>>,
-    /// Multiplier on the matrix-multiply accumulator.
-    pub alpha: f32,
-    /// Multiplier on `c`. Forced to `0.0` internally when `c` is `None`,
+    /// Multiplier on the matrix-multiply accumulator. Scalar type
+    /// matches `T::Scalar` — `f32` for f16/bf16/f32/[`F32Strict`], `f64`
+    /// for [`prim@f64`].
+    pub alpha: T::Scalar,
+    /// Multiplier on `c`. Forced to `0` internally when `c` is `None`,
     /// so callers don't need to pre-zero it for the no-accumulate case.
-    pub beta: f32,
+    pub beta: T::Scalar,
 }
 
 /// Problem shape and configuration handed to
@@ -373,18 +478,22 @@ pub struct BatchedGemmArgs<'a, T: CutlassElement> {
     pub d: MatrixMut<'a, T>,
     /// Element offset between consecutive D batches.
     pub stride_d: i64,
-    /// α multiplier (shared across batches).
-    pub alpha: f32,
-    /// β multiplier (shared across batches). Forced to `0.0` internally
+    /// α multiplier (shared across batches). Scalar type matches
+    /// `T::Scalar` — `f32` for f16/bf16/f32/[`F32Strict`], `f64` for
+    /// [`prim@f64`].
+    pub alpha: T::Scalar,
+    /// β multiplier (shared across batches). Forced to `0` internally
     /// when `c` is `None`.
-    pub beta: f32,
+    pub beta: T::Scalar,
 }
 
 /// One per-group entry for a grouped GEMM launch.
 ///
 /// Each group has its own shape and pointers; CUTLASS dispatches them in
-/// a single kernel invocation. Used by
-/// [`GroupedGemmPlan::run`](crate::GroupedGemmPlan::run).
+/// a single kernel invocation. Passed as a slice to
+/// [`GroupedGemmPlan::prepare`](crate::GroupedGemmPlan::prepare), which
+/// returns a [`PreparedGroupedGemm`](crate::PreparedGroupedGemm) whose
+/// [`run`](crate::PreparedGroupedGemm::run) method performs the launch.
 #[derive(Debug)]
 pub struct GroupedProblem<'a, T: CutlassElement> {
     /// Group `M`.
@@ -401,10 +510,11 @@ pub struct GroupedProblem<'a, T: CutlassElement> {
     pub c: Option<MatrixRef<'a, T>>,
     /// Output.
     pub d: MatrixMut<'a, T>,
-    /// α for this group.
-    pub alpha: f32,
-    /// β for this group. Forced to `0.0` internally when `c` is `None`.
-    pub beta: f32,
+    /// α for this group. Scalar type matches `T::Scalar` — `f32` for
+    /// f16/bf16/f32/[`F32Strict`], `f64` for [`prim@f64`].
+    pub alpha: T::Scalar,
+    /// β for this group. Forced to `0` internally when `c` is `None`.
+    pub beta: T::Scalar,
 }
 
 /// Hints that influence kernel selection inside [`GemmPlan::select`](crate::GemmPlan::select).
@@ -483,14 +593,24 @@ impl PrecisionGuarantee {
         let math_precision = match sku.element {
             ElementKind::F16 => MathPrecision::F16,
             ElementKind::Bf16 => MathPrecision::Bf16,
-            // Reserved for the f32-input kernel: routes through TF32
-            // tensor cores under the hood (not full F32 SIMT).
             ElementKind::F32 => MathPrecision::Tf32,
+            ElementKind::F32Strict => MathPrecision::F32,
+            ElementKind::F64 => MathPrecision::F64,
+        };
+        // F32Strict uses SIMT CUDA cores — no warp-reduction nondeterminism,
+        // so results are bit-identical across runs on the same hardware.
+        // Tensor-core kernels (F16/Bf16/Tf32/F64) don't pin the warp-level
+        // reduction order in the spec so they can differ in the last bit.
+        let bit_stable_on_same_hardware = matches!(sku.element, ElementKind::F32Strict);
+        // F64 GEMM accumulates into F64; all others accumulate into F32.
+        let accumulator = match sku.element {
+            ElementKind::F64 => ElementKind::F64,
+            _ => ElementKind::F32,
         };
         Self {
             math_precision,
-            accumulator: ElementKind::F32,
-            bit_stable_on_same_hardware: false,
+            accumulator,
+            bit_stable_on_same_hardware,
             deterministic: true,
         }
     }

@@ -9,7 +9,7 @@ use crate::error::{status_to_result, Error, Result};
 use crate::types::{
     ArchSku, BatchedGemmArgs, BatchedGemmDescriptor, CutlassElement, ElementKind, EpilogueKind,
     GemmArgs, GemmDescriptor, GemmSku, GroupedPlanPreference, GroupedProblem, GroupedScheduleMode,
-    LayoutSku, PlanPreference, PrecisionGuarantee, Workspace,
+    LayoutSku, PlanPreference, PrecisionGuarantee, ScalarType, Workspace,
 };
 
 // ============================================================================
@@ -25,9 +25,12 @@ mod dispatch {
     /// Single-GEMM dispatch on sm_80 with a bias-family epilogue (Bias,
     /// BiasRelu, BiasGelu, BiasSilu).
     ///
-    /// SKU coverage today: `{Rcr, Rrr} × {F16, Bf16}` for every
-    /// bias-family epilogue. Everything else returns status 3 (not
-    /// implemented). The non-bias path lives in [`gemm_sm80_run`].
+    /// SKU coverage today: `{Rcr, Rrr} × {F16, Bf16, F32 (TF32),
+    /// F32Strict (SIMT)}` for every bias-family epilogue. F64 routes
+    /// through [`gemm_bias_sm80_run_f64`] because the FFI takes `f64`
+    /// alpha/beta; that fork is selected at the call site based on
+    /// `T::Scalar::IS_F64`. The non-bias path lives in
+    /// [`gemm_sm80_run`].
     #[cfg(feature = "sm80")]
     #[allow(clippy::too_many_arguments)]
     pub(super) unsafe fn gemm_bias_sm80_run(
@@ -176,6 +179,81 @@ mod dispatch {
                     bias, alpha, beta, workspace, workspace_bytes, stream,
                 )
             },
+            // ---- TF32 path (Rrr × F32) ----
+            (LayoutSku::Rrr, ElementKind::F32, EpilogueKind::Bias) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_tf32_rrr_sm80_run(
+                    m, n, k, a, lda, b, ldb, c, ldc, d, ldd,
+                    bias, alpha, beta, workspace, workspace_bytes, stream,
+                )
+            },
+            (LayoutSku::Rrr, ElementKind::F32, EpilogueKind::BiasRelu) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_relu_tf32_rrr_sm80_run(
+                    m, n, k, a, lda, b, ldb, c, ldc, d, ldd,
+                    bias, alpha, beta, workspace, workspace_bytes, stream,
+                )
+            },
+            (LayoutSku::Rrr, ElementKind::F32, EpilogueKind::BiasGelu) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_gelu_tf32_rrr_sm80_run(
+                    m, n, k, a, lda, b, ldb, c, ldc, d, ldd,
+                    bias, alpha, beta, workspace, workspace_bytes, stream,
+                )
+            },
+            (LayoutSku::Rrr, ElementKind::F32, EpilogueKind::BiasSilu) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_silu_tf32_rrr_sm80_run(
+                    m, n, k, a, lda, b, ldb, c, ldc, d, ldd,
+                    bias, alpha, beta, workspace, workspace_bytes, stream,
+                )
+            },
+            // ---- f32-SIMT path (Rcr × F32Strict) ----
+            (LayoutSku::Rcr, ElementKind::F32Strict, EpilogueKind::Bias) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_f32_simt_rcr_sm80_run(
+                    m, n, k, a, lda, b, ldb, c, ldc, d, ldd,
+                    bias, alpha, beta, workspace, workspace_bytes, stream,
+                )
+            },
+            (LayoutSku::Rcr, ElementKind::F32Strict, EpilogueKind::BiasRelu) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_relu_f32_simt_rcr_sm80_run(
+                    m, n, k, a, lda, b, ldb, c, ldc, d, ldd,
+                    bias, alpha, beta, workspace, workspace_bytes, stream,
+                )
+            },
+            (LayoutSku::Rcr, ElementKind::F32Strict, EpilogueKind::BiasGelu) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_gelu_f32_simt_rcr_sm80_run(
+                    m, n, k, a, lda, b, ldb, c, ldc, d, ldd,
+                    bias, alpha, beta, workspace, workspace_bytes, stream,
+                )
+            },
+            (LayoutSku::Rcr, ElementKind::F32Strict, EpilogueKind::BiasSilu) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_silu_f32_simt_rcr_sm80_run(
+                    m, n, k, a, lda, b, ldb, c, ldc, d, ldd,
+                    bias, alpha, beta, workspace, workspace_bytes, stream,
+                )
+            },
+            // ---- f32-SIMT path (Rrr × F32Strict) ----
+            (LayoutSku::Rrr, ElementKind::F32Strict, EpilogueKind::Bias) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_f32_simt_rrr_sm80_run(
+                    m, n, k, a, lda, b, ldb, c, ldc, d, ldd,
+                    bias, alpha, beta, workspace, workspace_bytes, stream,
+                )
+            },
+            (LayoutSku::Rrr, ElementKind::F32Strict, EpilogueKind::BiasRelu) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_relu_f32_simt_rrr_sm80_run(
+                    m, n, k, a, lda, b, ldb, c, ldc, d, ldd,
+                    bias, alpha, beta, workspace, workspace_bytes, stream,
+                )
+            },
+            (LayoutSku::Rrr, ElementKind::F32Strict, EpilogueKind::BiasGelu) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_gelu_f32_simt_rrr_sm80_run(
+                    m, n, k, a, lda, b, ldb, c, ldc, d, ldd,
+                    bias, alpha, beta, workspace, workspace_bytes, stream,
+                )
+            },
+            (LayoutSku::Rrr, ElementKind::F32Strict, EpilogueKind::BiasSilu) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_silu_f32_simt_rrr_sm80_run(
+                    m, n, k, a, lda, b, ldb, c, ldc, d, ldd,
+                    bias, alpha, beta, workspace, workspace_bytes, stream,
+                )
+            },
             _ => 3,
         }
     }
@@ -250,6 +328,42 @@ mod dispatch {
             },
             (LayoutSku::Rcr, ElementKind::F32, EpilogueKind::BiasSilu) => unsafe {
                 k_sys::baracuda_cutlass_gemm_bias_silu_tf32_rcr_sm80_workspace_size(m, n, k)
+            },
+            (LayoutSku::Rrr, ElementKind::F32, EpilogueKind::Bias) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_tf32_rrr_sm80_workspace_size(m, n, k)
+            },
+            (LayoutSku::Rrr, ElementKind::F32, EpilogueKind::BiasRelu) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_relu_tf32_rrr_sm80_workspace_size(m, n, k)
+            },
+            (LayoutSku::Rrr, ElementKind::F32, EpilogueKind::BiasGelu) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_gelu_tf32_rrr_sm80_workspace_size(m, n, k)
+            },
+            (LayoutSku::Rrr, ElementKind::F32, EpilogueKind::BiasSilu) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_silu_tf32_rrr_sm80_workspace_size(m, n, k)
+            },
+            (LayoutSku::Rcr, ElementKind::F32Strict, EpilogueKind::Bias) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_f32_simt_rcr_sm80_workspace_size(m, n, k)
+            },
+            (LayoutSku::Rcr, ElementKind::F32Strict, EpilogueKind::BiasRelu) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_relu_f32_simt_rcr_sm80_workspace_size(m, n, k)
+            },
+            (LayoutSku::Rcr, ElementKind::F32Strict, EpilogueKind::BiasGelu) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_gelu_f32_simt_rcr_sm80_workspace_size(m, n, k)
+            },
+            (LayoutSku::Rcr, ElementKind::F32Strict, EpilogueKind::BiasSilu) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_silu_f32_simt_rcr_sm80_workspace_size(m, n, k)
+            },
+            (LayoutSku::Rrr, ElementKind::F32Strict, EpilogueKind::Bias) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_f32_simt_rrr_sm80_workspace_size(m, n, k)
+            },
+            (LayoutSku::Rrr, ElementKind::F32Strict, EpilogueKind::BiasRelu) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_relu_f32_simt_rrr_sm80_workspace_size(m, n, k)
+            },
+            (LayoutSku::Rrr, ElementKind::F32Strict, EpilogueKind::BiasGelu) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_gelu_f32_simt_rrr_sm80_workspace_size(m, n, k)
+            },
+            (LayoutSku::Rrr, ElementKind::F32Strict, EpilogueKind::BiasSilu) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_silu_f32_simt_rrr_sm80_workspace_size(m, n, k)
             },
             _ => 0,
         }
@@ -376,16 +490,75 @@ mod dispatch {
                     m, n, k, a, lda, b, ldb, c, ldc, d, ldd, bias,
                 )
             },
+            (LayoutSku::Rrr, ElementKind::F32, EpilogueKind::Bias) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_tf32_rrr_sm80_can_implement(
+                    m, n, k, a, lda, b, ldb, c, ldc, d, ldd, bias,
+                )
+            },
+            (LayoutSku::Rrr, ElementKind::F32, EpilogueKind::BiasRelu) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_relu_tf32_rrr_sm80_can_implement(
+                    m, n, k, a, lda, b, ldb, c, ldc, d, ldd, bias,
+                )
+            },
+            (LayoutSku::Rrr, ElementKind::F32, EpilogueKind::BiasGelu) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_gelu_tf32_rrr_sm80_can_implement(
+                    m, n, k, a, lda, b, ldb, c, ldc, d, ldd, bias,
+                )
+            },
+            (LayoutSku::Rrr, ElementKind::F32, EpilogueKind::BiasSilu) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_silu_tf32_rrr_sm80_can_implement(
+                    m, n, k, a, lda, b, ldb, c, ldc, d, ldd, bias,
+                )
+            },
+            (LayoutSku::Rcr, ElementKind::F32Strict, EpilogueKind::Bias) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_f32_simt_rcr_sm80_can_implement(
+                    m, n, k, a, lda, b, ldb, c, ldc, d, ldd, bias,
+                )
+            },
+            (LayoutSku::Rcr, ElementKind::F32Strict, EpilogueKind::BiasRelu) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_relu_f32_simt_rcr_sm80_can_implement(
+                    m, n, k, a, lda, b, ldb, c, ldc, d, ldd, bias,
+                )
+            },
+            (LayoutSku::Rcr, ElementKind::F32Strict, EpilogueKind::BiasGelu) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_gelu_f32_simt_rcr_sm80_can_implement(
+                    m, n, k, a, lda, b, ldb, c, ldc, d, ldd, bias,
+                )
+            },
+            (LayoutSku::Rcr, ElementKind::F32Strict, EpilogueKind::BiasSilu) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_silu_f32_simt_rcr_sm80_can_implement(
+                    m, n, k, a, lda, b, ldb, c, ldc, d, ldd, bias,
+                )
+            },
+            (LayoutSku::Rrr, ElementKind::F32Strict, EpilogueKind::Bias) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_f32_simt_rrr_sm80_can_implement(
+                    m, n, k, a, lda, b, ldb, c, ldc, d, ldd, bias,
+                )
+            },
+            (LayoutSku::Rrr, ElementKind::F32Strict, EpilogueKind::BiasRelu) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_relu_f32_simt_rrr_sm80_can_implement(
+                    m, n, k, a, lda, b, ldb, c, ldc, d, ldd, bias,
+                )
+            },
+            (LayoutSku::Rrr, ElementKind::F32Strict, EpilogueKind::BiasGelu) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_gelu_f32_simt_rrr_sm80_can_implement(
+                    m, n, k, a, lda, b, ldb, c, ldc, d, ldd, bias,
+                )
+            },
+            (LayoutSku::Rrr, ElementKind::F32Strict, EpilogueKind::BiasSilu) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_silu_f32_simt_rrr_sm80_can_implement(
+                    m, n, k, a, lda, b, ldb, c, ldc, d, ldd, bias,
+                )
+            },
             _ => 3,
         }
     }
 
     /// Single-GEMM dispatch on sm_80 — selects per `(layout, kind)`.
     ///
-    /// SKU coverage (status 3 = not implemented):
-    ///   - Rcr × {F16, Bf16, F32(via TF32)} ✓
-    ///   - Rrr × {F16, Bf16}                ✓
-    ///   - Rrr × F32                        ✗
+    /// SKU coverage: all `(Rcr|Rrr) × (F16|Bf16|F32-via-TF32)` are
+    /// implemented. F32 routes through Ampere TF32 tensor cores. Any
+    /// unknown pair returns status 3 (not implemented).
     #[cfg(feature = "sm80")]
     #[allow(clippy::too_many_arguments)]
     pub(super) unsafe fn gemm_sm80_run(
@@ -440,7 +613,30 @@ mod dispatch {
                     alpha, beta, workspace, workspace_bytes, stream,
                 )
             },
-            (LayoutSku::Rrr, ElementKind::F32) => 3,
+            (LayoutSku::Rrr, ElementKind::F32) => unsafe {
+                k_sys::baracuda_cutlass_gemm_tf32_rrr_sm80_run(
+                    m, n, k, a, lda, b, ldb, c, ldc, d, ldd,
+                    alpha, beta, workspace, workspace_bytes, stream,
+                )
+            },
+            (LayoutSku::Rcr, ElementKind::F32Strict) => unsafe {
+                k_sys::baracuda_cutlass_gemm_f32_simt_rcr_sm80_run(
+                    m, n, k, a, lda, b, ldb, c, ldc, d, ldd,
+                    alpha, beta, workspace, workspace_bytes, stream,
+                )
+            },
+            (LayoutSku::Rrr, ElementKind::F32Strict) => unsafe {
+                k_sys::baracuda_cutlass_gemm_f32_simt_rrr_sm80_run(
+                    m, n, k, a, lda, b, ldb, c, ldc, d, ldd,
+                    alpha, beta, workspace, workspace_bytes, stream,
+                )
+            },
+            // F64 has its own dispatcher (`gemm_sm80_run_f64`) because the
+            // FFI takes `f64` alpha/beta. The plan layer routes F64 through
+            // that path before reaching this function; this arm is
+            // defensive.
+            (LayoutSku::Rcr, ElementKind::F64)
+            | (LayoutSku::Rrr, ElementKind::F64) => 3,
         }
     }
 
@@ -469,7 +665,18 @@ mod dispatch {
             (LayoutSku::Rrr, ElementKind::Bf16) => unsafe {
                 k_sys::baracuda_cutlass_gemm_bf16_rrr_sm80_workspace_size(m, n, k)
             },
-            (LayoutSku::Rrr, ElementKind::F32) => 0,
+            (LayoutSku::Rrr, ElementKind::F32) => unsafe {
+                k_sys::baracuda_cutlass_gemm_tf32_rrr_sm80_workspace_size(m, n, k)
+            },
+            (LayoutSku::Rcr, ElementKind::F32Strict) => unsafe {
+                k_sys::baracuda_cutlass_gemm_f32_simt_rcr_sm80_workspace_size(m, n, k)
+            },
+            (LayoutSku::Rrr, ElementKind::F32Strict) => unsafe {
+                k_sys::baracuda_cutlass_gemm_f32_simt_rrr_sm80_workspace_size(m, n, k)
+            },
+            // F64 routes through its own dispatcher.
+            (LayoutSku::Rcr, ElementKind::F64)
+            | (LayoutSku::Rrr, ElementKind::F64) => 0,
         }
     }
 
@@ -517,7 +724,295 @@ mod dispatch {
                     m, n, k, a, lda, b, ldb, c, ldc, d, ldd,
                 )
             },
-            (LayoutSku::Rrr, ElementKind::F32) => 3,
+            (LayoutSku::Rrr, ElementKind::F32) => unsafe {
+                k_sys::baracuda_cutlass_gemm_tf32_rrr_sm80_can_implement(
+                    m, n, k, a, lda, b, ldb, c, ldc, d, ldd,
+                )
+            },
+            (LayoutSku::Rcr, ElementKind::F32Strict) => unsafe {
+                k_sys::baracuda_cutlass_gemm_f32_simt_rcr_sm80_can_implement(
+                    m, n, k, a, lda, b, ldb, c, ldc, d, ldd,
+                )
+            },
+            (LayoutSku::Rrr, ElementKind::F32Strict) => unsafe {
+                k_sys::baracuda_cutlass_gemm_f32_simt_rrr_sm80_can_implement(
+                    m, n, k, a, lda, b, ldb, c, ldc, d, ldd,
+                )
+            },
+            // F64 routes through its own dispatcher.
+            (LayoutSku::Rcr, ElementKind::F64)
+            | (LayoutSku::Rrr, ElementKind::F64) => 3,
+        }
+    }
+
+    // ---------- f64 single-GEMM dispatch, sm_80 ----------
+    //
+    // Distinct from `gemm_sm80_run` because the FFI signature takes
+    // `f64` alpha/beta. The plan layer routes through these when
+    // `T::Scalar::IS_F64` is true.
+
+    #[cfg(feature = "sm80")]
+    #[allow(clippy::too_many_arguments)]
+    pub(super) unsafe fn gemm_sm80_run_f64(
+        layout: LayoutSku,
+        m: i32,
+        n: i32,
+        k: i32,
+        a: *const c_void,
+        lda: i64,
+        b: *const c_void,
+        ldb: i64,
+        c: *const c_void,
+        ldc: i64,
+        d: *mut c_void,
+        ldd: i64,
+        alpha: f64,
+        beta: f64,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32 {
+        use baracuda_cutlass_kernels_sys as k_sys;
+        match layout {
+            LayoutSku::Rcr => unsafe {
+                k_sys::baracuda_cutlass_gemm_f64_rcr_sm80_run(
+                    m, n, k, a, lda, b, ldb, c, ldc, d, ldd,
+                    alpha, beta, workspace, workspace_bytes, stream,
+                )
+            },
+            LayoutSku::Rrr => unsafe {
+                k_sys::baracuda_cutlass_gemm_f64_rrr_sm80_run(
+                    m, n, k, a, lda, b, ldb, c, ldc, d, ldd,
+                    alpha, beta, workspace, workspace_bytes, stream,
+                )
+            },
+        }
+    }
+
+    #[cfg(feature = "sm80")]
+    pub(super) fn gemm_sm80_workspace_size_f64(layout: LayoutSku, m: i32, n: i32, k: i32) -> usize {
+        use baracuda_cutlass_kernels_sys as k_sys;
+        match layout {
+            LayoutSku::Rcr => unsafe {
+                k_sys::baracuda_cutlass_gemm_f64_rcr_sm80_workspace_size(m, n, k)
+            },
+            LayoutSku::Rrr => unsafe {
+                k_sys::baracuda_cutlass_gemm_f64_rrr_sm80_workspace_size(m, n, k)
+            },
+        }
+    }
+
+    #[cfg(feature = "sm80")]
+    #[allow(clippy::too_many_arguments)]
+    pub(super) unsafe fn gemm_sm80_can_implement_f64(
+        layout: LayoutSku,
+        m: i32,
+        n: i32,
+        k: i32,
+        a: *const c_void,
+        lda: i64,
+        b: *const c_void,
+        ldb: i64,
+        c: *const c_void,
+        ldc: i64,
+        d: *mut c_void,
+        ldd: i64,
+    ) -> i32 {
+        use baracuda_cutlass_kernels_sys as k_sys;
+        match layout {
+            LayoutSku::Rcr => unsafe {
+                k_sys::baracuda_cutlass_gemm_f64_rcr_sm80_can_implement(
+                    m, n, k, a, lda, b, ldb, c, ldc, d, ldd,
+                )
+            },
+            LayoutSku::Rrr => unsafe {
+                k_sys::baracuda_cutlass_gemm_f64_rrr_sm80_can_implement(
+                    m, n, k, a, lda, b, ldb, c, ldc, d, ldd,
+                )
+            },
+        }
+    }
+
+    // ---------- f64 bias-fused GEMM dispatch, sm_80 ----------
+
+    #[cfg(feature = "sm80")]
+    #[allow(clippy::too_many_arguments)]
+    pub(super) unsafe fn gemm_bias_sm80_run_f64(
+        layout: LayoutSku,
+        epilogue: EpilogueKind,
+        m: i32,
+        n: i32,
+        k: i32,
+        a: *const c_void,
+        lda: i64,
+        b: *const c_void,
+        ldb: i64,
+        c: *const c_void,
+        ldc: i64,
+        d: *mut c_void,
+        ldd: i64,
+        bias: *const c_void,
+        alpha: f64,
+        beta: f64,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32 {
+        use baracuda_cutlass_kernels_sys as k_sys;
+        match (layout, epilogue) {
+            (LayoutSku::Rcr, EpilogueKind::Bias) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_f64_rcr_sm80_run(
+                    m, n, k, a, lda, b, ldb, c, ldc, d, ldd,
+                    bias, alpha, beta, workspace, workspace_bytes, stream,
+                )
+            },
+            (LayoutSku::Rcr, EpilogueKind::BiasRelu) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_relu_f64_rcr_sm80_run(
+                    m, n, k, a, lda, b, ldb, c, ldc, d, ldd,
+                    bias, alpha, beta, workspace, workspace_bytes, stream,
+                )
+            },
+            (LayoutSku::Rcr, EpilogueKind::BiasGelu) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_gelu_f64_rcr_sm80_run(
+                    m, n, k, a, lda, b, ldb, c, ldc, d, ldd,
+                    bias, alpha, beta, workspace, workspace_bytes, stream,
+                )
+            },
+            (LayoutSku::Rcr, EpilogueKind::BiasSilu) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_silu_f64_rcr_sm80_run(
+                    m, n, k, a, lda, b, ldb, c, ldc, d, ldd,
+                    bias, alpha, beta, workspace, workspace_bytes, stream,
+                )
+            },
+            (LayoutSku::Rrr, EpilogueKind::Bias) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_f64_rrr_sm80_run(
+                    m, n, k, a, lda, b, ldb, c, ldc, d, ldd,
+                    bias, alpha, beta, workspace, workspace_bytes, stream,
+                )
+            },
+            (LayoutSku::Rrr, EpilogueKind::BiasRelu) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_relu_f64_rrr_sm80_run(
+                    m, n, k, a, lda, b, ldb, c, ldc, d, ldd,
+                    bias, alpha, beta, workspace, workspace_bytes, stream,
+                )
+            },
+            (LayoutSku::Rrr, EpilogueKind::BiasGelu) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_gelu_f64_rrr_sm80_run(
+                    m, n, k, a, lda, b, ldb, c, ldc, d, ldd,
+                    bias, alpha, beta, workspace, workspace_bytes, stream,
+                )
+            },
+            (LayoutSku::Rrr, EpilogueKind::BiasSilu) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_silu_f64_rrr_sm80_run(
+                    m, n, k, a, lda, b, ldb, c, ldc, d, ldd,
+                    bias, alpha, beta, workspace, workspace_bytes, stream,
+                )
+            },
+            // Identity not a bias-family epilogue; never reached when
+            // `epilogue.requires_bias()` gates the call site.
+            (_, EpilogueKind::Identity) => 3,
+        }
+    }
+
+    #[cfg(feature = "sm80")]
+    pub(super) fn gemm_bias_sm80_workspace_size_f64(
+        layout: LayoutSku,
+        epilogue: EpilogueKind,
+        m: i32,
+        n: i32,
+        k: i32,
+    ) -> usize {
+        use baracuda_cutlass_kernels_sys as k_sys;
+        match (layout, epilogue) {
+            (LayoutSku::Rcr, EpilogueKind::Bias) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_f64_rcr_sm80_workspace_size(m, n, k)
+            },
+            (LayoutSku::Rcr, EpilogueKind::BiasRelu) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_relu_f64_rcr_sm80_workspace_size(m, n, k)
+            },
+            (LayoutSku::Rcr, EpilogueKind::BiasGelu) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_gelu_f64_rcr_sm80_workspace_size(m, n, k)
+            },
+            (LayoutSku::Rcr, EpilogueKind::BiasSilu) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_silu_f64_rcr_sm80_workspace_size(m, n, k)
+            },
+            (LayoutSku::Rrr, EpilogueKind::Bias) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_f64_rrr_sm80_workspace_size(m, n, k)
+            },
+            (LayoutSku::Rrr, EpilogueKind::BiasRelu) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_relu_f64_rrr_sm80_workspace_size(m, n, k)
+            },
+            (LayoutSku::Rrr, EpilogueKind::BiasGelu) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_gelu_f64_rrr_sm80_workspace_size(m, n, k)
+            },
+            (LayoutSku::Rrr, EpilogueKind::BiasSilu) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_silu_f64_rrr_sm80_workspace_size(m, n, k)
+            },
+            (_, EpilogueKind::Identity) => 0,
+        }
+    }
+
+    #[cfg(feature = "sm80")]
+    #[allow(clippy::too_many_arguments)]
+    pub(super) unsafe fn gemm_bias_sm80_can_implement_f64(
+        layout: LayoutSku,
+        epilogue: EpilogueKind,
+        m: i32,
+        n: i32,
+        k: i32,
+        a: *const c_void,
+        lda: i64,
+        b: *const c_void,
+        ldb: i64,
+        c: *const c_void,
+        ldc: i64,
+        d: *mut c_void,
+        ldd: i64,
+        bias: *const c_void,
+    ) -> i32 {
+        use baracuda_cutlass_kernels_sys as k_sys;
+        match (layout, epilogue) {
+            (LayoutSku::Rcr, EpilogueKind::Bias) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_f64_rcr_sm80_can_implement(
+                    m, n, k, a, lda, b, ldb, c, ldc, d, ldd, bias,
+                )
+            },
+            (LayoutSku::Rcr, EpilogueKind::BiasRelu) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_relu_f64_rcr_sm80_can_implement(
+                    m, n, k, a, lda, b, ldb, c, ldc, d, ldd, bias,
+                )
+            },
+            (LayoutSku::Rcr, EpilogueKind::BiasGelu) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_gelu_f64_rcr_sm80_can_implement(
+                    m, n, k, a, lda, b, ldb, c, ldc, d, ldd, bias,
+                )
+            },
+            (LayoutSku::Rcr, EpilogueKind::BiasSilu) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_silu_f64_rcr_sm80_can_implement(
+                    m, n, k, a, lda, b, ldb, c, ldc, d, ldd, bias,
+                )
+            },
+            (LayoutSku::Rrr, EpilogueKind::Bias) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_f64_rrr_sm80_can_implement(
+                    m, n, k, a, lda, b, ldb, c, ldc, d, ldd, bias,
+                )
+            },
+            (LayoutSku::Rrr, EpilogueKind::BiasRelu) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_relu_f64_rrr_sm80_can_implement(
+                    m, n, k, a, lda, b, ldb, c, ldc, d, ldd, bias,
+                )
+            },
+            (LayoutSku::Rrr, EpilogueKind::BiasGelu) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_gelu_f64_rrr_sm80_can_implement(
+                    m, n, k, a, lda, b, ldb, c, ldc, d, ldd, bias,
+                )
+            },
+            (LayoutSku::Rrr, EpilogueKind::BiasSilu) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_silu_f64_rrr_sm80_can_implement(
+                    m, n, k, a, lda, b, ldb, c, ldc, d, ldd, bias,
+                )
+            },
+            (_, EpilogueKind::Identity) => 3,
         }
     }
 
@@ -677,7 +1172,7 @@ mod dispatch {
             ElementKind::Bf16 => unsafe {
                 k_sys::baracuda_cutlass_grouped_gemm_bf16_rcr_sm80_sufficient(h_m, h_n, h_k, group_count)
             },
-            ElementKind::F32 => 0,
+            ElementKind::F32 | ElementKind::F32Strict | ElementKind::F64 => 0,
         }
     }
 
@@ -702,7 +1197,7 @@ mod dispatch {
                     h_m, h_n, h_k, group_count, threadblock_count,
                 )
             },
-            ElementKind::F32 => 0,
+            ElementKind::F32 | ElementKind::F32Strict | ElementKind::F64 => 0,
         }
     }
 
@@ -722,7 +1217,7 @@ mod dispatch {
             ElementKind::Bf16 => unsafe {
                 k_sys::baracuda_cutlass_grouped_gemm_bf16_rcr_sm80_can_implement(h_m, h_n, h_k, group_count)
             },
-            ElementKind::F32 => 3,
+            ElementKind::F32 | ElementKind::F32Strict | ElementKind::F64 => 3,
         }
     }
 
@@ -774,7 +1269,7 @@ mod dispatch {
                     stream,
                 )
             },
-            ElementKind::F32 => 3,
+            ElementKind::F32 | ElementKind::F32Strict | ElementKind::F64 => 3,
         }
     }
 }
@@ -979,26 +1474,19 @@ impl<T: CutlassElement> GemmPlan<T> {
     /// *available*; the device cap decides what to *use*.
     pub fn select(stream: &Stream, desc: &GemmDescriptor, pref: PlanPreference) -> Result<Self> {
         check_descriptor(desc)?;
-        // Bias-family kernels (Bias / BiasRelu / BiasGelu / BiasSilu)
-        // ship today for:
-        //   - `{Rcr, Rrr} × {F16, Bf16}` (f16/bf16 tile, 8 elements-per-access)
-        //   - `Rcr × F32` (TF32 tile, 4 elements-per-access)
-        // Reject other combinations here so callers don't get a runtime
-        // status 3 deep inside the launch path.
-        if desc.epilogue.requires_bias() {
-            match (desc.layout, T::KIND) {
-                (LayoutSku::Rcr, ElementKind::F16)
-                | (LayoutSku::Rcr, ElementKind::Bf16)
-                | (LayoutSku::Rcr, ElementKind::F32)
-                | (LayoutSku::Rrr, ElementKind::F16)
-                | (LayoutSku::Rrr, ElementKind::Bf16) => {}
-                _ => {
-                    return Err(Error::Unsupported(
-                        "Bias-family epilogues are implemented for {Rcr, Rrr} × {F16, Bf16} and Rcr × F32 (TF32) on sm_80 today",
-                    ));
-                }
-            }
-        }
+        // Bias-family kernels currently cover every `(Layout, ElementKind)`
+        // pair: F16/Bf16 → 8 elements per epilogue access; F32 (TF32)
+        // and F64 → 4 elements per access; F32Strict (SIMT) → 1. The
+        // F32Strict bias path uses a vendored SIMT broadcast-epilogue
+        // partial specialization (see
+        // `crates/baracuda-cutlass-kernels-sys/kernels/include/
+        // baracuda_simt_broadcast_epilogue.h`) because CUTLASS doesn't
+        // wire one by default. F64 routes through the f64-scalar
+        // dispatcher (`gemm_bias_sm80_run_f64`) because alpha/beta are
+        // `f64` at the FFI. When new element kinds land that don't yet
+        // have bias instantiations, reinstate a gate here that returns
+        // `Error::Unsupported` so callers don't get a runtime status 3
+        // deep inside the launch path.
         let arch = pick_arch(stream, desc, pref)?;
         let sku = GemmSku {
             arch,
@@ -1044,21 +1532,39 @@ impl<T: CutlassElement> GemmPlan<T> {
         let bias_family = self.sku.epilogue.requires_bias();
         let status = match (self.sku.arch, bias_family) {
             #[cfg(feature = "sm80")]
+            (ArchSku::Sm80, false) if <T::Scalar as ScalarType>::IS_F64 => unsafe {
+                dispatch::gemm_sm80_can_implement_f64(
+                    self.sku.layout,
+                    self.desc.m, self.desc.n, self.desc.k,
+                    a_ptr, args.a.ld,
+                    b_ptr, args.b.ld,
+                    c_ptr, ldc,
+                    d_ptr, args.d.ld,
+                )
+            },
+            #[cfg(feature = "sm80")]
             (ArchSku::Sm80, false) => unsafe {
                 dispatch::gemm_sm80_can_implement(
                     self.sku.layout,
                     T::KIND,
-                    self.desc.m,
-                    self.desc.n,
-                    self.desc.k,
-                    a_ptr,
-                    args.a.ld,
-                    b_ptr,
-                    args.b.ld,
-                    c_ptr,
-                    ldc,
-                    d_ptr,
-                    args.d.ld,
+                    self.desc.m, self.desc.n, self.desc.k,
+                    a_ptr, args.a.ld,
+                    b_ptr, args.b.ld,
+                    c_ptr, ldc,
+                    d_ptr, args.d.ld,
+                )
+            },
+            #[cfg(feature = "sm80")]
+            (ArchSku::Sm80, true) if <T::Scalar as ScalarType>::IS_F64 => unsafe {
+                dispatch::gemm_bias_sm80_can_implement_f64(
+                    self.sku.layout,
+                    self.sku.epilogue,
+                    self.desc.m, self.desc.n, self.desc.k,
+                    a_ptr, args.a.ld,
+                    b_ptr, args.b.ld,
+                    c_ptr, ldc,
+                    d_ptr, args.d.ld,
+                    bias_ptr,
                 )
             },
             #[cfg(feature = "sm80")]
@@ -1067,17 +1573,11 @@ impl<T: CutlassElement> GemmPlan<T> {
                     self.sku.layout,
                     T::KIND,
                     self.sku.epilogue,
-                    self.desc.m,
-                    self.desc.n,
-                    self.desc.k,
-                    a_ptr,
-                    args.a.ld,
-                    b_ptr,
-                    args.b.ld,
-                    c_ptr,
-                    ldc,
-                    d_ptr,
-                    args.d.ld,
+                    self.desc.m, self.desc.n, self.desc.k,
+                    a_ptr, args.a.ld,
+                    b_ptr, args.b.ld,
+                    c_ptr, ldc,
+                    d_ptr, args.d.ld,
                     bias_ptr,
                 )
             },
@@ -1105,21 +1605,32 @@ impl<T: CutlassElement> GemmPlan<T> {
         let bias_family = self.sku.epilogue.requires_bias();
         match (self.sku.arch, bias_family) {
             #[cfg(feature = "sm80")]
+            (ArchSku::Sm80, false) if <T::Scalar as ScalarType>::IS_F64 => {
+                dispatch::gemm_sm80_workspace_size_f64(
+                    self.sku.layout,
+                    self.desc.m, self.desc.n, self.desc.k,
+                )
+            }
+            #[cfg(feature = "sm80")]
             (ArchSku::Sm80, false) => dispatch::gemm_sm80_workspace_size(
                 self.sku.layout,
                 T::KIND,
-                self.desc.m,
-                self.desc.n,
-                self.desc.k,
+                self.desc.m, self.desc.n, self.desc.k,
             ),
+            #[cfg(feature = "sm80")]
+            (ArchSku::Sm80, true) if <T::Scalar as ScalarType>::IS_F64 => {
+                dispatch::gemm_bias_sm80_workspace_size_f64(
+                    self.sku.layout,
+                    self.sku.epilogue,
+                    self.desc.m, self.desc.n, self.desc.k,
+                )
+            }
             #[cfg(feature = "sm80")]
             (ArchSku::Sm80, true) => dispatch::gemm_bias_sm80_workspace_size(
                 self.sku.layout,
                 T::KIND,
                 self.sku.epilogue,
-                self.desc.m,
-                self.desc.n,
-                self.desc.k,
+                self.desc.m, self.desc.n, self.desc.k,
             ),
             #[cfg(not(feature = "sm80"))]
             (ArchSku::Sm80, _) => 0,
@@ -1195,32 +1706,59 @@ impl<T: CutlassElement> GemmPlan<T> {
         // satisfy CUTLASS's non-null pointer contract, so a non-zero beta
         // here would silently fold the previous D contents into the
         // result (D += alpha*AB instead of D = alpha*AB).
-        let beta_eff = if args.c.is_some() { args.beta } else { 0.0 };
+        let beta_eff = if args.c.is_some() { args.beta } else { <T::Scalar as Default>::default() };
         let stream_raw = stream.as_raw();
 
         let bias_family = self.sku.epilogue.requires_bias();
         let status = match (self.sku.arch, bias_family) {
+            // Fork on T::Scalar::IS_F64 to pick the matching FFI dispatcher.
+            // The two paths only differ in the alpha/beta types passed to
+            // CUTLASS; the `to_f32` / `to_f64` calls are identity on the
+            // matching impl and never narrow at runtime because the gate
+            // statically picks the impl that matches `T::Scalar`.
+            #[cfg(feature = "sm80")]
+            (ArchSku::Sm80, false) if <T::Scalar as ScalarType>::IS_F64 => unsafe {
+                dispatch::gemm_sm80_run_f64(
+                    self.sku.layout,
+                    self.desc.m, self.desc.n, self.desc.k,
+                    a_ptr, args.a.ld,
+                    b_ptr, args.b.ld,
+                    c_ptr, ldc,
+                    d_ptr, args.d.ld,
+                    args.alpha.to_f64(),
+                    beta_eff.to_f64(),
+                    ws_ptr, ws_bytes, stream_raw,
+                )
+            },
             #[cfg(feature = "sm80")]
             (ArchSku::Sm80, false) => unsafe {
                 dispatch::gemm_sm80_run(
                     self.sku.layout,
                     T::KIND,
-                    self.desc.m,
-                    self.desc.n,
-                    self.desc.k,
-                    a_ptr,
-                    args.a.ld,
-                    b_ptr,
-                    args.b.ld,
-                    c_ptr,
-                    ldc,
-                    d_ptr,
-                    args.d.ld,
-                    args.alpha,
-                    beta_eff,
-                    ws_ptr,
-                    ws_bytes,
-                    stream_raw,
+                    self.desc.m, self.desc.n, self.desc.k,
+                    a_ptr, args.a.ld,
+                    b_ptr, args.b.ld,
+                    c_ptr, ldc,
+                    d_ptr, args.d.ld,
+                    args.alpha.to_f32(),
+                    beta_eff.to_f32(),
+                    ws_ptr, ws_bytes, stream_raw,
+                )
+            },
+            #[cfg(feature = "sm80")]
+            (ArchSku::Sm80, true) if <T::Scalar as ScalarType>::IS_F64 => unsafe {
+                dispatch::gemm_bias_sm80_run_f64(
+                    self.sku.layout,
+                    self.sku.epilogue,
+                    self.desc.m, self.desc.n, self.desc.k,
+                    a_ptr, args.a.ld,
+                    b_ptr, args.b.ld,
+                    c_ptr, ldc,
+                    d_ptr, args.d.ld,
+                    bias_ptr,
+                    args.alpha.to_f64(),
+                    beta_eff.to_f64(),
+                    ws_ptr, ws_bytes, stream_raw,
                 )
             },
             #[cfg(feature = "sm80")]
@@ -1229,23 +1767,15 @@ impl<T: CutlassElement> GemmPlan<T> {
                     self.sku.layout,
                     T::KIND,
                     self.sku.epilogue,
-                    self.desc.m,
-                    self.desc.n,
-                    self.desc.k,
-                    a_ptr,
-                    args.a.ld,
-                    b_ptr,
-                    args.b.ld,
-                    c_ptr,
-                    ldc,
-                    d_ptr,
-                    args.d.ld,
+                    self.desc.m, self.desc.n, self.desc.k,
+                    a_ptr, args.a.ld,
+                    b_ptr, args.b.ld,
+                    c_ptr, ldc,
+                    d_ptr, args.d.ld,
                     bias_ptr,
-                    args.alpha,
-                    beta_eff,
-                    ws_ptr,
-                    ws_bytes,
-                    stream_raw,
+                    args.alpha.to_f32(),
+                    beta_eff.to_f32(),
+                    ws_ptr, ws_bytes, stream_raw,
                 )
             },
             #[cfg(not(feature = "sm80"))]
@@ -1568,12 +2098,15 @@ impl<T: CutlassElement> BatchedGemmPlan<T> {
             Some(c) => (c.data.as_raw().0 as *const c_void, c.ld, args.stride_c),
             None => (core::ptr::null(), 0i64, 0i64),
         };
-        let beta_eff = if args.c.is_some() { args.beta } else { 0.0 };
+        let beta_eff = if args.c.is_some() { args.beta } else { <T::Scalar as Default>::default() };
         let stream_raw = stream.as_raw();
 
         let status = match self.sku.arch {
             #[cfg(feature = "sm80")]
             ArchSku::Sm80 => unsafe {
+                // Batched GEMM v1 ships only Rcr × {F16, Bf16} — both
+                // f32-scalar — so the `to_f32` conversion is identity.
+                // The select gate rejects F64/F32Strict before we reach here.
                 dispatch::batched_gemm_sm80_run(
                     self.sku.layout,
                     T::KIND,
@@ -1592,8 +2125,8 @@ impl<T: CutlassElement> BatchedGemmPlan<T> {
                     d_ptr,
                     args.d.ld,
                     args.stride_d,
-                    args.alpha,
-                    beta_eff,
+                    args.alpha.to_f32(),
+                    beta_eff.to_f32(),
                     self.desc.batch_count,
                     ws_ptr,
                     ws_bytes,
@@ -2054,16 +2587,19 @@ impl<T: CutlassElement> GroupedGemmPlan<T> {
             host_problem_sizes.push(g.k);
         }
 
-        let beta_eff = if first_has_c { first_beta } else { 0.0 };
+        let beta_eff = if first_has_c { first_beta } else { <T::Scalar as Default>::default() };
 
+        // Grouped GEMM v0 ships only Rcr × {F16, Bf16} (both f32-scalar);
+        // the to_f32 conversion is identity. The select gate rejects
+        // F64/F32Strict before we reach here.
         Ok(PreparedGroupedGemm {
             plan: self,
             pinned,
             host_problem_sizes,
             layout,
             threadblock_count,
-            alpha: first_alpha,
-            beta: beta_eff,
+            alpha: first_alpha.to_f32(),
+            beta: beta_eff.to_f32(),
             _element: PhantomData,
         })
     }
