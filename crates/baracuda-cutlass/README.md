@@ -45,25 +45,49 @@ kernels) and below framework integration crates like Fuel's `fuel-cublaslt`.
 
 ### Kernel SKU coverage
 
-| API                                                | Layout × Element                                                                                              |
-|----------------------------------------------------|---------------------------------------------------------------------------------------------------------------|
-| `GemmPlan` (Identity)                              | `{Rcr, Rrr} × {F16, Bf16, F32 (TF32), F32Strict (SIMT), F64 (DGEMM)}`                                         |
-| `GemmPlan` (Bias / BiasRelu / BiasGelu / BiasSilu) | `{Rcr, Rrr} × {F16, Bf16, F32 (TF32), F32Strict (SIMT), F64 (DGEMM)}`                                         |
-| `BatchedGemmPlan`                                  | `Rcr × {F16, Bf16}`                                                                                           |
-| `GroupedGemmPlan`                                  | `Rcr × {F16, Bf16}`                                                                                           |
+| API                                                   | Layout × Element                                                              |
+|-------------------------------------------------------|-------------------------------------------------------------------------------|
+| `GemmPlan` (Identity)                                 | `{Rcr, Rrr} × {F16, Bf16, F32 (TF32), F32Strict (SIMT), F64 (DGEMM)}`         |
+| `GemmPlan` (Bias / BiasRelu / BiasGelu / BiasSilu)    | `{Rcr, Rrr} × {F16, Bf16, F32 (TF32), F32Strict (SIMT), F64 (DGEMM)}`         |
+| `IntGemmPlan` (Identity)                              | `Rcr × {S8, U8}`                                                              |
+| `IntGemmPlan` (Bias / BiasRelu / BiasGelu / BiasSilu) | `Rcr × {S8, U8} × {bias = f32, bias = i32}`                                   |
+| `BatchedGemmPlan`                                     | `Rcr × {F16, Bf16}`                                                           |
+| `GroupedGemmPlan`                                     | `Rcr × {F16, Bf16}`                                                           |
 
 **Per-element scalar (alpha / beta) types:**
 
-| Element       | `T::Scalar` | Notes                                                            |
-|---------------|-------------|------------------------------------------------------------------|
-| `f16`         | `f32`       | Tensor-core math, F32 accumulator                                |
-| `bf16`        | `f32`       | Tensor-core math, F32 accumulator                                |
-| `f32`         | `f32`       | TF32 tensor-core math (10-bit mantissa), F32 accumulator         |
-| `F32Strict`   | `f32`       | SIMT full-precision math, F32 accumulator, bit-stable            |
-| `f64`         | `f64`       | DGEMM tensor-core math, F64 accumulator                          |
+| Element       | `T::Scalar` | Notes                                                                                                        |
+|---------------|-------------|--------------------------------------------------------------------------------------------------------------|
+| `f16`         | `f32`       | Tensor-core math, F32 accumulator                                                                            |
+| `bf16`        | `f32`       | Tensor-core math, F32 accumulator                                                                            |
+| `f32`         | `f32`       | TF32 tensor-core math (10-bit mantissa), F32 accumulator                                                     |
+| `F32Strict`   | `f32`       | SIMT full-precision math, F32 accumulator, bit-stable                                                        |
+| `f64`         | `f64`       | DGEMM tensor-core math, F64 accumulator                                                                      |
+| `S8` / `U8`   | `f32`       | Int8 tensor-core math, int32 accumulator, bit-stable. Float alpha/beta let the epilogue act as a dequantize. |
 
-Int / quantized dtypes (`s8`/`u8`/`s4`/`u4`/`b1`) are planned follow-ups
-and not yet shipped.
+**Int family notes:**
+
+`IntGemmPlan<T: IntElement, BT: BiasElement = f32>` is a sibling type to
+`GemmPlan`. The matrix element `T` picks the kernel family
+(`S8` / `U8` today; `s4` / `u4` / 1-bit deferred to follow-ups). For
+`Bias*` epilogues, `BT` picks the bias broadcast element type — `f32`
+(default; matches the float-bias convention used elsewhere) or `i32`
+(matches TensorRT's int8 inference convention). Both routes use
+`LinearCombinationBiasElementwise` with `ElementCompute = float`, so
+the fused activation runs in float space after int32→float dequant and
+the final saturating cast back to int8 happens via the
+`cvt.rni.sat.{s8,u8}.f32` PTX instruction.
+
+`Rrr` is **not yet shipped** for the int family — CUTLASS 4.2.0 lacks
+warp-level iterator specializations for the 8-bit
+`TensorOpMultiplicandCongruous` shared-memory layout that
+`RowMajor × RowMajor × OpClassTensorOp` would select for int8. Selecting
+`LayoutSku::Rrr` on `IntGemmPlan` returns `Error::Unsupported` at plan
+selection time. A follow-up release will vendor the missing
+specialization.
+
+Remaining int / quantized dtypes (`s4`/`u4`/`b1`) are planned
+follow-ups and not yet shipped.
 
 All on `sm_80` (Ampere); `sm_90a` deferred until Hopper validation.
 
