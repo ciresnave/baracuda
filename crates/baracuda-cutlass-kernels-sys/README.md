@@ -12,6 +12,13 @@ infrastructure — its API is a list of unsafe C functions with no type
 safety. The safe layer wraps these with typed plans, descriptors, and
 lifetime-checked device buffers.
 
+For SKUs that **don't** go through CUTLASS templates — bespoke
+hand-rolled `mma.sync` kernels for layouts / dtypes CUTLASS can't
+express cleanly (today: int8 RRR; later: int4, bin, FP8) — see
+[`baracuda-kernels-sys`] (raw FFI) and [`baracuda-kernels`] (safe
+facade). The two -sys crates are siblings; the unified
+`baracuda-kernels` facade dispatches across both.
+
 ## v0 scope
 
 | Op family | Kernels (planned) | Shipped today |
@@ -54,3 +61,5 @@ Guoqing Bao). See `NOTICE` for full provenance.
 
 [`baracuda-forge`]: ../baracuda-forge
 [`baracuda-cutlass`]: ../baracuda-cutlass
+[`baracuda-kernels`]: ../baracuda-kernels
+[`baracuda-kernels-sys`]: ../baracuda-kernels-sys

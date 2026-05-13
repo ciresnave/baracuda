@@ -5,9 +5,10 @@
 //! This crate has no behavior of its own — it ships pure-data types that
 //! are common to every member of the kernel facade ecosystem:
 //!
-//! - The [`Element`] / [`IntElement`] / [`BiasElement`] trait hierarchy
-//!   plus the [`ScalarType`] alpha/beta projection.
-//! - Wrapper types ([`S8`], [`U8`], [`F32Strict`]) that drive kernel
+//! - The [`Element`] / [`IntElement`] / [`FpElement`] / [`BiasElement`]
+//!   trait hierarchy plus the [`ScalarType`] alpha/beta projection.
+//! - Wrapper types ([`S8`], [`U8`], [`S4`], [`U4`], [`Bin`],
+//!   [`F32Strict`], [`Fp8E4M3`], [`Fp8E5M2`]) that drive kernel
 //!   selection at the Rust type level.
 //! - Tag enums ([`ElementKind`], [`MathPrecision`], [`BiasElementKind`],
 //!   [`LayoutSku`], [`ArchSku`], [`EpilogueKind`], [`ActivationKind`]).
@@ -34,8 +35,8 @@ pub mod matrix;
 pub mod plan;
 
 pub use element::{
-    BiasElement, BiasElementKind, Element, ElementKind, F32Strict, IntElement, MathPrecision,
-    S8, ScalarType, U8,
+    BiasElement, BiasElementKind, Bin, BinElement, Element, ElementKind, F32Strict, Fp8E4M3,
+    Fp8E5M2, FpElement, IntElement, MathPrecision, S4, S8, ScalarType, U4, U8,
 };
 pub use layout::{ActivationKind, ArchSku, EpilogueKind, LayoutSku};
 pub use matrix::{MatrixMut, MatrixRef, VectorRef};

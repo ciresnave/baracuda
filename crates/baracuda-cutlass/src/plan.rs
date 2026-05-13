@@ -643,7 +643,12 @@ mod dispatch {
             // dispatcher should never see them when the plan layer is
             // wired correctly. `I32` is an accumulator-only kind and
             // is never a kernel input element.
-            (_, ElementKind::S8) | (_, ElementKind::U8) | (_, ElementKind::I32) => 3,
+            (_, ElementKind::S8) | (_, ElementKind::U8) | (_, ElementKind::I32)
+            | (_, ElementKind::Fp8E4M3)
+            | (_, ElementKind::Fp8E5M2)
+            | (_, ElementKind::S4)
+            | (_, ElementKind::U4)
+            | (_, ElementKind::Bin) => 3,
         }
     }
 
@@ -685,8 +690,16 @@ mod dispatch {
             (LayoutSku::Rcr, ElementKind::F64)
             | (LayoutSku::Rrr, ElementKind::F64) => 0,
             // Integer kinds route through `int_gemm_sm80_workspace_size`.
-            // Defensive arm; never expected to fire here.
-            (_, ElementKind::S8) | (_, ElementKind::U8) | (_, ElementKind::I32) => 0,
+            // FP8 kinds route through baracuda-kernels-sys. Defensive arms;
+            // never expected to fire here.
+            (_, ElementKind::S8)
+            | (_, ElementKind::U8)
+            | (_, ElementKind::I32)
+            | (_, ElementKind::Fp8E4M3)
+            | (_, ElementKind::Fp8E5M2)
+            | (_, ElementKind::S4)
+            | (_, ElementKind::U4)
+            | (_, ElementKind::Bin) => 0,
         }
     }
 
@@ -753,7 +766,12 @@ mod dispatch {
             (LayoutSku::Rcr, ElementKind::F64)
             | (LayoutSku::Rrr, ElementKind::F64) => 3,
             // Integer kinds route through `int_gemm_sm80_can_implement`.
-            (_, ElementKind::S8) | (_, ElementKind::U8) | (_, ElementKind::I32) => 3,
+            (_, ElementKind::S8) | (_, ElementKind::U8) | (_, ElementKind::I32)
+            | (_, ElementKind::Fp8E4M3)
+            | (_, ElementKind::Fp8E5M2)
+            | (_, ElementKind::S4)
+            | (_, ElementKind::U4)
+            | (_, ElementKind::Bin) => 3,
         }
     }
 
@@ -1189,7 +1207,12 @@ mod dispatch {
             | ElementKind::F64
             | ElementKind::S8
             | ElementKind::U8
-            | ElementKind::I32 => 0,
+            | ElementKind::I32
+            | ElementKind::Fp8E4M3
+            | ElementKind::Fp8E5M2
+            | ElementKind::S4
+            | ElementKind::U4
+            | ElementKind::Bin => 0,
         }
     }
 
@@ -1219,7 +1242,12 @@ mod dispatch {
             | ElementKind::F64
             | ElementKind::S8
             | ElementKind::U8
-            | ElementKind::I32 => 0,
+            | ElementKind::I32
+            | ElementKind::Fp8E4M3
+            | ElementKind::Fp8E5M2
+            | ElementKind::S4
+            | ElementKind::U4
+            | ElementKind::Bin => 0,
         }
     }
 
@@ -1244,7 +1272,12 @@ mod dispatch {
             | ElementKind::F64
             | ElementKind::S8
             | ElementKind::U8
-            | ElementKind::I32 => 3,
+            | ElementKind::I32
+            | ElementKind::Fp8E4M3
+            | ElementKind::Fp8E5M2
+            | ElementKind::S4
+            | ElementKind::U4
+            | ElementKind::Bin => 3,
         }
     }
 
@@ -1301,7 +1334,12 @@ mod dispatch {
             | ElementKind::F64
             | ElementKind::S8
             | ElementKind::U8
-            | ElementKind::I32 => 3,
+            | ElementKind::I32
+            | ElementKind::Fp8E4M3
+            | ElementKind::Fp8E5M2
+            | ElementKind::S4
+            | ElementKind::U4
+            | ElementKind::Bin => 3,
         }
     }
 
@@ -2065,6 +2103,11 @@ impl<T: CutlassElement> GemmPlan<T> {
                     "sm90a kernels not yet shipped (deferred until Hopper hardware available for validation)",
                 ));
             }
+            (ArchSku::Sm89, _) => {
+                return Err(Error::Unsupported(
+                    "Ada-specialized FP8 / sm_89 SKUs live in baracuda-kernels-sys, not baracuda-cutlass",
+                ));
+            }
         };
 
         status_to_result(status)
@@ -2108,6 +2151,7 @@ impl<T: CutlassElement> GemmPlan<T> {
             #[cfg(not(feature = "sm80"))]
             (ArchSku::Sm80, _) => 0,
             (ArchSku::Sm90a, _) => 0,
+            (ArchSku::Sm89, _) => 0,
         }
     }
 
@@ -2260,6 +2304,11 @@ impl<T: CutlassElement> GemmPlan<T> {
             (ArchSku::Sm90a, _) => {
                 return Err(Error::Unsupported(
                     "sm90a kernels not yet implemented (Phase 4c)",
+                ));
+            }
+            (ArchSku::Sm89, _) => {
+                return Err(Error::Unsupported(
+                    "Ada-specialized FP8 / sm_89 SKUs live in baracuda-kernels-sys, not baracuda-cutlass",
                 ));
             }
         };
@@ -2508,6 +2557,11 @@ impl<T: CutlassElement> BatchedGemmPlan<T> {
                     "sm90a batched kernels not yet shipped",
                 ));
             }
+            ArchSku::Sm89 => {
+                return Err(Error::Unsupported(
+                    "Ada-specialized FP8 / sm_89 SKUs live in baracuda-kernels-sys, not baracuda-cutlass",
+                ));
+            }
         };
 
         status_to_result(status)
@@ -2528,6 +2582,7 @@ impl<T: CutlassElement> BatchedGemmPlan<T> {
             #[cfg(not(feature = "sm80"))]
             ArchSku::Sm80 => 0,
             ArchSku::Sm90a => 0,
+            ArchSku::Sm89 => 0,
         }
     }
 
@@ -2620,6 +2675,11 @@ impl<T: CutlassElement> BatchedGemmPlan<T> {
             ArchSku::Sm90a => {
                 return Err(Error::Unsupported(
                     "sm90a batched kernels not yet shipped",
+                ));
+            }
+            ArchSku::Sm89 => {
+                return Err(Error::Unsupported(
+                    "Ada-specialized FP8 / sm_89 SKUs live in baracuda-kernels-sys, not baracuda-cutlass",
                 ));
             }
         };
@@ -2944,6 +3004,11 @@ impl<T: CutlassElement> GroupedGemmPlan<T> {
                     "sm90a grouped kernels not yet shipped (deferred until Hopper hardware available)",
                 ));
             }
+            ArchSku::Sm89 => {
+                return Err(Error::Unsupported(
+                    "Ada-specialized FP8 / sm_89 SKUs live in baracuda-kernels-sys, not baracuda-cutlass",
+                ));
+            }
         };
         status_to_result(ci_status)?;
 
@@ -2962,6 +3027,7 @@ impl<T: CutlassElement> GroupedGemmPlan<T> {
             #[cfg(not(feature = "sm80"))]
             ArchSku::Sm80 => 0,
             ArchSku::Sm90a => 0,
+            ArchSku::Sm89 => 0,
         };
         if threadblock_count <= 0 {
             return Err(Error::CutlassInternal(threadblock_count));
@@ -2982,6 +3048,7 @@ impl<T: CutlassElement> GroupedGemmPlan<T> {
             #[cfg(not(feature = "sm80"))]
             ArchSku::Sm80 => 0,
             ArchSku::Sm90a => 0,
+            ArchSku::Sm89 => 0,
         };
 
         let layout = MetadataLayout::compute(group_count, scratch_bytes);
@@ -3232,6 +3299,11 @@ impl<'a, T: CutlassElement> PreparedGroupedGemm<'a, T> {
                     "sm90a grouped kernels not yet shipped",
                 ));
             }
+            ArchSku::Sm89 => {
+                return Err(Error::Unsupported(
+                    "Ada-specialized FP8 / sm_89 SKUs live in baracuda-kernels-sys, not baracuda-cutlass",
+                ));
+            }
         };
 
         status_to_result(status)
@@ -3383,6 +3455,11 @@ impl<T: IntElement, BT: BiasElement> IntGemmPlan<T, BT> {
                     "sm90a int8 kernels not yet shipped",
                 ));
             }
+            (ArchSku::Sm89, _) => {
+                return Err(Error::Unsupported(
+                    "Ada-specialized FP8 / sm_89 SKUs live in baracuda-kernels-sys, not baracuda-cutlass",
+                ));
+            }
         };
 
         status_to_result(status)
@@ -3409,6 +3486,7 @@ impl<T: IntElement, BT: BiasElement> IntGemmPlan<T, BT> {
             #[cfg(not(feature = "sm80"))]
             (ArchSku::Sm80, _) => 0,
             (ArchSku::Sm90a, _) => 0,
+            (ArchSku::Sm89, _) => 0,
         }
     }
 
@@ -3511,6 +3589,11 @@ impl<T: IntElement, BT: BiasElement> IntGemmPlan<T, BT> {
             }
             (ArchSku::Sm90a, _) => {
                 return Err(Error::Unsupported("sm90a int8 kernels not yet shipped"));
+            }
+            (ArchSku::Sm89, _) => {
+                return Err(Error::Unsupported(
+                    "Ada-specialized FP8 / sm_89 SKUs live in baracuda-kernels-sys, not baracuda-cutlass",
+                ));
             }
         };
 

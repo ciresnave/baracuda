@@ -312,6 +312,15 @@ impl GemmSku {
             // only int kernel family that produces an int32 accum) as
             // a defensive fallback.
             ElementKind::I32 => MathPrecision::Int8,
+            // FP8 kernels live in baracuda-kernels-sys, not baracuda-cutlass.
+            // No CUTLASS SKU produces these element kinds; defensive arm.
+            ElementKind::Fp8E4M3 => MathPrecision::Fp8E4M3,
+            ElementKind::Fp8E5M2 => MathPrecision::Fp8E5M2,
+            // Int4 kernels (S4 / U4) live in baracuda-kernels-sys, not
+            // baracuda-cutlass. Defensive arm.
+            ElementKind::S4 | ElementKind::U4 => MathPrecision::Int4,
+            // Binary (Bin) GEMM lives in baracuda-kernels-sys. Defensive arm.
+            ElementKind::Bin => MathPrecision::Binary,
         };
         // F32Strict (SIMT CUDA cores) and int8 (integer tensor cores)
         // are bit-stable on the same hardware. Float tensor-core
@@ -319,11 +328,20 @@ impl GemmSku {
         // reduction order so they can differ in the last bit.
         let bit_stable_on_same_hardware = matches!(
             self.element,
-            ElementKind::F32Strict | ElementKind::S8 | ElementKind::U8,
+            ElementKind::F32Strict
+                | ElementKind::S8
+                | ElementKind::U8
+                | ElementKind::S4
+                | ElementKind::U4
+                | ElementKind::Bin,
         );
         let accumulator = match self.element {
             ElementKind::F64 => ElementKind::F64,
-            ElementKind::S8 | ElementKind::U8 => ElementKind::I32,
+            ElementKind::S8
+            | ElementKind::U8
+            | ElementKind::S4
+            | ElementKind::U4
+            | ElementKind::Bin => ElementKind::I32,
             _ => ElementKind::F32,
         };
         PrecisionGuarantee {

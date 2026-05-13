@@ -15,6 +15,11 @@ For *build-time* kernel compilation via `nvcc` (incremental, parallel,
 multi-arch fat binaries, CUTLASS dependency management), see
 [`baracuda-forge`] instead.
 
+For *pre-built, curated* ML kernels (GEMM family across float and int
+dtypes today; the broader PyTorch + JAX op set landing across the
+alpha.16+ phases), see [`baracuda-kernels`] — no compilation step
+needed for SKUs already in the curated set.
+
 ## What's exposed
 
 - `nvrtcProgram` create / compile / destroy.
@@ -31,3 +36,4 @@ Dual MIT / Apache-2.0.
 
 [`baracuda-nvrtc`]: https://docs.rs/baracuda-nvrtc
 [`baracuda-forge`]: https://docs.rs/baracuda-forge
+[`baracuda-kernels`]: https://docs.rs/baracuda-kernels

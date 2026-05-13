@@ -45,14 +45,14 @@ kernels) and below framework integration crates like Fuel's `fuel-cublaslt`.
 
 ### Kernel SKU coverage
 
-| API                                                   | Layout × Element                                                              |
-|-------------------------------------------------------|-------------------------------------------------------------------------------|
-| `GemmPlan` (Identity)                                 | `{Rcr, Rrr} × {F16, Bf16, F32 (TF32), F32Strict (SIMT), F64 (DGEMM)}`         |
-| `GemmPlan` (Bias / BiasRelu / BiasGelu / BiasSilu)    | `{Rcr, Rrr} × {F16, Bf16, F32 (TF32), F32Strict (SIMT), F64 (DGEMM)}`         |
-| `IntGemmPlan` (Identity)                              | `Rcr × {S8, U8}`                                                              |
-| `IntGemmPlan` (Bias / BiasRelu / BiasGelu / BiasSilu) | `Rcr × {S8, U8} × {bias = f32, bias = i32}`                                   |
-| `BatchedGemmPlan`                                     | `Rcr × {F16, Bf16}`                                                           |
-| `GroupedGemmPlan`                                     | `Rcr × {F16, Bf16}`                                                           |
+| API                                                   | Layout × Element                                                                          |
+|-------------------------------------------------------|-------------------------------------------------------------------------------------------|
+| `GemmPlan` (Identity)                                 | `{Rcr, Rrr} × {F16, Bf16, F32 (TF32), F32Strict (SIMT), F64 (DGEMM)}`                     |
+| `GemmPlan` (Bias / BiasRelu / BiasGelu / BiasSilu)    | `{Rcr, Rrr} × {F16, Bf16, F32 (TF32), F32Strict (SIMT), F64 (DGEMM)}`                     |
+| `IntGemmPlan` (Identity)                              | `Rcr × {S8, U8}` (this crate) · `Rrr × {S8, U8}` via [`baracuda-kernels`]                 |
+| `IntGemmPlan` (Bias / BiasRelu / BiasGelu / BiasSilu) | `Rcr × {S8, U8} × {bias = f32, bias = i32}` (this crate) · `Rrr` via [`baracuda-kernels`] |
+| `BatchedGemmPlan`                                     | `Rcr × {F16, Bf16}`                                                                       |
+| `GroupedGemmPlan`                                     | `Rcr × {F16, Bf16}`                                                                       |
 
 **Per-element scalar (alpha / beta) types:**
 
@@ -78,16 +78,23 @@ the fused activation runs in float space after int32→float dequant and
 the final saturating cast back to int8 happens via the
 `cvt.rni.sat.{s8,u8}.f32` PTX instruction.
 
-`Rrr` is **not yet shipped** for the int family — CUTLASS 4.2.0 lacks
-warp-level iterator specializations for the 8-bit
+`Rrr` for the int family is **not in this crate** — CUTLASS 4.2.0
+lacks the warp-level iterator specializations for the 8-bit
 `TensorOpMultiplicandCongruous` shared-memory layout that
-`RowMajor × RowMajor × OpClassTensorOp` would select for int8. Selecting
-`LayoutSku::Rrr` on `IntGemmPlan` returns `Error::Unsupported` at plan
-selection time. A follow-up release will vendor the missing
-specialization.
+`RowMajor × RowMajor × OpClassTensorOp` would select for int8.
+Selecting `LayoutSku::Rrr` on **this crate's** `IntGemmPlan` returns
+`Error::Unsupported` at plan selection time. The bespoke RRR kernels
+live in [`baracuda-kernels`] — selecting `Rrr` on
+`baracuda_kernels::IntGemmPlan` dispatches to a hand-rolled
+`mma.sync.m16n8k32` kernel set covering all 18 SKUs
+(`{S8, U8} × {Identity, Bias, BiasRelu, BiasGelu, BiasSilu} × {f32, i32}`
+bias). Callers building new code should import from `baracuda-kernels`
+— it's a strict superset of this crate's int-GEMM surface.
 
 Remaining int / quantized dtypes (`s4`/`u4`/`b1`) are planned
-follow-ups and not yet shipped.
+follow-ups in `baracuda-kernels` and not yet shipped.
+
+[`baracuda-kernels`]: https://docs.rs/baracuda-kernels
 
 All on `sm_80` (Ampere); `sm_90a` deferred until Hopper validation.
 

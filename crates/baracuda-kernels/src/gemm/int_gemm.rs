@@ -23,8 +23,8 @@ use core::marker::PhantomData;
 use baracuda_cutlass::{Error, Result};
 use baracuda_driver::Stream;
 use baracuda_kernels_types::{
-    ArchSku, BiasElement, ElementKind, EpilogueKind, IntElement, LayoutSku, PlanPreference,
-    PrecisionGuarantee, S8, Workspace,
+    ArchSku, BiasElement, BiasElementKind, ElementKind, EpilogueKind, IntElement, LayoutSku,
+    PlanPreference, PrecisionGuarantee, S8, Workspace,
 };
 
 // Public re-exports of the descriptor / args structs. These live in
@@ -88,22 +88,14 @@ impl<T: IntElement, BT: BiasElement> IntGemmPlan<T, BT> {
                         "int GEMM problem must have positive M, N, K",
                     ));
                 }
-                // Today: only `S8 × Identity` is implemented. The other
-                // 17 SKUs land in subsequent commits — return
-                // `Unsupported` with a precise reason so callers can
-                // gate on it.
-                if T::KIND != ElementKind::S8 {
+                // baracuda-kernels' RRR coverage today: {S8, U8} ×
+                // {Identity, Bias, BiasRelu, BiasGelu, BiasSilu} ×
+                // {f32 bias, i32 bias}. int4 / bin land in Phase 2.
+                if !matches!(T::KIND, ElementKind::S8 | ElementKind::U8) {
                     return Err(Error::Unsupported(
-                        "baracuda-kernels: int8 RRR bespoke kernels: \
-                         only S8 is implemented today (U8 / int4 / bin \
-                         follow in later commits)",
-                    ));
-                }
-                if !matches!(desc.epilogue, EpilogueKind::Identity) {
-                    return Err(Error::Unsupported(
-                        "baracuda-kernels: int8 RRR bespoke kernels: \
-                         only the Identity epilogue is implemented today \
-                         (bias / activation variants follow in later commits)",
+                        "baracuda-kernels: int RRR bespoke kernels: \
+                         only S8 / U8 are implemented today \
+                         (int4 / bin land in Phase 2)",
                     ));
                 }
                 let sku = GemmSku {
@@ -111,9 +103,14 @@ impl<T: IntElement, BT: BiasElement> IntGemmPlan<T, BT> {
                     layout: desc.layout,
                     epilogue: desc.epilogue,
                     element: T::KIND,
-                    // Identity carries no bias-element tag — matches the
-                    // float-family convention; see the GemmSku docstring.
-                    bias_element: None,
+                    // `bias_element` tags the bias broadcast type for
+                    // the `Bias*` epilogue family; `None` for Identity
+                    // matches the float-family convention.
+                    bias_element: if desc.epilogue.requires_bias() {
+                        Some(BT::KIND)
+                    } else {
+                        None
+                    },
                 };
                 Ok(Self {
                     desc: *desc,
@@ -206,30 +203,198 @@ impl<T: IntElement, BT: BiasElement> IntGemmPlan<T, BT> {
                     Some(c) => (c.data.as_raw().0 as *const c_void, c.ld),
                     None => (core::ptr::null(), 0i64),
                 };
+                let bias_ptr = match &args.bias {
+                    Some(b) => b.data.as_raw().0 as *const c_void,
+                    None => core::ptr::null(),
+                };
+
+                // Reject mis-paired bias / epilogue: Identity must have
+                // no bias supplied; Bias* must have one. The cutlass
+                // backend enforces this in `can_implement`; mirror the
+                // same contract here.
+                let needs_bias = self.sku.epilogue.requires_bias();
+                if needs_bias && bias_ptr.is_null() {
+                    return Err(Error::InvalidProblem(
+                        "Bias* epilogue requires a bias vector",
+                    ));
+                }
+                if !needs_bias && !bias_ptr.is_null() {
+                    return Err(Error::InvalidProblem(
+                        "Identity epilogue must not be supplied a bias vector",
+                    ));
+                }
 
                 let stream_ptr = stream.as_raw() as *mut c_void;
+                let m = self.desc.m;
+                let n = self.desc.n;
+                let k = self.desc.k;
+                let lda = args.a.ld;
+                let ldb = args.b.ld;
+                let ldd = args.d.ld;
+                let alpha = args.alpha;
+                let beta = args.beta;
 
-                // Dispatch — only S8 × Identity is implemented today.
-                let status = match (T::KIND, self.sku.epilogue) {
-                    (ElementKind::S8, EpilogueKind::Identity) => unsafe {
+                // Identity launchers don't take a bias pointer in their
+                // signature; the bias family does. Both ABI shapes are
+                // expressed through separate `extern "C"` declarations
+                // in baracuda-kernels-sys.
+                let status = match (T::KIND, self.sku.epilogue, BT::KIND) {
+                    // ---- Identity (bias_element tag is meaningless) ----
+                    (ElementKind::S8, EpilogueKind::Identity, _) => unsafe {
                         baracuda_kernels_sys::baracuda_kernels_gemm_s8_rrr_sm80_run(
-                            self.desc.m, self.desc.n, self.desc.k,
-                            a_ptr, args.a.ld,
-                            b_ptr, args.b.ld,
-                            c_ptr, ldc,
-                            d_ptr, args.d.ld,
-                            args.alpha, args.beta,
+                            m, n, k,
+                            a_ptr, lda, b_ptr, ldb, c_ptr, ldc, d_ptr, ldd,
+                            alpha, beta,
                             core::ptr::null_mut(), 0,
                             stream_ptr,
                         )
                     },
-                    // `select` should have rejected anything else, but
-                    // surface as a clean error rather than panic if a
-                    // future descriptor variant slips through.
+                    (ElementKind::U8, EpilogueKind::Identity, _) => unsafe {
+                        baracuda_kernels_sys::baracuda_kernels_gemm_u8_rrr_sm80_run(
+                            m, n, k,
+                            a_ptr, lda, b_ptr, ldb, c_ptr, ldc, d_ptr, ldd,
+                            alpha, beta,
+                            core::ptr::null_mut(), 0,
+                            stream_ptr,
+                        )
+                    },
+
+                    // ---- S8 × Bias family ----
+                    (ElementKind::S8, EpilogueKind::Bias, BiasElementKind::F32) => unsafe {
+                        baracuda_kernels_sys::baracuda_kernels_gemm_s8_rrr_sm80_bias_f32_run(
+                            m, n, k,
+                            a_ptr, lda, b_ptr, ldb, c_ptr, ldc, d_ptr, ldd,
+                            bias_ptr, alpha, beta,
+                            core::ptr::null_mut(), 0, stream_ptr,
+                        )
+                    },
+                    (ElementKind::S8, EpilogueKind::BiasRelu, BiasElementKind::F32) => unsafe {
+                        baracuda_kernels_sys::baracuda_kernels_gemm_s8_rrr_sm80_bias_relu_f32_run(
+                            m, n, k,
+                            a_ptr, lda, b_ptr, ldb, c_ptr, ldc, d_ptr, ldd,
+                            bias_ptr, alpha, beta,
+                            core::ptr::null_mut(), 0, stream_ptr,
+                        )
+                    },
+                    (ElementKind::S8, EpilogueKind::BiasGelu, BiasElementKind::F32) => unsafe {
+                        baracuda_kernels_sys::baracuda_kernels_gemm_s8_rrr_sm80_bias_gelu_f32_run(
+                            m, n, k,
+                            a_ptr, lda, b_ptr, ldb, c_ptr, ldc, d_ptr, ldd,
+                            bias_ptr, alpha, beta,
+                            core::ptr::null_mut(), 0, stream_ptr,
+                        )
+                    },
+                    (ElementKind::S8, EpilogueKind::BiasSilu, BiasElementKind::F32) => unsafe {
+                        baracuda_kernels_sys::baracuda_kernels_gemm_s8_rrr_sm80_bias_silu_f32_run(
+                            m, n, k,
+                            a_ptr, lda, b_ptr, ldb, c_ptr, ldc, d_ptr, ldd,
+                            bias_ptr, alpha, beta,
+                            core::ptr::null_mut(), 0, stream_ptr,
+                        )
+                    },
+                    (ElementKind::S8, EpilogueKind::Bias, BiasElementKind::I32) => unsafe {
+                        baracuda_kernels_sys::baracuda_kernels_gemm_s8_rrr_sm80_bias_i32_run(
+                            m, n, k,
+                            a_ptr, lda, b_ptr, ldb, c_ptr, ldc, d_ptr, ldd,
+                            bias_ptr, alpha, beta,
+                            core::ptr::null_mut(), 0, stream_ptr,
+                        )
+                    },
+                    (ElementKind::S8, EpilogueKind::BiasRelu, BiasElementKind::I32) => unsafe {
+                        baracuda_kernels_sys::baracuda_kernels_gemm_s8_rrr_sm80_bias_relu_i32_run(
+                            m, n, k,
+                            a_ptr, lda, b_ptr, ldb, c_ptr, ldc, d_ptr, ldd,
+                            bias_ptr, alpha, beta,
+                            core::ptr::null_mut(), 0, stream_ptr,
+                        )
+                    },
+                    (ElementKind::S8, EpilogueKind::BiasGelu, BiasElementKind::I32) => unsafe {
+                        baracuda_kernels_sys::baracuda_kernels_gemm_s8_rrr_sm80_bias_gelu_i32_run(
+                            m, n, k,
+                            a_ptr, lda, b_ptr, ldb, c_ptr, ldc, d_ptr, ldd,
+                            bias_ptr, alpha, beta,
+                            core::ptr::null_mut(), 0, stream_ptr,
+                        )
+                    },
+                    (ElementKind::S8, EpilogueKind::BiasSilu, BiasElementKind::I32) => unsafe {
+                        baracuda_kernels_sys::baracuda_kernels_gemm_s8_rrr_sm80_bias_silu_i32_run(
+                            m, n, k,
+                            a_ptr, lda, b_ptr, ldb, c_ptr, ldc, d_ptr, ldd,
+                            bias_ptr, alpha, beta,
+                            core::ptr::null_mut(), 0, stream_ptr,
+                        )
+                    },
+
+                    // ---- U8 × Bias family ----
+                    (ElementKind::U8, EpilogueKind::Bias, BiasElementKind::F32) => unsafe {
+                        baracuda_kernels_sys::baracuda_kernels_gemm_u8_rrr_sm80_bias_f32_run(
+                            m, n, k,
+                            a_ptr, lda, b_ptr, ldb, c_ptr, ldc, d_ptr, ldd,
+                            bias_ptr, alpha, beta,
+                            core::ptr::null_mut(), 0, stream_ptr,
+                        )
+                    },
+                    (ElementKind::U8, EpilogueKind::BiasRelu, BiasElementKind::F32) => unsafe {
+                        baracuda_kernels_sys::baracuda_kernels_gemm_u8_rrr_sm80_bias_relu_f32_run(
+                            m, n, k,
+                            a_ptr, lda, b_ptr, ldb, c_ptr, ldc, d_ptr, ldd,
+                            bias_ptr, alpha, beta,
+                            core::ptr::null_mut(), 0, stream_ptr,
+                        )
+                    },
+                    (ElementKind::U8, EpilogueKind::BiasGelu, BiasElementKind::F32) => unsafe {
+                        baracuda_kernels_sys::baracuda_kernels_gemm_u8_rrr_sm80_bias_gelu_f32_run(
+                            m, n, k,
+                            a_ptr, lda, b_ptr, ldb, c_ptr, ldc, d_ptr, ldd,
+                            bias_ptr, alpha, beta,
+                            core::ptr::null_mut(), 0, stream_ptr,
+                        )
+                    },
+                    (ElementKind::U8, EpilogueKind::BiasSilu, BiasElementKind::F32) => unsafe {
+                        baracuda_kernels_sys::baracuda_kernels_gemm_u8_rrr_sm80_bias_silu_f32_run(
+                            m, n, k,
+                            a_ptr, lda, b_ptr, ldb, c_ptr, ldc, d_ptr, ldd,
+                            bias_ptr, alpha, beta,
+                            core::ptr::null_mut(), 0, stream_ptr,
+                        )
+                    },
+                    (ElementKind::U8, EpilogueKind::Bias, BiasElementKind::I32) => unsafe {
+                        baracuda_kernels_sys::baracuda_kernels_gemm_u8_rrr_sm80_bias_i32_run(
+                            m, n, k,
+                            a_ptr, lda, b_ptr, ldb, c_ptr, ldc, d_ptr, ldd,
+                            bias_ptr, alpha, beta,
+                            core::ptr::null_mut(), 0, stream_ptr,
+                        )
+                    },
+                    (ElementKind::U8, EpilogueKind::BiasRelu, BiasElementKind::I32) => unsafe {
+                        baracuda_kernels_sys::baracuda_kernels_gemm_u8_rrr_sm80_bias_relu_i32_run(
+                            m, n, k,
+                            a_ptr, lda, b_ptr, ldb, c_ptr, ldc, d_ptr, ldd,
+                            bias_ptr, alpha, beta,
+                            core::ptr::null_mut(), 0, stream_ptr,
+                        )
+                    },
+                    (ElementKind::U8, EpilogueKind::BiasGelu, BiasElementKind::I32) => unsafe {
+                        baracuda_kernels_sys::baracuda_kernels_gemm_u8_rrr_sm80_bias_gelu_i32_run(
+                            m, n, k,
+                            a_ptr, lda, b_ptr, ldb, c_ptr, ldc, d_ptr, ldd,
+                            bias_ptr, alpha, beta,
+                            core::ptr::null_mut(), 0, stream_ptr,
+                        )
+                    },
+                    (ElementKind::U8, EpilogueKind::BiasSilu, BiasElementKind::I32) => unsafe {
+                        baracuda_kernels_sys::baracuda_kernels_gemm_u8_rrr_sm80_bias_silu_i32_run(
+                            m, n, k,
+                            a_ptr, lda, b_ptr, ldb, c_ptr, ldc, d_ptr, ldd,
+                            bias_ptr, alpha, beta,
+                            core::ptr::null_mut(), 0, stream_ptr,
+                        )
+                    },
+
                     _ => {
                         return Err(Error::Unsupported(
-                            "baracuda-kernels: int8 RRR bespoke kernel dispatcher \
-                             reached an unimplemented (element, epilogue) pair",
+                            "baracuda-kernels: int RRR bespoke kernel dispatcher \
+                             reached an unimplemented (element, epilogue, bias) triple",
                         ));
                     }
                 };

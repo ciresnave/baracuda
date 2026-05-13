@@ -15,6 +15,12 @@
 //! contract; the per-layout backend is observable via [`IntGemmPlan::sku`]
 //! for telemetry but doesn't leak into the call signature.
 
+pub mod bin_gemm;
+pub mod fp8_gemm;
+pub mod int4_gemm;
 pub mod int_gemm;
 
+pub use bin_gemm::{BinGemmArgs, BinGemmDescriptor, BinGemmPlan};
+pub use fp8_gemm::{Fp8GemmArgs, Fp8GemmDescriptor, Fp8GemmPlan};
+pub use int4_gemm::{Int4GemmArgs, Int4GemmDescriptor, Int4GemmPlan};
 pub use int_gemm::{IntGemmArgs, IntGemmDescriptor, IntGemmPlan};

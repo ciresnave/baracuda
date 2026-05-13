@@ -96,6 +96,62 @@ fn collect_kernel_files() -> Vec<&'static str> {
                 }
             }
         }
+
+        // Phase 2 deliverables: FP8 / int4 / bin GEMM, sm_89 (Ada
+        // Lovelace) baseline. Selected only when `sm89` is enabled —
+        // the FP8 m16n8k32 instruction is sm_89+ and won't assemble
+        // against an `sm_80` target.
+        //
+        // Full FP8 SKU matrix: {E4M3, E5M2} × {RCR, RRR} × {Identity,
+        // Bias, BiasRelu, BiasGelu, BiasSilu} = 20 SKUs across 8 .cu
+        // files (4 Identity + 4 bias multi-instantiation files).
+        if cfg!(feature = "sm89") {
+            for f in &[
+                "gemm/gemm_fp8_e4m3_rcr_sm89.cu",
+                "gemm/gemm_fp8_e4m3_rrr_sm89.cu",
+                "gemm/gemm_fp8_e5m2_rcr_sm89.cu",
+                "gemm/gemm_fp8_e5m2_rrr_sm89.cu",
+                "gemm/gemm_fp8_e4m3_rcr_sm89_bias.cu",
+                "gemm/gemm_fp8_e4m3_rrr_sm89_bias.cu",
+                "gemm/gemm_fp8_e5m2_rcr_sm89_bias.cu",
+                "gemm/gemm_fp8_e5m2_rrr_sm89_bias.cu",
+                // int4 GEMM — S4 / U4 × {RCR, RRR} × Identity
+                // (alpha.17). The bias-family variants land in
+                // subsequent fanout commits.
+                // `mma.sync.m16n8k64.{s4|u4}.{s4|u4}.s32` requires
+                // sm_89+. RRR header gathers two nibbles from two
+                // gmem K-rows into one packed-pair smem byte (B is
+                // pair-packed along N in gmem, K-contig in smem).
+                "gemm/gemm_s4_rcr_sm89.cu",
+                "gemm/gemm_u4_rcr_sm89.cu",
+                "gemm/gemm_s4_rrr_sm89.cu",
+                "gemm/gemm_u4_rrr_sm89.cu",
+                // int4 bias-family multi-instantiation files. Each file
+                // ships 8 `_run` symbols for the
+                // `{Bias, BiasRelu, BiasGelu, BiasSilu} × {f32, i32}` bias
+                // matrix at a fixed `(element, layout)` pair. The
+                // Identity SKU above ships the shared `_workspace_size`
+                // and `_can_implement` for each `(element, layout)`.
+                "gemm/gemm_s4_rcr_sm89_bias.cu",
+                "gemm/gemm_u4_rcr_sm89_bias.cu",
+                "gemm/gemm_s4_rrr_sm89_bias.cu",
+                "gemm/gemm_u4_rrr_sm89_bias.cu",
+                // bin (B1) GEMM — RCR + RRR Identity-only. `xor.popc`
+                // model; output is raw int32 popcount sum (no
+                // α/β/bias/activation chain).
+                // `mma.sync.m16n8k256.b1.b1.s32.xor.popc` (sm_80+;
+                // gated to sm_89 here for build-set parity with
+                // int4/FP8). The RRR header bit-gathers 8 K-row gmem
+                // bytes into one K-pair smem byte per output column
+                // (B is N-bit-packed in gmem, K-bit-packed in smem).
+                "gemm/gemm_bin_rcr_sm89.cu",
+                "gemm/gemm_bin_rrr_sm89.cu",
+            ] {
+                if std::path::Path::new(&format!("kernels/{f}")).exists() {
+                    kernels.push(*f);
+                }
+            }
+        }
     }
 
     kernels

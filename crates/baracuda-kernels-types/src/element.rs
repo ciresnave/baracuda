@@ -5,9 +5,10 @@
 //! that's the floating-point family (`f16`, `bf16`, `f32`, [`F32Strict`],
 //! `f64`) via [`Element`] itself with a `type Scalar: ScalarType` projection
 //! (the alpha/beta scalar matching the kernel's accumulator), plus the
-//! integer family via the sibling [`IntElement`] trait. [`BiasElement`]
-//! marks the bias broadcast element types accepted by integer GEMM
-//! epilogues.
+//! integer family via the sibling [`IntElement`] trait and the 8-bit
+//! floating-point family via the sibling [`FpElement`] trait.
+//! [`BiasElement`] marks the bias broadcast element types accepted by
+//! integer GEMM epilogues.
 //!
 //! `Element` was originally named `CutlassElement` in the
 //! `baracuda-cutlass` crate. The rename here unifies the vocabulary
@@ -26,6 +27,14 @@ mod scalar_sealed {
 }
 
 mod int_sealed {
+    pub trait Sealed {}
+}
+
+mod fp_sealed {
+    pub trait Sealed {}
+}
+
+mod bin_sealed {
     pub trait Sealed {}
 }
 
@@ -173,6 +182,90 @@ pub struct U8(pub u8);
 unsafe impl DeviceRepr for S8 {}
 unsafe impl DeviceRepr for U8 {}
 
+/// Signed 4-bit integer element marker — **packed-pair storage**.
+///
+/// `#[repr(transparent)]` around `u8`. One [`S4`] *storage slot* is one
+/// byte and holds **two** packed s4 elements: the low nibble is the
+/// element at even logical index, the high nibble is the element at
+/// odd logical index (along the K axis for A/B operands, along the
+/// N axis for D output). Sign-extended to s32 on the GPU side via
+/// `((s8)(nibble << 4)) >> 4`.
+///
+/// A `DeviceBuffer<u8>` of `(M*K)/2` bytes can be reinterpreted as a
+/// `DeviceBuffer<S4>` of `(M*K)/2` storage slots via `view_as` without
+/// copying — `S4` is byte-storage at the buffer layer, and *element
+/// count* lives at the plan-layer descriptor (M / N / K).
+///
+/// Numerical range per element: `[-8, +7]`. The plan layer
+/// (`Int4GemmPlan` in `baracuda-kernels`) takes `M`, `N`, `K` in
+/// **element** counts and leading dimensions in **storage-slot
+/// (= byte)** counts — `MatrixRef<S4>::ld` therefore equals `K / 2` for
+/// row-major A with no padding. `K` must be even (packing is byte-
+/// aligned). Routes through Ada Lovelace int4 tensor cores
+/// (`mma.sync.aligned.m16n8k64.row.col.satfinite.s32.s4.s4.s32`) with
+/// S32 accumulation and float `alpha` / `beta` scaling. First landed in
+/// baracuda-kernels Phase 2.
+#[repr(transparent)]
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct S4(pub u8);
+
+/// Unsigned 4-bit integer element marker — **packed-pair storage**.
+///
+/// `#[repr(transparent)]` around `u8`. Packing convention is identical
+/// to [`S4`] (low nibble = even index, high nibble = odd index); the
+/// only difference is zero-extension to s32 on the GPU side
+/// (`nibble & 0xF`).
+///
+/// Numerical range per element: `[0, 15]`. Plan-layer conventions
+/// (M/N/K in elements, LDs in storage slots, K even) match [`S4`].
+/// Routes through Ada Lovelace int4 tensor cores
+/// (`mma.sync.aligned.m16n8k64.row.col.satfinite.s32.u4.u4.s32`) with
+/// the same S32 accumulator and `float` α/β family as [`S4`].
+#[repr(transparent)]
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct U4(pub u8);
+
+// SAFETY: S4 / U4 are #[repr(transparent)] around u8, which is DeviceRepr.
+// Same ABI, same Copy + 'static bounds.
+unsafe impl DeviceRepr for S4 {}
+unsafe impl DeviceRepr for U4 {}
+
+impl S4 {
+    /// Pack two s4 values `[lo, hi]` (each in `[-8, +7]`) into one
+    /// storage slot. Values outside the range are masked to their low 4
+    /// bits (no saturation — pre-clamp on the caller side if needed).
+    #[inline]
+    pub fn pack(lo: i8, hi: i8) -> Self {
+        Self(((lo as u8) & 0x0F) | (((hi as u8) & 0x0F) << 4))
+    }
+
+    /// Unpack into `[low_nibble_as_s4, high_nibble_as_s4]`. Each
+    /// returned value is sign-extended from the 4-bit nibble.
+    #[inline]
+    pub fn unpack(self) -> [i8; 2] {
+        let lo = ((self.0 & 0x0F) << 4) as i8 >> 4;
+        let hi = (self.0 & 0xF0) as i8 >> 4;
+        [lo, hi]
+    }
+}
+
+impl U4 {
+    /// Pack two u4 values `[lo, hi]` (each in `[0, 15]`) into one
+    /// storage slot. Values outside the range are masked to their low 4
+    /// bits.
+    #[inline]
+    pub fn pack(lo: u8, hi: u8) -> Self {
+        Self((lo & 0x0F) | ((hi & 0x0F) << 4))
+    }
+
+    /// Unpack into `[low_nibble, high_nibble]`. Each returned value is
+    /// in `[0, 15]`.
+    #[inline]
+    pub fn unpack(self) -> [u8; 2] {
+        [self.0 & 0x0F, (self.0 >> 4) & 0x0F]
+    }
+}
+
 /// Integer element types supported by the int-GEMM kernel set.
 ///
 /// Sibling trait to [`Element`] (the float family) — kept separate
@@ -190,6 +283,8 @@ pub trait IntElement: DeviceRepr + int_sealed::Sealed + Copy + 'static {
 
 impl int_sealed::Sealed for S8 {}
 impl int_sealed::Sealed for U8 {}
+impl int_sealed::Sealed for S4 {}
+impl int_sealed::Sealed for U4 {}
 
 impl IntElement for S8 {
     const KIND: ElementKind = ElementKind::S8;
@@ -197,6 +292,216 @@ impl IntElement for S8 {
 
 impl IntElement for U8 {
     const KIND: ElementKind = ElementKind::U8;
+}
+
+impl IntElement for S4 {
+    const KIND: ElementKind = ElementKind::S4;
+}
+
+impl IntElement for U4 {
+    const KIND: ElementKind = ElementKind::U4;
+}
+
+// ============================================================================
+// 8-bit floating-point element family — sibling to Element / IntElement
+// ============================================================================
+
+/// 8-bit floating-point, E4M3 encoding (1 sign + 4 exponent + 3 mantissa,
+/// exponent bias 7).
+///
+/// `#[repr(transparent)]` around `u8` storage — bit-compatible with
+/// `__nv_fp8_storage_t` on the CUDA side and with `float8::F8E4M3` on the
+/// host side. A `DeviceBuffer<u8>` (byte substrate) can be reinterpreted
+/// as `DeviceBuffer<Fp8E4M3>` via `view_as` without copying.
+///
+/// Numerical range: ±448 (max finite). One NaN encoding only
+/// (`S.1111.111`); E4M3 has **no infinities**. The conversion path
+/// matches NVIDIA's `__nv_cvt_float_to_fp8(x, __NV_SATFINITE, __NV_E4M3)`:
+/// round-half-to-even, saturating-to-max-finite on overflow.
+///
+/// Routes through Ada Lovelace FP8 tensor cores
+/// (`mma.sync.aligned.m16n8k32.row.col.f32.e4m3.e4m3.f32`) with F32
+/// accumulation and float alpha / beta scaling. First landed in
+/// baracuda-kernels Phase 2.
+#[repr(transparent)]
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct Fp8E4M3(pub u8);
+
+impl Fp8E4M3 {
+    /// Convert from `f32` using NVIDIA's `SATFINITE` semantics
+    /// (round-half-to-even, clamp `|x|` to the E4M3 max-finite `448.0`).
+    #[inline]
+    pub fn from_f32(x: f32) -> Self {
+        Self(float8::F8E4M3::from_f32(x).to_bits())
+    }
+
+    /// Convert to `f32`. The E4M3 grid is sparse — the result is one of
+    /// 254 finite values (or NaN) on the E4M3 lattice.
+    #[inline]
+    pub fn to_f32(self) -> f32 {
+        float8::F8E4M3::from_bits(self.0).to_f32()
+    }
+}
+
+// SAFETY: Fp8E4M3 is #[repr(transparent)] over u8, which is DeviceRepr.
+// Same ABI, same Copy + 'static bounds.
+unsafe impl DeviceRepr for Fp8E4M3 {}
+
+/// 8-bit floating-point, E5M2 encoding (1 sign + 5 exponent + 2 mantissa,
+/// exponent bias 15).
+///
+/// `#[repr(transparent)]` around `u8` storage — bit-compatible with
+/// `__nv_fp8_storage_t` on the CUDA side and with `float8::F8E5M2` on the
+/// host side. A `DeviceBuffer<u8>` (byte substrate) can be reinterpreted
+/// as `DeviceBuffer<Fp8E5M2>` via `view_as` without copying.
+///
+/// Numerical range: ±57344 (max finite). IEEE-style infinity and NaN
+/// encodings (unlike [`Fp8E4M3`], which has neither). The conversion
+/// path matches NVIDIA's
+/// `__nv_cvt_float_to_fp8(x, __NV_SATFINITE, __NV_E5M2)`:
+/// round-half-to-even, saturating-to-max-finite on overflow.
+///
+/// Routes through Ada Lovelace FP8 tensor cores
+/// (`mma.sync.aligned.m16n8k32.row.col.f32.e5m2.e5m2.f32`) with F32
+/// accumulation and float alpha / beta scaling.
+#[repr(transparent)]
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct Fp8E5M2(pub u8);
+
+impl Fp8E5M2 {
+    /// Convert from `f32` using NVIDIA's `SATFINITE` semantics
+    /// (round-half-to-even, clamp `|x|` to the E5M2 max-finite `57344.0`).
+    #[inline]
+    pub fn from_f32(x: f32) -> Self {
+        Self(float8::F8E5M2::from_f32(x).to_bits())
+    }
+
+    /// Convert to `f32`. The E5M2 grid is sparse — the result is one of
+    /// the finite values (or inf / NaN) on the E5M2 lattice.
+    #[inline]
+    pub fn to_f32(self) -> f32 {
+        float8::F8E5M2::from_bits(self.0).to_f32()
+    }
+}
+
+// SAFETY: Fp8E5M2 is #[repr(transparent)] over u8, which is DeviceRepr.
+// Same ABI, same Copy + 'static bounds.
+unsafe impl DeviceRepr for Fp8E5M2 {}
+
+/// 8-bit floating-point element types supported by the kernel facade.
+///
+/// Sibling trait to [`Element`] (which covers f16 / bf16 / f32 /
+/// [`F32Strict`] / f64) and to [`IntElement`] (which covers S8 / U8) —
+/// kept separate because the FP8 kernel family has its own MMA
+/// instruction set (`mma.sync ... .f32.e4m3.e4m3.f32`), arch requirement
+/// (sm_89+), and conversion semantics (saturating-to-max-finite vs the
+/// int family's saturating-to-INT_MAX).
+///
+/// Sealed because adding a new FP8 variant requires shipping new kernel
+/// instantiations in `baracuda-kernels-sys`.
+pub trait FpElement: DeviceRepr + fp_sealed::Sealed + Copy + 'static {
+    /// Runtime tag for this element type. Always one of the FP8 variants
+    /// of [`ElementKind`].
+    const KIND: ElementKind;
+}
+
+impl fp_sealed::Sealed for Fp8E4M3 {}
+impl fp_sealed::Sealed for Fp8E5M2 {}
+
+impl FpElement for Fp8E4M3 {
+    const KIND: ElementKind = ElementKind::Fp8E4M3;
+}
+
+impl FpElement for Fp8E5M2 {
+    const KIND: ElementKind = ElementKind::Fp8E5M2;
+}
+
+// ============================================================================
+// Binary element family — sibling to Element / IntElement / FpElement
+// ============================================================================
+
+/// 1-bit binary element marker — **packed-byte storage**.
+///
+/// `#[repr(transparent)]` around `u8`. One [`Bin`] *storage slot* is one
+/// byte and holds **eight** packed b1 elements: bit `i` of the byte
+/// (LSB = bit 0) is the element at K offset `8 * byte_idx + i`. Packing
+/// is along the K axis for A/B operands.
+///
+/// A `DeviceBuffer<u8>` of `(M*K)/8` bytes can be reinterpreted as a
+/// `DeviceBuffer<Bin>` of `(M*K)/8` storage slots via `view_as` without
+/// copying.
+///
+/// Routes through Ampere+ binary tensor cores
+/// (`mma.sync.aligned.m16n8k256.row.col.s32.b1.b1.s32.xor.popc`) with
+/// an **S32 output accumulator**. Unlike the int4 / int8 / FP8
+/// families, bin GEMM does **not** quantize its output back to the
+/// input element type — the result is the raw popcount accumulator
+/// (`popcount(xor(A_row, B_col))` summed over K bytes), surfaced as
+/// `i32`. No α / β / bias / activation chain (the popcount programming
+/// model doesn't have a meaningful place for them).
+///
+/// The plan layer ([`Bin` is consumed by `BinGemmPlan` in
+/// `baracuda-kernels`) takes `M`, `N`, `K` in **element** counts and
+/// leading dimensions in **storage-slot (= byte)** counts —
+/// `MatrixRef<Bin>::ld` therefore equals `K / 8` for row-major A with
+/// no padding. `K` must be divisible by 8 (packing is byte-aligned).
+#[repr(transparent)]
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct Bin(pub u8);
+
+// SAFETY: Bin is #[repr(transparent)] around u8, which is DeviceRepr.
+unsafe impl DeviceRepr for Bin {}
+
+impl Bin {
+    /// Pack eight `bool` values `bits[0..8]` into one storage byte.
+    /// `bits[i]` becomes bit `i` of the result (LSB-first).
+    #[inline]
+    pub fn pack(bits: [bool; 8]) -> Self {
+        let mut b = 0u8;
+        let mut i = 0;
+        while i < 8 {
+            if bits[i] {
+                b |= 1 << i;
+            }
+            i += 1;
+        }
+        Self(b)
+    }
+
+    /// Unpack one storage byte into eight `bool` values along K (LSB-first).
+    #[inline]
+    pub fn unpack(self) -> [bool; 8] {
+        let b = self.0;
+        [
+            (b >> 0) & 1 != 0,
+            (b >> 1) & 1 != 0,
+            (b >> 2) & 1 != 0,
+            (b >> 3) & 1 != 0,
+            (b >> 4) & 1 != 0,
+            (b >> 5) & 1 != 0,
+            (b >> 6) & 1 != 0,
+            (b >> 7) & 1 != 0,
+        ]
+    }
+}
+
+/// Binary (1-bit) element types supported by the kernel facade.
+///
+/// Sibling trait to [`Element`] / [`IntElement`] / [`FpElement`] —
+/// kept separate because the bin kernel family has a distinct
+/// programming model (popcount-based, `D = popcount(xor(A, B))`, no
+/// α/β/bias/activation chain) and a non-matching output type (raw
+/// `i32` accumulator rather than re-quantized to the input type).
+pub trait BinElement: DeviceRepr + bin_sealed::Sealed + Copy + 'static {
+    /// Runtime tag for this element type. Always [`ElementKind::Bin`]
+    /// today (the bin family currently has a single member).
+    const KIND: ElementKind;
+}
+
+impl bin_sealed::Sealed for Bin {}
+
+impl BinElement for Bin {
+    const KIND: ElementKind = ElementKind::Bin;
 }
 
 /// Bias element types accepted by the int-GEMM bias epilogue family.
@@ -292,6 +597,35 @@ pub enum ElementKind {
     /// not a valid kernel *input* element type and has no corresponding
     /// [`IntElement`] impl.
     I32,
+    /// 8-bit floating-point, E4M3 encoding (1 sign + 4 exponent + 3
+    /// mantissa, bias 7, max-finite 448, no infinities). Maps to the
+    /// [`Fp8E4M3`] wrapper type. Routed through Ada / Hopper FP8 tensor
+    /// cores (`mma.sync m16n8k32` FP8 variant) with F32 accumulation.
+    Fp8E4M3,
+    /// 8-bit floating-point, E5M2 encoding (1 sign + 5 exponent + 2
+    /// mantissa, bias 15, IEEE-754-compatible inf / NaN). Maps to the
+    /// [`Fp8E5M2`] wrapper type. Same FP8 tensor-core path as
+    /// [`Fp8E4M3`] with the alternate operand tag
+    /// (`.e5m2.e5m2.f32`).
+    Fp8E5M2,
+    /// Signed 4-bit integer — packed-pair storage. Maps to the [`S4`]
+    /// wrapper type. Routed through Ada Lovelace int4 tensor cores
+    /// (`mma.sync.aligned.m16n8k64.row.col.satfinite.s32.s4.s4.s32`)
+    /// with int32 accumulation; float `alpha` / `beta` let the kernel
+    /// act as a dequantize-in-epilogue (same convention as the int8
+    /// family).
+    S4,
+    /// Unsigned 4-bit integer — packed-pair storage. Maps to the [`U4`]
+    /// wrapper type. Same kernel family as [`S4`] with the alternate
+    /// operand tag (`.u4.u4.s32`).
+    U4,
+    /// 1-bit binary — packed-byte storage (8 bits per byte, LSB =
+    /// lowest K index). Maps to the [`Bin`] wrapper type. Routed
+    /// through Ampere+ binary tensor cores
+    /// (`mma.sync.aligned.m16n8k256.row.col.s32.b1.b1.s32.xor.popc`).
+    /// Distinct programming model: the output is the raw popcount
+    /// accumulator (s32), not a re-quantized b1.
+    Bin,
 }
 
 /// Math precision used by the FMA / tensor-core instruction.
@@ -321,4 +655,27 @@ pub enum MathPrecision {
     /// `OpMultiplyAddSaturate` operator (clamps the accumulator on
     /// overflow rather than wrapping).
     Int8,
+    /// FP8 E4M3 multiply-add (`mma.sync m16n8k32` FP8 variant) with F32
+    /// accumulation. Inputs are E4M3 (8-bit), the accumulator is F32,
+    /// and the epilogue cast saturates to the E4M3 max-finite (±448).
+    Fp8E4M3,
+    /// FP8 E5M2 multiply-add. Same instruction family as
+    /// [`Fp8E4M3`](Self::Fp8E4M3) but with the E5M2 encoding (wider
+    /// exponent, narrower mantissa).
+    Fp8E5M2,
+    /// 4-bit integer multiply-add (`mma.sync m16n8k64` int4 variant)
+    /// with int32 accumulation. Used by both signed (s4) and unsigned
+    /// (u4) integer GEMM SKUs; the multiply operands are 4-bit
+    /// (packed-pair storage in memory), the accumulator is 32-bit, and
+    /// the multiply-add uses the `satfinite` operator (clamps the
+    /// accumulator on overflow rather than wrapping). sm_89+.
+    Int4,
+    /// 1-bit binary `xor.popc` multiply-add
+    /// (`mma.sync m16n8k256` b1 variant) with int32 accumulation. The
+    /// "multiply" is per-bit XOR and the "add" is popcount. Used by
+    /// the binary GEMM SKU; operands are 1-bit (packed 8-per-byte in
+    /// memory), the accumulator is 32-bit, and the output is the
+    /// **raw** popcount accumulator — no re-quantization back to b1.
+    /// sm_80+.
+    Binary,
 }

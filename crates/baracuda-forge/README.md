@@ -11,6 +11,14 @@ wrappers ([`baracuda-driver`], [`baracuda-runtime`], etc.). Use forge to turn
 your `.cu` files into a library, then use the runtime crates to launch the
 kernels from Rust.
 
+If you'd rather not roll your own kernels: [`baracuda-kernels`] ships a
+curated, growing set of ML kernels (GEMM family across float and int
+dtypes, with the rest of the PyTorch + JAX op set landing across the
+alpha.16+ phases) behind a safe Rust facade. baracuda-kernels-sys uses
+forge internally to build its `.cu` sources; baracuda-kernels wraps
+them with typed plans. Reach for forge when you have a bespoke kernel
+the curated set doesn't cover yet.
+
 ## Quick start
 
 ```rust,no_run
@@ -161,3 +169,4 @@ upstream cudaforge license. See [LICENSE-MIT](../../LICENSE-MIT) and
 [`baracuda-cutlass-sys`]: ../baracuda-cutlass-sys
 [`baracuda-driver`]: ../baracuda-driver
 [`baracuda-runtime`]: ../baracuda-runtime
+[`baracuda-kernels`]: ../baracuda-kernels

@@ -34,15 +34,22 @@ let ptx = prog.ptx()?;
 - Include-path registration (`add_name_expression`, `name_expression`).
 - Name-mangled lookup for `__global__` C++ entry points.
 
-## NVRTC vs `baracuda-forge`
+## NVRTC vs `baracuda-forge` vs `baracuda-kernels`
 
 - **`baracuda-nvrtc`**: in-process compilation at *runtime*. Use when
   source isn't known until then.
 - **[`baracuda-forge`]**: out-of-process compilation at *build time*
   via `nvcc`. Better when source is fixed, you want incremental builds,
   parallel compile, multi-arch fat binaries, or CUTLASS dependencies.
+- **[`baracuda-kernels`]**: curated, pre-built ML kernels (GEMM family
+  across float and int dtypes, with the rest of the PyTorch + JAX op
+  set landing across the alpha.16+ phases) behind a safe Rust facade.
+  Use when the SKU you need already exists — no compilation step at
+  all. Reach for NVRTC or forge only for kernels not yet in the
+  curated set.
 
-Both load PTX through `baracuda-driver`'s `Module::load_ptx`.
+All three load PTX through `baracuda-driver`'s `Module::load_ptx`
+(or `baracuda-kernels`'s internal launchers).
 
 Pairs with [`baracuda-nvrtc-sys`] for the raw FFI surface.
 
@@ -54,3 +61,4 @@ Dual MIT / Apache-2.0.
 
 [`baracuda-forge`]: https://docs.rs/baracuda-forge
 [`baracuda-nvrtc-sys`]: https://docs.rs/baracuda-nvrtc-sys
+[`baracuda-kernels`]: https://docs.rs/baracuda-kernels

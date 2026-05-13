@@ -35,9 +35,10 @@
 
 // Re-export the shared type vocabulary.
 pub use baracuda_kernels_types::{
-    ActivationKind, ArchSku, BiasElement, BiasElementKind, Element, ElementKind, EpilogueKind,
-    F32Strict, IntElement, LayoutSku, MathPrecision, MatrixMut, MatrixRef, PlanPreference,
-    PrecisionGuarantee, S8, ScalarType, U8, VectorRef, Workspace,
+    ActivationKind, ArchSku, BiasElement, BiasElementKind, Bin, BinElement, Element, ElementKind,
+    EpilogueKind, F32Strict, Fp8E4M3, Fp8E5M2, FpElement, IntElement, LayoutSku, MathPrecision,
+    MatrixMut, MatrixRef, PlanPreference, PrecisionGuarantee, S4, S8, ScalarType, U4, U8,
+    VectorRef, Workspace,
 };
 
 // Re-export the float-GEMM plan types from baracuda-cutlass unchanged —
@@ -54,4 +55,7 @@ pub use baracuda_cutlass::{
 // dispatchers join later.
 pub mod gemm;
 
-pub use gemm::{IntGemmArgs, IntGemmDescriptor, IntGemmPlan};
+pub use gemm::{
+    BinGemmArgs, BinGemmDescriptor, BinGemmPlan, Fp8GemmArgs, Fp8GemmDescriptor, Fp8GemmPlan,
+    Int4GemmArgs, Int4GemmDescriptor, Int4GemmPlan, IntGemmArgs, IntGemmDescriptor, IntGemmPlan,
+};

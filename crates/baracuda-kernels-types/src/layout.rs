@@ -25,15 +25,13 @@ pub enum LayoutSku {
 }
 
 /// Compute capability bucket the selected kernel was compiled for.
-///
-/// Sm_89 (Ada Lovelace) is not yet represented here — Ada-specific
-/// kernel SKUs (FP8 family) land in baracuda-kernels Phase 2 and the
-/// variant will be added then. Today, code running on an Ada GPU
-/// selects the [`Sm80`](Self::Sm80) baseline (runs forward-compatibly).
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 pub enum ArchSku {
     /// Ampere (also runs on Ada and as forward-compatible fallback on Hopper).
     Sm80,
+    /// Ada Lovelace specializations (FP8 tensor cores). Requires `sm89`
+    /// feature in the consuming kernel crate.
+    Sm89,
     /// Hopper-specialized (requires `sm90a` feature in the consuming
     /// kernel crate).
     Sm90a,
