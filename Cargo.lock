@@ -294,6 +294,7 @@ version = "0.0.1-alpha.15"
 dependencies = [
  "baracuda-cutlass-kernels-sys",
  "baracuda-driver",
+ "baracuda-kernels-types",
  "baracuda-types",
  "half",
  "thiserror",
@@ -377,6 +378,35 @@ dependencies = [
  "sha2",
  "thiserror",
  "walkdir",
+]
+
+[[package]]
+name = "baracuda-kernels"
+version = "0.0.1-alpha.15"
+dependencies = [
+ "baracuda-cutlass",
+ "baracuda-driver",
+ "baracuda-kernels-sys",
+ "baracuda-kernels-types",
+ "baracuda-types",
+ "half",
+ "thiserror",
+]
+
+[[package]]
+name = "baracuda-kernels-sys"
+version = "0.0.1-alpha.15"
+dependencies = [
+ "baracuda-forge",
+]
+
+[[package]]
+name = "baracuda-kernels-types"
+version = "0.0.1-alpha.15"
+dependencies = [
+ "baracuda-driver",
+ "baracuda-types",
+ "half",
 ]
 
 [[package]]

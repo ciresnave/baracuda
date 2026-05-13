@@ -27,6 +27,7 @@ cutlass-2-11 = ["baracuda-cutlass-kernels-sys/cutlass-2-11"]
 
 [dependencies]
 baracuda-cutlass-kernels-sys = { workspace = true }
+baracuda-kernels-types = { workspace = true }
 baracuda-driver = { workspace = true }
 baracuda-types = { workspace = true, features = ["half-crate"] }
 half = { workspace = true }

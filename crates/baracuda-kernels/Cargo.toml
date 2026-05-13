@@ -1,0 +1,34 @@
+[package]
+name = "baracuda-kernels"
+version = "0.0.1-alpha.15"
+description = "Unified ML op facade for the baracuda CUDA ecosystem. Exposes every primitive an ML framework would expect (union of PyTorch torch.* + nn.functional and JAX lax.* / numpy ops) through a single Plan-based Rust surface, internally dispatching to baracuda-cutlass, the baracuda-* NVIDIA-library wrappers, or bespoke baracuda-kernels-sys kernels."
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords = ["cuda", "gpu", "ml", "kernel", "pytorch"]
+categories = ["api-bindings", "science"]
+exclude = ["*.profraw", "target/"]
+
+[features]
+default = ["sm80"]
+
+# Architecture features forwarded to the bespoke kernel crate.
+sm80 = ["baracuda-kernels-sys/sm80", "baracuda-cutlass/sm80"]
+sm89 = ["baracuda-kernels-sys/sm89"]
+sm90a = ["baracuda-kernels-sys/sm90a", "baracuda-cutlass/sm90a"]
+
+[dependencies]
+baracuda-kernels-types = { workspace = true }
+baracuda-kernels-sys = { workspace = true }
+baracuda-cutlass = { workspace = true }
+baracuda-driver = { workspace = true }
+baracuda-types = { workspace = true, features = ["half-crate"] }
+half = { workspace = true }
+thiserror = { workspace = true }
+
+[package.metadata.docs.rs]
+features = ["sm80"]
+no-default-features = false

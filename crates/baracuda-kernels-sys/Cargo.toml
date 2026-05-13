@@ -1,0 +1,42 @@
+[package]
+name = "baracuda-kernels-sys"
+version = "0.0.1-alpha.15"
+description = "Compiled bespoke .cu kernel template instantiations for the baracuda ML kernel facade. Hosts curated CUDA kernel sources (int8/FP8/int4/bin GEMM RRR, elementwise, reduce, norm, attention, …), builds them via baracuda-forge, exposes extern \"C\" entry points for the safe baracuda-kernels crate. No CUTLASS dependency — every kernel here is hand-rolled."
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords = ["cuda", "kernel", "gemm", "ml", "ffi"]
+categories = ["external-ffi-bindings", "science"]
+links = "baracuda_kernels"
+build = "build.rs"
+# Belt-and-suspenders: prevent .profraw coverage files from accidentally
+# being included in the crates.io tarball.
+exclude = ["*.profraw", "target/"]
+
+[features]
+# Default to Ampere (sm_80) — runs on Ampere, Ada (RTX 40-series), and
+# as forward-compatible fallback on Hopper if `sm_90a` isn't enabled.
+default = ["sm80"]
+
+# Build the sm_80 (Ampere / Ada-fallback) kernel set.
+sm80 = []
+
+# Build the sm_89 (Ada Lovelace) kernel set. Adds FP8 over sm_80.
+sm89 = []
+
+# Build the sm_90a (Hopper async) kernel set.
+sm90a = []
+
+[dependencies]
+
+[build-dependencies]
+baracuda-forge = { workspace = true }
+
+# docs.rs builds with --all-features by default; we only want the
+# baseline (sm80) build to be attempted on docs.rs.
+[package.metadata.docs.rs]
+features = ["sm80"]
+no-default-features = false

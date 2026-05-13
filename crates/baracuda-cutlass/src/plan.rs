@@ -2118,13 +2118,13 @@ impl<T: CutlassElement> GemmPlan<T> {
 
     /// Numerical guarantees this plan's kernel provides.
     ///
-    /// Convenience for [`PrecisionGuarantee::for_sku`] applied to this
+    /// Convenience for [`GemmSku::precision_guarantee`] applied to this
     /// plan's SKU. Useful for callers that maintain a per-decision-point
     /// alternatives table (e.g. picking between cuBLAS and CUTLASS for a
     /// given precision contract) without having to re-derive the
     /// guarantees from per-kernel documentation.
     pub fn precision_guarantee(&self) -> PrecisionGuarantee {
-        PrecisionGuarantee::for_sku(self.sku)
+        self.sku.precision_guarantee()
     }
 
     /// Launch the kernel.
@@ -2538,7 +2538,7 @@ impl<T: CutlassElement> BatchedGemmPlan<T> {
 
     /// Numerical guarantees this plan's kernel provides.
     pub fn precision_guarantee(&self) -> PrecisionGuarantee {
-        PrecisionGuarantee::for_sku(self.sku)
+        self.sku.precision_guarantee()
     }
 
     /// Launch the batched kernel.
@@ -2834,7 +2834,7 @@ impl<T: CutlassElement> GroupedGemmPlan<T> {
     ///
     /// See [`GemmPlan::precision_guarantee`] for usage.
     pub fn precision_guarantee(&self) -> PrecisionGuarantee {
-        PrecisionGuarantee::for_sku(self.sku)
+        self.sku.precision_guarantee()
     }
 
     /// Schedule mode this plan was selected with.
@@ -3419,7 +3419,7 @@ impl<T: IntElement, BT: BiasElement> IntGemmPlan<T, BT> {
 
     /// Numerical guarantees this plan's kernel provides.
     pub fn precision_guarantee(&self) -> PrecisionGuarantee {
-        PrecisionGuarantee::for_sku(self.sku)
+        self.sku.precision_guarantee()
     }
 
     /// Launch the kernel.
