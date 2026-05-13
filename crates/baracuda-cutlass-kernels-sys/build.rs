@@ -123,28 +123,19 @@ fn collect_kernel_files() -> Vec<&'static str> {
                 "gemm_f64_rcr_sm80_bias.cu",
                 "gemm_f64_rrr_sm80.cu",
                 "gemm_f64_rrr_sm80_bias.cu",
-                // Phase 2: int8 GEMM (s8 + u8), identity + bias family
-                // (f32 or i32 bias). `LinearCombinationClamp` for
-                // identity, `LinearCombinationBiasElementwise` for bias.
-                //
-                // Both RCR and RRR layouts ship. RRR depends on the
-                // vendored Crosswise-B `DefaultMmaCore` partial spec at
-                // `kernels/include/baracuda_int8_rr_default_mma_core.h`
-                // — it routes B through K-contig Crosswise smem so
-                // `ldmatrix.x4` packs K-adjacent bytes for
-                // `mma.sync.m16n8k32.s8`. (The earlier Phase 2b attempt
-                // — `baracuda_int8_congruous_warp_iterator.h` — is
-                // retained for reference but unused by the working
-                // path; the Congruous-8 smem layout it serves is
-                // numerically incompatible with that mma instruction.)
+                // Phase 2: int8 GEMM (s8 + u8), RCR layout only, identity
+                // and bias family (with f32 or i32 bias).
+                // `LinearCombinationClamp` for identity,
+                // `LinearCombinationBiasElementwise` for bias. RRR layout
+                // is deferred — CUTLASS 4.2.0 lacks 8-bit `Congruous`
+                // warp iterators, so `RowMajor × RowMajor × OpClassTensorOp`
+                // can't be instantiated without vendoring a custom
+                // `MmaTensorOpMultiplicandTileIterator` specialization.
+                // Tracked as a follow-up for the next milestone.
                 "gemm_s8_rcr_sm80.cu",
                 "gemm_u8_rcr_sm80.cu",
                 "gemm_s8_rcr_sm80_bias.cu",
                 "gemm_u8_rcr_sm80_bias.cu",
-                "gemm_s8_rrr_sm80.cu",
-                "gemm_u8_rrr_sm80.cu",
-                "gemm_s8_rrr_sm80_bias.cu",
-                "gemm_u8_rrr_sm80_bias.cu",
                 "gemm_batched_rcr_sm80.cu",
                 "grouped_gemm_rcr_sm80.cu",
             ] {

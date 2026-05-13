@@ -605,14 +605,17 @@ fn int8_smoke_u8_rcr_bias_silu_i32() {
     );
 }
 
-// ---- Positive: RRR int8 plan-selection succeeds (alpha.16+) ----
+// ---- Negative: RRR int8 must report Unsupported at plan selection ----
 
 #[test]
-fn int8_rrr_select_returns_ok() {
-    // Host-side check that selecting an RRR int8 plan no longer
-    // returns Unsupported. Runtime numerical validation lives in
-    // `tests/int8_rrr_smoke.rs`.
+fn int8_rrr_select_returns_unsupported() {
+    // Pure host-side check — doesn't touch the device. Doesn't need a
+    // real CUDA context, but `IntGemmPlan::select` does query the
+    // stream's device. We probe a Stream to satisfy the API; this test
+    // is marked NOT `#[ignore]` because it's host-side validation.
     if init().is_err() {
+        // No CUDA driver — skip silently. This is a host-side test
+        // that's only meaningful if the workspace builds.
         return;
     }
     let Ok(device) = Device::get(0) else { return };
@@ -626,6 +629,10 @@ fn int8_rrr_select_returns_ok() {
         layout: LayoutSku::Rrr,
         epilogue: EpilogueKind::Identity,
     };
-    IntGemmPlan::<S8>::select(&stream, &desc, PlanPreference::default())
-        .expect("int8 RRR plan selection should succeed (alpha.16+)");
+    let err = IntGemmPlan::<S8>::select(&stream, &desc, PlanPreference::default()).unwrap_err();
+    let msg = format!("{err:?}");
+    assert!(
+        msg.contains("RCR-only") || msg.contains("Unsupported") || msg.to_lowercase().contains("rrr"),
+        "expected an Unsupported error for int8 RRR; got: {msg}"
+    );
 }

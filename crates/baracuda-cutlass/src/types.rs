@@ -684,12 +684,13 @@ pub struct GroupedProblem<'a, T: CutlassElement> {
 /// [`IntGemmPlan::select`](crate::IntGemmPlan::select).
 ///
 /// Parallel to [`GemmDescriptor`] for the integer GEMM family.
-/// `LayoutSku` and [`EpilogueKind`] are shared with the float family.
-/// Int8 coverage spans both [`LayoutSku::Rcr`] and [`LayoutSku::Rrr`];
-/// `Rrr` routes through a vendored `DefaultMmaCore` partial spec in
-/// `baracuda-cutlass-kernels-sys` that picks K-contig Crosswise smem
-/// for B (the upstream `Congruous-8` default doesn't compose with
-/// `mma.sync.m16n8k32.s8`'s register fragment).
+/// `LayoutSku` and [`EpilogueKind`] are shared with the float family,
+/// but coverage on int8 is limited to [`LayoutSku::Rcr`] in this
+/// release — selecting [`LayoutSku::Rrr`] returns
+/// [`Error::Unsupported`](crate::Error::Unsupported). `RowMajor × RowMajor`
+/// for int8 tensor-op is gated on a CUTLASS upstream limitation
+/// (missing 8-bit `TensorOpMultiplicandCongruous` warp iterator); a
+/// follow-up release will vendor the missing specialization.
 #[derive(Copy, Clone, Debug)]
 pub struct IntGemmDescriptor {
     /// Output row count.
@@ -698,9 +699,9 @@ pub struct IntGemmDescriptor {
     pub n: i32,
     /// Reduction depth.
     pub k: i32,
-    /// Layout SKU. Today's int8 SKUs are [`LayoutSku::Rcr`] and [`LayoutSku::Rrr`].
+    /// Layout SKU. Today's int8 SKUs require [`LayoutSku::Rcr`].
     pub layout: LayoutSku,
-    /// Epilogue kind. All five variants are supported on both int8 layouts.
+    /// Epilogue kind. All five variants are supported on int8 RCR.
     pub epilogue: EpilogueKind,
 }
 

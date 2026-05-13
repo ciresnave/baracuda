@@ -6,33 +6,6 @@ CUTLASS examples (https://github.com/NVIDIA/cutlass), licensed under
 BSD 3-Clause. CUTLASS itself is not redistributed — its headers are fetched
 at build time by `baracuda-cutlass-sys`.
 
-Vendored CUTLASS partial-specialization headers live under
-`kernels/include/` and are also BSD-3-Clause (structure mirrors
-upstream CUTLASS templates, re-specialized for SKUs CUTLASS's primary
-dispatch chain doesn't route to):
-
-- `baracuda_simt_broadcast_epilogue.h` — adds
-  `DefaultGemmWithBroadcast` routing for `OperatorClass = OpClassSimt`,
-  reaching CUTLASS's existing `DefaultEpilogueWithBroadcastSimt`.
-- `baracuda_int8_rr_default_mma_core.h` — adds a partial specialization
-  of `cutlass::gemm::threadblock::DefaultMmaCore` for `{int8_t, uint8_t}
-  × RowMajor × {same} × RowMajor × OpClassTensorOp × Sm80` that swaps
-  B's smem layout from `RowMajorTensorOpMultiplicandCongruous<8, _>` to
-  `ColumnMajorTensorOpMultiplicandCrosswise<8, Shape::kK>` (K-contig in
-  the smem PL view, what `mma.sync.m16n8k32.s8` expects). Bridges
-  gmem→smem with `transform::TransposePitchLinearThreadMap`. Body
-  structurally derived from CUTLASS's `RowMajor × RowMajor` spec at
-  `default_mma_core_sm80.h:~1669` and the col-major-interleaved spec's
-  transpose pattern at `~1821`. **Phase 2b-v2 WIP — the type chain
-  compiles and the kernel runs, but the simple-transpose path produces
-  random-pairing numerics on the GPU.** Need a custom transposing
-  smem-store iterator (register-level `shfl.sync`) before this ships.
-- `baracuda_int8_congruous_warp_iterator.h` — Phase 2b's vendored
-  warp iterator for 8-bit `TensorOpMultiplicandCongruous<8, Crosswise>`
-  smem. Not included by any current .cu — Congruous-8 smem layout
-  itself is incompatible with the m16n8k32.s8 fragment expectation, so
-  this artifact stays in tree as reference only.
-
 The crate's API shape, plan-based architecture, and v0 SKU set
 (`{f16, bf16} × RCR × {sm80, sm90a}` with Identity epilogue, grouped GEMM
 as a first-class op with `prepare`/`run` separation and caller-supplied

@@ -78,24 +78,13 @@ the fused activation runs in float space after int32→float dequant and
 the final saturating cast back to int8 happens via the
 `cvt.rni.sat.{s8,u8}.f32` PTX instruction.
 
-`Rrr` is **not yet shipped** for the int family. Phase 2b-v2 (WIP)
-vendored a custom `DefaultMmaCore` partial spec
-(`baracuda-cutlass-kernels-sys/kernels/include/baracuda_int8_rr_default_mma_core.h`)
-that routes B's smem through K-contig
-`ColumnMajorTensorOpMultiplicandCrosswise<8, Shape::kK>` instead of the
-upstream `Congruous-8` default — Congruous-8 smem doesn't compose with
-the register fragment `mma.sync.m16n8k32.s8` expects (b16 chunks pack
-N-adjacent bytes; mma needs K-adjacent within each register). The type
-chain compiles end-to-end and the kernel launches, but GPU validation
-shows the simple-transpose smem-store path
-(`TransposePitchLinearThreadMap`) produces random-pairing numerics —
-the primitive relabels thread coordinates but doesn't physically
-scatter each thread's 16-byte gmem chunk across 16 K-positions in
-smem. The shippable fix is a custom transposing smem-store iterator
-(register-level `__shfl_sync` rearrangement); the 18 SKU tests in
-`int8_rrr_smoke.rs` are `#[ignore]`d until that lands. `IntGemmPlan`
-selection accepts `LayoutSku::Rrr` but launches still produce wrong
-output, so callers shouldn't depend on RRR yet.
+`Rrr` is **not yet shipped** for the int family — CUTLASS 4.2.0 lacks
+warp-level iterator specializations for the 8-bit
+`TensorOpMultiplicandCongruous` shared-memory layout that
+`RowMajor × RowMajor × OpClassTensorOp` would select for int8. Selecting
+`LayoutSku::Rrr` on `IntGemmPlan` returns `Error::Unsupported` at plan
+selection time. A follow-up release will vendor the missing
+specialization.
 
 Remaining int / quantized dtypes (`s4`/`u4`/`b1`) are planned
 follow-ups and not yet shipped.

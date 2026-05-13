@@ -1309,11 +1309,10 @@ mod dispatch {
     // int8 GEMM dispatch — Identity, RCR layout, sm_80
     // ============================================================================
     //
-    // Identity int kernels: `LinearCombinationClamp` epilogue. Layouts
-    // are `Rcr` and `Rrr`; element kind is restricted to S8 / U8.
-    // Alpha/beta are `f32` (CUTLASS int8 dequant-in-epilogue convention).
-    // `Rrr` routing depends on the vendored Crosswise-B `DefaultMmaCore`
-    // — see `baracuda-cutlass-kernels-sys` lib.rs section header.
+    // Identity int kernels: `LinearCombinationClamp` epilogue. Layout is
+    // restricted to `Rcr` (`Rrr` is deferred — see lib.rs section header).
+    // Element kind is restricted to S8 / U8. Alpha/beta are `f32` (CUTLASS
+    // int8 dequant-in-epilogue convention).
 
     #[cfg(feature = "sm80")]
     #[allow(clippy::too_many_arguments)]
@@ -1351,18 +1350,10 @@ mod dispatch {
                     alpha, beta, workspace, workspace_bytes, stream,
                 )
             },
-            (LayoutSku::Rrr, ElementKind::S8) => unsafe {
-                k_sys::baracuda_cutlass_gemm_s8_rrr_sm80_run(
-                    m, n, k, a, lda, b, ldb, c, ldc, d, ldd,
-                    alpha, beta, workspace, workspace_bytes, stream,
-                )
-            },
-            (LayoutSku::Rrr, ElementKind::U8) => unsafe {
-                k_sys::baracuda_cutlass_gemm_u8_rrr_sm80_run(
-                    m, n, k, a, lda, b, ldb, c, ldc, d, ldd,
-                    alpha, beta, workspace, workspace_bytes, stream,
-                )
-            },
+            // RRR int8 is deferred — CUTLASS 4.2.0 lacks the 8-bit
+            // `TensorOpMultiplicandCongruous` warp iterator needed for
+            // `RowMajor × RowMajor × OpClassTensorOp` instantiation.
+            (LayoutSku::Rrr, ElementKind::S8) | (LayoutSku::Rrr, ElementKind::U8) => 3,
             // Defensive: float and I32 kinds should never reach this dispatcher.
             _ => 3,
         }
@@ -1383,12 +1374,6 @@ mod dispatch {
             },
             (LayoutSku::Rcr, ElementKind::U8) => unsafe {
                 k_sys::baracuda_cutlass_gemm_u8_rcr_sm80_workspace_size(m, n, k)
-            },
-            (LayoutSku::Rrr, ElementKind::S8) => unsafe {
-                k_sys::baracuda_cutlass_gemm_s8_rrr_sm80_workspace_size(m, n, k)
-            },
-            (LayoutSku::Rrr, ElementKind::U8) => unsafe {
-                k_sys::baracuda_cutlass_gemm_u8_rrr_sm80_workspace_size(m, n, k)
             },
             _ => 0,
         }
@@ -1423,16 +1408,7 @@ mod dispatch {
                     m, n, k, a, lda, b, ldb, c, ldc, d, ldd,
                 )
             },
-            (LayoutSku::Rrr, ElementKind::S8) => unsafe {
-                k_sys::baracuda_cutlass_gemm_s8_rrr_sm80_can_implement(
-                    m, n, k, a, lda, b, ldb, c, ldc, d, ldd,
-                )
-            },
-            (LayoutSku::Rrr, ElementKind::U8) => unsafe {
-                k_sys::baracuda_cutlass_gemm_u8_rrr_sm80_can_implement(
-                    m, n, k, a, lda, b, ldb, c, ldc, d, ldd,
-                )
-            },
+            (LayoutSku::Rrr, ElementKind::S8) | (LayoutSku::Rrr, ElementKind::U8) => 3,
             _ => 3,
         }
     }
@@ -1475,218 +1451,117 @@ mod dispatch {
         stream: *mut c_void,
     ) -> i32 {
         use baracuda_cutlass_kernels_sys as k_sys;
-        match layout {
-            LayoutSku::Rcr => match (kind, epilogue, bias_kind) {
-                // ---- s8 × f32 bias ----
-                (ElementKind::S8, EpilogueKind::Bias, BiasElementKind::F32) => unsafe {
-                    k_sys::baracuda_cutlass_gemm_bias_f32bias_s8_rcr_sm80_run(
-                        m, n, k, a, lda, b, ldb, c, ldc, d, ldd,
-                        bias, alpha, beta, workspace, workspace_bytes, stream,
-                    )
-                },
-                (ElementKind::S8, EpilogueKind::BiasRelu, BiasElementKind::F32) => unsafe {
-                    k_sys::baracuda_cutlass_gemm_bias_relu_f32bias_s8_rcr_sm80_run(
-                        m, n, k, a, lda, b, ldb, c, ldc, d, ldd,
-                        bias, alpha, beta, workspace, workspace_bytes, stream,
-                    )
-                },
-                (ElementKind::S8, EpilogueKind::BiasGelu, BiasElementKind::F32) => unsafe {
-                    k_sys::baracuda_cutlass_gemm_bias_gelu_f32bias_s8_rcr_sm80_run(
-                        m, n, k, a, lda, b, ldb, c, ldc, d, ldd,
-                        bias, alpha, beta, workspace, workspace_bytes, stream,
-                    )
-                },
-                (ElementKind::S8, EpilogueKind::BiasSilu, BiasElementKind::F32) => unsafe {
-                    k_sys::baracuda_cutlass_gemm_bias_silu_f32bias_s8_rcr_sm80_run(
-                        m, n, k, a, lda, b, ldb, c, ldc, d, ldd,
-                        bias, alpha, beta, workspace, workspace_bytes, stream,
-                    )
-                },
-                // ---- s8 × i32 bias ----
-                (ElementKind::S8, EpilogueKind::Bias, BiasElementKind::I32) => unsafe {
-                    k_sys::baracuda_cutlass_gemm_bias_i32bias_s8_rcr_sm80_run(
-                        m, n, k, a, lda, b, ldb, c, ldc, d, ldd,
-                        bias, alpha, beta, workspace, workspace_bytes, stream,
-                    )
-                },
-                (ElementKind::S8, EpilogueKind::BiasRelu, BiasElementKind::I32) => unsafe {
-                    k_sys::baracuda_cutlass_gemm_bias_relu_i32bias_s8_rcr_sm80_run(
-                        m, n, k, a, lda, b, ldb, c, ldc, d, ldd,
-                        bias, alpha, beta, workspace, workspace_bytes, stream,
-                    )
-                },
-                (ElementKind::S8, EpilogueKind::BiasGelu, BiasElementKind::I32) => unsafe {
-                    k_sys::baracuda_cutlass_gemm_bias_gelu_i32bias_s8_rcr_sm80_run(
-                        m, n, k, a, lda, b, ldb, c, ldc, d, ldd,
-                        bias, alpha, beta, workspace, workspace_bytes, stream,
-                    )
-                },
-                (ElementKind::S8, EpilogueKind::BiasSilu, BiasElementKind::I32) => unsafe {
-                    k_sys::baracuda_cutlass_gemm_bias_silu_i32bias_s8_rcr_sm80_run(
-                        m, n, k, a, lda, b, ldb, c, ldc, d, ldd,
-                        bias, alpha, beta, workspace, workspace_bytes, stream,
-                    )
-                },
-                // ---- u8 × f32 bias ----
-                (ElementKind::U8, EpilogueKind::Bias, BiasElementKind::F32) => unsafe {
-                    k_sys::baracuda_cutlass_gemm_bias_f32bias_u8_rcr_sm80_run(
-                        m, n, k, a, lda, b, ldb, c, ldc, d, ldd,
-                        bias, alpha, beta, workspace, workspace_bytes, stream,
-                    )
-                },
-                (ElementKind::U8, EpilogueKind::BiasRelu, BiasElementKind::F32) => unsafe {
-                    k_sys::baracuda_cutlass_gemm_bias_relu_f32bias_u8_rcr_sm80_run(
-                        m, n, k, a, lda, b, ldb, c, ldc, d, ldd,
-                        bias, alpha, beta, workspace, workspace_bytes, stream,
-                    )
-                },
-                (ElementKind::U8, EpilogueKind::BiasGelu, BiasElementKind::F32) => unsafe {
-                    k_sys::baracuda_cutlass_gemm_bias_gelu_f32bias_u8_rcr_sm80_run(
-                        m, n, k, a, lda, b, ldb, c, ldc, d, ldd,
-                        bias, alpha, beta, workspace, workspace_bytes, stream,
-                    )
-                },
-                (ElementKind::U8, EpilogueKind::BiasSilu, BiasElementKind::F32) => unsafe {
-                    k_sys::baracuda_cutlass_gemm_bias_silu_f32bias_u8_rcr_sm80_run(
-                        m, n, k, a, lda, b, ldb, c, ldc, d, ldd,
-                        bias, alpha, beta, workspace, workspace_bytes, stream,
-                    )
-                },
-                // ---- u8 × i32 bias ----
-                (ElementKind::U8, EpilogueKind::Bias, BiasElementKind::I32) => unsafe {
-                    k_sys::baracuda_cutlass_gemm_bias_i32bias_u8_rcr_sm80_run(
-                        m, n, k, a, lda, b, ldb, c, ldc, d, ldd,
-                        bias, alpha, beta, workspace, workspace_bytes, stream,
-                    )
-                },
-                (ElementKind::U8, EpilogueKind::BiasRelu, BiasElementKind::I32) => unsafe {
-                    k_sys::baracuda_cutlass_gemm_bias_relu_i32bias_u8_rcr_sm80_run(
-                        m, n, k, a, lda, b, ldb, c, ldc, d, ldd,
-                        bias, alpha, beta, workspace, workspace_bytes, stream,
-                    )
-                },
-                (ElementKind::U8, EpilogueKind::BiasGelu, BiasElementKind::I32) => unsafe {
-                    k_sys::baracuda_cutlass_gemm_bias_gelu_i32bias_u8_rcr_sm80_run(
-                        m, n, k, a, lda, b, ldb, c, ldc, d, ldd,
-                        bias, alpha, beta, workspace, workspace_bytes, stream,
-                    )
-                },
-                (ElementKind::U8, EpilogueKind::BiasSilu, BiasElementKind::I32) => unsafe {
-                    k_sys::baracuda_cutlass_gemm_bias_silu_i32bias_u8_rcr_sm80_run(
-                        m, n, k, a, lda, b, ldb, c, ldc, d, ldd,
-                        bias, alpha, beta, workspace, workspace_bytes, stream,
-                    )
-                },
-                // Identity reaches here when called accidentally — bias is
-                // required for the bias-family dispatchers. Identity routes
-                // through `int_gemm_rcr_sm80_run` instead.
-                (_, EpilogueKind::Identity, _) => 3,
-                _ => 3,
+        // RRR int8 deferred (see Identity dispatcher).
+        if !matches!(layout, LayoutSku::Rcr) {
+            return 3;
+        }
+        match (kind, epilogue, bias_kind) {
+            // ---- s8 × f32 bias ----
+            (ElementKind::S8, EpilogueKind::Bias, BiasElementKind::F32) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_f32bias_s8_rcr_sm80_run(
+                    m, n, k, a, lda, b, ldb, c, ldc, d, ldd,
+                    bias, alpha, beta, workspace, workspace_bytes, stream,
+                )
             },
-            LayoutSku::Rrr => match (kind, epilogue, bias_kind) {
-                // ---- s8 × f32 bias (RRR) ----
-                (ElementKind::S8, EpilogueKind::Bias, BiasElementKind::F32) => unsafe {
-                    k_sys::baracuda_cutlass_gemm_bias_f32bias_s8_rrr_sm80_run(
-                        m, n, k, a, lda, b, ldb, c, ldc, d, ldd,
-                        bias, alpha, beta, workspace, workspace_bytes, stream,
-                    )
-                },
-                (ElementKind::S8, EpilogueKind::BiasRelu, BiasElementKind::F32) => unsafe {
-                    k_sys::baracuda_cutlass_gemm_bias_relu_f32bias_s8_rrr_sm80_run(
-                        m, n, k, a, lda, b, ldb, c, ldc, d, ldd,
-                        bias, alpha, beta, workspace, workspace_bytes, stream,
-                    )
-                },
-                (ElementKind::S8, EpilogueKind::BiasGelu, BiasElementKind::F32) => unsafe {
-                    k_sys::baracuda_cutlass_gemm_bias_gelu_f32bias_s8_rrr_sm80_run(
-                        m, n, k, a, lda, b, ldb, c, ldc, d, ldd,
-                        bias, alpha, beta, workspace, workspace_bytes, stream,
-                    )
-                },
-                (ElementKind::S8, EpilogueKind::BiasSilu, BiasElementKind::F32) => unsafe {
-                    k_sys::baracuda_cutlass_gemm_bias_silu_f32bias_s8_rrr_sm80_run(
-                        m, n, k, a, lda, b, ldb, c, ldc, d, ldd,
-                        bias, alpha, beta, workspace, workspace_bytes, stream,
-                    )
-                },
-                // ---- s8 × i32 bias (RRR) ----
-                (ElementKind::S8, EpilogueKind::Bias, BiasElementKind::I32) => unsafe {
-                    k_sys::baracuda_cutlass_gemm_bias_i32bias_s8_rrr_sm80_run(
-                        m, n, k, a, lda, b, ldb, c, ldc, d, ldd,
-                        bias, alpha, beta, workspace, workspace_bytes, stream,
-                    )
-                },
-                (ElementKind::S8, EpilogueKind::BiasRelu, BiasElementKind::I32) => unsafe {
-                    k_sys::baracuda_cutlass_gemm_bias_relu_i32bias_s8_rrr_sm80_run(
-                        m, n, k, a, lda, b, ldb, c, ldc, d, ldd,
-                        bias, alpha, beta, workspace, workspace_bytes, stream,
-                    )
-                },
-                (ElementKind::S8, EpilogueKind::BiasGelu, BiasElementKind::I32) => unsafe {
-                    k_sys::baracuda_cutlass_gemm_bias_gelu_i32bias_s8_rrr_sm80_run(
-                        m, n, k, a, lda, b, ldb, c, ldc, d, ldd,
-                        bias, alpha, beta, workspace, workspace_bytes, stream,
-                    )
-                },
-                (ElementKind::S8, EpilogueKind::BiasSilu, BiasElementKind::I32) => unsafe {
-                    k_sys::baracuda_cutlass_gemm_bias_silu_i32bias_s8_rrr_sm80_run(
-                        m, n, k, a, lda, b, ldb, c, ldc, d, ldd,
-                        bias, alpha, beta, workspace, workspace_bytes, stream,
-                    )
-                },
-                // ---- u8 × f32 bias (RRR) ----
-                (ElementKind::U8, EpilogueKind::Bias, BiasElementKind::F32) => unsafe {
-                    k_sys::baracuda_cutlass_gemm_bias_f32bias_u8_rrr_sm80_run(
-                        m, n, k, a, lda, b, ldb, c, ldc, d, ldd,
-                        bias, alpha, beta, workspace, workspace_bytes, stream,
-                    )
-                },
-                (ElementKind::U8, EpilogueKind::BiasRelu, BiasElementKind::F32) => unsafe {
-                    k_sys::baracuda_cutlass_gemm_bias_relu_f32bias_u8_rrr_sm80_run(
-                        m, n, k, a, lda, b, ldb, c, ldc, d, ldd,
-                        bias, alpha, beta, workspace, workspace_bytes, stream,
-                    )
-                },
-                (ElementKind::U8, EpilogueKind::BiasGelu, BiasElementKind::F32) => unsafe {
-                    k_sys::baracuda_cutlass_gemm_bias_gelu_f32bias_u8_rrr_sm80_run(
-                        m, n, k, a, lda, b, ldb, c, ldc, d, ldd,
-                        bias, alpha, beta, workspace, workspace_bytes, stream,
-                    )
-                },
-                (ElementKind::U8, EpilogueKind::BiasSilu, BiasElementKind::F32) => unsafe {
-                    k_sys::baracuda_cutlass_gemm_bias_silu_f32bias_u8_rrr_sm80_run(
-                        m, n, k, a, lda, b, ldb, c, ldc, d, ldd,
-                        bias, alpha, beta, workspace, workspace_bytes, stream,
-                    )
-                },
-                // ---- u8 × i32 bias (RRR) ----
-                (ElementKind::U8, EpilogueKind::Bias, BiasElementKind::I32) => unsafe {
-                    k_sys::baracuda_cutlass_gemm_bias_i32bias_u8_rrr_sm80_run(
-                        m, n, k, a, lda, b, ldb, c, ldc, d, ldd,
-                        bias, alpha, beta, workspace, workspace_bytes, stream,
-                    )
-                },
-                (ElementKind::U8, EpilogueKind::BiasRelu, BiasElementKind::I32) => unsafe {
-                    k_sys::baracuda_cutlass_gemm_bias_relu_i32bias_u8_rrr_sm80_run(
-                        m, n, k, a, lda, b, ldb, c, ldc, d, ldd,
-                        bias, alpha, beta, workspace, workspace_bytes, stream,
-                    )
-                },
-                (ElementKind::U8, EpilogueKind::BiasGelu, BiasElementKind::I32) => unsafe {
-                    k_sys::baracuda_cutlass_gemm_bias_gelu_i32bias_u8_rrr_sm80_run(
-                        m, n, k, a, lda, b, ldb, c, ldc, d, ldd,
-                        bias, alpha, beta, workspace, workspace_bytes, stream,
-                    )
-                },
-                (ElementKind::U8, EpilogueKind::BiasSilu, BiasElementKind::I32) => unsafe {
-                    k_sys::baracuda_cutlass_gemm_bias_silu_i32bias_u8_rrr_sm80_run(
-                        m, n, k, a, lda, b, ldb, c, ldc, d, ldd,
-                        bias, alpha, beta, workspace, workspace_bytes, stream,
-                    )
-                },
-                (_, EpilogueKind::Identity, _) => 3,
-                _ => 3,
+            (ElementKind::S8, EpilogueKind::BiasRelu, BiasElementKind::F32) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_relu_f32bias_s8_rcr_sm80_run(
+                    m, n, k, a, lda, b, ldb, c, ldc, d, ldd,
+                    bias, alpha, beta, workspace, workspace_bytes, stream,
+                )
             },
+            (ElementKind::S8, EpilogueKind::BiasGelu, BiasElementKind::F32) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_gelu_f32bias_s8_rcr_sm80_run(
+                    m, n, k, a, lda, b, ldb, c, ldc, d, ldd,
+                    bias, alpha, beta, workspace, workspace_bytes, stream,
+                )
+            },
+            (ElementKind::S8, EpilogueKind::BiasSilu, BiasElementKind::F32) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_silu_f32bias_s8_rcr_sm80_run(
+                    m, n, k, a, lda, b, ldb, c, ldc, d, ldd,
+                    bias, alpha, beta, workspace, workspace_bytes, stream,
+                )
+            },
+            // ---- s8 × i32 bias ----
+            (ElementKind::S8, EpilogueKind::Bias, BiasElementKind::I32) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_i32bias_s8_rcr_sm80_run(
+                    m, n, k, a, lda, b, ldb, c, ldc, d, ldd,
+                    bias, alpha, beta, workspace, workspace_bytes, stream,
+                )
+            },
+            (ElementKind::S8, EpilogueKind::BiasRelu, BiasElementKind::I32) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_relu_i32bias_s8_rcr_sm80_run(
+                    m, n, k, a, lda, b, ldb, c, ldc, d, ldd,
+                    bias, alpha, beta, workspace, workspace_bytes, stream,
+                )
+            },
+            (ElementKind::S8, EpilogueKind::BiasGelu, BiasElementKind::I32) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_gelu_i32bias_s8_rcr_sm80_run(
+                    m, n, k, a, lda, b, ldb, c, ldc, d, ldd,
+                    bias, alpha, beta, workspace, workspace_bytes, stream,
+                )
+            },
+            (ElementKind::S8, EpilogueKind::BiasSilu, BiasElementKind::I32) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_silu_i32bias_s8_rcr_sm80_run(
+                    m, n, k, a, lda, b, ldb, c, ldc, d, ldd,
+                    bias, alpha, beta, workspace, workspace_bytes, stream,
+                )
+            },
+            // ---- u8 × f32 bias ----
+            (ElementKind::U8, EpilogueKind::Bias, BiasElementKind::F32) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_f32bias_u8_rcr_sm80_run(
+                    m, n, k, a, lda, b, ldb, c, ldc, d, ldd,
+                    bias, alpha, beta, workspace, workspace_bytes, stream,
+                )
+            },
+            (ElementKind::U8, EpilogueKind::BiasRelu, BiasElementKind::F32) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_relu_f32bias_u8_rcr_sm80_run(
+                    m, n, k, a, lda, b, ldb, c, ldc, d, ldd,
+                    bias, alpha, beta, workspace, workspace_bytes, stream,
+                )
+            },
+            (ElementKind::U8, EpilogueKind::BiasGelu, BiasElementKind::F32) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_gelu_f32bias_u8_rcr_sm80_run(
+                    m, n, k, a, lda, b, ldb, c, ldc, d, ldd,
+                    bias, alpha, beta, workspace, workspace_bytes, stream,
+                )
+            },
+            (ElementKind::U8, EpilogueKind::BiasSilu, BiasElementKind::F32) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_silu_f32bias_u8_rcr_sm80_run(
+                    m, n, k, a, lda, b, ldb, c, ldc, d, ldd,
+                    bias, alpha, beta, workspace, workspace_bytes, stream,
+                )
+            },
+            // ---- u8 × i32 bias ----
+            (ElementKind::U8, EpilogueKind::Bias, BiasElementKind::I32) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_i32bias_u8_rcr_sm80_run(
+                    m, n, k, a, lda, b, ldb, c, ldc, d, ldd,
+                    bias, alpha, beta, workspace, workspace_bytes, stream,
+                )
+            },
+            (ElementKind::U8, EpilogueKind::BiasRelu, BiasElementKind::I32) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_relu_i32bias_u8_rcr_sm80_run(
+                    m, n, k, a, lda, b, ldb, c, ldc, d, ldd,
+                    bias, alpha, beta, workspace, workspace_bytes, stream,
+                )
+            },
+            (ElementKind::U8, EpilogueKind::BiasGelu, BiasElementKind::I32) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_gelu_i32bias_u8_rcr_sm80_run(
+                    m, n, k, a, lda, b, ldb, c, ldc, d, ldd,
+                    bias, alpha, beta, workspace, workspace_bytes, stream,
+                )
+            },
+            (ElementKind::U8, EpilogueKind::BiasSilu, BiasElementKind::I32) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_silu_i32bias_u8_rcr_sm80_run(
+                    m, n, k, a, lda, b, ldb, c, ldc, d, ldd,
+                    bias, alpha, beta, workspace, workspace_bytes, stream,
+                )
+            },
+            // Identity reaches here when called accidentally — bias is
+            // required for the bias-family dispatchers. Identity routes
+            // through `int_gemm_rcr_sm80_run` instead.
+            (_, EpilogueKind::Identity, _) => 3,
+            // Defensive: float / I32 kinds should never reach this dispatcher.
+            _ => 3,
         }
     }
 
@@ -1701,109 +1576,59 @@ mod dispatch {
         k: i32,
     ) -> usize {
         use baracuda_cutlass_kernels_sys as k_sys;
-        match layout {
-            LayoutSku::Rcr => match (kind, epilogue, bias_kind) {
-                (ElementKind::S8, EpilogueKind::Bias, BiasElementKind::F32) => unsafe {
-                    k_sys::baracuda_cutlass_gemm_bias_f32bias_s8_rcr_sm80_workspace_size(m, n, k)
-                },
-                (ElementKind::S8, EpilogueKind::BiasRelu, BiasElementKind::F32) => unsafe {
-                    k_sys::baracuda_cutlass_gemm_bias_relu_f32bias_s8_rcr_sm80_workspace_size(m, n, k)
-                },
-                (ElementKind::S8, EpilogueKind::BiasGelu, BiasElementKind::F32) => unsafe {
-                    k_sys::baracuda_cutlass_gemm_bias_gelu_f32bias_s8_rcr_sm80_workspace_size(m, n, k)
-                },
-                (ElementKind::S8, EpilogueKind::BiasSilu, BiasElementKind::F32) => unsafe {
-                    k_sys::baracuda_cutlass_gemm_bias_silu_f32bias_s8_rcr_sm80_workspace_size(m, n, k)
-                },
-                (ElementKind::S8, EpilogueKind::Bias, BiasElementKind::I32) => unsafe {
-                    k_sys::baracuda_cutlass_gemm_bias_i32bias_s8_rcr_sm80_workspace_size(m, n, k)
-                },
-                (ElementKind::S8, EpilogueKind::BiasRelu, BiasElementKind::I32) => unsafe {
-                    k_sys::baracuda_cutlass_gemm_bias_relu_i32bias_s8_rcr_sm80_workspace_size(m, n, k)
-                },
-                (ElementKind::S8, EpilogueKind::BiasGelu, BiasElementKind::I32) => unsafe {
-                    k_sys::baracuda_cutlass_gemm_bias_gelu_i32bias_s8_rcr_sm80_workspace_size(m, n, k)
-                },
-                (ElementKind::S8, EpilogueKind::BiasSilu, BiasElementKind::I32) => unsafe {
-                    k_sys::baracuda_cutlass_gemm_bias_silu_i32bias_s8_rcr_sm80_workspace_size(m, n, k)
-                },
-                (ElementKind::U8, EpilogueKind::Bias, BiasElementKind::F32) => unsafe {
-                    k_sys::baracuda_cutlass_gemm_bias_f32bias_u8_rcr_sm80_workspace_size(m, n, k)
-                },
-                (ElementKind::U8, EpilogueKind::BiasRelu, BiasElementKind::F32) => unsafe {
-                    k_sys::baracuda_cutlass_gemm_bias_relu_f32bias_u8_rcr_sm80_workspace_size(m, n, k)
-                },
-                (ElementKind::U8, EpilogueKind::BiasGelu, BiasElementKind::F32) => unsafe {
-                    k_sys::baracuda_cutlass_gemm_bias_gelu_f32bias_u8_rcr_sm80_workspace_size(m, n, k)
-                },
-                (ElementKind::U8, EpilogueKind::BiasSilu, BiasElementKind::F32) => unsafe {
-                    k_sys::baracuda_cutlass_gemm_bias_silu_f32bias_u8_rcr_sm80_workspace_size(m, n, k)
-                },
-                (ElementKind::U8, EpilogueKind::Bias, BiasElementKind::I32) => unsafe {
-                    k_sys::baracuda_cutlass_gemm_bias_i32bias_u8_rcr_sm80_workspace_size(m, n, k)
-                },
-                (ElementKind::U8, EpilogueKind::BiasRelu, BiasElementKind::I32) => unsafe {
-                    k_sys::baracuda_cutlass_gemm_bias_relu_i32bias_u8_rcr_sm80_workspace_size(m, n, k)
-                },
-                (ElementKind::U8, EpilogueKind::BiasGelu, BiasElementKind::I32) => unsafe {
-                    k_sys::baracuda_cutlass_gemm_bias_gelu_i32bias_u8_rcr_sm80_workspace_size(m, n, k)
-                },
-                (ElementKind::U8, EpilogueKind::BiasSilu, BiasElementKind::I32) => unsafe {
-                    k_sys::baracuda_cutlass_gemm_bias_silu_i32bias_u8_rcr_sm80_workspace_size(m, n, k)
-                },
-                _ => 0,
+        if !matches!(layout, LayoutSku::Rcr) {
+            return 0;
+        }
+        match (kind, epilogue, bias_kind) {
+            (ElementKind::S8, EpilogueKind::Bias, BiasElementKind::F32) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_f32bias_s8_rcr_sm80_workspace_size(m, n, k)
             },
-            LayoutSku::Rrr => match (kind, epilogue, bias_kind) {
-                (ElementKind::S8, EpilogueKind::Bias, BiasElementKind::F32) => unsafe {
-                    k_sys::baracuda_cutlass_gemm_bias_f32bias_s8_rrr_sm80_workspace_size(m, n, k)
-                },
-                (ElementKind::S8, EpilogueKind::BiasRelu, BiasElementKind::F32) => unsafe {
-                    k_sys::baracuda_cutlass_gemm_bias_relu_f32bias_s8_rrr_sm80_workspace_size(m, n, k)
-                },
-                (ElementKind::S8, EpilogueKind::BiasGelu, BiasElementKind::F32) => unsafe {
-                    k_sys::baracuda_cutlass_gemm_bias_gelu_f32bias_s8_rrr_sm80_workspace_size(m, n, k)
-                },
-                (ElementKind::S8, EpilogueKind::BiasSilu, BiasElementKind::F32) => unsafe {
-                    k_sys::baracuda_cutlass_gemm_bias_silu_f32bias_s8_rrr_sm80_workspace_size(m, n, k)
-                },
-                (ElementKind::S8, EpilogueKind::Bias, BiasElementKind::I32) => unsafe {
-                    k_sys::baracuda_cutlass_gemm_bias_i32bias_s8_rrr_sm80_workspace_size(m, n, k)
-                },
-                (ElementKind::S8, EpilogueKind::BiasRelu, BiasElementKind::I32) => unsafe {
-                    k_sys::baracuda_cutlass_gemm_bias_relu_i32bias_s8_rrr_sm80_workspace_size(m, n, k)
-                },
-                (ElementKind::S8, EpilogueKind::BiasGelu, BiasElementKind::I32) => unsafe {
-                    k_sys::baracuda_cutlass_gemm_bias_gelu_i32bias_s8_rrr_sm80_workspace_size(m, n, k)
-                },
-                (ElementKind::S8, EpilogueKind::BiasSilu, BiasElementKind::I32) => unsafe {
-                    k_sys::baracuda_cutlass_gemm_bias_silu_i32bias_s8_rrr_sm80_workspace_size(m, n, k)
-                },
-                (ElementKind::U8, EpilogueKind::Bias, BiasElementKind::F32) => unsafe {
-                    k_sys::baracuda_cutlass_gemm_bias_f32bias_u8_rrr_sm80_workspace_size(m, n, k)
-                },
-                (ElementKind::U8, EpilogueKind::BiasRelu, BiasElementKind::F32) => unsafe {
-                    k_sys::baracuda_cutlass_gemm_bias_relu_f32bias_u8_rrr_sm80_workspace_size(m, n, k)
-                },
-                (ElementKind::U8, EpilogueKind::BiasGelu, BiasElementKind::F32) => unsafe {
-                    k_sys::baracuda_cutlass_gemm_bias_gelu_f32bias_u8_rrr_sm80_workspace_size(m, n, k)
-                },
-                (ElementKind::U8, EpilogueKind::BiasSilu, BiasElementKind::F32) => unsafe {
-                    k_sys::baracuda_cutlass_gemm_bias_silu_f32bias_u8_rrr_sm80_workspace_size(m, n, k)
-                },
-                (ElementKind::U8, EpilogueKind::Bias, BiasElementKind::I32) => unsafe {
-                    k_sys::baracuda_cutlass_gemm_bias_i32bias_u8_rrr_sm80_workspace_size(m, n, k)
-                },
-                (ElementKind::U8, EpilogueKind::BiasRelu, BiasElementKind::I32) => unsafe {
-                    k_sys::baracuda_cutlass_gemm_bias_relu_i32bias_u8_rrr_sm80_workspace_size(m, n, k)
-                },
-                (ElementKind::U8, EpilogueKind::BiasGelu, BiasElementKind::I32) => unsafe {
-                    k_sys::baracuda_cutlass_gemm_bias_gelu_i32bias_u8_rrr_sm80_workspace_size(m, n, k)
-                },
-                (ElementKind::U8, EpilogueKind::BiasSilu, BiasElementKind::I32) => unsafe {
-                    k_sys::baracuda_cutlass_gemm_bias_silu_i32bias_u8_rrr_sm80_workspace_size(m, n, k)
-                },
-                _ => 0,
+            (ElementKind::S8, EpilogueKind::BiasRelu, BiasElementKind::F32) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_relu_f32bias_s8_rcr_sm80_workspace_size(m, n, k)
             },
+            (ElementKind::S8, EpilogueKind::BiasGelu, BiasElementKind::F32) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_gelu_f32bias_s8_rcr_sm80_workspace_size(m, n, k)
+            },
+            (ElementKind::S8, EpilogueKind::BiasSilu, BiasElementKind::F32) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_silu_f32bias_s8_rcr_sm80_workspace_size(m, n, k)
+            },
+            (ElementKind::S8, EpilogueKind::Bias, BiasElementKind::I32) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_i32bias_s8_rcr_sm80_workspace_size(m, n, k)
+            },
+            (ElementKind::S8, EpilogueKind::BiasRelu, BiasElementKind::I32) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_relu_i32bias_s8_rcr_sm80_workspace_size(m, n, k)
+            },
+            (ElementKind::S8, EpilogueKind::BiasGelu, BiasElementKind::I32) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_gelu_i32bias_s8_rcr_sm80_workspace_size(m, n, k)
+            },
+            (ElementKind::S8, EpilogueKind::BiasSilu, BiasElementKind::I32) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_silu_i32bias_s8_rcr_sm80_workspace_size(m, n, k)
+            },
+            (ElementKind::U8, EpilogueKind::Bias, BiasElementKind::F32) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_f32bias_u8_rcr_sm80_workspace_size(m, n, k)
+            },
+            (ElementKind::U8, EpilogueKind::BiasRelu, BiasElementKind::F32) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_relu_f32bias_u8_rcr_sm80_workspace_size(m, n, k)
+            },
+            (ElementKind::U8, EpilogueKind::BiasGelu, BiasElementKind::F32) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_gelu_f32bias_u8_rcr_sm80_workspace_size(m, n, k)
+            },
+            (ElementKind::U8, EpilogueKind::BiasSilu, BiasElementKind::F32) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_silu_f32bias_u8_rcr_sm80_workspace_size(m, n, k)
+            },
+            (ElementKind::U8, EpilogueKind::Bias, BiasElementKind::I32) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_i32bias_u8_rcr_sm80_workspace_size(m, n, k)
+            },
+            (ElementKind::U8, EpilogueKind::BiasRelu, BiasElementKind::I32) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_relu_i32bias_u8_rcr_sm80_workspace_size(m, n, k)
+            },
+            (ElementKind::U8, EpilogueKind::BiasGelu, BiasElementKind::I32) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_gelu_i32bias_u8_rcr_sm80_workspace_size(m, n, k)
+            },
+            (ElementKind::U8, EpilogueKind::BiasSilu, BiasElementKind::I32) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_silu_i32bias_u8_rcr_sm80_workspace_size(m, n, k)
+            },
+            _ => 0,
         }
     }
 
@@ -1828,173 +1653,91 @@ mod dispatch {
         bias: *const c_void,
     ) -> i32 {
         use baracuda_cutlass_kernels_sys as k_sys;
-        match layout {
-            LayoutSku::Rcr => match (kind, epilogue, bias_kind) {
-                (ElementKind::S8, EpilogueKind::Bias, BiasElementKind::F32) => unsafe {
-                    k_sys::baracuda_cutlass_gemm_bias_f32bias_s8_rcr_sm80_can_implement(
-                        m, n, k, a, lda, b, ldb, c, ldc, d, ldd, bias,
-                    )
-                },
-                (ElementKind::S8, EpilogueKind::BiasRelu, BiasElementKind::F32) => unsafe {
-                    k_sys::baracuda_cutlass_gemm_bias_relu_f32bias_s8_rcr_sm80_can_implement(
-                        m, n, k, a, lda, b, ldb, c, ldc, d, ldd, bias,
-                    )
-                },
-                (ElementKind::S8, EpilogueKind::BiasGelu, BiasElementKind::F32) => unsafe {
-                    k_sys::baracuda_cutlass_gemm_bias_gelu_f32bias_s8_rcr_sm80_can_implement(
-                        m, n, k, a, lda, b, ldb, c, ldc, d, ldd, bias,
-                    )
-                },
-                (ElementKind::S8, EpilogueKind::BiasSilu, BiasElementKind::F32) => unsafe {
-                    k_sys::baracuda_cutlass_gemm_bias_silu_f32bias_s8_rcr_sm80_can_implement(
-                        m, n, k, a, lda, b, ldb, c, ldc, d, ldd, bias,
-                    )
-                },
-                (ElementKind::S8, EpilogueKind::Bias, BiasElementKind::I32) => unsafe {
-                    k_sys::baracuda_cutlass_gemm_bias_i32bias_s8_rcr_sm80_can_implement(
-                        m, n, k, a, lda, b, ldb, c, ldc, d, ldd, bias,
-                    )
-                },
-                (ElementKind::S8, EpilogueKind::BiasRelu, BiasElementKind::I32) => unsafe {
-                    k_sys::baracuda_cutlass_gemm_bias_relu_i32bias_s8_rcr_sm80_can_implement(
-                        m, n, k, a, lda, b, ldb, c, ldc, d, ldd, bias,
-                    )
-                },
-                (ElementKind::S8, EpilogueKind::BiasGelu, BiasElementKind::I32) => unsafe {
-                    k_sys::baracuda_cutlass_gemm_bias_gelu_i32bias_s8_rcr_sm80_can_implement(
-                        m, n, k, a, lda, b, ldb, c, ldc, d, ldd, bias,
-                    )
-                },
-                (ElementKind::S8, EpilogueKind::BiasSilu, BiasElementKind::I32) => unsafe {
-                    k_sys::baracuda_cutlass_gemm_bias_silu_i32bias_s8_rcr_sm80_can_implement(
-                        m, n, k, a, lda, b, ldb, c, ldc, d, ldd, bias,
-                    )
-                },
-                (ElementKind::U8, EpilogueKind::Bias, BiasElementKind::F32) => unsafe {
-                    k_sys::baracuda_cutlass_gemm_bias_f32bias_u8_rcr_sm80_can_implement(
-                        m, n, k, a, lda, b, ldb, c, ldc, d, ldd, bias,
-                    )
-                },
-                (ElementKind::U8, EpilogueKind::BiasRelu, BiasElementKind::F32) => unsafe {
-                    k_sys::baracuda_cutlass_gemm_bias_relu_f32bias_u8_rcr_sm80_can_implement(
-                        m, n, k, a, lda, b, ldb, c, ldc, d, ldd, bias,
-                    )
-                },
-                (ElementKind::U8, EpilogueKind::BiasGelu, BiasElementKind::F32) => unsafe {
-                    k_sys::baracuda_cutlass_gemm_bias_gelu_f32bias_u8_rcr_sm80_can_implement(
-                        m, n, k, a, lda, b, ldb, c, ldc, d, ldd, bias,
-                    )
-                },
-                (ElementKind::U8, EpilogueKind::BiasSilu, BiasElementKind::F32) => unsafe {
-                    k_sys::baracuda_cutlass_gemm_bias_silu_f32bias_u8_rcr_sm80_can_implement(
-                        m, n, k, a, lda, b, ldb, c, ldc, d, ldd, bias,
-                    )
-                },
-                (ElementKind::U8, EpilogueKind::Bias, BiasElementKind::I32) => unsafe {
-                    k_sys::baracuda_cutlass_gemm_bias_i32bias_u8_rcr_sm80_can_implement(
-                        m, n, k, a, lda, b, ldb, c, ldc, d, ldd, bias,
-                    )
-                },
-                (ElementKind::U8, EpilogueKind::BiasRelu, BiasElementKind::I32) => unsafe {
-                    k_sys::baracuda_cutlass_gemm_bias_relu_i32bias_u8_rcr_sm80_can_implement(
-                        m, n, k, a, lda, b, ldb, c, ldc, d, ldd, bias,
-                    )
-                },
-                (ElementKind::U8, EpilogueKind::BiasGelu, BiasElementKind::I32) => unsafe {
-                    k_sys::baracuda_cutlass_gemm_bias_gelu_i32bias_u8_rcr_sm80_can_implement(
-                        m, n, k, a, lda, b, ldb, c, ldc, d, ldd, bias,
-                    )
-                },
-                (ElementKind::U8, EpilogueKind::BiasSilu, BiasElementKind::I32) => unsafe {
-                    k_sys::baracuda_cutlass_gemm_bias_silu_i32bias_u8_rcr_sm80_can_implement(
-                        m, n, k, a, lda, b, ldb, c, ldc, d, ldd, bias,
-                    )
-                },
-                _ => 3,
+        if !matches!(layout, LayoutSku::Rcr) {
+            return 3;
+        }
+        match (kind, epilogue, bias_kind) {
+            (ElementKind::S8, EpilogueKind::Bias, BiasElementKind::F32) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_f32bias_s8_rcr_sm80_can_implement(
+                    m, n, k, a, lda, b, ldb, c, ldc, d, ldd, bias,
+                )
             },
-            LayoutSku::Rrr => match (kind, epilogue, bias_kind) {
-                (ElementKind::S8, EpilogueKind::Bias, BiasElementKind::F32) => unsafe {
-                    k_sys::baracuda_cutlass_gemm_bias_f32bias_s8_rrr_sm80_can_implement(
-                        m, n, k, a, lda, b, ldb, c, ldc, d, ldd, bias,
-                    )
-                },
-                (ElementKind::S8, EpilogueKind::BiasRelu, BiasElementKind::F32) => unsafe {
-                    k_sys::baracuda_cutlass_gemm_bias_relu_f32bias_s8_rrr_sm80_can_implement(
-                        m, n, k, a, lda, b, ldb, c, ldc, d, ldd, bias,
-                    )
-                },
-                (ElementKind::S8, EpilogueKind::BiasGelu, BiasElementKind::F32) => unsafe {
-                    k_sys::baracuda_cutlass_gemm_bias_gelu_f32bias_s8_rrr_sm80_can_implement(
-                        m, n, k, a, lda, b, ldb, c, ldc, d, ldd, bias,
-                    )
-                },
-                (ElementKind::S8, EpilogueKind::BiasSilu, BiasElementKind::F32) => unsafe {
-                    k_sys::baracuda_cutlass_gemm_bias_silu_f32bias_s8_rrr_sm80_can_implement(
-                        m, n, k, a, lda, b, ldb, c, ldc, d, ldd, bias,
-                    )
-                },
-                (ElementKind::S8, EpilogueKind::Bias, BiasElementKind::I32) => unsafe {
-                    k_sys::baracuda_cutlass_gemm_bias_i32bias_s8_rrr_sm80_can_implement(
-                        m, n, k, a, lda, b, ldb, c, ldc, d, ldd, bias,
-                    )
-                },
-                (ElementKind::S8, EpilogueKind::BiasRelu, BiasElementKind::I32) => unsafe {
-                    k_sys::baracuda_cutlass_gemm_bias_relu_i32bias_s8_rrr_sm80_can_implement(
-                        m, n, k, a, lda, b, ldb, c, ldc, d, ldd, bias,
-                    )
-                },
-                (ElementKind::S8, EpilogueKind::BiasGelu, BiasElementKind::I32) => unsafe {
-                    k_sys::baracuda_cutlass_gemm_bias_gelu_i32bias_s8_rrr_sm80_can_implement(
-                        m, n, k, a, lda, b, ldb, c, ldc, d, ldd, bias,
-                    )
-                },
-                (ElementKind::S8, EpilogueKind::BiasSilu, BiasElementKind::I32) => unsafe {
-                    k_sys::baracuda_cutlass_gemm_bias_silu_i32bias_s8_rrr_sm80_can_implement(
-                        m, n, k, a, lda, b, ldb, c, ldc, d, ldd, bias,
-                    )
-                },
-                (ElementKind::U8, EpilogueKind::Bias, BiasElementKind::F32) => unsafe {
-                    k_sys::baracuda_cutlass_gemm_bias_f32bias_u8_rrr_sm80_can_implement(
-                        m, n, k, a, lda, b, ldb, c, ldc, d, ldd, bias,
-                    )
-                },
-                (ElementKind::U8, EpilogueKind::BiasRelu, BiasElementKind::F32) => unsafe {
-                    k_sys::baracuda_cutlass_gemm_bias_relu_f32bias_u8_rrr_sm80_can_implement(
-                        m, n, k, a, lda, b, ldb, c, ldc, d, ldd, bias,
-                    )
-                },
-                (ElementKind::U8, EpilogueKind::BiasGelu, BiasElementKind::F32) => unsafe {
-                    k_sys::baracuda_cutlass_gemm_bias_gelu_f32bias_u8_rrr_sm80_can_implement(
-                        m, n, k, a, lda, b, ldb, c, ldc, d, ldd, bias,
-                    )
-                },
-                (ElementKind::U8, EpilogueKind::BiasSilu, BiasElementKind::F32) => unsafe {
-                    k_sys::baracuda_cutlass_gemm_bias_silu_f32bias_u8_rrr_sm80_can_implement(
-                        m, n, k, a, lda, b, ldb, c, ldc, d, ldd, bias,
-                    )
-                },
-                (ElementKind::U8, EpilogueKind::Bias, BiasElementKind::I32) => unsafe {
-                    k_sys::baracuda_cutlass_gemm_bias_i32bias_u8_rrr_sm80_can_implement(
-                        m, n, k, a, lda, b, ldb, c, ldc, d, ldd, bias,
-                    )
-                },
-                (ElementKind::U8, EpilogueKind::BiasRelu, BiasElementKind::I32) => unsafe {
-                    k_sys::baracuda_cutlass_gemm_bias_relu_i32bias_u8_rrr_sm80_can_implement(
-                        m, n, k, a, lda, b, ldb, c, ldc, d, ldd, bias,
-                    )
-                },
-                (ElementKind::U8, EpilogueKind::BiasGelu, BiasElementKind::I32) => unsafe {
-                    k_sys::baracuda_cutlass_gemm_bias_gelu_i32bias_u8_rrr_sm80_can_implement(
-                        m, n, k, a, lda, b, ldb, c, ldc, d, ldd, bias,
-                    )
-                },
-                (ElementKind::U8, EpilogueKind::BiasSilu, BiasElementKind::I32) => unsafe {
-                    k_sys::baracuda_cutlass_gemm_bias_silu_i32bias_u8_rrr_sm80_can_implement(
-                        m, n, k, a, lda, b, ldb, c, ldc, d, ldd, bias,
-                    )
-                },
-                _ => 3,
+            (ElementKind::S8, EpilogueKind::BiasRelu, BiasElementKind::F32) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_relu_f32bias_s8_rcr_sm80_can_implement(
+                    m, n, k, a, lda, b, ldb, c, ldc, d, ldd, bias,
+                )
             },
+            (ElementKind::S8, EpilogueKind::BiasGelu, BiasElementKind::F32) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_gelu_f32bias_s8_rcr_sm80_can_implement(
+                    m, n, k, a, lda, b, ldb, c, ldc, d, ldd, bias,
+                )
+            },
+            (ElementKind::S8, EpilogueKind::BiasSilu, BiasElementKind::F32) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_silu_f32bias_s8_rcr_sm80_can_implement(
+                    m, n, k, a, lda, b, ldb, c, ldc, d, ldd, bias,
+                )
+            },
+            (ElementKind::S8, EpilogueKind::Bias, BiasElementKind::I32) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_i32bias_s8_rcr_sm80_can_implement(
+                    m, n, k, a, lda, b, ldb, c, ldc, d, ldd, bias,
+                )
+            },
+            (ElementKind::S8, EpilogueKind::BiasRelu, BiasElementKind::I32) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_relu_i32bias_s8_rcr_sm80_can_implement(
+                    m, n, k, a, lda, b, ldb, c, ldc, d, ldd, bias,
+                )
+            },
+            (ElementKind::S8, EpilogueKind::BiasGelu, BiasElementKind::I32) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_gelu_i32bias_s8_rcr_sm80_can_implement(
+                    m, n, k, a, lda, b, ldb, c, ldc, d, ldd, bias,
+                )
+            },
+            (ElementKind::S8, EpilogueKind::BiasSilu, BiasElementKind::I32) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_silu_i32bias_s8_rcr_sm80_can_implement(
+                    m, n, k, a, lda, b, ldb, c, ldc, d, ldd, bias,
+                )
+            },
+            (ElementKind::U8, EpilogueKind::Bias, BiasElementKind::F32) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_f32bias_u8_rcr_sm80_can_implement(
+                    m, n, k, a, lda, b, ldb, c, ldc, d, ldd, bias,
+                )
+            },
+            (ElementKind::U8, EpilogueKind::BiasRelu, BiasElementKind::F32) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_relu_f32bias_u8_rcr_sm80_can_implement(
+                    m, n, k, a, lda, b, ldb, c, ldc, d, ldd, bias,
+                )
+            },
+            (ElementKind::U8, EpilogueKind::BiasGelu, BiasElementKind::F32) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_gelu_f32bias_u8_rcr_sm80_can_implement(
+                    m, n, k, a, lda, b, ldb, c, ldc, d, ldd, bias,
+                )
+            },
+            (ElementKind::U8, EpilogueKind::BiasSilu, BiasElementKind::F32) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_silu_f32bias_u8_rcr_sm80_can_implement(
+                    m, n, k, a, lda, b, ldb, c, ldc, d, ldd, bias,
+                )
+            },
+            (ElementKind::U8, EpilogueKind::Bias, BiasElementKind::I32) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_i32bias_u8_rcr_sm80_can_implement(
+                    m, n, k, a, lda, b, ldb, c, ldc, d, ldd, bias,
+                )
+            },
+            (ElementKind::U8, EpilogueKind::BiasRelu, BiasElementKind::I32) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_relu_i32bias_u8_rcr_sm80_can_implement(
+                    m, n, k, a, lda, b, ldb, c, ldc, d, ldd, bias,
+                )
+            },
+            (ElementKind::U8, EpilogueKind::BiasGelu, BiasElementKind::I32) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_gelu_i32bias_u8_rcr_sm80_can_implement(
+                    m, n, k, a, lda, b, ldb, c, ldc, d, ldd, bias,
+                )
+            },
+            (ElementKind::U8, EpilogueKind::BiasSilu, BiasElementKind::I32) => unsafe {
+                k_sys::baracuda_cutlass_gemm_bias_silu_i32bias_u8_rcr_sm80_can_implement(
+                    m, n, k, a, lda, b, ldb, c, ldc, d, ldd, bias,
+                )
+            },
+            _ => 3,
         }
     }
 }
@@ -3516,12 +3259,11 @@ impl<'a, T: CutlassElement> PreparedGroupedGemm<'a, T> {
 //   shorthand picks the f32-bias path. Override explicitly with
 //   `IntGemmPlan::<S8, i32>` for the int32-bias path.
 //
-// Layout coverage: int8 kernels ship `Rcr` and `Rrr`. `Rrr` routes
-// through a vendored `DefaultMmaCore` partial spec in
-// `baracuda-cutlass-kernels-sys` (see `baracuda_int8_rr_default_mma_core.h`)
-// that picks K-contig Crosswise smem for B instead of the upstream
-// default of `Congruous` — the Congruous-8 smem layout doesn't compose
-// with what `mma.sync.m16n8k32.s8` expects in its register fragment.
+// Layout coverage: today's int8 kernels are RCR-only. Selecting
+// [`LayoutSku::Rrr`] returns [`Error::Unsupported`] at `select` time —
+// CUTLASS 4.2.0 has no warp-level iterator for the 8-bit `Congruous`
+// shared-memory layout the row-major B operand would need. A follow-up
+// release will vendor the missing specialization.
 
 /// Plan handle for an int8 GEMM kernel selection.
 ///
@@ -3538,6 +3280,8 @@ pub struct IntGemmPlan<T: IntElement, BT: BiasElement = f32> {
 impl<T: IntElement, BT: BiasElement> IntGemmPlan<T, BT> {
     /// Pick an int-GEMM kernel for `desc`.
     ///
+    /// Returns [`Error::Unsupported`] for `LayoutSku::Rrr` — see the
+    /// module-level docs above for the CUTLASS upstream limitation.
     /// `BT` is only meaningful for the `Bias*` epilogue variants;
     /// `EpilogueKind::Identity` ignores it.
     pub fn select(
@@ -3547,6 +3291,16 @@ impl<T: IntElement, BT: BiasElement> IntGemmPlan<T, BT> {
     ) -> Result<Self> {
         check_int_descriptor(desc)?;
         let arch = pick_int_arch(stream, pref)?;
+        // RCR-only on int8 today. The descriptor-level check rejects
+        // any non-RCR layout up front so callers see the error at
+        // plan-creation time rather than at launch.
+        if !matches!(desc.layout, LayoutSku::Rcr) {
+            return Err(Error::Unsupported(
+                "int8 GEMM kernels are RCR-only in this release \
+                 (CUTLASS 4.2.0 lacks 8-bit `TensorOpMultiplicandCongruous` \
+                 warp iterators for RRR / row-major-B layout)",
+            ));
+        }
         // `bias_element` is meaningful only for the bias-family
         // epilogues; Identity int kernels carry `None` to match the
         // float-family convention.

@@ -2057,13 +2057,14 @@ unsafe extern "C" {
 }
 
 // ============================================================================
-// int8 GEMM — RCR and RRR layouts, sm_80 instantiations (Phase 2)
+// int8 GEMM — RCR layout, sm_80 instantiations (Phase 2)
 // ============================================================================
 //
-// Layout conventions:
-//   RCR — A row-major [M,K], B column-major [K,N], C/D row-major [M,N]
-//   RRR — A row-major [M,K], B row-major    [K,N], C/D row-major [M,N]
-//   All operands share `int8` or `uint8` element type (no mixed-sign).
+// Layout convention `RCR`:
+//   A: row-major    [M, K], leading dimension `lda`  (int8 or uint8)
+//   B: column-major [K, N], leading dimension `ldb`  (matches A signedness)
+//   C: row-major    [M, N], leading dimension `ldc`  (matches A signedness; optional)
+//   D: row-major    [M, N], leading dimension `ldd`  (matches A signedness)
 //
 // Accumulator is int32; alpha/beta are f32 (the standard CUTLASS dequant-
 // in-epilogue convention for integer GEMM). The final saturating cast
@@ -2077,15 +2078,11 @@ unsafe extern "C" {
 // in float (after int32→float dequant), so GELU/SiLU compose without a
 // custom epilogue.
 //
-// RRR at int8 depends on a vendored `DefaultMmaCore` partial spec (see
-// `kernels/include/baracuda_int8_rr_default_mma_core.h`) that routes B
-// through K-contiguous Crosswise smem instead of the upstream default
-// of `Congruous`. The Congruous smem layout doesn't compose with what
-// `mma.sync.m16n8k32.s8` expects in its register fragment (b16 chunks
-// pack N-adjacent bytes; mma needs K-adjacent within each register).
-// Phase 2b's vendored 8-bit Congruous warp iterator
-// (`baracuda_int8_congruous_warp_iterator.h`) is retained as reference
-// but unused by the working path.
+// `RRR` (row-major × row-major) is **not** present at int8 — CUTLASS 4.2.0
+// has no warp-level `MmaTensorOpMultiplicandTileIterator` specialization
+// for `TensorOpMultiplicandCongruous<8, ...>`, so `RowMajor × RowMajor ×
+// OpClassTensorOp` cannot be instantiated for 8-bit operands. The safe
+// layer reports `Error::Unsupported` for an int8 RRR descriptor.
 
 #[cfg(any(feature = "sm80", feature = "sm90a"))]
 unsafe extern "C" {
@@ -2361,207 +2358,4 @@ mod int8_bias_decls {
 
 #[cfg(any(feature = "sm80", feature = "sm90a"))]
 pub use int8_bias_decls::*;
-
-// ---- int8 Identity FFI decls — RRR layout (alpha.16) ----
-
-#[cfg(any(feature = "sm80", feature = "sm90a"))]
-unsafe extern "C" {
-    // ---------- s8 Identity, RRR, sm_80 ----------
-
-    /// Signed-int8 GEMM, RRR layout, sm_80.
-    ///
-    /// Same contract as
-    /// [`baracuda_cutlass_gemm_s8_rcr_sm80_run`]; only B's layout
-    /// differs (row-major here, column-major in the RCR sibling).
-    ///
-    /// # Safety
-    /// See [`baracuda_cutlass_gemm_s8_rcr_sm80_run`].
-    pub fn baracuda_cutlass_gemm_s8_rrr_sm80_run(
-        m: i32,
-        n: i32,
-        k: i32,
-        a: *const c_void,
-        lda: i64,
-        b: *const c_void,
-        ldb: i64,
-        c: *const c_void,
-        ldc: i64,
-        d: *mut c_void,
-        ldd: i64,
-        alpha: f32,
-        beta: f32,
-        workspace: *mut c_void,
-        workspace_bytes: usize,
-        stream: *mut c_void,
-    ) -> i32;
-
-    /// Workspace size in bytes for the `s8` RRR sm_80 GEMM.
-    pub fn baracuda_cutlass_gemm_s8_rrr_sm80_workspace_size(m: i32, n: i32, k: i32) -> usize;
-
-    /// Pre-launch implementability check for the `s8` RRR sm_80 GEMM.
-    ///
-    /// # Safety
-    /// See [`baracuda_cutlass_gemm_s8_rcr_sm80_can_implement`].
-    pub fn baracuda_cutlass_gemm_s8_rrr_sm80_can_implement(
-        m: i32,
-        n: i32,
-        k: i32,
-        a: *const c_void,
-        lda: i64,
-        b: *const c_void,
-        ldb: i64,
-        c: *const c_void,
-        ldc: i64,
-        d: *mut c_void,
-        ldd: i64,
-    ) -> i32;
-
-    // ---------- u8 Identity, RRR, sm_80 ----------
-
-    /// Unsigned-uint8 GEMM, RRR layout, sm_80.
-    ///
-    /// # Safety
-    /// See [`baracuda_cutlass_gemm_s8_rcr_sm80_run`].
-    pub fn baracuda_cutlass_gemm_u8_rrr_sm80_run(
-        m: i32,
-        n: i32,
-        k: i32,
-        a: *const c_void,
-        lda: i64,
-        b: *const c_void,
-        ldb: i64,
-        c: *const c_void,
-        ldc: i64,
-        d: *mut c_void,
-        ldd: i64,
-        alpha: f32,
-        beta: f32,
-        workspace: *mut c_void,
-        workspace_bytes: usize,
-        stream: *mut c_void,
-    ) -> i32;
-
-    /// Workspace size for `u8` RRR sm_80 GEMM.
-    pub fn baracuda_cutlass_gemm_u8_rrr_sm80_workspace_size(m: i32, n: i32, k: i32) -> usize;
-
-    /// Pre-launch check for `u8` RRR sm_80 GEMM.
-    ///
-    /// # Safety
-    /// See [`baracuda_cutlass_gemm_s8_rcr_sm80_can_implement`].
-    pub fn baracuda_cutlass_gemm_u8_rrr_sm80_can_implement(
-        m: i32,
-        n: i32,
-        k: i32,
-        a: *const c_void,
-        lda: i64,
-        b: *const c_void,
-        ldb: i64,
-        c: *const c_void,
-        ldc: i64,
-        d: *mut c_void,
-        ldd: i64,
-    ) -> i32;
-}
-
-// ---- int8 bias-family FFI decls — RRR layout (alpha.16) ----
-//
-// Same shape as the RCR set above: 16 families × 3 signatures each. The
-// `int8_bias_ffi!` macro is reused; only the underlying C symbol names
-// differ (`_rcr_` → `_rrr_`).
-
-#[cfg(any(feature = "sm80", feature = "sm90a"))]
-mod int8_bias_decls_rrr {
-    use super::c_void;
-
-    // ===== s8 × f32 bias =====
-    int8_bias_ffi!(
-        baracuda_cutlass_gemm_bias_f32bias_s8_rrr_sm80_run,
-        baracuda_cutlass_gemm_bias_f32bias_s8_rrr_sm80_workspace_size,
-        baracuda_cutlass_gemm_bias_f32bias_s8_rrr_sm80_can_implement
-    );
-    int8_bias_ffi!(
-        baracuda_cutlass_gemm_bias_relu_f32bias_s8_rrr_sm80_run,
-        baracuda_cutlass_gemm_bias_relu_f32bias_s8_rrr_sm80_workspace_size,
-        baracuda_cutlass_gemm_bias_relu_f32bias_s8_rrr_sm80_can_implement
-    );
-    int8_bias_ffi!(
-        baracuda_cutlass_gemm_bias_gelu_f32bias_s8_rrr_sm80_run,
-        baracuda_cutlass_gemm_bias_gelu_f32bias_s8_rrr_sm80_workspace_size,
-        baracuda_cutlass_gemm_bias_gelu_f32bias_s8_rrr_sm80_can_implement
-    );
-    int8_bias_ffi!(
-        baracuda_cutlass_gemm_bias_silu_f32bias_s8_rrr_sm80_run,
-        baracuda_cutlass_gemm_bias_silu_f32bias_s8_rrr_sm80_workspace_size,
-        baracuda_cutlass_gemm_bias_silu_f32bias_s8_rrr_sm80_can_implement
-    );
-
-    // ===== s8 × i32 bias =====
-    int8_bias_ffi!(
-        baracuda_cutlass_gemm_bias_i32bias_s8_rrr_sm80_run,
-        baracuda_cutlass_gemm_bias_i32bias_s8_rrr_sm80_workspace_size,
-        baracuda_cutlass_gemm_bias_i32bias_s8_rrr_sm80_can_implement
-    );
-    int8_bias_ffi!(
-        baracuda_cutlass_gemm_bias_relu_i32bias_s8_rrr_sm80_run,
-        baracuda_cutlass_gemm_bias_relu_i32bias_s8_rrr_sm80_workspace_size,
-        baracuda_cutlass_gemm_bias_relu_i32bias_s8_rrr_sm80_can_implement
-    );
-    int8_bias_ffi!(
-        baracuda_cutlass_gemm_bias_gelu_i32bias_s8_rrr_sm80_run,
-        baracuda_cutlass_gemm_bias_gelu_i32bias_s8_rrr_sm80_workspace_size,
-        baracuda_cutlass_gemm_bias_gelu_i32bias_s8_rrr_sm80_can_implement
-    );
-    int8_bias_ffi!(
-        baracuda_cutlass_gemm_bias_silu_i32bias_s8_rrr_sm80_run,
-        baracuda_cutlass_gemm_bias_silu_i32bias_s8_rrr_sm80_workspace_size,
-        baracuda_cutlass_gemm_bias_silu_i32bias_s8_rrr_sm80_can_implement
-    );
-
-    // ===== u8 × f32 bias =====
-    int8_bias_ffi!(
-        baracuda_cutlass_gemm_bias_f32bias_u8_rrr_sm80_run,
-        baracuda_cutlass_gemm_bias_f32bias_u8_rrr_sm80_workspace_size,
-        baracuda_cutlass_gemm_bias_f32bias_u8_rrr_sm80_can_implement
-    );
-    int8_bias_ffi!(
-        baracuda_cutlass_gemm_bias_relu_f32bias_u8_rrr_sm80_run,
-        baracuda_cutlass_gemm_bias_relu_f32bias_u8_rrr_sm80_workspace_size,
-        baracuda_cutlass_gemm_bias_relu_f32bias_u8_rrr_sm80_can_implement
-    );
-    int8_bias_ffi!(
-        baracuda_cutlass_gemm_bias_gelu_f32bias_u8_rrr_sm80_run,
-        baracuda_cutlass_gemm_bias_gelu_f32bias_u8_rrr_sm80_workspace_size,
-        baracuda_cutlass_gemm_bias_gelu_f32bias_u8_rrr_sm80_can_implement
-    );
-    int8_bias_ffi!(
-        baracuda_cutlass_gemm_bias_silu_f32bias_u8_rrr_sm80_run,
-        baracuda_cutlass_gemm_bias_silu_f32bias_u8_rrr_sm80_workspace_size,
-        baracuda_cutlass_gemm_bias_silu_f32bias_u8_rrr_sm80_can_implement
-    );
-
-    // ===== u8 × i32 bias =====
-    int8_bias_ffi!(
-        baracuda_cutlass_gemm_bias_i32bias_u8_rrr_sm80_run,
-        baracuda_cutlass_gemm_bias_i32bias_u8_rrr_sm80_workspace_size,
-        baracuda_cutlass_gemm_bias_i32bias_u8_rrr_sm80_can_implement
-    );
-    int8_bias_ffi!(
-        baracuda_cutlass_gemm_bias_relu_i32bias_u8_rrr_sm80_run,
-        baracuda_cutlass_gemm_bias_relu_i32bias_u8_rrr_sm80_workspace_size,
-        baracuda_cutlass_gemm_bias_relu_i32bias_u8_rrr_sm80_can_implement
-    );
-    int8_bias_ffi!(
-        baracuda_cutlass_gemm_bias_gelu_i32bias_u8_rrr_sm80_run,
-        baracuda_cutlass_gemm_bias_gelu_i32bias_u8_rrr_sm80_workspace_size,
-        baracuda_cutlass_gemm_bias_gelu_i32bias_u8_rrr_sm80_can_implement
-    );
-    int8_bias_ffi!(
-        baracuda_cutlass_gemm_bias_silu_i32bias_u8_rrr_sm80_run,
-        baracuda_cutlass_gemm_bias_silu_i32bias_u8_rrr_sm80_workspace_size,
-        baracuda_cutlass_gemm_bias_silu_i32bias_u8_rrr_sm80_can_implement
-    );
-}
-
-#[cfg(any(feature = "sm80", feature = "sm90a"))]
-pub use int8_bias_decls_rrr::*;
 
