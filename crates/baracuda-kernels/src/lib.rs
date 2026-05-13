@@ -40,12 +40,18 @@ pub use baracuda_kernels_types::{
     PrecisionGuarantee, S8, ScalarType, U8, VectorRef, Workspace,
 };
 
-// Phase 0 facade: re-export the existing CUTLASS plan types so callers
-// can switch import paths. The actual unified-dispatcher wrappers
-// (`IntGemmPlan` with a `Backend::Cutlass | Backend::Bespoke` enum) land
-// in Phase 1 once the bespoke int8 RRR kernels exist.
+// Re-export the float-GEMM plan types from baracuda-cutlass unchanged —
+// no bespoke path exists for float GEMM yet, the CUTLASS surface is
+// the one true entry.
 pub use baracuda_cutlass::{
     BatchedGemmArgs, BatchedGemmDescriptor, BatchedGemmPlan, Error, GemmArgs, GemmDescriptor,
     GemmPlan, GemmSku, GroupedGemmPlan, GroupedPlanPreference, GroupedProblem, GroupedScheduleMode,
-    IntGemmArgs, IntGemmDescriptor, IntGemmPlan, PreparedGroupedGemm, Result,
+    PreparedGroupedGemm, Result,
 };
+
+// Unified GEMM plan dispatchers. Today exposes only `IntGemmPlan` (RCR
+// → CUTLASS, RRR → bespoke); float GEMM and the FP8 / int4 / bin
+// dispatchers join later.
+pub mod gemm;
+
+pub use gemm::{IntGemmArgs, IntGemmDescriptor, IntGemmPlan};
