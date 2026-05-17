@@ -1,0 +1,6 @@
+// baracuda-kernels Milestone 5.3 — CosineEmbedding BW for FP types.
+#include "../include/baracuda_loss.cuh"
+BARACUDA_KERNELS_LOSS_COSINE_EMBEDDING_BW_INSTANTIATE(loss_cosine_embedding_backward_f32, float)
+BARACUDA_KERNELS_LOSS_COSINE_EMBEDDING_BW_INSTANTIATE(loss_cosine_embedding_backward_f16, __half)
+BARACUDA_KERNELS_LOSS_COSINE_EMBEDDING_BW_INSTANTIATE(loss_cosine_embedding_backward_bf16, __nv_bfloat16)
+BARACUDA_KERNELS_LOSS_COSINE_EMBEDDING_BW_INSTANTIATE(loss_cosine_embedding_backward_f64, double)

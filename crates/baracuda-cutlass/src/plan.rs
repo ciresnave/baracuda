@@ -644,11 +644,15 @@ mod dispatch {
             // wired correctly. `I32` is an accumulator-only kind and
             // is never a kernel input element.
             (_, ElementKind::S8) | (_, ElementKind::U8) | (_, ElementKind::I32)
+            | (_, ElementKind::I64)
+            | (_, ElementKind::Bool)
             | (_, ElementKind::Fp8E4M3)
             | (_, ElementKind::Fp8E5M2)
             | (_, ElementKind::S4)
             | (_, ElementKind::U4)
-            | (_, ElementKind::Bin) => 3,
+            | (_, ElementKind::Bin)
+            | (_, ElementKind::Complex32)
+            | (_, ElementKind::Complex64) => 3,
         }
     }
 
@@ -695,11 +699,15 @@ mod dispatch {
             (_, ElementKind::S8)
             | (_, ElementKind::U8)
             | (_, ElementKind::I32)
+            | (_, ElementKind::I64)
+            | (_, ElementKind::Bool)
             | (_, ElementKind::Fp8E4M3)
             | (_, ElementKind::Fp8E5M2)
             | (_, ElementKind::S4)
             | (_, ElementKind::U4)
-            | (_, ElementKind::Bin) => 0,
+            | (_, ElementKind::Bin)
+            | (_, ElementKind::Complex32)
+            | (_, ElementKind::Complex64) => 0,
         }
     }
 
@@ -767,11 +775,15 @@ mod dispatch {
             | (LayoutSku::Rrr, ElementKind::F64) => 3,
             // Integer kinds route through `int_gemm_sm80_can_implement`.
             (_, ElementKind::S8) | (_, ElementKind::U8) | (_, ElementKind::I32)
+            | (_, ElementKind::I64)
+            | (_, ElementKind::Bool)
             | (_, ElementKind::Fp8E4M3)
             | (_, ElementKind::Fp8E5M2)
             | (_, ElementKind::S4)
             | (_, ElementKind::U4)
-            | (_, ElementKind::Bin) => 3,
+            | (_, ElementKind::Bin)
+            | (_, ElementKind::Complex32)
+            | (_, ElementKind::Complex64) => 3,
         }
     }
 
@@ -1208,11 +1220,15 @@ mod dispatch {
             | ElementKind::S8
             | ElementKind::U8
             | ElementKind::I32
+            | ElementKind::I64
+            | ElementKind::Bool
             | ElementKind::Fp8E4M3
             | ElementKind::Fp8E5M2
             | ElementKind::S4
             | ElementKind::U4
-            | ElementKind::Bin => 0,
+            | ElementKind::Bin
+            | ElementKind::Complex32
+            | ElementKind::Complex64 => 0,
         }
     }
 
@@ -1243,11 +1259,15 @@ mod dispatch {
             | ElementKind::S8
             | ElementKind::U8
             | ElementKind::I32
+            | ElementKind::I64
+            | ElementKind::Bool
             | ElementKind::Fp8E4M3
             | ElementKind::Fp8E5M2
             | ElementKind::S4
             | ElementKind::U4
-            | ElementKind::Bin => 0,
+            | ElementKind::Bin
+            | ElementKind::Complex32
+            | ElementKind::Complex64 => 0,
         }
     }
 
@@ -1273,11 +1293,15 @@ mod dispatch {
             | ElementKind::S8
             | ElementKind::U8
             | ElementKind::I32
+            | ElementKind::I64
+            | ElementKind::Bool
             | ElementKind::Fp8E4M3
             | ElementKind::Fp8E5M2
             | ElementKind::S4
             | ElementKind::U4
-            | ElementKind::Bin => 3,
+            | ElementKind::Bin
+            | ElementKind::Complex32
+            | ElementKind::Complex64 => 3,
         }
     }
 
@@ -1335,11 +1359,15 @@ mod dispatch {
             | ElementKind::S8
             | ElementKind::U8
             | ElementKind::I32
+            | ElementKind::I64
+            | ElementKind::Bool
             | ElementKind::Fp8E4M3
             | ElementKind::Fp8E5M2
             | ElementKind::S4
             | ElementKind::U4
-            | ElementKind::Bin => 3,
+            | ElementKind::Bin
+            | ElementKind::Complex32
+            | ElementKind::Complex64 => 3,
         }
     }
 

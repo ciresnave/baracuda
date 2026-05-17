@@ -82,19 +82,34 @@ impl ScalarType for f64 {
     #[inline] fn to_f64(self) -> f64 { self }
 }
 
-/// Floating-point element types supported by the kernel facade.
+/// Element types supported by the kernel facade.
 ///
 /// Sealed to prevent downstream `impl`s — adding a new dtype requires
 /// shipping a new kernel instantiation in the corresponding `*-kernels-sys`
 /// crate.
 ///
-/// `f32` and [`F32Strict`] are both implementations of this trait and
-/// differ only in the math precision used inside the kernel:
-/// - `f32` → TF32 tensor cores (10-bit mantissa, ~tensor-core-throughput)
-/// - [`F32Strict`] → SIMT CUDA cores (full IEEE 754 binary32, bit-stable)
+/// The trait spans three families that share the `<T: Element>`-
+/// parameterized plan shape but route through distinct kernel SKUs:
 ///
-/// Both store inputs as IEEE 754 binary32; the choice of math op is
-/// driven by which Rust type the caller picks.
+/// - **Floating-point**: `f16`, `bf16`, `f32`, [`F32Strict`], `f64`.
+///   `f32` reduces through TF32 tensor cores (10-bit mantissa);
+///   [`F32Strict`] uses SIMT CUDA cores at full IEEE 754 binary32 with
+///   bit-stable results. The `Scalar` projection is `f32` for the
+///   16-bit / 32-bit float members and `f64` for `f64`.
+/// - **Integer**: `i32`, `i64`. Used for elementwise integer arithmetic
+///   (bitwise ops, integer comparison). The `Scalar` projection is
+///   `f32` — these types don't participate in α/β-scaled epilogues, so
+///   the projection is nominal. Note: [`S8`] / [`U8`] / [`S4`] / [`U4`]
+///   are GEMM-only operand types and live on the separate [`IntElement`]
+///   trait — they don't implement [`Element`].
+/// - **Boolean**: [`Bool`] (1-byte storage, 0/non-zero truthiness).
+///   Used for logical ops and as the output type of comparison ops.
+///   The `Scalar` projection is `f32` (also nominal).
+///
+/// Sibling traits [`IntElement`], [`FpElement`], [`BinElement`], and
+/// [`BiasElement`] cover GEMM-only / FP8 / packed-bit / bias-broadcast
+/// types respectively; those have their own kernel families and don't
+/// route through `<T: Element>`-parameterized elementwise plans.
 pub trait Element: DeviceRepr + sealed::Sealed + Copy + 'static {
     /// Runtime tag for this element type.
     const KIND: ElementKind;
@@ -102,7 +117,8 @@ pub trait Element: DeviceRepr + sealed::Sealed + Copy + 'static {
     /// the epilogue compute type). `f32` for f16/bf16/f32/[`F32Strict`]
     /// — the epilogue runs at f32 to match the F32 accumulator. `f64`
     /// for [`prim@f64`] — the DGEMM path uses an F64 accumulator and
-    /// f64 alpha/beta.
+    /// f64 alpha/beta. For integer / [`Bool`] elements the projection
+    /// is nominally `f32` (no α/β-scaled epilogue applies).
     type Scalar: ScalarType;
 }
 
@@ -111,6 +127,9 @@ impl sealed::Sealed for bf16 {}
 impl sealed::Sealed for f32 {}
 impl sealed::Sealed for F32Strict {}
 impl sealed::Sealed for f64 {}
+impl sealed::Sealed for i32 {}
+impl sealed::Sealed for i64 {}
+impl sealed::Sealed for Bool {}
 
 impl Element for f16 {
     const KIND: ElementKind = ElementKind::F16;
@@ -140,6 +159,170 @@ impl Element for f64 {
     const KIND: ElementKind = ElementKind::F64;
     type Scalar = f64;
 }
+
+/// `i32` as an elementwise kernel input element. Used by the integer
+/// arithmetic kernels (bitwise and / or / xor / shift, integer
+/// comparison, integer scans). Distinct from [`ElementKind::I32`]'s
+/// historical use as an accumulator-only marker for integer GEMMs —
+/// here `i32` is a first-class kernel *input* type with an `Element`
+/// impl, so the same `BinaryPlan<T, N>` / `UnaryPlan<T, N>` shapes
+/// extend to integer arithmetic.
+///
+/// The `Scalar` projection is `f32` (nominal — integer kernels don't
+/// use α/β-scaled epilogues today).
+impl Element for i32 {
+    const KIND: ElementKind = ElementKind::I32;
+    type Scalar = f32;
+}
+
+/// `i64` as an elementwise kernel input element. Sibling of the `i32`
+/// impl above for 64-bit integer arithmetic (PyTorch's default integer
+/// tensor dtype). Same kernel families, twice the storage width.
+impl Element for i64 {
+    const KIND: ElementKind = ElementKind::I64;
+    type Scalar = f32;
+}
+
+/// Boolean as an elementwise kernel input element. Used by the logical
+/// op family (`logical_and` / `logical_or` / `logical_xor`) and as the
+/// output type of comparison ops. Storage is 1 byte per element via the
+/// [`Bool`] wrapper.
+///
+/// The `Scalar` projection is `f32` (nominal).
+impl Element for Bool {
+    const KIND: ElementKind = ElementKind::Bool;
+    type Scalar = f32;
+}
+
+impl sealed::Sealed for Complex32 {}
+impl sealed::Sealed for Complex64 {}
+
+/// Single-precision complex (interleaved real/imag pair of `f32`) as an
+/// elementwise kernel input element. Used by the FFT family (`fft`,
+/// `ifft`, `rfft` output / `irfft` input, etc.) for spectrum-domain
+/// tensors. The `Scalar` projection is `f32` (matches the real width).
+impl Element for Complex32 {
+    const KIND: ElementKind = ElementKind::Complex32;
+    type Scalar = f32;
+}
+
+/// Double-precision complex (interleaved real/imag pair of `f64`) as an
+/// elementwise kernel input element. Sibling to [`Complex32`]; the
+/// `Scalar` projection is `f64`.
+impl Element for Complex64 {
+    const KIND: ElementKind = ElementKind::Complex64;
+    type Scalar = f64;
+}
+
+// ============================================================================
+// Boolean element type — implements Element directly
+// ============================================================================
+
+/// Boolean element marker. `#[repr(transparent)]` wrapper around `u8`
+/// (1-byte storage).
+///
+/// Truthiness convention follows PyTorch / NumPy: `0` is false; **any**
+/// non-zero byte is true. Kernels that consume `Bool` operands normalize
+/// the input to `0` or `1` before applying the logical op so the result
+/// is always strictly `0` or `1`. The wrapper is `#[repr(transparent)]`
+/// over `u8`, so a `DeviceBuffer<u8>` (byte substrate) can be
+/// reinterpreted as a `DeviceBuffer<Bool>` via `view_as` without
+/// copying.
+///
+/// Used as the element type of comparison-op output tensors (`eq`, `gt`,
+/// …) and as the input element type for the logical-op family
+/// (`logical_and`, `logical_or`, `logical_xor`). Implements [`Element`]
+/// so the same `BinaryPlan<T, N>` / `UnaryPlan<T, N>` shapes extend to
+/// boolean tensors.
+#[repr(transparent)]
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct Bool(pub u8);
+
+impl Bool {
+    /// Build a [`Bool`] from a Rust `bool`. `true` becomes `1`, `false`
+    /// becomes `0`.
+    #[inline]
+    pub const fn new(b: bool) -> Self {
+        Self(b as u8)
+    }
+
+    /// Convert to a Rust `bool` using the PyTorch convention: any
+    /// non-zero byte is true.
+    #[inline]
+    pub const fn to_bool(self) -> bool {
+        self.0 != 0
+    }
+}
+
+// SAFETY: Bool is #[repr(transparent)] around u8, which is DeviceRepr.
+// Same ABI, same Copy + 'static bounds.
+unsafe impl DeviceRepr for Bool {}
+
+// ============================================================================
+// Complex element types — implements Element directly
+// ============================================================================
+
+/// Single-precision complex element. `#[repr(C)]` struct of two `f32`
+/// fields (real, imag) — ABI-compatible with cuFFT's `cufftComplex`
+/// (which is itself an alias for CUDA's `float2`), with NumPy's
+/// `complex64`, and with PyTorch's `torch.complex64`.
+///
+/// Used by the FFT op family (Milestone 6.4) as the element type for
+/// spectrum-domain tensors. Complex arithmetic is not a kernel concern
+/// at this layer — Rust callers build / inspect complex values via the
+/// `re` / `im` fields and pass `DeviceBuffer<Complex32>` directly to
+/// the FFT plans, which reinterpret them as `cufftComplex` over the
+/// FFI boundary.
+///
+/// Layout invariant: `Complex32 { re, im }` and `cufftComplex { x, y }`
+/// share identical byte storage on every platform CUDA supports
+/// (`(f32, f32)` is 8-byte aligned, naturally padded). A
+/// `DeviceBuffer<Complex32>` can be reinterpreted as a
+/// `DeviceBuffer<cufftComplex>` via `view_as` without copying.
+#[repr(C)]
+#[derive(Copy, Clone, Debug, Default, PartialEq)]
+pub struct Complex32 {
+    /// Real component.
+    pub re: f32,
+    /// Imaginary component.
+    pub im: f32,
+}
+
+impl Complex32 {
+    /// Build a `Complex32` from real and imaginary `f32` parts.
+    #[inline]
+    pub const fn new(re: f32, im: f32) -> Self {
+        Self { re, im }
+    }
+}
+
+/// Double-precision complex element. `#[repr(C)]` struct of two `f64`
+/// fields — ABI-compatible with cuFFT's `cufftDoubleComplex`, NumPy's
+/// `complex128`, and PyTorch's `torch.complex128`. Sibling to
+/// [`Complex32`].
+#[repr(C)]
+#[derive(Copy, Clone, Debug, Default, PartialEq)]
+pub struct Complex64 {
+    /// Real component.
+    pub re: f64,
+    /// Imaginary component.
+    pub im: f64,
+}
+
+impl Complex64 {
+    /// Build a `Complex64` from real and imaginary `f64` parts.
+    #[inline]
+    pub const fn new(re: f64, im: f64) -> Self {
+        Self { re, im }
+    }
+}
+
+// SAFETY: Complex32 / Complex64 are #[repr(C)] structs of two FP fields
+// each, with no padding (8-byte and 16-byte natural alignment), so they
+// satisfy DeviceRepr's invariants (no uninitialized bytes, no host-side
+// resource handles, byte-for-byte transferable between host and device).
+unsafe impl DeviceRepr for Complex32 {}
+unsafe impl DeviceRepr for Complex64 {}
 
 // ============================================================================
 // Integer element family — sibling to Element
@@ -592,11 +775,27 @@ pub enum ElementKind {
     /// Unsigned 8-bit integer. Maps to the [`U8`] wrapper type. Same
     /// kernel family as [`S8`] with unsigned operands.
     U8,
-    /// Signed 32-bit integer. Surfaced only as the accumulator type of
-    /// integer GEMM SKUs in [`crate::PrecisionGuarantee::accumulator`];
-    /// not a valid kernel *input* element type and has no corresponding
-    /// [`IntElement`] impl.
+    /// Signed 32-bit integer. Maps to the `i32` Rust type via the
+    /// [`Element`] impl. Two roles:
+    /// 1. **Accumulator marker** for integer GEMM SKUs (reported by
+    ///    [`crate::PrecisionGuarantee::accumulator`]).
+    /// 2. **Input element** for elementwise integer arithmetic
+    ///    (bitwise / comparison / scan ops). The same plan shapes used
+    ///    for floating-point inputs extend to `i32` via the [`Element`]
+    ///    impl.
     I32,
+    /// Signed 64-bit integer. Maps to the `i64` Rust type via the
+    /// [`Element`] impl. Used as an input element for the elementwise
+    /// integer arithmetic family (bitwise / comparison / scan ops).
+    /// PyTorch's default integer tensor dtype.
+    I64,
+    /// Boolean (1-byte storage). Maps to the [`Bool`] wrapper type via
+    /// the [`Element`] impl. Used as the input element for the logical-
+    /// op family (`logical_and` / `logical_or` / `logical_xor`) and as
+    /// the output element for the comparison-op family
+    /// (`eq` / `ne` / `gt` / `ge` / `lt` / `le`). Truthiness convention
+    /// follows PyTorch: 0 = false, any non-zero byte = true.
+    Bool,
     /// 8-bit floating-point, E4M3 encoding (1 sign + 4 exponent + 3
     /// mantissa, bias 7, max-finite 448, no infinities). Maps to the
     /// [`Fp8E4M3`] wrapper type. Routed through Ada / Hopper FP8 tensor
@@ -626,6 +825,17 @@ pub enum ElementKind {
     /// Distinct programming model: the output is the raw popcount
     /// accumulator (s32), not a re-quantized b1.
     Bin,
+    /// Single-precision complex — interleaved real/imag pair of `f32`
+    /// (`#[repr(C)]`). Maps to the [`Complex32`] wrapper type. Used by
+    /// the FFT op family (Milestone 6.4) for spectrum-domain tensors.
+    /// ABI-compatible with cuFFT's `cufftComplex`, NumPy's `complex64`,
+    /// and PyTorch's `torch.complex64`.
+    Complex32,
+    /// Double-precision complex — interleaved real/imag pair of `f64`.
+    /// Maps to the [`Complex64`] wrapper type. ABI-compatible with
+    /// cuFFT's `cufftDoubleComplex`, NumPy's `complex128`, and
+    /// PyTorch's `torch.complex128`.
+    Complex64,
 }
 
 /// Math precision used by the FMA / tensor-core instruction.

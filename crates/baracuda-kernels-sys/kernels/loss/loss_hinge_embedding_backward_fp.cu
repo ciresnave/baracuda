@@ -1,0 +1,6 @@
+// baracuda-kernels Milestone 5.3 — HingeEmbedding BW for FP types.
+#include "../include/baracuda_loss.cuh"
+BARACUDA_KERNELS_LOSS_HINGE_EMBEDDING_BW_INSTANTIATE(loss_hinge_embedding_backward_f32, float)
+BARACUDA_KERNELS_LOSS_HINGE_EMBEDDING_BW_INSTANTIATE(loss_hinge_embedding_backward_f16, __half)
+BARACUDA_KERNELS_LOSS_HINGE_EMBEDDING_BW_INSTANTIATE(loss_hinge_embedding_backward_bf16, __nv_bfloat16)
+BARACUDA_KERNELS_LOSS_HINGE_EMBEDDING_BW_INSTANTIATE(loss_hinge_embedding_backward_f64, double)

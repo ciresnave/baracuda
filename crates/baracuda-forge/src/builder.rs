@@ -545,25 +545,46 @@ impl KernelBuilder {
             cache.save(&self.out_dir)?;
         }
 
-        let mut command = Command::new(&toolkit.nvcc_path);
-        command
-            .arg("--lib")
-            .arg("-o")
-            .arg(&out_file)
-            .args(&all_obj_files);
+        // Linking with many objects can exceed Windows' 32 KiB
+        // command-line limit (one large baracuda-kernels-sys build
+        // pushed past this with 217 .cu files, and `nvcc --lib`
+        // doesn't accept response files — it errors with
+        // `Don't know what to do with '@file'`).
+        //
+        // On MSVC hosts we work around this by invoking the MSVC
+        // archiver (`lib.exe`) directly with the object list passed
+        // via a response file (`@file`), which `lib.exe` natively
+        // supports for arguments of arbitrary length. nvcc's `--lib`
+        // would have shelled out to `lib.exe` anyway, so this
+        // preserves the same archive format. We discover `lib.exe`
+        // by querying `vswhere.exe` for the most recent MSVC install
+        // (matching the layout the Rust MSVC toolchain target uses).
+        //
+        // On non-MSVC hosts argv limits are much higher (~2 MiB on
+        // Linux) so we keep the simpler nvcc --lib path there.
+        if is_msvc {
+            archive_with_msvc_lib(&out_file, &all_obj_files, &self.out_dir)?;
+        } else {
+            let mut command = Command::new(&toolkit.nvcc_path);
+            command
+                .arg("--lib")
+                .arg("-o")
+                .arg(&out_file)
+                .args(&all_obj_files);
 
-        let output = command
-            .spawn()
-            .map_err(|e| Error::NvccNotFound(format!("Failed to spawn nvcc for linking: {}", e)))?
-            .wait_with_output()
-            .map_err(|e| Error::LinkingFailed(e.to_string()))?;
+            let output = command
+                .spawn()
+                .map_err(|e| Error::NvccNotFound(format!("Failed to spawn nvcc for linking: {}", e)))?
+                .wait_with_output()
+                .map_err(|e| Error::LinkingFailed(e.to_string()))?;
 
-        if !output.status.success() {
-            return Err(Error::LinkingFailed(format!(
-                "nvcc linking error:\n{}\n{}",
-                String::from_utf8_lossy(&output.stdout),
-                String::from_utf8_lossy(&output.stderr)
-            )));
+            if !output.status.success() {
+                return Err(Error::LinkingFailed(format!(
+                    "nvcc linking error:\n{}\n{}",
+                    String::from_utf8_lossy(&output.stdout),
+                    String::from_utf8_lossy(&output.stderr)
+                )));
+            }
         }
 
         Ok(())
@@ -786,6 +807,151 @@ impl KernelBuilder {
 
         self.out_dir.join(format!("{}-{:x}.o", stem, hash))
     }
+}
+
+/// Locate the MSVC archiver (`lib.exe`) at build time.
+///
+/// We prefer the host-architecture build that matches `target_arch`
+/// (since that's what nvcc would have picked). The discovery walks
+/// the same paths cc-rs / cargo's MSVC setup walks, in priority order:
+///
+/// 1. `BARACUDA_FORGE_LIB_EXE` env var (escape hatch).
+/// 2. `vswhere.exe` (the canonical MS-supplied locator).
+/// 3. PATH (`lib.exe` may already be on PATH in dev-shell builds).
+///
+/// Returns the absolute path on success; an `Err` describing what
+/// was tried otherwise.
+fn find_msvc_lib_exe() -> Result<PathBuf> {
+    if let Ok(p) = std::env::var("BARACUDA_FORGE_LIB_EXE") {
+        let pb = PathBuf::from(&p);
+        if pb.exists() {
+            return Ok(pb);
+        }
+        return Err(Error::LinkingFailed(format!(
+            "BARACUDA_FORGE_LIB_EXE points to a non-existent file: {}",
+            p
+        )));
+    }
+
+    // Probe vswhere at its fixed install location.
+    let vswhere = PathBuf::from(
+        r"C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe",
+    );
+    if vswhere.exists() {
+        let output = Command::new(&vswhere)
+            .args([
+                "-latest",
+                "-products",
+                "*",
+                "-requires",
+                "Microsoft.VisualStudio.Component.VC.Tools.x86.x64",
+                "-property",
+                "installationPath",
+            ])
+            .output()
+            .ok();
+        if let Some(out) = output {
+            if out.status.success() {
+                let install_path = String::from_utf8_lossy(&out.stdout).trim().to_string();
+                if !install_path.is_empty() {
+                    let install = PathBuf::from(&install_path);
+                    let version_file = install.join(
+                        r"VC\Auxiliary\Build\Microsoft.VCToolsVersion.default.txt",
+                    );
+                    if let Ok(ver) = std::fs::read_to_string(&version_file) {
+                        let ver = ver.trim();
+                        // Match host arch — assume x64 (current target arch on
+                        // every CUDA-supported Windows host today).
+                        let lib = install
+                            .join("VC")
+                            .join("Tools")
+                            .join("MSVC")
+                            .join(ver)
+                            .join("bin")
+                            .join("Hostx64")
+                            .join("x64")
+                            .join("lib.exe");
+                        if lib.exists() {
+                            return Ok(lib);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Fall back to PATH lookup.
+    if Command::new("lib.exe").arg("/?").output().is_ok() {
+        return Ok(PathBuf::from("lib.exe"));
+    }
+
+    Err(Error::LinkingFailed(
+        "could not locate MSVC `lib.exe`. Set `BARACUDA_FORGE_LIB_EXE` to its \
+         full path, or run from a Visual Studio Developer Command Prompt so \
+         `lib.exe` is on PATH."
+            .to_string(),
+    ))
+}
+
+/// Invoke `lib.exe` to assemble a static archive from `obj_files`,
+/// passing the object list via a response file (`@file`) to avoid
+/// Windows' command-line-length limit.
+fn archive_with_msvc_lib(
+    out_file: &Path,
+    obj_files: &[PathBuf],
+    out_dir: &Path,
+) -> Result<()> {
+    let lib_exe = find_msvc_lib_exe()?;
+
+    let response_file = out_dir.join(".lib_response.txt");
+    {
+        let mut f = std::fs::File::create(&response_file).map_err(|e| {
+            Error::LinkingFailed(format!(
+                "failed to create lib response file {}: {}",
+                response_file.display(),
+                e
+            ))
+        })?;
+        for obj in obj_files {
+            // Each path on its own line, surrounded by quotes so any
+            // embedded spaces survive lib.exe's response-file parser.
+            writeln!(f, "\"{}\"", obj.display()).map_err(|e| {
+                Error::LinkingFailed(format!(
+                    "failed to write lib response file: {}",
+                    e
+                ))
+            })?;
+        }
+    }
+
+    let mut command = Command::new(&lib_exe);
+    command
+        .arg("/NOLOGO")
+        .arg(format!("/OUT:{}", out_file.display()))
+        .arg(format!("@{}", response_file.display()));
+
+    let output = command
+        .spawn()
+        .map_err(|e| {
+            Error::NvccNotFound(format!(
+                "Failed to spawn {} for linking: {}",
+                lib_exe.display(),
+                e
+            ))
+        })?
+        .wait_with_output()
+        .map_err(|e| Error::LinkingFailed(e.to_string()))?;
+
+    if !output.status.success() {
+        return Err(Error::LinkingFailed(format!(
+            "{} archiving error:\n{}\n{}",
+            lib_exe.display(),
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        )));
+    }
+
+    Ok(())
 }
 
 /// Output from PTX compilation.

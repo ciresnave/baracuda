@@ -49,6 +49,7 @@ fn main() {
         // Bespoke header includes (cp.async / mma.sync helpers, dtype
         // wrappers, warp-reduction primitives, ...).
         .include_path("kernels/include")
+        .watch(collect_header_files())
         .out_dir(&out_dir);
 
     if cfg!(feature = "sm90a") {
@@ -69,6 +70,36 @@ fn main() {
     // CUDA Runtime — kernel objects reference cudart helpers (streams etc.).
     println!("cargo:rustc-link-lib=dylib=cudart");
 
+    // cuRAND — Phase 4.5 random / sampling family routes its uniform and
+    // normal generators through cuRAND. On Linux this resolves to
+    // `libcurand.so`; on Windows to `curand.dll` (loader picks the
+    // versioned `curand64_*.dll` from `CUDA_PATH\bin`).
+    println!("cargo:rustc-link-lib=dylib=curand");
+
+    // cuSOLVER — Milestone 6.3 dense linalg family (Cholesky / LU / QR /
+    // SVD). cuSOLVER's dense API itself depends on cuBLAS for the
+    // underlying BLAS calls (e.g. `geqrf` defers to `gemm` / `trsm`),
+    // so both libraries must be on the link line. On Linux these
+    // resolve to `libcusolver.so` / `libcublas.so`; on Windows to
+    // `cusolver64_*.dll` / `cublas64_*.dll` from `CUDA_PATH\bin`.
+    println!("cargo:rustc-link-lib=dylib=cusolver");
+    println!("cargo:rustc-link-lib=dylib=cublas");
+
+    // cuFFT — Milestone 6.4 FFT family (FFT / IFFT / RFFT / IRFFT plus
+    // bespoke fftshift / ifftshift). On Linux resolves to `libcufft.so`;
+    // on Windows to `cufft64_*.dll` from `CUDA_PATH\bin`.
+    println!("cargo:rustc-link-lib=dylib=cufft");
+
+    // CUDA Driver API — the linalg/qr plan uses `cuMemcpyDtoHAsync_v2`
+    // / `cuMemcpyHtoDAsync_v2` directly to round-trip the post-`geqrf`
+    // matrix through host memory so we can zero its strict lower
+    // triangle and stage an identity for the `ormqr` Q materialization.
+    // baracuda-driver loads these via libloading at runtime; this
+    // crate statically links them through the platform's `cuda` lib
+    // (`libcuda.so` on Linux, `cuda.lib` referencing `nvcuda.dll` on
+    // Windows — the CUDA toolkit ships both).
+    println!("cargo:rustc-link-lib=dylib=cuda");
+
     // C++ runtime on Linux — the static lib pulls in libstdc++ via
     // template instantiations.
     if cfg!(target_os = "linux") {
@@ -84,6 +115,391 @@ fn collect_kernel_files() -> Vec<&'static str> {
     // not-yet-present file so the workspace stays buildable during
     // Phase 0 scaffolding.
     if cfg!(any(feature = "sm80", feature = "sm89", feature = "sm90a")) {
+        // Phase 3 — elementwise / shape / layout kernels. Arch-agnostic
+        // pointwise compute (no tensor cores) so the same set ships
+        // across every arch feature.
+        for f in &[
+            "elementwise/binary_add_fp.cu",
+            "elementwise/binary_sub_fp.cu",
+            "elementwise/binary_mul_fp.cu",
+            "elementwise/binary_div_fp.cu",
+            "elementwise/binary_pow_fp.cu",
+            "elementwise/binary_atan2_fp.cu",
+            "elementwise/binary_hypot_fp.cu",
+            "elementwise/binary_copysign_fp.cu",
+            "elementwise/binary_nextafter_fp.cu",
+            "elementwise/binary_fmin_fp.cu",
+            "elementwise/binary_fmax_fp.cu",
+            "elementwise/binary_maximum_fp.cu",
+            "elementwise/binary_minimum_fp.cu",
+            "elementwise/binary_floor_divide_fp.cu",
+            "elementwise/binary_mod_fp.cu",
+            "elementwise/binary_remainder_fp.cu",
+            // Phase 3.3 — integer / bool elementwise binary ops.
+            // Contig-only today; strided variants deferred per the
+            // milestone scope.
+            "elementwise/binary_bitwise_and_int.cu",
+            "elementwise/binary_bitwise_or_int.cu",
+            "elementwise/binary_bitwise_xor_int.cu",
+            "elementwise/binary_bitwise_left_shift_int.cu",
+            "elementwise/binary_bitwise_right_shift_int.cu",
+            "elementwise/binary_logical_and_bool.cu",
+            "elementwise/binary_logical_or_bool.cu",
+            "elementwise/binary_logical_xor_bool.cu",
+            "elementwise/binary_cmp_eq_fp.cu",
+            "elementwise/binary_cmp_ne_fp.cu",
+            "elementwise/binary_cmp_gt_fp.cu",
+            "elementwise/binary_cmp_ge_fp.cu",
+            "elementwise/binary_cmp_lt_fp.cu",
+            "elementwise/binary_cmp_le_fp.cu",
+            "elementwise/ternary_clamp_fp.cu",
+            "elementwise/ternary_fma_fp.cu",
+            "elementwise/ternary_addcmul_fp.cu",
+            "elementwise/ternary_addcdiv_fp.cu",
+            "elementwise/where_fp.cu",
+            "elementwise/where_backward_fp.cu",
+            // Phase 3 Category N — shape/layout trailblazers.
+            "elementwise/pad_fp.cu",
+            "elementwise/concat2_fp.cu",
+            "elementwise/permute_fp.cu",
+            "elementwise/flip_fp.cu",
+            "elementwise/roll_fp.cu",
+            "elementwise/arg_reduce_fp.cu",
+            "elementwise/repeat_fp.cu",
+            "elementwise/reduce_var_std_fp.cu",
+            "elementwise/binary_add_backward_fp.cu",
+            "elementwise/binary_sub_backward_fp.cu",
+            "elementwise/binary_mul_backward_fp.cu",
+            "elementwise/binary_div_backward_fp.cu",
+            "elementwise/binary_pow_backward_fp.cu",
+            "elementwise/binary_atan2_backward_fp.cu",
+            "elementwise/binary_hypot_backward_fp.cu",
+            "elementwise/binary_maximum_backward_fp.cu",
+            "elementwise/binary_minimum_backward_fp.cu",
+            // Phase 3 backward fanout (Milestone F): ternary backwards.
+            "elementwise/ternary_fma_backward_fp.cu",
+            "elementwise/ternary_clamp_backward_fp.cu",
+            "elementwise/ternary_addcmul_backward_fp.cu",
+            "elementwise/ternary_addcdiv_backward_fp.cu",
+            "elementwise/unary_sin_backward_fp.cu",
+            "elementwise/unary_exp_backward_fp.cu",
+            "elementwise/unary_expm1_backward_fp.cu",
+            "elementwise/unary_tanh_backward_fp.cu",
+            "elementwise/unary_sigmoid_backward_fp.cu",
+            "elementwise/unary_sqrt_backward_fp.cu",
+            "elementwise/unary_rsqrt_backward_fp.cu",
+            "elementwise/unary_log_backward_fp.cu",
+            "elementwise/unary_log1p_backward_fp.cu",
+            "elementwise/unary_log2_backward_fp.cu",
+            "elementwise/unary_log10_backward_fp.cu",
+            "elementwise/unary_atan_backward_fp.cu",
+            "elementwise/unary_cos_backward_fp.cu",
+            "elementwise/unary_tan_backward_fp.cu",
+            "elementwise/unary_sinh_backward_fp.cu",
+            "elementwise/unary_cosh_backward_fp.cu",
+            "elementwise/unary_asin_backward_fp.cu",
+            "elementwise/unary_acos_backward_fp.cu",
+            "elementwise/unary_asinh_backward_fp.cu",
+            "elementwise/unary_acosh_backward_fp.cu",
+            "elementwise/unary_atanh_backward_fp.cu",
+            "elementwise/unary_square_backward_fp.cu",
+            "elementwise/unary_cube_backward_fp.cu",
+            "elementwise/unary_exp2_backward_fp.cu",
+            "elementwise/unary_tanhshrink_backward_fp.cu",
+            "elementwise/unary_logit_backward_fp.cu",
+            "elementwise/unary_reciprocal_backward_fp.cu",
+            "elementwise/unary_erf_backward_fp.cu",
+            "elementwise/unary_erfc_backward_fp.cu",
+            "elementwise/unary_relu_backward_fp.cu",
+            "elementwise/unary_hardtanh_backward_fp.cu",
+            "elementwise/unary_relu6_backward_fp.cu",
+            "elementwise/unary_hardsigmoid_backward_fp.cu",
+            "elementwise/unary_hardswish_backward_fp.cu",
+            "elementwise/unary_softplus_backward_fp.cu",
+            "elementwise/unary_silu_backward_fp.cu",
+            "elementwise/unary_mish_backward_fp.cu",
+            "elementwise/unary_gelu_backward_fp.cu",
+            "elementwise/unary_gelu_tanh_backward_fp.cu",
+            "elementwise/unary_selu_backward_fp.cu",
+            "elementwise/reduce_sum_backward_fp.cu",
+            "elementwise/reduce_mean_backward_fp.cu",
+            "elementwise/reduce_max_min_backward_fp.cu",
+            "elementwise/reduce_prod_backward_fp.cu",
+            "elementwise/reduce_norm2_backward_fp.cu",
+            "elementwise/reduce_logsumexp_backward_fp.cu",
+            "elementwise/reduce_var_std_backward_fp.cu",
+            // Phase 4 — scans (Category F).
+            "elementwise/scan_cumsum_fp.cu",
+            "elementwise/scan_cumprod_fp.cu",
+            "elementwise/scan_cummax_fp.cu",
+            "elementwise/scan_cummin_fp.cu",
+            "elementwise/scan_cumprod_backward_fp.cu",
+            "elementwise/scan_cummax_min_backward_fp.cu",
+            "elementwise/scan_log_cumsum_exp_fp.cu",
+            "elementwise/scan_log_cumsum_exp_backward_fp.cu",
+            // Phase 5 — softmax family (Category H).
+            "softmax/softmax_fp.cu",
+            "softmax/softmax_backward_fp.cu",
+            "softmax/log_softmax_fp.cu",
+            "softmax/log_softmax_backward_fp.cu",
+            // Milestone 5.4 — softmax family completion: GumbelSoftmax +
+            // Sparsemax. GumbelSoftmax BW reuses softmax_backward_fp_kernel
+            // (saved soft output), so no separate BW CU file.
+            "softmax/gumbel_softmax_fp.cu",
+            "softmax/sparsemax_fp.cu",
+            "softmax/sparsemax_backward_fp.cu",
+            // Phase 5 — normalization family (Category G). RMSNorm /
+            // LayerNorm (FW + BW × 4 FP dtypes). BW launchers fire two
+            // kernels: the per-cell dx kernel and (when affine grads are
+            // requested) a one-block-per-feature reduction kernel for
+            // dgamma / dbeta — fully deterministic, no atomic-adds.
+            "norm/rms_norm_fp.cu",
+            "norm/rms_norm_backward_fp.cu",
+            "norm/layer_norm_fp.cu",
+            "norm/layer_norm_backward_fp.cu",
+            // Phase 5.1 — Norm family completion: BatchNorm / GroupNorm
+            // (FW + BW × 4 FP dtypes). InstanceNorm is a Rust-side thin
+            // wrapper around GroupNorm with num_groups == num_channels —
+            // no separate kernel.
+            "norm/batch_norm_fp.cu",
+            "norm/batch_norm_backward_fp.cu",
+            "norm/group_norm_fp.cu",
+            "norm/group_norm_backward_fp.cu",
+            // Phase 5 — loss family (Category R). MSE / NLL / CrossEntropy
+            // / BCE / KLDiv (FW + BW × 4 FP dtypes). Per-cell or per-row
+            // kernel + single-block tree reduction for Mean/Sum modes;
+            // direct per-cell output for None mode. Deterministic
+            // (no atomicAdd).
+            "loss/loss_mse_fp.cu",
+            "loss/loss_mse_backward_fp.cu",
+            "loss/loss_bce_fp.cu",
+            "loss/loss_bce_backward_fp.cu",
+            "loss/loss_kl_div_fp.cu",
+            "loss/loss_kl_div_backward_fp.cu",
+            "loss/loss_nll_fp.cu",
+            "loss/loss_nll_backward_fp.cu",
+            "loss/loss_cross_entropy_fp.cu",
+            "loss/loss_cross_entropy_backward_fp.cu",
+            // Milestone 5.2 — Tier-1 losses.
+            "loss/loss_l1_fp.cu",
+            "loss/loss_l1_backward_fp.cu",
+            "loss/loss_smooth_l1_fp.cu",
+            "loss/loss_smooth_l1_backward_fp.cu",
+            "loss/loss_huber_fp.cu",
+            "loss/loss_huber_backward_fp.cu",
+            "loss/loss_bce_with_logits_fp.cu",
+            "loss/loss_bce_with_logits_backward_fp.cu",
+            "loss/loss_poisson_nll_fp.cu",
+            "loss/loss_poisson_nll_backward_fp.cu",
+            "loss/loss_gaussian_nll_fp.cu",
+            "loss/loss_gaussian_nll_backward_fp.cu",
+            "loss/loss_cross_entropy_soft_fp.cu",
+            "loss/loss_cross_entropy_soft_backward_fp.cu",
+            // Milestone 5.3 — Tier-2 margin / embedding losses.
+            "loss/loss_margin_ranking_fp.cu",
+            "loss/loss_margin_ranking_backward_fp.cu",
+            "loss/loss_hinge_embedding_fp.cu",
+            "loss/loss_hinge_embedding_backward_fp.cu",
+            "loss/loss_cosine_embedding_fp.cu",
+            "loss/loss_cosine_embedding_backward_fp.cu",
+            "loss/loss_triplet_margin_fp.cu",
+            "loss/loss_triplet_margin_backward_fp.cu",
+            "loss/loss_multi_margin_fp.cu",
+            "loss/loss_multi_margin_backward_fp.cu",
+            "loss/loss_multilabel_margin_fp.cu",
+            "loss/loss_multilabel_margin_backward_fp.cu",
+            "loss/loss_multilabel_soft_margin_fp.cu",
+            "loss/loss_multilabel_soft_margin_backward_fp.cu",
+            // Milestone 5.5 — CTCLoss (Phase 5 final deferral).
+            "loss/loss_ctc_fp.cu",
+            "loss/loss_ctc_backward_fp.cu",
+            // Milestone 5.3 — PReLU FW + BW.
+            "elementwise/prelu_fp.cu",
+            "elementwise/prelu_backward_fp.cu",
+            // Phase 3 Category N — shape/layout BWs.
+            "elementwise/pad_constant_backward_fp.cu",
+            "elementwise/repeat_backward_fp.cu",
+            "elementwise/concat2_backward_fp.cu",
+            // Phase 4 — reduction trailblazer + fanout
+            // (Sum / Mean / Max / Min / Prod, each × {f32, f16, bf16, f64}).
+            "elementwise/reduce_sum_fp.cu",
+            "elementwise/reduce_mean_fp.cu",
+            "elementwise/reduce_max_fp.cu",
+            "elementwise/reduce_min_fp.cu",
+            "elementwise/reduce_prod_fp.cu",
+            "elementwise/reduce_norm2_fp.cu",
+            "elementwise/reduce_logsumexp_fp.cu",
+            // Phase 4 deferral 4.4 — heterogeneous-output reductions
+            // (Any / All → Bool output; CountNonzero → i64 output).
+            // 7 input dtypes each: {f32, f16, bf16, f64, i32, i64, Bool}.
+            "elementwise/reduce_any_fp_int_bool.cu",
+            "elementwise/reduce_all_fp_int_bool.cu",
+            "elementwise/reduce_count_nonzero_fp_int_bool.cu",
+            "elementwise/trace_fp.cu",
+            "elementwise/unary_neg_fp.cu",
+            "elementwise/unary_abs_fp.cu",
+            "elementwise/unary_sign_fp.cu",
+            "elementwise/unary_reciprocal_fp.cu",
+            "elementwise/unary_square_fp.cu",
+            "elementwise/unary_cube_fp.cu",
+            // Phase 3 transcendental fanout — 12 ops × 4 FP dtypes ×
+            // contig+strided. All use the f32-detour pattern for f16 /
+            // bf16; f32 / f64 use the matching libm intrinsics.
+            "elementwise/unary_sqrt_fp.cu",
+            "elementwise/unary_rsqrt_fp.cu",
+            "elementwise/unary_exp_fp.cu",
+            "elementwise/unary_expm1_fp.cu",
+            "elementwise/unary_log_fp.cu",
+            "elementwise/unary_log1p_fp.cu",
+            "elementwise/unary_sin_fp.cu",
+            "elementwise/unary_cos_fp.cu",
+            "elementwise/unary_tan_fp.cu",
+            "elementwise/unary_sinh_fp.cu",
+            "elementwise/unary_cosh_fp.cu",
+            "elementwise/unary_tanh_fp.cu",
+            // Phase 3 activation fanout — 10 ops × 4 FP dtypes ×
+            // contig+strided. Same f32-detour pattern as the
+            // transcendentals; piecewise-linear ops (hardswish /
+            // hardsigmoid / hardtanh) bypass the detour's transcendental
+            // cost but use it for uniform dispatch.
+            "elementwise/unary_relu_fp.cu",
+            "elementwise/unary_gelu_fp.cu",
+            "elementwise/unary_gelu_tanh_fp.cu",
+            "elementwise/unary_silu_fp.cu",
+            "elementwise/unary_mish_fp.cu",
+            "elementwise/unary_sigmoid_fp.cu",
+            "elementwise/unary_softplus_fp.cu",
+            "elementwise/unary_hardswish_fp.cu",
+            "elementwise/unary_hardsigmoid_fp.cu",
+            "elementwise/unary_hardtanh_fp.cu",
+            // Phase 3 math / rounding fanout — 15 ops × 4 FP dtypes ×
+            // contig+strided. Same f32-detour pattern as the
+            // transcendentals; floor / ceil / round / trunc / frac are
+            // bit-exact at f32 / f64 because they reduce to a single
+            // device intrinsic with no further arithmetic. Round uses
+            // the round-half-to-even convention (`rintf` / `rint`) to
+            // match PyTorch and `f32::round_ties_even`.
+            "elementwise/unary_cbrt_fp.cu",
+            "elementwise/unary_exp2_fp.cu",
+            "elementwise/unary_log2_fp.cu",
+            "elementwise/unary_log10_fp.cu",
+            "elementwise/unary_asin_fp.cu",
+            "elementwise/unary_acos_fp.cu",
+            "elementwise/unary_atan_fp.cu",
+            "elementwise/unary_asinh_fp.cu",
+            "elementwise/unary_acosh_fp.cu",
+            "elementwise/unary_atanh_fp.cu",
+            "elementwise/unary_floor_fp.cu",
+            "elementwise/unary_ceil_fp.cu",
+            "elementwise/unary_round_fp.cu",
+            "elementwise/unary_trunc_fp.cu",
+            "elementwise/unary_frac_fp.cu",
+            // Phase 3 special-function / activation fanout — 8 ops × 4
+            // FP dtypes × contig+strided. Erf / Erfc / Lgamma are pure
+            // libdevice intrinsics; Logit / Softsign / Tanhshrink / Relu6
+            // / Selu compose from libdevice transcendentals + arithmetic.
+            // All use the f32-detour pattern for f16 / bf16.
+            "elementwise/unary_erf_fp.cu",
+            "elementwise/unary_erfc_fp.cu",
+            "elementwise/unary_lgamma_fp.cu",
+            "elementwise/unary_logit_fp.cu",
+            "elementwise/unary_softsign_fp.cu",
+            "elementwise/unary_tanhshrink_fp.cu",
+            "elementwise/unary_relu6_fp.cu",
+            "elementwise/unary_selu_fp.cu",
+            // Phase 3 parameterized-activation fanout (hardcoded
+            // defaults — LeakyRelu α=0.01, ELU α=1.0, Hardshrink λ=0.5,
+            // Softshrink λ=0.5). Threshold(t, v) and PReLU need
+            // distinct plan shapes (2 params / per-channel vector) and
+            // ship in a later session.
+            "elementwise/unary_leaky_relu_fp.cu",
+            "elementwise/unary_leaky_relu_backward_fp.cu",
+            "elementwise/unary_elu_fp.cu",
+            "elementwise/unary_elu_backward_fp.cu",
+            "elementwise/unary_hardshrink_fp.cu",
+            "elementwise/unary_hardshrink_backward_fp.cu",
+            "elementwise/unary_softshrink_fp.cu",
+            "elementwise/unary_softshrink_backward_fp.cu",
+            // Phase 3 parameterized-unary / parameterized-binary plan
+            // families (Threshold / Lerp). New INSTANTIATE macros thread
+            // f32 scalar params through the kernel ABI alongside the
+            // tensor pointers — contig only, no strided variant.
+            "elementwise/unary_threshold_fp.cu",
+            "elementwise/unary_threshold_backward_fp.cu",
+            "elementwise/binary_lerp_fp.cu",
+            "elementwise/binary_lerp_backward_fp.cu",
+            // Phase 3 Category C′ — gated activations (FW + BW × 4
+            // FP dtypes × {Glu, ReGlu, SwiGlu, GeGlu}). Plan shape:
+            // input is split along `split_dim` into (a, b); output
+            // `y = a · gate(b)` is half-size along that axis. Contig
+            // only today; strided fanout follows the binary-strided
+            // pattern.
+            "elementwise/gated_swiglu_fp.cu",
+            "elementwise/gated_swiglu_backward_fp.cu",
+            "elementwise/gated_glu_fp.cu",
+            "elementwise/gated_glu_backward_fp.cu",
+            "elementwise/gated_reglu_fp.cu",
+            "elementwise/gated_reglu_backward_fp.cu",
+            "elementwise/gated_geglu_fp.cu",
+            "elementwise/gated_geglu_backward_fp.cu",
+            // Phase 4.5 — random / sampling (Category Q). Bernoulli +
+            // Dropout (FW + BW) are bespoke kernels that consume a
+            // cuRAND-generated uniform-rand buffer; Uniform / Normal go
+            // straight through cuRAND at the safe-plan layer (no .cu).
+            "random/random_bernoulli.cu",
+            "random/random_dropout_fp.cu",
+            "random/random_dropout_backward_fp.cu",
+            // Phase 6.1 — attention positional encodings (Category K).
+            // RoPE (rotary) + ALiBi (linear biases). FW + BW × 4 FP
+            // dtypes. ALiBi BW uses one-block-per-head warp-shuffle
+            // reduction for dslope; deterministic (no atomicAdd).
+            "attention/rope_fp.cu",
+            "attention/rope_backward_fp.cu",
+            "attention/alibi_fp.cu",
+            "attention/alibi_backward_fp.cu",
+            // Milestone 6.2 — naive SDPA (FW + BW × 4 FP dtypes). Three
+            // sub-kernels FW (scores / row-softmax / out), five sub-
+            // kernels BW (dV / dattn / dscores=softmax_bw / dQ / dK),
+            // all bundled behind a single launcher per direction.
+            "attention/sdpa_fp.cu",
+            "attention/sdpa_backward_fp.cu",
+            // Milestone 6.5 — KV-cache append (inference-time op). Two
+            // device-side copy kernels (K + V) per launcher, instantiated
+            // for {f32, f16, bf16, f64}. Bit-exact (pure copy). No BW.
+            "attention/kv_cache_fp.cu",
+            // Milestone 6.6 — Flash Attention SDPA (FW + BW × 4 FP dtypes).
+            // Tiled fused online-softmax FW kernel; 3-kernel deterministic
+            // BW pipeline (D = rowsum(y ⊙ dy), then dQ per q-block, then
+            // dK/dV per k-block). Br = Bc = 64, d_k = d_v ≤ 128. Saved
+            // `lse` ([B, H, Q]) replaces the saved `attn` of naive SDPA.
+            "attention/flash_sdpa_fp.cu",
+            "attention/flash_sdpa_backward_fp.cu",
+            // Milestone 6.4 — cuFFT companion kernels. fftshift /
+            // ifftshift (cuFFT has no native shift) at 4/8/16-byte cell
+            // widths covering f32 / f64 / Complex32 / Complex64; plus
+            // in-place scale-by-1/N kernels to bake PyTorch's inverse
+            // FFT normalization into the output of `cufftExec{C2C,Z2Z,
+            // C2R,Z2D}` in the inverse direction.
+            "fft/fft_shift.cu",
+            "fft/fft_shift_nd.cu",
+            "fft/fft_scale.cu",
+            // Milestone 6.14 — bespoke batched-`ormqr` + batched-QR
+            // dense Q/R materialization. Single launch per batch
+            // instead of cuSOLVER's non-batched `ormqr` looped over
+            // slots (latency-dominated regime).
+            "linalg/batched_ormqr.cu",
+            "linalg/batched_qr_materialize.cu",
+            // Milestone 6.17 — WY-blocked batched-`ormqr`. Pairs the
+            // T-build kernel + V-extraction helper with cuBLAS strided-
+            // batched GEMM at the safe-plan layer to lift the apply
+            // step from GEMV-rates to GEMM-rates.
+            "linalg/batched_ormqr_wy.cu",
+        ] {
+            if std::path::Path::new(&format!("kernels/{f}")).exists() {
+                kernels.push(*f);
+            }
+        }
+
         if cfg!(any(feature = "sm80", feature = "sm89")) {
             for f in &[
                 "gemm/gemm_s8_rrr_sm80.cu",
@@ -155,6 +571,32 @@ fn collect_kernel_files() -> Vec<&'static str> {
     }
 
     kernels
+}
+
+/// Walk `kernels/include` and gather every `.cuh` (or `.h`) file so the
+/// builder's content-hash cache invalidates when a header changes. Without
+/// this, edits to a shared header (e.g. `baracuda_loss.cuh`) don't trigger
+/// a rebuild of the `.cu` files that include it.
+fn collect_header_files() -> Vec<std::path::PathBuf> {
+    let mut headers = Vec::new();
+    let dir = std::path::Path::new("kernels/include");
+    if !dir.exists() {
+        return headers;
+    }
+    if let Ok(entries) = std::fs::read_dir(dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path
+                .extension()
+                .and_then(|e| e.to_str())
+                .map(|e| e == "cuh" || e == "h" || e == "hpp" || e == "cuhpp")
+                .unwrap_or(false)
+            {
+                headers.push(path);
+            }
+        }
+    }
+    headers
 }
 
 fn lib_static_path(out_dir: &str, name: &str) -> String {

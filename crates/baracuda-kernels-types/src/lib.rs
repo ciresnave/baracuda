@@ -32,12 +32,23 @@
 pub mod element;
 pub mod layout;
 pub mod matrix;
+pub mod ops;
 pub mod plan;
+pub mod sku;
+pub mod tensor;
 
 pub use element::{
-    BiasElement, BiasElementKind, Bin, BinElement, Element, ElementKind, F32Strict, Fp8E4M3,
-    Fp8E5M2, FpElement, IntElement, MathPrecision, S4, S8, ScalarType, U4, U8,
+    BiasElement, BiasElementKind, Bin, BinElement, Bool, Complex32, Complex64, Element,
+    ElementKind, F32Strict, Fp8E4M3, Fp8E5M2, FpElement, IntElement, MathPrecision, S4, S8,
+    ScalarType, U4, U8,
 };
 pub use layout::{ActivationKind, ArchSku, EpilogueKind, LayoutSku};
 pub use matrix::{MatrixMut, MatrixRef, VectorRef};
+pub use ops::{
+    ArgReduceKind, AttentionKind, BinaryCmpKind, BinaryKind, CrossEntropyTargetKind, FftKind,
+    FillMode, GatedActivationKind, LinalgKind, LossKind, LossReduction, NormalizationKind, PadMode,
+    RandomKind, ReduceKind, ScanKind, ShapeLayoutKind, SoftmaxKind, TernaryKind, UnaryKind,
+};
 pub use plan::{PlanPreference, PrecisionGuarantee, Workspace};
+pub use sku::{BackendKind, KernelSku, OpCategory};
+pub use tensor::{contiguous_stride, TensorMut, TensorRef};

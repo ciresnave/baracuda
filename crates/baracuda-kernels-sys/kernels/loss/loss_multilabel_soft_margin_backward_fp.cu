@@ -1,0 +1,6 @@
+// baracuda-kernels Milestone 5.3 — MultilabelSoftMargin BW for FP types.
+#include "../include/baracuda_loss.cuh"
+BARACUDA_KERNELS_LOSS_MULTILABEL_SOFT_MARGIN_BW_INSTANTIATE(loss_multilabel_soft_margin_backward_f32, float)
+BARACUDA_KERNELS_LOSS_MULTILABEL_SOFT_MARGIN_BW_INSTANTIATE(loss_multilabel_soft_margin_backward_f16, __half)
+BARACUDA_KERNELS_LOSS_MULTILABEL_SOFT_MARGIN_BW_INSTANTIATE(loss_multilabel_soft_margin_backward_bf16, __nv_bfloat16)
+BARACUDA_KERNELS_LOSS_MULTILABEL_SOFT_MARGIN_BW_INSTANTIATE(loss_multilabel_soft_margin_backward_f64, double)

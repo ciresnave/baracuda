@@ -1,6 +1,6 @@
 [package]
 name = "baracuda-kernels"
-version = "0.0.1-alpha.16"
+version = "0.0.1-alpha.21"
 description = "Unified ML op facade for the baracuda CUDA ecosystem. Exposes every primitive an ML framework would expect (union of PyTorch torch.* + nn.functional and JAX lax.* / numpy ops) through a single Plan-based Rust surface, internally dispatching to baracuda-cutlass, the baracuda-* NVIDIA-library wrappers, or bespoke baracuda-kernels-sys kernels."
 edition.workspace = true
 rust-version.workspace = true
@@ -31,6 +31,9 @@ thiserror = { workspace = true }
 
 [dev-dependencies]
 float8 = { workspace = true }
+# erf / erff for the unary GELU smoke test's CPU reference (Rust stable
+# does not expose `erf` from std).
+libm = "0.2"
 
 [package.metadata.docs.rs]
 features = ["sm80"]
