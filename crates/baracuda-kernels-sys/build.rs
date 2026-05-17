@@ -729,6 +729,58 @@ fn collect_kernel_files() -> Vec<&'static str> {
             // (op × dtype) launcher via the INSTANTIATE macros in
             // `kernels/include/baracuda_segment.cuh`.
             "segment/segment.cu",
+            // Phase 8 Milestone 8.1 — quantization family (Category P).
+            // Per-tensor + per-channel quantize / dequantize +
+            // fake_quantize (FW + BW × {f32, f64, f16, bf16} × {s8, u8}).
+            // STE-based BW recomputes the in-range mask from the saved
+            // input `x` — no separate mask tensor in the FW signature.
+            // Sub-byte packed (s4 / u4) output is deferred.
+            "quantize/per_tensor.cu",
+            "quantize/per_channel.cu",
+            "quantize/fake_quantize.cu",
+            // Phase 8 Milestone 8.2 — per-token + per-group quantize /
+            // dequantize (Category P, LLM-style activation + weight
+            // compression). FW + BW × {f32, f64, f16, bf16} × {s8, u8}
+            // for FW; BW is TIn-only (STE / straight-through). Sibling
+            // 8.1 (per-tensor / per-channel / fake_quantize) ships its
+            // own .cu files in this same directory.
+            "quantize/per_token.cu",
+            "quantize/per_group.cu",
+            // Phase 8 Milestone 8.3 — composing quantization ops
+            // (DynamicRangeQuantize + QuantizedLinear). Builds on 8.1 /
+            // 8.2 primitives — see `kernels/include/baracuda_quantize_compose.cuh`.
+            "quantize/compose.cu",
+            // Phase 8 Milestone 8.4 — GGUF block-format dequant + MMVQ
+            // (Category P). Vendored from llama.cpp via fuel-cuda-kernels.
+            // Two .cu files behind a single shared header
+            // (`kernels/include/baracuda_gguf.cuh`):
+            //   * dequantize.cu — 11 `_run` symbols, one per block format
+            //     (Q4_0/Q4_1/Q5_0/Q5_1/Q8_0 + Q2_K..Q8_K). f32 output.
+            //   * mmvq.cu — 10 `_run` symbols (no Q8_K — llama.cpp / Fuel
+            //     reserve Q8_K as a CPU-side intermediate and never wire
+            //     a Q8_K MMVQ kernel). f32 activation, f32 output.
+            "gguf/dequantize.cu",
+            "gguf/mmvq.cu",
+            // Phase 8 Milestone 8.5 — Mixture-of-Experts forward
+            // (Category V). Three fused per-token-dispatch + expert-
+            // matmul + accumulate kernels vendored from Fuel / attention.rs.
+            //   * moe/moe_gguf.cu — scalar GGUF (Q8_0 + k-quants),
+            //     f32 activations through a q8_1-staged intermediate.
+            //   * moe/moe_wmma.cu — WMMA FP weights (f16, bf16).
+            //   * moe/moe_wmma_gguf.cu — WMMA + GGUF combined hot path
+            //     (f16/bf16 activations, Q8_0 + k-quants weights).
+            // sm_70+ for the WMMA paths (already covered by every
+            // arch feature this crate exposes).
+            "moe/moe_gguf.cu",
+            "moe/moe_wmma.cu",
+            "moe/moe_wmma_gguf.cu",
+            // Phase 3 fanout — cast / fill / affine. Vendored from
+            // fuel-cuda-kernels (cast.cu / fill.cu / affine.cu) with
+            // the standard SPDX header. Contig-only fast path; baracuda's
+            // plan layer materializes strided views upstream.
+            "elementwise/cast.cu",
+            "elementwise/fill.cu",
+            "elementwise/affine.cu",
         ] {
             if std::path::Path::new(&format!("kernels/{f}")).exists() {
                 kernels.push(*f);

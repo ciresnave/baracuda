@@ -97,6 +97,12 @@ pub enum OpCategory {
     /// Includes Cholesky, LU, QR, SVD, matrix inverse, eigen-
     /// decomposition, linear solve, least-squares — the cuSOLVER family.
     Linalg,
+    /// Mixture-of-Experts inference (category V). Fused per-token
+    /// dispatch + expert matmul + accumulate. Covers FP (`MoeKind::Wmma`),
+    /// GGUF-quantized weights (`MoeKind::ScalarGguf`), and the combined
+    /// WMMA + GGUF hot path (`MoeKind::WmmaGguf`) used by quantized LLM
+    /// inference.
+    Moe,
 }
 
 /// Which underlying compute backend served a kernel SKU.

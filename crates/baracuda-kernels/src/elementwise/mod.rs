@@ -15,11 +15,13 @@
 //! Future modules: `unary` (categories B + B'), `ternary` (category D),
 //! `gated` (category C'), `shape_layout` (category N).
 
+pub mod affine;
 pub mod binary;
 pub mod binary_backward;
 pub mod binary_cmp;
 pub mod binary_param;
 pub mod binary_param_backward;
+pub mod cast;
 pub mod gated_activation;
 pub mod gated_activation_backward;
 pub mod prelu;
@@ -33,7 +35,9 @@ pub mod unary_param_backward;
 pub mod where_backward;
 pub mod where_op;
 
+pub use affine::{AffineArgs, AffineDescriptor, AffinePlan};
 pub use binary::{BinaryArgs, BinaryDescriptor, BinaryPlan};
+pub use cast::{CastArgs, CastDescriptor, CastPlan};
 pub use binary_backward::{BinaryBackwardArgs, BinaryBackwardDescriptor, BinaryBackwardPlan};
 pub use binary_cmp::{BinaryCmpArgs, BinaryCmpDescriptor, BinaryCmpPlan};
 pub use binary_param::{BinaryParamArgs, BinaryParamDescriptor, BinaryParamPlan};

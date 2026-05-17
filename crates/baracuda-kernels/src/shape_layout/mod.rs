@@ -13,6 +13,7 @@
 
 pub mod concat;
 pub mod concat_backward;
+pub mod fill;
 pub mod flip;
 pub mod flip_backward;
 pub mod pad;
@@ -25,6 +26,7 @@ pub mod roll;
 pub mod roll_backward;
 
 pub use concat::{ConcatArgs, ConcatDescriptor, ConcatPlan};
+pub use fill::{FillArgs, FillDescriptor, FillPlan};
 pub use concat_backward::{
     ConcatBackwardArgs, ConcatBackwardDescriptor, ConcatBackwardPlan,
 };

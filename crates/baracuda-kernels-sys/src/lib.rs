@@ -28970,3 +28970,1980 @@ unsafe extern "C" {
         stream: *mut c_void,
     ) -> i32;
 }
+
+// ============================================================================
+// Phase 8 Milestone 8.1 — per-tensor + per-channel quantize / dequantize
+// + fake_quantize (Category P).
+// ============================================================================
+//
+// FFI shape:
+//   per-tensor FW    : (numel, scale, zero_point, qmin, qmax, x, q, ws, wsb, stream)
+//   per-tensor BW    : (numel, scale, zero_point, qmin, qmax, x, dy, dx, ws, wsb, stream)
+//   dequant FW       : (numel, scale, zero_point, q, x, ws, wsb, stream)
+//   dequant BW       : (numel, scale, dy, dq, ws, wsb, stream)
+//   per-channel FW   : (numel, shape4, axis, qmin, qmax, x, scale, zp, q, ws, wsb, stream)
+//   per-channel BW   : (numel, shape4, axis, qmin, qmax, x, scale, zp, dy, dx, ws, wsb, stream)
+//   pc dequant FW    : (numel, shape4, axis, q, scale, zp, x, ws, wsb, stream)
+//   pc dequant BW    : (numel, shape4, axis, scale, dy, dq, ws, wsb, stream)
+//   fake_quantize FW : (numel, scale, zero_point, qmin, qmax, x, y, ws, wsb, stream)
+//   fake_quantize BW : (numel, scale, zero_point, qmin, qmax, x, dy, dx, ws, wsb, stream)
+//
+// The `scale` parameter is `f32` for f32 / f16 / bf16 inputs and `f64`
+// for f64 inputs. The `_f64` symbol suffix marks the f64-scale flavor.
+// `zero_point` is always i32. Per-channel kernels receive scale[] / zp[]
+// as device pointers of length C (the extent along `axis`).
+//
+// STE BW convention: the "in-range mask" is recomputed in BW from the
+// saved input `x` plus scale/zp — no separate mask tensor.
+
+#[cfg(any(feature = "sm80", feature = "sm89", feature = "sm90a"))]
+unsafe extern "C" {
+    // ---------- quantize_per_tensor FW (8 SKUs) ----------
+
+    /// `q = clamp(round(x/scale)+zp, qmin, qmax)`. f32 input, s8 output.
+    pub fn baracuda_kernels_quantize_per_tensor_f32_s8_run(
+        numel: i64,
+        scale: f32,
+        zero_point: i32,
+        q_min: i32,
+        q_max: i32,
+        x: *const c_void,
+        q: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `quantize_per_tensor` — f32 → u8.
+    pub fn baracuda_kernels_quantize_per_tensor_f32_u8_run(
+        numel: i64, scale: f32, zero_point: i32, q_min: i32, q_max: i32,
+        x: *const c_void, q: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// `quantize_per_tensor` — f16 → s8.
+    pub fn baracuda_kernels_quantize_per_tensor_f16_s8_run(
+        numel: i64, scale: f32, zero_point: i32, q_min: i32, q_max: i32,
+        x: *const c_void, q: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// `quantize_per_tensor` — f16 → u8.
+    pub fn baracuda_kernels_quantize_per_tensor_f16_u8_run(
+        numel: i64, scale: f32, zero_point: i32, q_min: i32, q_max: i32,
+        x: *const c_void, q: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// `quantize_per_tensor` — bf16 → s8.
+    pub fn baracuda_kernels_quantize_per_tensor_bf16_s8_run(
+        numel: i64, scale: f32, zero_point: i32, q_min: i32, q_max: i32,
+        x: *const c_void, q: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// `quantize_per_tensor` — bf16 → u8.
+    pub fn baracuda_kernels_quantize_per_tensor_bf16_u8_run(
+        numel: i64, scale: f32, zero_point: i32, q_min: i32, q_max: i32,
+        x: *const c_void, q: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// `quantize_per_tensor` — f64 → s8 (f64 scale).
+    pub fn baracuda_kernels_quantize_per_tensor_f64_s8_run(
+        numel: i64, scale: f64, zero_point: i32, q_min: i32, q_max: i32,
+        x: *const c_void, q: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// `quantize_per_tensor` — f64 → u8 (f64 scale).
+    pub fn baracuda_kernels_quantize_per_tensor_f64_u8_run(
+        numel: i64, scale: f64, zero_point: i32, q_min: i32, q_max: i32,
+        x: *const c_void, q: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    // ---------- quantize_per_tensor BW (STE; 4 SKUs, FP-typed) ----------
+
+    /// `dx = (dy / scale) * in_range_mask(x)`. f32.
+    pub fn baracuda_kernels_quantize_per_tensor_backward_f32_run(
+        numel: i64, scale: f32, zero_point: i32, q_min: i32, q_max: i32,
+        x: *const c_void, dy: *const c_void, dx: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// `quantize_per_tensor_backward` — f16.
+    pub fn baracuda_kernels_quantize_per_tensor_backward_f16_run(
+        numel: i64, scale: f32, zero_point: i32, q_min: i32, q_max: i32,
+        x: *const c_void, dy: *const c_void, dx: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// `quantize_per_tensor_backward` — bf16.
+    pub fn baracuda_kernels_quantize_per_tensor_backward_bf16_run(
+        numel: i64, scale: f32, zero_point: i32, q_min: i32, q_max: i32,
+        x: *const c_void, dy: *const c_void, dx: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// `quantize_per_tensor_backward` — f64 (f64 scale).
+    pub fn baracuda_kernels_quantize_per_tensor_backward_f64_run(
+        numel: i64, scale: f64, zero_point: i32, q_min: i32, q_max: i32,
+        x: *const c_void, dy: *const c_void, dx: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    // ---------- dequantize_per_tensor FW (8 SKUs) ----------
+
+    /// `x = scale * (q - zp)`. s8 → f32.
+    pub fn baracuda_kernels_dequantize_per_tensor_f32_s8_run(
+        numel: i64, scale: f32, zero_point: i32,
+        q: *const c_void, x: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// `dequantize_per_tensor` — u8 → f32.
+    pub fn baracuda_kernels_dequantize_per_tensor_f32_u8_run(
+        numel: i64, scale: f32, zero_point: i32,
+        q: *const c_void, x: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// `dequantize_per_tensor` — s8 → f16.
+    pub fn baracuda_kernels_dequantize_per_tensor_f16_s8_run(
+        numel: i64, scale: f32, zero_point: i32,
+        q: *const c_void, x: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// `dequantize_per_tensor` — u8 → f16.
+    pub fn baracuda_kernels_dequantize_per_tensor_f16_u8_run(
+        numel: i64, scale: f32, zero_point: i32,
+        q: *const c_void, x: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// `dequantize_per_tensor` — s8 → bf16.
+    pub fn baracuda_kernels_dequantize_per_tensor_bf16_s8_run(
+        numel: i64, scale: f32, zero_point: i32,
+        q: *const c_void, x: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// `dequantize_per_tensor` — u8 → bf16.
+    pub fn baracuda_kernels_dequantize_per_tensor_bf16_u8_run(
+        numel: i64, scale: f32, zero_point: i32,
+        q: *const c_void, x: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// `dequantize_per_tensor` — s8 → f64.
+    pub fn baracuda_kernels_dequantize_per_tensor_f64_s8_run(
+        numel: i64, scale: f64, zero_point: i32,
+        q: *const c_void, x: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// `dequantize_per_tensor` — u8 → f64.
+    pub fn baracuda_kernels_dequantize_per_tensor_f64_u8_run(
+        numel: i64, scale: f64, zero_point: i32,
+        q: *const c_void, x: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    // ---------- dequantize_per_tensor BW (4 SKUs, FP-typed) ----------
+
+    /// `dq = dy * scale`. f32.
+    pub fn baracuda_kernels_dequantize_per_tensor_backward_f32_run(
+        numel: i64, scale: f32,
+        dy: *const c_void, dq: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// `dequantize_per_tensor_backward` — f16.
+    pub fn baracuda_kernels_dequantize_per_tensor_backward_f16_run(
+        numel: i64, scale: f32,
+        dy: *const c_void, dq: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// `dequantize_per_tensor_backward` — bf16.
+    pub fn baracuda_kernels_dequantize_per_tensor_backward_bf16_run(
+        numel: i64, scale: f32,
+        dy: *const c_void, dq: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// `dequantize_per_tensor_backward` — f64.
+    pub fn baracuda_kernels_dequantize_per_tensor_backward_f64_run(
+        numel: i64, scale: f64,
+        dy: *const c_void, dq: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    // ---------- fake_quantize FW + BW (4 + 4 SKUs) ----------
+
+    /// `y = scale * (clamp(round(x/scale)+zp, qmin, qmax) - zp)`. f32.
+    pub fn baracuda_kernels_fake_quantize_f32_run(
+        numel: i64, scale: f32, zero_point: i32, q_min: i32, q_max: i32,
+        x: *const c_void, y: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// `fake_quantize` — f16.
+    pub fn baracuda_kernels_fake_quantize_f16_run(
+        numel: i64, scale: f32, zero_point: i32, q_min: i32, q_max: i32,
+        x: *const c_void, y: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// `fake_quantize` — bf16.
+    pub fn baracuda_kernels_fake_quantize_bf16_run(
+        numel: i64, scale: f32, zero_point: i32, q_min: i32, q_max: i32,
+        x: *const c_void, y: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// `fake_quantize` — f64 (f64 scale).
+    pub fn baracuda_kernels_fake_quantize_f64_run(
+        numel: i64, scale: f64, zero_point: i32, q_min: i32, q_max: i32,
+        x: *const c_void, y: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// `dx = dy * in_range_mask(x)`. STE, no 1/scale factor. f32.
+    pub fn baracuda_kernels_fake_quantize_backward_f32_run(
+        numel: i64, scale: f32, zero_point: i32, q_min: i32, q_max: i32,
+        x: *const c_void, dy: *const c_void, dx: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// `fake_quantize_backward` — f16.
+    pub fn baracuda_kernels_fake_quantize_backward_f16_run(
+        numel: i64, scale: f32, zero_point: i32, q_min: i32, q_max: i32,
+        x: *const c_void, dy: *const c_void, dx: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// `fake_quantize_backward` — bf16.
+    pub fn baracuda_kernels_fake_quantize_backward_bf16_run(
+        numel: i64, scale: f32, zero_point: i32, q_min: i32, q_max: i32,
+        x: *const c_void, dy: *const c_void, dx: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// `fake_quantize_backward` — f64.
+    pub fn baracuda_kernels_fake_quantize_backward_f64_run(
+        numel: i64, scale: f64, zero_point: i32, q_min: i32, q_max: i32,
+        x: *const c_void, dy: *const c_void, dx: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    // ---------- quantize_per_channel FW (8 SKUs) ----------
+    //
+    // `shape4` is a 4-element i32 array (caller pads rank to 4 with 1's).
+    // `axis` selects which of the 4 dims indexes scale[] / zp[].
+
+    /// `q[i] = clamp(round(x[i]/scale[c])+zp[c], qmin, qmax)` where c =
+    /// coord[axis]. f32 → s8.
+    pub fn baracuda_kernels_quantize_per_channel_f32_s8_run(
+        numel: i64, shape4: *const i32, axis: i32, q_min: i32, q_max: i32,
+        x: *const c_void, scale: *const c_void, zero_point: *const c_void,
+        q: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// `quantize_per_channel` — f32 → u8.
+    pub fn baracuda_kernels_quantize_per_channel_f32_u8_run(
+        numel: i64, shape4: *const i32, axis: i32, q_min: i32, q_max: i32,
+        x: *const c_void, scale: *const c_void, zero_point: *const c_void,
+        q: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// `quantize_per_channel` — f16 → s8.
+    pub fn baracuda_kernels_quantize_per_channel_f16_s8_run(
+        numel: i64, shape4: *const i32, axis: i32, q_min: i32, q_max: i32,
+        x: *const c_void, scale: *const c_void, zero_point: *const c_void,
+        q: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// `quantize_per_channel` — f16 → u8.
+    pub fn baracuda_kernels_quantize_per_channel_f16_u8_run(
+        numel: i64, shape4: *const i32, axis: i32, q_min: i32, q_max: i32,
+        x: *const c_void, scale: *const c_void, zero_point: *const c_void,
+        q: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// `quantize_per_channel` — bf16 → s8.
+    pub fn baracuda_kernels_quantize_per_channel_bf16_s8_run(
+        numel: i64, shape4: *const i32, axis: i32, q_min: i32, q_max: i32,
+        x: *const c_void, scale: *const c_void, zero_point: *const c_void,
+        q: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// `quantize_per_channel` — bf16 → u8.
+    pub fn baracuda_kernels_quantize_per_channel_bf16_u8_run(
+        numel: i64, shape4: *const i32, axis: i32, q_min: i32, q_max: i32,
+        x: *const c_void, scale: *const c_void, zero_point: *const c_void,
+        q: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// `quantize_per_channel` — f64 → s8.
+    pub fn baracuda_kernels_quantize_per_channel_f64_s8_run(
+        numel: i64, shape4: *const i32, axis: i32, q_min: i32, q_max: i32,
+        x: *const c_void, scale: *const c_void, zero_point: *const c_void,
+        q: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// `quantize_per_channel` — f64 → u8.
+    pub fn baracuda_kernels_quantize_per_channel_f64_u8_run(
+        numel: i64, shape4: *const i32, axis: i32, q_min: i32, q_max: i32,
+        x: *const c_void, scale: *const c_void, zero_point: *const c_void,
+        q: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    // ---------- quantize_per_channel BW (4 SKUs, STE) ----------
+
+    /// `dx[i] = (dy[i] / scale[c]) * in_range_mask(x[i])`. f32.
+    pub fn baracuda_kernels_quantize_per_channel_backward_f32_run(
+        numel: i64, shape4: *const i32, axis: i32, q_min: i32, q_max: i32,
+        x: *const c_void, scale: *const c_void, zero_point: *const c_void,
+        dy: *const c_void, dx: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// `quantize_per_channel_backward` — f16.
+    pub fn baracuda_kernels_quantize_per_channel_backward_f16_run(
+        numel: i64, shape4: *const i32, axis: i32, q_min: i32, q_max: i32,
+        x: *const c_void, scale: *const c_void, zero_point: *const c_void,
+        dy: *const c_void, dx: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// `quantize_per_channel_backward` — bf16.
+    pub fn baracuda_kernels_quantize_per_channel_backward_bf16_run(
+        numel: i64, shape4: *const i32, axis: i32, q_min: i32, q_max: i32,
+        x: *const c_void, scale: *const c_void, zero_point: *const c_void,
+        dy: *const c_void, dx: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// `quantize_per_channel_backward` — f64.
+    pub fn baracuda_kernels_quantize_per_channel_backward_f64_run(
+        numel: i64, shape4: *const i32, axis: i32, q_min: i32, q_max: i32,
+        x: *const c_void, scale: *const c_void, zero_point: *const c_void,
+        dy: *const c_void, dx: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    // ---------- dequantize_per_channel FW (8 SKUs) ----------
+
+    /// `x[i] = scale[c] * (q[i] - zp[c])`. s8 → f32.
+    pub fn baracuda_kernels_dequantize_per_channel_f32_s8_run(
+        numel: i64, shape4: *const i32, axis: i32,
+        q: *const c_void, scale: *const c_void, zero_point: *const c_void,
+        x: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// `dequantize_per_channel` — u8 → f32.
+    pub fn baracuda_kernels_dequantize_per_channel_f32_u8_run(
+        numel: i64, shape4: *const i32, axis: i32,
+        q: *const c_void, scale: *const c_void, zero_point: *const c_void,
+        x: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// `dequantize_per_channel` — s8 → f16.
+    pub fn baracuda_kernels_dequantize_per_channel_f16_s8_run(
+        numel: i64, shape4: *const i32, axis: i32,
+        q: *const c_void, scale: *const c_void, zero_point: *const c_void,
+        x: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// `dequantize_per_channel` — u8 → f16.
+    pub fn baracuda_kernels_dequantize_per_channel_f16_u8_run(
+        numel: i64, shape4: *const i32, axis: i32,
+        q: *const c_void, scale: *const c_void, zero_point: *const c_void,
+        x: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// `dequantize_per_channel` — s8 → bf16.
+    pub fn baracuda_kernels_dequantize_per_channel_bf16_s8_run(
+        numel: i64, shape4: *const i32, axis: i32,
+        q: *const c_void, scale: *const c_void, zero_point: *const c_void,
+        x: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// `dequantize_per_channel` — u8 → bf16.
+    pub fn baracuda_kernels_dequantize_per_channel_bf16_u8_run(
+        numel: i64, shape4: *const i32, axis: i32,
+        q: *const c_void, scale: *const c_void, zero_point: *const c_void,
+        x: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// `dequantize_per_channel` — s8 → f64.
+    pub fn baracuda_kernels_dequantize_per_channel_f64_s8_run(
+        numel: i64, shape4: *const i32, axis: i32,
+        q: *const c_void, scale: *const c_void, zero_point: *const c_void,
+        x: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// `dequantize_per_channel` — u8 → f64.
+    pub fn baracuda_kernels_dequantize_per_channel_f64_u8_run(
+        numel: i64, shape4: *const i32, axis: i32,
+        q: *const c_void, scale: *const c_void, zero_point: *const c_void,
+        x: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    // ---------- dequantize_per_channel BW (4 SKUs) ----------
+
+    /// `dq[i] = dy[i] * scale[c]`. f32.
+    pub fn baracuda_kernels_dequantize_per_channel_backward_f32_run(
+        numel: i64, shape4: *const i32, axis: i32,
+        scale: *const c_void, dy: *const c_void, dq: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// `dequantize_per_channel_backward` — f16.
+    pub fn baracuda_kernels_dequantize_per_channel_backward_f16_run(
+        numel: i64, shape4: *const i32, axis: i32,
+        scale: *const c_void, dy: *const c_void, dq: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// `dequantize_per_channel_backward` — bf16.
+    pub fn baracuda_kernels_dequantize_per_channel_backward_bf16_run(
+        numel: i64, shape4: *const i32, axis: i32,
+        scale: *const c_void, dy: *const c_void, dq: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// `dequantize_per_channel_backward` — f64.
+    pub fn baracuda_kernels_dequantize_per_channel_backward_f64_run(
+        numel: i64, shape4: *const i32, axis: i32,
+        scale: *const c_void, dy: *const c_void, dq: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+}
+
+// ============================================================================
+// Phase 8 Milestone 8.2 — per-token + per-group quantize / dequantize
+// (Category P, LLM/GPTQ-style)
+// ============================================================================
+//
+// Sibling Milestone 8.1 (per-tensor / per-channel / fake_quantize) ships
+// its own `unsafe extern "C" { ... }` block; this one carries only the
+// per-token / per-group symbols so the two milestones never collide.
+//
+// FW signature (per-token):
+//   (n, d, qmin, qmax, input, scale, zero_point, output, ws, ws_bytes, stream)
+// FW signature (per-group):
+//   (outer, axis_size, group_size, qmin, qmax,
+//    input, scale, zero_point, output, ws, ws_bytes, stream)
+// BW signatures append `input` (per-token quant BW) and drop `qmin/qmax`
+// for dequant BW (straight-through, no clipping). Workspace is unused —
+// these are pure pointwise kernels.
+
+unsafe extern "C" {
+    // ---------- quantize_per_token forward × 8 ----------
+    /// `quantize_per_token` — TIn f32, TOut s8. Status codes as elsewhere.
+    pub fn baracuda_kernels_quantize_per_token_f32_s8_run(
+        n: i32,
+        d: i32,
+        qmin: i32,
+        qmax: i32,
+        input: *const c_void,
+        scale: *const c_void,
+        zero_point: *const c_void,
+        output: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `quantize_per_token` — f32 → u8.
+    pub fn baracuda_kernels_quantize_per_token_f32_u8_run(
+        n: i32, d: i32, qmin: i32, qmax: i32,
+        input: *const c_void, scale: *const c_void, zero_point: *const c_void,
+        output: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// `quantize_per_token` — f64 → s8.
+    pub fn baracuda_kernels_quantize_per_token_f64_s8_run(
+        n: i32, d: i32, qmin: i32, qmax: i32,
+        input: *const c_void, scale: *const c_void, zero_point: *const c_void,
+        output: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// `quantize_per_token` — f64 → u8.
+    pub fn baracuda_kernels_quantize_per_token_f64_u8_run(
+        n: i32, d: i32, qmin: i32, qmax: i32,
+        input: *const c_void, scale: *const c_void, zero_point: *const c_void,
+        output: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// `quantize_per_token` — f16 → s8.
+    pub fn baracuda_kernels_quantize_per_token_f16_s8_run(
+        n: i32, d: i32, qmin: i32, qmax: i32,
+        input: *const c_void, scale: *const c_void, zero_point: *const c_void,
+        output: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// `quantize_per_token` — f16 → u8.
+    pub fn baracuda_kernels_quantize_per_token_f16_u8_run(
+        n: i32, d: i32, qmin: i32, qmax: i32,
+        input: *const c_void, scale: *const c_void, zero_point: *const c_void,
+        output: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// `quantize_per_token` — bf16 → s8.
+    pub fn baracuda_kernels_quantize_per_token_bf16_s8_run(
+        n: i32, d: i32, qmin: i32, qmax: i32,
+        input: *const c_void, scale: *const c_void, zero_point: *const c_void,
+        output: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// `quantize_per_token` — bf16 → u8.
+    pub fn baracuda_kernels_quantize_per_token_bf16_u8_run(
+        n: i32, d: i32, qmin: i32, qmax: i32,
+        input: *const c_void, scale: *const c_void, zero_point: *const c_void,
+        output: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    // ---------- quantize_per_token backward × 4 (STE) ----------
+    /// STE backward — f32.
+    pub fn baracuda_kernels_quantize_per_token_backward_f32_run(
+        n: i32, d: i32, qmin: i32, qmax: i32,
+        d_output: *const c_void,
+        input: *const c_void,
+        scale: *const c_void,
+        zero_point: *const c_void,
+        d_input: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// STE backward — f64.
+    pub fn baracuda_kernels_quantize_per_token_backward_f64_run(
+        n: i32, d: i32, qmin: i32, qmax: i32,
+        d_output: *const c_void, input: *const c_void,
+        scale: *const c_void, zero_point: *const c_void,
+        d_input: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// STE backward — f16.
+    pub fn baracuda_kernels_quantize_per_token_backward_f16_run(
+        n: i32, d: i32, qmin: i32, qmax: i32,
+        d_output: *const c_void, input: *const c_void,
+        scale: *const c_void, zero_point: *const c_void,
+        d_input: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// STE backward — bf16.
+    pub fn baracuda_kernels_quantize_per_token_backward_bf16_run(
+        n: i32, d: i32, qmin: i32, qmax: i32,
+        d_output: *const c_void, input: *const c_void,
+        scale: *const c_void, zero_point: *const c_void,
+        d_input: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    // ---------- dequantize_per_token forward × 8 ----------
+    /// `dequantize_per_token` — q s8 → y f32.
+    pub fn baracuda_kernels_dequantize_per_token_f32_s8_run(
+        n: i32, d: i32,
+        input: *const c_void, scale: *const c_void, zero_point: *const c_void,
+        output: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// `dequantize_per_token` — q u8 → y f32.
+    pub fn baracuda_kernels_dequantize_per_token_f32_u8_run(
+        n: i32, d: i32,
+        input: *const c_void, scale: *const c_void, zero_point: *const c_void,
+        output: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// `dequantize_per_token` — q s8 → y f64.
+    pub fn baracuda_kernels_dequantize_per_token_f64_s8_run(
+        n: i32, d: i32,
+        input: *const c_void, scale: *const c_void, zero_point: *const c_void,
+        output: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// `dequantize_per_token` — q u8 → y f64.
+    pub fn baracuda_kernels_dequantize_per_token_f64_u8_run(
+        n: i32, d: i32,
+        input: *const c_void, scale: *const c_void, zero_point: *const c_void,
+        output: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// `dequantize_per_token` — q s8 → y f16.
+    pub fn baracuda_kernels_dequantize_per_token_f16_s8_run(
+        n: i32, d: i32,
+        input: *const c_void, scale: *const c_void, zero_point: *const c_void,
+        output: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// `dequantize_per_token` — q u8 → y f16.
+    pub fn baracuda_kernels_dequantize_per_token_f16_u8_run(
+        n: i32, d: i32,
+        input: *const c_void, scale: *const c_void, zero_point: *const c_void,
+        output: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// `dequantize_per_token` — q s8 → y bf16.
+    pub fn baracuda_kernels_dequantize_per_token_bf16_s8_run(
+        n: i32, d: i32,
+        input: *const c_void, scale: *const c_void, zero_point: *const c_void,
+        output: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// `dequantize_per_token` — q u8 → y bf16.
+    pub fn baracuda_kernels_dequantize_per_token_bf16_u8_run(
+        n: i32, d: i32,
+        input: *const c_void, scale: *const c_void, zero_point: *const c_void,
+        output: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    // ---------- dequantize_per_token backward × 4 (straight-through) ----------
+    /// Dequant BW — f32.
+    pub fn baracuda_kernels_dequantize_per_token_backward_f32_run(
+        n: i32, d: i32,
+        d_output: *const c_void, scale: *const c_void,
+        d_input: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// Dequant BW — f64.
+    pub fn baracuda_kernels_dequantize_per_token_backward_f64_run(
+        n: i32, d: i32,
+        d_output: *const c_void, scale: *const c_void,
+        d_input: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// Dequant BW — f16.
+    pub fn baracuda_kernels_dequantize_per_token_backward_f16_run(
+        n: i32, d: i32,
+        d_output: *const c_void, scale: *const c_void,
+        d_input: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// Dequant BW — bf16.
+    pub fn baracuda_kernels_dequantize_per_token_backward_bf16_run(
+        n: i32, d: i32,
+        d_output: *const c_void, scale: *const c_void,
+        d_input: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    // ---------- quantize_per_group forward × 8 ----------
+    /// `quantize_per_group` — f32 → s8.
+    pub fn baracuda_kernels_quantize_per_group_f32_s8_run(
+        outer: i32, axis_size: i32, group_size: i32,
+        qmin: i32, qmax: i32,
+        input: *const c_void, scale: *const c_void, zero_point: *const c_void,
+        output: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// `quantize_per_group` — f32 → u8.
+    pub fn baracuda_kernels_quantize_per_group_f32_u8_run(
+        outer: i32, axis_size: i32, group_size: i32, qmin: i32, qmax: i32,
+        input: *const c_void, scale: *const c_void, zero_point: *const c_void,
+        output: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// `quantize_per_group` — f64 → s8.
+    pub fn baracuda_kernels_quantize_per_group_f64_s8_run(
+        outer: i32, axis_size: i32, group_size: i32, qmin: i32, qmax: i32,
+        input: *const c_void, scale: *const c_void, zero_point: *const c_void,
+        output: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// `quantize_per_group` — f64 → u8.
+    pub fn baracuda_kernels_quantize_per_group_f64_u8_run(
+        outer: i32, axis_size: i32, group_size: i32, qmin: i32, qmax: i32,
+        input: *const c_void, scale: *const c_void, zero_point: *const c_void,
+        output: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// `quantize_per_group` — f16 → s8.
+    pub fn baracuda_kernels_quantize_per_group_f16_s8_run(
+        outer: i32, axis_size: i32, group_size: i32, qmin: i32, qmax: i32,
+        input: *const c_void, scale: *const c_void, zero_point: *const c_void,
+        output: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// `quantize_per_group` — f16 → u8.
+    pub fn baracuda_kernels_quantize_per_group_f16_u8_run(
+        outer: i32, axis_size: i32, group_size: i32, qmin: i32, qmax: i32,
+        input: *const c_void, scale: *const c_void, zero_point: *const c_void,
+        output: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// `quantize_per_group` — bf16 → s8.
+    pub fn baracuda_kernels_quantize_per_group_bf16_s8_run(
+        outer: i32, axis_size: i32, group_size: i32, qmin: i32, qmax: i32,
+        input: *const c_void, scale: *const c_void, zero_point: *const c_void,
+        output: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// `quantize_per_group` — bf16 → u8.
+    pub fn baracuda_kernels_quantize_per_group_bf16_u8_run(
+        outer: i32, axis_size: i32, group_size: i32, qmin: i32, qmax: i32,
+        input: *const c_void, scale: *const c_void, zero_point: *const c_void,
+        output: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    // ---------- quantize_per_group backward × 4 (STE) ----------
+    /// STE BW — f32.
+    pub fn baracuda_kernels_quantize_per_group_backward_f32_run(
+        outer: i32, axis_size: i32, group_size: i32, qmin: i32, qmax: i32,
+        d_output: *const c_void, input: *const c_void,
+        scale: *const c_void, zero_point: *const c_void,
+        d_input: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// STE BW — f64.
+    pub fn baracuda_kernels_quantize_per_group_backward_f64_run(
+        outer: i32, axis_size: i32, group_size: i32, qmin: i32, qmax: i32,
+        d_output: *const c_void, input: *const c_void,
+        scale: *const c_void, zero_point: *const c_void,
+        d_input: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// STE BW — f16.
+    pub fn baracuda_kernels_quantize_per_group_backward_f16_run(
+        outer: i32, axis_size: i32, group_size: i32, qmin: i32, qmax: i32,
+        d_output: *const c_void, input: *const c_void,
+        scale: *const c_void, zero_point: *const c_void,
+        d_input: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// STE BW — bf16.
+    pub fn baracuda_kernels_quantize_per_group_backward_bf16_run(
+        outer: i32, axis_size: i32, group_size: i32, qmin: i32, qmax: i32,
+        d_output: *const c_void, input: *const c_void,
+        scale: *const c_void, zero_point: *const c_void,
+        d_input: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    // ---------- dequantize_per_group forward × 8 ----------
+    /// Dequant — f32, s8.
+    pub fn baracuda_kernels_dequantize_per_group_f32_s8_run(
+        outer: i32, axis_size: i32, group_size: i32,
+        input: *const c_void, scale: *const c_void, zero_point: *const c_void,
+        output: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// Dequant — f32, u8.
+    pub fn baracuda_kernels_dequantize_per_group_f32_u8_run(
+        outer: i32, axis_size: i32, group_size: i32,
+        input: *const c_void, scale: *const c_void, zero_point: *const c_void,
+        output: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// Dequant — f64, s8.
+    pub fn baracuda_kernels_dequantize_per_group_f64_s8_run(
+        outer: i32, axis_size: i32, group_size: i32,
+        input: *const c_void, scale: *const c_void, zero_point: *const c_void,
+        output: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// Dequant — f64, u8.
+    pub fn baracuda_kernels_dequantize_per_group_f64_u8_run(
+        outer: i32, axis_size: i32, group_size: i32,
+        input: *const c_void, scale: *const c_void, zero_point: *const c_void,
+        output: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// Dequant — f16, s8.
+    pub fn baracuda_kernels_dequantize_per_group_f16_s8_run(
+        outer: i32, axis_size: i32, group_size: i32,
+        input: *const c_void, scale: *const c_void, zero_point: *const c_void,
+        output: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// Dequant — f16, u8.
+    pub fn baracuda_kernels_dequantize_per_group_f16_u8_run(
+        outer: i32, axis_size: i32, group_size: i32,
+        input: *const c_void, scale: *const c_void, zero_point: *const c_void,
+        output: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// Dequant — bf16, s8.
+    pub fn baracuda_kernels_dequantize_per_group_bf16_s8_run(
+        outer: i32, axis_size: i32, group_size: i32,
+        input: *const c_void, scale: *const c_void, zero_point: *const c_void,
+        output: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// Dequant — bf16, u8.
+    pub fn baracuda_kernels_dequantize_per_group_bf16_u8_run(
+        outer: i32, axis_size: i32, group_size: i32,
+        input: *const c_void, scale: *const c_void, zero_point: *const c_void,
+        output: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    // ---------- dequantize_per_group backward × 4 (straight-through) ----------
+    /// Dequant BW — f32.
+    pub fn baracuda_kernels_dequantize_per_group_backward_f32_run(
+        outer: i32, axis_size: i32, group_size: i32,
+        d_output: *const c_void, scale: *const c_void,
+        d_input: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// Dequant BW — f64.
+    pub fn baracuda_kernels_dequantize_per_group_backward_f64_run(
+        outer: i32, axis_size: i32, group_size: i32,
+        d_output: *const c_void, scale: *const c_void,
+        d_input: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// Dequant BW — f16.
+    pub fn baracuda_kernels_dequantize_per_group_backward_f16_run(
+        outer: i32, axis_size: i32, group_size: i32,
+        d_output: *const c_void, scale: *const c_void,
+        d_input: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// Dequant BW — bf16.
+    pub fn baracuda_kernels_dequantize_per_group_backward_bf16_run(
+        outer: i32, axis_size: i32, group_size: i32,
+        d_output: *const c_void, scale: *const c_void,
+        d_input: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    // ---------- Milestone 8.3 — composing quantization ops ----------
+    //
+    // Two op families:
+    //   1. `dynamic_range_quantize_per_token_sym` — fused per-row
+    //      max-abs + symmetric scale + per-token quantize. Writes the
+    //      computed `scale[N]` vector alongside the quantized output.
+    //   2. `quantized_linear_w8a8` — naive W8A8 quantized matmul.
+    //      Input: already-quantized int8 activation `[M, K]` +
+    //      already-quantized int8 weight `[C_out, K]` + per-row
+    //      `scale_a[M]` + per-channel `scale_w[C_out]`. Output: FP
+    //      `[M, C_out]`. Trailblazer = correctness scaffold, not
+    //      perf-optimized.
+    //
+    // Trailblazer dtype coverage: TIn ∈ {f32, f64}, TOut weight/act = s8.
+
+    /// `dynamic_range_quantize_per_token_sym` — f32 → s8.
+    pub fn baracuda_kernels_dynamic_range_quantize_per_token_sym_f32_s8_run(
+        n: i32, d: i32, qmin: i32, qmax: i32,
+        input: *const c_void,
+        scale: *mut c_void,
+        output: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// `dynamic_range_quantize_per_token_sym` — f64 → s8.
+    pub fn baracuda_kernels_dynamic_range_quantize_per_token_sym_f64_s8_run(
+        n: i32, d: i32, qmin: i32, qmax: i32,
+        input: *const c_void,
+        scale: *mut c_void,
+        output: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// `quantized_linear_w8a8` — TIn = f32.
+    pub fn baracuda_kernels_quantized_linear_w8a8_f32_run(
+        m: i32, c_out: i32, k: i32,
+        weight_q: *const c_void,
+        act_q: *const c_void,
+        scale_a: *const c_void,
+        scale_w: *const c_void,
+        output: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// `quantized_linear_w8a8` — TIn = f64.
+    pub fn baracuda_kernels_quantized_linear_w8a8_f64_run(
+        m: i32, c_out: i32, k: i32,
+        weight_q: *const c_void,
+        act_q: *const c_void,
+        scale_a: *const c_void,
+        scale_w: *const c_void,
+        output: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+}
+
+// ============================================================================
+// Cast / Fill / Affine — Phase 3 fanout from fuel-cuda-kernels
+// ============================================================================
+//
+// Vendored / adapted from `fuel-cuda-kernels/src/{cast,fill,affine}.cu`.
+// See `crates/baracuda-kernels-sys/LICENSE-thirdparty.md`. Contig-only
+// fast path; baracuda's plan layer materializes strided views upstream.
+//
+// Status codes mirror the GEMM family (see crate-level doc).
+
+// Cast — explicit per-pair declarations (no macro to keep no_std + no
+// proc-macro deps; each pair is just two trivial `pub fn` lines).
+//
+// Safety contract shared by all cast `_run` / `_can_implement` pairs:
+// - `x` and `y` must each point to at least `numel` elements of device
+//   memory in the input / output element type respectively.
+// - `stream` must be a live CUDA stream in the current context.
+// - `_can_implement` performs host-side checks only.
+#[cfg(any(feature = "sm80", feature = "sm89", feature = "sm90a"))]
+unsafe extern "C" {
+    // f32 -> *
+    /// Cast `f32 -> f32`. See `LICENSE-thirdparty.md`.
+    pub fn baracuda_kernels_cast_f32_f32_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    /// Implementability check for `cast_f32_f32`.
+    pub fn baracuda_kernels_cast_f32_f32_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+    /// Cast `f32 -> f64`.
+    pub fn baracuda_kernels_cast_f32_f64_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    /// Implementability check for `cast_f32_f64`.
+    pub fn baracuda_kernels_cast_f32_f64_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+    /// Cast `f32 -> f16`.
+    pub fn baracuda_kernels_cast_f32_f16_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    /// Implementability check for `cast_f32_f16`.
+    pub fn baracuda_kernels_cast_f32_f16_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+    /// Cast `f32 -> bf16`.
+    pub fn baracuda_kernels_cast_f32_bf16_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    /// Implementability check for `cast_f32_bf16`.
+    pub fn baracuda_kernels_cast_f32_bf16_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+    /// Cast `f32 -> i32`.
+    pub fn baracuda_kernels_cast_f32_i32_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    /// Implementability check for `cast_f32_i32`.
+    pub fn baracuda_kernels_cast_f32_i32_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+    /// Cast `f32 -> i64`.
+    pub fn baracuda_kernels_cast_f32_i64_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    /// Implementability check for `cast_f32_i64`.
+    pub fn baracuda_kernels_cast_f32_i64_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+    /// Cast `f32 -> u8`.
+    pub fn baracuda_kernels_cast_f32_u8_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    /// Implementability check for `cast_f32_u8`.
+    pub fn baracuda_kernels_cast_f32_u8_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+    /// Cast `f32 -> i8`.
+    pub fn baracuda_kernels_cast_f32_i8_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    /// Implementability check for `cast_f32_i8`.
+    pub fn baracuda_kernels_cast_f32_i8_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+
+    // f64 -> *
+    /// Cast `f64 -> f32`.
+    pub fn baracuda_kernels_cast_f64_f32_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    /// Implementability check for `cast_f64_f32`.
+    pub fn baracuda_kernels_cast_f64_f32_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+    /// Cast `f64 -> f64`.
+    pub fn baracuda_kernels_cast_f64_f64_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    /// Implementability check for `cast_f64_f64`.
+    pub fn baracuda_kernels_cast_f64_f64_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+    /// Cast `f64 -> f16`.
+    pub fn baracuda_kernels_cast_f64_f16_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    /// Implementability check for `cast_f64_f16`.
+    pub fn baracuda_kernels_cast_f64_f16_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+    /// Cast `f64 -> bf16`.
+    pub fn baracuda_kernels_cast_f64_bf16_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    /// Implementability check for `cast_f64_bf16`.
+    pub fn baracuda_kernels_cast_f64_bf16_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+    /// Cast `f64 -> i32`.
+    pub fn baracuda_kernels_cast_f64_i32_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    /// Implementability check for `cast_f64_i32`.
+    pub fn baracuda_kernels_cast_f64_i32_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+    /// Cast `f64 -> i64`.
+    pub fn baracuda_kernels_cast_f64_i64_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    /// Implementability check for `cast_f64_i64`.
+    pub fn baracuda_kernels_cast_f64_i64_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+    /// Cast `f64 -> u8`.
+    pub fn baracuda_kernels_cast_f64_u8_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    /// Implementability check for `cast_f64_u8`.
+    pub fn baracuda_kernels_cast_f64_u8_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+    /// Cast `f64 -> i8`.
+    pub fn baracuda_kernels_cast_f64_i8_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    /// Implementability check for `cast_f64_i8`.
+    pub fn baracuda_kernels_cast_f64_i8_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+
+    // f16 -> *
+    /// Cast `f16 -> f32`.
+    pub fn baracuda_kernels_cast_f16_f32_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    /// Implementability check for `cast_f16_f32`.
+    pub fn baracuda_kernels_cast_f16_f32_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+    /// Cast `f16 -> f64`.
+    pub fn baracuda_kernels_cast_f16_f64_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    /// Implementability check for `cast_f16_f64`.
+    pub fn baracuda_kernels_cast_f16_f64_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+    /// Cast `f16 -> f16`.
+    pub fn baracuda_kernels_cast_f16_f16_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    /// Implementability check for `cast_f16_f16`.
+    pub fn baracuda_kernels_cast_f16_f16_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+    /// Cast `f16 -> bf16`.
+    pub fn baracuda_kernels_cast_f16_bf16_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    /// Implementability check for `cast_f16_bf16`.
+    pub fn baracuda_kernels_cast_f16_bf16_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+    /// Cast `f16 -> i32`.
+    pub fn baracuda_kernels_cast_f16_i32_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    /// Implementability check for `cast_f16_i32`.
+    pub fn baracuda_kernels_cast_f16_i32_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+    /// Cast `f16 -> i64`.
+    pub fn baracuda_kernels_cast_f16_i64_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    /// Implementability check for `cast_f16_i64`.
+    pub fn baracuda_kernels_cast_f16_i64_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+    /// Cast `f16 -> u8`.
+    pub fn baracuda_kernels_cast_f16_u8_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    /// Implementability check for `cast_f16_u8`.
+    pub fn baracuda_kernels_cast_f16_u8_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+    /// Cast `f16 -> i8`.
+    pub fn baracuda_kernels_cast_f16_i8_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    /// Implementability check for `cast_f16_i8`.
+    pub fn baracuda_kernels_cast_f16_i8_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+
+    // bf16 -> *
+    /// Cast `bf16 -> f32`.
+    pub fn baracuda_kernels_cast_bf16_f32_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    /// Implementability check for `cast_bf16_f32`.
+    pub fn baracuda_kernels_cast_bf16_f32_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+    /// Cast `bf16 -> f64`.
+    pub fn baracuda_kernels_cast_bf16_f64_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    /// Implementability check for `cast_bf16_f64`.
+    pub fn baracuda_kernels_cast_bf16_f64_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+    /// Cast `bf16 -> f16`.
+    pub fn baracuda_kernels_cast_bf16_f16_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    /// Implementability check for `cast_bf16_f16`.
+    pub fn baracuda_kernels_cast_bf16_f16_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+    /// Cast `bf16 -> bf16`.
+    pub fn baracuda_kernels_cast_bf16_bf16_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    /// Implementability check for `cast_bf16_bf16`.
+    pub fn baracuda_kernels_cast_bf16_bf16_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+    /// Cast `bf16 -> i32`.
+    pub fn baracuda_kernels_cast_bf16_i32_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    /// Implementability check for `cast_bf16_i32`.
+    pub fn baracuda_kernels_cast_bf16_i32_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+    /// Cast `bf16 -> i64`.
+    pub fn baracuda_kernels_cast_bf16_i64_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    /// Implementability check for `cast_bf16_i64`.
+    pub fn baracuda_kernels_cast_bf16_i64_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+    /// Cast `bf16 -> u8`.
+    pub fn baracuda_kernels_cast_bf16_u8_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    /// Implementability check for `cast_bf16_u8`.
+    pub fn baracuda_kernels_cast_bf16_u8_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+    /// Cast `bf16 -> i8`.
+    pub fn baracuda_kernels_cast_bf16_i8_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    /// Implementability check for `cast_bf16_i8`.
+    pub fn baracuda_kernels_cast_bf16_i8_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+
+    // i32 -> *
+    /// Cast `i32 -> f32`.
+    pub fn baracuda_kernels_cast_i32_f32_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    /// Implementability check for `cast_i32_f32`.
+    pub fn baracuda_kernels_cast_i32_f32_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+    /// Cast `i32 -> f64`.
+    pub fn baracuda_kernels_cast_i32_f64_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    /// Implementability check for `cast_i32_f64`.
+    pub fn baracuda_kernels_cast_i32_f64_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+    /// Cast `i32 -> f16`.
+    pub fn baracuda_kernels_cast_i32_f16_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    /// Implementability check for `cast_i32_f16`.
+    pub fn baracuda_kernels_cast_i32_f16_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+    /// Cast `i32 -> bf16`.
+    pub fn baracuda_kernels_cast_i32_bf16_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    /// Implementability check for `cast_i32_bf16`.
+    pub fn baracuda_kernels_cast_i32_bf16_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+    /// Cast `i32 -> i32`.
+    pub fn baracuda_kernels_cast_i32_i32_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    /// Implementability check for `cast_i32_i32`.
+    pub fn baracuda_kernels_cast_i32_i32_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+    /// Cast `i32 -> i64`.
+    pub fn baracuda_kernels_cast_i32_i64_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    /// Implementability check for `cast_i32_i64`.
+    pub fn baracuda_kernels_cast_i32_i64_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+    /// Cast `i32 -> u8`.
+    pub fn baracuda_kernels_cast_i32_u8_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    /// Implementability check for `cast_i32_u8`.
+    pub fn baracuda_kernels_cast_i32_u8_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+    /// Cast `i32 -> i8`.
+    pub fn baracuda_kernels_cast_i32_i8_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    /// Implementability check for `cast_i32_i8`.
+    pub fn baracuda_kernels_cast_i32_i8_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+
+    // i64 -> *
+    /// Cast `i64 -> f32`.
+    pub fn baracuda_kernels_cast_i64_f32_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    /// Implementability check for `cast_i64_f32`.
+    pub fn baracuda_kernels_cast_i64_f32_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+    /// Cast `i64 -> f64`.
+    pub fn baracuda_kernels_cast_i64_f64_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    /// Implementability check for `cast_i64_f64`.
+    pub fn baracuda_kernels_cast_i64_f64_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+    /// Cast `i64 -> f16`.
+    pub fn baracuda_kernels_cast_i64_f16_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    /// Implementability check for `cast_i64_f16`.
+    pub fn baracuda_kernels_cast_i64_f16_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+    /// Cast `i64 -> bf16`.
+    pub fn baracuda_kernels_cast_i64_bf16_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    /// Implementability check for `cast_i64_bf16`.
+    pub fn baracuda_kernels_cast_i64_bf16_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+    /// Cast `i64 -> i32`.
+    pub fn baracuda_kernels_cast_i64_i32_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    /// Implementability check for `cast_i64_i32`.
+    pub fn baracuda_kernels_cast_i64_i32_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+    /// Cast `i64 -> i64`.
+    pub fn baracuda_kernels_cast_i64_i64_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    /// Implementability check for `cast_i64_i64`.
+    pub fn baracuda_kernels_cast_i64_i64_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+    /// Cast `i64 -> u8`.
+    pub fn baracuda_kernels_cast_i64_u8_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    /// Implementability check for `cast_i64_u8`.
+    pub fn baracuda_kernels_cast_i64_u8_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+    /// Cast `i64 -> i8`.
+    pub fn baracuda_kernels_cast_i64_i8_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    /// Implementability check for `cast_i64_i8`.
+    pub fn baracuda_kernels_cast_i64_i8_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+
+    // u8 -> *
+    /// Cast `u8 -> f32`.
+    pub fn baracuda_kernels_cast_u8_f32_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    /// Implementability check for `cast_u8_f32`.
+    pub fn baracuda_kernels_cast_u8_f32_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+    /// Cast `u8 -> f64`.
+    pub fn baracuda_kernels_cast_u8_f64_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    /// Implementability check for `cast_u8_f64`.
+    pub fn baracuda_kernels_cast_u8_f64_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+    /// Cast `u8 -> f16`.
+    pub fn baracuda_kernels_cast_u8_f16_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    /// Implementability check for `cast_u8_f16`.
+    pub fn baracuda_kernels_cast_u8_f16_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+    /// Cast `u8 -> bf16`.
+    pub fn baracuda_kernels_cast_u8_bf16_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    /// Implementability check for `cast_u8_bf16`.
+    pub fn baracuda_kernels_cast_u8_bf16_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+    /// Cast `u8 -> i32`.
+    pub fn baracuda_kernels_cast_u8_i32_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    /// Implementability check for `cast_u8_i32`.
+    pub fn baracuda_kernels_cast_u8_i32_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+    /// Cast `u8 -> i64`.
+    pub fn baracuda_kernels_cast_u8_i64_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    /// Implementability check for `cast_u8_i64`.
+    pub fn baracuda_kernels_cast_u8_i64_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+    /// Cast `u8 -> u8`.
+    pub fn baracuda_kernels_cast_u8_u8_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    /// Implementability check for `cast_u8_u8`.
+    pub fn baracuda_kernels_cast_u8_u8_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+    /// Cast `u8 -> i8`.
+    pub fn baracuda_kernels_cast_u8_i8_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    /// Implementability check for `cast_u8_i8`.
+    pub fn baracuda_kernels_cast_u8_i8_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+
+    // i8 -> *
+    /// Cast `i8 -> f32`.
+    pub fn baracuda_kernels_cast_i8_f32_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    /// Implementability check for `cast_i8_f32`.
+    pub fn baracuda_kernels_cast_i8_f32_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+    /// Cast `i8 -> f64`.
+    pub fn baracuda_kernels_cast_i8_f64_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    /// Implementability check for `cast_i8_f64`.
+    pub fn baracuda_kernels_cast_i8_f64_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+    /// Cast `i8 -> f16`.
+    pub fn baracuda_kernels_cast_i8_f16_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    /// Implementability check for `cast_i8_f16`.
+    pub fn baracuda_kernels_cast_i8_f16_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+    /// Cast `i8 -> bf16`.
+    pub fn baracuda_kernels_cast_i8_bf16_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    /// Implementability check for `cast_i8_bf16`.
+    pub fn baracuda_kernels_cast_i8_bf16_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+    /// Cast `i8 -> i32`.
+    pub fn baracuda_kernels_cast_i8_i32_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    /// Implementability check for `cast_i8_i32`.
+    pub fn baracuda_kernels_cast_i8_i32_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+    /// Cast `i8 -> i64`.
+    pub fn baracuda_kernels_cast_i8_i64_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    /// Implementability check for `cast_i8_i64`.
+    pub fn baracuda_kernels_cast_i8_i64_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+    /// Cast `i8 -> u8`.
+    pub fn baracuda_kernels_cast_i8_u8_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    /// Implementability check for `cast_i8_u8`.
+    pub fn baracuda_kernels_cast_i8_u8_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+    /// Cast `i8 -> i8`.
+    pub fn baracuda_kernels_cast_i8_i8_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    /// Implementability check for `cast_i8_i8`.
+    pub fn baracuda_kernels_cast_i8_i8_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+
+    // ----- Fill ------------------------------------------------------------
+
+    /// Fill `y` with `value`, f32 dtype.
+    ///
+    /// # Safety
+    /// `y` must point to at least `numel * sizeof::<f32>()` bytes of
+    /// device memory. `stream` must be a live CUDA stream.
+    pub fn baracuda_kernels_fill_f32_run(
+        numel: i64,
+        y: *mut c_void,
+        value: f32,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// Implementability check for `fill_f32`. Host-side only.
+    pub fn baracuda_kernels_fill_f32_can_implement(numel: i64, y: *const c_void) -> i32;
+
+    /// Fill `y` with `value`, f64 dtype.
+    ///
+    /// # Safety
+    /// Same contract as the f32 variant; storage is f64.
+    pub fn baracuda_kernels_fill_f64_run(
+        numel: i64,
+        y: *mut c_void,
+        value: f64,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// Implementability check for `fill_f64`. Host-side only.
+    pub fn baracuda_kernels_fill_f64_can_implement(numel: i64, y: *const c_void) -> i32;
+
+    /// Fill `y` with `value`, i32 dtype.
+    ///
+    /// # Safety
+    /// Same contract as the f32 variant; storage is i32.
+    pub fn baracuda_kernels_fill_i32_run(
+        numel: i64,
+        y: *mut c_void,
+        value: i32,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// Implementability check for `fill_i32`. Host-side only.
+    pub fn baracuda_kernels_fill_i32_can_implement(numel: i64, y: *const c_void) -> i32;
+
+    /// Fill `y` with `value`, i64 dtype.
+    ///
+    /// # Safety
+    /// Same contract as the f32 variant; storage is i64.
+    pub fn baracuda_kernels_fill_i64_run(
+        numel: i64,
+        y: *mut c_void,
+        value: i64,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// Implementability check for `fill_i64`. Host-side only.
+    pub fn baracuda_kernels_fill_i64_can_implement(numel: i64, y: *const c_void) -> i32;
+
+    /// Fill `y` with `value`, u8 dtype.
+    ///
+    /// # Safety
+    /// Same contract as the f32 variant; storage is u8.
+    pub fn baracuda_kernels_fill_u8_run(
+        numel: i64,
+        y: *mut c_void,
+        value: u8,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// Implementability check for `fill_u8`. Host-side only.
+    pub fn baracuda_kernels_fill_u8_can_implement(numel: i64, y: *const c_void) -> i32;
+
+    /// Fill `y` with `value`, i8 dtype.
+    ///
+    /// # Safety
+    /// Same contract as the f32 variant; storage is i8.
+    pub fn baracuda_kernels_fill_i8_run(
+        numel: i64,
+        y: *mut c_void,
+        value: i8,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// Implementability check for `fill_i8`. Host-side only.
+    pub fn baracuda_kernels_fill_i8_can_implement(numel: i64, y: *const c_void) -> i32;
+
+    /// Fill `y` with `value`, f16 dtype. `value_bits` is the raw
+    /// 16-bit pattern of an `f16` value (transport convention shared
+    /// with the Pad-constant family).
+    ///
+    /// # Safety
+    /// `y` must point to at least `numel * 2` bytes of device memory.
+    pub fn baracuda_kernels_fill_f16_run(
+        numel: i64,
+        y: *mut c_void,
+        value_bits: u16,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// Implementability check for `fill_f16`. Host-side only.
+    pub fn baracuda_kernels_fill_f16_can_implement(numel: i64, y: *const c_void) -> i32;
+
+    /// Fill `y` with `value`, bf16 dtype. `value_bits` is the raw
+    /// 16-bit pattern of a `bf16` value.
+    ///
+    /// # Safety
+    /// `y` must point to at least `numel * 2` bytes of device memory.
+    pub fn baracuda_kernels_fill_bf16_run(
+        numel: i64,
+        y: *mut c_void,
+        value_bits: u16,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// Implementability check for `fill_bf16`. Host-side only.
+    pub fn baracuda_kernels_fill_bf16_can_implement(numel: i64, y: *const c_void) -> i32;
+
+    // ----- Affine ----------------------------------------------------------
+    //
+    // `y[i] = a * x[i] + b`. f16 / bf16 receive `a` / `b` as `f32` and
+    // compute through f32 internally (matches the elementwise family's
+    // f32-accumulator contract). The other dtypes receive `a` / `b` in
+    // the kernel's element type directly.
+
+    /// Affine `y = a*x + b`, f32 dtype.
+    ///
+    /// # Safety
+    /// `x` and `y` must each point to at least `numel` `f32`s of device
+    /// memory. Aliasing `y` with `x` is safe.
+    pub fn baracuda_kernels_affine_f32_run(
+        numel: i64,
+        x: *const c_void,
+        y: *mut c_void,
+        a: f32,
+        b: f32,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// Implementability check for `affine_f32`. Host-side only.
+    pub fn baracuda_kernels_affine_f32_can_implement(
+        numel: i64,
+        x: *const c_void,
+        y: *const c_void,
+    ) -> i32;
+
+    /// Affine `y = a*x + b`, f64 dtype.
+    ///
+    /// # Safety
+    /// Same contract as the f32 variant; storage is f64.
+    pub fn baracuda_kernels_affine_f64_run(
+        numel: i64,
+        x: *const c_void,
+        y: *mut c_void,
+        a: f64,
+        b: f64,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// Implementability check for `affine_f64`. Host-side only.
+    pub fn baracuda_kernels_affine_f64_can_implement(
+        numel: i64,
+        x: *const c_void,
+        y: *const c_void,
+    ) -> i32;
+
+    /// Affine `y = a*x + b`, i32 dtype.
+    ///
+    /// # Safety
+    /// Same contract as the f32 variant; storage is i32.
+    pub fn baracuda_kernels_affine_i32_run(
+        numel: i64,
+        x: *const c_void,
+        y: *mut c_void,
+        a: i32,
+        b: i32,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// Implementability check for `affine_i32`. Host-side only.
+    pub fn baracuda_kernels_affine_i32_can_implement(
+        numel: i64,
+        x: *const c_void,
+        y: *const c_void,
+    ) -> i32;
+
+    /// Affine `y = a*x + b`, i64 dtype.
+    ///
+    /// # Safety
+    /// Same contract as the f32 variant; storage is i64.
+    pub fn baracuda_kernels_affine_i64_run(
+        numel: i64,
+        x: *const c_void,
+        y: *mut c_void,
+        a: i64,
+        b: i64,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// Implementability check for `affine_i64`. Host-side only.
+    pub fn baracuda_kernels_affine_i64_can_implement(
+        numel: i64,
+        x: *const c_void,
+        y: *const c_void,
+    ) -> i32;
+
+    /// Affine `y = a*x + b`, u8 dtype.
+    ///
+    /// # Safety
+    /// Same contract as the f32 variant; storage is u8.
+    pub fn baracuda_kernels_affine_u8_run(
+        numel: i64,
+        x: *const c_void,
+        y: *mut c_void,
+        a: u8,
+        b: u8,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// Implementability check for `affine_u8`. Host-side only.
+    pub fn baracuda_kernels_affine_u8_can_implement(
+        numel: i64,
+        x: *const c_void,
+        y: *const c_void,
+    ) -> i32;
+
+    /// Affine `y = a*x + b`, i8 dtype.
+    ///
+    /// # Safety
+    /// Same contract as the f32 variant; storage is i8.
+    pub fn baracuda_kernels_affine_i8_run(
+        numel: i64,
+        x: *const c_void,
+        y: *mut c_void,
+        a: i8,
+        b: i8,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// Implementability check for `affine_i8`. Host-side only.
+    pub fn baracuda_kernels_affine_i8_can_implement(
+        numel: i64,
+        x: *const c_void,
+        y: *const c_void,
+    ) -> i32;
+
+    /// Affine `y = a*x + b`, f16 storage / f32 compute. `a` / `b`
+    /// arrive as `f32`.
+    ///
+    /// # Safety
+    /// `x` and `y` must each point to at least `numel * 2` bytes of
+    /// device memory holding `__half` values. Aliasing is safe.
+    pub fn baracuda_kernels_affine_f16_run(
+        numel: i64,
+        x: *const c_void,
+        y: *mut c_void,
+        a: f32,
+        b: f32,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// Implementability check for `affine_f16`. Host-side only.
+    pub fn baracuda_kernels_affine_f16_can_implement(
+        numel: i64,
+        x: *const c_void,
+        y: *const c_void,
+    ) -> i32;
+
+    /// Affine `y = a*x + b`, bf16 storage / f32 compute. `a` / `b`
+    /// arrive as `f32`.
+    ///
+    /// # Safety
+    /// `x` and `y` must each point to at least `numel * 2` bytes of
+    /// device memory holding `__nv_bfloat16` values. Aliasing is safe.
+    pub fn baracuda_kernels_affine_bf16_run(
+        numel: i64,
+        x: *const c_void,
+        y: *mut c_void,
+        a: f32,
+        b: f32,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// Implementability check for `affine_bf16`. Host-side only.
+    pub fn baracuda_kernels_affine_bf16_can_implement(
+        numel: i64,
+        x: *const c_void,
+        y: *const c_void,
+    ) -> i32;
+}
+
+// ============================================================================
+// GGUF block-format quantization — Phase 8 Milestone 8.4 (Category P)
+// ============================================================================
+//
+// Vendored from llama.cpp via fuel-cuda-kernels. See
+// `kernels/include/baracuda_gguf.cuh` for lineage notes.
+//
+// Symbols are split into two op families:
+//   * `baracuda_kernels_dequantize_<qtype>_run` — unpack a GGUF-packed
+//     weight matrix into a dense f32 tensor.
+//   * `baracuda_kernels_mmvq_<qtype>_run` — fused dequant + matmul-vec
+//     (FP-activation MMVQ): `out[r] = Σ_c W_q[r, c] · y[c]`. Single FP
+//     activation vector in, FP output vector out.
+//
+// Pointer ABI (both families):
+//   - `x` / `vx` is the GGUF-packed weight buffer (raw bytes; element
+//     stride = the block size of the qtype). For dequant: pointer is
+//     to a flat byte buffer storing `ceil(numel / block_size)` blocks.
+//     For MMVQ: pointer is to a `[nrows × packed_cols_bytes]` matrix
+//     laid out row-major (one block-row per qtype row).
+//   - Dequant output `y` is `float* ` device memory, length `numel`.
+//   - MMVQ activation `y` is `float* ` of length `ncols`. MMVQ output
+//     `dst` is `float*` of length `nrows`.
+//
+// `numel` (dequant) and `ncols` (MMVQ) MUST be divisible by the qtype's
+// block size: 32 for the type-0/1 qtypes (Q4_0 / Q4_1 / Q5_0 / Q5_1 /
+// Q8_0); 256 for the k-quants (Q2_K / Q3_K / Q4_K / Q5_K / Q6_K / Q8_K).
+//
+// Q8_K MMVQ is intentionally NOT shipped — llama.cpp / Fuel reserve
+// Q8_K as a CPU-side intermediate; no upstream MMVQ specialization
+// exists. Only dequant is exposed for Q8_K.
+
+#[cfg(any(feature = "sm80", feature = "sm89", feature = "sm90a"))]
+unsafe extern "C" {
+    // ---- Dequantize: type-0/1 (32-element blocks) ----
+
+    /// GGUF `Q4_0` block-format dequantize → f32. `numel` must be a
+    /// multiple of 32. # Safety: device-resident `x`, `y`; valid stream.
+    pub fn baracuda_kernels_dequantize_q4_0_run(
+        numel: i64,
+        x: *const c_void,
+        y: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// GGUF `Q4_1` dequantize → f32. # Safety: as `Q4_0`.
+    pub fn baracuda_kernels_dequantize_q4_1_run(
+        numel: i64,
+        x: *const c_void,
+        y: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// GGUF `Q5_0` dequantize → f32. # Safety: as `Q4_0`.
+    pub fn baracuda_kernels_dequantize_q5_0_run(
+        numel: i64,
+        x: *const c_void,
+        y: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// GGUF `Q5_1` dequantize → f32. # Safety: as `Q4_0`.
+    pub fn baracuda_kernels_dequantize_q5_1_run(
+        numel: i64,
+        x: *const c_void,
+        y: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// GGUF `Q8_0` dequantize → f32. # Safety: as `Q4_0`.
+    pub fn baracuda_kernels_dequantize_q8_0_run(
+        numel: i64,
+        x: *const c_void,
+        y: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    // ---- Dequantize: k-quants (256-element blocks) ----
+
+    /// GGUF `Q2_K` dequantize → f32. `numel` must be a multiple of 256.
+    /// # Safety: device-resident `x`, `y`; valid stream.
+    pub fn baracuda_kernels_dequantize_q2_K_run(
+        numel: i64,
+        x: *const c_void,
+        y: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// GGUF `Q3_K` dequantize → f32. # Safety: as `Q2_K`.
+    pub fn baracuda_kernels_dequantize_q3_K_run(
+        numel: i64,
+        x: *const c_void,
+        y: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// GGUF `Q4_K` dequantize → f32. # Safety: as `Q2_K`.
+    pub fn baracuda_kernels_dequantize_q4_K_run(
+        numel: i64,
+        x: *const c_void,
+        y: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// GGUF `Q5_K` dequantize → f32. # Safety: as `Q2_K`.
+    pub fn baracuda_kernels_dequantize_q5_K_run(
+        numel: i64,
+        x: *const c_void,
+        y: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// GGUF `Q6_K` dequantize → f32. # Safety: as `Q2_K`.
+    pub fn baracuda_kernels_dequantize_q6_K_run(
+        numel: i64,
+        x: *const c_void,
+        y: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// GGUF `Q8_K` dequantize → f32. # Safety: as `Q2_K`.
+    pub fn baracuda_kernels_dequantize_q8_K_run(
+        numel: i64,
+        x: *const c_void,
+        y: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    // ---- MMVQ: type-0/1 (32-element blocks) ----
+
+    /// GGUF `Q4_0` MMVQ — FP-activation matrix-vector mul.
+    /// `ncols` must be a multiple of 32.
+    /// # Safety: device-resident `x` (packed), `y` (f32 activation),
+    /// `dst` (f32 output); valid stream.
+    pub fn baracuda_kernels_mmvq_q4_0_run(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        y: *const c_void,
+        dst: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// GGUF `Q4_1` MMVQ. # Safety: as `Q4_0`.
+    pub fn baracuda_kernels_mmvq_q4_1_run(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        y: *const c_void,
+        dst: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// GGUF `Q5_0` MMVQ. # Safety: as `Q4_0`.
+    pub fn baracuda_kernels_mmvq_q5_0_run(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        y: *const c_void,
+        dst: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// GGUF `Q5_1` MMVQ. # Safety: as `Q4_0`.
+    pub fn baracuda_kernels_mmvq_q5_1_run(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        y: *const c_void,
+        dst: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// GGUF `Q8_0` MMVQ. # Safety: as `Q4_0`.
+    pub fn baracuda_kernels_mmvq_q8_0_run(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        y: *const c_void,
+        dst: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    // ---- MMVQ: k-quants (256-element blocks) ----
+    //
+    // `Q8_K` MMVQ is NOT exposed — llama.cpp / Fuel reserve Q8_K as a
+    // CPU-side intermediate. The Rust plan returns `Error::Unsupported`
+    // when dispatched with `GgufBlockFormat::Q8K`.
+
+    /// GGUF `Q2_K` MMVQ — FP-activation matrix-vector mul.
+    /// `ncols` must be a multiple of 256.
+    /// # Safety: as `Q4_0`.
+    pub fn baracuda_kernels_mmvq_q2_K_run(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        y: *const c_void,
+        dst: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// GGUF `Q3_K` MMVQ. # Safety: as `Q2_K`.
+    pub fn baracuda_kernels_mmvq_q3_K_run(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        y: *const c_void,
+        dst: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// GGUF `Q4_K` MMVQ. # Safety: as `Q2_K`.
+    pub fn baracuda_kernels_mmvq_q4_K_run(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        y: *const c_void,
+        dst: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// GGUF `Q5_K` MMVQ. # Safety: as `Q2_K`.
+    pub fn baracuda_kernels_mmvq_q5_K_run(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        y: *const c_void,
+        dst: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// GGUF `Q6_K` MMVQ. # Safety: as `Q2_K`.
+    pub fn baracuda_kernels_mmvq_q6_K_run(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        y: *const c_void,
+        dst: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+}
+
+// ============================================================================
+// Mixture-of-Experts forward — Phase 8 Milestone 8.5 (Category V)
+// ============================================================================
+//
+// Vendored from `attention.rs` via fuel-cuda-kernels. See
+// `kernels/include/baracuda_moe.cuh` and
+// `LICENSE-thirdparty.md` for lineage notes.
+//
+// Three variants:
+//   * `_moe_scalar_gguf_*_run` — f32 activations, GGUF-packed expert
+//     weights. Scalar dispatch (no tensor cores). Stages activations
+//     through a q8_1 intermediate allocated internally.
+//   * `_moe_wmma_<f16|bf16>_run` — FP activations + FP weights, sm_70+
+//     WMMA tensor cores.
+//   * `_moe_wmma_gguf_<f16|bf16>_run` — FP activations + GGUF-packed
+//     expert weights, sm_70+ WMMA tensor cores. The production hot
+//     path for quantized LLM inference.
+//
+// `gguf_dtype` argument for the GGUF variants follows Fuel's
+// discriminant numbering (NOT baracuda's `GgufBlockFormat::repr`):
+//   0 = Q8_0, 1 = Q4_K, 2 = Q2_K, 3 = Q3_K, 4 = Q5_K, 5 = Q6_K.
+//
+// `is_prefill` (WMMA-only variant) selects between prefill geometry
+// (M_tile=16, N_tile=16) and decode geometry (M_tile=8, N_tile=32).
+//
+// The WMMA paths require caller-allocated scratch buffers
+// `expert_counts[num_experts]` and `expert_offsets[num_experts + 1]`
+// (both i32, device-resident).
+
+#[cfg(any(feature = "sm80", feature = "sm89", feature = "sm90a"))]
+unsafe extern "C" {
+    /// MoE forward — scalar dispatch path on GGUF-packed expert weights.
+    /// f32 activations in, f32 output out.
+    ///
+    /// `gguf_dtype` discriminant (Fuel-convention, not
+    /// `GgufBlockFormat::repr`):
+    ///   `0 = Q8_0`, `1 = Q4_K`, `2 = Q2_K`, `3 = Q3_K`, `4 = Q5_K`, `5 = Q6_K`.
+    ///
+    /// # Safety
+    /// All pointer args must be device-resident with the documented
+    /// shapes; `stream` must be a valid CUDA stream pointer.
+    pub fn baracuda_kernels_moe_scalar_gguf_run(
+        inputs: *const c_void,             // f32 [size_m_input, size_k]
+        weights: *const c_void,            // packed GGUF [num_experts, size_n, size_k]
+        sorted_token_ids: *const i32,      // [size_m]
+        expert_ids: *const i32,            // [size_m]
+        topk_weights: *const f32,          // [size_m] or null
+        outputs: *mut c_void,              // f32 [size_m_input, size_n]
+        num_experts: i32,
+        topk: i32,
+        size_m: i32,
+        size_n: i32,
+        size_k: i32,
+        gguf_dtype: i32,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// MoE forward — WMMA FP weights, f16 activations + weights, f16 output.
+    /// Output buffer must be zero-initialized by the caller when
+    /// `topk_weights == null` and `topk > 1` (multiple writes per row).
+    /// # Safety: as `moe_scalar_gguf_run`.
+    pub fn baracuda_kernels_moe_wmma_f16_run(
+        input: *const c_void,
+        weights: *const c_void,
+        sorted_token_ids: *const i32,
+        expert_ids: *const i32,
+        topk_weights: *const f32,
+        output: *mut c_void,
+        expert_counts: *mut i32,            // prealloc [num_experts]
+        expert_offsets: *mut i32,           // prealloc [num_experts + 1]
+        num_experts: i32,
+        topk: i32,
+        size_m: i32,
+        size_n: i32,
+        size_k: i32,
+        is_prefill: i32,                    // 0 = decode (M=8, N=32); !=0 = prefill (M=16, N=16)
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// MoE forward — WMMA FP weights, bf16 activations + weights, bf16 output.
+    /// # Safety: as `moe_wmma_f16_run`.
+    pub fn baracuda_kernels_moe_wmma_bf16_run(
+        input: *const c_void,
+        weights: *const c_void,
+        sorted_token_ids: *const i32,
+        expert_ids: *const i32,
+        topk_weights: *const f32,
+        output: *mut c_void,
+        expert_counts: *mut i32,
+        expert_offsets: *mut i32,
+        num_experts: i32,
+        topk: i32,
+        size_m: i32,
+        size_n: i32,
+        size_k: i32,
+        is_prefill: i32,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// MoE forward — WMMA + GGUF combined path. f16 activations,
+    /// GGUF-packed weights, f32 output.
+    ///
+    /// `gguf_dtype` discriminant (Fuel-convention):
+    ///   `0 = Q8_0`, `1 = Q4_K`, `2 = Q2_K`, `3 = Q3_K`, `4 = Q5_K`, `5 = Q6_K`.
+    /// # Safety: as `moe_wmma_f16_run`.
+    pub fn baracuda_kernels_moe_wmma_gguf_f16_run(
+        input: *const c_void,
+        weights: *const c_void,             // packed GGUF bytes
+        sorted_token_ids: *const i32,
+        expert_ids: *const i32,
+        topk_weights: *const f32,
+        output: *mut c_void,                // f32
+        expert_counts: *mut i32,
+        expert_offsets: *mut i32,
+        num_experts: i32,
+        topk: i32,
+        size_m: i32,
+        size_n: i32,
+        size_k: i32,
+        gguf_dtype: i32,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// MoE forward — WMMA + GGUF combined path, bf16 activations.
+    /// # Safety: as `moe_wmma_gguf_f16_run`.
+    pub fn baracuda_kernels_moe_wmma_gguf_bf16_run(
+        input: *const c_void,
+        weights: *const c_void,
+        sorted_token_ids: *const i32,
+        expert_ids: *const i32,
+        topk_weights: *const f32,
+        output: *mut c_void,
+        expert_counts: *mut i32,
+        expert_offsets: *mut i32,
+        num_experts: i32,
+        topk: i32,
+        size_m: i32,
+        size_n: i32,
+        size_k: i32,
+        gguf_dtype: i32,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+}

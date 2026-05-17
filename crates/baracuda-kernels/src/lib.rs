@@ -38,10 +38,12 @@ pub use baracuda_kernels_types::{
     contiguous_stride, ActivationKind, ArchSku, ArgReduceKind, AttentionKind, BackendKind,
     BiasElement, BiasElementKind, Bin, BinElement, BinaryCmpKind, BinaryKind, Bool, Complex32,
     Complex64, CrossEntropyTargetKind, Element, ElementKind, EmbeddingKind, EpilogueKind,
-    F32Strict, FftKind, FillMode, Fp8E4M3, Fp8E5M2, FpElement, GatedActivationKind, IndexingKind,
+    F32Strict, FftKind, FillMode, Fp8E4M3, Fp8E5M2, FpElement, GatedActivationKind,
+    GgufBlockFormat, IndexingKind,
     IntElement, KernelSku, LayoutSku, LinalgKind, LossKind, LossReduction, MathPrecision,
-    MatrixMut, MatrixRef, NormalizationKind, OpCategory, PadMode, PlanPreference, PoolKind,
-    PrecisionGuarantee, RandomKind, ReduceKind, S4, S8, ScalarType, ScanKind, SegmentKind,
+    MatrixMut, MatrixRef, MoeKind, NormalizationKind, OpCategory, PadMode, PlanPreference, PoolKind,
+    PrecisionGuarantee, QuantizeKind, RandomKind, ReduceKind, S4, S8, ScalarType, ScanKind,
+    SegmentKind,
     ShapeLayoutKind, SoftmaxKind, TensorMut, TensorRef, TernaryKind, U4, U8, UnaryKind, VectorRef,
     Workspace,
 };
@@ -70,10 +72,12 @@ pub use gemm::{
 pub mod elementwise;
 
 pub use elementwise::{
-    BinaryArgs, BinaryBackwardArgs, BinaryBackwardDescriptor, BinaryBackwardPlan, BinaryCmpArgs,
+    AffineArgs, AffineDescriptor, AffinePlan, BinaryArgs, BinaryBackwardArgs,
+    BinaryBackwardDescriptor, BinaryBackwardPlan, BinaryCmpArgs,
     BinaryCmpDescriptor, BinaryCmpPlan, BinaryDescriptor, BinaryParamArgs,
     BinaryParamBackwardArgs, BinaryParamBackwardDescriptor, BinaryParamBackwardPlan,
-    BinaryParamDescriptor, BinaryParamPlan, BinaryPlan, GatedActivationArgs,
+    BinaryParamDescriptor, BinaryParamPlan, BinaryPlan, CastArgs, CastDescriptor, CastPlan,
+    GatedActivationArgs,
     GatedActivationBackwardArgs, GatedActivationBackwardDescriptor, GatedActivationBackwardPlan,
     GatedActivationDescriptor, GatedActivationPlan, TernaryArgs, TernaryBackwardArgs,
     TernaryBackwardDescriptor, TernaryBackwardPlan, TernaryDescriptor, TernaryPlan, UnaryArgs,
@@ -94,7 +98,8 @@ pub mod shape_layout;
 
 pub use shape_layout::{
     ConcatArgs, ConcatBackwardArgs, ConcatBackwardDescriptor, ConcatBackwardPlan,
-    ConcatDescriptor, ConcatPlan, FlipArgs, FlipBackwardArgs, FlipBackwardDescriptor,
+    ConcatDescriptor, ConcatPlan, FillArgs, FillDescriptor, FillPlan, FlipArgs,
+    FlipBackwardArgs, FlipBackwardDescriptor,
     FlipBackwardPlan, FlipDescriptor, FlipPlan, PadArgs, PadBackwardArgs,
     PadBackwardDescriptor, PadBackwardPlan, PadDescriptor, PadPlan, PermuteArgs,
     PermuteBackwardArgs, PermuteBackwardDescriptor, PermuteBackwardPlan, PermuteDescriptor,
@@ -346,3 +351,59 @@ pub use segment::{
     UnsortedSegmentSumBackwardArgs, UnsortedSegmentSumBackwardDescriptor,
     UnsortedSegmentSumBackwardPlan, UnsortedSegmentSumDescriptor, UnsortedSegmentSumPlan,
 };
+
+// Quantization family — Phase 8 (Category P). Split across two parallel
+// milestones: 8.1 ships per-tensor / per-channel / fake_quantize plans;
+// 8.2 ships per-token / per-group plans for LLM-style activation +
+// weight quantization (W8A8 and INT4 GPTQ). Dtype coverage:
+// {f32, f64, f16, bf16} × {s8, u8}. Backwards via STE for `quantize_*`
+// and straight-through scaling for `dequantize_*`.
+pub mod quantize;
+
+pub use quantize::{
+    DequantizePerGroupArgs, DequantizePerGroupBackwardArgs,
+    DequantizePerGroupBackwardDescriptor, DequantizePerGroupBackwardPlan,
+    DequantizePerGroupDescriptor, DequantizePerGroupPlan, DequantizePerTokenArgs,
+    DequantizePerTokenBackwardArgs, DequantizePerTokenBackwardDescriptor,
+    DequantizePerTokenBackwardPlan, DequantizePerTokenDescriptor, DequantizePerTokenPlan,
+    QuantizePerGroupArgs, QuantizePerGroupBackwardArgs, QuantizePerGroupBackwardDescriptor,
+    QuantizePerGroupBackwardPlan, QuantizePerGroupDescriptor, QuantizePerGroupPlan,
+    QuantizePerTokenArgs, QuantizePerTokenBackwardArgs, QuantizePerTokenBackwardDescriptor,
+    QuantizePerTokenBackwardPlan, QuantizePerTokenDescriptor, QuantizePerTokenPlan,
+};
+
+// Milestone 8.1 — per-tensor + per-channel + fake_quantize plan types.
+pub use quantize::{
+    DequantizePerChannelArgs, DequantizePerChannelBackwardArgs,
+    DequantizePerChannelBackwardDescriptor, DequantizePerChannelBackwardPlan,
+    DequantizePerChannelDescriptor, DequantizePerChannelPlan, DequantizePerTensorArgs,
+    DequantizePerTensorBackwardArgs, DequantizePerTensorBackwardDescriptor,
+    DequantizePerTensorBackwardPlan, DequantizePerTensorDescriptor, DequantizePerTensorPlan,
+    FakeQuantizeArgs, FakeQuantizeBackwardArgs, FakeQuantizeBackwardDescriptor,
+    FakeQuantizeBackwardPlan, FakeQuantizeDescriptor, FakeQuantizePlan, QuantizePerChannelArgs,
+    QuantizePerChannelBackwardArgs, QuantizePerChannelBackwardDescriptor,
+    QuantizePerChannelBackwardPlan, QuantizePerChannelDescriptor, QuantizePerChannelPlan,
+    QuantizePerTensorArgs, QuantizePerTensorBackwardArgs, QuantizePerTensorBackwardDescriptor,
+    QuantizePerTensorBackwardPlan, QuantizePerTensorDescriptor, QuantizePerTensorPlan,
+};
+
+// Milestone 8.3 — composing quantization ops (DynamicRangeQuantize +
+// QuantizedLinear).
+pub use quantize::{
+    DynamicRangeMode, DynamicRangeQuantizeArgs, DynamicRangeQuantizeDescriptor,
+    DynamicRangeQuantizePlan, DynamicRangeScope, QuantizedLinearArgs,
+    QuantizedLinearDescriptor, QuantizedLinearPlan,
+};
+
+// Milestone 8.4 — GGUF block-format dequant + MMVQ (Category P).
+// Vendored from llama.cpp via fuel-cuda-kernels.
+pub use quantize::{
+    BlockQ2K, BlockQ3K, BlockQ4_0, BlockQ4_1, BlockQ4K, BlockQ5_0, BlockQ5_1, BlockQ5K, BlockQ6K,
+    BlockQ8_0, BlockQ8K, GgufDequantizeArgs, GgufDequantizeDescriptor, GgufDequantizePlan,
+    GgufMmvqArgs, GgufMmvqDescriptor, GgufMmvqPlan,
+};
+
+// Milestone 8.5 — Mixture-of-Experts inference forward (Category V).
+// Vendored from attention.rs via fuel-cuda-kernels.
+pub mod moe;
+pub use moe::{MoeArgs, MoeDescriptor, MoePlan, MoeVariant};

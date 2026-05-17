@@ -271,6 +271,20 @@ pub enum UnaryKind {
     /// (`PReluPlan` / `PReluBackwardPlan`) because α is a tensor operand,
     /// not a scalar parameter. Wired in Milestone 5.3.
     PReLU = 120,
+
+    // ---- Category B: dtype / scalar-shape ops ----
+    /// `y = (TOut) x` — dtype conversion. Heterogeneous input / output
+    /// element types, so it goes through its own `CastPlan` (not the
+    /// same-dtype `UnaryPlan<T, N>`). The discriminant lives here for
+    /// telemetry / SKU-tagging consistency with the rest of the unary
+    /// family. Wired from `fuel-cuda-kernels/cast.cu`.
+    Cast = 130,
+    /// `y = a * x + b` — fused affine (multiply-add) with scalar
+    /// parameters `a` / `b`. Same-dtype input/output but carries two
+    /// scalar parameters, so it gets its own `AffinePlan` (the unified
+    /// `UnaryPlan<T, N>` doesn't carry kernel parameters). Wired from
+    /// `fuel-cuda-kernels/affine.cu`.
+    Affine = 131,
 }
 
 /// Ternary elementwise op discriminant.
@@ -373,6 +387,10 @@ pub enum ShapeLayoutKind {
     Roll = 5,
     /// `torch.meshgrid(*tensors)` — N rank-1 → N rank-N. Reserved.
     Meshgrid = 6,
+    /// `torch.full(shape, value)` / `Tensor.fill_(value)` — fill every
+    /// element of an output tensor with a scalar constant. Wired from
+    /// `fuel-cuda-kernels/fill.cu`.
+    Fill = 7,
 }
 
 /// Index-returning reduction discriminant — Phase 4 (`ArgReducePlan`).
@@ -1224,3 +1242,288 @@ pub enum EmbeddingKind {
     EmbeddingBagMaxBackward = 7,
 }
 
+/// Quantization op discriminant — Category P from the comprehensive plan.
+///
+/// Stored as `u16` in [`crate::KernelSku::op`] when
+/// `category == OpCategory::Quantization`. Phase 8 Milestone 8.1 wires the
+/// trailblazer set: per-tensor + per-channel quantize / dequantize plus
+/// fake_quantize (round-trip in FP space). All entries support FW + BW
+/// where applicable (FW-only for kinds that have no meaningful gradient).
+///
+/// **Trailblazer dtype scope.** Input FP × output int:
+/// - Input FP: `f32, f64, f16, bf16`.
+/// - Output int: `s8, u8`. Sub-byte packed types (`s4`, `u4`) are deferred.
+/// - `scale` matches the input FP dtype; `zero_point` is always `i32`
+///   (wide enough for any int output qmin/qmax range).
+///
+/// **Backward convention (Straight-Through Estimator).** The BW of
+/// `quantize` and `fake_quantize` uses STE — the gradient passes through
+/// (with a `1/scale` factor for `quantize`, no factor for `fake_quantize`)
+/// where the rounded result was in-range `[qmin, qmax]`, zero elsewhere.
+/// The "in-range mask" is **recomputed in BW from the saved `input`
+/// tensor** rather than saved as a separate FW output — this matches
+/// PyTorch's internal FakeQuantize and keeps the FW signature clean.
+/// Callers must therefore retain the original input tensor for the BW
+/// pass (which they would do anyway for autograd).
+///
+/// Future milestones extend this enum with `PerToken` / `PerGroup` /
+/// `DynamicRange` variants — discriminant gaps are intentionally left
+/// for those.
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
+#[repr(u16)]
+pub enum QuantizeKind {
+    /// `quantize_per_tensor(x, scale, zero_point)` —
+    /// `q = clamp(round(x / scale) + zero_point, qmin, qmax)`.
+    /// One scalar `scale` (FP) and `zero_point` (i32) for the whole
+    /// tensor. PyTorch `torch.quantize_per_tensor`.
+    PerTensor = 0,
+    /// Gradient of [`Self::PerTensor`] via STE:
+    /// `dx = (dy / scale) * in_range_mask`, where the mask is
+    /// `qmin <= round(x/scale) + zp <= qmax`.
+    PerTensorBackward = 1,
+    /// `dequantize_per_tensor(q, scale, zero_point)` —
+    /// `x = scale * (q - zero_point)`. Linear; exactly invertible up to
+    /// rounding. PyTorch `torch.Tensor.dequantize`.
+    DequantizePerTensor = 2,
+    /// Gradient of [`Self::DequantizePerTensor`]: `dq = dy * scale`
+    /// (linear identity scaled).
+    DequantizePerTensorBackward = 3,
+    /// `quantize_per_channel(x, scale[C], zero_point[C], axis)` — same
+    /// math as [`Self::PerTensor`] but with one `scale[c]` /
+    /// `zero_point[c]` pair per slice along `axis`. PyTorch
+    /// `torch.quantize_per_channel`.
+    PerChannel = 4,
+    /// Gradient of [`Self::PerChannel`] via STE:
+    /// `dx = (dy / scale[c]) * in_range_mask[c]`.
+    PerChannelBackward = 5,
+    /// `dequantize_per_channel(q, scale[C], zero_point[C], axis)` —
+    /// `x = scale[c] * (q - zero_point[c])`.
+    DequantizePerChannel = 6,
+    /// Gradient of [`Self::DequantizePerChannel`]:
+    /// `dq = dy * scale[c]`.
+    DequantizePerChannelBackward = 7,
+    /// `fake_quantize_per_tensor(x, scale, zero_point)` —
+    /// `y = scale * (clamp(round(x/scale)+zp, qmin, qmax) - zp)`. The
+    /// roundtrip quantize-then-dequantize in FP space; produces a lossy
+    /// FP output. PyTorch
+    /// `torch.fake_quantize_per_tensor_affine`.
+    FakeQuantize = 8,
+    /// Gradient of [`Self::FakeQuantize`] via STE:
+    /// `dx = dy * in_range_mask`. **No `1/scale` factor** — the
+    /// dequant-side multiplication by `scale` in FW cancels the
+    /// `1/scale` from STE.
+    FakeQuantizeBackward = 9,
+    /// Reserved — `quantize_per_token` (per-row dynamic-range
+    /// quantization used by activation quantization).
+    PerToken = 16,
+    /// Reserved — gradient of [`Self::PerToken`].
+    PerTokenBackward = 17,
+    /// Reserved — `quantize_per_group` (block-wise quantization used by
+    /// GPTQ / AWQ / GGML).
+    PerGroup = 18,
+    /// Reserved — gradient of [`Self::PerGroup`].
+    PerGroupBackward = 19,
+    /// Reserved — `dynamic_range_quantize` (post-training dynamic
+    /// quantization).
+    DynamicRange = 20,
+    // ---- Milestone 8.2 completion — per-token / per-group dequant
+    //      + backwards (FW PerToken / PerGroup discriminants were
+    //      reserved above at 16-19) ----
+    /// `dequantize_per_token(q, scale[N], zero_point[N])` —
+    /// `y[n, d] = scale[n] * (q[n, d] - zp[n])`. Per-row inverse of
+    /// [`Self::PerToken`].
+    DequantizePerToken = 21,
+    /// Gradient of [`Self::DequantizePerToken`]:
+    /// `dq = dy * scale[n]` (straight-through).
+    DequantizePerTokenBackward = 22,
+    /// `dequantize_per_group(q, scale[outer, num_groups],
+    /// zero_point[outer, num_groups])` — per-group inverse of
+    /// [`Self::PerGroup`].
+    DequantizePerGroup = 23,
+    /// Gradient of [`Self::DequantizePerGroup`]:
+    /// `dq[i, j] = dy[i, j] * scale[i, j/g]` (straight-through).
+    DequantizePerGroupBackward = 24,
+    // ---- Milestone 8.3 — composing quantization ops ----
+    /// `quantized_linear(activation_fp, weight_q_s8, weight_scale,
+    /// bias?)` — W8A8 fused quantized matmul. Pipeline: dynamic-range
+    /// per-token quantize the activation → int8 GEMM with int32
+    /// accumulator → dequantize via per-row `scale_a` and per-channel
+    /// `scale_w`. The canonical inference-time LLM matmul recipe
+    /// (e.g. SmoothQuant, AWQ-runtime); FP activation in, FP output out,
+    /// int8 storage only on the GEMM. Backward isn't shipped — this op
+    /// is inference-only by convention.
+    QuantizedLinear = 25,
+    // ---- Milestone 8.4 — GGUF block-format quant family ----
+    /// `gguf_dequantize(packed_bytes) -> fp_tensor` — unpack a
+    /// GGUF-packed weight buffer (Q4_0 / Q4_1 / Q5_0 / Q5_1 / Q8_0 +
+    /// Q2_K / Q3_K / Q4_K / Q5_K / Q6_K / Q8_K) into a dense FP
+    /// tensor. The block format is carried out-of-band on the plan
+    /// descriptor (see [`GgufBlockFormat`]); the kernel surface
+    /// fans out across block formats but the enum value is the same.
+    /// Inference-only by convention (BW not shipped).
+    GgufDequantize = 26,
+    /// `gguf_mmvq(packed_weight, fp_activation) -> fp_output` —
+    /// fused dequant + matrix-vector multiply: the inference-time
+    /// "decode-step" matmul used by llama.cpp on GGUF weights.
+    /// FP activation in (f32 today), FP output out. Inference-only
+    /// (BW not shipped).
+    GgufMmvq = 27,
+}
+
+/// GGUF block-format selector for [`QuantizeKind::GgufDequantize`] /
+/// [`QuantizeKind::GgufMmvq`] plans. Mirrors the discriminants used by
+/// llama.cpp / `ggml` so a descriptor can be round-tripped to a GGUF
+/// file header without translation.
+///
+/// Block sizes:
+///   * Type-0/1 variants (`Q4_0`, `Q4_1`, `Q5_0`, `Q5_1`, `Q8_0`)
+///     pack 32 quantized values per block plus a shared FP scale
+///     (+ min for the `_1` variants).
+///   * k-quants variants (`Q2_K` ... `Q8_K`) pack 256 values per
+///     super-block with a multi-level scale hierarchy
+///     (quantized sub-block scales + FP super-block scale).
+///
+/// Discriminant values match the `GGML_TYPE_*` enum in upstream
+/// `ggml.h`, ensuring binary compatibility with GGUF file headers.
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
+#[repr(u16)]
+pub enum GgufBlockFormat {
+    /// 4-bit, 32-element block, single FP scale. `block_q4_0`.
+    Q4_0 = 2,
+    /// 4-bit, 32-element block, FP scale + FP min. `block_q4_1`.
+    Q4_1 = 3,
+    /// 5-bit, 32-element block, single FP scale. `block_q5_0`.
+    Q5_0 = 6,
+    /// 5-bit, 32-element block, FP scale + FP min. `block_q5_1`.
+    Q5_1 = 7,
+    /// 8-bit, 32-element block, single FP scale. `block_q8_0`.
+    Q8_0 = 8,
+    /// 2.5-bit (effective), 256-element super-block. `block_q2_K`.
+    Q2K = 10,
+    /// 3.4-bit (effective), 256-element super-block. `block_q3_K`.
+    Q3K = 11,
+    /// 4.5-bit (effective), 256-element super-block. `block_q4_K`.
+    Q4K = 12,
+    /// 5.5-bit (effective), 256-element super-block. `block_q5_K`.
+    Q5K = 13,
+    /// 6.6-bit (effective), 256-element super-block. `block_q6_K`.
+    Q6K = 14,
+    /// 8-bit, 256-element super-block (CPU-side intermediate).
+    /// `block_q8_K`. Dequant supported; MMVQ NOT supported (matches
+    /// llama.cpp — no upstream MMVQ specialization).
+    Q8K = 15,
+}
+
+impl GgufBlockFormat {
+    /// Number of FP elements per packed block.
+    #[inline]
+    pub const fn block_size(self) -> usize {
+        match self {
+            GgufBlockFormat::Q4_0
+            | GgufBlockFormat::Q4_1
+            | GgufBlockFormat::Q5_0
+            | GgufBlockFormat::Q5_1
+            | GgufBlockFormat::Q8_0 => 32,
+            _ => 256,
+        }
+    }
+
+    /// Number of bytes per packed block. Matches `sizeof(block_q*)`
+    /// from `ggml.h`. Used by the Rust plan layer to size the input
+    /// weight buffer.
+    #[inline]
+    pub const fn type_size(self) -> usize {
+        match self {
+            // 2 (fp16 d) + 16 (qs[16])
+            GgufBlockFormat::Q4_0 => 18,
+            // 2*2 (half2 dm) + 16 (qs[16])
+            GgufBlockFormat::Q4_1 => 20,
+            // 2 (fp16 d) + 4 (qh) + 16 (qs[16])
+            GgufBlockFormat::Q5_0 => 22,
+            // 2*2 (half2 dm) + 4 (qh) + 16 (qs[16])
+            GgufBlockFormat::Q5_1 => 24,
+            // 2 (fp16 d) + 32 (qs[32])
+            GgufBlockFormat::Q8_0 => 34,
+            // 2*2 (half2 dm) + QK_K/16 (16 scales) + QK_K/4 (64 qs) = 4+16+64
+            GgufBlockFormat::Q2K => 84,
+            // hmask(32) + qs(64) + scales(12) + d(2)
+            GgufBlockFormat::Q3K => 110,
+            // dm(4) + scales(12) + qs(128)
+            GgufBlockFormat::Q4K => 144,
+            // dm(4) + scales(12) + qh(32) + qs(128)
+            GgufBlockFormat::Q5K => 176,
+            // ql(128) + qh(64) + scales(16) + d(2)
+            GgufBlockFormat::Q6K => 210,
+            // d(4) + qs(256) + bsums(32)
+            GgufBlockFormat::Q8K => 292,
+        }
+    }
+
+    /// `true` for the type-0/1 family (32-element blocks); `false`
+    /// for the k-quants family (256-element super-blocks).
+    #[inline]
+    pub const fn is_type_01(self) -> bool {
+        matches!(
+            self,
+            GgufBlockFormat::Q4_0
+                | GgufBlockFormat::Q4_1
+                | GgufBlockFormat::Q5_0
+                | GgufBlockFormat::Q5_1
+                | GgufBlockFormat::Q8_0
+        )
+    }
+
+    /// `true` if MMVQ (fused dequant + matvec) is supported for this
+    /// block format. `false` for [`GgufBlockFormat::Q8K`] only —
+    /// llama.cpp / Fuel reserve Q8_K as a CPU-side intermediate.
+    #[inline]
+    pub const fn has_mmvq(self) -> bool {
+        !matches!(self, GgufBlockFormat::Q8K)
+    }
+}
+
+
+/// Mixture-of-Experts (MoE) variant selector — used as the `op`
+/// discriminant for kernel SKUs whose [`crate::OpCategory`] is
+/// [`crate::OpCategory::Moe`]. Phase 8 Milestone 8.5 wires the three
+/// fused per-token-dispatch + expert-matmul + accumulate kernels.
+///
+/// MoE forward pass shape:
+///   * Input activations `[T, D_model]`.
+///   * Per-token top-k expert indices `[T, top_k]` (i32).
+///   * Per-token top-k expert weights `[T, top_k]` (FP).
+///   * Per-expert weight matrices `[num_experts, D_model, D_expert]`
+///     (dtype depends on the variant: FP for `Wmma`, GGUF-packed bytes
+///     for `ScalarGguf` / `WmmaGguf`).
+///   * Output `[T, D_model]` (after expert mixing).
+///
+/// All three variants are inference-only by convention; backward
+/// passes are not shipped (MoE training uses higher-level autograd
+/// surfaces that compose the per-expert FFN ops manually).
+///
+/// Lineage: vendored from `attention.rs` via `fuel-cuda-kernels`. See
+/// `crates/baracuda-kernels-sys/LICENSE-thirdparty.md` for the full
+/// attribution chain.
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
+#[repr(u16)]
+pub enum MoeKind {
+    /// Scalar dispatch path operating on GGUF-quantized expert weights
+    /// staged through a q8_1 intermediate (FP32 activations in, FP32
+    /// output out). No tensor cores. Used as a portability fallback
+    /// and as the slower-but-simpler reference for the WMMA + GGUF
+    /// hot path. Block formats: `Q8_0`, `Q2_K`, `Q3_K`, `Q4_K`,
+    /// `Q5_K`, `Q6_K` (matches Fuel's `moe_gemm_gguf` switch).
+    ScalarGguf = 0,
+    /// WMMA tensor-core path operating on dense FP expert weights
+    /// (f16 / bf16). The FP MoE hot path used when full-precision
+    /// expert weights are available — typically training-time or
+    /// FP-deployment inference. sm_70+ required.
+    Wmma = 1,
+    /// Combined WMMA tensor-core + GGUF-quantized weight path. The
+    /// dispatcher dequantizes one GGUF block per N-row into shared
+    /// memory, then issues a 16×16×16 WMMA mma.sync against the
+    /// dense activation tile. The production hot path for quantized
+    /// LLM inference. Activation dtype: f16 / bf16. Weight block
+    /// formats: same set as [`Self::ScalarGguf`]. sm_70+ required.
+    WmmaGguf = 2,
+}
