@@ -889,6 +889,113 @@ pub enum FftKind {
     IfftShift = 5,
 }
 
+/// Convolution-family op discriminant — Category I from the
+/// comprehensive plan.
+///
+/// Stored as `u16` in [`crate::KernelSku::op`] when
+/// `category == OpCategory::Convolution`. Each variant maps to a
+/// distinct cuDNN exec path (forward, data-gradient, filter-gradient)
+/// of the underlying convolution descriptor. The dimensional axis
+/// (1-D / 2-D / 3-D), padding / stride / dilation, and depthwise /
+/// transposed flavors live on the per-plan descriptor — they don't
+/// fan out a separate enum slot here.
+///
+/// Today wired: `Conv2d` × `{f32, f64, f16, bf16}` (FW + BW data +
+/// BW filter) via cuDNN. Conv1d / Conv3d / ConvTranspose* / depthwise
+/// / `unfold` / `fold` are reserved discriminants for fanout
+/// milestones.
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
+#[repr(u16)]
+pub enum ConvKind {
+    /// 2-D convolution forward pass. PyTorch
+    /// `torch.nn.functional.conv2d`. Trailblazer for Phase 7.
+    Conv2d = 0,
+    /// 2-D convolution data-gradient pass (computes `dx` from `dy`
+    /// and the filter `w`). PyTorch's autograd-internal
+    /// `conv2d_backward_input`.
+    Conv2dBackwardData = 1,
+    /// 2-D convolution filter-gradient pass (computes `dw` from `x`
+    /// and `dy`). PyTorch's autograd-internal
+    /// `conv2d_backward_weight`.
+    Conv2dBackwardFilter = 2,
+    /// 1-D convolution forward. Reserved.
+    Conv1d = 3,
+    /// 1-D convolution data-gradient. Reserved.
+    Conv1dBackwardData = 4,
+    /// 1-D convolution filter-gradient. Reserved.
+    Conv1dBackwardFilter = 5,
+    /// 3-D convolution forward. Reserved.
+    Conv3d = 6,
+    /// 3-D convolution data-gradient. Reserved.
+    Conv3dBackwardData = 7,
+    /// 3-D convolution filter-gradient. Reserved.
+    Conv3dBackwardFilter = 8,
+    /// 2-D transposed convolution (fractionally-strided / "deconv").
+    /// Reserved.
+    ConvTranspose2d = 9,
+    /// 2-D transposed convolution backward. Reserved.
+    ConvTranspose2dBackward = 10,
+    /// Depthwise 2-D convolution (`groups == c_in`). Reserved — today
+    /// callers route through the generic Conv2d plan with cuDNN's
+    /// auto-detected depthwise path.
+    DepthwiseConv2d = 11,
+    /// `torch.nn.functional.unfold` — extract sliding windows. Reserved.
+    Unfold = 12,
+    /// `torch.nn.functional.fold` — inverse of unfold. Reserved.
+    Fold = 13,
+}
+
+/// Pooling-family op discriminant — Category J from the comprehensive
+/// plan.
+///
+/// Stored as `u16` in [`crate::KernelSku::op`] when
+/// `category == OpCategory::Pooling`. Each variant maps to a distinct
+/// cuDNN pooling exec path (forward / backward) for one of three
+/// pooling modes: max, average-include-padding, average-exclude-padding.
+/// PyTorch's `nn.MaxPool2d` corresponds to [`Self::MaxPool2d`];
+/// `nn.AvgPool2d` defaults to `count_include_pad=False` which maps to
+/// [`Self::AvgPool2dExcludePad`].
+///
+/// Today wired: `{MaxPool2d, AvgPool2d} × {f32, f64, f16, bf16}` (FW +
+/// BW) via cuDNN. 1-D / 3-D pooling, adaptive pooling, LP-pool, and
+/// fractional-max-pool are reserved discriminants for fanout milestones.
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
+#[repr(u16)]
+pub enum PoolKind {
+    /// 2-D max-pool forward. PyTorch `torch.nn.functional.max_pool2d`.
+    /// Trailblazer for Phase 7 Milestone 7.2.
+    MaxPool2d = 0,
+    /// 2-D max-pool backward (data-gradient). PyTorch's autograd-
+    /// internal `max_pool2d_with_indices_backward`.
+    MaxPool2dBackward = 1,
+    /// 2-D average-pool forward, **count-include-padding** denominator.
+    /// Matches cuDNN's `*_COUNT_INCLUDE_PADDING` mode.
+    AvgPool2dIncludePad = 2,
+    /// 2-D average-pool backward, count-include-padding.
+    AvgPool2dIncludePadBackward = 3,
+    /// 2-D average-pool forward, **count-exclude-padding** denominator
+    /// (PyTorch default — `nn.AvgPool2d` with `count_include_pad=False`).
+    AvgPool2dExcludePad = 4,
+    /// 2-D average-pool backward, count-exclude-padding.
+    AvgPool2dExcludePadBackward = 5,
+    /// 1-D max-pool forward. Reserved.
+    MaxPool1d = 6,
+    /// 1-D average-pool forward. Reserved.
+    AvgPool1d = 7,
+    /// 3-D max-pool forward. Reserved.
+    MaxPool3d = 8,
+    /// 3-D average-pool forward. Reserved.
+    AvgPool3d = 9,
+    /// `torch.nn.functional.adaptive_max_pool*` — reserved.
+    AdaptiveMaxPool = 10,
+    /// `torch.nn.functional.adaptive_avg_pool*` — reserved.
+    AdaptiveAvgPool = 11,
+    /// `torch.nn.functional.lp_pool*` — reserved.
+    LpPool = 12,
+    /// `torch.nn.functional.fractional_max_pool*` — reserved.
+    FractionalMaxPool = 13,
+}
+
 /// Attention-family op discriminant — Category K from the comprehensive
 /// plan.
 ///
@@ -933,5 +1040,187 @@ pub enum AttentionKind {
     KvCache = 4,
     /// Paged attention (vLLM-style) — reserved.
     PagedAttention = 5,
+}
+
+/// Indexing / scatter / gather op discriminant — Category L from the
+/// comprehensive plan.
+///
+/// Stored as `u16` in [`crate::KernelSku::op`] when
+/// `category == OpCategory::Indexing`. Phase 7 Milestone 7.3 wires:
+/// - [`Self::Gather`] (FW + BW): `out[i] = src[index[i]]` along a dim.
+/// - [`Self::ScatterAdd`]: `out[index[i]] += updates[i]` along a dim
+///   (atomicAdd, dup-safe).
+/// - [`Self::IndexSelect`] (FW + BW): `out[..., j, ...] = src[..., idx[j], ...]`
+///   with a 1-D i32 idx tensor.
+/// - [`Self::MaskedFill`] (FW + BW): `out[i] = mask[i] ? value : src[i]`.
+/// - [`Self::OneHot`] (FW only — non-differentiable):
+///   `out[..., c] = 1 if c == src[...] else 0`.
+/// - [`Self::Nonzero`] (FW only): coordinates where input != 0,
+///   returned as an `[k, rank]` i32 table plus a count.
+///
+/// Index dtype is `i32` only in the trailblazer (i64 deferred).
+/// Out-of-bounds and negative indices are treated as no-ops (the kernel
+/// skips them — PyTorch-style negative wrap-around is deferred).
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
+#[repr(u16)]
+pub enum IndexingKind {
+    /// `gather(src, dim, index)` — `out[..., j, ...] = src[..., index[..., j, ...], ...]`
+    /// along the specified gather dimension. PyTorch `torch.gather`.
+    Gather = 0,
+    /// Gradient of [`Self::Gather`]: scatters `dout` into `dsrc` along
+    /// the gather dim with atomicAdd (dup-safe). Different signature
+    /// from [`Self::ScatterAdd`] because the dst is `dsrc` and the
+    /// index pattern matches the FW gather coordinates exactly.
+    GatherBackward = 1,
+    /// `scatter_add(out, dim, index, updates)` —
+    /// `out[..., index[..., j, ...], ...] += updates[..., j, ...]`
+    /// (atomicAdd). PyTorch `torch.scatter_add_`.
+    ScatterAdd = 2,
+    /// `index_select(src, dim, idx)` —
+    /// `out[..., j, ...] = src[..., idx[j], ...]` with a 1-D i32 idx
+    /// tensor. Faster / simpler than `gather` when the index tensor
+    /// is 1-D. PyTorch `torch.index_select`.
+    IndexSelect = 3,
+    /// Gradient of [`Self::IndexSelect`]: scatter-add `dout` into `dsrc`
+    /// along `select_dim` using `idx` (atomicAdd).
+    IndexSelectBackward = 4,
+    /// `masked_fill(src, mask, value)` —
+    /// `out[i] = mask[i] ? value : src[i]`. PyTorch
+    /// `torch.Tensor.masked_fill`.
+    MaskedFill = 5,
+    /// Gradient of [`Self::MaskedFill`]: `dsrc[i] = mask[i] ? 0 : dout[i]`.
+    /// `value` is a non-differentiable scalar.
+    MaskedFillBackward = 6,
+    /// `one_hot(src, num_classes)` —
+    /// `out[indices..., c] = 1 if c == src[indices...] else 0`. Input
+    /// dtype is i32 (class indices); output dtype is configurable.
+    /// PyTorch `torch.nn.functional.one_hot`. Non-differentiable.
+    OneHot = 7,
+    /// `nonzero(x)` — coordinates where `x != 0`. Returns an
+    /// `[k, rank]` i32 coordinate table plus a count. PyTorch
+    /// `torch.nonzero`. Output ordering is NOT row-major (atomic-counter
+    /// races); callers that need sorted output sort afterward.
+    Nonzero = 8,
+}
+
+/// Segment / scatter-reduce op discriminant — Category S from the
+/// comprehensive plan.
+///
+/// Stored as `u16` in [`crate::KernelSku::op`] when
+/// `category == OpCategory::SegmentOps`. Each variant maps to a
+/// distinct kernel symbol — sorted and unsorted families live in the
+/// same enum (different `op` slots) because the kernel implementation
+/// differs (sorted = binary-search single-pass sweep; unsorted = atomic
+/// scatter from the input side).
+///
+/// Phase 7 Milestone 7.6 wires:
+/// - Sorted: [`Self::SegmentSum`], [`Self::SegmentMean`],
+///   [`Self::SegmentMax`], [`Self::SegmentMin`], [`Self::SegmentProd`]
+///   (FW). Sum / Mean carry a BW variant
+///   ([`Self::SegmentSumBackward`], [`Self::SegmentMeanBackward`]).
+/// - Unsorted: [`Self::UnsortedSegmentSum`],
+///   [`Self::UnsortedSegmentMean`], [`Self::UnsortedSegmentMax`],
+///   [`Self::UnsortedSegmentMin`] (FW). Sum / Mean carry a BW variant
+///   ([`Self::UnsortedSegmentSumBackward`],
+///   [`Self::UnsortedSegmentMeanBackward`]).
+///
+/// Max / Min / Prod BW is deferred — argmax tracking (Max / Min) and
+/// numerically stable division-by-input (Prod) are out-of-scope for
+/// the trailblazer. Unsorted Prod is also deferred (no native FP
+/// atomicMul; would need a `atomicCAS` retry loop).
+///
+/// Dtype coverage: `f32, f64` (atomic-supported FP types). f16 / bf16
+/// deferred — the kernels use `atomicAdd` / `atomicMax` / `atomicMin`
+/// which are restricted to native-FP-atomic types.
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
+#[repr(u16)]
+pub enum SegmentKind {
+    /// `out[s, d] = Σ_{n : seg[n] == s} input[n, d]` — sorted segment
+    /// IDs (monotonically non-decreasing). TF / JAX `segment_sum`.
+    SegmentSum = 0,
+    /// Gradient of [`Self::SegmentSum`]:
+    /// `d_input[n, d] = d_output[seg[n], d]` (gather along seg ids).
+    SegmentSumBackward = 1,
+    /// `out[s, d] = mean_{n : seg[n] == s} input[n, d]` — sorted.
+    SegmentMean = 2,
+    /// Gradient of [`Self::SegmentMean`]:
+    /// `d_input[n, d] = d_output[seg[n], d] / count[seg[n]]`.
+    SegmentMeanBackward = 3,
+    /// `out[s, d] = max_{n : seg[n] == s} input[n, d]` — sorted.
+    /// FW-only; BW deferred (requires argmax tracking).
+    SegmentMax = 4,
+    /// `out[s, d] = min_{n : seg[n] == s} input[n, d]` — sorted.
+    /// FW-only; BW deferred (requires argmin tracking).
+    SegmentMin = 5,
+    /// `out[s, d] = prod_{n : seg[n] == s} input[n, d]` — sorted.
+    /// FW-only; BW deferred (requires numerically stable
+    /// division-by-input or saved-running-product).
+    SegmentProd = 6,
+    /// `out[s, d] = Σ_{n : seg[n] == s} input[n, d]` — unsorted
+    /// (seg IDs in any order). TF `unsorted_segment_sum`.
+    UnsortedSegmentSum = 7,
+    /// Gradient of [`Self::UnsortedSegmentSum`]:
+    /// `d_input[n, d] = d_output[seg[n], d]`.
+    UnsortedSegmentSumBackward = 8,
+    /// `out[s, d] = mean_{n : seg[n] == s} input[n, d]` — unsorted.
+    UnsortedSegmentMean = 9,
+    /// Gradient of [`Self::UnsortedSegmentMean`]:
+    /// `d_input[n, d] = d_output[seg[n], d] / count[seg[n]]`.
+    UnsortedSegmentMeanBackward = 10,
+    /// `out[s, d] = max_{n : seg[n] == s} input[n, d]` — unsorted.
+    /// FW-only; BW deferred.
+    UnsortedSegmentMax = 11,
+    /// `out[s, d] = min_{n : seg[n] == s} input[n, d]` — unsorted.
+    /// FW-only; BW deferred.
+    UnsortedSegmentMin = 12,
+}
+
+/// Embedding-family op discriminant — Category M from the comprehensive
+/// plan.
+///
+/// Stored as `u16` in [`crate::KernelSku::op`] when
+/// `category == OpCategory::Embedding`. Phase 7 Milestone 7.5 wires:
+/// - [`Self::Embedding`] (FW + BW): row-lookup
+///   `out[i, :] = weight[indices[i], :]` with optional `padding_idx`
+///   that emits an all-zero row at FW and skips accumulation at BW.
+/// - [`Self::EmbeddingBagSum`] / [`Self::EmbeddingBagMean`] (FW + BW):
+///   bag-reduced row lookup —
+///   `out[b, :] = reduce(weight[indices[k], :] for k in offsets[b]..offsets[b+1])`.
+///   Mode determines the reducer (sum / divide-by-bag-size).
+///   `EmbeddingBagMax` is deferred (needs argmax tracking for BW).
+///
+/// Index dtype is `i32` only (i64 deferred). FW kernels emit
+/// `f32, f64, f16, bf16` (pure copy / reduce); BW kernels emit `f32,
+/// f64` (atomicAdd).
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
+#[repr(u16)]
+pub enum EmbeddingKind {
+    /// `embedding(weight, indices, padding_idx)` —
+    /// `out[i, :] = weight[indices[i], :]`. PyTorch
+    /// `torch.nn.functional.embedding`.
+    Embedding = 0,
+    /// Gradient of [`Self::Embedding`]:
+    /// `dweight[indices[i], :] += dout[i, :]` (atomicAdd), skipping
+    /// rows where `indices[i] == padding_idx`.
+    EmbeddingBackward = 1,
+    /// `embedding_bag(weight, indices, offsets, mode=Sum)`.
+    /// PyTorch `torch.nn.functional.embedding_bag` with `mode='sum'`.
+    EmbeddingBagSum = 2,
+    /// `embedding_bag(weight, indices, offsets, mode=Mean)`.
+    /// PyTorch `torch.nn.functional.embedding_bag` with `mode='mean'`.
+    EmbeddingBagMean = 3,
+    /// Gradient of `embedding_bag` (Sum-mode):
+    /// `dweight[indices[k], :] += dout[b, :]` for k in bag b (atomicAdd).
+    EmbeddingBagSumBackward = 4,
+    /// Gradient of `embedding_bag` (Mean-mode):
+    /// `dweight[indices[k], :] += dout[b, :] / bag_size(b)` (atomicAdd).
+    EmbeddingBagMeanBackward = 5,
+    /// `embedding_bag(weight, indices, offsets, mode=Max)` — reserved.
+    /// Max-mode requires argmax tracking on FW (the per-feature index
+    /// of the contributing row) so the BW can scatter into just that
+    /// row — different plan shape; deferred.
+    EmbeddingBagMax = 6,
+    /// Gradient of `embedding_bag` (Max-mode) — reserved.
+    EmbeddingBagMaxBackward = 7,
 }
 

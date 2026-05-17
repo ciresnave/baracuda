@@ -45,9 +45,10 @@ pub use element::{
 pub use layout::{ActivationKind, ArchSku, EpilogueKind, LayoutSku};
 pub use matrix::{MatrixMut, MatrixRef, VectorRef};
 pub use ops::{
-    ArgReduceKind, AttentionKind, BinaryCmpKind, BinaryKind, CrossEntropyTargetKind, FftKind,
-    FillMode, GatedActivationKind, LinalgKind, LossKind, LossReduction, NormalizationKind, PadMode,
-    RandomKind, ReduceKind, ScanKind, ShapeLayoutKind, SoftmaxKind, TernaryKind, UnaryKind,
+    ArgReduceKind, AttentionKind, BinaryCmpKind, BinaryKind, ConvKind, CrossEntropyTargetKind,
+    EmbeddingKind, FftKind, FillMode, GatedActivationKind, IndexingKind, LinalgKind, LossKind,
+    LossReduction, NormalizationKind, PadMode, PoolKind, RandomKind, ReduceKind, ScanKind,
+    SegmentKind, ShapeLayoutKind, SoftmaxKind, TernaryKind, UnaryKind,
 };
 pub use plan::{PlanPreference, PrecisionGuarantee, Workspace};
 pub use sku::{BackendKind, KernelSku, OpCategory};

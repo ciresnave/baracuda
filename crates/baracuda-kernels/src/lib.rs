@@ -37,12 +37,13 @@
 pub use baracuda_kernels_types::{
     contiguous_stride, ActivationKind, ArchSku, ArgReduceKind, AttentionKind, BackendKind,
     BiasElement, BiasElementKind, Bin, BinElement, BinaryCmpKind, BinaryKind, Bool, Complex32,
-    Complex64, CrossEntropyTargetKind, Element, ElementKind, EpilogueKind, F32Strict, FftKind,
-    FillMode, Fp8E4M3, Fp8E5M2, FpElement, GatedActivationKind, IntElement, KernelSku, LayoutSku,
-    LinalgKind, LossKind, LossReduction, MathPrecision, MatrixMut, MatrixRef, NormalizationKind,
-    OpCategory, PadMode, PlanPreference, PrecisionGuarantee, RandomKind, ReduceKind, S4, S8,
-    ScalarType, ScanKind, ShapeLayoutKind, SoftmaxKind, TensorMut, TensorRef, TernaryKind, U4, U8,
-    UnaryKind, VectorRef, Workspace,
+    Complex64, CrossEntropyTargetKind, Element, ElementKind, EmbeddingKind, EpilogueKind,
+    F32Strict, FftKind, FillMode, Fp8E4M3, Fp8E5M2, FpElement, GatedActivationKind, IndexingKind,
+    IntElement, KernelSku, LayoutSku, LinalgKind, LossKind, LossReduction, MathPrecision,
+    MatrixMut, MatrixRef, NormalizationKind, OpCategory, PadMode, PlanPreference, PoolKind,
+    PrecisionGuarantee, RandomKind, ReduceKind, S4, S8, ScalarType, ScanKind, SegmentKind,
+    ShapeLayoutKind, SoftmaxKind, TensorMut, TensorRef, TernaryKind, U4, U8, UnaryKind, VectorRef,
+    Workspace,
 };
 
 // Re-export the float-GEMM plan types from baracuda-cutlass unchanged —
@@ -203,6 +204,12 @@ pub use loss::{
     CtcLossDescriptor, CtcLossPlan,
 };
 
+// CTCLoss cuDNN sibling (Phase 7 Milestone 7.4) — same op, distinct
+// backend; Fuel's autotuner races this against the bespoke plan.
+// Gated behind the `cudnn` cargo feature.
+#[cfg(feature = "cudnn")]
+pub use loss::{CtcLossCudnnArgs, CtcLossCudnnDescriptor, CtcLossCudnnPlan};
+
 // Random / sampling family — Phase 4.5 (Category Q). Uniform / Normal
 // pass through cuRAND; Bernoulli + Dropout use bespoke kernels on top
 // of cuRAND-uniform.
@@ -244,6 +251,33 @@ pub use linalg::{
     SvdDescriptor, SvdPlan, WY_NB,
 };
 
+// Convolution family — Phase 7 Milestone 7.1 (Category Convolution).
+// Wraps cuDNN's legacy descriptor-based API. Today wired: NCHW Conv2d
+// FW + BW data + BW filter × {f32, f64, f16, bf16}. 1-D / 3-D /
+// transposed / depthwise variants follow in fanout milestones. Gated
+// behind the `cudnn` cargo feature — cuDNN is a separate NVIDIA
+// download not bundled with the stock CUDA toolkit.
+#[cfg(feature = "cudnn")]
+pub mod conv;
+
+#[cfg(feature = "cudnn")]
+pub use conv::{
+    Conv2dArgs, Conv2dBwArgs, Conv2dDescriptor, Conv2dDwArgs, Conv2dPlan,
+};
+
+// Pooling family — Phase 7 Milestone 7.2 (Category Pooling). Wraps
+// cuDNN's legacy pooling API. Today wired: NCHW MaxPool2d + AvgPool2d
+// (FW + BW) × {f32, f64, f16, bf16}. 1-D / 3-D / adaptive / LP-pool /
+// fractional-max-pool follow in fanout milestones. Gated behind the
+// `cudnn` cargo feature.
+#[cfg(feature = "cudnn")]
+pub mod pool;
+
+#[cfg(feature = "cudnn")]
+pub use pool::{
+    AvgPool2dPlan, MaxPool2dPlan, Pool2dBwArgs, Pool2dDescriptor, Pool2dFwArgs, PoolMode,
+};
+
 // FFT family — Milestone 6.4 (Category Fft). Wraps cuFFT for the four
 // canonical 1-D PyTorch / JAX FFTs (FFT / IFFT / RFFT / IRFFT) plus
 // the two bespoke index-permutation helpers (fftshift / ifftshift).
@@ -256,4 +290,59 @@ pub use fft::{
     IrfftArgs, IrfftDescriptor, IrfftNdArgs, IrfftNdDescriptor, IrfftNdPlan, IrfftPlan, RfftArgs,
     RfftDescriptor, RfftNdArgs, RfftNdDescriptor, RfftNdPlan, RfftPlan, FFTSHIFT_ND_MAX_RANK,
     FFTSHIFT_ND_MAX_SHIFT_AXES,
+};
+
+// Indexing / scatter / gather family — Phase 7 Milestone 7.3 (Category L).
+// Bespoke kernels for gather + gather_backward, scatter_add, index_select
+// + index_select_backward, masked_fill + masked_fill_backward, one_hot,
+// nonzero. Index dtype is i32 only (i64 deferred); out-of-bounds + negative
+// indices are skipped (no PyTorch-style wrap-around).
+pub mod indexing;
+
+pub use indexing::{
+    GatherArgs, GatherBackwardArgs, GatherBackwardDescriptor, GatherBackwardPlan,
+    GatherDescriptor, GatherPlan, IndexSelectArgs, IndexSelectBackwardArgs,
+    IndexSelectBackwardDescriptor, IndexSelectBackwardPlan, IndexSelectDescriptor,
+    IndexSelectPlan, MaskedFillArgs, MaskedFillBackwardArgs, MaskedFillBackwardDescriptor,
+    MaskedFillBackwardPlan, MaskedFillDescriptor, MaskedFillPlan, NonzeroArgs,
+    NonzeroDescriptor, NonzeroPlan, OneHotArgs, OneHotDescriptor, OneHotPlan, ScatterAddArgs,
+    ScatterAddDescriptor, ScatterAddPlan,
+};
+
+// Embedding family — Phase 7 Milestone 7.5 (Category M). Bespoke
+// kernels for `embedding` (FW + BW) with optional `padding_idx` and
+// `embedding_bag` (FW + BW × Sum / Mean modes). FW dtypes: f32 / f64 /
+// f16 / bf16 (pure copy / accumulator-typed reduce); BW dtypes: f32 /
+// f64 only (atomicAdd is native-FP). Max-mode for `embedding_bag` is
+// deferred (needs per-feature argmax tracking).
+pub mod embedding;
+
+pub use embedding::{
+    EmbeddingArgs, EmbeddingBackwardArgs, EmbeddingBackwardDescriptor, EmbeddingBackwardPlan,
+    EmbeddingBagArgs, EmbeddingBagBackwardArgs, EmbeddingBagBackwardDescriptor,
+    EmbeddingBagBackwardPlan, EmbeddingBagDescriptor, EmbeddingBagMode, EmbeddingBagPlan,
+    EmbeddingDescriptor, EmbeddingPlan,
+};
+
+// Segment / scatter-reduce family — Phase 7 Milestone 7.6 (Category S).
+// Sorted (binary-search single-pass sweep) and unsorted (atomicAdd /
+// atomicMax-via-CAS / atomicMin-via-CAS) variants for sum / mean / max
+// / min / prod. BW shipped for sum + mean (sorted and unsorted share
+// the BW launcher); max / min / prod BW deferred (argmax tracking +
+// stable prod-div). f32 + f64 only.
+pub mod segment;
+
+pub use segment::{
+    SegmentMaxArgs, SegmentMaxDescriptor, SegmentMaxPlan, SegmentMeanArgs,
+    SegmentMeanBackwardArgs, SegmentMeanBackwardDescriptor, SegmentMeanBackwardPlan,
+    SegmentMeanDescriptor, SegmentMeanPlan, SegmentMinArgs, SegmentMinDescriptor, SegmentMinPlan,
+    SegmentProdArgs, SegmentProdDescriptor, SegmentProdPlan, SegmentSumArgs,
+    SegmentSumBackwardArgs, SegmentSumBackwardDescriptor, SegmentSumBackwardPlan,
+    SegmentSumDescriptor, SegmentSumPlan, UnsortedSegmentMaxArgs, UnsortedSegmentMaxDescriptor,
+    UnsortedSegmentMaxPlan, UnsortedSegmentMeanArgs, UnsortedSegmentMeanBackwardArgs,
+    UnsortedSegmentMeanBackwardDescriptor, UnsortedSegmentMeanBackwardPlan,
+    UnsortedSegmentMeanDescriptor, UnsortedSegmentMeanPlan, UnsortedSegmentMinArgs,
+    UnsortedSegmentMinDescriptor, UnsortedSegmentMinPlan, UnsortedSegmentSumArgs,
+    UnsortedSegmentSumBackwardArgs, UnsortedSegmentSumBackwardDescriptor,
+    UnsortedSegmentSumBackwardPlan, UnsortedSegmentSumDescriptor, UnsortedSegmentSumPlan,
 };

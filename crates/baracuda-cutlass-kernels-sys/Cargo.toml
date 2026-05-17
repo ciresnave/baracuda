@@ -1,6 +1,6 @@
 [package]
 name = "baracuda-cutlass-kernels-sys"
-version = "0.0.1-alpha.21"
+version = "0.0.1-alpha.22"
 description = "Compiled CUTLASS template instantiations for the baracuda ecosystem. Hosts curated .cu kernel sources, builds them via baracuda-forge, exposes extern \"C\" entry points for the safe baracuda-cutlass crate."
 edition.workspace = true
 rust-version.workspace = true

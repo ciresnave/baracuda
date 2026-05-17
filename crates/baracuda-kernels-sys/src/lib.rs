@@ -27150,3 +27150,1823 @@ unsafe extern "C" {
         stream: *mut c_void,
     ) -> i32;
 }
+
+// =============================================================================
+// cuDNN — convolution / pooling / CTC family infrastructure
+// =============================================================================
+//
+// Gated behind the `cudnn` cargo feature. cuDNN is a separate NVIDIA
+// download not bundled with the stock CUDA toolkit; the entire block
+// below (types + constants + extern "C" fns) is invisible when the
+// feature is off, so the rest of `baracuda-kernels-sys` builds cleanly
+// on machines without cuDNN. Re-exported at the crate root via
+// `pub use cudnn_ffi::*;` at the end of the module so callers don't
+// see the wrapper.
+//
+// Phase 7 wraps cuDNN's legacy "v6" descriptor-based API (handle +
+// tensor / filter / op descriptors → exec). The graph API (introduced
+// in cuDNN 8 and reworked further in cuDNN 9) is a separate axis we
+// defer for now — the legacy API is stable across cuDNN 8 / 9 and
+// covers everything Milestones 7.1 (Conv2d) / 7.2 (Pooling) / 7.3
+// (CTC) need.
+//
+// Linkage: `cargo:rustc-link-lib=dylib=cudnn` (added in build.rs). On
+// Linux resolves to `libcudnn.so`; on Windows to `cudnn64_*.dll` from
+// `CUDA_PATH\bin` (the cuDNN installer drops the DLLs alongside the
+// CUDA toolkit by default).
+//
+// Conv-specific descriptor types + the convolution exec / workspace
+// FFI live in this block (Milestone 7.1, this session). Pooling and
+// CTC agents extend with their own descriptors only — the handle,
+// tensor / filter descriptor types, data-type / format / NaN-prop
+// constants, and create / destroy helpers below are shared.
+
+#[cfg(feature = "cudnn")]
+mod cudnn_ffi {
+use super::*;
+
+/// Opaque cuDNN handle. Stateful object — the plan layer creates one
+/// lazily on first `run` and reuses it across launches. Like cuBLAS /
+/// cuSOLVER, the handle is **not** thread-safe; the plan owns it via a
+/// `Cell<>` and is `!Sync` / `!Send` by virtue of that interior
+/// mutability.
+#[allow(non_camel_case_types)]
+pub type cudnnHandle_t = *mut c_void;
+
+/// Opaque cuDNN tensor descriptor. Carries shape + layout + element
+/// type for an n-D tensor operand. Reused across launches by the plan
+/// layer (set once on first `run`, mutated only if the descriptor
+/// shape changes).
+#[allow(non_camel_case_types)]
+pub type cudnnTensorDescriptor_t = *mut c_void;
+
+/// Opaque cuDNN filter descriptor. Same shape as
+/// [`cudnnTensorDescriptor_t`] but carries an `[output_channels,
+/// input_channels, ...]` filter-bank tensor (semantics differ from a
+/// plain n-D tensor — cuDNN uses this to express convolution weights,
+/// transposed-convolution weights, etc.).
+#[allow(non_camel_case_types)]
+pub type cudnnFilterDescriptor_t = *mut c_void;
+
+/// Opaque cuDNN convolution descriptor. Carries the
+/// (pad, stride, dilation, mode, accumulator-dtype) tuple. Reused
+/// across launches by the conv plan.
+#[allow(non_camel_case_types)]
+pub type cudnnConvolutionDescriptor_t = *mut c_void;
+
+/// cuDNN data-type tag — `cudnnDataType_t` from the C header.
+/// Used by `cudnnSetTensor4dDescriptor`, `cudnnSetFilter4dDescriptor`,
+/// `cudnnSetConvolution2dDescriptor` to encode the per-operand element
+/// type.
+#[allow(non_camel_case_types)]
+pub type cudnnDataType_t = i32;
+
+/// `CUDNN_DATA_FLOAT` — `f32`.
+pub const CUDNN_DATA_FLOAT: i32 = 0;
+/// `CUDNN_DATA_DOUBLE` — `f64`.
+pub const CUDNN_DATA_DOUBLE: i32 = 1;
+/// `CUDNN_DATA_HALF` — IEEE 754 `f16`.
+pub const CUDNN_DATA_HALF: i32 = 2;
+/// `CUDNN_DATA_BFLOAT16` — Google `bf16`.
+pub const CUDNN_DATA_BFLOAT16: i32 = 9;
+
+/// cuDNN tensor format tag — `cudnnTensorFormat_t` from the C header.
+/// Selects between channel-first (NCHW, PyTorch default) and channel-
+/// last (NHWC, TensorFlow default) storage. Trailblazer wires NCHW
+/// only; NHWC is a follow-up.
+#[allow(non_camel_case_types)]
+pub type cudnnTensorFormat_t = i32;
+
+/// `CUDNN_TENSOR_NCHW` — channel-first storage (PyTorch / default).
+pub const CUDNN_TENSOR_NCHW: i32 = 0;
+/// `CUDNN_TENSOR_NHWC` — channel-last storage (TensorFlow / default).
+pub const CUDNN_TENSOR_NHWC: i32 = 1;
+
+/// cuDNN NaN-propagation tag — `cudnnNanPropagation_t` from the C
+/// header. Controls whether pooling / activation kernels propagate
+/// NaN values through reductions (matters for max-pool etc.).
+#[allow(non_camel_case_types)]
+pub type cudnnNanPropagation_t = i32;
+
+/// `CUDNN_NOT_PROPAGATE_NAN` — NaN inputs are ignored (treated as
+/// `-inf` for max, `+inf` for min). cuDNN default for the legacy
+/// pooling API; matches PyTorch's pooling-on-NaN-input behavior.
+pub const CUDNN_NOT_PROPAGATE_NAN: i32 = 0;
+/// `CUDNN_PROPAGATE_NAN` — NaN inputs propagate through the reduction.
+pub const CUDNN_PROPAGATE_NAN: i32 = 1;
+
+/// cuDNN convolution-mode tag — `cudnnConvolutionMode_t` from the C
+/// header. Selects between mathematical convolution (kernel flipped
+/// before the multiply-accumulate) and cross-correlation (kernel
+/// applied directly). **PyTorch's `torch.nn.Conv2d` is actually
+/// cross-correlation** despite the name — pass
+/// [`CUDNN_CROSS_CORRELATION`] for PyTorch parity.
+#[allow(non_camel_case_types)]
+pub type cudnnConvolutionMode_t = i32;
+
+/// `CUDNN_CONVOLUTION` — true mathematical convolution (kernel
+/// flipped). Rarely what callers want — PyTorch's `Conv2d` is
+/// cross-correlation.
+pub const CUDNN_CONVOLUTION: i32 = 0;
+/// `CUDNN_CROSS_CORRELATION` — kernel applied directly (PyTorch
+/// `Conv2d` semantics). Use this unless you have a specific reason
+/// to flip the kernel.
+pub const CUDNN_CROSS_CORRELATION: i32 = 1;
+
+/// cuDNN forward-convolution algorithm tag —
+/// `cudnnConvolutionFwdAlgo_t` from the C header. Trailblazer pins
+/// [`CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_GEMM`] (algo `0`) as the
+/// universally supported baseline; the heuristic search via
+/// `cudnnGetConvolutionForwardAlgorithm_v7` is a follow-up.
+#[allow(non_camel_case_types)]
+pub type cudnnConvolutionFwdAlgo_t = i32;
+
+/// `CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_GEMM` — universal-coverage
+/// baseline (works for any input/filter shape that cuDNN itself
+/// accepts).
+pub const CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_GEMM: i32 = 0;
+
+/// cuDNN backward-data-convolution algorithm tag —
+/// `cudnnConvolutionBwdDataAlgo_t` from the C header. Trailblazer
+/// pins [`CUDNN_CONVOLUTION_BWD_DATA_ALGO_1`] (algo `1`, the
+/// `IMPLICIT_PRECOMP_GEMM`-style universal baseline for backward
+/// data).
+#[allow(non_camel_case_types)]
+pub type cudnnConvolutionBwdDataAlgo_t = i32;
+
+/// `CUDNN_CONVOLUTION_BWD_DATA_ALGO_1` — universal-coverage baseline
+/// for the data-gradient pass.
+pub const CUDNN_CONVOLUTION_BWD_DATA_ALGO_1: i32 = 1;
+
+/// cuDNN backward-filter-convolution algorithm tag —
+/// `cudnnConvolutionBwdFilterAlgo_t` from the C header. Trailblazer
+/// pins [`CUDNN_CONVOLUTION_BWD_FILTER_ALGO_1`].
+#[allow(non_camel_case_types)]
+pub type cudnnConvolutionBwdFilterAlgo_t = i32;
+
+/// `CUDNN_CONVOLUTION_BWD_FILTER_ALGO_1` — universal-coverage
+/// baseline for the filter-gradient pass.
+pub const CUDNN_CONVOLUTION_BWD_FILTER_ALGO_1: i32 = 1;
+
+/// `CUDNN_STATUS_SUCCESS` — the only success code. Any non-zero
+/// return from a cuDNN routine is mapped to a negative status at the
+/// safe-plan layer for distinct error reporting (mirrors the
+/// `CUSOLVER_STATUS_SUCCESS` convention).
+pub const CUDNN_STATUS_SUCCESS: i32 = 0;
+
+/// Opaque cuDNN CTC-loss descriptor. Carries the `(compute_type,
+/// norm_mode, nan_prop)` tuple configured via
+/// [`cudnnSetCTCLossDescriptorEx`]. Owned by the CTC plan, reused
+/// across launches.
+#[allow(non_camel_case_types)]
+pub type cudnnCTCLossDescriptor_t = *mut c_void;
+
+/// cuDNN CTC-loss algorithm tag — `cudnnCTCLossAlgo_t` from the C
+/// header. Selects between deterministic and non-deterministic
+/// internal algorithms (cuDNN's non-deterministic variant uses
+/// atomic-add reductions for higher throughput on large batches).
+#[allow(non_camel_case_types)]
+pub type cudnnCTCLossAlgo_t = i32;
+
+/// `CUDNN_CTC_LOSS_ALGO_DETERMINISTIC` — bit-stable across runs
+/// on the same hardware. Trailblazer default for parity with the
+/// bespoke CTC plan.
+pub const CUDNN_CTC_LOSS_ALGO_DETERMINISTIC: i32 = 0;
+/// `CUDNN_CTC_LOSS_ALGO_NON_DETERMINISTIC` — faster on large
+/// batches but introduces atomicAdd-induced non-determinism.
+pub const CUDNN_CTC_LOSS_ALGO_NON_DETERMINISTIC: i32 = 1;
+
+/// cuDNN loss-normalization-mode tag —
+/// `cudnnLossNormalizationMode_t` from the C header. Selects how
+/// cuDNN interprets the input probability tensor for losses that
+/// can take either raw probabilities or pre-softmaxed log-probs.
+#[allow(non_camel_case_types)]
+pub type cudnnLossNormalizationMode_t = i32;
+
+/// `CUDNN_LOSS_NORMALIZATION_NONE` — input is raw probabilities;
+/// caller is responsible for the softmax (and the entries must
+/// sum to 1 along the class axis).
+pub const CUDNN_LOSS_NORMALIZATION_NONE: i32 = 0;
+/// `CUDNN_LOSS_NORMALIZATION_SOFTMAX` — input is log-probs;
+/// cuDNN applies log-softmax internally to recover the
+/// normalization. Trailblazer default for parity with the
+/// bespoke CTC plan's `log_probs` convention.
+pub const CUDNN_LOSS_NORMALIZATION_SOFTMAX: i32 = 1;
+
+// ----- pooling (Milestone 7.2) -------------------------------------------
+
+/// Opaque cuDNN pooling descriptor. Carries the
+/// `(mode, nan_prop, window, pad, stride)` tuple. Reused across launches
+/// by the pool plan.
+#[allow(non_camel_case_types)]
+pub type cudnnPoolingDescriptor_t = *mut c_void;
+
+/// cuDNN pooling-mode tag — `cudnnPoolingMode_t` from the C header.
+/// Selects max / avg-include-padding / avg-exclude-padding /
+/// max-deterministic. PyTorch's `nn.MaxPool2d` corresponds to
+/// [`CUDNN_POOLING_MAX`]; `nn.AvgPool2d` with the PyTorch default
+/// `count_include_pad=False` corresponds to
+/// [`CUDNN_POOLING_AVERAGE_COUNT_EXCLUDE_PADDING`].
+#[allow(non_camel_case_types)]
+pub type cudnnPoolingMode_t = i32;
+
+/// `CUDNN_POOLING_MAX` — pick the maximum element in each window.
+/// PyTorch / TensorFlow default for max-pool.
+pub const CUDNN_POOLING_MAX: i32 = 0;
+/// `CUDNN_POOLING_AVERAGE_COUNT_INCLUDE_PADDING` — average over the
+/// full `window_h * window_w` denominator (padded zeros included).
+pub const CUDNN_POOLING_AVERAGE_COUNT_INCLUDE_PADDING: i32 = 1;
+/// `CUDNN_POOLING_AVERAGE_COUNT_EXCLUDE_PADDING` — average over the
+/// number of *valid* (non-padded) elements per window. PyTorch's
+/// `nn.AvgPool2d` default (`count_include_pad=False`).
+pub const CUDNN_POOLING_AVERAGE_COUNT_EXCLUDE_PADDING: i32 = 2;
+/// `CUDNN_POOLING_MAX_DETERMINISTIC` — same semantics as
+/// [`CUDNN_POOLING_MAX`] but uses cuDNN's deterministic max-pool path
+/// for reproducible bit-identical output across launches (slightly
+/// slower).
+pub const CUDNN_POOLING_MAX_DETERMINISTIC: i32 = 3;
+
+unsafe extern "C" {
+    // ----- handle lifecycle ----------------------------------------------
+
+    /// `cudnnCreate(handle)` — allocate a cuDNN handle. Returns 0 on
+    /// success.
+    ///
+    /// # Safety
+    /// `handle` must point to writable storage for one
+    /// [`cudnnHandle_t`].
+    pub fn cudnnCreate(handle: *mut cudnnHandle_t) -> i32;
+
+    /// `cudnnDestroy(handle)` — release a cuDNN handle. Returns 0 on
+    /// success.
+    ///
+    /// # Safety
+    /// `handle` must be a valid handle returned by [`cudnnCreate`]
+    /// that has not been previously destroyed.
+    pub fn cudnnDestroy(handle: cudnnHandle_t) -> i32;
+
+    /// `cudnnSetStream(handle, stream)` — bind subsequent cuDNN calls
+    /// to the given CUDA stream. Returns 0 on success.
+    ///
+    /// # Safety
+    /// `handle` must be a live cuDNN handle; `stream` must be a
+    /// valid CUDA stream in the current context (or null for the
+    /// default stream).
+    pub fn cudnnSetStream(handle: cudnnHandle_t, stream: *mut c_void) -> i32;
+
+    // ----- tensor descriptor lifecycle ----------------------------------
+
+    /// `cudnnCreateTensorDescriptor(desc)` — allocate a tensor
+    /// descriptor. Returns 0 on success.
+    ///
+    /// # Safety
+    /// `desc` must point to writable storage for one
+    /// [`cudnnTensorDescriptor_t`].
+    pub fn cudnnCreateTensorDescriptor(desc: *mut cudnnTensorDescriptor_t) -> i32;
+
+    /// `cudnnDestroyTensorDescriptor(desc)` — release a tensor
+    /// descriptor. Returns 0 on success.
+    ///
+    /// # Safety
+    /// `desc` must be a valid descriptor returned by
+    /// [`cudnnCreateTensorDescriptor`] that has not been previously
+    /// destroyed.
+    pub fn cudnnDestroyTensorDescriptor(desc: cudnnTensorDescriptor_t) -> i32;
+
+    /// `cudnnSetTensor4dDescriptor(desc, format, dtype, n, c, h, w)`
+    /// — configure a rank-4 (`NCHW` or `NHWC`) tensor descriptor.
+    /// Returns 0 on success.
+    ///
+    /// `format` is a [`cudnnTensorFormat_t`] constant
+    /// ([`CUDNN_TENSOR_NCHW`] / [`CUDNN_TENSOR_NHWC`]); `dtype` is a
+    /// [`cudnnDataType_t`] constant. The `(n, c, h, w)` axes always
+    /// follow the NCHW logical order regardless of `format` — the
+    /// `format` arg only changes how cuDNN computes the underlying
+    /// strides.
+    ///
+    /// # Safety
+    /// `desc` must be a live tensor descriptor.
+    pub fn cudnnSetTensor4dDescriptor(
+        desc: cudnnTensorDescriptor_t,
+        format: cudnnTensorFormat_t,
+        dtype: cudnnDataType_t,
+        n: i32,
+        c: i32,
+        h: i32,
+        w: i32,
+    ) -> i32;
+
+    // ----- filter descriptor lifecycle ----------------------------------
+
+    /// `cudnnCreateFilterDescriptor(desc)` — allocate a filter
+    /// descriptor. Returns 0 on success.
+    ///
+    /// # Safety
+    /// `desc` must point to writable storage for one
+    /// [`cudnnFilterDescriptor_t`].
+    pub fn cudnnCreateFilterDescriptor(desc: *mut cudnnFilterDescriptor_t) -> i32;
+
+    /// `cudnnDestroyFilterDescriptor(desc)` — release a filter
+    /// descriptor. Returns 0 on success.
+    ///
+    /// # Safety
+    /// `desc` must be a valid descriptor returned by
+    /// [`cudnnCreateFilterDescriptor`] that has not been previously
+    /// destroyed.
+    pub fn cudnnDestroyFilterDescriptor(desc: cudnnFilterDescriptor_t) -> i32;
+
+    /// `cudnnSetFilter4dDescriptor(desc, dtype, format, k, c, h, w)`
+    /// — configure a rank-4 filter bank descriptor. Returns 0 on
+    /// success.
+    ///
+    /// `k` is `output_channels` (number of filters); `c` is
+    /// `input_channels` per filter; `(h, w)` are the per-filter
+    /// spatial extents. Note: the argument order in the cuDNN C ABI
+    /// puts `dtype` *before* `format` for filter descriptors
+    /// (opposite of `cudnnSetTensor4dDescriptor`); we mirror that
+    /// here.
+    ///
+    /// # Safety
+    /// `desc` must be a live filter descriptor.
+    pub fn cudnnSetFilter4dDescriptor(
+        desc: cudnnFilterDescriptor_t,
+        dtype: cudnnDataType_t,
+        format: cudnnTensorFormat_t,
+        k: i32,
+        c: i32,
+        h: i32,
+        w: i32,
+    ) -> i32;
+
+    // ----- convolution descriptor lifecycle -----------------------------
+
+    /// `cudnnCreateConvolutionDescriptor(desc)` — allocate a
+    /// convolution descriptor. Returns 0 on success.
+    ///
+    /// # Safety
+    /// `desc` must point to writable storage for one
+    /// [`cudnnConvolutionDescriptor_t`].
+    pub fn cudnnCreateConvolutionDescriptor(
+        desc: *mut cudnnConvolutionDescriptor_t,
+    ) -> i32;
+
+    /// `cudnnDestroyConvolutionDescriptor(desc)` — release a
+    /// convolution descriptor. Returns 0 on success.
+    ///
+    /// # Safety
+    /// `desc` must be a valid descriptor returned by
+    /// [`cudnnCreateConvolutionDescriptor`] that has not been
+    /// previously destroyed.
+    pub fn cudnnDestroyConvolutionDescriptor(
+        desc: cudnnConvolutionDescriptor_t,
+    ) -> i32;
+
+    /// `cudnnSetConvolution2dDescriptor(desc, pad_h, pad_w, u, v,
+    /// dilation_h, dilation_w, mode, compute_type)` — configure a
+    /// 2-D convolution descriptor. Returns 0 on success.
+    ///
+    /// `u`/`v` are the vertical / horizontal **stride**;
+    /// `dilation_h`/`dilation_w` are the per-axis dilation factors;
+    /// `mode` is a [`cudnnConvolutionMode_t`] (pass
+    /// [`CUDNN_CROSS_CORRELATION`] for PyTorch parity);
+    /// `compute_type` is the **accumulator** dtype (a
+    /// [`cudnnDataType_t`] constant — typically `f32` even when the
+    /// operand dtype is `f16` / `bf16`).
+    ///
+    /// # Safety
+    /// `desc` must be a live convolution descriptor.
+    pub fn cudnnSetConvolution2dDescriptor(
+        desc: cudnnConvolutionDescriptor_t,
+        pad_h: i32,
+        pad_w: i32,
+        u: i32,
+        v: i32,
+        dilation_h: i32,
+        dilation_w: i32,
+        mode: cudnnConvolutionMode_t,
+        compute_type: cudnnDataType_t,
+    ) -> i32;
+
+    // ----- workspace size queries ---------------------------------------
+
+    /// `cudnnGetConvolutionForwardWorkspaceSize(handle, x_desc,
+    /// w_desc, conv_desc, y_desc, algo, &size)` — query the
+    /// workspace size (in bytes) the FW conv kernel needs for the
+    /// given (x_desc, w_desc, conv_desc, y_desc, algo) combination.
+    /// Returns 0 on success.
+    ///
+    /// # Safety
+    /// All descriptors must be live and consistent; `size_in_bytes`
+    /// must point to writable storage for one `usize` (cuDNN's
+    /// `size_t`).
+    pub fn cudnnGetConvolutionForwardWorkspaceSize(
+        handle: cudnnHandle_t,
+        x_desc: cudnnTensorDescriptor_t,
+        w_desc: cudnnFilterDescriptor_t,
+        conv_desc: cudnnConvolutionDescriptor_t,
+        y_desc: cudnnTensorDescriptor_t,
+        algo: cudnnConvolutionFwdAlgo_t,
+        size_in_bytes: *mut usize,
+    ) -> i32;
+
+    /// `cudnnGetConvolutionBackwardDataWorkspaceSize(handle, w_desc,
+    /// dy_desc, conv_desc, dx_desc, algo, &size)` — query the
+    /// workspace size (in bytes) the BW-data conv kernel needs.
+    /// Returns 0 on success.
+    ///
+    /// # Safety
+    /// As for the FW variant.
+    pub fn cudnnGetConvolutionBackwardDataWorkspaceSize(
+        handle: cudnnHandle_t,
+        w_desc: cudnnFilterDescriptor_t,
+        dy_desc: cudnnTensorDescriptor_t,
+        conv_desc: cudnnConvolutionDescriptor_t,
+        dx_desc: cudnnTensorDescriptor_t,
+        algo: cudnnConvolutionBwdDataAlgo_t,
+        size_in_bytes: *mut usize,
+    ) -> i32;
+
+    /// `cudnnGetConvolutionBackwardFilterWorkspaceSize(handle,
+    /// x_desc, dy_desc, conv_desc, dw_desc, algo, &size)` — query
+    /// the workspace size (in bytes) the BW-filter conv kernel needs.
+    /// Returns 0 on success.
+    ///
+    /// # Safety
+    /// As for the FW variant.
+    pub fn cudnnGetConvolutionBackwardFilterWorkspaceSize(
+        handle: cudnnHandle_t,
+        x_desc: cudnnTensorDescriptor_t,
+        dy_desc: cudnnTensorDescriptor_t,
+        conv_desc: cudnnConvolutionDescriptor_t,
+        dw_desc: cudnnFilterDescriptor_t,
+        algo: cudnnConvolutionBwdFilterAlgo_t,
+        size_in_bytes: *mut usize,
+    ) -> i32;
+
+    // ----- convolution exec ---------------------------------------------
+
+    /// `cudnnConvolutionForward(handle, alpha, x_desc, x, w_desc, w,
+    /// conv_desc, algo, workspace, workspace_bytes, beta, y_desc, y)`
+    /// — run the FW conv. Computes
+    /// `y := alpha · conv(x, w) + beta · y`. Returns 0 on success.
+    ///
+    /// `alpha` and `beta` point to a single host-side scalar of the
+    /// **accumulator** dtype (typically `f32` — same value as the
+    /// `compute_type` passed to `cudnnSetConvolution2dDescriptor`).
+    /// For pure-store semantics pass `*alpha = 1.0, *beta = 0.0`.
+    ///
+    /// # Safety
+    /// All pointers must be device-resident where applicable; the
+    /// scalar pointers may point to host or device memory (matching
+    /// the handle's current scalar mode — host by default). Stream
+    /// is implicit via [`cudnnSetStream`].
+    pub fn cudnnConvolutionForward(
+        handle: cudnnHandle_t,
+        alpha: *const c_void,
+        x_desc: cudnnTensorDescriptor_t,
+        x: *const c_void,
+        w_desc: cudnnFilterDescriptor_t,
+        w: *const c_void,
+        conv_desc: cudnnConvolutionDescriptor_t,
+        algo: cudnnConvolutionFwdAlgo_t,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        beta: *const c_void,
+        y_desc: cudnnTensorDescriptor_t,
+        y: *mut c_void,
+    ) -> i32;
+
+    /// `cudnnConvolutionBackwardData(handle, alpha, w_desc, w,
+    /// dy_desc, dy, conv_desc, algo, workspace, workspace_bytes,
+    /// beta, dx_desc, dx)` — data-gradient pass. Computes
+    /// `dx := alpha · conv^T(w, dy) + beta · dx`. Returns 0 on
+    /// success.
+    ///
+    /// # Safety
+    /// As for [`cudnnConvolutionForward`].
+    pub fn cudnnConvolutionBackwardData(
+        handle: cudnnHandle_t,
+        alpha: *const c_void,
+        w_desc: cudnnFilterDescriptor_t,
+        w: *const c_void,
+        dy_desc: cudnnTensorDescriptor_t,
+        dy: *const c_void,
+        conv_desc: cudnnConvolutionDescriptor_t,
+        algo: cudnnConvolutionBwdDataAlgo_t,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        beta: *const c_void,
+        dx_desc: cudnnTensorDescriptor_t,
+        dx: *mut c_void,
+    ) -> i32;
+
+    /// `cudnnConvolutionBackwardFilter(handle, alpha, x_desc, x,
+    /// dy_desc, dy, conv_desc, algo, workspace, workspace_bytes,
+    /// beta, dw_desc, dw)` — filter-gradient pass. Computes
+    /// `dw := alpha · conv_grad(x, dy) + beta · dw`. Returns 0 on
+    /// success.
+    ///
+    /// # Safety
+    /// As for [`cudnnConvolutionForward`].
+    pub fn cudnnConvolutionBackwardFilter(
+        handle: cudnnHandle_t,
+        alpha: *const c_void,
+        x_desc: cudnnTensorDescriptor_t,
+        x: *const c_void,
+        dy_desc: cudnnTensorDescriptor_t,
+        dy: *const c_void,
+        conv_desc: cudnnConvolutionDescriptor_t,
+        algo: cudnnConvolutionBwdFilterAlgo_t,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        beta: *const c_void,
+        dw_desc: cudnnFilterDescriptor_t,
+        dw: *mut c_void,
+    ) -> i32;
+
+    // ----- n-D tensor descriptor (used by CTC for the [T, B, C] probs/grads
+    // tensor) -----------------------------------------------------------------
+
+    /// `cudnnSetTensorNdDescriptor(desc, dtype, nb_dims, dim_a, stride_a)`
+    /// — configure an n-D tensor descriptor with caller-supplied
+    /// dimensions and strides. Returns 0 on success.
+    ///
+    /// Used by the CTC plan to describe the rank-3 `[T, B, C]`
+    /// log-probability / gradient tensors that don't fit the rank-4
+    /// `NCHW` / `NHWC` shape that [`cudnnSetTensor4dDescriptor`] expects.
+    ///
+    /// # Safety
+    /// `desc` must be a live tensor descriptor; `dim_a` and `stride_a`
+    /// must each point to at least `nb_dims` readable `i32` values.
+    pub fn cudnnSetTensorNdDescriptor(
+        desc: cudnnTensorDescriptor_t,
+        dtype: cudnnDataType_t,
+        nb_dims: i32,
+        dim_a: *const i32,
+        stride_a: *const i32,
+    ) -> i32;
+
+    // ----- CTC loss --------------------------------------------------------
+
+    /// `cudnnCreateCTCLossDescriptor(ctc_desc)` — allocate a CTC-loss
+    /// descriptor. Returns 0 on success.
+    ///
+    /// # Safety
+    /// `ctc_desc` must point to writable storage for one
+    /// [`cudnnCTCLossDescriptor_t`].
+    pub fn cudnnCreateCTCLossDescriptor(ctc_desc: *mut cudnnCTCLossDescriptor_t) -> i32;
+
+    /// `cudnnDestroyCTCLossDescriptor(ctc_desc)` — release a CTC-loss
+    /// descriptor. Returns 0 on success.
+    ///
+    /// # Safety
+    /// `ctc_desc` must be a valid descriptor returned by
+    /// [`cudnnCreateCTCLossDescriptor`] that has not been previously
+    /// destroyed.
+    pub fn cudnnDestroyCTCLossDescriptor(ctc_desc: cudnnCTCLossDescriptor_t) -> i32;
+
+    /// `cudnnSetCTCLossDescriptorEx(ctc_desc, comp_type, norm_mode,
+    /// grad_mode)` — configure a CTC-loss descriptor.
+    ///
+    /// `comp_type` is the compute (accumulator) [`cudnnDataType_t`]
+    /// ([`CUDNN_DATA_FLOAT`] or [`CUDNN_DATA_DOUBLE`]). `norm_mode` is a
+    /// [`cudnnLossNormalizationMode_t`]: pass
+    /// [`CUDNN_LOSS_NORMALIZATION_SOFTMAX`] when the input is log-probs
+    /// (cuDNN softmaxes internally); pass
+    /// [`CUDNN_LOSS_NORMALIZATION_NONE`] for raw probabilities.
+    /// `grad_mode` is a [`cudnnNanPropagation_t`] controlling whether
+    /// NaN gradients propagate.
+    ///
+    /// # Safety
+    /// `ctc_desc` must be a live CTC-loss descriptor.
+    pub fn cudnnSetCTCLossDescriptorEx(
+        ctc_desc: cudnnCTCLossDescriptor_t,
+        comp_type: cudnnDataType_t,
+        norm_mode: cudnnLossNormalizationMode_t,
+        grad_mode: cudnnNanPropagation_t,
+    ) -> i32;
+
+    /// `cudnnGetCTCLossWorkspaceSize(handle, probs_desc, grads_desc,
+    /// labels, label_lengths, input_lengths, algo, ctc_desc,
+    /// size_in_bytes)` — compute the device workspace needed for a
+    /// CTC-loss forward+backward fused call.
+    ///
+    /// `labels`, `label_lengths`, `input_lengths` are **host-side**
+    /// `i32` arrays. `labels` is the concatenation of per-batch
+    /// label sequences (length `Σ label_lengths`); `label_lengths`
+    /// and `input_lengths` are each length `B` (batch).
+    ///
+    /// # Safety
+    /// All descriptors must be live; host arrays must be valid for
+    /// their stated lengths; `size_in_bytes` must point to writable
+    /// storage for one `usize`.
+    pub fn cudnnGetCTCLossWorkspaceSize(
+        handle: cudnnHandle_t,
+        probs_desc: cudnnTensorDescriptor_t,
+        grads_desc: cudnnTensorDescriptor_t,
+        labels: *const i32,
+        label_lengths: *const i32,
+        input_lengths: *const i32,
+        algo: cudnnCTCLossAlgo_t,
+        ctc_desc: cudnnCTCLossDescriptor_t,
+        size_in_bytes: *mut usize,
+    ) -> i32;
+
+    /// `cudnnCTCLoss(handle, probs_desc, probs, labels, label_lengths,
+    /// input_lengths, costs, grads_desc, grads, algo, ctc_desc,
+    /// workspace, workspace_bytes)` — fused CTC forward + backward.
+    ///
+    /// `probs` is a device pointer to a `[T, B, C]` log-prob (or raw
+    /// prob; see `norm_mode`) tensor; `costs` is a device pointer to a
+    /// `[B]` per-sample loss buffer; `grads` is a device pointer to a
+    /// `[T, B, C]` gradient buffer (or null for FW-only). `labels`,
+    /// `label_lengths`, `input_lengths` are **host-side** `i32`
+    /// arrays as for [`cudnnGetCTCLossWorkspaceSize`].
+    ///
+    /// # Safety
+    /// All descriptors must be live; host / device pointers must be
+    /// valid for the stated shapes; `workspace` must point to at
+    /// least `workspace_bytes` of device memory (the value returned
+    /// by [`cudnnGetCTCLossWorkspaceSize`]). Stream attachment is
+    /// implicit via [`cudnnSetStream`].
+    pub fn cudnnCTCLoss(
+        handle: cudnnHandle_t,
+        probs_desc: cudnnTensorDescriptor_t,
+        probs: *const c_void,
+        labels: *const i32,
+        label_lengths: *const i32,
+        input_lengths: *const i32,
+        costs: *mut c_void,
+        grads_desc: cudnnTensorDescriptor_t,
+        grads: *mut c_void,
+        algo: cudnnCTCLossAlgo_t,
+        ctc_desc: cudnnCTCLossDescriptor_t,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+    ) -> i32;
+
+    // ----- pooling descriptor lifecycle (Milestone 7.2) ----------------
+
+    /// `cudnnCreatePoolingDescriptor(desc)` — allocate a pooling
+    /// descriptor. Returns 0 on success.
+    ///
+    /// # Safety
+    /// `desc` must point to writable storage for one
+    /// [`cudnnPoolingDescriptor_t`].
+    pub fn cudnnCreatePoolingDescriptor(desc: *mut cudnnPoolingDescriptor_t) -> i32;
+
+    /// `cudnnDestroyPoolingDescriptor(desc)` — release a pooling
+    /// descriptor. Returns 0 on success.
+    ///
+    /// # Safety
+    /// `desc` must be a valid descriptor returned by
+    /// [`cudnnCreatePoolingDescriptor`] that has not been previously
+    /// destroyed.
+    pub fn cudnnDestroyPoolingDescriptor(desc: cudnnPoolingDescriptor_t) -> i32;
+
+    /// `cudnnSetPooling2dDescriptor(desc, mode, nan_prop, window_h,
+    /// window_w, pad_h, pad_w, stride_h, stride_w)` — configure a 2-D
+    /// pooling descriptor. Returns 0 on success.
+    ///
+    /// `mode` is a [`cudnnPoolingMode_t`]; `nan_propagation` is a
+    /// [`cudnnNanPropagation_t`] (typically [`CUDNN_NOT_PROPAGATE_NAN`],
+    /// matching PyTorch). Output spatial extents are computed by the FW
+    /// kernel as `out = floor((in + 2·pad - window) / stride) + 1`.
+    ///
+    /// # Safety
+    /// `desc` must be a live pooling descriptor.
+    pub fn cudnnSetPooling2dDescriptor(
+        desc: cudnnPoolingDescriptor_t,
+        mode: cudnnPoolingMode_t,
+        nan_propagation: cudnnNanPropagation_t,
+        window_h: i32,
+        window_w: i32,
+        pad_h: i32,
+        pad_w: i32,
+        stride_h: i32,
+        stride_w: i32,
+    ) -> i32;
+
+    // ----- pooling exec ------------------------------------------------
+
+    /// `cudnnPoolingForward(handle, pool_desc, alpha, x_desc, x, beta,
+    /// y_desc, y)` — FW pool. Computes
+    /// `y := alpha · pool(x) + beta · y`. Returns 0 on success.
+    ///
+    /// `alpha` / `beta` point to a single host-side scalar of the
+    /// accumulator dtype (`f32` for `f32` / `f16` / `bf16` operands;
+    /// `f64` for `f64` operands). For pure-store semantics pass
+    /// `*alpha = 1, *beta = 0`. **No workspace argument** — cuDNN's
+    /// pooling kernel allocates its small internal scratch itself.
+    ///
+    /// # Safety
+    /// All descriptors must be live and consistent with the operand
+    /// buffers. Stream is implicit via [`cudnnSetStream`].
+    pub fn cudnnPoolingForward(
+        handle: cudnnHandle_t,
+        pool_desc: cudnnPoolingDescriptor_t,
+        alpha: *const c_void,
+        x_desc: cudnnTensorDescriptor_t,
+        x: *const c_void,
+        beta: *const c_void,
+        y_desc: cudnnTensorDescriptor_t,
+        y: *mut c_void,
+    ) -> i32;
+
+    /// `cudnnPoolingBackward(handle, pool_desc, alpha, y_desc, y,
+    /// dy_desc, dy, x_desc, x, beta, dx_desc, dx)` — BW pool. Computes
+    /// `dx := alpha · pool_grad(y, dy, x) + beta · dx`. Returns 0 on
+    /// success.
+    ///
+    /// **Both `y` (saved FW output) and `x` (saved FW input) must be
+    /// retained from the FW launch** — cuDNN uses `y` and `x`
+    /// together to recover the per-window argmax for max-pool (no
+    /// separate "indices" tensor is materialized by the legacy API).
+    /// For average-pool the gradient depends only on `x` (window
+    /// shape + denominator), but the prototype still requires `y` for
+    /// API uniformity.
+    ///
+    /// # Safety
+    /// As for [`cudnnPoolingForward`]. All four data buffers must be
+    /// live and shape-consistent with their descriptors.
+    pub fn cudnnPoolingBackward(
+        handle: cudnnHandle_t,
+        pool_desc: cudnnPoolingDescriptor_t,
+        alpha: *const c_void,
+        y_desc: cudnnTensorDescriptor_t,
+        y: *const c_void,
+        dy_desc: cudnnTensorDescriptor_t,
+        dy: *const c_void,
+        x_desc: cudnnTensorDescriptor_t,
+        x: *const c_void,
+        beta: *const c_void,
+        dx_desc: cudnnTensorDescriptor_t,
+        dx: *mut c_void,
+    ) -> i32;
+}
+
+} // end mod cudnn_ffi
+
+#[cfg(feature = "cudnn")]
+pub use cudnn_ffi::*;
+
+// ============================================================================
+// Phase 7 Milestone 7.3 — Indexing / scatter / gather (Category L)
+// ============================================================================
+//
+// Six ops: gather + gather_backward, scatter_add, index_select +
+// index_select_backward, masked_fill + masked_fill_backward, one_hot,
+// nonzero. Index dtype is i32 only (i64 deferred). All FFI signatures
+// match the INSTANTIATE macros in `kernels/include/baracuda_indexing.cuh`.
+//
+// Trailblazer dtype coverage:
+// - gather, scatter_add, index_select (FW): f32, f64, i32
+// - gather BW, index_select BW: f32, f64 (FP-only — uses atomicAdd)
+// - masked_fill FW + BW: f32, f64, i32, bool
+// - one_hot FW: input always i32, output f32 / f64 / i32 / bool
+// - nonzero FW: input f32 / f64 / i32 / bool, output i32 indices
+//
+// Out-of-bounds index policy: kernels skip (no write); negative indices
+// are treated as out-of-bounds (no wrap-around — PyTorch-style wrap is
+// deferred).
+
+#[cfg(any(feature = "sm80", feature = "sm89", feature = "sm90a"))]
+unsafe extern "C" {
+    // ---------- gather (FW) ----------
+
+    /// `out[..., j, ...] = src[..., index[..., j, ...], ...]` along
+    /// `gather_dim`. f32.
+    pub fn baracuda_kernels_gather_f32_run(
+        out_numel: i64,
+        rank: i32,
+        gather_dim: i32,
+        src_dim_size: i32,
+        out_shape: *const i32,
+        stride_src: *const i64,
+        stride_index: *const i64,
+        stride_out: *const i64,
+        src: *const c_void,
+        index: *const c_void,
+        out: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `gather` along `gather_dim`. f64.
+    pub fn baracuda_kernels_gather_f64_run(
+        out_numel: i64,
+        rank: i32,
+        gather_dim: i32,
+        src_dim_size: i32,
+        out_shape: *const i32,
+        stride_src: *const i64,
+        stride_index: *const i64,
+        stride_out: *const i64,
+        src: *const c_void,
+        index: *const c_void,
+        out: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `gather` along `gather_dim`. i32.
+    pub fn baracuda_kernels_gather_i32_run(
+        out_numel: i64,
+        rank: i32,
+        gather_dim: i32,
+        src_dim_size: i32,
+        out_shape: *const i32,
+        stride_src: *const i64,
+        stride_index: *const i64,
+        stride_out: *const i64,
+        src: *const c_void,
+        index: *const c_void,
+        out: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    // ---------- gather_backward (scatter-add into dsrc) ----------
+
+    /// `dsrc[..., index[..., j, ...], ...] += dout[..., j, ...]` along
+    /// `gather_dim`. f32 (atomicAdd).
+    pub fn baracuda_kernels_gather_backward_f32_run(
+        out_numel: i64,
+        rank: i32,
+        gather_dim: i32,
+        src_dim_size: i32,
+        out_shape: *const i32,
+        stride_dout: *const i64,
+        stride_index: *const i64,
+        stride_dsrc: *const i64,
+        dout: *const c_void,
+        index: *const c_void,
+        dsrc: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `gather_backward` — f64 (atomicAdd).
+    pub fn baracuda_kernels_gather_backward_f64_run(
+        out_numel: i64,
+        rank: i32,
+        gather_dim: i32,
+        src_dim_size: i32,
+        out_shape: *const i32,
+        stride_dout: *const i64,
+        stride_index: *const i64,
+        stride_dsrc: *const i64,
+        dout: *const c_void,
+        index: *const c_void,
+        dsrc: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    // ---------- scatter_add ----------
+
+    /// `out[..., index[..., j, ...], ...] += updates[..., j, ...]`
+    /// along `scatter_dim`. f32 (atomicAdd).
+    pub fn baracuda_kernels_scatter_add_f32_run(
+        upd_numel: i64,
+        rank: i32,
+        scatter_dim: i32,
+        out_dim_size: i32,
+        upd_shape: *const i32,
+        stride_upd: *const i64,
+        stride_index: *const i64,
+        stride_out: *const i64,
+        updates: *const c_void,
+        index: *const c_void,
+        out: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `scatter_add` — f64 (atomicAdd).
+    pub fn baracuda_kernels_scatter_add_f64_run(
+        upd_numel: i64,
+        rank: i32,
+        scatter_dim: i32,
+        out_dim_size: i32,
+        upd_shape: *const i32,
+        stride_upd: *const i64,
+        stride_index: *const i64,
+        stride_out: *const i64,
+        updates: *const c_void,
+        index: *const c_void,
+        out: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    // ---------- index_select (FW) ----------
+
+    /// `out[..., j, ...] = src[..., idx[j], ...]` along `select_dim`.
+    /// `idx` is 1-D i32. f32.
+    pub fn baracuda_kernels_index_select_f32_run(
+        out_numel: i64,
+        rank: i32,
+        select_dim: i32,
+        src_dim_size: i32,
+        out_shape: *const i32,
+        stride_src: *const i64,
+        stride_out: *const i64,
+        src: *const c_void,
+        idx: *const c_void,
+        out: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `index_select` — f64.
+    pub fn baracuda_kernels_index_select_f64_run(
+        out_numel: i64,
+        rank: i32,
+        select_dim: i32,
+        src_dim_size: i32,
+        out_shape: *const i32,
+        stride_src: *const i64,
+        stride_out: *const i64,
+        src: *const c_void,
+        idx: *const c_void,
+        out: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `index_select` — i32.
+    pub fn baracuda_kernels_index_select_i32_run(
+        out_numel: i64,
+        rank: i32,
+        select_dim: i32,
+        src_dim_size: i32,
+        out_shape: *const i32,
+        stride_src: *const i64,
+        stride_out: *const i64,
+        src: *const c_void,
+        idx: *const c_void,
+        out: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    // ---------- index_select_backward (scatter-add into dsrc) ----------
+
+    /// `dsrc[..., idx[j], ...] += dout[..., j, ...]` along
+    /// `select_dim`. f32 (atomicAdd).
+    pub fn baracuda_kernels_index_select_backward_f32_run(
+        out_numel: i64,
+        rank: i32,
+        select_dim: i32,
+        src_dim_size: i32,
+        out_shape: *const i32,
+        stride_dout: *const i64,
+        stride_dsrc: *const i64,
+        dout: *const c_void,
+        idx: *const c_void,
+        dsrc: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `index_select_backward` — f64 (atomicAdd).
+    pub fn baracuda_kernels_index_select_backward_f64_run(
+        out_numel: i64,
+        rank: i32,
+        select_dim: i32,
+        src_dim_size: i32,
+        out_shape: *const i32,
+        stride_dout: *const i64,
+        stride_dsrc: *const i64,
+        dout: *const c_void,
+        idx: *const c_void,
+        dsrc: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    // ---------- masked_fill (FW) ----------
+    //
+    // `fill_bits` is a 64-bit payload that the kernel reinterprets into
+    // T at launch (`__builtin_memcpy` of `sizeof(T)` bytes). Caller
+    // encodes their fill value into the low bits.
+
+    /// `out[i] = mask[i] ? fill_value : src[i]`. f32 (caller passes
+    /// `fill_value.to_bits() as i64`).
+    pub fn baracuda_kernels_masked_fill_f32_run(
+        numel: i64,
+        src: *const c_void,
+        mask: *const c_void,
+        out: *mut c_void,
+        fill_bits: i64,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `masked_fill` — f64.
+    pub fn baracuda_kernels_masked_fill_f64_run(
+        numel: i64,
+        src: *const c_void,
+        mask: *const c_void,
+        out: *mut c_void,
+        fill_bits: i64,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `masked_fill` — i32.
+    pub fn baracuda_kernels_masked_fill_i32_run(
+        numel: i64,
+        src: *const c_void,
+        mask: *const c_void,
+        out: *mut c_void,
+        fill_bits: i64,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `masked_fill` — bool (u8 storage).
+    pub fn baracuda_kernels_masked_fill_bool_run(
+        numel: i64,
+        src: *const c_void,
+        mask: *const c_void,
+        out: *mut c_void,
+        fill_bits: i64,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    // ---------- masked_fill_backward ----------
+
+    /// `dsrc[i] = mask[i] ? 0 : dout[i]`. f32.
+    pub fn baracuda_kernels_masked_fill_backward_f32_run(
+        numel: i64,
+        dout: *const c_void,
+        mask: *const c_void,
+        dsrc: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `masked_fill_backward` — f64.
+    pub fn baracuda_kernels_masked_fill_backward_f64_run(
+        numel: i64,
+        dout: *const c_void,
+        mask: *const c_void,
+        dsrc: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `masked_fill_backward` — i32.
+    pub fn baracuda_kernels_masked_fill_backward_i32_run(
+        numel: i64,
+        dout: *const c_void,
+        mask: *const c_void,
+        dsrc: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `masked_fill_backward` — bool (u8 storage).
+    pub fn baracuda_kernels_masked_fill_backward_bool_run(
+        numel: i64,
+        dout: *const c_void,
+        mask: *const c_void,
+        dsrc: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    // ---------- one_hot (FW) ----------
+
+    /// `out[..., c] = 1 if c == src[...] else 0`. Output last axis has
+    /// extent `num_classes`. Input dtype is always i32; output is f32.
+    pub fn baracuda_kernels_one_hot_f32_run(
+        out_numel: i64,
+        num_classes: i32,
+        src: *const c_void,
+        out: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `one_hot` — f64 output.
+    pub fn baracuda_kernels_one_hot_f64_run(
+        out_numel: i64,
+        num_classes: i32,
+        src: *const c_void,
+        out: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `one_hot` — i32 output.
+    pub fn baracuda_kernels_one_hot_i32_run(
+        out_numel: i64,
+        num_classes: i32,
+        src: *const c_void,
+        out: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `one_hot` — bool output (u8 storage).
+    pub fn baracuda_kernels_one_hot_bool_run(
+        out_numel: i64,
+        num_classes: i32,
+        src: *const c_void,
+        out: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    // ---------- nonzero (FW) ----------
+    //
+    // Output is a `[max_nz, rank]` i32 coordinate table plus a single
+    // i32 counter (the launcher zeros it via cudaMemsetAsync before the
+    // kernel). The kernel uses a global atomic counter, so output order
+    // is NOT row-major — callers that need sorted output should sort
+    // afterward.
+
+    /// Coordinates where `x[i] != 0`. f32 input.
+    pub fn baracuda_kernels_nonzero_f32_run(
+        numel: i64,
+        rank: i32,
+        max_nz: i32,
+        shape: *const i32,
+        stride_x: *const i64,
+        x: *const c_void,
+        out_coords: *mut c_void,
+        counter: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `nonzero` — f64 input.
+    pub fn baracuda_kernels_nonzero_f64_run(
+        numel: i64,
+        rank: i32,
+        max_nz: i32,
+        shape: *const i32,
+        stride_x: *const i64,
+        x: *const c_void,
+        out_coords: *mut c_void,
+        counter: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `nonzero` — i32 input.
+    pub fn baracuda_kernels_nonzero_i32_run(
+        numel: i64,
+        rank: i32,
+        max_nz: i32,
+        shape: *const i32,
+        stride_x: *const i64,
+        x: *const c_void,
+        out_coords: *mut c_void,
+        counter: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `nonzero` — bool (u8) input.
+    pub fn baracuda_kernels_nonzero_bool_run(
+        numel: i64,
+        rank: i32,
+        max_nz: i32,
+        shape: *const i32,
+        stride_x: *const i64,
+        x: *const c_void,
+        out_coords: *mut c_void,
+        counter: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    // ---------- embedding (Phase 7 Milestone 7.5) ----------
+    //
+    // `out[n, :] = weight[indices[n], :]` with `padding_idx` zeroing
+    // rows where `indices[n] == padding_idx`. Caller passes
+    // `i32::MIN` as the padding-disabled sentinel (`kPaddingDisabled`
+    // in the .cuh). `weight: [V, D]` row-major contiguous; `indices`
+    // is a flat i32 buffer of length `num_indices`; `out: [N, D]`
+    // row-major contiguous.
+
+    /// `embedding` FW — f32 (pure copy).
+    pub fn baracuda_kernels_embedding_f32_run(
+        num_indices: i64,
+        num_embeddings: i32,
+        embedding_dim: i32,
+        padding_idx: i32,
+        weight: *const c_void,
+        indices: *const c_void,
+        out: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `embedding` FW — f64.
+    pub fn baracuda_kernels_embedding_f64_run(
+        num_indices: i64,
+        num_embeddings: i32,
+        embedding_dim: i32,
+        padding_idx: i32,
+        weight: *const c_void,
+        indices: *const c_void,
+        out: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `embedding` FW — f16.
+    pub fn baracuda_kernels_embedding_f16_run(
+        num_indices: i64,
+        num_embeddings: i32,
+        embedding_dim: i32,
+        padding_idx: i32,
+        weight: *const c_void,
+        indices: *const c_void,
+        out: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `embedding` FW — bf16.
+    pub fn baracuda_kernels_embedding_bf16_run(
+        num_indices: i64,
+        num_embeddings: i32,
+        embedding_dim: i32,
+        padding_idx: i32,
+        weight: *const c_void,
+        indices: *const c_void,
+        out: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `embedding` BW — `dweight[indices[n], :] += dout[n, :]` (atomicAdd),
+    /// skipping rows where `indices[n] == padding_idx`. f32.
+    pub fn baracuda_kernels_embedding_backward_f32_run(
+        num_indices: i64,
+        num_embeddings: i32,
+        embedding_dim: i32,
+        padding_idx: i32,
+        dout: *const c_void,
+        indices: *const c_void,
+        dweight: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `embedding` BW — f64.
+    pub fn baracuda_kernels_embedding_backward_f64_run(
+        num_indices: i64,
+        num_embeddings: i32,
+        embedding_dim: i32,
+        padding_idx: i32,
+        dout: *const c_void,
+        indices: *const c_void,
+        dweight: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    // ---------- embedding_bag (Phase 7 Milestone 7.5) ----------
+    //
+    // `out[b, :] = reduce(weight[indices[k], :] for k in
+    // offsets[b]..offsets[b+1])`. `mode` is 0 (Sum) or 1 (Mean). The
+    // last bag's end is `total_indices`. `padding_idx` skips rows;
+    // for Mean the divisor uses the post-skip count.
+
+    /// `embedding_bag` FW — f32.
+    pub fn baracuda_kernels_embedding_bag_f32_run(
+        total_indices: i32,
+        num_embeddings: i32,
+        embedding_dim: i32,
+        num_bags: i32,
+        mode: i32,
+        padding_idx: i32,
+        weight: *const c_void,
+        indices: *const c_void,
+        offsets: *const c_void,
+        out: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `embedding_bag` FW — f64.
+    pub fn baracuda_kernels_embedding_bag_f64_run(
+        total_indices: i32,
+        num_embeddings: i32,
+        embedding_dim: i32,
+        num_bags: i32,
+        mode: i32,
+        padding_idx: i32,
+        weight: *const c_void,
+        indices: *const c_void,
+        offsets: *const c_void,
+        out: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `embedding_bag` FW — f16.
+    pub fn baracuda_kernels_embedding_bag_f16_run(
+        total_indices: i32,
+        num_embeddings: i32,
+        embedding_dim: i32,
+        num_bags: i32,
+        mode: i32,
+        padding_idx: i32,
+        weight: *const c_void,
+        indices: *const c_void,
+        offsets: *const c_void,
+        out: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `embedding_bag` FW — bf16.
+    pub fn baracuda_kernels_embedding_bag_bf16_run(
+        total_indices: i32,
+        num_embeddings: i32,
+        embedding_dim: i32,
+        num_bags: i32,
+        mode: i32,
+        padding_idx: i32,
+        weight: *const c_void,
+        indices: *const c_void,
+        offsets: *const c_void,
+        out: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `embedding_bag` BW — atomicAdd into `dweight`. f32.
+    pub fn baracuda_kernels_embedding_bag_backward_f32_run(
+        total_indices: i32,
+        num_embeddings: i32,
+        embedding_dim: i32,
+        num_bags: i32,
+        mode: i32,
+        padding_idx: i32,
+        dout: *const c_void,
+        indices: *const c_void,
+        offsets: *const c_void,
+        dweight: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `embedding_bag` BW — f64.
+    pub fn baracuda_kernels_embedding_bag_backward_f64_run(
+        total_indices: i32,
+        num_embeddings: i32,
+        embedding_dim: i32,
+        num_bags: i32,
+        mode: i32,
+        padding_idx: i32,
+        dout: *const c_void,
+        indices: *const c_void,
+        offsets: *const c_void,
+        dweight: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+}
+
+// ============================================================================
+// Phase 7 Milestone 7.6 — Segment / scatter-reduce (Category S)
+// ============================================================================
+//
+// Ten FW ops + four BW ops:
+//   Sorted FW:    segment_sum, segment_mean, segment_max, segment_min,
+//                 segment_prod   (segment_ids monotonically non-decreasing)
+//   Unsorted FW:  unsorted_segment_sum, unsorted_segment_mean,
+//                 unsorted_segment_max, unsorted_segment_min
+//                 (atomic scatter; unsorted_prod deferred — no native FP
+//                  atomicMul)
+//   BW:           segment_sum_backward, segment_mean_backward,
+//                 unsorted_segment_sum_backward, unsorted_segment_mean_backward
+//                 (sorted + unsorted share the BW launcher — the gather
+//                  access pattern is identical)
+//
+// All FFI signatures share the shape:
+//   (N, D, num_segments, input/dout, segment_ids, output/dinput,
+//    workspace, workspace_bytes, stream)
+//
+// Workspace usage:
+//   - Sorted FW (sum/mean/max/min/prod): none (workspace_bytes ignored).
+//   - Unsorted FW sum/max/min: none.
+//   - Unsorted FW mean: requires `num_segments * sizeof(i32)` workspace
+//     for per-segment counts.
+//   - Sum BW: none.
+//   - Mean BW (sorted or unsorted): requires `num_segments * sizeof(i32)`
+//     workspace for per-segment counts.
+//
+// Dtype coverage: f32, f64 (atomic-FP-restricted). f16 / bf16 deferred.
+// Out-of-range segment IDs are silently dropped.
+
+#[cfg(any(feature = "sm80", feature = "sm89", feature = "sm90a"))]
+unsafe extern "C" {
+    // ---------- Sorted FW ----------
+
+    /// `out[s, d] = Σ_{n : seg[n] == s} input[n, d]` — sorted seg ids
+    /// (monotonically non-decreasing). f32.
+    pub fn baracuda_kernels_segment_sum_f32_run(
+        n: i32,
+        d: i32,
+        num_segments: i32,
+        input: *const c_void,
+        segment_ids: *const c_void,
+        output: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `segment_sum` — f64.
+    pub fn baracuda_kernels_segment_sum_f64_run(
+        n: i32,
+        d: i32,
+        num_segments: i32,
+        input: *const c_void,
+        segment_ids: *const c_void,
+        output: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `out[s, d] = mean_{n : seg[n] == s} input[n, d]` — sorted. f32.
+    pub fn baracuda_kernels_segment_mean_f32_run(
+        n: i32,
+        d: i32,
+        num_segments: i32,
+        input: *const c_void,
+        segment_ids: *const c_void,
+        output: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `segment_mean` — f64.
+    pub fn baracuda_kernels_segment_mean_f64_run(
+        n: i32,
+        d: i32,
+        num_segments: i32,
+        input: *const c_void,
+        segment_ids: *const c_void,
+        output: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `out[s, d] = max_{n : seg[n] == s} input[n, d]` — sorted. f32.
+    pub fn baracuda_kernels_segment_max_f32_run(
+        n: i32,
+        d: i32,
+        num_segments: i32,
+        input: *const c_void,
+        segment_ids: *const c_void,
+        output: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `segment_max` — f64.
+    pub fn baracuda_kernels_segment_max_f64_run(
+        n: i32,
+        d: i32,
+        num_segments: i32,
+        input: *const c_void,
+        segment_ids: *const c_void,
+        output: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `out[s, d] = min_{n : seg[n] == s} input[n, d]` — sorted. f32.
+    pub fn baracuda_kernels_segment_min_f32_run(
+        n: i32,
+        d: i32,
+        num_segments: i32,
+        input: *const c_void,
+        segment_ids: *const c_void,
+        output: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `segment_min` — f64.
+    pub fn baracuda_kernels_segment_min_f64_run(
+        n: i32,
+        d: i32,
+        num_segments: i32,
+        input: *const c_void,
+        segment_ids: *const c_void,
+        output: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `out[s, d] = prod_{n : seg[n] == s} input[n, d]` — sorted. f32.
+    pub fn baracuda_kernels_segment_prod_f32_run(
+        n: i32,
+        d: i32,
+        num_segments: i32,
+        input: *const c_void,
+        segment_ids: *const c_void,
+        output: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `segment_prod` — f64.
+    pub fn baracuda_kernels_segment_prod_f64_run(
+        n: i32,
+        d: i32,
+        num_segments: i32,
+        input: *const c_void,
+        segment_ids: *const c_void,
+        output: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    // ---------- Unsorted FW ----------
+
+    /// `out[s, d] = Σ_{n : seg[n] == s} input[n, d]` — unsorted seg
+    /// ids; atomicAdd into output. Output pre-zeroed by the launcher.
+    /// f32.
+    pub fn baracuda_kernels_unsorted_segment_sum_f32_run(
+        n: i32,
+        d: i32,
+        num_segments: i32,
+        input: *const c_void,
+        segment_ids: *const c_void,
+        output: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `unsorted_segment_sum` — f64.
+    pub fn baracuda_kernels_unsorted_segment_sum_f64_run(
+        n: i32,
+        d: i32,
+        num_segments: i32,
+        input: *const c_void,
+        segment_ids: *const c_void,
+        output: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `out[s, d] = mean_{n : seg[n] == s} input[n, d]` — unsorted.
+    /// Workspace: `num_segments * sizeof(i32)` for per-segment counts.
+    /// f32.
+    pub fn baracuda_kernels_unsorted_segment_mean_f32_run(
+        n: i32,
+        d: i32,
+        num_segments: i32,
+        input: *const c_void,
+        segment_ids: *const c_void,
+        output: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `unsorted_segment_mean` — f64.
+    pub fn baracuda_kernels_unsorted_segment_mean_f64_run(
+        n: i32,
+        d: i32,
+        num_segments: i32,
+        input: *const c_void,
+        segment_ids: *const c_void,
+        output: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `out[s, d] = max_{n : seg[n] == s} input[n, d]` — unsorted;
+    /// atomicMax-via-CAS. Output pre-initialized to `-inf` by the
+    /// launcher. f32.
+    pub fn baracuda_kernels_unsorted_segment_max_f32_run(
+        n: i32,
+        d: i32,
+        num_segments: i32,
+        input: *const c_void,
+        segment_ids: *const c_void,
+        output: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `unsorted_segment_max` — f64.
+    pub fn baracuda_kernels_unsorted_segment_max_f64_run(
+        n: i32,
+        d: i32,
+        num_segments: i32,
+        input: *const c_void,
+        segment_ids: *const c_void,
+        output: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `out[s, d] = min_{n : seg[n] == s} input[n, d]` — unsorted. f32.
+    pub fn baracuda_kernels_unsorted_segment_min_f32_run(
+        n: i32,
+        d: i32,
+        num_segments: i32,
+        input: *const c_void,
+        segment_ids: *const c_void,
+        output: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `unsorted_segment_min` — f64.
+    pub fn baracuda_kernels_unsorted_segment_min_f64_run(
+        n: i32,
+        d: i32,
+        num_segments: i32,
+        input: *const c_void,
+        segment_ids: *const c_void,
+        output: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    // ---------- BW (sum / mean) ----------
+    //
+    // Sorted and unsorted variants share the same BW kernel — the
+    // access pattern (`d_input[n, d] = d_output[seg[n], d]` for sum;
+    // same divided by count for mean) is identical regardless of seg-
+    // ids ordering.
+
+    /// `d_input[n, d] = d_output[seg[n], d]`. f32.
+    pub fn baracuda_kernels_segment_sum_backward_f32_run(
+        n: i32,
+        d: i32,
+        num_segments: i32,
+        d_output: *const c_void,
+        segment_ids: *const c_void,
+        d_input: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `segment_sum_backward` — f64.
+    pub fn baracuda_kernels_segment_sum_backward_f64_run(
+        n: i32,
+        d: i32,
+        num_segments: i32,
+        d_output: *const c_void,
+        segment_ids: *const c_void,
+        d_input: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// Same kernel as `segment_sum_backward_f32`; distinct symbol for
+    /// SKU-tagging differentiation.
+    pub fn baracuda_kernels_unsorted_segment_sum_backward_f32_run(
+        n: i32,
+        d: i32,
+        num_segments: i32,
+        d_output: *const c_void,
+        segment_ids: *const c_void,
+        d_input: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `unsorted_segment_sum_backward` — f64.
+    pub fn baracuda_kernels_unsorted_segment_sum_backward_f64_run(
+        n: i32,
+        d: i32,
+        num_segments: i32,
+        d_output: *const c_void,
+        segment_ids: *const c_void,
+        d_input: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `d_input[n, d] = d_output[seg[n], d] / count[seg[n]]`.
+    /// Workspace: `num_segments * sizeof(i32)`. f32.
+    pub fn baracuda_kernels_segment_mean_backward_f32_run(
+        n: i32,
+        d: i32,
+        num_segments: i32,
+        d_output: *const c_void,
+        segment_ids: *const c_void,
+        d_input: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `segment_mean_backward` — f64.
+    pub fn baracuda_kernels_segment_mean_backward_f64_run(
+        n: i32,
+        d: i32,
+        num_segments: i32,
+        d_output: *const c_void,
+        segment_ids: *const c_void,
+        d_input: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `unsorted_segment_mean_backward` — f32.
+    pub fn baracuda_kernels_unsorted_segment_mean_backward_f32_run(
+        n: i32,
+        d: i32,
+        num_segments: i32,
+        d_output: *const c_void,
+        segment_ids: *const c_void,
+        d_input: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `unsorted_segment_mean_backward` — f64.
+    pub fn baracuda_kernels_unsorted_segment_mean_backward_f64_run(
+        n: i32,
+        d: i32,
+        num_segments: i32,
+        d_output: *const c_void,
+        segment_ids: *const c_void,
+        d_input: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+}

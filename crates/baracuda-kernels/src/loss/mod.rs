@@ -59,6 +59,8 @@ pub mod bce_with_logits;
 pub mod cosine_embedding;
 pub mod cross_entropy;
 pub mod ctc;
+#[cfg(feature = "cudnn")]
+pub mod ctc_loss_cudnn;
 pub mod gaussian_nll;
 pub mod hinge_embedding;
 pub mod huber;
@@ -156,3 +158,5 @@ pub use ctc::{
     CtcLossArgs, CtcLossBackwardArgs, CtcLossBackwardDescriptor, CtcLossBackwardPlan,
     CtcLossDescriptor, CtcLossPlan,
 };
+#[cfg(feature = "cudnn")]
+pub use ctc_loss_cudnn::{CtcLossCudnnArgs, CtcLossCudnnDescriptor, CtcLossCudnnPlan};

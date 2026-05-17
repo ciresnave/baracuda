@@ -17,6 +17,172 @@
 //! layer will return an `Unsupported` error at runtime).
 
 use std::env;
+#[cfg(feature = "cudnn")]
+use std::path::{Path, PathBuf};
+
+/// Try to locate a directory containing the cuDNN import / shared
+/// library on this host. Follows the de-facto ecosystem conventions
+/// (no single official standard exists — PyTorch / TensorFlow / ONNX
+/// Runtime / CMake's `FindCUDNN.cmake` all probe a similar list).
+///
+/// Search order (first hit wins):
+///   1. `CUDNN_PATH` — canonical env override. Points at the cuDNN
+///      install root (the directory containing `lib/` and `bin/`).
+///   2. `CUDNN_ROOT` / `CUDNN_HOME` — historical alternates used by
+///      some upstream tools; treated the same as `CUDNN_PATH`.
+///   3. **Windows installer layout** (cuDNN 9+):
+///      `C:\Program Files\NVIDIA\CUDNN\v<X.Y>\lib\<cuda_ver>\x64\` —
+///      versioned by both cuDNN release AND target CUDA toolkit.
+///   4. **Legacy "drop into CUDA toolkit" layout**: `$CUDA_PATH\lib\x64\`
+///      on Windows or `$CUDA_PATH/lib64/` on Linux. This was the
+///      pre-cuDNN-9 convention (tarball expanded into the CUDA dir).
+///   5. **Linux distro paths**: `/usr/lib/x86_64-linux-gnu/` and
+///      `/usr/local/cuda/lib64/` — debian / RPM package destinations.
+///
+/// Returns the directory path for `rustc-link-search=native=…`.
+#[cfg(feature = "cudnn")]
+fn locate_cudnn_lib_dir() -> Option<String> {
+    // (1-2) Explicit env-var roots.
+    for var in &["CUDNN_PATH", "CUDNN_ROOT", "CUDNN_HOME"] {
+        if let Some(root) = env::var_os(var) {
+            let root = PathBuf::from(root);
+            if let Some(dir) = probe_install_root(&root) {
+                return Some(dir);
+            }
+        }
+    }
+
+    // (3) Windows: standard NVIDIA installer layout.
+    #[cfg(target_os = "windows")]
+    {
+        let std_root = PathBuf::from(r"C:\Program Files\NVIDIA\CUDNN");
+        if std_root.is_dir() {
+            if let Some(dir) = probe_windows_versioned_root(&std_root) {
+                return Some(dir);
+            }
+        }
+    }
+
+    // (4) Legacy "in CUDA toolkit" layout — pre-cuDNN-9.
+    if let Some(cuda_path) = env::var_os("CUDA_PATH") {
+        let cuda = PathBuf::from(cuda_path);
+        #[cfg(target_os = "windows")]
+        {
+            let x64 = cuda.join("lib").join("x64");
+            if x64.join("cudnn.lib").is_file() {
+                return Some(x64.to_string_lossy().into_owned());
+            }
+        }
+        #[cfg(not(target_os = "windows"))]
+        {
+            let lib64 = cuda.join("lib64");
+            if lib64.join("libcudnn.so").is_file() || lib64.join("libcudnn.so.9").is_file() {
+                return Some(lib64.to_string_lossy().into_owned());
+            }
+            let lib = cuda.join("lib");
+            if lib.join("libcudnn.so").is_file() || lib.join("libcudnn.so.9").is_file() {
+                return Some(lib.to_string_lossy().into_owned());
+            }
+        }
+    }
+
+    // (5) Linux distro paths.
+    #[cfg(not(target_os = "windows"))]
+    {
+        for p in &[
+            "/usr/lib/x86_64-linux-gnu",
+            "/usr/local/cuda/lib64",
+            "/usr/lib64",
+        ] {
+            let path = PathBuf::from(p);
+            if path.join("libcudnn.so").is_file() || path.join("libcudnn.so.9").is_file() {
+                return Some(p.to_string());
+            }
+        }
+    }
+
+    None
+}
+
+/// Probe a single cuDNN install root for a usable lib dir. Handles both
+/// the new Windows layout (root/lib/<cuda_ver>/x64) and the simpler
+/// flat layout (root/lib/x64 on Windows; root/lib on Linux).
+#[cfg(feature = "cudnn")]
+fn probe_install_root(root: &Path) -> Option<String> {
+    let lib = root.join("lib");
+    if !lib.is_dir() {
+        return None;
+    }
+    // New Windows layout: lib/<cuda_ver>/x64/cudnn.lib
+    if let Some(dir) = pick_cuda_versioned_x64_under_lib(&lib) {
+        return Some(dir);
+    }
+    // Flat Windows layout: lib/x64/cudnn.lib
+    let x64 = lib.join("x64");
+    if x64.join("cudnn.lib").is_file() {
+        return Some(x64.to_string_lossy().into_owned());
+    }
+    // Flat Linux layout: lib/libcudnn.so
+    if lib.join("libcudnn.so").is_file() || lib.join("libcudnn.so.9").is_file() {
+        return Some(lib.to_string_lossy().into_owned());
+    }
+    // Some Linux installs also use lib64 under root.
+    let lib64 = root.join("lib64");
+    if lib64.join("libcudnn.so").is_file() || lib64.join("libcudnn.so.9").is_file() {
+        return Some(lib64.to_string_lossy().into_owned());
+    }
+    None
+}
+
+/// Walk a Windows `C:\Program Files\NVIDIA\CUDNN` root, pick the
+/// highest cuDNN version, then the highest CUDA-toolkit sub-dir, then
+/// return the `x64` lib path inside.
+#[cfg(feature = "cudnn")]
+fn probe_windows_versioned_root(std_root: &Path) -> Option<String> {
+    let mut versions: Vec<PathBuf> = std::fs::read_dir(std_root)
+        .ok()?
+        .filter_map(|e| e.ok().map(|e| e.path()))
+        .filter(|p| {
+            p.is_dir()
+                && p.file_name()
+                    .and_then(|n| n.to_str())
+                    .map(|s| s.starts_with('v'))
+                    .unwrap_or(false)
+        })
+        .collect();
+    // Highest cuDNN version first.
+    versions.sort();
+    versions.reverse();
+    for v in versions {
+        if let Some(dir) = pick_cuda_versioned_x64_under_lib(&v.join("lib")) {
+            return Some(dir);
+        }
+    }
+    None
+}
+
+/// Given `.../v<X.Y>/lib/`, pick the `<cuda_ver>/x64/` sub-dir
+/// containing `cudnn.lib`. Picks the highest CUDA-toolkit version.
+#[cfg(feature = "cudnn")]
+fn pick_cuda_versioned_x64_under_lib(lib_dir: &Path) -> Option<String> {
+    if !lib_dir.is_dir() {
+        return None;
+    }
+    let mut cuda_dirs: Vec<PathBuf> = std::fs::read_dir(lib_dir)
+        .ok()?
+        .filter_map(|e| e.ok().map(|e| e.path()))
+        .filter(|p| p.is_dir())
+        .collect();
+    cuda_dirs.sort();
+    cuda_dirs.reverse();
+    for d in cuda_dirs {
+        let x64 = d.join("x64");
+        if x64.join("cudnn.lib").is_file() {
+            return Some(x64.to_string_lossy().into_owned());
+        }
+    }
+    None
+}
 
 fn main() {
     println!("cargo:rerun-if-changed=build.rs");
@@ -89,6 +255,43 @@ fn main() {
     // bespoke fftshift / ifftshift). On Linux resolves to `libcufft.so`;
     // on Windows to `cufft64_*.dll` from `CUDA_PATH\bin`.
     println!("cargo:rustc-link-lib=dylib=cufft");
+
+    // cuDNN — Phase 7 convolution / pooling / CTC family. Gated behind
+    // the `cudnn` cargo feature because cuDNN is a separate NVIDIA
+    // download not bundled with the stock CUDA toolkit; linking blindly
+    // breaks builds on machines that haven't installed it. Enable the
+    // feature when cuDNN is present and you want the conv / pool /
+    // CTC-cuDNN plans to link.
+    //
+    // Search-path discovery (Windows): the NVIDIA installer places cuDNN
+    // at `C:\Program Files\NVIDIA\CUDNN\v<X.Y>\lib\<cuda_ver>\x64\` — a
+    // versioned directory not on the default linker search path. We
+    // probe `CUDNN_PATH` first (set if the user has wired it manually);
+    // otherwise we glob the standard install dir for the newest v*
+    // sub-folder and the cuda-toolkit-versioned sub-sub-folder. The
+    // matching `bin\<cuda_ver>\` dir holds the runtime DLLs and must be
+    // on `PATH` at test-run time (the build does NOT auto-stage DLLs).
+    #[cfg(feature = "cudnn")]
+    {
+        let cudnn_lib_dir = locate_cudnn_lib_dir();
+        if let Some(dir) = cudnn_lib_dir.as_deref() {
+            println!("cargo:rustc-link-search=native={}", dir);
+            println!("cargo:warning=baracuda-kernels-sys: cuDNN lib dir → {}", dir);
+        } else {
+            println!(
+                "cargo:warning=baracuda-kernels-sys: `cudnn` feature is on but no cuDNN \
+                 lib directory was found via CUDNN_PATH or the standard NVIDIA Windows \
+                 install layout. Linker is likely to fail on cudnn.lib. Set CUDNN_PATH \
+                 to point at the cuDNN install root (the directory containing lib/ and \
+                 bin/ subtrees)."
+            );
+        }
+        println!("cargo:rustc-link-lib=dylib=cudnn");
+        println!("cargo:rerun-if-env-changed=CUDNN_PATH");
+        println!("cargo:rerun-if-env-changed=CUDNN_ROOT");
+        println!("cargo:rerun-if-env-changed=CUDNN_HOME");
+        println!("cargo:rerun-if-env-changed=CUDA_PATH");
+    }
 
     // CUDA Driver API — the linalg/qr plan uses `cuMemcpyDtoHAsync_v2`
     // / `cuMemcpyHtoDAsync_v2` directly to round-trip the post-`geqrf`
@@ -494,6 +697,38 @@ fn collect_kernel_files() -> Vec<&'static str> {
             // batched GEMM at the safe-plan layer to lift the apply
             // step from GEMV-rates to GEMM-rates.
             "linalg/batched_ormqr_wy.cu",
+            // Phase 7 Milestone 7.3 — indexing / scatter / gather family
+            // (Category L). Six ops total: gather (FW+BW), scatter_add,
+            // index_select (FW+BW), masked_fill (FW+BW), one_hot,
+            // nonzero. Index dtype is i32 only (i64 deferred). All
+            // kernels are workspace-free; BW for {gather, index_select}
+            // uses atomicAdd (FP-only). masked_fill / one_hot / nonzero
+            // also cover the i32 + bool element families.
+            "indexing/gather.cu",
+            "indexing/scatter.cu",
+            "indexing/index_select.cu",
+            "indexing/masked_fill.cu",
+            "indexing/one_hot.cu",
+            "indexing/nonzero.cu",
+            // Phase 7 Milestone 7.5 — embedding family (Category M).
+            // `embedding` FW (f32/f64/f16/bf16) + BW (f32/f64 via
+            // atomicAdd) with optional `padding_idx`. `embedding_bag`
+            // FW (Sum / Mean, 4 FP dtypes) + BW (f32/f64). Max-mode is
+            // deferred (needs argmax tracking).
+            "embedding/embedding.cu",
+            "embedding/embedding_backward.cu",
+            "embedding/embedding_bag.cu",
+            "embedding/embedding_bag_backward.cu",
+            // Phase 7 Milestone 7.6 — segment / scatter-reduce family
+            // (Category S). Sorted + unsorted variants of sum / mean /
+            // max / min / prod (FW); sum + mean BW (sorted and
+            // unsorted share BW launchers — the gather access pattern
+            // is identical, only the seg-ids monotonicity assumption
+            // differs and that doesn't affect BW). Dtype coverage:
+            // f32, f64 (atomic-FP-restricted). Single .cu ships every
+            // (op × dtype) launcher via the INSTANTIATE macros in
+            // `kernels/include/baracuda_segment.cuh`.
+            "segment/segment.cu",
         ] {
             if std::path::Path::new(&format!("kernels/{f}")).exists() {
                 kernels.push(*f);
