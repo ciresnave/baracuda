@@ -239,6 +239,14 @@ pub use attention::{
     SdpaBackwardPlan, SdpaDescriptor, SdpaPlan, FLASH_SDPA_MAX_D, ROPE_DEFAULT_BASE,
 };
 
+// Phase 10 Milestone 10.3 — sm_89 (Ada Lovelace) Flash Attention FW
+// sibling. Same descriptor / args shape as the sm_80 baseline so callers
+// swap plans by changing the type, with `cp.async` double-buffered K/V
+// loads and a wider thread block for Ada's larger per-SM register file.
+// f16 + bf16 only.
+#[cfg(feature = "sm89")]
+pub use attention::{FlashSdpaSm89Args, FlashSdpaSm89Descriptor, FlashSdpaSm89Plan};
+
 // Dense linalg family — Milestone 6.3 (Category Linalg). Wraps
 // cuSOLVER for Cholesky / LU / QR / SVD. f32 + f64 only (cuSOLVER's
 // dense API does not expose f16 / bf16 for these ops).

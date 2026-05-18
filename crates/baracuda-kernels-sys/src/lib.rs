@@ -24792,6 +24792,62 @@ unsafe extern "C" {
 }
 
 // ============================================================================
+// Phase 10 Milestone 10.3 — Flash Attention SDPA FW, sm_89 (Ada) sibling
+// ============================================================================
+//
+// Same FW signature as the sm_80 baseline (`baracuda_kernels_flash_sdpa_*_run`)
+// — the sm_89 variant is purely a data-movement optimization (`cp.async`
+// double-buffered K/V loads + 256-thread block). f16 + bf16 only; f32 /
+// f64 stay on the sm_80 baseline. BW is shared (the existing sm_80 BW
+// kernels run forward-compat on Ada — there's no Ada-specific BW
+// optimization in this milestone).
+
+#[cfg(feature = "sm89")]
+unsafe extern "C" {
+    /// Flash SDPA FW, f16 (f32 accumulators), sm_89 specialization with
+    /// `cp.async` K/V double-buffer.
+    pub fn baracuda_kernels_flash_sdpa_sm89_f16_run(
+        batch: i32,
+        heads: i32,
+        q_len: i32,
+        k_len: i32,
+        d_k: i32,
+        d_v: i32,
+        scale: f32,
+        is_causal: i32,
+        q: *const c_void,
+        k: *const c_void,
+        v: *const c_void,
+        y: *mut c_void,
+        lse: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// Flash SDPA FW, bf16 (f32 accumulators), sm_89 specialization with
+    /// `cp.async` K/V double-buffer.
+    pub fn baracuda_kernels_flash_sdpa_sm89_bf16_run(
+        batch: i32,
+        heads: i32,
+        q_len: i32,
+        k_len: i32,
+        d_k: i32,
+        d_v: i32,
+        scale: f32,
+        is_causal: i32,
+        q: *const c_void,
+        k: *const c_void,
+        v: *const c_void,
+        y: *mut c_void,
+        lse: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+}
+
+// ============================================================================
 // cuSOLVER — Milestone 6.3 dense linalg
 // ============================================================================
 //

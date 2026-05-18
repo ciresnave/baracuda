@@ -872,6 +872,11 @@ fn collect_kernel_files() -> Vec<&'static str> {
                 // (B is N-bit-packed in gmem, K-bit-packed in smem).
                 "gemm/gemm_bin_rcr_sm89.cu",
                 "gemm/gemm_bin_rrr_sm89.cu",
+                // Phase 10 Milestone 10.3 — Flash Attention SDPA FW,
+                // sm_89 specialization. Sibling of `flash_sdpa_fp.cu`
+                // (sm_80 baseline). Same math, `cp.async` double-buffered
+                // K/V loads + 256-thread block. f16 + bf16 only.
+                "attention/flash_sdpa_sm89.cu",
             ] {
                 if std::path::Path::new(&format!("kernels/{f}")).exists() {
                     kernels.push(*f);
