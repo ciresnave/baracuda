@@ -781,6 +781,29 @@ fn collect_kernel_files() -> Vec<&'static str> {
             "elementwise/cast.cu",
             "elementwise/fill.cu",
             "elementwise/affine.cu",
+            // Phase 9 Category T — image / spatial transforms. Bespoke
+            // bilinear interpolate (FW+BW), grid_sample (FW+BW) +
+            // affine_grid, pixel_shuffle / pixel_unshuffle (pure layout,
+            // each other's BW), roi_align / roi_pool (FW+BW), nms (no BW).
+            // Trailblazer dtypes: f32 + f64 for math-bearing ops;
+            // pixel_shuffle adds f16 + bf16 (memory-bound, dtype-agnostic).
+            "image/interpolate.cu",
+            "image/grid_sample.cu",
+            "image/pixel_shuffle.cu",
+            "image/roi.cu",
+            "image/nms.cu",
+            // Phase 9 Milestone Category O — sort / topk / kthvalue /
+            // unique / msort / histogram / bincount / searchsorted.
+            // Block-bitonic primitive shared by sort + topk + msort;
+            // atomic-bin accumulators for histogram + bincount; per-row
+            // binary search for searchsorted; sort BW = scatter via
+            // saved indices (FP only). Trailblazer caps:
+            // row_len ≤ 1024, top-k ≤ 64.
+            "sort/sort.cu",
+            "sort/topk.cu",
+            "sort/unique.cu",
+            "sort/histogram.cu",
+            "sort/searchsorted.cu",
         ] {
             if std::path::Path::new(&format!("kernels/{f}")).exists() {
                 kernels.push(*f);

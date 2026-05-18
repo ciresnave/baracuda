@@ -46,10 +46,10 @@ pub use layout::{ActivationKind, ArchSku, EpilogueKind, LayoutSku};
 pub use matrix::{MatrixMut, MatrixRef, VectorRef};
 pub use ops::{
     ArgReduceKind, AttentionKind, BinaryCmpKind, BinaryKind, ConvKind, CrossEntropyTargetKind,
-    EmbeddingKind, FftKind, FillMode, GatedActivationKind, GgufBlockFormat, IndexingKind,
-    LinalgKind, LossKind, LossReduction, MoeKind, NormalizationKind, PadMode, PoolKind,
-    QuantizeKind, RandomKind, ReduceKind, ScanKind, SegmentKind, ShapeLayoutKind, SoftmaxKind,
-    TernaryKind, UnaryKind,
+    EmbeddingKind, FftKind, FillMode, GatedActivationKind, GgufBlockFormat, ImageKind,
+    IndexingKind, LinalgKind, LossKind, LossReduction, MoeKind, NormalizationKind, PadMode,
+    PoolKind, QuantizeKind, RandomKind, ReduceKind, ScanKind, SegmentKind, ShapeLayoutKind,
+    SoftmaxKind, SortKind, TernaryKind, UnaryKind,
 };
 pub use plan::{PlanPreference, PrecisionGuarantee, Workspace};
 pub use sku::{BackendKind, KernelSku, OpCategory};

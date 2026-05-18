@@ -1,6 +1,6 @@
 [package]
 name = "baracuda-kernels-sys"
-version = "0.0.1-alpha.23"
+version = "0.0.1-alpha.24"
 description = "Compiled bespoke .cu kernel template instantiations for the baracuda ML kernel facade. Hosts curated CUDA kernel sources (int8/FP8/int4/bin GEMM RRR, elementwise, reduce, norm, attention, …), builds them via baracuda-forge, exposes extern \"C\" entry points for the safe baracuda-kernels crate. No CUTLASS dependency — every kernel here is hand-rolled."
 edition.workspace = true
 rust-version.workspace = true

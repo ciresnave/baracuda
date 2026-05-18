@@ -30947,3 +30947,854 @@ unsafe extern "C" {
         stream: *mut c_void,
     ) -> i32;
 }
+
+// ============================================================================
+// Image / spatial transforms — Phase 9 Category T
+// ============================================================================
+//
+// Trailblazer set: interpolate (bilinear 2D), grid_sample (2D),
+// affine_grid (2D), pixel_shuffle / pixel_unshuffle, roi_align, roi_pool,
+// nms. NCHW layout throughout. f32 + f64 for math-bearing ops;
+// pixel_shuffle / pixel_unshuffle also wire f16 + bf16.
+//
+// BW ops that scatter via atomicAdd (`interpolate_bilinear_2d_backward`,
+// `grid_sample_2d_backward`, `roi_align_backward`, `roi_pool_backward`)
+// require caller to pre-zero the output gradient buffers.
+
+#[cfg(any(feature = "sm80", feature = "sm89", feature = "sm90a"))]
+unsafe extern "C" {
+    // ---- interpolate (bilinear 2D) ----
+
+    /// `interpolate(x, mode='bilinear', align_corners=false)` FW, f32.
+    /// `input`: `[N, C, IH, IW]`; `output`: `[N, C, OH, OW]`. NCHW.
+    /// # Safety: all pointers must be live device memory; `stream` valid.
+    pub fn baracuda_kernels_interpolate_bilinear_2d_f32_run(
+        N: i32, C: i32, IH: i32, IW: i32, OH: i32, OW: i32,
+        input: *const c_void,
+        output: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `interpolate_bilinear_2d` FW, f64. # Safety: as f32.
+    pub fn baracuda_kernels_interpolate_bilinear_2d_f64_run(
+        N: i32, C: i32, IH: i32, IW: i32, OH: i32, OW: i32,
+        input: *const c_void,
+        output: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `interpolate_bilinear_2d` BW, f32. Caller pre-zeros `dinput`.
+    /// # Safety: as FW.
+    pub fn baracuda_kernels_interpolate_bilinear_2d_backward_f32_run(
+        N: i32, C: i32, IH: i32, IW: i32, OH: i32, OW: i32,
+        dout: *const c_void,
+        dinput: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `interpolate_bilinear_2d` BW, f64. # Safety: as f32 BW.
+    pub fn baracuda_kernels_interpolate_bilinear_2d_backward_f64_run(
+        N: i32, C: i32, IH: i32, IW: i32, OH: i32, OW: i32,
+        dout: *const c_void,
+        dinput: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    // ---- grid_sample (2D, bilinear, zeros pad, align_corners=false) ----
+
+    /// `grid_sample(input, grid)` FW, f32. `grid`: `[N, OH, OW, 2]` with
+    /// (x, y) normalized in [-1, 1]. # Safety: as `interpolate_*`.
+    pub fn baracuda_kernels_grid_sample_2d_f32_run(
+        N: i32, C: i32, IH: i32, IW: i32, OH: i32, OW: i32,
+        input: *const c_void,
+        grid: *const c_void,
+        output: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `grid_sample_2d` FW, f64. # Safety: as f32.
+    pub fn baracuda_kernels_grid_sample_2d_f64_run(
+        N: i32, C: i32, IH: i32, IW: i32, OH: i32, OW: i32,
+        input: *const c_void,
+        grid: *const c_void,
+        output: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `grid_sample_2d` BW, f32. Caller pre-zeros `dinput` and `dgrid`.
+    /// `dgrid`: `[N, OH, OW, 2]`. # Safety: as FW.
+    pub fn baracuda_kernels_grid_sample_2d_backward_f32_run(
+        N: i32, C: i32, IH: i32, IW: i32, OH: i32, OW: i32,
+        dout: *const c_void,
+        input: *const c_void,
+        grid: *const c_void,
+        dinput: *mut c_void,
+        dgrid: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `grid_sample_2d` BW, f64. # Safety: as f32 BW.
+    pub fn baracuda_kernels_grid_sample_2d_backward_f64_run(
+        N: i32, C: i32, IH: i32, IW: i32, OH: i32, OW: i32,
+        dout: *const c_void,
+        input: *const c_void,
+        grid: *const c_void,
+        dinput: *mut c_void,
+        dgrid: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    // ---- affine_grid (2D) ----
+
+    /// `affine_grid(theta, size)` — produce `[N, OH, OW, 2]` grid from
+    /// `theta: [N, 2, 3]`. f32. # Safety: as above.
+    pub fn baracuda_kernels_affine_grid_2d_f32_run(
+        N: i32, OH: i32, OW: i32,
+        theta: *const c_void,
+        grid: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `affine_grid_2d`, f64. # Safety: as f32.
+    pub fn baracuda_kernels_affine_grid_2d_f64_run(
+        N: i32, OH: i32, OW: i32,
+        theta: *const c_void,
+        grid: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    // ---- pixel_shuffle / pixel_unshuffle ----
+
+    /// `pixel_shuffle(x, r)` — `[N, C·r², H, W] → [N, C, H·r, W·r]`.
+    /// f32. # Safety: as above.
+    pub fn baracuda_kernels_pixel_shuffle_f32_run(
+        N: i32, C: i32, H: i32, W: i32, r: i32,
+        input: *const c_void,
+        output: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `pixel_shuffle`, f64. # Safety: as f32.
+    pub fn baracuda_kernels_pixel_shuffle_f64_run(
+        N: i32, C: i32, H: i32, W: i32, r: i32,
+        input: *const c_void,
+        output: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `pixel_shuffle`, f16. # Safety: as f32.
+    pub fn baracuda_kernels_pixel_shuffle_f16_run(
+        N: i32, C: i32, H: i32, W: i32, r: i32,
+        input: *const c_void,
+        output: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `pixel_shuffle`, bf16. # Safety: as f32.
+    pub fn baracuda_kernels_pixel_shuffle_bf16_run(
+        N: i32, C: i32, H: i32, W: i32, r: i32,
+        input: *const c_void,
+        output: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `pixel_unshuffle(x, r)` — `[N, C, H·r, W·r] → [N, C·r², H, W]`.
+    /// Inverse of pixel_shuffle (and each is the other's BW). f32.
+    /// # Safety: as above.
+    pub fn baracuda_kernels_pixel_unshuffle_f32_run(
+        N: i32, C: i32, H: i32, W: i32, r: i32,
+        input: *const c_void,
+        output: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `pixel_unshuffle`, f64. # Safety: as f32.
+    pub fn baracuda_kernels_pixel_unshuffle_f64_run(
+        N: i32, C: i32, H: i32, W: i32, r: i32,
+        input: *const c_void,
+        output: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `pixel_unshuffle`, f16. # Safety: as f32.
+    pub fn baracuda_kernels_pixel_unshuffle_f16_run(
+        N: i32, C: i32, H: i32, W: i32, r: i32,
+        input: *const c_void,
+        output: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `pixel_unshuffle`, bf16. # Safety: as f32.
+    pub fn baracuda_kernels_pixel_unshuffle_bf16_run(
+        N: i32, C: i32, H: i32, W: i32, r: i32,
+        input: *const c_void,
+        output: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    // ---- roi_align / roi_pool ----
+
+    /// `roi_align`, f32. `rois`: `[num_rois, 5]` (batch_idx, x1, y1, x2, y2)
+    /// in INPUT-pixel coords (scaled by `spatial_scale` inside the kernel).
+    /// `sampling_ratio == 0` selects adaptive sampling.
+    /// `aligned == 0` is PyTorch's pre-0.6 convention.
+    /// # Safety: as above.
+    pub fn baracuda_kernels_roi_align_f32_run(
+        N: i32, C: i32, H: i32, W: i32,
+        num_rois: i32, pooled_h: i32, pooled_w: i32,
+        spatial_scale: f32, sampling_ratio: i32, aligned: i32,
+        input: *const c_void,
+        rois: *const c_void,
+        output: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `roi_align`, f64. # Safety: as f32.
+    pub fn baracuda_kernels_roi_align_f64_run(
+        N: i32, C: i32, H: i32, W: i32,
+        num_rois: i32, pooled_h: i32, pooled_w: i32,
+        spatial_scale: f32, sampling_ratio: i32, aligned: i32,
+        input: *const c_void,
+        rois: *const c_void,
+        output: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `roi_align` BW, f32. Caller pre-zeros `dinput`. # Safety: as FW.
+    pub fn baracuda_kernels_roi_align_backward_f32_run(
+        N: i32, C: i32, H: i32, W: i32,
+        num_rois: i32, pooled_h: i32, pooled_w: i32,
+        spatial_scale: f32, sampling_ratio: i32, aligned: i32,
+        dout: *const c_void,
+        rois: *const c_void,
+        dinput: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `roi_align` BW, f64. # Safety: as f32 BW.
+    pub fn baracuda_kernels_roi_align_backward_f64_run(
+        N: i32, C: i32, H: i32, W: i32,
+        num_rois: i32, pooled_h: i32, pooled_w: i32,
+        spatial_scale: f32, sampling_ratio: i32, aligned: i32,
+        dout: *const c_void,
+        rois: *const c_void,
+        dinput: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `roi_pool`, f32. Writes `output` AND `argmax` (i32 linear
+    /// plane-relative index per output cell; `-1` for empty bins).
+    /// # Safety: as `roi_align`.
+    pub fn baracuda_kernels_roi_pool_f32_run(
+        N: i32, C: i32, H: i32, W: i32,
+        num_rois: i32, pooled_h: i32, pooled_w: i32,
+        spatial_scale: f32,
+        input: *const c_void,
+        rois: *const c_void,
+        output: *mut c_void,
+        argmax: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `roi_pool`, f64. # Safety: as f32.
+    pub fn baracuda_kernels_roi_pool_f64_run(
+        N: i32, C: i32, H: i32, W: i32,
+        num_rois: i32, pooled_h: i32, pooled_w: i32,
+        spatial_scale: f32,
+        input: *const c_void,
+        rois: *const c_void,
+        output: *mut c_void,
+        argmax: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `roi_pool` BW, f32. Caller pre-zeros `dinput`. # Safety: as FW.
+    pub fn baracuda_kernels_roi_pool_backward_f32_run(
+        N: i32, C: i32, H: i32, W: i32,
+        num_rois: i32, pooled_h: i32, pooled_w: i32,
+        dout: *const c_void,
+        rois: *const c_void,
+        argmax: *const c_void,
+        dinput: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `roi_pool` BW, f64. # Safety: as f32 BW.
+    pub fn baracuda_kernels_roi_pool_backward_f64_run(
+        N: i32, C: i32, H: i32, W: i32,
+        num_rois: i32, pooled_h: i32, pooled_w: i32,
+        dout: *const c_void,
+        rois: *const c_void,
+        argmax: *const c_void,
+        dinput: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    // ---- nms (non-max suppression) ----
+
+    /// `nms(boxes, iou_thresh)`. Caller supplies boxes pre-sorted by
+    /// score, descending. `boxes`: `[num_boxes, 4]` (x1, y1, x2, y2).
+    /// `keep_mask`: `[num_boxes]` u8 (0 / 1); `count_out`: single i32.
+    /// f32. # Safety: as above.
+    pub fn baracuda_kernels_nms_f32_run(
+        num_boxes: i32,
+        iou_thresh: f32,
+        boxes: *const c_void,
+        keep_mask: *mut c_void,
+        count_out: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `nms`, f64. # Safety: as f32.
+    pub fn baracuda_kernels_nms_f64_run(
+        num_boxes: i32,
+        iou_thresh: f32,
+        boxes: *const c_void,
+        keep_mask: *mut c_void,
+        count_out: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+}
+
+// ============================================================================
+// Phase 9 Category O — sort / argsort / msort / topk / kthvalue / unique /
+// histogram / bincount / searchsorted
+// ============================================================================
+//
+// Sort / argsort / msort: block-bitonic, one CUDA block per row.
+// Trailblazer caps `row_len ≤ 1024`. `descending` is `0` = ascending,
+// `1` = descending. `msort` is the stable variant (tie-break on
+// original index).
+//
+// FW signature (sort / msort): emits BOTH sorted values AND sorted
+// indices in one launch (saved-indices contract — BW reads them):
+//   (batch, row_len, descending, x, y_vals, y_idx, ws, ws_bytes, stream)
+// FW signature (argsort): emits indices only (saves a values write
+// when the caller only needs the permutation):
+//   (batch, row_len, descending, x, y_idx, ws, ws_bytes, stream)
+// BW signature (sort / msort): pure scatter `dx[indices[i]] = dy[i]`.
+// The launcher zeros `dx` first via `cudaMemsetAsync`.
+//   (batch, row_len, dy, indices, dx, ws, ws_bytes, stream)
+//
+// Topk: full block-bitonic sort, take first k cells. Trailblazer caps
+// `k ≤ 64` (LLM-inference range). `largest == 1` = top-k by value;
+// `largest == 0` = bottom-k.
+// FW signature:
+//   (batch, row_len, k, largest, x, y_vals, y_idx, ws, ws_bytes, stream)
+// BW signature: same scatter pattern as sort BW; `k`-wide grad routed
+// back to a zero-init `row_len`-wide `dx`.
+//   (batch, k, row_len, dy, indices, dx, ws, ws_bytes, stream)
+//
+// Unique (consecutive): one-block-per-row sweep; output ordering is
+// atomic-counter racy (NOT input-order). The Rust plan layer chains
+// sort + this kernel to implement the un-consecutive `unique` op.
+//   (batch, row_len, max_unique, x, y_vals, y_counts, counter,
+//    ws, ws_bytes, stream)
+//
+// Histogram (1-D uniform bins): atomic-add per bin. `lo` / `hi` are
+// passed as `double` and cast to `T` inside the macro — keeps the FFI
+// shape uniform across f32 / f64.
+//   (n, num_bins, lo_d, hi_d, x, output, ws, ws_bytes, stream)
+//
+// Bincount: atomic-add per index. Out-of-range indices (`< 0` or `>=
+// num_bins`) silently dropped.
+//   (n, num_bins, x, output, ws, ws_bytes, stream)
+//
+// Searchsorted: per-query binary search in a 1-D sorted array.
+// `right == 0` = lower_bound; `right == 1` = upper_bound. Trailblazer
+// is "single sorted_seq shared across all queries"; batched-per-row
+// is a follow-up.
+//   (num_queries, len_sorted, right, sorted_seq, values, output,
+//    ws, ws_bytes, stream)
+//
+// Dtype coverage:
+//   sort / argsort / msort FW: f32, f64, i32, i64.
+//   sort / msort BW:           f32, f64 (FP grads only).
+//   topk FW + BW:              f32, f64.
+//   unique (consecutive):      f32, f64, i32.
+//   histogram:                 f32, f64.
+//   bincount:                  i32, i64 input → i32 counts.
+//   searchsorted:              f32, f64, i32, i64.
+
+#[cfg(any(feature = "sm80", feature = "sm89", feature = "sm90a"))]
+unsafe extern "C" {
+    // ---------- sort FW (values + indices, ascending OR descending) ----------
+
+    /// Block-bitonic sort, f32. Emits sorted values + sorted indices
+    /// (saved-indices contract for BW). `descending == 0` = ascending.
+    pub fn baracuda_kernels_sort_f32_run(
+        batch: i32,
+        row_len: i32,
+        descending: i32,
+        x: *const c_void,
+        y_vals: *mut c_void,
+        y_idx: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// Block-bitonic sort, f64.
+    pub fn baracuda_kernels_sort_f64_run(
+        batch: i32,
+        row_len: i32,
+        descending: i32,
+        x: *const c_void,
+        y_vals: *mut c_void,
+        y_idx: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// Block-bitonic sort, i32.
+    pub fn baracuda_kernels_sort_i32_run(
+        batch: i32,
+        row_len: i32,
+        descending: i32,
+        x: *const c_void,
+        y_vals: *mut c_void,
+        y_idx: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// Block-bitonic sort, i64.
+    pub fn baracuda_kernels_sort_i64_run(
+        batch: i32,
+        row_len: i32,
+        descending: i32,
+        x: *const c_void,
+        y_vals: *mut c_void,
+        y_idx: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    // ---------- argsort FW (indices only) ----------
+
+    /// Block-bitonic argsort, f32. Returns indices; values not written.
+    pub fn baracuda_kernels_argsort_f32_run(
+        batch: i32,
+        row_len: i32,
+        descending: i32,
+        x: *const c_void,
+        y_idx: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// Block-bitonic argsort, f64.
+    pub fn baracuda_kernels_argsort_f64_run(
+        batch: i32,
+        row_len: i32,
+        descending: i32,
+        x: *const c_void,
+        y_idx: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// Block-bitonic argsort, i32.
+    pub fn baracuda_kernels_argsort_i32_run(
+        batch: i32,
+        row_len: i32,
+        descending: i32,
+        x: *const c_void,
+        y_idx: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// Block-bitonic argsort, i64.
+    pub fn baracuda_kernels_argsort_i64_run(
+        batch: i32,
+        row_len: i32,
+        descending: i32,
+        x: *const c_void,
+        y_idx: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    // ---------- msort FW (stable; values + indices) ----------
+
+    /// Stable block-bitonic sort, f32. Tie-break on original index so
+    /// equal keys preserve input order.
+    pub fn baracuda_kernels_msort_f32_run(
+        batch: i32,
+        row_len: i32,
+        descending: i32,
+        x: *const c_void,
+        y_vals: *mut c_void,
+        y_idx: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// Stable block-bitonic sort, f64.
+    pub fn baracuda_kernels_msort_f64_run(
+        batch: i32,
+        row_len: i32,
+        descending: i32,
+        x: *const c_void,
+        y_vals: *mut c_void,
+        y_idx: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// Stable block-bitonic sort, i32.
+    pub fn baracuda_kernels_msort_i32_run(
+        batch: i32,
+        row_len: i32,
+        descending: i32,
+        x: *const c_void,
+        y_vals: *mut c_void,
+        y_idx: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// Stable block-bitonic sort, i64.
+    pub fn baracuda_kernels_msort_i64_run(
+        batch: i32,
+        row_len: i32,
+        descending: i32,
+        x: *const c_void,
+        y_vals: *mut c_void,
+        y_idx: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    // ---------- sort / msort BW (scatter via saved indices) ----------
+
+    /// Sort BW, f32. `dx[indices[i]] = dy[i]`; launcher zeros `dx` first.
+    pub fn baracuda_kernels_sort_backward_f32_run(
+        batch: i32,
+        row_len: i32,
+        dy: *const c_void,
+        indices: *const c_void,
+        dx: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// Sort BW, f64.
+    pub fn baracuda_kernels_sort_backward_f64_run(
+        batch: i32,
+        row_len: i32,
+        dy: *const c_void,
+        indices: *const c_void,
+        dx: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// Msort BW, f32. Same scatter as sort BW; distinct symbol kept for
+    /// FFI / telemetry parity.
+    pub fn baracuda_kernels_msort_backward_f32_run(
+        batch: i32,
+        row_len: i32,
+        dy: *const c_void,
+        indices: *const c_void,
+        dx: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// Msort BW, f64.
+    pub fn baracuda_kernels_msort_backward_f64_run(
+        batch: i32,
+        row_len: i32,
+        dy: *const c_void,
+        indices: *const c_void,
+        dx: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    // ---------- topk FW + BW ----------
+
+    /// Block-bitonic top-k, f32. Caps `k ≤ 64` and `row_len ≤ 1024`.
+    /// `largest == 1` = top-k by value; `largest == 0` = bottom-k.
+    pub fn baracuda_kernels_topk_f32_run(
+        batch: i32,
+        row_len: i32,
+        k: i32,
+        largest: i32,
+        x: *const c_void,
+        y_vals: *mut c_void,
+        y_idx: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// Block-bitonic top-k, f64.
+    pub fn baracuda_kernels_topk_f64_run(
+        batch: i32,
+        row_len: i32,
+        k: i32,
+        largest: i32,
+        x: *const c_void,
+        y_vals: *mut c_void,
+        y_idx: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// Top-k BW, f32. Scatter k-wide `dy` into `row_len`-wide `dx`
+    /// (zero-init) via saved indices.
+    pub fn baracuda_kernels_topk_backward_f32_run(
+        batch: i32,
+        k: i32,
+        row_len: i32,
+        dy: *const c_void,
+        indices: *const c_void,
+        dx: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// Top-k BW, f64.
+    pub fn baracuda_kernels_topk_backward_f64_run(
+        batch: i32,
+        k: i32,
+        row_len: i32,
+        dy: *const c_void,
+        indices: *const c_void,
+        dx: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    // ---------- unique_consecutive FW (no BW — set-valued) ----------
+
+    /// Unique-consecutive, f32. Emits one cell per run-start; output
+    /// slot order is atomic-counter race order. `counter[row]` holds
+    /// the actual unique count post-launch.
+    pub fn baracuda_kernels_unique_consecutive_f32_run(
+        batch: i32,
+        row_len: i32,
+        max_unique: i32,
+        x: *const c_void,
+        y_vals: *mut c_void,
+        y_counts: *mut c_void,
+        counter: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// Unique-consecutive, f64.
+    pub fn baracuda_kernels_unique_consecutive_f64_run(
+        batch: i32,
+        row_len: i32,
+        max_unique: i32,
+        x: *const c_void,
+        y_vals: *mut c_void,
+        y_counts: *mut c_void,
+        counter: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// Unique-consecutive, i32.
+    pub fn baracuda_kernels_unique_consecutive_i32_run(
+        batch: i32,
+        row_len: i32,
+        max_unique: i32,
+        x: *const c_void,
+        y_vals: *mut c_void,
+        y_counts: *mut c_void,
+        counter: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    // ---------- histogram FW (1-D uniform bins, FP input, i32 counts) ----------
+
+    /// 1-D histogram, f32 input. `lo` / `hi` passed as `double` —
+    /// kernel casts to `T` (keeps the FFI shape uniform across dtypes).
+    pub fn baracuda_kernels_histogram_f32_run(
+        n: i64,
+        num_bins: i32,
+        lo_d: f64,
+        hi_d: f64,
+        x: *const c_void,
+        output: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// 1-D histogram, f64 input.
+    pub fn baracuda_kernels_histogram_f64_run(
+        n: i64,
+        num_bins: i32,
+        lo_d: f64,
+        hi_d: f64,
+        x: *const c_void,
+        output: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    // ---------- bincount FW (int input, i32 counts) ----------
+
+    /// `bincount`, i32 input. Out-of-range (`< 0` or `>= num_bins`)
+    /// silently dropped.
+    pub fn baracuda_kernels_bincount_i32_run(
+        n: i64,
+        num_bins: i32,
+        x: *const c_void,
+        output: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `bincount`, i64 input.
+    pub fn baracuda_kernels_bincount_i64_run(
+        n: i64,
+        num_bins: i32,
+        x: *const c_void,
+        output: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    // ---------- searchsorted FW (1-D sorted_seq, per-query binary search) ----------
+
+    /// `searchsorted`, f32. `right == 0` = lower_bound; `right == 1`
+    /// = upper_bound.
+    pub fn baracuda_kernels_searchsorted_f32_run(
+        num_queries: i64,
+        len_sorted: i32,
+        right: i32,
+        sorted_seq: *const c_void,
+        values: *const c_void,
+        output: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `searchsorted`, f64.
+    pub fn baracuda_kernels_searchsorted_f64_run(
+        num_queries: i64,
+        len_sorted: i32,
+        right: i32,
+        sorted_seq: *const c_void,
+        values: *const c_void,
+        output: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `searchsorted`, i32.
+    pub fn baracuda_kernels_searchsorted_i32_run(
+        num_queries: i64,
+        len_sorted: i32,
+        right: i32,
+        sorted_seq: *const c_void,
+        values: *const c_void,
+        output: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `searchsorted`, i64.
+    pub fn baracuda_kernels_searchsorted_i64_run(
+        num_queries: i64,
+        len_sorted: i32,
+        right: i32,
+        sorted_seq: *const c_void,
+        values: *const c_void,
+        output: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+}

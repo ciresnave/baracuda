@@ -1527,3 +1527,190 @@ pub enum MoeKind {
     /// formats: same set as [`Self::ScalarGguf`]. sm_70+ required.
     WmmaGguf = 2,
 }
+
+/// Sorting / order-statistics op discriminant — Category O from the
+/// comprehensive plan (Phase 9).
+///
+/// Stored as `u16` in [`crate::KernelSku::op`] when
+/// `category == OpCategory::Sorting`. Phase 9 wires the block-bitonic
+/// trailblazer family (`row_len ≤ 1024`, `k ≤ 64`):
+///
+/// - [`Self::Sort`] / [`Self::SortBackward`] — full sort with saved
+///   indices for BW. PyTorch `torch.sort`.
+/// - [`Self::Argsort`] — indices-only variant. PyTorch `torch.argsort`.
+/// - [`Self::Msort`] / [`Self::MsortBackward`] — stable sort (tie-break
+///   on original index preserves input order). PyTorch `torch.msort`.
+/// - [`Self::Topk`] / [`Self::TopkBackward`] — top-k by value (or
+///   bottom-k when `largest == false`). PyTorch `torch.topk`.
+/// - [`Self::Kthvalue`] / [`Self::KthvalueBackward`] — composed atop
+///   topk; returns the k-th value + its index.
+/// - [`Self::Unique`] / [`Self::UniqueConsecutive`] — set-valued ops;
+///   `unique` chains sort + consecutive-dedup, `unique_consecutive`
+///   assumes the input is already sorted (or only run-equal cells
+///   matter). No BW (set-valued).
+/// - [`Self::Histogram`] / [`Self::Histogramdd`] / [`Self::Bincount`]
+///   — atomic-bin accumulation; histogram + bincount FW shipped,
+///   histogramdd reserved (rank > 1 trailblazer follow-up).
+/// - [`Self::Searchsorted`] — per-query binary search in a 1-D sorted
+///   array. PyTorch `torch.searchsorted`. No BW.
+///
+/// Dtype coverage:
+/// - sort / argsort / msort FW: `f32, f64, i32, i64`.
+/// - sort / msort BW: `f32, f64` (FP grads only).
+/// - topk FW + BW: `f32, f64`.
+/// - kthvalue: composes topk; same dtype set.
+/// - unique / unique_consecutive: `f32, f64, i32`.
+/// - histogram: `f32, f64` input → `i32` counts.
+/// - bincount: `i32, i64` input → `i32` counts.
+/// - searchsorted: `f32, f64, i32, i64`.
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
+#[repr(u16)]
+pub enum SortKind {
+    /// `sort(x, dim, descending)` — returns sorted values + sorted
+    /// indices. PyTorch `torch.sort`.
+    Sort = 0,
+    /// Gradient of [`Self::Sort`] — scatter `dy` back to the original
+    /// positions via the saved indices.
+    SortBackward = 1,
+    /// `argsort(x, dim, descending)` — returns sorted indices only.
+    /// PyTorch `torch.argsort`.
+    Argsort = 2,
+    /// `msort(x)` — stable sort along the last dimension. Tie-break on
+    /// original index preserves input order. PyTorch `torch.msort`.
+    Msort = 3,
+    /// Gradient of [`Self::Msort`] — same scatter as
+    /// [`Self::SortBackward`].
+    MsortBackward = 4,
+    /// `topk(x, k, dim, largest)` — top-k (or bottom-k) values + their
+    /// indices. PyTorch `torch.topk`. Trailblazer caps `k ≤ 64`.
+    Topk = 5,
+    /// Gradient of [`Self::Topk`] — scatter the k-wide `dy` back to a
+    /// zero-init `row_len`-wide `dx` via saved indices.
+    TopkBackward = 6,
+    /// `kthvalue(x, k, dim)` — the k-th smallest value + its index.
+    /// Composed at the Rust plan layer atop [`Self::Topk`] with the
+    /// "bottom-k" order.
+    Kthvalue = 7,
+    /// Gradient of [`Self::Kthvalue`] — scatter the scalar `dy` back
+    /// to the single source position.
+    KthvalueBackward = 8,
+    /// `unique(x, sorted=True)` — returns the unique values in `x`. At
+    /// the Rust plan layer this chains [`Self::Sort`] + the consecutive
+    /// dedup. Set-valued — no BW.
+    Unique = 9,
+    /// `unique_consecutive(x)` — emits one cell per run-start (input
+    /// must be sorted, or only consecutive-equal cells should be
+    /// collapsed). Set-valued — no BW.
+    UniqueConsecutive = 10,
+    /// `histogram(x, bins, range)` — 1-D uniform-bin histogram.
+    /// PyTorch `torch.histogram`. FW only.
+    Histogram = 11,
+    /// `histogramdd(x, bins, range)` — N-D histogram. Reserved
+    /// discriminant; rank > 1 trailblazer follow-up.
+    Histogramdd = 12,
+    /// `bincount(x, minlength)` — count occurrences of each integer
+    /// in `x`. PyTorch `torch.bincount`. FW only.
+    Bincount = 13,
+    /// `searchsorted(sorted_seq, values, right)` — per-query
+    /// lower/upper bound binary search. PyTorch `torch.searchsorted`.
+    /// FW only.
+    Searchsorted = 14,
+}
+
+/// Image / spatial-transform op discriminant — Category T from the
+/// comprehensive plan.
+///
+/// Stored as `u16` in [`crate::KernelSku::op`] when
+/// `category == OpCategory::Image`. Phase 9 Category T wires the
+/// trailblazer set:
+/// - [`Self::InterpolateBilinear2d`] / [`Self::InterpolateBilinear2dBackward`]
+///   — spatial up/downsample via bilinear interpolation.
+/// - [`Self::GridSample2d`] / [`Self::GridSample2dBackward`] — sample
+///   input at arbitrary normalized coordinates (PyTorch
+///   `torch.nn.functional.grid_sample`, default config:
+///   `mode='bilinear'`, `padding_mode='zeros'`, `align_corners=false`).
+/// - [`Self::AffineGrid2d`] — generate a sampling grid from a 2×3
+///   affine matrix (companion to GridSample).
+/// - [`Self::PixelShuffle`] / [`Self::PixelUnshuffle`] — pure index
+///   permutation between `[N, C·r², H, W]` and `[N, C, H·r, W·r]`.
+///   Each is the other's backward.
+/// - [`Self::RoiAlign`] / [`Self::RoiAlignBackward`] — extract fixed-
+///   size feature from variable RoIs via bilinear sampling.
+/// - [`Self::RoiPool`] / [`Self::RoiPoolBackward`] — max-pool variant
+///   of RoiAlign (argmax routing on BW).
+/// - [`Self::Nms`] — non-max suppression on bounding boxes. Returns a
+///   boolean keep mask + count; no BW (set-valued op).
+///
+/// Other interpolation modes (`nearest`, `bicubic`, `trilinear`,
+/// `linear`, `area`) have discriminants reserved here but the kernels
+/// are stubbed `Unsupported` in the trailblazer.
+///
+/// Trailblazer dtype coverage: `f32, f64` for math-bearing ops;
+/// `pixel_shuffle` / `pixel_unshuffle` additionally cover `f16, bf16`
+/// (pure layout — dtype-agnostic).
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
+#[repr(u16)]
+pub enum ImageKind {
+    /// `interpolate(x, mode='bilinear', size=…)` — 2-D spatial
+    /// resample with bilinear weights. Trailblazer wired today.
+    InterpolateBilinear2d = 0,
+    /// Gradient of [`Self::InterpolateBilinear2d`] — atomic-add of
+    /// weighted contributions from each output cell to the 4 input
+    /// cells it bilinearly sampled.
+    InterpolateBilinear2dBackward = 1,
+    /// `interpolate(x, mode='nearest')` — reserved.
+    InterpolateNearest2d = 2,
+    /// Gradient of [`Self::InterpolateNearest2d`] — reserved.
+    InterpolateNearest2dBackward = 3,
+    /// `interpolate(x, mode='bicubic')` — reserved.
+    InterpolateBicubic2d = 4,
+    /// Gradient of [`Self::InterpolateBicubic2d`] — reserved.
+    InterpolateBicubic2dBackward = 5,
+    /// `interpolate(x, mode='trilinear')` — reserved.
+    InterpolateTrilinear3d = 6,
+    /// Gradient of [`Self::InterpolateTrilinear3d`] — reserved.
+    InterpolateTrilinear3dBackward = 7,
+    /// `interpolate(x, mode='linear')` — reserved (1-D).
+    InterpolateLinear1d = 8,
+    /// Gradient of [`Self::InterpolateLinear1d`] — reserved.
+    InterpolateLinear1dBackward = 9,
+    /// `interpolate(x, mode='area')` — reserved (adaptive avg pool).
+    InterpolateArea2d = 10,
+    /// Gradient of [`Self::InterpolateArea2d`] — reserved.
+    InterpolateArea2dBackward = 11,
+
+    /// `grid_sample(input, grid)` — 2-D bilinear, zeros-pad,
+    /// `align_corners=false`. PyTorch defaults.
+    GridSample2d = 16,
+    /// Gradient of [`Self::GridSample2d`] — atomic-add into `dinput`
+    /// + analytical bilinear coordinate derivatives into `dgrid`.
+    GridSample2dBackward = 17,
+    /// `affine_grid(theta, size)` — generate the normalized sampling
+    /// grid for a 2×3 affine matrix. Companion to GridSample2d.
+    AffineGrid2d = 18,
+
+    /// `pixel_shuffle(x, r)` — `[N, C·r², H, W] → [N, C, H·r, W·r]`.
+    /// Pure index permutation. BW is `PixelUnshuffle`.
+    PixelShuffle = 24,
+    /// `pixel_unshuffle(x, r)` — `[N, C, H·r, W·r] → [N, C·r², H, W]`.
+    /// Inverse of `PixelShuffle`. BW is `PixelShuffle`.
+    PixelUnshuffle = 25,
+
+    /// `roi_align(input, rois, output_size, spatial_scale,
+    /// sampling_ratio=0, aligned=false)`. PyTorch convention.
+    RoiAlign = 32,
+    /// Gradient of [`Self::RoiAlign`] — bilinear-weighted atomic-add
+    /// into `dinput`.
+    RoiAlignBackward = 33,
+    /// `roi_pool(input, rois, output_size, spatial_scale)` — max-pool
+    /// variant of RoiAlign. Saves argmax indices for BW.
+    RoiPool = 34,
+    /// Gradient of [`Self::RoiPool`] — atomic-add of `dout[i, c, h, w]`
+    /// into `dinput` at the saved argmax cell.
+    RoiPoolBackward = 35,
+
+    /// `nms(boxes, scores, iou_threshold)` — non-max suppression.
+    /// Returns a boolean keep mask `[num_boxes]` and a count scalar.
+    /// No BW (set-valued op).
+    Nms = 40,
+}

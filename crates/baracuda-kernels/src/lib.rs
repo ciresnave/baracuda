@@ -39,13 +39,13 @@ pub use baracuda_kernels_types::{
     BiasElement, BiasElementKind, Bin, BinElement, BinaryCmpKind, BinaryKind, Bool, Complex32,
     Complex64, CrossEntropyTargetKind, Element, ElementKind, EmbeddingKind, EpilogueKind,
     F32Strict, FftKind, FillMode, Fp8E4M3, Fp8E5M2, FpElement, GatedActivationKind,
-    GgufBlockFormat, IndexingKind,
+    GgufBlockFormat, ImageKind, IndexingKind,
     IntElement, KernelSku, LayoutSku, LinalgKind, LossKind, LossReduction, MathPrecision,
     MatrixMut, MatrixRef, MoeKind, NormalizationKind, OpCategory, PadMode, PlanPreference, PoolKind,
     PrecisionGuarantee, QuantizeKind, RandomKind, ReduceKind, S4, S8, ScalarType, ScanKind,
     SegmentKind,
-    ShapeLayoutKind, SoftmaxKind, TensorMut, TensorRef, TernaryKind, U4, U8, UnaryKind, VectorRef,
-    Workspace,
+    ShapeLayoutKind, SoftmaxKind, SortKind, TensorMut, TensorRef, TernaryKind, U4, U8, UnaryKind,
+    VectorRef, Workspace,
 };
 
 // Re-export the float-GEMM plan types from baracuda-cutlass unchanged —
@@ -407,3 +407,45 @@ pub use quantize::{
 // Vendored from attention.rs via fuel-cuda-kernels.
 pub mod moe;
 pub use moe::{MoeArgs, MoeDescriptor, MoePlan, MoeVariant};
+
+// Image / spatial-transform family — Phase 9 Category T. Bespoke
+// kernels for the canonical vision-domain ops: interpolate (bilinear
+// 2D), grid_sample + affine_grid, pixel_shuffle / pixel_unshuffle (each
+// is the other's BW), roi_align, roi_pool, nms. f32 + f64 for math-
+// bearing ops; pixel_shuffle adds f16 + bf16 (memory-bound). NCHW.
+pub mod image;
+
+pub use image::{
+    AffineGridArgs, AffineGridDescriptor, AffineGridPlan, GridSampleArgs,
+    GridSampleBackwardArgs, GridSampleBackwardDescriptor, GridSampleBackwardPlan,
+    GridSampleDescriptor, GridSamplePlan, InterpolateArgs, InterpolateBackwardArgs,
+    InterpolateBackwardDescriptor, InterpolateBackwardPlan, InterpolateDescriptor,
+    InterpolateMode, InterpolatePlan, NmsArgs, NmsDescriptor, NmsPlan, PixelShuffleArgs,
+    PixelShuffleDescriptor, PixelShufflePlan, PixelUnshuffleArgs, PixelUnshuffleDescriptor,
+    PixelUnshufflePlan, RoiAlignArgs, RoiAlignBackwardArgs, RoiAlignBackwardDescriptor,
+    RoiAlignBackwardPlan, RoiAlignDescriptor, RoiAlignPlan, RoiPoolArgs, RoiPoolBackwardArgs,
+    RoiPoolBackwardDescriptor, RoiPoolBackwardPlan, RoiPoolDescriptor, RoiPoolPlan,
+};
+
+// Sorting / order-statistics family — Phase 9 Category O. Block-
+// bitonic sort + topk (one block per row, `row_len ≤ 1024`, `k ≤ 64`),
+// per-query binary search (searchsorted), atomic-bin histograms +
+// bincount, and the unique / unique_consecutive set-valued ops.
+// Sort / topk BW use the saved-indices scatter contract (FW emits
+// indices as a required output; BW reads them verbatim — no
+// recomputation). f32 + f64 + i32 + i64 FW for sort family; f32 + f64
+// for grads.
+pub mod sort;
+
+pub use sort::{
+    ArgsortArgs, ArgsortDescriptor, ArgsortPlan, BincountArgs, BincountDescriptor, BincountPlan,
+    HistogramArgs, HistogramDescriptor, HistogramPlan, HistogramddArgs, HistogramddDescriptor,
+    HistogramddPlan, KthvalueArgs, KthvalueBackwardArgs, KthvalueBackwardDescriptor,
+    KthvalueBackwardPlan, KthvalueDescriptor, KthvaluePlan, MsortArgs, MsortBackwardArgs,
+    MsortBackwardDescriptor, MsortBackwardPlan, MsortDescriptor, MsortPlan, SearchsortedArgs,
+    SearchsortedDescriptor, SearchsortedPlan, SortArgs, SortBackwardArgs, SortBackwardDescriptor,
+    SortBackwardPlan, SortDescriptor, SortPlan, TopkArgs, TopkBackwardArgs,
+    TopkBackwardDescriptor, TopkBackwardPlan, TopkDescriptor, TopkPlan, UniqueArgs,
+    UniqueConsecutiveArgs, UniqueConsecutiveDescriptor, UniqueConsecutivePlan, UniqueDescriptor,
+    UniquePlan, SORT_MAX_ROW, TOPK_MAX_K,
+};
