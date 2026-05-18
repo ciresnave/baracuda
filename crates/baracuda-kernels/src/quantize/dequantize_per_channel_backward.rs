@@ -43,6 +43,19 @@ pub struct DequantizePerChannelBackwardArgs<'a, TIn: Element, TOut: IntElement> 
 }
 
 /// `dequantize_per_channel` backward plan.
+///
+/// Straight-through linear: `dq_FP[..., c, ...] = scale[c] * dy[..., c, ...]`.
+///
+/// **When to use**: backward for
+/// [`DequantizePerChannelPlan`](crate::DequantizePerChannelPlan).
+///
+/// **Dtypes**: gradients in `{f32, f64, f16, bf16}`.
+///
+/// **Shape limits**: rank-4 contiguous; `axis ∈ [0, 4)`.
+///
+/// **Workspace**: none.
+///
+/// **Precision guarantee**: deterministic, bit-stable.
 pub struct DequantizePerChannelBackwardPlan<TIn: Element, TOut: IntElement> {
     desc: DequantizePerChannelBackwardDescriptor,
     sku: KernelSku,

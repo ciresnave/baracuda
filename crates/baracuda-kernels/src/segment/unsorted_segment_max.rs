@@ -55,6 +55,24 @@ pub struct UnsortedSegmentMaxArgs<'a, T: Element> {
 }
 
 /// `unsorted_segment_max` plan.
+///
+/// `out[s, d] = max input[n, d]` over `n : segment_ids[n] == s`, with
+/// IDs in any order. Implemented via `atomicMax`-emulated `atomicCAS`
+/// retry loop.
+///
+/// **When to use**: forward unsorted segment-max. **No BW plan** —
+/// argmax tracking deferred.
+///
+/// **Dtypes**: `{f32, f64}`.
+///
+/// **Shape limits**: `input` `[N, D]`; `segment_ids` `[N]` (any
+/// order); `output` `[num_segments, D]`. Out-of-range IDs dropped;
+/// empty segments emit the negative-infinity identity.
+///
+/// **Workspace**: none.
+///
+/// **Precision guarantee**: **non-deterministic** — atomic-CAS
+/// retry ordering varies across launches.
 pub struct UnsortedSegmentMaxPlan<T: Element> {
     desc: UnsortedSegmentMaxDescriptor,
     sku: KernelSku,

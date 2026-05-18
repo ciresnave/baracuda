@@ -50,6 +50,24 @@ pub struct FakeQuantizeArgs<'a, TIn: Element> {
 }
 
 /// `fake_quantize` forward plan.
+///
+/// `y = scale * (clamp(round(x / scale) + zp, q_min, q_max) - zp)`.
+/// The FP-only roundtrip of quantize-then-dequantize, no integer
+/// storage (PyTorch `torch.fake_quantize_per_tensor_affine`).
+///
+/// **When to use**: QAT (quantization-aware training) — produces a
+/// lossy FP output of the same dtype as the input. Pair with
+/// [`FakeQuantizeBackwardPlan`](crate::FakeQuantizeBackwardPlan) for
+/// STE autograd.
+///
+/// **Dtypes**: `{f32, f64, f16, bf16}` in and out (same dtype).
+///
+/// **Shape limits**: flat `[numel]`.
+///
+/// **Workspace**: none.
+///
+/// **Precision guarantee**: deterministic, bit-stable. Round-ties-
+/// even matches FW quantize.
 pub struct FakeQuantizePlan<TIn: Element> {
     desc: FakeQuantizeDescriptor,
     sku: KernelSku,

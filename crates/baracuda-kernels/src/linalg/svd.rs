@@ -65,7 +65,27 @@ pub struct SvdArgs<'a, T: Element> {
     pub info: TensorMut<'a, i32, 1>,
 }
 
-/// SVD plan.
+/// Singular value decomposition plan — `A = U · diag(S) · V^T`.
+///
+/// Wraps cuSOLVER's `gesvd` (bidiagonal reduction + QR sweeps). Use
+/// [`super::BatchedSvdPlan`] for batched square problems, or
+/// [`super::BatchedSvdaPlan`] for batched rectangular / truncated SVD.
+///
+/// **Dtypes**: `f32`, `f64` only.
+///
+/// **Shape**: `[M, N]` with `m >= n` (cuSOLVER constraint — transpose
+/// before invoking if you need `m < n`). `full_matrices` toggles
+/// between full (`U: [M, M]`, `V^T: [N, N]`) and thin
+/// (`U: [M, K]`, `V^T: [K, N]`) shapes where `K = min(M, N)`.
+///
+/// **Storage**: column-major end-to-end.
+///
+/// **Workspace**: cuSOLVER `_bufferSize` (queried lazily on first
+/// `run`).
+///
+/// **Precision guarantee**: deterministic; not bit-stable across runs.
+///
+/// Owns a lazy cuSOLVER handle (`!Sync` / `!Send`); destroyed on `Drop`.
 pub struct SvdPlan<T: Element> {
     desc: SvdDescriptor,
     sku: KernelSku,

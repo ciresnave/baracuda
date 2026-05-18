@@ -123,8 +123,34 @@ pub struct EigArgs<'a, T: Element> {
     pub info: TensorMut<'a, i32, 1>,
 }
 
-/// General eig plan. Type parameter `T` is the input element type —
-/// outputs use the same `T` per cuSOLVER Xgeev's convention.
+/// General (non-symmetric) eigendecomposition plan — `A · v = λ · v`.
+///
+/// Wraps cuSOLVER's 64-bit-index `Xgeev` (cuSOLVER 11.7+ / CUDA 12.6+).
+/// Type parameter `T` is the input element type — outputs use the
+/// same `T` per cuSOLVER Xgeev's convention (real input → packed
+/// `wr` / `wi` real eigvals; complex input → complex eigvals).
+///
+/// **When to use**: full eigendecomposition of an arbitrary square
+/// matrix. Use [`super::EighPlan`] when the input is symmetric /
+/// Hermitian (faster, real eigvals).
+///
+/// **Dtypes**: `f32`, `f64`, `Complex32`, `Complex64`. The single
+/// `Xgeev` entry point dispatches via `cudaDataType`.
+///
+/// **Shape**: `[N, N]`. 2-D only — no batched `Xgeev` in cuSOLVER.
+///
+/// **Storage**: column-major end-to-end.
+///
+/// **Workspace**: two separate buffers per `Xgeev_bufferSize`: device
+/// scratch + a small host scratch (the plan allocates the host buffer
+/// transparently). Queried lazily on first `run`.
+///
+/// **Precision guarantee**: deterministic; not bit-stable across runs.
+/// Per the QR-algorithm iteration count, results may differ slightly
+/// across runs depending on cuSOLVER's internal heuristics.
+///
+/// Owns a lazy cuSOLVER handle + params object (`!Sync` / `!Send`);
+/// destroyed on `Drop`.
 pub struct EigPlan<T: Element> {
     desc: EigDescriptor,
     sku: KernelSku,

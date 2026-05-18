@@ -1,8 +1,23 @@
-//! Softmax backward plan — `dx = y · (dy - Σ_j y[j] · dy[j])` along
-//! the softmax axis (Softmax BW), or `dx = dy - exp(y) · Σ_j dy[j]`
-//! (LogSoftmax BW).
+//! Softmax backward plan.
 //!
-//! Today wired: `{Softmax, LogSoftmax} × {f32, f16, bf16, f64}`.
+//! **Formulas**:
+//! - `Softmax` BW:    `dx[k] = y[k] · (dy[k] - Σ_j y[j] · dy[j])`
+//! - `LogSoftmax` BW: `dx[k] = dy[k] - exp(y[k]) · Σ_j dy[j]`
+//!
+//! Both reference the **saved forward output** `y` — the BW formula has
+//! no dependence on the forward input `x` once `y` is known.
+//!
+//! **When to use**: autograd backward for [`SoftmaxPlan`](super::SoftmaxPlan).
+//! Caller saves `y` from the FW pass and feeds it as `args.y`.
+//!
+//! **Dtypes / shape**: `{Softmax, LogSoftmax} × {f32, f16, bf16, f64}`,
+//! tensor rank `1..=8`. f16 / bf16 reduce in f32 (FP detour) then cast
+//! back.
+//!
+//! **Workspace**: none.
+//!
+//! **Precision**: deterministic, bit-stable on the same hardware
+//! (two-pass per-row scan; no atomic-add).
 
 use core::ffi::c_void;
 use core::marker::PhantomData;
@@ -40,7 +55,11 @@ pub struct SoftmaxBackwardArgs<'a, T: Element, const N: usize> {
     pub dx: TensorMut<'a, T, N>,
 }
 
-/// Softmax backward plan.
+/// Softmax backward plan — see the module-level docs for formulas,
+/// dtypes, workspace, and precision guarantees.
+///
+/// `T: Element` is the element type (`f32` / `f64` / `f16` / `bf16`).
+/// `const N: usize` is the tensor rank (1..=8).
 pub struct SoftmaxBackwardPlan<T: Element, const N: usize> {
     desc: SoftmaxBackwardDescriptor<N>,
     sku: KernelSku,
@@ -48,7 +67,10 @@ pub struct SoftmaxBackwardPlan<T: Element, const N: usize> {
 }
 
 impl<T: Element, const N: usize> SoftmaxBackwardPlan<T, N> {
-    /// Pick a kernel.
+    /// Pick a kernel for `desc`. Validates `softmax_axis < N`, the dtype
+    /// is in the wired FP family, and tensor rank ≤ 8. Returns
+    /// [`Error::Unsupported`] for cells outside the matrix and
+    /// [`Error::InvalidProblem`] for malformed shapes / axes.
     pub fn select(
         _stream: &Stream,
         desc: &SoftmaxBackwardDescriptor<N>,
@@ -142,23 +164,26 @@ impl<T: Element, const N: usize> SoftmaxBackwardPlan<T, N> {
         Ok(())
     }
 
-    /// Workspace size in bytes.
+    /// Workspace size in bytes. Always zero.
     #[inline]
     pub fn workspace_size(&self) -> usize {
         0
     }
-    /// Kernel SKU identity.
+    /// Identity of the kernel this plan picked.
     #[inline]
     pub fn sku(&self) -> KernelSku {
         self.sku
     }
-    /// Numerical guarantees.
+    /// Numerical guarantees for this plan's kernel — deterministic,
+    /// bit-stable on the same hardware, f32 accumulator for f16 / bf16
+    /// inputs (FP detour).
     #[inline]
     pub fn precision_guarantee(&self) -> PrecisionGuarantee {
         self.sku.precision_guarantee
     }
 
-    /// Launch.
+    /// Launch the kernel against `args`. Calls `can_implement` first;
+    /// returns `Ok(())` for empty tensors.
     pub fn run(
         &self,
         stream: &Stream,

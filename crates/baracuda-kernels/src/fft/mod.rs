@@ -71,9 +71,13 @@
 //!
 //! The ND plans wrap `cufftPlanMany` with the default "tight" layout
 //! (`inembed = onembed = null`) and require the transformed axes to be
-//! a contiguous suffix of the logical operand. ND `fftshift` is *not*
-//! shipped in this trailblazer — callers can chain 1-D `FftShiftPlan`
-//! launches axis-by-axis (with intervening permutes) for ND shifts.
+//! a contiguous suffix of the logical operand.
+//!
+//! ND `fftshift` / `ifftshift` is wired as [`FftShiftNdPlan`] — a
+//! bespoke index-permutation kernel that shifts a caller-selected
+//! subset of axes (`[FFTSHIFT_ND_MAX_SHIFT_AXES]` capacity) over a
+//! tensor of rank up to [`FFTSHIFT_ND_MAX_RANK`]. The 1-D
+//! [`FftShiftPlan`] remains the fast path for single-axis shifts.
 
 pub mod fft;
 pub mod fftn;

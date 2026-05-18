@@ -45,6 +45,24 @@ pub struct DequantizePerTensorBackwardArgs<'a, TIn: Element, TOut: IntElement> {
 }
 
 /// `dequantize_per_tensor` backward plan.
+///
+/// Straight-through. The dequant FW is exactly linear in the int
+/// input (`x = scale * (q - zp)`), so `dq = scale * dy`. The int
+/// input itself is non-differentiable; this BW propagates the
+/// upstream gradient back into FP-typed `d_input` for autograd
+/// continuity.
+///
+/// **When to use**: backward for
+/// [`DequantizePerTensorPlan`](crate::DequantizePerTensorPlan).
+///
+/// **Dtypes**: gradients in `{f32, f64, f16, bf16}`; `TOut` carried
+/// for SKU parity with the FW Plan.
+///
+/// **Shape limits**: flat `[numel]`.
+///
+/// **Workspace**: none.
+///
+/// **Precision guarantee**: deterministic, bit-stable.
 pub struct DequantizePerTensorBackwardPlan<TIn: Element, TOut: IntElement> {
     desc: DequantizePerTensorBackwardDescriptor,
     sku: KernelSku,

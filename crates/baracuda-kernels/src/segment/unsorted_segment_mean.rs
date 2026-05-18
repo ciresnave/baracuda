@@ -62,6 +62,26 @@ pub struct UnsortedSegmentMeanArgs<'a, T: Element> {
 }
 
 /// `unsorted_segment_mean` plan.
+///
+/// `out[s, d] = Σ input[n, d] / count[s]` with `segment_ids` in any
+/// order. Two-phase: (1) atomicAdd accumulate, (2) divide by
+/// per-segment count derived via a separate atomic-counter pass.
+///
+/// **When to use**: forward unsorted segment-mean. For sorted IDs
+/// use [`SegmentMeanPlan`](crate::SegmentMeanPlan). BW pass shares
+/// [`SegmentMeanBackwardPlan`](crate::SegmentMeanBackwardPlan).
+///
+/// **Dtypes**: `{f32, f64}`.
+///
+/// **Shape limits**: `input` `[N, D]`; `segment_ids` `[N]` (any
+/// order); `output` `[num_segments, D]`. Out-of-range IDs dropped;
+/// empty segments emit zero.
+///
+/// **Workspace**: `num_segments * sizeof(i32)` bytes for the per-
+/// segment count buffer. Use [`Self::workspace_size`].
+///
+/// **Precision guarantee**: **non-deterministic** — atomicAdd
+/// ordering during accumulation.
 pub struct UnsortedSegmentMeanPlan<T: Element> {
     desc: UnsortedSegmentMeanDescriptor,
     sku: KernelSku,

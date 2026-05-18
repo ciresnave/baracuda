@@ -52,6 +52,28 @@ pub struct QuantizePerTokenArgs<'a, TIn: Element, TOut: IntElement> {
 }
 
 /// `quantize_per_token` forward plan.
+///
+/// `q[n, d] = clamp(round(x[n, d] / scale[n]) + zero_point[n], qmin, qmax)`.
+/// Per-row quantization for 2-D activations (W8A8 LLM-style).
+///
+/// **When to use**: forward activation quantization at inference (one
+/// `(scale, zp)` pair per token row, computed from the row's max-abs
+/// range upstream). For weight quantization use
+/// [`QuantizePerChannelPlan`](crate::QuantizePerChannelPlan); for
+/// global scale use [`QuantizePerTensorPlan`](crate::QuantizePerTensorPlan).
+/// Pair with [`QuantizePerTokenBackwardPlan`](crate::QuantizePerTokenBackwardPlan)
+/// for STE.
+///
+/// **Dtypes**: input FP `{f32, f64, f16, bf16}` × output int
+/// `{s8, u8}`. `scale[]` is input dtype; `zero_point[]` is `i32`.
+///
+/// **Shape limits**: rank-2 `[N, D]`; `scale` and `zero_point` are
+/// `[N]`. `q_max ≥ q_min`.
+///
+/// **Workspace**: none.
+///
+/// **Precision guarantee**: deterministic, bit-stable. One thread
+/// per output cell, no atomics. Round-ties-even.
 pub struct QuantizePerTokenPlan<TIn: Element, TOut: IntElement> {
     desc: QuantizePerTokenDescriptor,
     sku: KernelSku,

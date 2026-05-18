@@ -21,7 +21,8 @@ use baracuda_kernels_types::{
 
 use super::gather::map_status;
 
-/// Descriptor for a `gather_backward` op.
+/// Descriptor for a `gather_backward` op. Mirrors the FW descriptor's
+/// shape / axis / dtype tuple.
 #[derive(Copy, Clone, Debug)]
 pub struct GatherBackwardDescriptor<const N: usize> {
     /// Shape of `dout` / `index` (== shape of FW output).
@@ -46,6 +47,26 @@ pub struct GatherBackwardArgs<'a, T: Element, const N: usize> {
 }
 
 /// `gather_backward` plan.
+///
+/// Adjoint of [`crate::GatherPlan`]: scatter-adds `dout` into `dsrc`
+/// at positions given by `index`.
+///
+/// **When to use**: backward pass for an op whose forward was
+/// [`GatherPlan`](crate::GatherPlan).
+///
+/// **Dtypes**: `{f32, f64}` only. BW uses `atomicAdd` which is
+/// restricted to native-FP atomic types on `sm_80+`. Integer
+/// atomic-add is hardware-supported but kept out-of-scope for the
+/// trailblazer.
+///
+/// **Shape limits**: rank in `[1, 8]`; `gather_dim ∈ [0, N)`;
+/// `src_dim_size ≥ 0`. `dout` and `index` must share shape.
+///
+/// **Workspace**: none. Caller MUST zero `dsrc` before launch (or
+/// pre-populate it to accumulate).
+///
+/// **Precision guarantee**: **non-deterministic** — `atomicAdd`
+/// ordering varies between launches, so results are not bit-stable.
 pub struct GatherBackwardPlan<T: Element, const N: usize> {
     desc: GatherBackwardDescriptor<N>,
     sku: KernelSku,
@@ -53,7 +74,9 @@ pub struct GatherBackwardPlan<T: Element, const N: usize> {
 }
 
 impl<T: Element, const N: usize> GatherBackwardPlan<T, N> {
-    /// Pick a kernel for `desc`.
+    /// Pick a kernel for `desc`. Validates `T::KIND == element`, rank
+    /// > 0, `gather_dim` in range, `src_dim_size ≥ 0`, and that dtype
+    /// is `{f32, f64}`.
     pub fn select(
         _stream: &Stream,
         desc: &GatherBackwardDescriptor<N>,
@@ -117,7 +140,8 @@ impl<T: Element, const N: usize> GatherBackwardPlan<T, N> {
         })
     }
 
-    /// Validate args.
+    /// Validate args against the descriptor: `dout` / `index` shape
+    /// match, rank ≤ 8, buffers are large enough.
     pub fn can_implement(&self, args: &GatherBackwardArgs<'_, T, N>) -> Result<()> {
         if args.dout.shape != self.desc.out_shape {
             return Err(Error::InvalidProblem(
@@ -153,7 +177,7 @@ impl<T: Element, const N: usize> GatherBackwardPlan<T, N> {
         Ok(())
     }
 
-    /// Workspace size in bytes.
+    /// Workspace size in bytes. Always zero.
     #[inline]
     pub fn workspace_size(&self) -> usize {
         0
@@ -171,7 +195,8 @@ impl<T: Element, const N: usize> GatherBackwardPlan<T, N> {
         self.sku.precision_guarantee
     }
 
-    /// Launch.
+    /// Launch the kernel on `stream`. Caller must have zeroed
+    /// (or pre-populated) `dsrc` before the call. `workspace` ignored.
     pub fn run(
         &self,
         stream: &Stream,

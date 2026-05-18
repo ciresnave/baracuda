@@ -58,6 +58,37 @@ pub struct NonzeroArgs<'a, T: Element, const N: usize> {
 }
 
 /// `nonzero` plan.
+///
+/// Emits the multi-index coordinates of every nonzero element of `x`
+/// into a flat `[max_nz, rank]` `i32` table. Non-differentiable.
+///
+/// **When to use**: extract sparse indices from a dense tensor (mask
+/// → coords, sparse-from-dense conversion).
+///
+/// **Dtypes**: input `{f32, f64, i32, bool}`; output always `i32`
+/// coords.
+///
+/// **Shape limits**: input rank `N ∈ [1, 8]`. Output table length
+/// must be ≥ `max_nz * N`. Caller picks `max_nz` (set to `numel`
+/// for the worst-case-safe bound).
+///
+/// **Workspace**: none, but caller must (a) provide an `out_coords`
+/// table of at least `max_nz * rank` cells and (b) provide a 1-cell
+/// `counter` tensor which the launcher zeros via `cudaMemsetAsync`
+/// before the kernel runs. After the launch, the counter holds the
+/// true count of nonzeros (may exceed `max_nz` — overflow coords
+/// are discarded).
+///
+/// **Precision guarantee**: **non-deterministic ordering** — the
+/// kernel uses a single global atomic counter for slot assignment,
+/// so coordinates appear in CUDA-block race order (not row-major).
+/// The *set* of coords is fully determined by the input; only the
+/// row order varies. Callers needing PyTorch-style row-major coords
+/// should sort the `[count, rank]` rows afterward.
+///
+/// **Known limitations**: a future milestone may replace the atomic
+/// counter with a two-pass prefix-sum kernel that preserves row-major
+/// order.
 pub struct NonzeroPlan<T: Element, const N: usize> {
     desc: NonzeroDescriptor<N>,
     sku: KernelSku,

@@ -71,7 +71,32 @@ pub struct BatchedQrMaterializeArgs<'a, T: Element> {
     pub r: TensorMut<'a, T, 3>,
 }
 
-/// Batched-QR dense Q/R materialization plan.
+/// Batched-QR dense `Q` / `R` materialization plan.
+///
+/// Consumes the packed output of [`super::BatchedQrPlan`] and writes
+/// out dense `Q [B, M, M]` + `R [B, K, N]` per slot. Internally:
+/// (1) bespoke upper-triangle copy → `R`; (2) bespoke identity-stage
+/// → `Q`; (3) chained [`super::BatchedOrmqrPlan`] (Side = Left, Op =
+/// N) overwrites `Q` in place with the dense Q matrix encoded by the
+/// reflectors.
+///
+/// **When to use**: when downstream code needs dense `Q` / `R` per
+/// batch slot. Skip this and apply [`super::BatchedOrmqrPlan`] /
+/// [`super::BatchedOrmqrWyPlan`] directly to right-hand sides when
+/// you only need `Q · C` (cheaper).
+///
+/// **Dtypes**: `f32`, `f64` (inherited from `BatchedOrmqrPlan`).
+///
+/// **Shape**: `[batch, M, N]` packed → `Q [B, M, M]`, `R [B, K, N]`
+/// where `K = min(M, N)`.
+///
+/// **Storage**: column-major end-to-end.
+///
+/// **Workspace**: zero from this plan; the chained ormqr plan needs
+/// its own workspace per its docs.
+///
+/// **Precision guarantee**: deterministic; not bit-stable across runs
+/// (cuBLAS reduction order).
 pub struct BatchedQrMaterializePlan<T: Element> {
     desc: BatchedQrMaterializeDescriptor,
     sku: KernelSku,

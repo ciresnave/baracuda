@@ -61,7 +61,27 @@ pub struct RopeArgs<'a, T: Element> {
     pub y: TensorMut<'a, T, 4>,
 }
 
-/// RoPE forward plan.
+/// Rotary Position Embedding forward plan.
+///
+/// Rotates consecutive feature pairs `(2i, 2i+1)` of a `[B, H, S, D]`
+/// Q or K tensor by per-position angles `θ_i = pos · base^(-2i/D)`.
+///
+/// **When to use**: dominant positional encoding in modern LLMs (Llama,
+/// Mistral, Gemma, Qwen, Phi). Apply once per Q and once per K before
+/// the attention matmul. Pair with [`super::RopeBackwardPlan`] for
+/// autograd.
+///
+/// **Dtypes**: `f32`, `f64`, `f16`, `bf16`. `f16` / `bf16` detour
+/// through `f32` for the trig + multiply; `f64` uses native double.
+///
+/// **Shape limits**: rank-4, contiguous, row-major. `head_dim` must
+/// be even (RoPE rotates pairs). Optional `positions: i64[S]` override
+/// — when absent the kernel uses `positions[s] = s`.
+///
+/// **Workspace**: zero.
+///
+/// **Precision guarantee**: deterministic; bit-stable on the same
+/// hardware. Per-cell write, no atomics.
 pub struct RopePlan<T: Element> {
     desc: RopeDescriptor,
     sku: KernelSku,

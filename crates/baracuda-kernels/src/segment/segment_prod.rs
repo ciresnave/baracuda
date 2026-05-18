@@ -61,6 +61,25 @@ pub struct SegmentProdArgs<'a, T: Element> {
 }
 
 /// `segment_prod` plan (sorted, FW only).
+///
+/// `out[s, d] = Π_{n : segment_ids[n] == s} input[n, d]`. Sorted
+/// segment-product.
+///
+/// **When to use**: forward sorted segment-product. **No BW plan** —
+/// would need numerically-stable `prod / x_n` per-input divides
+/// (deferred).
+///
+/// **Dtypes**: `{f32, f64}`.
+///
+/// **Shape limits**: `input` `[N, D]`; `segment_ids` `[N]`;
+/// `output` `[num_segments, D]`.
+///
+/// **Workspace**: none.
+///
+/// **Precision guarantee**: deterministic, bit-stable.
+///
+/// **Index policy**: out-of-range IDs dropped. Empty segments emit
+/// identity (1.0).
 pub struct SegmentProdPlan<T: Element> {
     desc: SegmentProdDescriptor,
     sku: KernelSku,

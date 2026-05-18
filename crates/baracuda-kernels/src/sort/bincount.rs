@@ -36,6 +36,22 @@ pub struct BincountArgs<'a, T: Element> {
 }
 
 /// `bincount` plan.
+///
+/// Counts occurrences of each integer in a flat input (PyTorch
+/// `torch.bincount`).
+///
+/// **When to use**: forward bincount over int arrays. No BW.
+///
+/// **Dtypes**: input `{i32, i64}`; output always `i32` counts.
+///
+/// **Shape limits**: input flat `[numel]`; output `[num_bins]`.
+/// Caller pre-computes `num_bins = max(max(x)+1, minlength)`.
+/// Negative input values are skipped.
+///
+/// **Workspace**: none. Launcher zeros `output`.
+///
+/// **Precision guarantee**: **non-deterministic** — atomic
+/// accumulation order varies. Counts are data-determined.
 pub struct BincountPlan<T: Element> {
     desc: BincountDescriptor,
     sku: KernelSku,

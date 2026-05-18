@@ -77,6 +77,25 @@ pub struct SdpaBackwardArgs<'a, T: Element> {
 }
 
 /// Naive SDPA backward plan.
+///
+/// Computes `dQ`, `dK`, `dV` from upstream `dy` and the saved softmax
+/// output `attn` from the FW pass. Launches five sub-kernels behind a
+/// single symbol per dtype (dV / dattn / dscores-via-softmax-bw / dQ /
+/// dK), with a caller-supplied `dscores_ws` scratch reused as both the
+/// `dattn` and `dscores` buffer.
+///
+/// **When to use**: autograd partner for [`super::SdpaPlan`]. The
+/// `dscores_ws` arg is the only extra allocation the BW needs beyond
+/// the saved-FW `attn`.
+///
+/// **Dtypes**: `f32`, `f64`, `f16`, `bf16` — matching the FW plan.
+///
+/// **Workspace**: zero. `dscores_ws` is passed explicitly via the args
+/// rather than via the workspace channel because it is op-shaped (`[B,
+/// H, Q, K]`) rather than a flat byte scratch.
+///
+/// **Precision guarantee**: deterministic; bit-stable on the same
+/// hardware. No atomicAdd.
 pub struct SdpaBackwardPlan<T: Element> {
     desc: SdpaBackwardDescriptor,
     sku: KernelSku,

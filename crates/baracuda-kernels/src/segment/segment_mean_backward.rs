@@ -61,6 +61,25 @@ pub struct SegmentMeanBackwardArgs<'a, T: Element> {
 }
 
 /// `segment_mean_backward` plan.
+///
+/// Adjoint of [`crate::SegmentMeanPlan`]:
+/// `d_input[n, d] = d_output[seg[n], d] / count[seg[n]]`. The kernel
+/// computes the per-segment count on-the-fly into a caller-supplied
+/// workspace, then divides. Sorted and unsorted variants share this
+/// kernel (count computation is order-independent).
+///
+/// **When to use**: BW for `segment_mean` and `unsorted_segment_mean`
+/// alike.
+///
+/// **Dtypes**: `{f32, f64}`.
+///
+/// **Shape limits**: `d_output` `[num_segments, D]`; `segment_ids`
+/// `[N]`; `d_input` `[N, D]`.
+///
+/// **Workspace**: `num_segments * sizeof(i32)` bytes for the per-
+/// segment count buffer. Use [`Self::workspace_size`].
+///
+/// **Precision guarantee**: deterministic, bit-stable. No atomics.
 pub struct SegmentMeanBackwardPlan<T: Element> {
     desc: SegmentMeanBackwardDescriptor,
     sku: KernelSku,

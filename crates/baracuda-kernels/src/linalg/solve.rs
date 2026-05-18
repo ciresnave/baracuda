@@ -73,7 +73,28 @@ pub struct SolveArgs<'a, T: Element> {
     pub info: TensorMut<'a, i32, 1>,
 }
 
-/// Linear-solve plan.
+/// Linear-solve plan — `A · X = B` via `getrf` + `getrs`.
+///
+/// Two-step pipeline per `run`: `getrf` factors `A` in place to packed
+/// `LU` + pivots, then `getrs` solves over the packed factorization.
+/// `B` is overwritten with `X`.
+///
+/// **When to use**: square solve over a general `A`. Use
+/// [`super::CholeskyPlan`] + a `trsm` chain when `A` is SPD;
+/// [`super::LstSqPlan`] for least-squares.
+///
+/// **Dtypes**: `f32`, `f64`.
+///
+/// **Shape**: `[M, M]` × `[M, NRHS]`. 2-D only.
+///
+/// **Storage**: column-major end-to-end.
+///
+/// **Workspace**: cuSOLVER `_bufferSize` for `getrf` (queried lazily on
+/// first `run`).
+///
+/// **Precision guarantee**: deterministic; not bit-stable across runs.
+///
+/// Owns a lazy cuSOLVER handle (`!Sync` / `!Send`); destroyed on `Drop`.
 pub struct SolvePlan<T: Element> {
     desc: SolveDescriptor,
     sku: KernelSku,

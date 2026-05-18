@@ -64,6 +64,31 @@ pub struct QuantizePerTensorArgs<'a, TIn: Element, TOut: IntElement> {
 }
 
 /// `quantize_per_tensor` forward plan.
+///
+/// `q = clamp(round(x / scale) + zero_point, q_min, q_max)`. One scalar
+/// `scale` (FP) and `zero_point` (i32) for the entire tensor (PyTorch
+/// `torch.quantize_per_tensor`).
+///
+/// **When to use**: post-training quantization where one scale +
+/// zero-point is used across the whole tensor. Pair with
+/// [`QuantizePerTensorBackwardPlan`](crate::QuantizePerTensorBackwardPlan)
+/// for STE autograd. Use [`QuantizePerChannelPlan`](crate::QuantizePerChannelPlan)
+/// for weight quantization along output channels, or
+/// [`QuantizePerTokenPlan`](crate::QuantizePerTokenPlan) for LLM
+/// activations.
+///
+/// **Dtypes**: input FP `{f32, f64, f16, bf16}` × output int
+/// `{s8 ([-128, 127]), u8 ([0, 255])}`. Sub-byte (`s4` / `u4`)
+/// deferred.
+///
+/// **Shape limits**: trailblazer flattens to 1-D `[numel]`. Caller
+/// collapses multi-D inputs (per-tensor quant is axis-agnostic).
+/// `numel ≥ 0`; `q_max ≥ q_min`.
+///
+/// **Workspace**: none.
+///
+/// **Precision guarantee**: deterministic, bit-stable. Round-ties-
+/// even (`__float2int_rn`).
 pub struct QuantizePerTensorPlan<TIn: Element, TOut: IntElement> {
     desc: QuantizePerTensorDescriptor,
     sku: KernelSku,

@@ -49,6 +49,22 @@ pub struct DequantizePerTokenArgs<'a, TIn: Element, TOut: IntElement> {
 }
 
 /// `dequantize_per_token` plan.
+///
+/// `x[n, d] = scale[n] * (q[n, d] - zero_point[n])`. Inverse of
+/// [`QuantizePerTokenPlan`](crate::QuantizePerTokenPlan).
+///
+/// **When to use**: FP recovery from W8A8-style per-row-quantized
+/// activations. Pair with
+/// [`DequantizePerTokenBackwardPlan`](crate::DequantizePerTokenBackwardPlan).
+///
+/// **Dtypes**: input int `{s8, u8}`; output FP `{f32, f64, f16, bf16}`.
+///
+/// **Shape limits**: rank-2 `[N, D]`; per-row `scale` and `zp` of
+/// length `N`.
+///
+/// **Workspace**: none.
+///
+/// **Precision guarantee**: deterministic, bit-stable.
 pub struct DequantizePerTokenPlan<TIn: Element, TOut: IntElement> {
     desc: DequantizePerTokenDescriptor,
     sku: KernelSku,

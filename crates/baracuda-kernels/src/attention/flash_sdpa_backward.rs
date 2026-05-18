@@ -91,6 +91,24 @@ pub struct FlashSdpaBackwardArgs<'a, T: Element> {
 }
 
 /// Flash Attention backward plan.
+///
+/// Three-kernel deterministic BW pipeline (D / dQ / dK-dV). Reads the
+/// FW-saved `lse` rather than the full attention matrix; re-derives
+/// `P_ij` on the fly inside each block.
+///
+/// **When to use**: autograd partner for [`super::FlashSdpaPlan`].
+///
+/// **Dtypes**: `f32`, `f64`, `f16`, `bf16` — must match the FW plan.
+///
+/// **Shape limits**: identical to the FW plan (`d_k == d_v ≤ 128`,
+/// `Br = Bc = 64`).
+///
+/// **Workspace**: zero. The caller provides the per-row `D = rowsum(y
+/// ⊙ dy)` scratch as the `d_ws` arg (shape `[B, H, Q]`).
+///
+/// **Precision guarantee**: deterministic; bit-stable on the same
+/// hardware. dQ is written by the q-block owner, dK / dV by the
+/// k-block owner — no atomicAdd anywhere.
 pub struct FlashSdpaBackwardPlan<T: Element> {
     desc: FlashSdpaBackwardDescriptor,
     sku: KernelSku,

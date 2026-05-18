@@ -61,6 +61,21 @@ pub struct PermuteBackwardArgs<'a, T: Element, const N: usize> {
 }
 
 /// `permute` backward plan.
+///
+/// Adjoint of [`crate::PermutePlan`]: `dx = dy.permute(inverse_dims)`.
+/// Implemented as a Rust wrapper that dispatches to the FW kernel
+/// with the inverse permutation.
+///
+/// **When to use**: BW for [`PermutePlan`](crate::PermutePlan).
+///
+/// **Dtypes**: `{f32, f64, f16, bf16}`.
+///
+/// **Shape limits**: rank in `[1, 8]`; `dims` must be a permutation
+/// of `[0, N)`.
+///
+/// **Workspace**: none.
+///
+/// **Precision guarantee**: deterministic, bit-stable, bit-exact.
 pub struct PermuteBackwardPlan<T: Element, const N: usize> {
     desc: PermuteBackwardDescriptor<N>,
     sku: KernelSku,

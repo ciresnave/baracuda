@@ -64,7 +64,31 @@ pub struct FftShiftArgs<'a, T: Element> {
     pub y: TensorMut<'a, T, 2>,
 }
 
-/// fftshift / ifftshift plan. Bespoke kernel — no cuFFT handle.
+/// 1-D `fftshift` / `ifftshift` plan — bespoke index-permutation
+/// kernel.
+///
+/// Cyclically shifts the last axis of a `[batch, n]` tensor by `n/2`
+/// (ifftshift) or `(n+1)/2` (fftshift). Matches NumPy / PyTorch
+/// conventions. For even `n` the two directions are identical; for odd
+/// `n` `ifftshift` is the genuine inverse of `fftshift`.
+///
+/// **When to use**: place the DC component at the centre of an FFT
+/// output (or vice versa). Use [`super::FftShiftNdPlan`] for shifts
+/// over multiple axes.
+///
+/// **Dtypes**: any [`Element`] — kernel dispatches on
+/// `size_of::<T>()` (4 / 8 / 16-byte cells), so `f32`, `f64`,
+/// `Complex32`, `Complex64` all work without per-type templating.
+///
+/// **Shape**: `[batch, n]`. Out-of-place only (in-place shift would
+/// need a 2-phase swap).
+///
+/// **Workspace**: zero.
+///
+/// **Precision guarantee**: bit-exact (pure index permutation, no
+/// arithmetic).
+///
+/// No cuFFT handle / state — the plan is just configuration.
 pub struct FftShiftPlan<T: Element> {
     desc: FftShiftDescriptor,
     sku: KernelSku,

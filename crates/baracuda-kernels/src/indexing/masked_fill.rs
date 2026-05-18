@@ -91,6 +91,26 @@ pub struct MaskedFillArgs<'a, T: Element, const N: usize> {
 }
 
 /// `masked_fill` plan.
+///
+/// `out[i] = mask[i] ? value : src[i]` (PyTorch
+/// `torch.Tensor.masked_fill`).
+///
+/// **When to use**: forward `masked_fill`. Pair with
+/// [`MaskedFillBackwardPlan`](crate::MaskedFillBackwardPlan) — the BW
+/// simply zeros gradient at mask=true positions, so it's pure
+/// element-select like the FW.
+///
+/// **Dtypes**: `{f32, f64, i32, bool}`. Mask is always `u8` (Bool
+/// storage; non-zero = true).
+///
+/// **Shape limits**: rank in `[1, 8]`; same-shape only (no broadcast
+/// in the trailblazer). Use one of the `MaskedFillDescriptor::new_*`
+/// constructors to encode the fill value into `fill_bits`.
+///
+/// **Workspace**: none.
+///
+/// **Precision guarantee**: deterministic, bit-stable on same
+/// hardware. Pure element-select, no arithmetic — bit-exact.
 pub struct MaskedFillPlan<T: Element, const N: usize> {
     desc: MaskedFillDescriptor<N>,
     sku: KernelSku,

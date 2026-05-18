@@ -75,7 +75,28 @@ pub struct InverseArgs<'a, T: Element> {
     pub info: TensorMut<'a, i32, 1>,
 }
 
-/// Matrix-inverse plan.
+/// Matrix-inverse plan — `A^{-1}` via `getrf` + `getrs` over identity.
+///
+/// Pipeline per `run`: stage an `M × M` identity into `inv` (small
+/// host build + async H2D), `getrf` factors `A` in place, then `getrs`
+/// solves `A · X = I` in place over `inv` giving `X = A^{-1}`.
+///
+/// **When to use**: explicit dense inverse. Prefer [`super::SolvePlan`]
+/// when you only need to apply `A^{-1}` to specific RHS columns —
+/// inverting an `M × M` matrix to do a single solve is wasted work.
+///
+/// **Dtypes**: `f32`, `f64`.
+///
+/// **Shape**: `[M, M]`. 2-D only — no batching today.
+///
+/// **Storage**: column-major end-to-end.
+///
+/// **Workspace**: cuSOLVER `_bufferSize` for `getrf` (queried lazily
+/// on first `run`).
+///
+/// **Precision guarantee**: deterministic; not bit-stable across runs.
+///
+/// Owns a lazy cuSOLVER handle (`!Sync` / `!Send`); destroyed on `Drop`.
 pub struct InversePlan<T: Element> {
     desc: InverseDescriptor,
     sku: KernelSku,

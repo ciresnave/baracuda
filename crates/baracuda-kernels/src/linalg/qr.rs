@@ -81,7 +81,28 @@ pub struct QrArgs<'a, T: Element> {
     pub info: TensorMut<'a, i32, 1>,
 }
 
-/// QR factorization plan.
+/// QR factorization plan — `A = Q · R` with dense `Q` materialized.
+///
+/// Two-stage pipeline per `run`: `geqrf` packs Householder reflectors
+/// into `A` + `tau`, then `ormqr` applied to a host-built identity
+/// produces dense `Q [M, M]`. The strict lower triangle of `A` is
+/// zeroed in Rust to give `R [M, N]` cleanly.
+///
+/// **When to use**: single-matrix QR. Use [`super::BatchedQrPlan`] for
+/// batched problems and [`super::BatchedQrMaterializePlan`] for dense
+/// per-slot Q/R.
+///
+/// **Dtypes**: `f32`, `f64`.
+///
+/// **Storage**: column-major end-to-end (pass-through of cuSOLVER's
+/// convention).
+///
+/// **Workspace**: cuSOLVER `_bufferSize` for the larger of `geqrf` /
+/// `ormqr` (queried lazily on first `run`).
+///
+/// **Precision guarantee**: deterministic; not bit-stable across runs.
+///
+/// Owns a lazy cuSOLVER handle (`!Sync` / `!Send`); destroyed on `Drop`.
 pub struct QrPlan<T: Element> {
     desc: QrDescriptor,
     sku: KernelSku,

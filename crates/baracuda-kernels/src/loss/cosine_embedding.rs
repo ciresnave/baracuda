@@ -1,10 +1,21 @@
 //! CosineEmbedding loss plan — Tier-2 (Milestone 5.3).
 //!
-//! Per-row: `cs = (x1·x2) / (||x1|| · ||x2||)`. Then
-//!   `term = (1 - cs)` if t==1 else `max(0, cs - margin)`.
+//! **Formula** (per row):
+//!   `cs = (x1·x2) / (||x1|| · ||x2||)`
+//!   `term = (1 - cs)` if `t == 1` else `max(0, cs - margin)`
 //!
-//! 2-D input `[N, D]`. Target `t` is `T` (PyTorch uses ±1.0).
-//! Output shape: `[N]` for None mode, `[1]` for Mean / Sum.
+//! **When to use**: similarity learning, e.g. siamese networks. Pair
+//! with [`CosineEmbeddingLossBackwardPlan`] for autograd.
+//!
+//! **Dtypes / shape**: `{f32, f16, bf16, f64}`. 2-D inputs `[N, D]`,
+//! target `[N]` encoded as `[N, 1]` (PyTorch uses ±1.0). Output `[N]`
+//! for `None` mode, `[1]` for `Mean` / `Sum`.
+//!
+//! **Workspace**: `n_rows · sizeof(T)` for `Mean` / `Sum`; zero for
+//! `None` (per-cell kernel writes directly to output).
+//!
+//! **Precision**: deterministic, bit-stable. f16 / bf16 accumulate in
+//! f32 (FP detour); f64 keeps everything in double.
 
 use core::ffi::c_void;
 use core::marker::PhantomData;

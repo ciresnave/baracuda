@@ -57,6 +57,26 @@ pub struct RoiPoolArgs<'a, T: Element> {
 }
 
 /// `roi_pool` plan.
+///
+/// Max-pool variant of [`crate::RoiAlignPlan`]: each output cell is
+/// the max over the integer-rounded RoI bin in the input plane
+/// (torchvision `roi_pool`). FW emits an `argmax` buffer the BW
+/// reads to route gradients.
+///
+/// **When to use**: forward RoIPool (legacy detection nets). For
+/// bilinear-sampled extraction prefer
+/// [`RoiAlignPlan`](crate::RoiAlignPlan). Pair with
+/// [`RoiPoolBackwardPlan`](crate::RoiPoolBackwardPlan).
+///
+/// **Dtypes**: `{f32, f64}`.
+///
+/// **Shape limits**: rank-4 NCHW input; RoIs `[num_rois, 5]`;
+/// outputs (`output` + `argmax`) `[num_rois, C, pooled_h, pooled_w]`.
+///
+/// **Workspace**: none, but the caller supplies the `argmax` tensor
+/// as part of [`RoiPoolArgs`] (BW requires it).
+///
+/// **Precision guarantee**: deterministic, bit-stable.
 pub struct RoiPoolPlan<T: Element> {
     desc: RoiPoolDescriptor,
     sku: KernelSku,

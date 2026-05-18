@@ -55,6 +55,24 @@ pub struct UnsortedSegmentMinArgs<'a, T: Element> {
 }
 
 /// `unsorted_segment_min` plan.
+///
+/// `out[s, d] = min input[n, d]` over `n : segment_ids[n] == s`, with
+/// IDs in any order. Mirror of
+/// [`UnsortedSegmentMaxPlan`](crate::UnsortedSegmentMaxPlan); uses
+/// `atomicMin`-emulated CAS retry.
+///
+/// **When to use**: forward unsorted segment-min. **No BW plan** —
+/// argmin tracking deferred.
+///
+/// **Dtypes**: `{f32, f64}`.
+///
+/// **Shape limits**: `input` `[N, D]`; `segment_ids` `[N]`;
+/// `output` `[num_segments, D]`. Empty segments emit
+/// positive-infinity identity.
+///
+/// **Workspace**: none.
+///
+/// **Precision guarantee**: **non-deterministic**.
 pub struct UnsortedSegmentMinPlan<T: Element> {
     desc: UnsortedSegmentMinDescriptor,
     sku: KernelSku,

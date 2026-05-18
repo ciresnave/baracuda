@@ -44,6 +44,21 @@ pub struct PixelUnshuffleArgs<'a, T: Element> {
 }
 
 /// `pixel_unshuffle` plan.
+///
+/// `[N, C, H·r, W·r] → [N, C·r², H, W]` — inverse of
+/// [`PixelShufflePlan`](crate::PixelShufflePlan).
+///
+/// **When to use**: forward pixel-unshuffle. Also serves as the BW
+/// of `pixel_shuffle` (and vice versa).
+///
+/// **Dtypes**: `{f32, f64, f16, bf16}` (memory-bound).
+///
+/// **Shape limits**: rank-4 NCHW; H and W must be multiples of `r`;
+/// `r ≥ 1`.
+///
+/// **Workspace**: none.
+///
+/// **Precision guarantee**: deterministic, bit-stable, bit-exact.
 pub struct PixelUnshufflePlan<T: Element> {
     desc: PixelUnshuffleDescriptor,
     sku: KernelSku,

@@ -96,7 +96,32 @@ pub struct FlashSdpaArgs<'a, T: Element> {
     pub lse: TensorMut<'a, T, 3>,
 }
 
-/// Flash Attention forward plan.
+/// Flash Attention forward plan (Tri Dao 2022).
+///
+/// Tiled fused online-softmax SDPA that avoids materializing the
+/// `[B, H, Q, K]` attention matrix.
+///
+/// **When to use**: forward pass of self / cross attention when memory
+/// is tight (Flash has O(N) memory in sequence length vs naive O(N²)).
+/// Pair with [`super::FlashSdpaBackwardPlan`] for autograd. Use
+/// [`super::SdpaPlan`] when you need an explicit additive mask or
+/// `d_k != d_v`.
+///
+/// **Dtypes**: `f32`, `f64`, `f16`, `bf16`. Half-precision uses an
+/// `f32` accumulator throughout. No FP8 / int8 in the trailblazer.
+///
+/// **Shape limits**: `d_k == d_v ≤ 128`; arbitrary `Q`, `K`. The
+/// trailblazer fixes `Br = Bc = 64` and supports an optional
+/// upper-triangular causal mask.
+///
+/// **Workspace**: zero — the `lse` arg carries the only FW-saved
+/// state (used by the BW pass to re-derive `P_ij` without storing the
+/// attention matrix).
+///
+/// **Precision guarantee**: deterministic; bit-stable on the same
+/// hardware. Each output cell is written by exactly one block — no
+/// atomicAdd. Flash and naive SDPA differ in float-order so they are
+/// *not* bit-identical to each other.
 pub struct FlashSdpaPlan<T: Element> {
     desc: FlashSdpaDescriptor,
     sku: KernelSku,

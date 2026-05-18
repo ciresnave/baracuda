@@ -63,6 +63,29 @@ pub struct RoiAlignArgs<'a, T: Element> {
 }
 
 /// `roi_align` plan.
+///
+/// Extract a fixed-size `[pooled_h, pooled_w]` feature from each
+/// variable-size RoI by bilinearly sampling the input plane
+/// (torchvision `roi_align`).
+///
+/// **When to use**: forward RoIAlign for detection / instance-
+/// segmentation networks. Pair with
+/// [`RoiAlignBackwardPlan`](crate::RoiAlignBackwardPlan).
+///
+/// **Dtypes**: `{f32, f64}` for both input and RoI coords.
+///
+/// **Shape limits**: rank-4 NCHW input; RoIs `[num_rois, 5]`
+/// (rows are `(batch_idx, x1, y1, x2, y2)` in INPUT-image pixel
+/// coords, scaled by `spatial_scale`); output
+/// `[num_rois, C, pooled_h, pooled_w]`.
+///
+/// **Config**: `sampling_ratio == 0` → adaptive (one sample per
+/// `ceil(bin_h) × ceil(bin_w)` grid). `aligned == false` is the
+/// pre-0.6 PyTorch coord convention (no `0.5` offset before scaling).
+///
+/// **Workspace**: none.
+///
+/// **Precision guarantee**: deterministic, bit-stable.
 pub struct RoiAlignPlan<T: Element> {
     desc: RoiAlignDescriptor,
     sku: KernelSku,

@@ -39,6 +39,23 @@ pub struct HistogramArgs<'a, T: Element> {
 }
 
 /// `histogram` plan.
+///
+/// 1-D uniform-bin histogram via atomic-bin accumulation (PyTorch
+/// `torch.histc`). Bins cover `[lo, hi]` uniformly.
+///
+/// **When to use**: forward 1-D histogram. No BW (set-valued).
+///
+/// **Dtypes**: input `{f32, f64}`; output always `i32` counts.
+///
+/// **Shape limits**: input flat `[numel]`; output `[num_bins]`.
+/// `hi ≥ lo`, `num_bins ≥ 1`.
+///
+/// **Workspace**: none. Launcher zeros `output` before the kernel
+/// runs.
+///
+/// **Precision guarantee**: **non-deterministic** — atomic-bin
+/// accumulation order varies across launches. Final counts are
+/// data-determined.
 pub struct HistogramPlan<T: Element> {
     desc: HistogramDescriptor,
     sku: KernelSku,

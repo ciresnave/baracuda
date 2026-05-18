@@ -51,6 +51,26 @@ pub struct TopkArgs<'a, T: Element> {
 }
 
 /// `topk` plan.
+///
+/// `topk(x, k, dim=last, largest)` — returns the top-k values along
+/// the last dim and their indices (PyTorch `torch.topk`).
+///
+/// **When to use**: top-k select for sampling, speculative decoding,
+/// MoE expert dispatch. Pair with
+/// [`TopkBackwardPlan`](crate::TopkBackwardPlan).
+///
+/// **Dtypes**: `{f32, f64}`; indices always `i32`.
+///
+/// **Shape limits**: rank-2 input `[batch, row_len]`; outputs
+/// `[batch, k]`. `row_len ≤ 1024`; `k ≤ 64` (LLM-inference range).
+///
+/// **Workspace**: none.
+///
+/// **Precision guarantee**: deterministic, bit-stable on identical
+/// hardware. Block-bitonic select is a fixed comparator network.
+///
+/// **Saved-indices contract**: FW emits both `values` and `indices`;
+/// BW reads saved indices verbatim. Retain `indices` for autograd.
 pub struct TopkPlan<T: Element> {
     desc: TopkDescriptor,
     sku: KernelSku,

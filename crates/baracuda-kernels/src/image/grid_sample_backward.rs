@@ -54,6 +54,23 @@ pub struct GridSampleBackwardArgs<'a, T: Element> {
 }
 
 /// `grid_sample_backward` plan.
+///
+/// Adjoint of [`crate::GridSamplePlan`]: scatter `dout` into both
+/// `dinput` (4 bilinear weights via atomicAdd) and `dgrid` (analytic
+/// chain rule through the coordinate mapping).
+///
+/// **When to use**: BW for [`GridSamplePlan`](crate::GridSamplePlan).
+/// Caller retains FW `input` and `grid`.
+///
+/// **Dtypes**: `{f32, f64}`.
+///
+/// **Shape limits**: rank-4 NCHW + grid `[N, OH, OW, 2]`.
+///
+/// **Workspace**: none. Caller MUST zero `dinput` and `dgrid` before
+/// launch.
+///
+/// **Precision guarantee**: **non-deterministic** (atomicAdd into
+/// `dinput`).
 pub struct GridSampleBackwardPlan<T: Element> {
     desc: GridSampleBackwardDescriptor,
     sku: KernelSku,

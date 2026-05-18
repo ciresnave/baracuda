@@ -92,7 +92,32 @@ pub struct SdpaArgs<'a, T: Element> {
     pub attn: TensorMut<'a, T, 4>,
 }
 
-/// Naive SDPA forward plan.
+/// Naive scaled-dot-product attention forward plan.
+///
+/// **Formula**: `y = softmax((Q · K^T) · scale [+ mask]) · V`, with the
+/// optional upper-triangular causal mask applied inside the scores
+/// kernel.
+///
+/// **When to use**: any SDPA pass where `d_k != d_v`, where you need an
+/// explicit additive mask, or where you want the saved softmax matrix
+/// available for downstream consumption. Pair with
+/// [`SdpaBackwardPlan`] for autograd. Prefer [`super::FlashSdpaPlan`]
+/// when memory is tight (the naive plan materializes the full
+/// `[B, H, Q, K]` attention matrix).
+///
+/// **Dtypes**: `f32`, `f64`, `f16`, `bf16`. Half-precision uses an
+/// `f32` accumulator. Score / out matmuls use a per-cell IMAD-style
+/// inner loop (no Tensor Cores in the trailblazer).
+///
+/// **Shape limits**: all tensors must be contiguous, row-major, rank-4.
+/// `d_k` and `d_v` are independent. Three sub-kernels are launched
+/// behind one symbol per dtype.
+///
+/// **Workspace**: zero — the `attn` arg doubles as raw-scores scratch
+/// and saved softmax output.
+///
+/// **Precision guarantee**: deterministic; bit-stable on the same
+/// hardware. No atomicAdd anywhere.
 pub struct SdpaPlan<T: Element> {
     desc: SdpaDescriptor,
     sku: KernelSku,

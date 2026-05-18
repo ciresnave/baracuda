@@ -54,6 +54,31 @@ pub struct EmbeddingArgs<'a, T: Element> {
 }
 
 /// `embedding` plan.
+///
+/// `out[n, :] = weight[indices[n], :]` (PyTorch
+/// `torch.nn.functional.embedding`). When `padding_idx == Some(p)`,
+/// rows where `indices[n] == p` are zeroed (no read from `weight`).
+///
+/// **When to use**: forward embedding-table lookup. Mathematically
+/// equivalent to `index_select` along axis 0 with `padding_idx`-aware
+/// zeroing fused into the same pass. Pair with
+/// [`EmbeddingBackwardPlan`](crate::EmbeddingBackwardPlan) for
+/// autograd; use [`EmbeddingBagPlan`](crate::EmbeddingBagPlan) for
+/// bag-reductions.
+///
+/// **Dtypes**: weight / output `{f32, f64, f16, bf16}`; indices
+/// always `i32`.
+///
+/// **Shape limits**: `weight` is `[V, D]`, `indices` is `[N]`,
+/// `output` is `[N, D]`. All extents non-negative.
+///
+/// **Workspace**: none.
+///
+/// **Precision guarantee**: deterministic, bit-stable on same
+/// hardware. Pure copy, no arithmetic.
+///
+/// **Index policy**: negative or out-of-range indices emit an
+/// all-zero row (no PyTorch-style wrap-around).
 pub struct EmbeddingPlan<T: Element> {
     desc: EmbeddingDescriptor,
     sku: KernelSku,

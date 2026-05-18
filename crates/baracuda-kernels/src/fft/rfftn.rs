@@ -101,7 +101,29 @@ pub struct RfftNdArgs<'a, T: Element, C: Element> {
     pub y: DeviceSliceMut<'a, C>,
 }
 
-/// ND RFFT plan.
+/// Multi-dimensional RFFT plan — real → Hermitian-half complex.
+///
+/// Wraps cuFFT's `cufftPlanMany` with `R2C` / `D2Z`. The transformed
+/// axes are the trailing `rank` axes of the operand; the Hermitian-half
+/// halving is applied to the **last** transformed axis only.
+///
+/// **When to use**: ND forward FFT of real-valued data. Permute to
+/// move transform axes into the trailing suffix if needed.
+///
+/// **Dtypes**: `f32` → `Complex32`; `f64` → `Complex64`.
+///
+/// **Shape**: real-side `batch * product(dims[..rank])`; complex-side
+/// `batch * product(dims[..rank-1]) * (dims[rank-1]/2 + 1)`. Rank in
+/// `1..=3` is wired.
+///
+/// **Normalization**: unnormalized (`norm="backward"`).
+///
+/// **Workspace**: zero — cuFFT manages internal workspace.
+///
+/// **Precision guarantee**: deterministic; not bit-stable across
+/// cuFFT versions.
+///
+/// Owns a lazy cuFFT handle (`!Sync` / `!Send`); destroyed on `Drop`.
 pub struct RfftNdPlan<T: Element> {
     desc: RfftNdDescriptor,
     sku: KernelSku,
@@ -397,7 +419,29 @@ pub struct IrfftNdArgs<'a, T: Element, C: Element> {
     pub y: DeviceSliceMut<'a, T>,
 }
 
-/// ND IRFFT plan.
+/// Multi-dimensional IRFFT plan — Hermitian-half complex → real.
+///
+/// Wraps cuFFT's `cufftPlanMany` with `C2R` / `Z2D`, followed by a
+/// `scale_inplace_real_*` launch for the `1/N` normalization. The
+/// real-side extent of the last transformed axis is **explicit** in
+/// the descriptor (cannot be inferred from the Hermitian half).
+///
+/// **When to use**: ND inverse FFT producing real-valued data.
+///
+/// **Dtypes**: `Complex32` → `f32`; `Complex64` → `f64`.
+///
+/// **Shape**: complex-side `batch * product(dims[..rank-1]) *
+/// (dims[rank-1]/2 + 1)`; real-side `batch * product(dims[..rank])`.
+///
+/// **Normalization**: divided by `N = product(dims[..rank])` (real
+/// element count; PyTorch `norm="backward"`).
+///
+/// **Workspace**: zero — cuFFT manages internal workspace.
+///
+/// **Precision guarantee**: deterministic; not bit-stable across
+/// cuFFT versions.
+///
+/// Owns a lazy cuFFT handle (`!Sync` / `!Send`); destroyed on `Drop`.
 pub struct IrfftNdPlan<T: Element> {
     desc: IrfftNdDescriptor,
     sku: KernelSku,

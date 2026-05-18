@@ -23,6 +23,10 @@ use baracuda_kernels_types::{
 use super::gather::map_status;
 
 /// Descriptor for a `scatter_add` op.
+///
+/// Identifies the shape of `updates` (== `index` shape), the axis, and
+/// the extent of `out` along that axis. `T::KIND` must equal
+/// `element`.
 #[derive(Copy, Clone, Debug)]
 pub struct ScatterAddDescriptor<const N: usize> {
     /// Shape of `updates` / `index`.
@@ -47,6 +51,29 @@ pub struct ScatterAddArgs<'a, T: Element, const N: usize> {
 }
 
 /// `scatter_add` plan.
+///
+/// `out[..., index[..., j, ...], ...] += updates[..., j, ...]` along
+/// `scatter_dim` via `atomicAdd` (duplicate-index safe).
+///
+/// **When to use**: forward `scatter_add` (PyTorch
+/// `torch.Tensor.scatter_add_`). For its adjoint, route through
+/// [`GatherPlan`](crate::GatherPlan) — there is no separate
+/// `ScatterAddBackwardPlan` because `scatter_add`'s BW is exactly
+/// `gather`.
+///
+/// **Dtypes**: `{f32, f64}`. Integer scatter-add is hardware-supported
+/// but kept out-of-scope for the trailblazer.
+///
+/// **Shape limits**: rank in `[1, 8]`; `scatter_dim ∈ [0, N)`;
+/// `out_dim_size ≥ 0`. `updates` and `index` must share shape.
+///
+/// **Workspace**: none. Caller pre-zeros (or pre-populates) `out`.
+///
+/// **Precision guarantee**: **non-deterministic** — `atomicAdd`
+/// ordering varies between launches.
+///
+/// **Index policy**: out-of-bounds and negative indices are skipped
+/// (no PyTorch-style wraparound).
 pub struct ScatterAddPlan<T: Element, const N: usize> {
     desc: ScatterAddDescriptor<N>,
     sku: KernelSku,
@@ -54,7 +81,8 @@ pub struct ScatterAddPlan<T: Element, const N: usize> {
 }
 
 impl<T: Element, const N: usize> ScatterAddPlan<T, N> {
-    /// Pick a kernel for `desc`.
+    /// Pick a kernel for `desc`. Validates element-type alignment,
+    /// rank, axis, non-negative extents, and dtype in `{f32, f64}`.
     pub fn select(
         _stream: &Stream,
         desc: &ScatterAddDescriptor<N>,
@@ -124,7 +152,8 @@ impl<T: Element, const N: usize> ScatterAddPlan<T, N> {
         })
     }
 
-    /// Validate args.
+    /// Validate `args` against the descriptor: shapes match, rank ≤ 8,
+    /// device buffers are large enough.
     pub fn can_implement(&self, args: &ScatterAddArgs<'_, T, N>) -> Result<()> {
         if args.updates.shape != self.desc.upd_shape {
             return Err(Error::InvalidProblem(
@@ -159,7 +188,7 @@ impl<T: Element, const N: usize> ScatterAddPlan<T, N> {
         Ok(())
     }
 
-    /// Workspace size in bytes.
+    /// Workspace size in bytes. Always zero.
     #[inline]
     pub fn workspace_size(&self) -> usize {
         0
@@ -177,7 +206,8 @@ impl<T: Element, const N: usize> ScatterAddPlan<T, N> {
         self.sku.precision_guarantee
     }
 
-    /// Launch.
+    /// Launch the kernel on `stream`. Caller must have zeroed (or
+    /// pre-populated) `out` before this call. `workspace` ignored.
     pub fn run(
         &self,
         stream: &Stream,

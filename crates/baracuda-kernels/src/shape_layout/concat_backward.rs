@@ -74,6 +74,20 @@ pub struct ConcatBackwardArgs<'a, T: Element, const N: usize> {
 }
 
 /// 2-input `concat` backward plan.
+///
+/// Adjoint of [`crate::ConcatPlan`]: split `dy` along `concat_dim`
+/// into `da` and `db`. Pure slice — no arithmetic.
+///
+/// **When to use**: BW for [`ConcatPlan`](crate::ConcatPlan).
+///
+/// **Dtypes**: `{f32, f64, f16, bf16}`.
+///
+/// **Shape limits**: rank in `[1, 8]`; `dy` has the FW output shape;
+/// `da`, `db` have the FW input shapes.
+///
+/// **Workspace**: none.
+///
+/// **Precision guarantee**: deterministic, bit-stable, bit-exact.
 pub struct ConcatBackwardPlan<T: Element, const N: usize> {
     desc: ConcatBackwardDescriptor<N>,
     sku: KernelSku,

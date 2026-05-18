@@ -41,6 +41,23 @@ pub struct ArgsortArgs<'a, T: Element> {
 }
 
 /// `argsort` plan.
+///
+/// Returns only sorted indices along the last axis (PyTorch
+/// `torch.argsort`). No values output, no BW (indices are
+/// non-differentiable).
+///
+/// **When to use**: when only the permutation is needed (gather
+/// downstream tensors via [`GatherPlan`](crate::GatherPlan) using
+/// these indices). For sorted values + indices use
+/// [`SortPlan`](crate::SortPlan).
+///
+/// **Dtypes**: input `{f32, f64, i32, i64}`; output always `i32`.
+///
+/// **Shape limits**: rank-2 `[batch, row_len]`; `row_len ≤ 1024`.
+///
+/// **Workspace**: none.
+///
+/// **Precision guarantee**: deterministic, bit-stable.
 pub struct ArgsortPlan<T: Element> {
     desc: ArgsortDescriptor,
     sku: KernelSku,

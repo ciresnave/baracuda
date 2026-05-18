@@ -81,7 +81,20 @@ pub struct RMSNormBackwardArgs<'a, T: Element, const N: usize> {
     pub dgamma: Option<TensorMut<'a, T, 1>>,
 }
 
-/// RMSNorm backward plan.
+/// RMSNorm backward plan — see module docs for the formula.
+///
+/// **When to use**: autograd backward for [`super::RMSNormPlan`].
+/// Caller saves `x` and the per-row RMS from the FW pass.
+///
+/// **Dtypes / shape**: `{f32, f16, bf16, f64}` × rank `1..=8`. Mask
+/// must match the FW pass.
+///
+/// **Workspace**: none.
+///
+/// **Precision**: deterministic, bit-stable on the same hardware. The
+/// `dgamma` reduction uses a one-block-per-feature kernel with warp
+/// shuffles + smem (no atomic-add), so it's bit-stable regardless of the
+/// half / bf16 atomicAdd arch quirks. f16 / bf16 accumulate in f32.
 pub struct RMSNormBackwardPlan<T: Element, const N: usize> {
     desc: RMSNormBackwardDescriptor<N>,
     sku: KernelSku,

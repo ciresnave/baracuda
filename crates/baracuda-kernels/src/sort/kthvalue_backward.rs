@@ -42,6 +42,21 @@ pub struct KthvalueBackwardArgs<'a, T: Element> {
 }
 
 /// `kthvalue_backward` plan.
+///
+/// Adjoint of [`crate::KthvaluePlan`]: zero-init `dx`, scatter
+/// `dy[b] → dx[b, indices[b]]`. Exactly one cell per row receives a
+/// gradient.
+///
+/// **When to use**: BW for [`KthvaluePlan`](crate::KthvaluePlan).
+///
+/// **Dtypes**: `{f32, f64}`.
+///
+/// **Shape limits**: `dy`, `indices` `[batch]`; `dx`
+/// `[batch, row_len]`.
+///
+/// **Workspace**: none.
+///
+/// **Precision guarantee**: deterministic, bit-stable.
 pub struct KthvalueBackwardPlan<T: Element> {
     desc: KthvalueBackwardDescriptor,
     sku: KernelSku,

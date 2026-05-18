@@ -24,6 +24,12 @@ use baracuda_kernels_types::{
 };
 
 /// Descriptor for a `gather` op.
+///
+/// Identifies the shape of the output / index tensor, the axis to gather
+/// along, and the source extent along that axis (for in-bounds checks).
+/// The output and index tensors must have identical shape; this single
+/// `out_shape` doubles as the index shape. `T::KIND` must equal
+/// `element`.
 #[derive(Copy, Clone, Debug)]
 pub struct GatherDescriptor<const N: usize> {
     /// Output / index shape (gather collapses to whatever `index` shape
@@ -49,6 +55,27 @@ pub struct GatherArgs<'a, T: Element, const N: usize> {
 }
 
 /// `gather` plan.
+///
+/// `out[..., j, ...] = src[..., index[..., j, ...], ...]` along the
+/// `gather_dim` axis.
+///
+/// **When to use**: forward `gather`. Pair with [`GatherBackwardPlan`](crate::GatherBackwardPlan)
+/// for the autograd pass (which scatter-adds into `dsrc`).
+///
+/// **Dtypes**: value tensor `{f32, f64, i32}`; index tensor always
+/// `i32`. (i64 indices deferred.)
+///
+/// **Shape limits**: rank in `[1, 8]`; `gather_dim ∈ [0, N)`; every
+/// dim of `out_shape` non-negative.
+///
+/// **Workspace**: none.
+///
+/// **Precision guarantee**: deterministic, bit-stable on same hardware.
+/// Pure load + store, no arithmetic — output is bit-exact at every
+/// dtype.
+///
+/// **Index policy**: out-of-bounds indices skip the write; negative
+/// indices are treated as out-of-bounds (no PyTorch-style wraparound).
 pub struct GatherPlan<T: Element, const N: usize> {
     desc: GatherDescriptor<N>,
     sku: KernelSku,
@@ -57,6 +84,9 @@ pub struct GatherPlan<T: Element, const N: usize> {
 
 impl<T: Element, const N: usize> GatherPlan<T, N> {
     /// Pick a kernel for `desc`.
+    ///
+    /// Validates: `T::KIND == desc.element`, rank > 0, `gather_dim`
+    /// in range, non-negative extents, and dtype in `{f32, f64, i32}`.
     pub fn select(
         _stream: &Stream,
         desc: &GatherDescriptor<N>,
@@ -123,7 +153,9 @@ impl<T: Element, const N: usize> GatherPlan<T, N> {
         })
     }
 
-    /// Validate args.
+    /// Validate that `args` is compatible with this plan: output and
+    /// index shapes match the descriptor, rank is ≤ 8, and every device
+    /// buffer is large enough to address its declared `numel`.
     pub fn can_implement(&self, args: &GatherArgs<'_, T, N>) -> Result<()> {
         if args.out.shape != self.desc.out_shape {
             return Err(Error::InvalidProblem(
@@ -167,7 +199,8 @@ impl<T: Element, const N: usize> GatherPlan<T, N> {
         Ok(())
     }
 
-    /// Workspace size in bytes.
+    /// Workspace size in bytes. Always zero — gather is in-place over
+    /// the output tensor with no scratch state.
     #[inline]
     pub fn workspace_size(&self) -> usize {
         0
@@ -185,7 +218,9 @@ impl<T: Element, const N: usize> GatherPlan<T, N> {
         self.sku.precision_guarantee
     }
 
-    /// Launch.
+    /// Launch the kernel on `stream`. Calls [`Self::can_implement`]
+    /// first; returns early on zero-element output. `workspace` is
+    /// ignored (gather requires none).
     pub fn run(
         &self,
         stream: &Stream,

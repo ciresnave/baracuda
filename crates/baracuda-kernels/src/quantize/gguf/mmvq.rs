@@ -44,6 +44,29 @@ pub struct GgufMmvqArgs<'a> {
 }
 
 /// `gguf_mmvq` plan.
+///
+/// `out[r] = Σ_c W_q[r, c] · y[c]` — fused dequant + matrix-vector
+/// multiply over a GGUF-packed weight matrix.
+///
+/// **When to use**: inference-time "decode-step" matmul in
+/// llama.cpp-style LLM serving — single activation vector, full FP
+/// output, no intermediate dequant materialization. For ahead-of-time
+/// unpack use [`GgufDequantizePlan`](crate::GgufDequantizePlan).
+///
+/// **Dtypes**: weight is GGUF-packed `u8` bytes; activation and
+/// output `f32`. `f16` / `bf16` activation deferred.
+///
+/// **Block formats**: every k-quant + type-0/1 except `Q8_K` —
+/// llama.cpp / Fuel reserve `Q8_K` as a CPU-side intermediate and
+/// ship no MMVQ kernel. `select()` returns `Unsupported` for `Q8_K`.
+///
+/// **Shape limits**: `ncols` must be a multiple of the block size;
+/// weight byte length must equal `nrows * (ncols / block_size) * type_size`.
+///
+/// **Workspace**: none.
+///
+/// **Precision guarantee**: deterministic, bit-stable on identical
+/// hardware. Single-pass warp reduction; no atomics. f32 accumulator.
 pub struct GgufMmvqPlan {
     desc: GgufMmvqDescriptor,
     sku: KernelSku,

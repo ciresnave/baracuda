@@ -115,6 +115,28 @@ pub struct QuantizedLinearArgs<'a, TIn: Element, TWQ: IntElement> {
 /// Both passes share the same stream and execute back-to-back; the Plan
 /// does NOT own an internal `DynamicRangeQuantizePlan` instance — it
 /// invokes the FFI directly to keep the launch ordering explicit.
+///
+/// **When to use**: W8A8 inference matmul (SmoothQuant / AWQ-runtime
+/// style). Inference-only — no BW; for QAT use
+/// [`FakeQuantizePlan`](crate::FakeQuantizePlan) + normal FP matmul.
+///
+/// **Dtypes (trailblazer)**: `TIn (act/out) ∈ {f32, f64}`; `TWQ = S8`.
+/// f16 / bf16 activations and u8 weight not yet wired.
+///
+/// **Shape limits**: `activation` `[M, K]`; `weight_q` `[C_out, K]`;
+/// `weight_scale` `[C_out]`; `output` `[M, C_out]`. The W4 layout
+/// `[C_out, K]` matches `y = x · W^T` (PyTorch `nn.Linear.weight`).
+///
+/// **Workspace**: zero in [`Workspace`]. Caller supplies
+/// `act_q_scratch` `[M, K]` (int8) and `act_scale_scratch` `[M]`
+/// (FP) in [`QuantizedLinearArgs`] for the fused activation-quant
+/// pass.
+///
+/// **Precision guarantee**: deterministic, bit-stable. Naive kernel
+/// (one thread per output cell, register-only int32 acc) for
+/// correctness; tiled-smem / mma.sync optimizations land in a perf
+/// milestone — current variant is **correctness-scaffold, not
+/// throughput-optimized**.
 pub struct QuantizedLinearPlan<TIn: Element, TWQ: IntElement> {
     desc: QuantizedLinearDescriptor,
     sku: KernelSku,

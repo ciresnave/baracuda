@@ -49,6 +49,22 @@ pub struct InterpolateBackwardArgs<'a, T: Element> {
 }
 
 /// `interpolate_backward` plan.
+///
+/// Adjoint of [`crate::InterpolatePlan`]: scatter-adds 4 bilinear
+/// weights from each output cell into the input gradient using
+/// `atomicAdd`.
+///
+/// **When to use**: BW for [`InterpolatePlan`](crate::InterpolatePlan).
+///
+/// **Dtypes**: `{f32, f64}` (FP atomicAdd only).
+///
+/// **Shape limits**: rank-4 NCHW; `dout` matches FW output;
+/// `dinput` matches FW input.
+///
+/// **Workspace**: none. Caller MUST zero `dinput` before launch.
+///
+/// **Precision guarantee**: **non-deterministic** — atomicAdd
+/// ordering varies between launches.
 pub struct InterpolateBackwardPlan<T: Element> {
     desc: InterpolateBackwardDescriptor,
     sku: KernelSku,

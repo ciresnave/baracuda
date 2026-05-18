@@ -102,7 +102,31 @@ pub struct FftNdArgs<'a, T: Element> {
     pub y: DeviceSliceMut<'a, T>,
 }
 
-/// Multi-dimensional FFT / IFFT (C2C) plan.
+/// Multi-dimensional FFT / IFFT (complex-to-complex) plan.
+///
+/// Wraps cuFFT's `cufftPlanMany` for `rank`-D transforms. The
+/// transformed axes are the trailing `rank` axes of the operand;
+/// anything to the left flattens into the cuFFT `batch` dimension.
+///
+/// **When to use**: 2-D / 3-D FFTs over the trailing axes of a tensor.
+/// Permute first if your transformed axes aren't a contiguous suffix.
+/// Use [`super::FftPlan`] for the 1-D fast path.
+///
+/// **Dtypes**: `Complex32`, `Complex64`.
+///
+/// **Shape**: `rank ∈ {1, 2, 3}` trailblazer (rank 4 wired but
+/// rejected by `select` pending hardware soak). `dims[0..rank]` are the
+/// transform axes slowest-first.
+///
+/// **Normalization**: forward unnormalized; inverse divided by
+/// `N = product(dims[..rank])` (PyTorch `norm="backward"`).
+///
+/// **Workspace**: zero — cuFFT manages internal workspace.
+///
+/// **Precision guarantee**: deterministic; not bit-stable across
+/// cuFFT versions.
+///
+/// Owns a lazy cuFFT handle (`!Sync` / `!Send`); destroyed on `Drop`.
 pub struct FftNdPlan<T: Element> {
     desc: FftNdDescriptor,
     sku: KernelSku,

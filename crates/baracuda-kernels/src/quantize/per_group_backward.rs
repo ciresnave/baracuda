@@ -61,6 +61,22 @@ pub struct QuantizePerGroupBackwardArgs<'a, TIn: Element> {
 }
 
 /// `quantize_per_group` backward plan.
+///
+/// STE: `dx = (dy / scale[g]) * 1[in_range(round(x/scale[g])+zp[g])]`
+/// with `g` the group index along the quant axis.
+///
+/// **When to use**: backward for
+/// [`QuantizePerGroupPlan`](crate::QuantizePerGroupPlan). Caller
+/// retains FW input, `scale[outer, num_groups]`, `zp[outer, num_groups]`.
+///
+/// **Dtypes**: gradients in `{f32, f64, f16, bf16}`.
+///
+/// **Shape limits**: rank-2 `[outer, axis_size]` with
+/// `axis_size % group_size == 0`.
+///
+/// **Workspace**: none.
+///
+/// **Precision guarantee**: deterministic, bit-stable.
 pub struct QuantizePerGroupBackwardPlan<TIn: Element> {
     desc: QuantizePerGroupBackwardDescriptor,
     sku: KernelSku,

@@ -57,6 +57,28 @@ pub struct UniqueArgs<'a, T: Element> {
 }
 
 /// `unique` plan.
+///
+/// Sort-then-dedup composition (PyTorch `torch.unique(x, sorted=True)`).
+/// At the plan layer chains [`SortPlan`](crate::SortPlan) into a
+/// caller-supplied scratch buffer, then
+/// [`UniqueConsecutivePlan`](crate::UniqueConsecutivePlan) to collapse
+/// runs.
+///
+/// **When to use**: per-row distinct-value extraction. Set-valued —
+/// no BW (output dimensionality is data-dependent).
+///
+/// **Dtypes**: `{f32, f64, i32}`.
+///
+/// **Shape limits**: input `[batch, row_len]`; `row_len ≤ 1024` (sort
+/// cap). Outputs `[batch, max_unique]`; the caller's `max_unique`
+/// bounds the output; rows with more uniques have the overflow
+/// dropped (the `counter[]` reports the actual count).
+///
+/// **Workspace**: zero in [`Workspace`]; caller supplies
+/// `sorted_scratch`, `sorted_idx_scratch`, and `counter` in
+/// [`UniqueArgs`].
+///
+/// **Precision guarantee**: deterministic, bit-stable.
 pub struct UniquePlan<T: Element> {
     desc: UniqueDescriptor,
     sku: KernelSku,

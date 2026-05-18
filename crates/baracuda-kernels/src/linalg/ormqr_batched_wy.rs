@@ -126,7 +126,33 @@ pub struct BatchedOrmqrWyArgs<'a, T: Element> {
     pub c: TensorMut<'a, T, 3>,
 }
 
-/// WY-blocked batched-`ormqr` plan.
+/// WY-blocked batched-`ormqr` plan — apply Householder `Q` at
+/// GEMM-rates.
+///
+/// Groups `WY_NB = 32` consecutive reflectors into a single block-
+/// reflector `H_0 · ... · H_{nb-1} = I - V · T · V^T`, then applies
+/// via three cuBLAS strided-batched GEMMs per block. Sibling to
+/// [`super::BatchedOrmqrPlan`] (reflector-by-reflector, GEMV-rates) —
+/// choose by problem size: WY wins for `M, N > ~16`.
+///
+/// **When to use**: batched `Q · C` apply for medium / large
+/// matrices. Pair with [`super::BatchedQrPlan`] which produces the
+/// packed inputs.
+///
+/// **Dtypes**: `f32`, `f64` only (the trailblazer scope; complex is a
+/// deferred follow-up).
+///
+/// **Constraints**: `side = Left` only; `op ∈ {N, T}`.
+///
+/// **Storage**: column-major end-to-end.
+///
+/// **Workspace**: scratch for `V` and the per-block `T` matrices (size
+/// computed via [`Self::workspace_size`]).
+///
+/// **Precision guarantee**: deterministic per launch but not
+/// bit-stable (cuBLAS reduction order).
+///
+/// Owns a lazy cuBLAS handle (`!Sync` / `!Send`); destroyed on `Drop`.
 pub struct BatchedOrmqrWyPlan<T: Element> {
     desc: BatchedOrmqrWyDescriptor,
     sku: KernelSku,

@@ -54,6 +54,26 @@ pub struct KthvalueArgs<'a, T: Element> {
 }
 
 /// `kthvalue` plan.
+///
+/// Returns the k-th smallest value and its index along the last axis
+/// (PyTorch `torch.kthvalue`; 0-indexed `k` here, vs PyTorch's
+/// 1-indexed). Composed at the plan layer as a bottom-(k+1)
+/// [`TopkPlan`](crate::TopkPlan), reading cell `(k)` of the result.
+///
+/// **When to use**: order-statistic queries (median, quantile pickup
+/// in fixed K range). Pair with
+/// [`KthvalueBackwardPlan`](crate::KthvalueBackwardPlan).
+///
+/// **Dtypes**: `{f32, f64}`.
+///
+/// **Shape limits**: input `[batch, row_len]`; outputs `[batch]`;
+/// `row_len ≤ 1024`; `k < 64` (composes a bottom-(k+1) topk).
+///
+/// **Workspace**: zero in [`Workspace`]; plan internally allocates a
+/// scratch `[batch, k+1]` topk-result buffer per launch.
+///
+/// **Precision guarantee**: deterministic, bit-stable (inherits topk's
+/// fixed-network guarantee).
 pub struct KthvaluePlan<T: Element> {
     desc: KthvalueDescriptor,
     sku: KernelSku,

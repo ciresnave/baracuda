@@ -65,10 +65,33 @@ pub struct CholeskyArgs<'a, T: Element> {
     pub info: TensorMut<'a, i32, 1>,
 }
 
-/// Cholesky factorization plan.
+/// Cholesky factorization plan — `A = L · L^T` (lower) or `U^T · U`
+/// (upper).
 ///
-/// Owns a lazy cuSOLVER handle (`!Sync` / `!Send`). The handle is
-/// destroyed on `Drop`.
+/// **When to use**: factor an SPD matrix into a triangular factor; the
+/// follow-on solve is a pair of triangular substitutions (use
+/// [`super::SolvePlan`] for the general `getrf` / `getrs` solve, or
+/// chain a `trsm` for the SPD case).
+///
+/// **Dtypes**: `f32`, `f64` only — cuSOLVER's dense `*potrf` family
+/// does not expose `f16` / `bf16` / complex (Hermitian Cholesky is a
+/// future-milestone deferral).
+///
+/// **Shape**: `[batch, N, N]`. `batch_size == 1` routes through the
+/// non-batched `potrf`; `batch_size > 1` routes through
+/// `*potrfBatched`.
+///
+/// **Workspace**: non-batched path needs cuSOLVER's `_bufferSize`
+/// scratch (queried lazily on first `run`; see
+/// [`Self::workspace_size`] / [`Self::query_workspace_size`]). Batched
+/// path needs `batch_size * 8` bytes for the device-side array of
+/// pointers.
+///
+/// **Precision guarantee**: deterministic (single-stream cuSOLVER), but
+/// **not** bit-stable across runs — cuSOLVER's reduction order is
+/// implementation-defined.
+///
+/// Owns a lazy cuSOLVER handle (`!Sync` / `!Send`); destroyed on `Drop`.
 pub struct CholeskyPlan<T: Element> {
     desc: CholeskyDescriptor,
     sku: KernelSku,

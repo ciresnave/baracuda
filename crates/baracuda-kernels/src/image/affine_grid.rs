@@ -45,6 +45,24 @@ pub struct AffineGridArgs<'a, T: Element> {
 }
 
 /// `affine_grid` plan.
+///
+/// Generate a normalized sampling grid from a 2×3 affine matrix per
+/// batch entry (PyTorch `F.affine_grid`, `align_corners=false`).
+/// Pairs naturally with [`GridSamplePlan`](crate::GridSamplePlan)
+/// for spatial transformer networks.
+///
+/// **When to use**: forward grid generation. No BW (the grid is
+/// purely a function of theta + extents — the autograd path goes
+/// through grid_sample's `dgrid` and is handled at the autograd
+/// surface, not here).
+///
+/// **Dtypes**: `{f32, f64}`.
+///
+/// **Shape limits**: theta `[N, 2, 3]`; grid `[N, OH, OW, 2]`.
+///
+/// **Workspace**: none.
+///
+/// **Precision guarantee**: deterministic, bit-stable.
 pub struct AffineGridPlan<T: Element> {
     desc: AffineGridDescriptor,
     sku: KernelSku,

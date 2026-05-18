@@ -39,6 +39,20 @@ pub struct RollBackwardArgs<'a, T: Element, const N: usize> {
 }
 
 /// `roll` backward plan.
+///
+/// Adjoint of [`crate::RollPlan`]: `dx = dy.roll(-shifts, axes)`.
+/// Implemented as a Rust wrapper that reuses the FW kernel with
+/// negated shifts.
+///
+/// **When to use**: BW for [`RollPlan`](crate::RollPlan).
+///
+/// **Dtypes**: `{f32, f64, f16, bf16}`.
+///
+/// **Shape limits**: rank in `[1, 8]`.
+///
+/// **Workspace**: none.
+///
+/// **Precision guarantee**: deterministic, bit-stable, bit-exact.
 pub struct RollBackwardPlan<T: Element, const N: usize> {
     desc: RollBackwardDescriptor<N>,
     sku: KernelSku,

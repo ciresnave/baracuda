@@ -115,7 +115,36 @@ pub struct LstSqArgs<'a, T: Element> {
     pub a_backup: Option<TensorRef<'a, T, 2>>,
 }
 
-/// Least-squares plan.
+/// Least-squares plan — `min ‖A · x - b‖²`, full-rank `A` with
+/// `m ≥ n`.
+///
+/// Primary path is cuSOLVER's iterative `_gels` family
+/// (`cusolverDnSSgels` / `DDgels`). On non-convergence (typically
+/// ill-conditioned input) the plan falls back to the three-step
+/// QR-based solve (`geqrf` → `ormqr` → `trsm`) provided the caller
+/// supplied an `a_backup` (since `_gels` destroys `A` in place).
+///
+/// **When to use**: tall-skinny least-squares. For square `m == n`
+/// systems use [`super::SolvePlan`].
+///
+/// **Dtypes**: `f32`, `f64` only (same-precision `_gels` variants —
+/// mixed-precision combinations like `SHgels` are not surfaced).
+///
+/// **Shape**: `[M, N]` × `[M, NRHS]` → `[N, NRHS]`. Requires
+/// `m >= n`. 2-D only.
+///
+/// **Storage**: column-major end-to-end.
+///
+/// **Workspace**: max of the `_gels` `_bufferSize` and the
+/// QR-fallback `_bufferSize` (queried lazily on first `run`). The QR
+/// fallback also needs a cuBLAS handle for the `trsm` step.
+///
+/// **Precision guarantee**: deterministic per run, but `_gels` is
+/// iterative — the achieved residual depends on conditioning and
+/// `niters`. Not bit-stable across runs.
+///
+/// Owns a lazy cuSOLVER + cuBLAS handle pair (`!Sync` / `!Send`);
+/// destroyed on `Drop`.
 pub struct LstSqPlan<T: Element> {
     desc: LstSqDescriptor,
     sku: KernelSku,

@@ -59,6 +59,26 @@ pub struct EmbeddingBagBackwardArgs<'a, T: Element> {
 }
 
 /// `embedding_bag_backward` plan.
+///
+/// Adjoint of [`crate::EmbeddingBagPlan`]. For each bag `b` and each
+/// non-padded / in-bounds `k ∈ [offsets[b], end_b)`:
+/// * `Sum` mode:  `dweight[indices[k], :] += dout[b, :]`
+/// * `Mean` mode: `dweight[indices[k], :] += dout[b, :] / bag_size(b)`
+///   (divisor matches the FW per-bag count of non-padded entries).
+///
+/// **When to use**: backward for
+/// [`EmbeddingBagPlan`](crate::EmbeddingBagPlan). Descriptor `mode`
+/// and `padding_idx` must match the FW pass.
+///
+/// **Dtypes**: `{f32, f64}` only — atomicAdd is native-FP.
+///
+/// **Shape limits**: `dweight` is `[V, D]`, `dout` is `[num_bags, D]`,
+/// `indices` is `[total_indices]`, `offsets` is `[num_bags]`.
+///
+/// **Workspace**: none. Caller MUST zero `dweight` before launch.
+///
+/// **Precision guarantee**: **non-deterministic** — atomicAdd
+/// ordering varies between launches.
 pub struct EmbeddingBagBackwardPlan<T: Element> {
     desc: EmbeddingBagBackwardDescriptor,
     sku: KernelSku,

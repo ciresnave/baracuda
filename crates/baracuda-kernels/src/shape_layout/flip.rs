@@ -1,5 +1,5 @@
 //! `flip` plan — reverse along selected axes. Output shape == input
-//! shape. Today only `f32` is wired (trailblazer).
+//! shape. Today wired for `{f32, f64, f16, bf16}`.
 
 use core::ffi::c_void;
 use core::marker::PhantomData;
@@ -34,6 +34,24 @@ pub struct FlipArgs<'a, T: Element, const N: usize> {
 }
 
 /// `flip` plan.
+///
+/// `y = x.flip(axes)` — reverse along the selected axes (PyTorch
+/// `torch.flip`). Output shape equals input shape.
+///
+/// **When to use**: forward flip. Pair with
+/// [`FlipBackwardPlan`](crate::FlipBackwardPlan) — but note that
+/// `flip` is an involution, so the BW just re-flips along the same
+/// axes (reuses the FW kernel).
+///
+/// **Dtypes**: `{f32, f64, f16, bf16}`. Pure index permutation, no
+/// arithmetic.
+///
+/// **Shape limits**: rank in `[1, 8]`; `flip_axes` is a per-axis
+/// boolean mask.
+///
+/// **Workspace**: none.
+///
+/// **Precision guarantee**: deterministic, bit-stable, bit-exact.
 pub struct FlipPlan<T: Element, const N: usize> {
     desc: FlipDescriptor<N>,
     sku: KernelSku,

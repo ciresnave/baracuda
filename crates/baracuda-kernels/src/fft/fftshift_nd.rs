@@ -100,7 +100,30 @@ pub struct FftShiftNdArgs<'a, T: Element, const N: usize> {
     pub output: TensorMut<'a, T, N>,
 }
 
-/// N-D `fftshift` / `ifftshift` plan. Bespoke kernel — no cuFFT handle.
+/// N-D `fftshift` / `ifftshift` plan — single-pass general-permutation
+/// kernel.
+///
+/// Shifts a caller-selected subset of axes (up to
+/// [`FFTSHIFT_ND_MAX_SHIFT_AXES`] = 4) of a rank-up-to-
+/// [`FFTSHIFT_ND_MAX_RANK`] = 8 tensor in one kernel launch. The
+/// kernel decomposes / recomposes the flat index against the
+/// (dense, contiguous) strides.
+///
+/// **When to use**: ND fftshift over 2-D / 3-D / 4-D spectral data.
+/// Use [`super::FftShiftPlan`] for the 1-D fast path. Chaining 1-D
+/// shifts axis-by-axis works too but costs an extra launch each.
+///
+/// **Dtypes**: any [`Element`] — kernel dispatches on
+/// `size_of::<T>()` (4 / 8 / 16-byte cells).
+///
+/// **Shape**: rank in `1..=8`; both operands must be dense and
+/// contiguous. Out-of-place only.
+///
+/// **Workspace**: zero.
+///
+/// **Precision guarantee**: bit-exact (pure index permutation).
+///
+/// No cuFFT handle / state — bespoke kernel.
 pub struct FftShiftNdPlan<T: Element, const N: usize> {
     desc: FftShiftNdDescriptor,
     sku: KernelSku,

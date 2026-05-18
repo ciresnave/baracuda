@@ -50,6 +50,23 @@ pub struct RoiPoolBackwardArgs<'a, T: Element> {
 }
 
 /// `roi_pool_backward` plan.
+///
+/// Adjoint of [`crate::RoiPoolPlan`]: scatter `dout` to the saved
+/// argmax positions via atomicAdd. Empty bins (`argmax == -1`) are
+/// skipped.
+///
+/// **When to use**: BW for [`RoiPoolPlan`](crate::RoiPoolPlan).
+/// Caller retains FW `rois` and `argmax`.
+///
+/// **Dtypes**: `{f32, f64}`.
+///
+/// **Shape limits**: as for FW.
+///
+/// **Workspace**: none. Caller MUST zero `dinput`.
+///
+/// **Precision guarantee**: **non-deterministic** — multiple RoI
+/// cells can map to the same input position; atomicAdd ordering
+/// varies.
 pub struct RoiPoolBackwardPlan<T: Element> {
     desc: RoiPoolBackwardDescriptor,
     sku: KernelSku,

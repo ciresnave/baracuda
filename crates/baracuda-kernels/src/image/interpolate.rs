@@ -72,6 +72,29 @@ pub struct InterpolateArgs<'a, T: Element> {
 }
 
 /// `interpolate` plan.
+///
+/// Spatial resample of an NCHW input. PyTorch `F.interpolate`.
+/// Coordinate mapping: `src = (dst + 0.5) * (src_size / dst_size) - 0.5`
+/// (`align_corners=false`); corner samples clamp to the input
+/// boundary.
+///
+/// **When to use**: forward 2-D bilinear resample. Pair with
+/// [`InterpolateBackwardPlan`](crate::InterpolateBackwardPlan) for
+/// autograd.
+///
+/// **Dtypes**: `{f32, f64}`.
+///
+/// **Shape limits**: rank-4 NCHW input `[N, C, IH, IW]`; output
+/// `[N, C, OH, OW]`; all extents non-negative.
+///
+/// **Modes**: only `Bilinear2d` is wired in the trailblazer.
+/// `Nearest2d` / `Bicubic2d` / `Trilinear3d` / `Linear1d` / `Area2d`
+/// are reserved on the enum and return `Unsupported`.
+///
+/// **Workspace**: none.
+///
+/// **Precision guarantee**: deterministic, bit-stable on identical
+/// hardware. No atomics on FW.
 pub struct InterpolatePlan<T: Element> {
     desc: InterpolateDescriptor,
     sku: KernelSku,

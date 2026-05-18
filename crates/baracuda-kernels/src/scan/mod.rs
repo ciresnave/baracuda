@@ -5,10 +5,16 @@
 //! Inclusive scans by default (PyTorch convention: `y[i] = op(x[0], …,
 //! x[i])`); `reverse` flag in the descriptor flips the direction.
 //!
-//! Today wired: `{Cumsum} × {f32, f16, bf16, f64}` — FW + BW. The
-//! BW reuses the FW kernel with the direction flipped (gradient of
-//! `cumsum` is the reverse cumsum of `dy`). Cumprod / Cummax /
-//! Cummin / LogCumsumExp follow in fanout sessions.
+//! Today wired (FW + BW × all 4 FP dtypes: f32, f16, bf16, f64):
+//!
+//! - **Cumsum** — `y[i] = Σ_{j≤i} x[j]`. BW reuses the FW kernel with
+//!   the direction flipped (gradient of `cumsum` is the reverse cumsum
+//!   of `dy`).
+//! - **Cumprod** — `y[i] = Π_{j≤i} x[j]`. BW needs saved `x` + `y`.
+//! - **Cummax** / **Cummin** — running max / min. BW routes gradient to
+//!   the first-occurrence argmax/argmin position; needs saved `x`.
+//! - **LogCumsumExp** — `y[i] = log(Σ_{j≤i} exp(x[j]))`. Numerically
+//!   stable via per-cell running max. BW needs saved `x` + `y`.
 
 pub mod axis;
 pub mod axis_backward;

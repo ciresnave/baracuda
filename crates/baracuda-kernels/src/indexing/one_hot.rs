@@ -52,6 +52,23 @@ pub struct OneHotArgs<'a, T: Element, const N: usize> {
 }
 
 /// `one_hot` plan.
+///
+/// `out[indices..., c] = 1 if c == src[indices...] else 0`
+/// (PyTorch `torch.nn.functional.one_hot`).
+///
+/// **When to use**: forward one-hot encoding of class indices. No
+/// backward — class indices are non-differentiable.
+///
+/// **Dtypes**: input always `i32`; output `{f32, f64, i32, bool}`.
+///
+/// **Shape limits**: output rank `N ∈ [1, 8]`; `num_classes > 0`;
+/// `out_shape[N-1] == num_classes`. Output is row-major contiguous.
+/// Out-of-range src values yield an all-zero row.
+///
+/// **Workspace**: none.
+///
+/// **Precision guarantee**: deterministic, bit-stable. Pure
+/// equality + store, no arithmetic.
 pub struct OneHotPlan<T: Element, const N: usize> {
     desc: OneHotDescriptor<N>,
     sku: KernelSku,

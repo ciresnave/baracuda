@@ -57,6 +57,21 @@ pub struct DequantizePerGroupBackwardArgs<'a, TIn: Element, TOut: IntElement> {
 }
 
 /// `dequantize_per_group` backward plan.
+///
+/// Straight-through linear:
+/// `dq_FP[..., g] = scale[outer, g] * dy[..., g]`.
+///
+/// **When to use**: backward for
+/// [`DequantizePerGroupPlan`](crate::DequantizePerGroupPlan).
+///
+/// **Dtypes**: gradients in `{f32, f64, f16, bf16}`.
+///
+/// **Shape limits**: rank-2 `[outer, axis_size]` with
+/// `axis_size % group_size == 0`.
+///
+/// **Workspace**: none.
+///
+/// **Precision guarantee**: deterministic, bit-stable.
 pub struct DequantizePerGroupBackwardPlan<TIn: Element, TOut: IntElement> {
     desc: DequantizePerGroupBackwardDescriptor,
     sku: KernelSku,

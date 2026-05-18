@@ -46,6 +46,24 @@ pub struct PixelShuffleArgs<'a, T: Element> {
 }
 
 /// `pixel_shuffle` plan.
+///
+/// `[N, C·r², H, W] → [N, C, H·r, W·r]` — sub-pixel-conv rearrange
+/// (PyTorch `F.pixel_shuffle`). Pure index permutation.
+///
+/// **When to use**: super-resolution / efficient upsample. Its BW
+/// is [`PixelUnshufflePlan`](crate::PixelUnshufflePlan) — the two
+/// are each other's exact inverse.
+///
+/// **Dtypes**: `{f32, f64, f16, bf16}` (memory-bound; arithmetic-
+/// free so all FP dtypes work uniformly).
+///
+/// **Shape limits**: rank-4 NCHW; input channel count must equal
+/// `c * r * r`; `r ≥ 1`.
+///
+/// **Workspace**: none.
+///
+/// **Precision guarantee**: deterministic, bit-stable, bit-exact at
+/// every dtype. No arithmetic.
 pub struct PixelShufflePlan<T: Element> {
     desc: PixelShuffleDescriptor,
     sku: KernelSku,

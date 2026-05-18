@@ -57,6 +57,29 @@ pub struct UniqueConsecutiveArgs<'a, T: Element> {
 }
 
 /// `unique_consecutive` plan.
+///
+/// Emits one cell per run-start in each row (PyTorch
+/// `torch.unique_consecutive`). Input is expected to be pre-sorted,
+/// or the caller wants only consecutive-equal runs collapsed.
+///
+/// **When to use**: dedup runs after a sort, or unique-detection on
+/// already-sorted data. For full unique-of-row use
+/// [`UniquePlan`](crate::UniquePlan), which composes sort + this.
+/// Set-valued — no BW.
+///
+/// **Dtypes**: `{f32, f64, i32}`.
+///
+/// **Shape limits**: `[batch, row_len]` input; `[batch, max_unique]`
+/// outputs; `[batch]` counter. `max_unique == row_len` is the
+/// worst-case-safe bound.
+///
+/// **Workspace**: none.
+///
+/// **Precision guarantee**: **non-deterministic ordering** — slot
+/// assignment uses a per-row atomic counter (block-race order). The
+/// *set* of detected uniques is data-determined; only the row
+/// ordering varies. Callers needing input-order output should sort
+/// the result on `[batch, counter]` rows afterward.
 pub struct UniqueConsecutivePlan<T: Element> {
     desc: UniqueConsecutiveDescriptor,
     sku: KernelSku,

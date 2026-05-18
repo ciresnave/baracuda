@@ -38,6 +38,22 @@ pub struct SortBackwardArgs<'a, T: Element> {
 }
 
 /// `sort_backward` plan.
+///
+/// Adjoint of [`crate::SortPlan`]: scatters `d_values[b, p]` to
+/// `d_input[b, indices[b, p]]`. Pure index-routed permutation —
+/// each input position receives exactly one gradient, so no atomics
+/// needed.
+///
+/// **When to use**: BW for [`SortPlan`](crate::SortPlan). Consumes
+/// the FW's saved `indices` verbatim.
+///
+/// **Dtypes**: `{f32, f64, i32, i64}` (matches FW).
+///
+/// **Shape limits**: rank-2 `[batch, row_len]`; `row_len ≤ 1024`.
+///
+/// **Workspace**: none.
+///
+/// **Precision guarantee**: deterministic, bit-stable.
 pub struct SortBackwardPlan<T: Element> {
     desc: SortBackwardDescriptor,
     sku: KernelSku,

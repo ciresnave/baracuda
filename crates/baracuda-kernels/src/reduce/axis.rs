@@ -1,18 +1,32 @@
 //! Single-axis reduction plan.
 //!
 //! Output shape == input shape with the reduced axis collapsed to size
-//! 1 (keepdim convention). Wired for `{Sum, Mean, Max, Min, Prod,
-//! Norm2, LogSumExp, Var, Std} × {f32, f16, bf16, f64}` — 36 (kind,
-//! dtype) cells. The simple-reduce kernel template is shared (one
-//! thread per output cell, sequential walk over the reduced axis);
-//! each (op, dtype) has its own functor + FFI symbol. LogSumExp ships
-//! a dedicated two-pass kernel (max, then sum-exp) under the same FFI
-//! shape. Var / Std ship a Welford one-pass kernel templated on T;
-//! internal accumulation is f32 for f32/f16/bf16 and f64 for f64.
-//! Argmax / Argmin live in a separate plan shape because their output
-//! dtype differs (index, not value). Any / All are reserved
-//! discriminants for later fanout. Trace dispatches through
-//! `TracePlan` (scalar output).
+//! 1 (keepdim convention).
+//!
+//! **Wired matrix**: `{Sum, Mean, Max, Min, Prod, Norm2, LogSumExp, Var,
+//! Std} × {f32, f16, bf16, f64}` — 36 (kind, dtype) cells. The simple-
+//! reduce kernel template is shared (one thread per output cell,
+//! sequential walk over the reduced axis); each (op, dtype) has its
+//! own functor + FFI symbol. LogSumExp ships a dedicated two-pass
+//! kernel (max, then sum-exp) for numerical stability. Var / Std ship
+//! a Welford one-pass kernel templated on T.
+//!
+//! **Bessel correction** ([`ReduceDescriptor::correction`]): only Var /
+//! Std consume this; `1` = sample (PyTorch default), `0` = population.
+//!
+//! **Workspace**: none — the per-output-cell kernel keeps the running
+//! accumulator in registers.
+//!
+//! **Precision**: deterministic, bit-stable on the same hardware (no
+//! atomic-add; sequential per-cell accumulation has a fixed order).
+//! f16 / bf16 accumulate in f32 (FP detour); f64 keeps everything in
+//! double.
+//!
+//! **Sibling plans**:
+//! - Argmax / Argmin → [`crate::ArgReducePlan`] (i64 output).
+//! - Any / All → [`crate::BoolReducePlan`].
+//! - CountNonzero → [`crate::CountReducePlan`].
+//! - Trace → [`crate::TracePlan`] (rank-2 only, scalar output).
 
 use core::ffi::c_void;
 use core::marker::PhantomData;
@@ -67,9 +81,10 @@ pub struct ReduceArgs<'a, T: Element, const N: usize> {
     pub y: TensorMut<'a, T, N>,
 }
 
-/// Single-axis reduction plan.
+/// Single-axis reduction plan — see module docs for the wired matrix,
+/// workspace, and precision guarantees.
 ///
-/// `T: Element` is the element type (today: must be `f32`).
+/// `T: Element` is the element type (`f32` / `f64` / `f16` / `bf16`).
 /// `const N: usize` is the tensor rank.
 pub struct ReducePlan<T: Element, const N: usize> {
     desc: ReduceDescriptor<N>,

@@ -76,6 +76,30 @@ pub struct QuantizePerGroupArgs<'a, TIn: Element, TOut: IntElement> {
 }
 
 /// `quantize_per_group` forward plan.
+///
+/// Per-group quantization along the rightmost axis. Each contiguous
+/// group of `group_size` elements gets its own `(scale, zp)` pair.
+///
+/// **When to use**: INT4 LLM weight quantization (GPTQ / AWQ / GGML),
+/// typically `group_size = 128`. Pair with
+/// [`QuantizePerGroupBackwardPlan`](crate::QuantizePerGroupBackwardPlan)
+/// for STE. For per-channel quant use
+/// [`QuantizePerChannelPlan`](crate::QuantizePerChannelPlan).
+///
+/// **Dtypes**: input FP `{f32, f64, f16, bf16}` × output int
+/// `{s8, u8}`. `scale` is input dtype; `zero_point` is `i32`.
+///
+/// **Shape limits**: rank-2 `[outer_size, axis_size]` (caller
+/// flattens higher-rank inputs); `axis_size % group_size == 0`;
+/// `group_size > 0`; `scale` and `zero_point` are
+/// `[outer_size, num_groups]`. Quant axis must be the **rightmost**
+/// axis (a permute is the caller's responsibility otherwise).
+/// `q_max ≥ q_min`.
+///
+/// **Workspace**: none.
+///
+/// **Precision guarantee**: deterministic, bit-stable. Round-ties-
+/// even.
 pub struct QuantizePerGroupPlan<TIn: Element, TOut: IntElement> {
     desc: QuantizePerGroupDescriptor,
     sku: KernelSku,

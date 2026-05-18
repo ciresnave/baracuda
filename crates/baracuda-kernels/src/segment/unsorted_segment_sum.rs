@@ -61,6 +61,28 @@ pub struct UnsortedSegmentSumArgs<'a, T: Element> {
 }
 
 /// `unsorted_segment_sum` plan.
+///
+/// `out[s, d] = Σ_{n : segment_ids[n] == s} input[n, d]` with
+/// arbitrary `segment_ids` ordering. The kernel zero-fills `output`
+/// then performs `atomicAdd(output[seg[n], d], input[n, d])` per
+/// input cell. TF `unsorted_segment_sum`.
+///
+/// **When to use**: forward unsorted segment-sum. For sorted IDs
+/// prefer the deterministic
+/// [`SegmentSumPlan`](crate::SegmentSumPlan). BW pass shares
+/// [`SegmentSumBackwardPlan`](crate::SegmentSumBackwardPlan) with
+/// the sorted variant.
+///
+/// **Dtypes**: `{f32, f64}` (native FP atomicAdd only).
+///
+/// **Shape limits**: `input` `[N, D]`; `segment_ids` `[N]` (any
+/// order); `output` `[num_segments, D]`. Out-of-range IDs dropped.
+///
+/// **Workspace**: none.
+///
+/// **Precision guarantee**: **non-deterministic** — atomicAdd
+/// ordering varies. On a fixed problem the magnitude of float-
+/// summation drift is bounded by `O(eps · N)`.
 pub struct UnsortedSegmentSumPlan<T: Element> {
     desc: UnsortedSegmentSumDescriptor,
     sku: KernelSku,

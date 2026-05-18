@@ -49,6 +49,23 @@ pub struct GridSampleArgs<'a, T: Element> {
 }
 
 /// `grid_sample` plan.
+///
+/// Sample an NCHW input at arbitrary normalized `(x, y)` coordinates
+/// supplied via `grid: [N, OH, OW, 2]` (PyTorch `F.grid_sample`).
+/// Trailblazer config matches PyTorch defaults: `mode='bilinear'`,
+/// `padding_mode='zeros'`, `align_corners=false`.
+///
+/// **When to use**: forward 2-D grid sample. Pair with
+/// [`GridSampleBackwardPlan`](crate::GridSampleBackwardPlan).
+///
+/// **Dtypes**: `{f32, f64}`.
+///
+/// **Shape limits**: rank-4 NCHW input; rank-4 grid `[N, OH, OW, 2]`;
+/// output `[N, C, OH, OW]`.
+///
+/// **Workspace**: none.
+///
+/// **Precision guarantee**: deterministic, bit-stable.
 pub struct GridSamplePlan<T: Element> {
     desc: GridSampleDescriptor,
     sku: KernelSku,

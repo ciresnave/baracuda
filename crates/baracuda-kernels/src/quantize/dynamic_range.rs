@@ -134,6 +134,25 @@ pub struct DynamicRangeQuantizeArgs<'a, TIn: Element, TOut: IntElement> {
 /// adds asymmetric mode (requires xmin + xmax reductions) and the
 /// other three scopes (tensor / channel / group) by orchestrating
 /// existing primitives.
+///
+/// **When to use**: post-training activation quantization at
+/// inference — compute scale from runtime range and quantize in
+/// one launch. No BW (inference-only).
+///
+/// **Dtypes (trailblazer)**: `TIn ∈ {f32, f64}`, `TOut = S8`.
+/// `f16` / `bf16` activation, `u8` output, and asymmetric mode
+/// gated as `Unsupported` until follow-up milestones wire the
+/// xmin/xmax reductions and offset-compute kernel.
+///
+/// **Shape limits**: rank-2 `[N, D]`; `N ≤ 65535` (block-per-row
+/// grid cap, lifts when row tiling lands); `q_max > 0` (symmetric
+/// divisor); `q_max ≥ q_min`.
+///
+/// **Workspace**: none — single-launch fused kernel.
+///
+/// **Precision guarantee**: deterministic, bit-stable. One block
+/// per row, no atomics; block-tree reduction is associative-stable
+/// on a single GPU.
 pub struct DynamicRangeQuantizePlan<TIn: Element, TOut: IntElement> {
     desc: DynamicRangeQuantizeDescriptor,
     sku: KernelSku,

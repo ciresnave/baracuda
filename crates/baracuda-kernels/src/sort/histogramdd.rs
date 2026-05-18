@@ -36,6 +36,16 @@ pub struct HistogramddArgs<'a, T: Element> {
 }
 
 /// `histogramdd` plan (reserved — returns `Unsupported`).
+///
+/// **Status**: API stub. `select()` always returns `Unsupported`
+/// in the trailblazer; use [`HistogramPlan`](crate::HistogramPlan)
+/// for 1-D histograms today. This file pins the public surface
+/// (`Descriptor` / `Args` / `Plan` struct names) so callers can
+/// type-check against the eventual N-D path without churn.
+///
+/// **When the real kernel lands**: PyTorch `torch.histogramdd`
+/// shape — input `[numel, ndim]`, output flat
+/// `[prod(num_bins_per_dim)]`.
 pub struct HistogramddPlan<T: Element> {
     _desc: HistogramddDescriptor,
     _sku: KernelSku,

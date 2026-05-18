@@ -45,6 +45,24 @@ pub struct FillArgs<'a, T: Element> {
 }
 
 /// Fill plan.
+///
+/// `y[i] = value` for all `i` (PyTorch `torch.full`).
+///
+/// **When to use**: zero-init / constant-init of output buffers, or
+/// any broadcast-fill. No BW — a constant tensor has zero gradient.
+///
+/// **Dtypes**: `{f32, f64, f16, bf16, i32, i64}` — every numeric
+/// [`Element`] dtype baracuda exposes through the unified Plan
+/// layer. `u8` / `i8` ship in the sys crate but on the `IntElement`
+/// family (deferred plan shape).
+///
+/// **Shape limits**: flat `[numel]`; `numel ≥ 0`.
+///
+/// **Workspace**: none.
+///
+/// **Precision guarantee**: deterministic, bit-stable, bit-exact.
+/// f16 / bf16 transport `value` via raw `u16` bit pattern; the safe
+/// plan layer performs the bit cast.
 pub struct FillPlan<T: Element> {
     desc: FillDescriptor<T>,
     sku: KernelSku,

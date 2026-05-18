@@ -72,6 +72,28 @@ pub struct PadBackwardArgs<'a, T: Element, const N: usize> {
 }
 
 /// `pad` backward plan.
+///
+/// Adjoint of [`crate::PadPlan`] in `Constant` mode:
+/// `dx = dy[pad_low : pad_low + input_shape]` per axis — a pure
+/// slice. Pad-region cells of `dy` are discarded (their FW values
+/// were a constant, independent of `x`).
+///
+/// **When to use**: BW for [`PadPlan`](crate::PadPlan) in
+/// `Constant` mode.
+///
+/// **Dtypes**: `{f32, f64, f16, bf16}`.
+///
+/// **Shape limits**: rank in `[1, 8]`; `dy` has the FW output shape;
+/// `dx` has `input_shape`.
+///
+/// **Workspace**: none.
+///
+/// **Precision guarantee**: deterministic, bit-stable, bit-exact.
+///
+/// **Known limitations**: BW for `Reflect` / `Replicate` /
+/// `Circular` modes is not yet wired — those need a scatter-add
+/// (multiple pad cells can map to the same input coord). `select()`
+/// returns `Unsupported` for non-`Constant` modes today.
 pub struct PadBackwardPlan<T: Element, const N: usize> {
     desc: PadBackwardDescriptor<N>,
     sku: KernelSku,

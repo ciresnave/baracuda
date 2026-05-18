@@ -62,7 +62,26 @@ pub struct LuArgs<'a, T: Element> {
     pub info: TensorMut<'a, i32, 1>,
 }
 
-/// LU factorization plan.
+/// LU factorization plan — `P · A = L · U` via partial pivoting.
+///
+/// **When to use**: factor a general (possibly rectangular)
+/// `[M, N]` matrix into packed `LU` + pivots; consumed by
+/// [`super::SolvePlan`] / [`super::InversePlan`] for downstream
+/// solves. Use [`super::CholeskyPlan`] when the input is SPD.
+///
+/// **Dtypes**: `f32`, `f64` only.
+///
+/// **Shape**: `[batch, M, N]`. `batch_size == 1` only today —
+/// cuSOLVER's dense `getrf` is non-batched. Batched LU via
+/// `cublasSgetrfBatched` is a deferred follow-up.
+///
+/// **Workspace**: cuSOLVER `_bufferSize` scratch (queried lazily on
+/// first `run`).
+///
+/// **Precision guarantee**: deterministic (single-stream cuSOLVER); not
+/// bit-stable across runs.
+///
+/// Owns a lazy cuSOLVER handle (`!Sync` / `!Send`); destroyed on `Drop`.
 pub struct LuPlan<T: Element> {
     desc: LuDescriptor,
     sku: KernelSku,

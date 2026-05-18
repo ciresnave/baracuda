@@ -49,6 +49,19 @@ pub struct FlipBackwardArgs<'a, T: Element, const N: usize> {
 }
 
 /// `flip` backward plan.
+///
+/// Adjoint of [`crate::FlipPlan`]: `dx = dy.flip(axes)` — `flip` is
+/// an involution, so the BW reuses the FW kernel.
+///
+/// **When to use**: BW for [`FlipPlan`](crate::FlipPlan).
+///
+/// **Dtypes**: `{f32, f64, f16, bf16}`.
+///
+/// **Shape limits**: rank in `[1, 8]`.
+///
+/// **Workspace**: none.
+///
+/// **Precision guarantee**: deterministic, bit-stable, bit-exact.
 pub struct FlipBackwardPlan<T: Element, const N: usize> {
     desc: FlipBackwardDescriptor<N>,
     sku: KernelSku,

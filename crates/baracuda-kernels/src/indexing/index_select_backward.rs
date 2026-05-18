@@ -42,6 +42,21 @@ pub struct IndexSelectBackwardArgs<'a, T: Element, const N: usize> {
 }
 
 /// `index_select_backward` plan.
+///
+/// Adjoint of [`crate::IndexSelectPlan`]: scatter-adds `dout` into
+/// `dsrc` at the rows pointed to by `idx`.
+///
+/// **When to use**: backward for [`IndexSelectPlan`](crate::IndexSelectPlan).
+///
+/// **Dtypes**: `{f32, f64}` only (uses `atomicAdd`).
+///
+/// **Shape limits**: rank in `[1, 8]`; `select_dim ∈ [0, N)`;
+/// `idx` is 1-D `i32` with `idx.numel() == out_shape[select_dim]`.
+///
+/// **Workspace**: none. Caller MUST zero `dsrc` before launch.
+///
+/// **Precision guarantee**: **non-deterministic** — atomicAdd
+/// ordering varies across launches.
 pub struct IndexSelectBackwardPlan<T: Element, const N: usize> {
     desc: IndexSelectBackwardDescriptor<N>,
     sku: KernelSku,

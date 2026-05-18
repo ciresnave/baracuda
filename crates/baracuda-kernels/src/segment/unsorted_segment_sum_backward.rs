@@ -57,6 +57,22 @@ pub struct UnsortedSegmentSumBackwardArgs<'a, T: Element> {
 }
 
 /// `unsorted_segment_sum_backward` plan.
+///
+/// Adjoint of [`crate::UnsortedSegmentSumPlan`]:
+/// `d_input[n, d] = d_output[segment_ids[n], d]`. Pure gather along
+/// the seg-ids array — identical to the sorted-variant BW kernel
+/// (sort state is irrelevant for the gather).
+///
+/// **When to use**: BW for unsorted segment-sum.
+///
+/// **Dtypes**: `{f32, f64}`.
+///
+/// **Shape limits**: `d_output` `[num_segments, D]`; `segment_ids`
+/// `[N]`; `d_input` `[N, D]`.
+///
+/// **Workspace**: none.
+///
+/// **Precision guarantee**: deterministic, bit-stable. No atomics.
 pub struct UnsortedSegmentSumBackwardPlan<T: Element> {
     desc: UnsortedSegmentSumBackwardDescriptor,
     sku: KernelSku,

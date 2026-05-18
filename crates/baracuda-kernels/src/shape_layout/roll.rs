@@ -1,5 +1,5 @@
 //! `roll` plan — cyclic shift along axes. Output shape == input shape.
-//! Today only `f32` is wired (trailblazer).
+//! Today wired for `{f32, f64, f16, bf16}`.
 
 use core::ffi::c_void;
 use core::marker::PhantomData;
@@ -34,6 +34,22 @@ pub struct RollArgs<'a, T: Element, const N: usize> {
 }
 
 /// `roll` plan.
+///
+/// `y = x.roll(shifts, axes)` — cyclic shift along axes (PyTorch
+/// `torch.roll`). Output shape equals input shape.
+///
+/// **When to use**: forward cyclic shift. Pair with
+/// [`RollBackwardPlan`](crate::RollBackwardPlan), which reuses the
+/// FW kernel with negated shifts.
+///
+/// **Dtypes**: `{f32, f64, f16, bf16}`. Pure index permutation.
+///
+/// **Shape limits**: rank in `[1, 8]`; per-axis shifts can be
+/// negative (kernel normalizes to `[0, shape[d])`).
+///
+/// **Workspace**: none.
+///
+/// **Precision guarantee**: deterministic, bit-stable, bit-exact.
 pub struct RollPlan<T: Element, const N: usize> {
     desc: RollDescriptor<N>,
     sku: KernelSku,

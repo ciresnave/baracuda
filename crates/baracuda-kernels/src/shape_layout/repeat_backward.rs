@@ -63,6 +63,26 @@ pub struct RepeatBackwardArgs<'a, T: Element, const N: usize> {
 }
 
 /// `repeat` backward plan.
+///
+/// Adjoint of [`crate::RepeatPlan`]:
+/// `dx[c_in] = Σ_k dy[c_in + k · input_shape]` — every `dy` cell that
+/// maps back to `c_in` under the FW's modulo contributes. One thread
+/// per `dx` cell sweeps the `prod(repeats[d])` contributing cells.
+/// f16 / bf16 accumulate in f32 internally; f32 / f64 accumulate in
+/// their native dtype.
+///
+/// **When to use**: BW for [`RepeatPlan`](crate::RepeatPlan).
+///
+/// **Dtypes**: `{f32, f64, f16, bf16}`.
+///
+/// **Shape limits**: rank in `[1, 8]`; `repeats[d] ≥ 1`.
+///
+/// **Workspace**: none.
+///
+/// **Precision guarantee**: deterministic (no atomics — one thread
+/// per output cell, deterministic iteration order). Conservatively
+/// reported as **not bit-stable** because summation order matters in
+/// FP semantics and a future refactor might reorder the inner loop.
 pub struct RepeatBackwardPlan<T: Element, const N: usize> {
     desc: RepeatBackwardDescriptor<N>,
     sku: KernelSku,

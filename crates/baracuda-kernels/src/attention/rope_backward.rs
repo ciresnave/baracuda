@@ -48,7 +48,18 @@ pub struct RopeBackwardArgs<'a, T: Element> {
     pub dx: TensorMut<'a, T, 4>,
 }
 
-/// RoPE backward plan.
+/// Rotary Position Embedding backward plan.
+///
+/// Rotation matrices are orthogonal — BW is rotation by `-θ`. No saved
+/// FW state is needed; the kernel re-derives `θ` from `positions` (or
+/// from `s` when `positions` is omitted) on the fly.
+///
+/// **When to use**: autograd partner for [`super::RopePlan`]. `base`,
+/// `head_dim`, and the optional `positions` arg must match the FW
+/// call.
+///
+/// **Dtypes / shape limits / workspace / precision**: identical to
+/// [`super::RopePlan`].
 pub struct RopeBackwardPlan<T: Element> {
     desc: RopeBackwardDescriptor,
     sku: KernelSku,

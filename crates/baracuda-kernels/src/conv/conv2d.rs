@@ -112,9 +112,44 @@ pub struct Conv2dDwArgs<'a, T: Element> {
     pub dw: TensorMut<'a, T, 4>,
 }
 
-/// 2-D convolution plan — owns one cuDNN handle, four descriptors, and
-/// the per-direction workspace caches. See [`super`] for the lifecycle /
-/// algorithm-pinning rationale.
+/// 2-D convolution plan (cuDNN-backed) — forward + both backward
+/// passes for NCHW activations.
+///
+/// **When to use**: any 2-D convolution from a typical CNN
+/// (Conv2d / Conv1d-as-Conv2d / dilated conv / strided conv).
+/// Mathematical convention is cross-correlation to match PyTorch's
+/// `nn.Conv2d` (kernel applied directly, not flipped). Run `run_fw`
+/// for the forward, `run_bw_data` for `dx`, `run_bw_filter` for `dw`.
+///
+/// **Dtypes**: `f32`, `f64`, `f16`, `bf16` — the four cuDNN-supported
+/// floating-point types. Accumulator is `f32` for `f32` / `f16` /
+/// `bf16` and `f64` for `f64`, per cuDNN's mixed-precision
+/// conventions.
+///
+/// **Shape**: input `[N, C_in, H_in, W_in]`, filter `[C_out, C_in,
+/// H_filt, W_filt]`, output `[N, C_out, H_out, W_out]` with
+/// `H_out`, `W_out` computed from pad / stride / dilation. NCHW only
+/// (NHWC is a fanout milestone). Conv1d / Conv3d / transposed conv
+/// are deferred.
+///
+/// **Workspace**: caller-provided (`Workspace::Borrowed`). Each
+/// direction has its own size — call the relevant
+/// `query_*_workspace_size(stream)` accessor before launching to
+/// populate the cache. Running multiple directions over the same plan
+/// should size the workspace at the max across directions.
+///
+/// **Algorithm pinning**: FW = `IMPLICIT_GEMM` (algo 0), BW-data /
+/// BW-filter = `ALGO_1` (`IMPLICIT_PRECOMP_GEMM`). Heuristic search
+/// via `cudnnGet*Algorithm_v7` is a perf-tuning follow-up.
+///
+/// **Precision guarantee**: deterministic per run, but **not**
+/// bit-stable across runs — cuDNN's `IMPLICIT_GEMM` with tensor-core
+/// paths can re-order reductions.
+///
+/// Owns one `cudnnHandle_t` + four lazy descriptors + per-direction
+/// workspace-size caches (`!Sync` / `!Send`). All released on `Drop`.
+///
+/// Gated under `feature = "cudnn"` at the crate root.
 pub struct Conv2dPlan<T: Element> {
     desc: Conv2dDescriptor,
     sku: KernelSku,

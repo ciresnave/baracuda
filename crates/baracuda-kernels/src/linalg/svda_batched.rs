@@ -95,7 +95,30 @@ pub struct BatchedSvdaArgs<'a, T: Element> {
     pub residuals: Option<&'a mut [f64]>,
 }
 
-/// Rectangular batched-SVD plan (`gesvdaStridedBatched`).
+/// Rectangular batched approximate-SVD plan
+/// (`gesvdaStridedBatched`).
+///
+/// **When to use**: independent **rectangular** matrices in a batch
+/// (sibling [`super::BatchedSvdPlan`] is square-only). Also supports
+/// truncated SVD via the `rank` descriptor field. Batch addressing is
+/// via element-strides (all slots packed in one buffer).
+///
+/// **Dtypes**: `f32`, `f64`.
+///
+/// **Shape**: `[batch, M, N]`; `1 ≤ rank ≤ min(M, N)`. Returns `V`
+/// (not `V^T`); `S [batch, rank]`; optional `U [batch, M, rank]` and
+/// `V [batch, N, rank]`.
+///
+/// **Storage**: column-major end-to-end.
+///
+/// **Workspace**: cuSOLVER `_bufferSize` (queried lazily; reported in
+/// **bytes**, even though cuSOLVER's `lwork` is in elements — the plan
+/// multiplies by `sizeof(T)`).
+///
+/// **Precision guarantee**: deterministic; not bit-stable across runs.
+/// Approximate: results are accurate to the requested rank only.
+///
+/// Owns a lazy cuSOLVER handle (`!Sync` / `!Send`); destroyed on `Drop`.
 pub struct BatchedSvdaPlan<T: Element> {
     desc: BatchedSvdaDescriptor,
     sku: KernelSku,

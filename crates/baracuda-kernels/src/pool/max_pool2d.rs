@@ -115,8 +115,34 @@ pub struct Pool2dBwArgs<'a, T: Element> {
     pub dx: TensorMut<'a, T, 4>,
 }
 
-/// 2-D max-pool plan — owns one cuDNN handle, three lazy descriptors
-/// (`x_desc`, `y_desc`, `pool_desc`). Workspace-free.
+/// 2-D max-pool plan (cuDNN-backed) — forward + backward over NCHW.
+///
+/// `select` requires `descriptor.mode == PoolMode::Max`.
+///
+/// **When to use**: standard max-pool layer in a CNN. Use
+/// [`super::AvgPool2dPlan`] for average-pool. Pair `run_fw` + `run_bw`
+/// over the same plan instance for autograd.
+///
+/// **Dtypes**: `f32`, `f64`, `f16`, `bf16` — cuDNN's full FP coverage
+/// for pooling.
+///
+/// **Shape**: `[N, C, H_in, W_in]` → `[N, C, H_out, W_out]` with
+/// `H_out = floor((H_in + 2·pad_h - window_h) / stride_h) + 1`. NCHW
+/// only (NHWC is a fanout milestone). No `ceil_mode` knob.
+///
+/// **Workspace**: zero — cuDNN's pooling kernel is workspace-free.
+/// Pass [`Workspace::None`] (the plan accepts any `Workspace<'_>` for
+/// API uniformity but never reads from it).
+///
+/// **Backward semantics**: callers must retain both `y` (saved FW
+/// output) and `x` (saved FW input) — cuDNN's pooling-BW API requires
+/// both to recover the per-window argmax internally.
+///
+/// **Precision guarantee**: deterministic; cuDNN may re-order
+/// reductions across runs so not bit-stable.
+///
+/// Owns one `cudnnHandle_t` + three lazy descriptors (`!Sync` /
+/// `!Send`); released on `Drop`. Gated under `feature = "cudnn"`.
 pub struct MaxPool2dPlan<T: Element> {
     desc: Pool2dDescriptor,
     sku: KernelSku,

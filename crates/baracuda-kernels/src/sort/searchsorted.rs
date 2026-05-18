@@ -43,6 +43,24 @@ pub struct SearchsortedArgs<'a, T: Element> {
 }
 
 /// `searchsorted` plan.
+///
+/// `searchsorted(sorted_seq[L], values[N], right) -> output[N]`
+/// (PyTorch `torch.searchsorted`). `right == false` returns
+/// `lower_bound`, `right == true` returns `upper_bound`.
+///
+/// **When to use**: per-query binary search into a sorted 1-D array.
+/// Useful for histogram-binning / quantile-bucketing. No BW.
+///
+/// **Dtypes**: `{f32, f64, i32, i64}` for both sorted_seq and
+/// values; output always `i32`.
+///
+/// **Shape limits**: sorted_seq `[len_sorted]`; values, output
+/// `[num_queries]`.
+///
+/// **Workspace**: none.
+///
+/// **Precision guarantee**: deterministic, bit-stable. Pure binary
+/// search.
 pub struct SearchsortedPlan<T: Element> {
     desc: SearchsortedDescriptor,
     sku: KernelSku,

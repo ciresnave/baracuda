@@ -1,10 +1,23 @@
-//! Argmax / Argmin single-axis reduction. New plan shape from
-//! [`crate::ReducePlan`] because the output dtype differs from the
-//! input dtype: input is `T: Element` (value), output is always `i64`
-//! (index — PyTorch convention).
+//! Argmax / Argmin single-axis reduction.
 //!
-//! Today only `f32` value dtype is wired (the trailblazer); other
-//! dtypes follow as single-INSTANTIATE fanout.
+//! New plan shape from [`crate::ReducePlan`] because the output dtype
+//! differs from the input dtype: input is `T: Element` (value), output
+//! is always `i64` (index — PyTorch convention).
+//!
+//! **When to use**: forward argmax / argmin. No backward — `argmax` /
+//! `argmin` are non-differentiable (gradient is zero almost everywhere).
+//!
+//! **Dtypes / shape**: `{Argmax, Argmin} × {f32, f16, bf16, f64}` value
+//! input, `i64` index output; tensor rank `1..=8`; reduce axis must be
+//! non-empty.
+//!
+//! **Tie-breaking**: returns the first-occurrence index along the
+//! reduce axis (PyTorch convention).
+//!
+//! **Workspace**: none.
+//!
+//! **Precision**: deterministic, bit-stable on the same hardware (one-
+//! thread-per-output-cell sequential scan over the reduce axis).
 
 use core::ffi::c_void;
 use core::marker::PhantomData;
@@ -49,7 +62,11 @@ pub struct ArgReduceArgs<'a, T: Element, const N: usize> {
     pub y: TensorMut<'a, i64, N>,
 }
 
-/// Arg-reduce plan (argmax / argmin).
+/// Arg-reduce plan (argmax / argmin) — see module docs for dtypes,
+/// tie-breaking, and precision.
+///
+/// `T: Element` is the value dtype; the output index dtype is always
+/// `i64`. `const N: usize` is the tensor rank (1..=8).
 pub struct ArgReducePlan<T: Element, const N: usize> {
     desc: ArgReduceDescriptor<N>,
     sku: KernelSku,

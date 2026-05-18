@@ -58,6 +58,23 @@ pub struct DequantizePerGroupArgs<'a, TIn: Element, TOut: IntElement> {
 }
 
 /// `dequantize_per_group` plan.
+///
+/// `x[..., g] = scale[outer, g] * (q[..., g] - zero_point[outer, g])`
+/// with `g` the group index along the (rightmost) quant axis.
+/// Inverse of [`QuantizePerGroupPlan`](crate::QuantizePerGroupPlan).
+///
+/// **When to use**: FP recovery from INT4/INT8 grouped weight blobs
+/// (GPTQ / AWQ / GGML). Pair with
+/// [`DequantizePerGroupBackwardPlan`](crate::DequantizePerGroupBackwardPlan).
+///
+/// **Dtypes**: input int `{s8, u8}`; output FP `{f32, f64, f16, bf16}`.
+///
+/// **Shape limits**: rank-2 `[outer, axis_size]` with
+/// `axis_size % group_size == 0`.
+///
+/// **Workspace**: none.
+///
+/// **Precision guarantee**: deterministic, bit-stable.
 pub struct DequantizePerGroupPlan<TIn: Element, TOut: IntElement> {
     desc: DequantizePerGroupDescriptor,
     sku: KernelSku,

@@ -59,6 +59,24 @@ pub struct SegmentMaxArgs<'a, T: Element> {
 }
 
 /// `segment_max` plan (sorted, FW only).
+///
+/// `out[s, d] = max_{n : segment_ids[n] == s} input[n, d]` (TF / JAX
+/// `segment_max`). Requires sorted segment_ids.
+///
+/// **When to use**: forward sorted segment-max. **No BW plan** —
+/// argmax tracking from FW is needed (deferred).
+///
+/// **Dtypes**: `{f32, f64}`.
+///
+/// **Shape limits**: `input` `[N, D]`; `segment_ids` `[N]`;
+/// `output` `[num_segments, D]`.
+///
+/// **Workspace**: none.
+///
+/// **Precision guarantee**: deterministic, bit-stable.
+///
+/// **Index policy**: out-of-range IDs dropped. Empty segments emit
+/// zero (per-op identity sentinel from `segment_sorted_kernel`).
 pub struct SegmentMaxPlan<T: Element> {
     desc: SegmentMaxDescriptor,
     sku: KernelSku,

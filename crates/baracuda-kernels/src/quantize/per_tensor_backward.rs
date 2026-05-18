@@ -63,6 +63,26 @@ pub struct QuantizePerTensorBackwardArgs<'a, TIn: Element, TOut: IntElement> {
 }
 
 /// `quantize_per_tensor` backward plan.
+///
+/// Straight-Through Estimator (STE):
+/// `dx = (dy / scale) * 1[qmin ≤ round(x/scale)+zp ≤ qmax]`. The
+/// in-range mask is recomputed in-kernel from the saved input `x`
+/// (no separate mask is saved on FW).
+///
+/// **When to use**: backward for
+/// [`QuantizePerTensorPlan`](crate::QuantizePerTensorPlan). Caller
+/// must retain the original input `x` from the FW pass.
+///
+/// **Dtypes**: gradient `dy` and `dx` in input FP `{f32, f64, f16, bf16}`.
+/// `TOut` is the FW output int dtype, carried for SKU consistency
+/// only — BW kernel does not consume an int operand.
+///
+/// **Shape limits**: flat `[numel]`.
+///
+/// **Workspace**: none.
+///
+/// **Precision guarantee**: deterministic, bit-stable. The `1/scale`
+/// factor is mandatory (omitting it is the most common STE-grad bug).
 pub struct QuantizePerTensorBackwardPlan<TIn: Element, TOut: IntElement> {
     desc: QuantizePerTensorBackwardDescriptor,
     sku: KernelSku,

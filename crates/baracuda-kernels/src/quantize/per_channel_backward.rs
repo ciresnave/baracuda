@@ -55,6 +55,23 @@ pub struct QuantizePerChannelBackwardArgs<'a, TIn: Element, TOut: IntElement> {
 }
 
 /// `quantize_per_channel` backward plan.
+///
+/// STE: `dx[..., c, ...] = (dy[..., c, ...] / scale[c]) * 1[qmin ≤ round(x/scale[c])+zp[c] ≤ qmax]`.
+/// Mask recomputed in-kernel from the saved FW input.
+///
+/// **When to use**: backward for
+/// [`QuantizePerChannelPlan`](crate::QuantizePerChannelPlan). Caller
+/// must retain FW input `x`, `scale[]`, `zero_point[]`.
+///
+/// **Dtypes**: gradients in `{f32, f64, f16, bf16}`; `TOut` carried
+/// for SKU consistency only (BW kernel does not consume an int operand).
+///
+/// **Shape limits**: rank-4 contiguous; `axis ∈ [0, 4)`; per-channel
+/// vectors of length `shape[axis]`.
+///
+/// **Workspace**: none.
+///
+/// **Precision guarantee**: deterministic, bit-stable.
 pub struct QuantizePerChannelBackwardPlan<TIn: Element, TOut: IntElement> {
     desc: QuantizePerChannelBackwardDescriptor,
     sku: KernelSku,

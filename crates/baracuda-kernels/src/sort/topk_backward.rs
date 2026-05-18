@@ -41,6 +41,23 @@ pub struct TopkBackwardArgs<'a, T: Element> {
 }
 
 /// `topk_backward` plan.
+///
+/// Adjoint of [`crate::TopkPlan`]: zero-init `dx`, then scatter
+/// `dy[b, j] → dx[b, indices[b, j]]`. Indices are unique within a
+/// row (top-k select picks distinct positions), so no atomic
+/// reduction is needed.
+///
+/// **When to use**: BW for [`TopkPlan`](crate::TopkPlan).
+///
+/// **Dtypes**: `{f32, f64}`.
+///
+/// **Shape limits**: `dy` and `indices` `[batch, k]`; `dx`
+/// `[batch, row_len]`; `row_len ≤ 1024`; `k ≤ 64`.
+///
+/// **Workspace**: none.
+///
+/// **Precision guarantee**: deterministic, bit-stable (no atomics —
+/// top-k indices form an injection into row positions).
 pub struct TopkBackwardPlan<T: Element> {
     desc: TopkBackwardDescriptor,
     sku: KernelSku,

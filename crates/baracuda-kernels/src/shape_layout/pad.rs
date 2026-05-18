@@ -32,7 +32,9 @@ use half::{bf16, f16};
 /// mode). `element` must match `T::KIND` at `select` time.
 #[derive(Copy, Clone, Debug)]
 pub struct PadDescriptor<const N: usize> {
-    /// Padding mode. Today only [`PadMode::Constant`] is wired.
+    /// Padding mode — one of [`PadMode::Constant`] / [`PadMode::Reflect`]
+    /// / [`PadMode::Replicate`] / [`PadMode::Circular`]. All four are
+    /// wired for every supported dtype.
     pub mode: PadMode,
     /// Input tensor shape.
     pub input_shape: [i32; N],
@@ -72,8 +74,28 @@ pub struct PadArgs<'a, T: Element, const N: usize> {
 
 /// `pad` plan.
 ///
-/// `T: Element` is the element type (today: must be `f32`).
-/// `const N: usize` is the tensor rank.
+/// `y = F.pad(x, pad_low, pad_high, mode, value)` — per-axis low /
+/// high padding (PyTorch `torch.nn.functional.pad`).
+///
+/// **When to use**: forward pad. Pair with
+/// [`PadBackwardPlan`](crate::PadBackwardPlan) for autograd
+/// (slice-back of `Constant` mode; the other modes have
+/// scatter-add BWs not yet wired — see below).
+///
+/// **Dtypes**: `{f32, f64, f16, bf16}` — 16 (mode, dtype) cells.
+///
+/// **Modes**: all four [`PadMode`] variants — `Constant`, `Reflect`,
+/// `Replicate`, `Circular`. `value` is consumed only by `Constant`;
+/// the others derive pad-region values from the input.
+///
+/// **Shape limits**: rank in `[1, 8]`; `pad_low[d]`, `pad_high[d]`
+/// non-negative; output shape per axis is
+/// `input_shape[d] + pad_low[d] + pad_high[d]`.
+///
+/// **Workspace**: none.
+///
+/// **Precision guarantee**: deterministic, bit-stable, bit-exact (no
+/// arithmetic — pure index + copy / value-write).
 pub struct PadPlan<T: Element, const N: usize> {
     desc: PadDescriptor<N>,
     sku: KernelSku,

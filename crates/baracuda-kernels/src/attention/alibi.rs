@@ -50,7 +50,27 @@ pub struct AlibiArgs<'a, T: Element> {
     pub out: TensorMut<'a, T, 4>,
 }
 
-/// ALiBi forward plan.
+/// Attention with Linear Biases (ALiBi) forward plan.
+///
+/// Adds the per-head linear bias `slope[h] · (j - i)` to attention-
+/// score cell `(b, h, i, j)`.
+///
+/// **When to use**: in lieu of positional embeddings (MPT, BLOOM,
+/// MosaicML pretrained checkpoints). Apply after the `Q · K^T · scale`
+/// matmul, before softmax. Pair with [`super::AlibiBackwardPlan`] for
+/// autograd.
+///
+/// **Dtypes**: `f32`, `f64`, `f16`, `bf16`. Half-precision uses an
+/// `f32` accumulator.
+///
+/// **Shape limits**: rank-4 contiguous scores `[B, H, Q, K]` plus a
+/// `[H]` slopes vector. No causal-mask flag (the slopes themselves
+/// encode the causal preference if desired).
+///
+/// **Workspace**: zero.
+///
+/// **Precision guarantee**: deterministic; bit-stable on the same
+/// hardware. Single add per cell, no atomics.
 pub struct AlibiPlan<T: Element> {
     desc: AlibiDescriptor,
     sku: KernelSku,

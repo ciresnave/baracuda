@@ -49,6 +49,23 @@ pub struct FakeQuantizeBackwardArgs<'a, TIn: Element> {
 }
 
 /// `fake_quantize` backward plan.
+///
+/// STE: `dx = dy * 1[qmin ≤ round(x/scale)+zp ≤ qmax]`. **No
+/// `1/scale` factor** — the FW dequant-side multiply by `scale`
+/// exactly cancels the STE's `1/scale`. This is the key difference
+/// vs [`QuantizePerTensorBackwardPlan`](crate::QuantizePerTensorBackwardPlan),
+/// which DOES include `1/scale`. Mask recomputed in-kernel.
+///
+/// **When to use**: backward for
+/// [`FakeQuantizePlan`](crate::FakeQuantizePlan).
+///
+/// **Dtypes**: `{f32, f64, f16, bf16}`.
+///
+/// **Shape limits**: flat `[numel]`.
+///
+/// **Workspace**: none.
+///
+/// **Precision guarantee**: deterministic, bit-stable.
 pub struct FakeQuantizeBackwardPlan<TIn: Element> {
     desc: FakeQuantizeBackwardDescriptor,
     sku: KernelSku,

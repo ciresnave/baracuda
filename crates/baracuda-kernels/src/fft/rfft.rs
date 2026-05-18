@@ -65,7 +65,27 @@ pub struct RfftArgs<'a, T: Element, C: Element> {
     pub y: TensorMut<'a, C, 2>,
 }
 
-/// RFFT plan.
+/// 1-D RFFT plan — real input → Hermitian-half complex output.
+///
+/// Wraps cuFFT's `cufftExecR2C` (`f32`) / `cufftExecD2Z` (`f64`).
+///
+/// **When to use**: forward FFT of real-valued data; the output is the
+/// non-redundant Hermitian half. Pair with [`IrfftPlan`] for the
+/// inverse direction. Use [`super::FftPlan`] when the input is
+/// already complex.
+///
+/// **Dtypes**: `f32` → `Complex32`; `f64` → `Complex64`.
+///
+/// **Shape**: real `[batch, n]` → complex `[batch, n/2 + 1]`.
+///
+/// **Normalization**: unnormalized (`norm="backward"`).
+///
+/// **Workspace**: zero — cuFFT manages internal workspace.
+///
+/// **Precision guarantee**: deterministic; not bit-stable across
+/// cuFFT versions.
+///
+/// Owns a lazy cuFFT handle (`!Sync` / `!Send`); destroyed on `Drop`.
 pub struct RfftPlan<T: Element> {
     desc: RfftDescriptor,
     sku: KernelSku,
@@ -335,7 +355,29 @@ pub struct IrfftArgs<'a, T: Element, C: Element> {
     pub y: TensorMut<'a, T, 2>,
 }
 
-/// IRFFT plan.
+/// 1-D IRFFT plan — Hermitian-half complex input → real output.
+///
+/// Wraps cuFFT's `cufftExecC2R` (`f32`) / `cufftExecZ2D` (`f64`),
+/// followed by a `scale_inplace_real_*` launch that applies the
+/// `1/n` normalization (PyTorch `norm="backward"`).
+///
+/// **When to use**: inverse FFT producing real-valued data. The
+/// caller supplies `n` explicitly because the Hermitian-half input
+/// length is ambiguous between `2 * (n/2)` and `2 * (n/2) + 1`.
+///
+/// **Dtypes**: `Complex32` → `f32`; `Complex64` → `f64`.
+///
+/// **Shape**: complex `[batch, n/2 + 1]` → real `[batch, n]`.
+///
+/// **Normalization**: normalized by `1/n` to match PyTorch's
+/// `norm="backward"`.
+///
+/// **Workspace**: zero — cuFFT manages internal workspace.
+///
+/// **Precision guarantee**: deterministic; not bit-stable across
+/// cuFFT versions.
+///
+/// Owns a lazy cuFFT handle (`!Sync` / `!Send`); destroyed on `Drop`.
 pub struct IrfftPlan<T: Element> {
     desc: IrfftDescriptor,
     sku: KernelSku,

@@ -43,6 +43,23 @@ pub struct MsortArgs<'a, T: Element> {
 }
 
 /// `msort` plan.
+///
+/// **Stable** row-wise sort: equal keys preserve input order via
+/// tie-break on the original index (PyTorch `torch.msort`).
+/// Functionally identical to [`SortPlan`](crate::SortPlan) plus the
+/// stability guarantee.
+///
+/// **When to use**: when stable order matters (e.g. unique-by-key
+/// pipelines). Pair with
+/// [`MsortBackwardPlan`](crate::MsortBackwardPlan).
+///
+/// **Dtypes**: FW `{f32, f64, i32, i64}`.
+///
+/// **Shape limits**: rank-2 `[batch, row_len]`; `row_len ≤ 1024`.
+///
+/// **Workspace**: none.
+///
+/// **Precision guarantee**: deterministic, bit-stable.
 pub struct MsortPlan<T: Element> {
     desc: MsortDescriptor,
     sku: KernelSku,
@@ -199,6 +216,20 @@ pub struct MsortBackwardArgs<'a, T: Element> {
 }
 
 /// `msort_backward` plan.
+///
+/// Adjoint of [`crate::MsortPlan`]. Same permutation-scatter as
+/// [`SortBackwardPlan`](crate::SortBackwardPlan) (the stability tie-
+/// break only affected the FW indices, not the BW math).
+///
+/// **When to use**: BW for [`MsortPlan`](crate::MsortPlan).
+///
+/// **Dtypes**: `{f32, f64}`.
+///
+/// **Shape limits**: rank-2 `[batch, row_len]`; `row_len ≤ 1024`.
+///
+/// **Workspace**: none.
+///
+/// **Precision guarantee**: deterministic, bit-stable.
 pub struct MsortBackwardPlan<T: Element> {
     desc: MsortBackwardDescriptor,
     sku: KernelSku,

@@ -54,6 +54,20 @@ pub struct RoiAlignBackwardArgs<'a, T: Element> {
 }
 
 /// `roi_align_backward` plan.
+///
+/// Adjoint of [`crate::RoiAlignPlan`]: scatter `dout` into `dinput`
+/// via the 4 bilinear-sample weights per RoI cell (atomicAdd).
+///
+/// **When to use**: BW for [`RoiAlignPlan`](crate::RoiAlignPlan).
+/// Caller retains FW `rois`.
+///
+/// **Dtypes**: `{f32, f64}`.
+///
+/// **Shape limits**: as for FW (rank-4 NCHW, RoIs `[num_rois, 5]`).
+///
+/// **Workspace**: none. Caller MUST zero `dinput`.
+///
+/// **Precision guarantee**: **non-deterministic** (atomicAdd).
 pub struct RoiAlignBackwardPlan<T: Element> {
     desc: RoiAlignBackwardDescriptor,
     sku: KernelSku,

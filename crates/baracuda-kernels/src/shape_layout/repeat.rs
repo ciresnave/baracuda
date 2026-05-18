@@ -44,6 +44,21 @@ pub struct RepeatArgs<'a, T: Element, const N: usize> {
 }
 
 /// `repeat` plan.
+///
+/// Per-axis tile: `output.shape[d] = input.shape[d] * repeats[d]`
+/// (PyTorch `torch.repeat`). Kernel walks output cells and computes
+/// input coords as `output_coord[d] % input.shape[d]`.
+///
+/// **When to use**: forward repeat. Pair with
+/// [`RepeatBackwardPlan`](crate::RepeatBackwardPlan).
+///
+/// **Dtypes**: `{f32, f64, f16, bf16}`. Pure load + store.
+///
+/// **Shape limits**: rank in `[1, 8]`; `repeats[d] ≥ 1`.
+///
+/// **Workspace**: none.
+///
+/// **Precision guarantee**: deterministic, bit-stable, bit-exact.
 pub struct RepeatPlan<T: Element, const N: usize> {
     desc: RepeatDescriptor<N>,
     sku: KernelSku,

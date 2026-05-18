@@ -52,6 +52,28 @@ pub struct SortArgs<'a, T: Element> {
 }
 
 /// `sort` plan.
+///
+/// `sort(x, dim=last, descending)` — returns sorted values AND
+/// sorted indices along the last axis (PyTorch `torch.sort`).
+///
+/// **When to use**: forward row-wise sort. Pair with
+/// [`SortBackwardPlan`](crate::SortBackwardPlan) for autograd; for
+/// indices-only output use [`ArgsortPlan`](crate::ArgsortPlan).
+///
+/// **Dtypes**: `{f32, f64, i32, i64}`; indices always `i32`.
+///
+/// **Shape limits**: rank-2 `[batch, row_len]`; `row_len ≤ 1024`
+/// (one CUDA block per row, bitonic network in shared memory).
+/// Larger rows return `Unsupported` — tile-radix follow-up reserved.
+///
+/// **Workspace**: none.
+///
+/// **Precision guarantee**: deterministic, bit-stable. Block-bitonic
+/// is a fixed comparator network — no atomics, no reductions.
+///
+/// **Saved-indices contract**: FW emits both `values` and `indices`
+/// in a single launch. BW reads the saved indices verbatim; callers
+/// must retain `indices` for autograd.
 pub struct SortPlan<T: Element> {
     desc: SortDescriptor,
     sku: KernelSku,

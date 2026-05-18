@@ -130,6 +130,50 @@ where
 }
 
 /// MoE forward plan.
+///
+/// Fused per-token dispatch + expert GEMM + accumulate over up to
+/// `top_k` experts. Inference-only.
+///
+/// **When to use**: forward MoE FFN pass. No BW plan — MoE training
+/// composes per-expert FFN ops manually at the autograd surface.
+/// Variant is selected at descriptor build time:
+///
+/// | variant       | acts        | weights         | output |
+/// |---------------|-------------|-----------------|--------|
+/// | `ScalarGguf`  | `f32`       | GGUF-packed     | `f32`  |
+/// | `Wmma`        | `f16`/`bf16`| dense FP        | `T`    |
+/// | `WmmaGguf`    | `f16`/`bf16`| GGUF-packed     | `f32`  |
+///
+/// **Shape limits**: `num_experts ≤ 1024` (WMMA scan kernel);
+/// `top_k ≥ 1`. For GGUF variants `d_model` must be a multiple of
+/// the block size.
+///
+/// **GGUF coverage**: `Q8_0`, `Q2_K`, `Q3_K`, `Q4_K`, `Q5_K`, `Q6_K`.
+/// `Q4_0`/`Q4_1`/`Q5_0`/`Q5_1`/`Q8K` are NOT shipped (Fuel upstream
+/// doesn't carry the `vec_dot_q*_q8_1` wirings for those).
+///
+/// **Workspace**: zero in [`Workspace`]. WMMA variants require
+/// caller-supplied `expert_counts_scratch` (`num_experts * i32`) and
+/// `expert_offsets_scratch` (`(num_experts + 1) * i32`) in
+/// [`MoeArgs`] instead.
+///
+/// **Precision guarantee**: deterministic, bit-stable on identical
+/// hardware (no atomics — top-k writes are to distinct token rows;
+/// per-token weight scaling is applied in-kernel).
+///
+/// # Variant / `topk_weight` semantics — **PENDING**
+///
+/// The reference CPU math for each variant is a known TODO: the
+/// `kernels/moe.cu` integration tests currently retain the kernel
+/// outputs via `let _ = ...` placeholders rather than asserting
+/// against a verified CPU reference. The exact composition rules
+/// — when the kernel reads `topk_weight_flat` vs `expert_weights`,
+/// the post-mix scaling order, the prefill-vs-decode tile-geometry
+/// numerical drift — are NOT yet pinned down by a reference
+/// implementation. Callers should treat any specific numerical
+/// output as kernel-defined until the reference lands. See
+/// `crates/baracuda-kernels/src/moe/mod.rs` and the integration
+/// tests under `crates/baracuda-kernels/tests/moe*.rs`.
 pub struct MoePlan {
     desc: MoeDescriptor,
     sku: KernelSku,

@@ -47,6 +47,32 @@ pub struct SegmentSumArgs<'a, T: Element> {
 }
 
 /// `segment_sum` plan (sorted).
+///
+/// `out[s, d] = Σ_{n : segment_ids[n] == s} input[n, d]` (TF / JAX
+/// `segment_sum`). Requires `segment_ids` to be monotonically
+/// non-decreasing.
+///
+/// **When to use**: forward sorted segment-sum. For unsorted IDs use
+/// [`UnsortedSegmentSumPlan`](crate::UnsortedSegmentSumPlan). Pair
+/// with [`SegmentSumBackwardPlan`](crate::SegmentSumBackwardPlan)
+/// for autograd.
+///
+/// **Dtypes**: `{f32, f64}` (matches the family — kernels rely on
+/// FP atomic primitives even in the sorted variant for some paths).
+///
+/// **Shape limits**: `input` is `[N, D]`, `segment_ids` is `[N]`
+/// with values in `[0, num_segments)`; `output` is `[num_segments, D]`.
+/// All extents non-negative.
+///
+/// **Workspace**: none.
+///
+/// **Precision guarantee**: **deterministic, bit-stable** — single
+/// thread per output cell sweeps the segment's row range in order.
+///
+/// **Index policy**: out-of-range segment IDs (`< 0` or
+/// `≥ num_segments`) are silently dropped (TF / JAX semantic).
+/// Output buffer is fully overwritten (no accumulation into prior
+/// state).
 pub struct SegmentSumPlan<T: Element> {
     desc: SegmentSumDescriptor,
     sku: KernelSku,

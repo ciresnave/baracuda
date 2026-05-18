@@ -76,7 +76,28 @@ pub struct BatchedSvdArgs<'a, T: Element> {
     pub info: TensorMut<'a, i32, 1>,
 }
 
-/// Batched SVD plan (Jacobi).
+/// Batched SVD plan via Jacobi iteration (`gesvdjBatched`).
+///
+/// **When to use**: independent **square** matrices in a single batch
+/// — picks one Jacobi-sweep pipeline per slot but fuses the launch.
+/// For rectangular inputs use [`super::BatchedSvdaPlan`]; for one-shot
+/// SVD use [`super::SvdPlan`].
+///
+/// **Dtypes**: `f32`, `f64`.
+///
+/// **Shape**: `[batch, N, N]` (square-only — cuSOLVER limitation).
+/// Returns `V` (not `V^T`).
+///
+/// **Storage**: column-major end-to-end.
+///
+/// **Workspace**: cuSOLVER `_bufferSize` (queried lazily on first
+/// `run`). The plan also owns a lazy `gesvdjInfo_t` parameter object
+/// (default tol: `1e-7` f32 / `1e-12` f64; `max_sweeps = 100`).
+///
+/// **Precision guarantee**: deterministic; not bit-stable across runs.
+///
+/// Owns a lazy cuSOLVER handle + Jacobi-params object (`!Sync` /
+/// `!Send`); destroyed on `Drop`.
 pub struct BatchedSvdPlan<T: Element> {
     desc: BatchedSvdDescriptor,
     sku: KernelSku,

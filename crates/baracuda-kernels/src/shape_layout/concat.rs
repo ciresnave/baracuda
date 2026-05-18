@@ -58,6 +58,23 @@ pub struct ConcatArgs<'a, T: Element, const N: usize> {
 }
 
 /// 2-input `concat` plan.
+///
+/// `y = cat(a, b, dim=concat_dim)` (PyTorch `torch.cat`).
+///
+/// **When to use**: residual joins, KV-cache concat in attention, any
+/// 2-input concatenation. Variable-arity (N-input) concat needs a
+/// separate plan with device-side pointer arrays — deferred. Pair
+/// with [`ConcatBackwardPlan`](crate::ConcatBackwardPlan).
+///
+/// **Dtypes**: `{f32, f64, f16, bf16}`.
+///
+/// **Shape limits**: rank in `[1, 8]`; `a_shape` and `b_shape` must
+/// match on every axis except `concat_dim`; `concat_dim ∈ [0, N)`.
+///
+/// **Workspace**: none.
+///
+/// **Precision guarantee**: deterministic, bit-stable, bit-exact
+/// (pure load + store).
 pub struct ConcatPlan<T: Element, const N: usize> {
     desc: ConcatDescriptor<N>,
     sku: KernelSku,

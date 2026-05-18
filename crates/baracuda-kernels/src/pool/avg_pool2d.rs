@@ -36,12 +36,32 @@ use super::max_pool2d::{
     PoolMode,
 };
 
-/// 2-D average-pool plan — owns one cuDNN handle, three lazy
-/// descriptors (`x_desc`, `y_desc`, `pool_desc`). Workspace-free.
+/// 2-D average-pool plan (cuDNN-backed) — forward + backward over NCHW.
 ///
-/// Defaults to PyTorch's `count_include_pad=False` semantics: set
-/// [`Pool2dDescriptor::mode`] to [`PoolMode::AvgExcludePad`] for
-/// PyTorch parity, or [`PoolMode::AvgIncludePad`] for TensorFlow-style.
+/// `select` requires `descriptor.mode == PoolMode::AvgIncludePad` or
+/// `AvgExcludePad`. Defaults to PyTorch's `count_include_pad=False`
+/// semantics: set [`Pool2dDescriptor::mode`] to
+/// [`PoolMode::AvgExcludePad`] for PyTorch parity, or
+/// [`PoolMode::AvgIncludePad`] for TensorFlow-style.
+///
+/// **When to use**: average-pool layer in a CNN. Sibling plan to
+/// [`super::MaxPool2dPlan`]; they share descriptor + args types.
+///
+/// **Dtypes**: `f32`, `f64`, `f16`, `bf16`.
+///
+/// **Shape**: `[N, C, H_in, W_in]` → `[N, C, H_out, W_out]` with the
+/// standard floor formula. NCHW only.
+///
+/// **Workspace**: zero (cuDNN pooling is workspace-free).
+///
+/// **Backward semantics**: callers must retain `y` (saved FW output)
+/// and `x` (saved FW input) — cuDNN demands both for API uniformity,
+/// though avg-pool's gradient depends only on `x` mathematically.
+///
+/// **Precision guarantee**: deterministic; not bit-stable across runs.
+///
+/// Owns one `cudnnHandle_t` + three lazy descriptors (`!Sync` /
+/// `!Send`); released on `Drop`. Gated under `feature = "cudnn"`.
 pub struct AvgPool2dPlan<T: Element> {
     desc: Pool2dDescriptor,
     sku: KernelSku,

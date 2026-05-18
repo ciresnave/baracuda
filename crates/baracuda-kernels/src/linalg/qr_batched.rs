@@ -50,7 +50,7 @@ pub struct BatchedQrDescriptor {
     pub n: i32,
     /// Number of independent matrices in the batch.
     pub batch_size: i32,
-    /// Element type. Must be `F32` or `F64`.
+    /// Element type. Must be `F32`, `F64`, `Complex32`, or `Complex64`.
     pub element: ElementKind,
 }
 
@@ -71,7 +71,34 @@ pub struct BatchedQrArgs<'a, T: Element> {
     pub tau: TensorMut<'a, T, 2>,
 }
 
-/// Batched QR factorization plan.
+/// Batched QR factorization plan — packed `geqrf` per slot.
+///
+/// Wraps **cuBLAS**'s `geqrfBatched` (note: lives in cuBLAS, not
+/// cuSOLVER — cuSOLVER-Dn has no batched-`geqrf` entry point). Each
+/// `A[b]` is overwritten in place with the packed-output (`R` upper +
+/// Householder reflectors lower); `tau[b]` gets the Householder
+/// scalars (`K = min(M, N)` elements per slot).
+///
+/// **When to use**: batched QR where downstream consumers can work on
+/// packed Householder form (e.g. chain
+/// [`super::BatchedOrmqrPlan`] / [`super::BatchedOrmqrWyPlan`] for
+/// applying `Q` to right-hand sides, or
+/// [`super::BatchedQrMaterializePlan`] for explicit dense `Q` / `R`).
+/// For one-shot QR use [`super::QrPlan`].
+///
+/// **Dtypes**: `f32`, `f64`, `Complex32`, `Complex64` — cuBLAS exposes
+/// all four for `geqrfBatched`.
+///
+/// **Shape**: `[batch, M, N]` per slot.
+///
+/// **Storage**: column-major end-to-end.
+///
+/// **Workspace**: `batch_size * 8` bytes for the device-side array of
+/// pointers cuBLAS expects.
+///
+/// **Precision guarantee**: deterministic; not bit-stable across runs.
+///
+/// Owns a lazy cuBLAS handle (`!Sync` / `!Send`); destroyed on `Drop`.
 pub struct BatchedQrPlan<T: Element> {
     desc: BatchedQrDescriptor,
     sku: KernelSku,

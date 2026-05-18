@@ -56,6 +56,24 @@ pub struct SegmentMinArgs<'a, T: Element> {
 }
 
 /// `segment_min` plan (sorted, FW only).
+///
+/// `out[s, d] = min_{n : segment_ids[n] == s} input[n, d]`. Sorted
+/// segment-min mirror of [`SegmentMaxPlan`](crate::SegmentMaxPlan).
+///
+/// **When to use**: forward sorted segment-min. **No BW plan** —
+/// argmin tracking deferred.
+///
+/// **Dtypes**: `{f32, f64}`.
+///
+/// **Shape limits**: `input` `[N, D]`; `segment_ids` `[N]`;
+/// `output` `[num_segments, D]`.
+///
+/// **Workspace**: none.
+///
+/// **Precision guarantee**: deterministic, bit-stable.
+///
+/// **Index policy**: out-of-range IDs dropped. Empty segments emit
+/// the per-op identity sentinel.
 pub struct SegmentMinPlan<T: Element> {
     desc: SegmentMinDescriptor,
     sku: KernelSku,

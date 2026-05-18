@@ -45,6 +45,23 @@ pub struct NmsArgs<'a, T: Element> {
 }
 
 /// `nms` plan.
+///
+/// Non-max suppression (torchvision `ops.nms`). Boxes are
+/// `(x1, y1, x2, y2)` with `x2 ≥ x1`, `y2 ≥ y1`. Caller MUST supply
+/// `boxes` pre-sorted by score descending.
+///
+/// **When to use**: forward NMS for detection. Set-valued — no BW.
+///
+/// **Dtypes**: box coords `{f32, f64}`; output mask always `u8`,
+/// count always `i32`.
+///
+/// **Shape limits**: `boxes` `[num_boxes, 4]`; `keep_mask`
+/// `[num_boxes]`; `count` `[1]`.
+///
+/// **Workspace**: none.
+///
+/// **Precision guarantee**: deterministic, bit-stable on identical
+/// hardware. Output `count` is the number of `1`s in `keep_mask`.
 pub struct NmsPlan<T: Element> {
     desc: NmsDescriptor,
     sku: KernelSku,

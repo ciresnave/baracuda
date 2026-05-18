@@ -55,7 +55,21 @@ pub struct AlibiBackwardArgs<'a, T: Element> {
     pub dslopes: Option<TensorMut<'a, T, 1>>,
 }
 
-/// ALiBi backward plan.
+/// Attention with Linear Biases (ALiBi) backward plan.
+///
+/// `dA` is a pass-through copy of `dY`; `dslope[h]` is the per-head
+/// reduction `Σ_{b, i, j} dY[b, h, i, j] · (j - i)`.
+///
+/// **When to use**: autograd partner for [`super::AlibiPlan`]. Either
+/// output is optional — pass `None` to skip that kernel.
+///
+/// **Dtypes**: `f32`, `f64`, `f16`, `bf16` — must match the FW plan.
+///
+/// **Workspace**: zero.
+///
+/// **Precision guarantee**: deterministic; bit-stable on the same
+/// hardware. The reduction runs as one block per head with a
+/// warp-shuffle tree reduction — no atomicAdd.
 pub struct AlibiBackwardPlan<T: Element> {
     desc: AlibiBackwardDescriptor,
     sku: KernelSku,

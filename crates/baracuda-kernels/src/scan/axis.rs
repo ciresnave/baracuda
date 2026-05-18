@@ -3,8 +3,27 @@
 //! Length-preserving prefix scan along a single axis. Output shape ==
 //! input shape; the scan axis is *not* collapsed (unlike a reduction).
 //!
-//! Today wired: `{Cumsum, Cumprod, Cummax, Cummin, LogCumsumExp} ×
-//! {f32, f16, bf16, f64}`.
+//! **Formulas** (forward direction; reverse flips the index range):
+//! - `Cumsum[i]`        = `x[0] + ... + x[i]`
+//! - `Cumprod[i]`       = `x[0] · x[1] · ... · x[i]`
+//! - `Cummax[i]`        = `max(x[0], ..., x[i])`
+//! - `Cummin[i]`        = `min(x[0], ..., x[i])`
+//! - `LogCumsumExp[i]`  = `log(Σ_{j≤i} exp(x[j]))` (numerically stable
+//!   via per-cell running max).
+//!
+//! **When to use**: forward prefix scan. Pair with
+//! [`ScanBackwardPlan`](super::ScanBackwardPlan) for autograd; the BW
+//! pass needs saved `x` and/or `y` per the op (see that module's table).
+//!
+//! **Dtypes / shape**: `{Cumsum, Cumprod, Cummax, Cummin, LogCumsumExp}
+//! × {f32, f16, bf16, f64}`, tensor rank `1..=8`.
+//!
+//! **Workspace**: none.
+//!
+//! **Precision**: deterministic, bit-stable on the same hardware. The
+//! single-thread-per-row sequential accumulator has no warp-reduction
+//! ordering dependence. f16 / bf16 accumulate in f32 (FP detour); f64
+//! keeps everything in double.
 
 use core::ffi::c_void;
 use core::marker::PhantomData;
@@ -40,7 +59,11 @@ pub struct ScanArgs<'a, T: Element, const N: usize> {
     pub y: TensorMut<'a, T, N>,
 }
 
-/// Single-axis scan plan.
+/// Single-axis scan forward plan — see the module-level docs for
+/// formulas, dtypes, workspace, and precision guarantees.
+///
+/// `T: Element` is the element type (`f32` / `f64` / `f16` / `bf16`).
+/// `const N: usize` is the tensor rank (1..=8).
 pub struct ScanPlan<T: Element, const N: usize> {
     desc: ScanDescriptor<N>,
     sku: KernelSku,
@@ -48,7 +71,9 @@ pub struct ScanPlan<T: Element, const N: usize> {
 }
 
 impl<T: Element, const N: usize> ScanPlan<T, N> {
-    /// Pick a kernel.
+    /// Pick a kernel for `desc`. Validates `scan_axis < N`, the dtype
+    /// is in the wired FP family, and tensor rank ≤ 8. Returns
+    /// [`Error::Unsupported`] for cells outside the wired matrix.
     pub fn select(
         _stream: &Stream,
         desc: &ScanDescriptor<N>,
@@ -151,23 +176,26 @@ impl<T: Element, const N: usize> ScanPlan<T, N> {
         Ok(())
     }
 
-    /// Workspace size in bytes.
+    /// Workspace size in bytes. Always zero.
     #[inline]
     pub fn workspace_size(&self) -> usize {
         0
     }
-    /// Kernel SKU identity.
+    /// Identity of the kernel this plan picked.
     #[inline]
     pub fn sku(&self) -> KernelSku {
         self.sku
     }
-    /// Numerical guarantees.
+    /// Numerical guarantees for this plan's kernel — deterministic,
+    /// bit-stable on the same hardware, f32 accumulator for f16 / bf16
+    /// inputs (FP detour).
     #[inline]
     pub fn precision_guarantee(&self) -> PrecisionGuarantee {
         self.sku.precision_guarantee
     }
 
-    /// Launch.
+    /// Launch the kernel against `args`. Calls `can_implement` first;
+    /// returns `Ok(())` for empty tensors.
     pub fn run(
         &self,
         stream: &Stream,

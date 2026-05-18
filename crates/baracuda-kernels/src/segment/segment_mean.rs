@@ -57,6 +57,25 @@ pub struct SegmentMeanArgs<'a, T: Element> {
 }
 
 /// `segment_mean` plan (sorted).
+///
+/// `out[s, d] = mean_{n : segment_ids[n] == s} input[n, d]` (TF / JAX
+/// `segment_mean`). Requires `segment_ids` monotonically non-decreasing.
+///
+/// **When to use**: forward sorted segment-mean. Pair with
+/// [`SegmentMeanBackwardPlan`](crate::SegmentMeanBackwardPlan).
+///
+/// **Dtypes**: `{f32, f64}`.
+///
+/// **Shape limits**: `input` `[N, D]`; `segment_ids` `[N]` with values
+/// in `[0, num_segments)`; `output` `[num_segments, D]`.
+///
+/// **Workspace**: none — segment counts derived inline via binary
+/// search.
+///
+/// **Precision guarantee**: deterministic, bit-stable.
+///
+/// **Index policy**: out-of-range IDs dropped. Empty segments emit
+/// zero (division is guarded; no NaN).
 pub struct SegmentMeanPlan<T: Element> {
     desc: SegmentMeanDescriptor,
     sku: KernelSku,

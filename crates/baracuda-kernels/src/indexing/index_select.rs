@@ -48,6 +48,28 @@ pub struct IndexSelectArgs<'a, T: Element, const N: usize> {
 }
 
 /// `index_select` plan.
+///
+/// `out[..., j, ...] = src[..., idx[j], ...]` along the `select_dim`
+/// axis (PyTorch `torch.index_select`).
+///
+/// **When to use**: 1-D index lookups. For N-D `index` (broadcast to
+/// the output shape) use [`GatherPlan`](crate::GatherPlan); this op
+/// is the faster specialization. Pair with
+/// [`IndexSelectBackwardPlan`](crate::IndexSelectBackwardPlan) for
+/// autograd.
+///
+/// **Dtypes**: value `{f32, f64, i32}`; index always 1-D `i32`.
+///
+/// **Shape limits**: rank in `[1, 8]`; `select_dim ∈ [0, N)`;
+/// `idx.numel() == out_shape[select_dim]`.
+///
+/// **Workspace**: none.
+///
+/// **Precision guarantee**: deterministic, bit-stable on same
+/// hardware. Pure load + store, no arithmetic — bit-exact at every
+/// dtype.
+///
+/// **Index policy**: out-of-bounds and negative indices skipped.
 pub struct IndexSelectPlan<T: Element, const N: usize> {
     desc: IndexSelectDescriptor<N>,
     sku: KernelSku,
@@ -55,7 +77,8 @@ pub struct IndexSelectPlan<T: Element, const N: usize> {
 }
 
 impl<T: Element, const N: usize> IndexSelectPlan<T, N> {
-    /// Pick a kernel for `desc`.
+    /// Pick a kernel for `desc`. Validates element-type alignment,
+    /// rank, axis, non-negative extents, and dtype.
     pub fn select(
         _stream: &Stream,
         desc: &IndexSelectDescriptor<N>,
@@ -114,7 +137,9 @@ impl<T: Element, const N: usize> IndexSelectPlan<T, N> {
         })
     }
 
-    /// Validate args.
+    /// Validate `args` against the descriptor: output shape match,
+    /// idx length matches `out_shape[select_dim]`, rank ≤ 8, device
+    /// buffers large enough.
     pub fn can_implement(&self, args: &IndexSelectArgs<'_, T, N>) -> Result<()> {
         if args.out.shape != self.desc.out_shape {
             return Err(Error::InvalidProblem(
@@ -152,7 +177,7 @@ impl<T: Element, const N: usize> IndexSelectPlan<T, N> {
         Ok(())
     }
 
-    /// Workspace size in bytes.
+    /// Workspace size in bytes. Always zero.
     #[inline]
     pub fn workspace_size(&self) -> usize {
         0
@@ -170,7 +195,8 @@ impl<T: Element, const N: usize> IndexSelectPlan<T, N> {
         self.sku.precision_guarantee
     }
 
-    /// Launch.
+    /// Launch the kernel on `stream`. Returns early on zero-element
+    /// output. `workspace` ignored.
     pub fn run(
         &self,
         stream: &Stream,

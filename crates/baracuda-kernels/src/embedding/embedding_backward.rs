@@ -51,6 +51,23 @@ pub struct EmbeddingBackwardArgs<'a, T: Element> {
 }
 
 /// `embedding_backward` plan.
+///
+/// Adjoint of [`crate::EmbeddingPlan`]:
+/// `dweight[indices[n], :] += dout[n, :]` via atomicAdd. Rows where
+/// `indices[n] == padding_idx` (or negative / out-of-range) are skipped.
+///
+/// **When to use**: backward for [`EmbeddingPlan`](crate::EmbeddingPlan).
+///
+/// **Dtypes**: `{f32, f64}` only — atomicAdd is native-FP.
+///
+/// **Shape limits**: `dweight` is `[V, D]`, `dout` is `[N, D]`,
+/// `indices` is `[N]`, all extents non-negative.
+///
+/// **Workspace**: none. Caller MUST zero `dweight` before launch
+/// (or pre-populate to accumulate into a running gradient).
+///
+/// **Precision guarantee**: **non-deterministic** — atomicAdd
+/// ordering varies between launches.
 pub struct EmbeddingBackwardPlan<T: Element> {
     desc: EmbeddingBackwardDescriptor,
     sku: KernelSku,

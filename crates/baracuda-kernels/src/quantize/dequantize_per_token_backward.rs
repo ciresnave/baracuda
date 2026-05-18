@@ -48,6 +48,21 @@ pub struct DequantizePerTokenBackwardArgs<'a, TIn: Element, TOut: IntElement> {
 }
 
 /// `dequantize_per_token` backward plan.
+///
+/// Straight-through linear:
+/// `dq_FP[n, d] = scale[n] * dy[n, d]`. Int input is non-differentiable;
+/// FP gradient flows through.
+///
+/// **When to use**: backward for
+/// [`DequantizePerTokenPlan`](crate::DequantizePerTokenPlan).
+///
+/// **Dtypes**: gradients in `{f32, f64, f16, bf16}`.
+///
+/// **Shape limits**: rank-2 `[N, D]`.
+///
+/// **Workspace**: none.
+///
+/// **Precision guarantee**: deterministic, bit-stable.
 pub struct DequantizePerTokenBackwardPlan<TIn: Element, TOut: IntElement> {
     desc: DequantizePerTokenBackwardDescriptor,
     sku: KernelSku,

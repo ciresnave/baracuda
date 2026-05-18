@@ -84,6 +84,27 @@ pub struct KvCacheAppendArgs<'a, T: Element> {
 }
 
 /// KV-cache append plan.
+///
+/// Writes new `K_new` / `V_new` slices into running `K_cache` /
+/// `V_cache` buffers at per-sample offsets supplied via
+/// `cache_offsets[b]`. Pure copy — bit-exact across all wired dtypes.
+///
+/// **When to use**: autoregressive decoder inference. Call once per
+/// generation step to extend the cache before the attention op for the
+/// next step. Ragged-batch insertion is supported natively because each
+/// sample carries its own offset. No backward — KV-cache is an
+/// inference-time op.
+///
+/// **Dtypes**: `f32`, `f64`, `f16`, `bf16`.
+///
+/// **Shape limits**: rank-4 contiguous K/V tensors. `d_k != d_v` is
+/// allowed. Cells where `cache_offsets[b] + l_new >= max_cache_len`
+/// are silently skipped — the caller sizes the cache so writes land in
+/// bounds.
+///
+/// **Workspace**: zero (pure in-place copy).
+///
+/// **Precision guarantee**: bit-exact (no math at all).
 pub struct KvCacheAppendPlan<T: Element> {
     desc: KvCacheAppendDescriptor,
     sku: KernelSku,

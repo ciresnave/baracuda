@@ -62,6 +62,30 @@ pub struct QuantizePerChannelArgs<'a, TIn: Element, TOut: IntElement> {
 }
 
 /// `quantize_per_channel` forward plan.
+///
+/// `q[..., c, ...] = clamp(round(x[..., c, ...] / scale[c]) + zero_point[c], q_min, q_max)`.
+/// Per-axis quantization (PyTorch `torch.quantize_per_channel`).
+///
+/// **When to use**: post-training quantization of conv / linear
+/// weights along the output-channel axis. For activations use
+/// [`QuantizePerTokenPlan`](crate::QuantizePerTokenPlan); for whole-
+/// tensor scale use [`QuantizePerTensorPlan`](crate::QuantizePerTensorPlan).
+/// Pair with [`QuantizePerChannelBackwardPlan`](crate::QuantizePerChannelBackwardPlan)
+/// for STE.
+///
+/// **Dtypes**: input FP `{f32, f64, f16, bf16}` × output int
+/// `{s8, u8}`. `scale[]` is input dtype; `zero_point[]` is `i32`.
+/// Sub-byte (`s4` / `u4`) deferred.
+///
+/// **Shape limits**: rank-4 contiguous (caller pads lower-rank
+/// tensors with `1`'s); `axis ∈ [0, 4)`; per-channel vectors have
+/// length `shape[axis]`. `q_max ≥ q_min`. Strided per-channel is
+/// deferred.
+///
+/// **Workspace**: none.
+///
+/// **Precision guarantee**: deterministic, bit-stable on same
+/// hardware. Round-ties-even.
 pub struct QuantizePerChannelPlan<TIn: Element, TOut: IntElement> {
     desc: QuantizePerChannelDescriptor,
     sku: KernelSku,

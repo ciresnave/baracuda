@@ -39,6 +39,29 @@ pub struct GgufDequantizeArgs<'a> {
 }
 
 /// `gguf_dequantize` plan.
+///
+/// Unpacks a GGUF block-quantized weight buffer into a dense `f32`
+/// tensor.
+///
+/// **When to use**: ahead-of-time weight unpacking, or as a fallback
+/// when batched FP matmul is preferred over the dequant-fused
+/// [`GgufMmvqPlan`](crate::GgufMmvqPlan).
+///
+/// **Dtypes**: input is packed `u8` bytes; output `f32`. `f16`
+/// output deferred.
+///
+/// **Block formats**: all eleven — `Q4_0`, `Q4_1`, `Q5_0`, `Q5_1`,
+/// `Q8_0` (type-0/1, 32 elems/block), and `Q2_K`, `Q3_K`, `Q4_K`,
+/// `Q5_K`, `Q6_K`, `Q8_K` (k-quants, 256 elems/super-block).
+///
+/// **Shape limits**: `numel` must be a multiple of the block size
+/// (32 or 256). Input byte length must equal
+/// `(numel / block_size) * type_size`.
+///
+/// **Workspace**: none.
+///
+/// **Precision guarantee**: deterministic, bit-stable. No
+/// accumulation, no atomics — pure unpack arithmetic.
 pub struct GgufDequantizePlan {
     desc: GgufDequantizeDescriptor,
     sku: KernelSku,

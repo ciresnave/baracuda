@@ -1,24 +1,50 @@
-//! Dense linear algebra op family — Milestone 6.3 (Category Linalg).
+//! Dense linear algebra op family — Phase 6 (Category Linalg).
 //!
-//! Wraps cuSOLVER's dense API. Four canonical PyTorch / JAX
-//! factorizations land in this milestone:
+//! Wraps cuSOLVER's dense API plus a few bespoke kernels for batched-QR
+//! variants that cuSOLVER does not surface. The family covers:
 //!
-//! - [`CholeskyPlan`] — `A = L · L^T` (symmetric positive-definite),
-//!   batched. Lower or upper fill mode.
-//! - [`LuPlan`] — `P · A = L · U` (general; partial pivoting), batched
-//!   for square inputs. Non-batched `getrf` handles rectangular `[M, N]`.
-//! - [`QrPlan`] — `A = Q · R`. 2-D only (cuSOLVER's dense API has no
-//!   batched `geqrf`). Full `Q` (`[M, M]`) materialized via `ormqr` on
-//!   identity.
-//! - [`SvdPlan`] — `A = U · diag(S) · V^T`. 2-D only. `full_matrices`
-//!   selects between full (`U: [M, M]`, `V^T: [N, N]`) and thin
-//!   (`U: [M, K]`, `V^T: [K, N]`) shapes where `K = min(M, N)`.
+//! ### Factorizations
+//! - [`CholeskyPlan`] — `A = L · L^T` (SPD), non-batched + batched.
+//! - [`LuPlan`] — `P · A = L · U` (partial pivoting); non-batched today
+//!   (`batch_size == 1` only — cuSOLVER's dense `getrf` is non-batched,
+//!   cuBLAS batched LU is a deferred follow-up).
+//! - [`QrPlan`] — `A = Q · R`; 2-D only (cuSOLVER has no batched `geqrf`).
+//! - [`BatchedQrPlan`] — batched-QR via **cuBLAS** `geqrfBatched`,
+//!   packed output, `f32` / `f64` / `Complex32` / `Complex64`.
+//! - [`BatchedQrMaterializePlan`] — bespoke kernel that unpacks
+//!   [`BatchedQrPlan`]'s output into dense `Q [B, M, M]` + `R [B, K, N]`.
+//! - [`SvdPlan`] — `A = U · diag(S) · V^T`. 2-D only (`gesvd`,
+//!   bidiag-QR). `full_matrices` toggles full vs thin shapes.
+//! - [`BatchedSvdPlan`] — Jacobi-batched (`gesvdjBatched`), square-only.
+//! - [`BatchedSvdaPlan`] — rectangular approximate-SVD
+//!   (`gesvdaStridedBatched`) with rank-truncation.
+//!
+//! ### Eigendecompositions
+//! - [`EighPlan`] — `A · v = λ · v` (symmetric / Hermitian), real eigvals.
+//! - [`EigPlan`] — general non-symmetric `A · v = λ · v` via `Xgeev`;
+//!   real input → real packed eigvals (`wr` / `wi`), complex input →
+//!   complex eigvals.
+//!
+//! ### Solvers / inverse / least-squares
+//! - [`SolvePlan`] — `A · X = B` via `getrf` + `getrs`.
+//! - [`InversePlan`] — `A^{-1}` via `getrf` + `getrs` over identity RHS.
+//! - [`LstSqPlan`] — `min ‖A·x - b‖²` via `_gels` (iterative) with
+//!   optional QR (`geqrf` + `ormqr` + `trsm`) fallback.
+//!
+//! ### Householder application
+//! - [`BatchedOrmqrPlan`] — reflector-by-reflector apply (GEMV-rates;
+//!   wins for tiny matrices). Real `op ∈ {N, T}`, complex `op ∈ {N, C}`.
+//!   `side ∈ {Left, Right}`.
+//! - [`BatchedOrmqrWyPlan`] — WY-blocked apply via cuBLAS strided-batched
+//!   GEMM (GEMM-rates; wins for `M, N > ~16`). `side = Left` only.
 //!
 //! ## Dtype coverage
 //!
-//! `f32` + `f64` only. cuSOLVER's dense API does **not** expose `f16` /
-//! `bf16` for these factorizations — callers that need mixed-precision
-//! linalg must cast on either side.
+//! Most plans support `f32` + `f64` only — cuSOLVER's dense API does
+//! **not** expose `f16` / `bf16` for these factorizations. Complex
+//! (`Complex32` / `Complex64`) is wired for [`EighPlan`], [`EigPlan`],
+//! [`BatchedQrPlan`], [`BatchedOrmqrPlan`]. See per-plan docs for the
+//! authoritative dtype list.
 //!
 //! ## Row-major / column-major adapter
 //!

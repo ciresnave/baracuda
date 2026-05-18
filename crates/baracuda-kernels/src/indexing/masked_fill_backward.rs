@@ -39,6 +39,21 @@ pub struct MaskedFillBackwardArgs<'a, T: Element, const N: usize> {
 }
 
 /// `masked_fill_backward` plan.
+///
+/// Adjoint of [`crate::MaskedFillPlan`]:
+/// `dsrc[i] = mask[i] ? 0 : dout[i]`. The fill `value` is a
+/// non-differentiable scalar — no `dvalue` is produced.
+///
+/// **When to use**: backward for [`MaskedFillPlan`](crate::MaskedFillPlan).
+///
+/// **Dtypes**: `{f32, f64, i32, bool}` (matches FW).
+///
+/// **Shape limits**: rank in `[1, 8]`; same-shape only.
+///
+/// **Workspace**: none.
+///
+/// **Precision guarantee**: deterministic, bit-stable. Pure
+/// mask + copy + zero — no arithmetic, no atomics.
 pub struct MaskedFillBackwardPlan<T: Element, const N: usize> {
     desc: MaskedFillBackwardDescriptor<N>,
     sku: KernelSku,

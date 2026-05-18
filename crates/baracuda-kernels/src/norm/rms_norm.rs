@@ -86,6 +86,24 @@ pub struct RMSNormArgs<'a, T: Element, const N: usize> {
 }
 
 /// RMSNorm forward plan.
+///
+/// **Formula**: `y = x / sqrt(mean(x², over norm_axes) + eps) * gamma`.
+/// `gamma` is optional (gated by `desc.has_gamma`).
+///
+/// **When to use**: forward pre-norm / post-norm in Llama-family
+/// transformer blocks. Pair with [`super::RMSNormBackwardPlan`] for
+/// autograd; the BW reuses the saved per-row RMS value.
+///
+/// **Dtypes / shape**: `{f32, f16, bf16, f64}` × tensor rank `1..=8`.
+/// `norm_axes_mask` must be a non-empty suffix of `[0, N)`.
+///
+/// **Workspace**: none — the per-row RMS is saved to the caller-allocated
+/// `args.rms` buffer (shape `desc.rms_shape()`).
+///
+/// **Precision**: deterministic, bit-stable on the same hardware. The
+/// per-output-cell two-pass kernel has no atomic-add. f16 / bf16 mean-
+/// square reduces in f32 (mandatory — variance in half precision is
+/// catastrophic); f64 keeps everything in double.
 pub struct RMSNormPlan<T: Element, const N: usize> {
     desc: RMSNormDescriptor<N>,
     sku: KernelSku,
@@ -121,7 +139,10 @@ fn check_mask_is_suffix(mask: u8, n: usize) -> bool {
 }
 
 impl<T: Element, const N: usize> RMSNormPlan<T, N> {
-    /// Pick a kernel.
+    /// Pick a kernel for `desc`. Validates `norm_axes_mask` is a
+    /// non-empty suffix of `[0, N)`, the dtype is in the wired FP family,
+    /// and tensor rank is in `1..=8`. Returns [`Error::Unsupported`] for
+    /// cells outside the matrix.
     pub fn select(
         _stream: &Stream,
         desc: &RMSNormDescriptor<N>,
@@ -254,23 +275,26 @@ impl<T: Element, const N: usize> RMSNormPlan<T, N> {
         Ok(())
     }
 
-    /// Workspace size in bytes.
+    /// Workspace size in bytes. Always zero — the per-row RMS save
+    /// lives in the caller-allocated `args.rms` tensor, not in scratch.
     #[inline]
     pub fn workspace_size(&self) -> usize {
         0
     }
-    /// Kernel SKU identity.
+    /// Identity of the kernel this plan picked.
     #[inline]
     pub fn sku(&self) -> KernelSku {
         self.sku
     }
-    /// Numerical guarantees.
+    /// Numerical guarantees: deterministic, bit-stable on the same
+    /// hardware, f32 mean-square accumulator for f16 / bf16 inputs.
     #[inline]
     pub fn precision_guarantee(&self) -> PrecisionGuarantee {
         self.sku.precision_guarantee
     }
 
-    /// Launch.
+    /// Launch the kernel against `args`. Returns `Ok(())` for empty
+    /// tensors.
     pub fn run(
         &self,
         stream: &Stream,

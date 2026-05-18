@@ -130,7 +130,33 @@ pub struct BatchedOrmqrArgs<'a, T: Element> {
     pub c: TensorMut<'a, T, 3>,
 }
 
-/// Batched-`ormqr` plan.
+/// Batched-`ormqr` / `unmqr` plan — apply Householder-encoded `Q` to
+/// a stack of right-hand-side matrices.
+///
+/// Bespoke kernel (one launch for the whole batch; cuSOLVER's dense
+/// `ormqr` / `unmqr` is non-batched, which kills latency-bound small-
+/// matrix throughput). Applies reflectors one at a time at GEMV-rates.
+/// Pair with [`super::BatchedOrmqrWyPlan`] for GEMM-rates on
+/// `M, N > ~16` problems.
+///
+/// **When to use**: small-batch / small-matrix `Q · C` (or
+/// `C · Q^T` / etc.) where one launch dominates. Pair with
+/// [`super::BatchedQrPlan`] which produces the packed `A` + `tau`
+/// inputs.
+///
+/// **Dtypes**: `f32`, `f64`, `Complex32`, `Complex64`. Complex +
+/// `op = T` is rejected (use `C` for the conjugate-transpose adjoint
+/// of unitary `Q`).
+///
+/// **Shape**: see Side / `op` matrix in the descriptor docs.
+///
+/// **Storage**: column-major end-to-end.
+///
+/// **Workspace**: zero.
+///
+/// **Precision guarantee**: deterministic per launch but not
+/// bit-stable across configurations (reduction order can change with
+/// block geometry).
 pub struct BatchedOrmqrPlan<T: Element> {
     desc: BatchedOrmqrDescriptor,
     sku: KernelSku,

@@ -54,6 +54,24 @@ pub struct PermuteArgs<'a, T: Element, const N: usize> {
 }
 
 /// Materialized `permute` plan.
+///
+/// `y = x.permute(dims)` — output axis `d` is input axis `dims[d]`
+/// (PyTorch `torch.permute`).
+///
+/// **When to use**: when the caller needs a CONTIGUOUS permuted
+/// output. For zero-cost strided views (no kernel launch), construct
+/// a `TensorRef` with reshuffled strides directly. Pair with
+/// [`PermuteBackwardPlan`](crate::PermuteBackwardPlan).
+///
+/// **Dtypes**: `{f32, f64, f16, bf16}`. Pure copy, arithmetic-free
+/// so bit-exact at every dtype.
+///
+/// **Shape limits**: rank in `[1, 8]`; `dims` must be a permutation
+/// of `[0, N)`.
+///
+/// **Workspace**: none.
+///
+/// **Precision guarantee**: deterministic, bit-stable, bit-exact.
 pub struct PermutePlan<T: Element, const N: usize> {
     desc: PermuteDescriptor<N>,
     sku: KernelSku,

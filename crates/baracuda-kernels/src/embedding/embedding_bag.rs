@@ -102,6 +102,39 @@ pub struct EmbeddingBagArgs<'a, T: Element> {
 }
 
 /// `embedding_bag` plan.
+///
+/// Per-bag reduction over a flat `indices` array partitioned by the
+/// `offsets` table (PyTorch `torch.nn.functional.embedding_bag`). For
+/// each bag `b`: `out[b, :] = reduce(weight[indices[k], :])` for
+/// `k ∈ offsets[b]..offsets[b+1]` (last bag's end is `total_indices`).
+///
+/// **When to use**: forward pooled embedding lookup (e.g. continuous
+/// bag-of-words). Pair with
+/// [`EmbeddingBagBackwardPlan`](crate::EmbeddingBagBackwardPlan) for
+/// autograd. For non-pooled lookup, use
+/// [`EmbeddingPlan`](crate::EmbeddingPlan).
+///
+/// **Dtypes**: weight / output `{f32, f64, f16, bf16}`; indices and
+/// offsets always `i32`. f16 / bf16 accumulate in f32 internally
+/// before the cast back to T at write.
+///
+/// **Shape limits**: `weight` is `[V, D]`, `indices` is
+/// `[total_indices]`, `offsets` is `[num_bags]`, `output` is
+/// `[num_bags, D]`.
+///
+/// **Workspace**: none.
+///
+/// **Precision guarantee**: deterministic, bit-stable on same
+/// hardware. No atomics on FW.
+///
+/// **Index policy**: `padding_idx` (or negative / OOB) indices are
+/// dropped from the bag's reduction; excluded from the Mean divisor.
+/// Empty bags (`start == end`) emit zero rows; an all-padding bag in
+/// Mean mode also emits zero (no divide-by-zero).
+///
+/// **Known limitations**: `Max` mode is deferred — it needs
+/// per-feature argmax tracking on FW so the BW can scatter into the
+/// contributing rows.
 pub struct EmbeddingBagPlan<T: Element> {
     desc: EmbeddingBagDescriptor,
     sku: KernelSku,

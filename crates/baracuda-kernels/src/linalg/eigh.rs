@@ -81,10 +81,33 @@ pub struct EighArgs<'a, T: Element, TW: Element> {
     pub info: TensorMut<'a, i32, 1>,
 }
 
-/// Symmetric / Hermitian eigh plan.
+/// Symmetric / Hermitian eigendecomposition plan — `A · v = λ · v`
+/// with real eigenvalues.
 ///
-/// Owns a lazy cuSOLVER handle (`!Sync` / `!Send`). The handle is
-/// destroyed on `Drop`.
+/// Wraps cuSOLVER's divide-and-conquer routines (`syevd` / `heevd`).
+/// `A` is overwritten with the eigenvector matrix; `W` receives
+/// eigenvalues sorted ascending.
+///
+/// **When to use**: full eigendecomposition of a symmetric (real) or
+/// Hermitian (complex) matrix — typically faster and more accurate
+/// than [`super::EigPlan`] for these inputs.
+///
+/// **Dtypes**: `f32`, `f64`, `Complex32`, `Complex64`. Eigenvalues are
+/// always real — `W` takes `TW = T::Scalar` (`f32` for `f32` /
+/// `Complex32`, `f64` for `f64` / `Complex64`).
+///
+/// **Shape**: `[N, N]`. 2-D only — cuSOLVER has no batched
+/// `syevd` / `heevd`.
+///
+/// **Storage**: column-major end-to-end (a symmetric / Hermitian
+/// matrix has the same byte storage in either view).
+///
+/// **Workspace**: cuSOLVER `_bufferSize` (queried lazily on first
+/// `run`).
+///
+/// **Precision guarantee**: deterministic; not bit-stable across runs.
+///
+/// Owns a lazy cuSOLVER handle (`!Sync` / `!Send`); destroyed on `Drop`.
 pub struct EighPlan<T: Element> {
     desc: EighDescriptor,
     sku: KernelSku,

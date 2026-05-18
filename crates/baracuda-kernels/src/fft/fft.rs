@@ -66,10 +66,34 @@ pub struct FftArgs<'a, T: Element> {
     pub y: TensorMut<'a, T, 2>,
 }
 
-/// FFT / IFFT (C2C) plan.
+/// 1-D FFT / IFFT (complex-to-complex) plan.
+///
+/// Wraps cuFFT's `cufftExecC2C` (`f32`) / `cufftExecZ2Z` (`f64`).
+/// `descriptor.inverse` toggles direction at exec time; the cuFFT
+/// plan type itself is direction-agnostic.
+///
+/// **When to use**: 1-D complex FFT in either direction. Use
+/// [`super::RfftPlan`] / [`super::IrfftPlan`] for real input / output;
+/// [`super::FftNdPlan`] for multi-axis transforms.
+///
+/// **Dtypes**: `Complex32`, `Complex64`. cuFFT does not expose
+/// `f16` / `bf16` transforms.
+///
+/// **Shape**: `[batch, n]` — both buffers complex. Out-of-place only
+/// in the trailblazer (in-place exec is a deferred follow-up).
+///
+/// **Normalization**: forward is unnormalized (matches PyTorch
+/// `norm="backward"` default); inverse is normalized by `1/n` via a
+/// chained `scale_inplace_c*` launch.
+///
+/// **Workspace**: zero — cuFFT manages internal workspace.
+///
+/// **Precision guarantee**: deterministic; not bit-stable across
+/// different cuFFT build versions (cuFFT picks among several radix
+/// algorithms based on `n`).
 ///
 /// Owns a lazy cuFFT handle (`!Sync` / `!Send` via the
-/// `Cell<cufftHandle>`). The handle is destroyed on `Drop`.
+/// `Cell<cufftHandle>`). Destroyed on `Drop`.
 pub struct FftPlan<T: Element> {
     desc: FftDescriptor,
     sku: KernelSku,

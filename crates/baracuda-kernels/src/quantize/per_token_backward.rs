@@ -48,6 +48,23 @@ pub struct QuantizePerTokenBackwardArgs<'a, TIn: Element> {
 }
 
 /// `quantize_per_token` backward plan.
+///
+/// STE: `dx[n, d] = (dy[n, d] / scale[n]) * 1[qmin ≤ round(x[n,d]/scale[n])+zp[n] ≤ qmax]`.
+/// Mask recomputed in-kernel.
+///
+/// **When to use**: backward for
+/// [`QuantizePerTokenPlan`](crate::QuantizePerTokenPlan). Caller
+/// retains FW input, scale, zero_point.
+///
+/// **Dtypes**: gradients in `{f32, f64, f16, bf16}`; no int output —
+/// hence the single-type-parameter signature.
+///
+/// **Shape limits**: rank-2 `[N, D]`; per-row `scale` and `zp` of
+/// length `N`.
+///
+/// **Workspace**: none.
+///
+/// **Precision guarantee**: deterministic, bit-stable.
 pub struct QuantizePerTokenBackwardPlan<TIn: Element> {
     desc: QuantizePerTokenBackwardDescriptor,
     sku: KernelSku,

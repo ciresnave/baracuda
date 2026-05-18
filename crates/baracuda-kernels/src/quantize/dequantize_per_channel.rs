@@ -47,6 +47,22 @@ pub struct DequantizePerChannelArgs<'a, TIn: Element, TOut: IntElement> {
 }
 
 /// `dequantize_per_channel` plan.
+///
+/// `x[..., c, ...] = scale[c] * (q[..., c, ...] - zero_point[c])`.
+/// Exactly invertible (up to FW rounding) against
+/// [`QuantizePerChannelPlan`](crate::QuantizePerChannelPlan).
+///
+/// **When to use**: FP recovery from a per-channel-quantized weight
+/// buffer. Pair with [`DequantizePerChannelBackwardPlan`](crate::DequantizePerChannelBackwardPlan).
+///
+/// **Dtypes**: input int `{s8, u8}`; output FP `{f32, f64, f16, bf16}`.
+///
+/// **Shape limits**: rank-4 contiguous; `axis ∈ [0, 4)`; per-channel
+/// vectors of length `shape[axis]`.
+///
+/// **Workspace**: none.
+///
+/// **Precision guarantee**: deterministic, bit-stable.
 pub struct DequantizePerChannelPlan<TIn: Element, TOut: IntElement> {
     desc: DequantizePerChannelDescriptor,
     sku: KernelSku,

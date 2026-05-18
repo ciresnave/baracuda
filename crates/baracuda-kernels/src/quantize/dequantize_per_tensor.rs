@@ -43,6 +43,22 @@ pub struct DequantizePerTensorArgs<'a, TIn: Element, TOut: IntElement> {
 }
 
 /// `dequantize_per_tensor` plan.
+///
+/// `x = scale * (q - zero_point)`. Linear; exactly invertible (up to
+/// FW rounding) against [`QuantizePerTensorPlan`](crate::QuantizePerTensorPlan).
+///
+/// **When to use**: FP recovery from a per-tensor-quantized buffer.
+/// Pair with [`DequantizePerTensorBackwardPlan`](crate::DequantizePerTensorBackwardPlan)
+/// for autograd through the dequant op.
+///
+/// **Dtypes**: input int `{s8, u8}` (= `TOut`); output FP
+/// `{f32, f64, f16, bf16}` (= `TIn`).
+///
+/// **Shape limits**: flat `[numel]`.
+///
+/// **Workspace**: none.
+///
+/// **Precision guarantee**: deterministic, bit-stable.
 pub struct DequantizePerTensorPlan<TIn: Element, TOut: IntElement> {
     desc: DequantizePerTensorDescriptor,
     sku: KernelSku,
