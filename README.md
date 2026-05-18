@@ -250,6 +250,26 @@ vars, then `C:\Program Files\NVIDIA\CUDNN\v<X.Y>\` on Windows, then the
 CUDA toolkit's own `lib/` directory (pre-cuDNN-9 layout), then the
 standard Linux distro paths under `/usr/lib/`.
 
+## Troubleshooting
+
+### Windows: Git-for-Windows fake `link.exe` shadowing the MSVC linker
+
+Git-for-Windows ships a GNU coreutils binary named `link.exe` at
+`C:\Program Files\Git\usr\bin\link.exe` — its job is to create a hard
+link, **not** to link object files. If that directory appears on `PATH`
+ahead of the MSVC linker (or LLVM's `lld-link.exe`), `cargo build`
+invokes the coreutils binary instead of the real linker and fails with a
+cryptic error (it doesn't understand `/OUT:` and friends).
+
+baracuda's `baracuda-kernels-sys` and `baracuda-cutlass-sys` build
+scripts probe `PATH` on Windows and emit a `cargo:warning` if they
+detect this shadowing. **Fix:** re-order `PATH` so the MSVC linker
+(typically reached via the Visual Studio "x64 Native Tools Command
+Prompt") or LLVM's `lld-link.exe` (`C:\Program Files\LLVM\bin\`) appears
+before `C:\Program Files\Git\usr\bin\`. Building from the VS x64 Native
+Tools prompt is the most reliable option; alternatively, install LLVM
+and put its `bin` directory ahead of Git's on the user/system `PATH`.
+
 ## Testing
 
 baracuda's GPU integration tests are gated behind `#[ignore]` so a

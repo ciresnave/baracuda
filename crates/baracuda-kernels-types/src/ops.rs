@@ -949,18 +949,36 @@ pub enum ConvKind {
     /// 3-D convolution filter-gradient. Reserved.
     Conv3dBackwardFilter = 8,
     /// 2-D transposed convolution (fractionally-strided / "deconv").
-    /// Reserved.
+    /// Forward pass.
     ConvTranspose2d = 9,
-    /// 2-D transposed convolution backward. Reserved.
+    /// 2-D transposed convolution backward. Reserved — backward is
+    /// dispatched through the same plan via `run_bw_data` / `run_dw`.
     ConvTranspose2dBackward = 10,
-    /// Depthwise 2-D convolution (`groups == c_in`). Reserved — today
-    /// callers route through the generic Conv2d plan with cuDNN's
-    /// auto-detected depthwise path.
+    /// Depthwise 2-D convolution (`groups == c_in`). Today callers
+    /// route through the generic `Conv2dPlan` with `groups` set on
+    /// the descriptor — cuDNN's `cudnnSetConvolutionGroupCount`
+    /// detects the depthwise path automatically.
     DepthwiseConv2d = 11,
     /// `torch.nn.functional.unfold` — extract sliding windows. Reserved.
     Unfold = 12,
     /// `torch.nn.functional.fold` — inverse of unfold. Reserved.
     Fold = 13,
+    /// 1-D transposed convolution forward.
+    ConvTranspose1d = 14,
+    /// 1-D transposed convolution data-gradient.
+    ConvTranspose1dBackwardData = 15,
+    /// 1-D transposed convolution filter-gradient.
+    ConvTranspose1dBackwardFilter = 16,
+    /// 2-D transposed convolution data-gradient.
+    ConvTranspose2dBackwardData = 17,
+    /// 2-D transposed convolution filter-gradient.
+    ConvTranspose2dBackwardFilter = 18,
+    /// 3-D transposed convolution forward.
+    ConvTranspose3d = 19,
+    /// 3-D transposed convolution data-gradient.
+    ConvTranspose3dBackwardData = 20,
+    /// 3-D transposed convolution filter-gradient.
+    ConvTranspose3dBackwardFilter = 21,
 }
 
 /// Pooling-family op discriminant — Category J from the comprehensive
@@ -996,11 +1014,13 @@ pub enum PoolKind {
     AvgPool2dExcludePad = 4,
     /// 2-D average-pool backward, count-exclude-padding.
     AvgPool2dExcludePadBackward = 5,
-    /// 1-D max-pool forward. Reserved.
+    /// 1-D max-pool forward (Phase 11.8). NCL layout via cuDNN's Nd
+    /// pool descriptor with `W = 1`.
     MaxPool1d = 6,
     /// 1-D average-pool forward. Reserved.
     AvgPool1d = 7,
-    /// 3-D max-pool forward. Reserved.
+    /// 3-D max-pool forward (Phase 11.8). NCDHW layout via cuDNN's
+    /// Nd pool descriptor.
     MaxPool3d = 8,
     /// 3-D average-pool forward. Reserved.
     AvgPool3d = 9,
@@ -1012,6 +1032,58 @@ pub enum PoolKind {
     LpPool = 12,
     /// `torch.nn.functional.fractional_max_pool*` — reserved.
     FractionalMaxPool = 13,
+    /// 1-D max-pool backward.
+    MaxPool1dBackward = 14,
+    /// 1-D average-pool backward (count-include-padding).
+    AvgPool1dIncludePadBackward = 15,
+    /// 1-D average-pool forward (count-include-padding).
+    AvgPool1dIncludePad = 16,
+    /// 1-D average-pool forward (count-exclude-padding — PyTorch default).
+    AvgPool1dExcludePad = 17,
+    /// 1-D average-pool backward (count-exclude-padding).
+    AvgPool1dExcludePadBackward = 18,
+    /// 3-D max-pool backward.
+    MaxPool3dBackward = 19,
+    /// 3-D average-pool forward (count-include-padding).
+    AvgPool3dIncludePad = 20,
+    /// 3-D average-pool backward (count-include-padding).
+    AvgPool3dIncludePadBackward = 21,
+    /// 3-D average-pool forward (count-exclude-padding).
+    AvgPool3dExcludePad = 22,
+    /// 3-D average-pool backward (count-exclude-padding).
+    AvgPool3dExcludePadBackward = 23,
+    /// Adaptive average-pool 1-D (Phase 11.8 — cuDNN approximation).
+    AdaptiveAvgPool1d = 24,
+    /// Adaptive average-pool 1-D backward.
+    AdaptiveAvgPool1dBackward = 25,
+    /// Adaptive average-pool 2-D.
+    AdaptiveAvgPool2d = 26,
+    /// Adaptive average-pool 2-D backward.
+    AdaptiveAvgPool2dBackward = 27,
+    /// Adaptive average-pool 3-D.
+    AdaptiveAvgPool3d = 28,
+    /// Adaptive average-pool 3-D backward.
+    AdaptiveAvgPool3dBackward = 29,
+    /// Adaptive max-pool 1-D.
+    AdaptiveMaxPool1d = 30,
+    /// Adaptive max-pool 1-D backward.
+    AdaptiveMaxPool1dBackward = 31,
+    /// Adaptive max-pool 2-D.
+    AdaptiveMaxPool2d = 32,
+    /// Adaptive max-pool 2-D backward.
+    AdaptiveMaxPool2dBackward = 33,
+    /// Adaptive max-pool 3-D.
+    AdaptiveMaxPool3d = 34,
+    /// Adaptive max-pool 3-D backward.
+    AdaptiveMaxPool3dBackward = 35,
+    /// LP-pool 1-D (composite: pow → avg_pool1d → pow).
+    LpPool1d = 36,
+    /// LP-pool 2-D (composite: pow → avg_pool2d → pow).
+    LpPool2d = 37,
+    /// Fractional max-pool 2-D — stubbed (bespoke kernel required).
+    FractionalMaxPool2d = 38,
+    /// Fractional max-pool 3-D — stubbed (bespoke kernel required).
+    FractionalMaxPool3d = 39,
 }
 
 /// Attention-family op discriminant — Category K from the comprehensive
@@ -1474,11 +1546,26 @@ impl GgufBlockFormat {
     }
 
     /// `true` if MMVQ (fused dequant + matvec) is supported for this
-    /// block format. `false` for [`GgufBlockFormat::Q8K`] only —
-    /// llama.cpp / Fuel reserve Q8_K as a CPU-side intermediate.
+    /// block format. As of Phase 11.4, all 11 GGUF block formats ship a
+    /// MMVQ kernel. Q8_K MMVQ is a bespoke baracuda addition (upstream
+    /// llama.cpp / Fuel reserve Q8_K as a CPU-side intermediate and ship
+    /// dequant only); we close that gap to avoid 2× memory traffic on
+    /// the inference decode step.
     #[inline]
     pub const fn has_mmvq(self) -> bool {
-        !matches!(self, GgufBlockFormat::Q8K)
+        match self {
+            GgufBlockFormat::Q4_0
+            | GgufBlockFormat::Q4_1
+            | GgufBlockFormat::Q5_0
+            | GgufBlockFormat::Q5_1
+            | GgufBlockFormat::Q8_0
+            | GgufBlockFormat::Q2K
+            | GgufBlockFormat::Q3K
+            | GgufBlockFormat::Q4K
+            | GgufBlockFormat::Q5K
+            | GgufBlockFormat::Q6K
+            | GgufBlockFormat::Q8K => true,
+        }
     }
 }
 

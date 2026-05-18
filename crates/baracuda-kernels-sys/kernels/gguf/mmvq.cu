@@ -15,14 +15,16 @@
 //
 // Dtype coverage:
 //   Block formats : Q4_0, Q4_1, Q5_0, Q5_1, Q8_0 (type-0/1)
-//                   Q2_K, Q3_K, Q4_K, Q5_K, Q6_K (k-quants, QK_K=256)
+//                   Q2_K, Q3_K, Q4_K, Q5_K, Q6_K, Q8_K (k-quants, QK_K=256)
 //   Activation    : f32   (f16 / bf16 deferred)
 //   Output        : f32
 //
-// Q8_K MMVQ is intentionally NOT shipped — llama.cpp / Fuel reserves
-// Q8_K as a CPU-side intermediate and never wires a `dequantize_mul_mat_vec_q8_k`
-// kernel. The Rust plan's GgufBlockFormat::Q8_K dispatches at MMVQ
-// time will return Error::Unsupported (matches Fuel's behavior).
+// Q8_K MMVQ (Phase 11.4): NOT vendored from llama.cpp / Fuel — upstream
+// ships only the dequant kernel for Q8_K and treats it as a CPU-side
+// intermediate. baracuda adds a fused MMVQ here to close the Fuel team's
+// feedback gap (avoids the 2× memory traffic of dequant-then-GEMV). The
+// kernel is bespoke; math is straightforward since Q8_K is a single
+// f32 scale × 256 signed-byte quants per super-block.
 //
 // k-quants kernels below: vendored verbatim from
 // fuel-cuda-kernels/src/quantized.cu lines 1246..1816 (QK_K == 256 path).
@@ -398,6 +400,71 @@ extern "C" __global__ void baracuda_gguf_mmvq_q5_K_f32_kernel(
     }
 }
 
+// -----------------------------------------------------------------------------
+// Q8_K MMVQ — Phase 11.4. Bespoke (not vendored). Math:
+//   out[r] = Σ_sb d[r,sb] · Σ_{l=0..255} qs[r,sb,l] · y[sb*256 + l]
+// Each block-row's super-block contributes its full 256-element dot
+// product, scaled by the f32 per-super-block scale `d`.
+//
+// Geometry: 1 row per CUDA block, 32 threads per block (one warp).
+// `K_QUANTS_PER_ITERATION = 2` follows the rest of the k-quants family:
+// the warp's 32 threads split into 2 stride groups of 16, and each
+// 16-thread group covers the 256-element super-block as 16 chunks of
+// 16 quants (one chunk per thread). Each thread reads its 16 quants
+// as four vectorized int8x4 loads via `char4` to keep memory traffic
+// at 1B per quant (32 threads × 16 bytes = 512B per super-block load).
+// -----------------------------------------------------------------------------
+
+extern "C" __global__ void baracuda_gguf_mmvq_q8_K_f32_kernel(
+    const void * __restrict__ vx, const float * __restrict__ yy,
+    float * __restrict__ dst, const int ncols, int nrows)
+{
+    static_assert(QK_K % 16 == 0, "QK_K must be a multiple of 16");
+    static_assert(16 % K_QUANTS_PER_ITERATION == 0,
+                  "16 must be divisible by K_QUANTS_PER_ITERATION");
+
+    const int row = blockIdx.x*blockDim.y + threadIdx.y;
+    if (row > nrows) return;
+
+    const int num_blocks_per_row = ncols / QK_K;
+    const int ib0 = row*num_blocks_per_row;
+
+    const block_q8_K * x = (const block_q8_K *)vx + ib0;
+
+    // 32 threads → 16 chunk-owners × K_QUANTS_PER_ITERATION stride groups.
+    const int tid = threadIdx.x / K_QUANTS_PER_ITERATION;  // 0..15
+    const int ix  = threadIdx.x % K_QUANTS_PER_ITERATION;  // 0..1
+    constexpr int CHUNK = QK_K / 16;                       // = 16 quants
+    const int l0 = tid * CHUNK;                            // 0,16,...,240
+
+    float tmp = 0.0f;
+
+    for (int i = ix; i < num_blocks_per_row; i += K_QUANTS_PER_ITERATION) {
+        const float    d = x[i].d;
+        const int8_t * q = x[i].qs + l0;
+        const float  * y = yy + i*QK_K + l0;
+
+        // Accumulate this thread's CHUNK-element chunk of the super-block
+        // in f32, then fold in the f32 super-block scale once.
+        float fsum = 0.0f;
+
+#pragma unroll
+        for (int l = 0; l < CHUNK; ++l) {
+            fsum += (float)q[l] * y[l];
+        }
+        tmp += d * fsum;
+    }
+
+#pragma unroll
+    for (int mask = 16; mask > 0; mask >>= 1) {
+        tmp += __shfl_xor_sync(0xffffffff, tmp, mask, 32);
+    }
+
+    if (threadIdx.x == 0) {
+        dst[row] = tmp;
+    }
+}
+
 extern "C" __global__ void baracuda_gguf_mmvq_q6_K_f32_kernel(
     const void * __restrict__ vx, const float * __restrict__ yy,
     float * __restrict__ dst, const int ncols, int nrows)
@@ -671,6 +738,26 @@ extern "C" int32_t baracuda_kernels_mmvq_q6_K_run(
     dim3 grid(block_num_y, 1, 1);
     dim3 block(WARP_SIZE, GGML_CUDA_MMV_Y, 1);
     baracuda_gguf_mmvq_q6_K_f32_kernel<<<grid, block, 0, stream>>>(
+        x, static_cast<const float*>(y), static_cast<float*>(dst), ncols, nrows);
+    return status_from_launch(cudaPeekAtLastError());
+}
+
+// Q8_K MMVQ launcher — Phase 11.4. Same grid math as the other k-quants.
+extern "C" int32_t baracuda_kernels_mmvq_q8_K_run(
+    int32_t ncols, int32_t nrows,
+    const void * __restrict__ x,
+    const void * __restrict__ y,
+    void       * __restrict__ dst,
+    void * /*workspace*/, size_t /*workspace_bytes*/,
+    void * stream_ptr)
+{
+    if (!x || !y || !dst) return 2;
+    if (ncols <= 0 || nrows <= 0 || (ncols % QK_K) != 0) return 2;
+    cudaStream_t stream = static_cast<cudaStream_t>(stream_ptr);
+    const int block_num_y = ceil_div_host(nrows, GGML_CUDA_MMV_Y);
+    dim3 grid(block_num_y, 1, 1);
+    dim3 block(WARP_SIZE, GGML_CUDA_MMV_Y, 1);
+    baracuda_gguf_mmvq_q8_K_f32_kernel<<<grid, block, 0, stream>>>(
         x, static_cast<const float*>(y), static_cast<float*>(dst), ncols, nrows);
     return status_from_launch(cudaPeekAtLastError());
 }

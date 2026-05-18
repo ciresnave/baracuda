@@ -275,7 +275,13 @@ pub mod conv;
 
 #[cfg(feature = "cudnn")]
 pub use conv::{
-    Conv2dArgs, Conv2dBwArgs, Conv2dDescriptor, Conv2dDwArgs, Conv2dPlan,
+    Conv1dArgs, Conv1dBwArgs, Conv1dDescriptor, Conv1dDwArgs, Conv1dPlan, Conv2dArgs,
+    Conv2dBwArgs, Conv2dDescriptor, Conv2dDwArgs, Conv2dPlan, Conv3dArgs, Conv3dBwArgs,
+    Conv3dDescriptor, Conv3dDwArgs, Conv3dPlan, ConvTranspose1dArgs, ConvTranspose1dBwArgs,
+    ConvTranspose1dDescriptor, ConvTranspose1dDwArgs, ConvTranspose1dPlan, ConvTranspose2dArgs,
+    ConvTranspose2dBwArgs, ConvTranspose2dDescriptor, ConvTranspose2dDwArgs,
+    ConvTranspose2dPlan, ConvTranspose3dArgs, ConvTranspose3dBwArgs, ConvTranspose3dDescriptor,
+    ConvTranspose3dDwArgs, ConvTranspose3dPlan,
 };
 
 // Pooling family — Phase 7 Milestone 7.2 (Category Pooling). Wraps
@@ -288,7 +294,15 @@ pub mod pool;
 
 #[cfg(feature = "cudnn")]
 pub use pool::{
-    AvgPool2dPlan, MaxPool2dPlan, Pool2dBwArgs, Pool2dDescriptor, Pool2dFwArgs, PoolMode,
+    AdaptiveAvgPool1dPlan, AdaptiveAvgPool2dPlan, AdaptiveAvgPool3dPlan, AdaptiveMaxPool1dPlan,
+    AdaptiveMaxPool2dPlan, AdaptiveMaxPool3dPlan, AdaptivePool1dBwArgs, AdaptivePool1dDescriptor,
+    AdaptivePool1dFwArgs, AdaptivePool2dBwArgs, AdaptivePool2dDescriptor, AdaptivePool2dFwArgs,
+    AdaptivePool3dBwArgs, AdaptivePool3dDescriptor, AdaptivePool3dFwArgs, AvgPool1dPlan,
+    AvgPool2dPlan, AvgPool3dPlan, FractionalMaxPool2dDescriptor, FractionalMaxPool2dPlan,
+    FractionalMaxPool3dDescriptor, FractionalMaxPool3dPlan, LpPool1dDescriptor, LpPool1dPlan,
+    LpPool2dDescriptor, LpPool2dPlan, MaxPool1dPlan, MaxPool2dPlan, MaxPool3dPlan, Pool1dBwArgs,
+    Pool1dDescriptor, Pool1dFwArgs, Pool2dBwArgs, Pool2dDescriptor, Pool2dFwArgs, Pool3dBwArgs,
+    Pool3dDescriptor, Pool3dFwArgs, PoolMode,
 };
 
 // FFT family — Milestone 6.4 (Category Fft). Wraps cuFFT for the four

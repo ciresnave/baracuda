@@ -710,13 +710,43 @@ files. Without this, the whole crate couldn't link.
 
 ### 5.2 `lld-link.exe` missing from PATH
 
-**Pattern.** On a fresh Windows + MSVC + CUDA install, `lld-link.exe`
-isn't on PATH by default; nvcc invocations that try to use it fail at
-link time.
+**Pattern.** On a fresh Windows + LLVM install, `lld-link.exe` ships
+under `C:\Program Files\LLVM\bin\` but isn't on PATH by default.
+Rust uses `lld-link.exe` as the linker via the user's
+`~/.cargo/config.toml` (`linker = "lld-link.exe"`); every cargo
+build, test, and publish fails at the link step with `error: linker
+'lld-link.exe' not found` until the LLVM bin dir is reachable.
 
-**Fix.** Ensure `lld-link.exe` is reachable (either install LLVM with
-PATH integration or fall back to MSVC's `lib.exe` / `link.exe`).
-Baracuda's forge driver prefers the latter on MSVC hosts.
+**Fingerprint.**
+
+```text
+error: linker `lld-link.exe` not found
+  |
+  = note: program not found
+
+note: the msvc targets depend on the msvc linker but `link.exe` was
+not found
+```
+
+**Fix.** Add `C:\Program Files\LLVM\bin` to the user or system `PATH`
+once (Windows Settings → Environment Variables). After that, every
+shell — bash, PowerShell, cargo invocations from any tool — resolves
+`lld-link.exe` automatically.
+
+**Interim workaround.** Before the PATH fix landed, every cargo
+invocation in this project prepended `$env:PATH = "C:\Program
+Files\LLVM\bin;$env:PATH"` (PowerShell) or `export PATH="/c/Program
+Files/LLVM/bin:$PATH"` (bash). Hundreds of commits, regressions, and
+publishes ran through that prefix. It's no longer required — the
+PATH was permanently set on 2026-05-18, late in the alpha.26 publish
+sweep.
+
+**Why baracuda pins lld-link rather than MSVC `link.exe`.** lld-link
+gives faster incremental link times for the heavy `baracuda-cutlass`
++ `baracuda-kernels-sys` static libraries (hundreds of CUDA object
+files). On a fresh install of CUDA + MSVC + LLVM, it's the right
+default — the documentation note here is for the install-time gap,
+not a long-term workaround.
 
 ---
 

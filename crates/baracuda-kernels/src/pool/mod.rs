@@ -63,9 +63,25 @@
 //! pooling. The cuDNN alpha/beta scalar dtype is `f32` for `f32` /
 //! `f16` / `bf16` operands and `f64` for `f64` operands.
 
+pub mod adaptive_avg_pool1d;
+pub mod adaptive_avg_pool2d;
+pub mod adaptive_avg_pool3d;
+pub mod adaptive_max_pool1d;
+pub mod adaptive_max_pool2d;
+pub mod adaptive_max_pool3d;
+pub mod avg_pool1d;
 pub mod avg_pool2d;
+pub mod avg_pool3d;
+pub mod fractional_max_pool2d;
+pub mod fractional_max_pool3d;
+pub mod lp_pool1d;
+pub mod lp_pool2d;
+pub mod max_pool1d;
 pub mod max_pool2d;
+pub mod max_pool3d;
+mod pool_nd;
 
+// 2-D pooling (Phase 7 Milestone 7.2) — original trailblazers.
 pub use avg_pool2d::AvgPool2dPlan;
 pub use max_pool2d::MaxPool2dPlan;
 
@@ -73,3 +89,32 @@ pub use max_pool2d::MaxPool2dPlan;
 // (which gets compiled first) and are re-exported here so callers can
 // reach for `pool::Pool2dDescriptor` regardless of which plan they pick.
 pub use max_pool2d::{Pool2dBwArgs, Pool2dDescriptor, Pool2dFwArgs, PoolMode};
+
+// 1-D pooling (Phase 11.8 / Fuel feedback #9).
+pub use avg_pool1d::AvgPool1dPlan;
+pub use max_pool1d::{MaxPool1dPlan, Pool1dBwArgs, Pool1dDescriptor, Pool1dFwArgs};
+
+// 3-D pooling (Phase 11.8).
+pub use avg_pool3d::AvgPool3dPlan;
+pub use max_pool3d::{MaxPool3dPlan, Pool3dBwArgs, Pool3dDescriptor, Pool3dFwArgs};
+
+// Adaptive pooling family (Phase 11.8, cuDNN approximation — see
+// per-module rustdoc for the bit-exact-PyTorch caveat).
+pub use adaptive_avg_pool1d::{
+    AdaptiveAvgPool1dPlan, AdaptivePool1dBwArgs, AdaptivePool1dDescriptor, AdaptivePool1dFwArgs,
+};
+pub use adaptive_avg_pool2d::{
+    AdaptiveAvgPool2dPlan, AdaptivePool2dBwArgs, AdaptivePool2dDescriptor, AdaptivePool2dFwArgs,
+};
+pub use adaptive_avg_pool3d::{
+    AdaptiveAvgPool3dPlan, AdaptivePool3dBwArgs, AdaptivePool3dDescriptor, AdaptivePool3dFwArgs,
+};
+pub use adaptive_max_pool1d::AdaptiveMaxPool1dPlan;
+pub use adaptive_max_pool2d::AdaptiveMaxPool2dPlan;
+pub use adaptive_max_pool3d::AdaptiveMaxPool3dPlan;
+
+// Stubbed pools (bespoke kernel required — see per-module rustdoc).
+pub use fractional_max_pool2d::{FractionalMaxPool2dDescriptor, FractionalMaxPool2dPlan};
+pub use fractional_max_pool3d::{FractionalMaxPool3dDescriptor, FractionalMaxPool3dPlan};
+pub use lp_pool1d::{LpPool1dDescriptor, LpPool1dPlan};
+pub use lp_pool2d::{LpPool2dDescriptor, LpPool2dPlan};

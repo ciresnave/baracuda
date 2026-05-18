@@ -84,6 +84,7 @@ mod cudnn_impl {
                 stride_w: 1,
                 dilation_h: 1,
                 dilation_w: 1,
+                groups: 1,
                 element: kind,
             };
             let plan = match Conv2dPlan::<T>::select(&stream, &desc, PlanPreference::default()) {

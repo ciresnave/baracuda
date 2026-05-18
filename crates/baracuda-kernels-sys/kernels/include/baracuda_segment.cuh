@@ -45,6 +45,8 @@
 #include <cfloat>
 #include <cuda_runtime.h>
 
+#include "baracuda_atomic.cuh"
+
 namespace baracuda { namespace segment {
 
 // =============================================================================
@@ -134,9 +136,17 @@ __device__ inline void atomic_min_f64(double* addr, double val) {
     } while (assumed != old);
 }
 
-template <typename T> __device__ inline void seg_atomic_add(T* addr, T val);
-template <> __device__ inline void seg_atomic_add<float >(float*  a, float  v) { atomicAdd(a, v); }
-template <> __device__ inline void seg_atomic_add<double>(double* a, double v) { atomicAdd(a, v); }
+// `seg_atomic_add` routes to the unified `baracuda::atomic::add<T>`
+// helper from `baracuda_atomic.cuh` (Phase 11.3 / Fuel team feedback
+// #6) — generic over every dtype with a native or CAS-emulated
+// atomicAdd. f32 / f64 fall through to the native intrinsic; half /
+// bf16 use a 32-bit `atomicCAS` loop. The kernels here today only
+// instantiate f32 / f64 but the helper covers the future half/bf16
+// extension automatically.
+template <typename T>
+__device__ __forceinline__ void seg_atomic_add(T* addr, T val) {
+    baracuda::atomic::add<T>(addr, val);
+}
 
 template <typename T> __device__ inline void seg_atomic_max(T* addr, T val);
 template <> __device__ inline void seg_atomic_max<float >(float*  a, float  v) { atomic_max_f32(a, v); }
@@ -158,23 +168,25 @@ template <> __device__ inline void seg_atomic_min<double>(double* a, double v) {
 enum SegReduceOp : int { SEG_SUM = 0, SEG_MEAN = 1, SEG_MAX = 2, SEG_MIN = 3, SEG_PROD = 4 };
 
 // Lower bound on monotonically non-decreasing array — first index i
-// with segment_ids[i] >= target. Returns N if none.
+// with segment_ids[i] >= target. Returns N if none. Phase 11.5:
+// templated on the segment-id dtype.
+template <typename IndexT>
 __device__ inline int32_t seg_lower_bound(
-    const int32_t* __restrict__ seg_ids, int32_t n, int32_t target)
+    const IndexT* __restrict__ seg_ids, int32_t n, int32_t target)
 {
     int32_t lo = 0, hi = n;
     while (lo < hi) {
         int32_t mid = lo + ((hi - lo) >> 1);
-        if (seg_ids[mid] < target) lo = mid + 1;
-        else                       hi = mid;
+        if ((int64_t)seg_ids[mid] < (int64_t)target) lo = mid + 1;
+        else                                         hi = mid;
     }
     return lo;
 }
 
-template <typename T, int OP>
+template <typename T, int OP, typename IndexT>
 __global__ void segment_sorted_kernel(
     const T*       __restrict__ input,        // [N, D]
-    const int32_t* __restrict__ segment_ids,  // [N]
+    const IndexT*  __restrict__ segment_ids,  // [N]
     T*             __restrict__ output,       // [num_segments, D]
     int32_t        N,
     int32_t        D,
@@ -225,9 +237,9 @@ __global__ void segment_sorted_kernel(
     }
 }
 
-template <typename T, int OP>
+template <typename T, int OP, typename IndexT>
 __host__ inline int32_t launch_segment_sorted(
-    const T* input, const int32_t* segment_ids, T* output,
+    const T* input, const IndexT* segment_ids, T* output,
     int32_t N, int32_t D, int32_t num_segments,
     cudaStream_t stream)
 {
@@ -241,7 +253,7 @@ __host__ inline int32_t launch_segment_sorted(
     int64_t blocks_i64 = (total + kBlock - 1) / kBlock;
     int blocks = static_cast<int>(blocks_i64 > kMaxBlocks ? kMaxBlocks : blocks_i64);
     if (blocks <= 0) blocks = 1;
-    segment_sorted_kernel<T, OP><<<blocks, kBlock, 0, stream>>>(
+    segment_sorted_kernel<T, OP, IndexT><<<blocks, kBlock, 0, stream>>>(
         input, segment_ids, output, N, D, num_segments);
     cudaError_t err = cudaGetLastError();
     return (err == cudaSuccess) ? 0 : 5;
@@ -258,10 +270,10 @@ __host__ inline int32_t launch_segment_sorted(
 // memset value generically); the safe-layer plan zeroes / fills as
 // part of its run().
 
-template <typename T>
+template <typename T, typename IndexT>
 __global__ void unsorted_segment_sum_kernel(
     const T*       __restrict__ input,
-    const int32_t* __restrict__ segment_ids,
+    const IndexT*  __restrict__ segment_ids,
     T*             __restrict__ output,
     int32_t        N,
     int32_t        D,
@@ -273,16 +285,16 @@ __global__ void unsorted_segment_sum_kernel(
     for (int64_t i = tid; i < total; i += step) {
         int32_t n = (int32_t)(i / (int64_t)D);
         int32_t d = (int32_t)(i - (int64_t)n * (int64_t)D);
-        int32_t s = segment_ids[n];
-        if (s < 0 || s >= num_segments) continue;
-        seg_atomic_add<T>(&output[(int64_t)s * (int64_t)D + (int64_t)d], input[i]);
+        int64_t s = (int64_t)segment_ids[n];
+        if (s < 0 || s >= (int64_t)num_segments) continue;
+        seg_atomic_add<T>(&output[s * (int64_t)D + (int64_t)d], input[i]);
     }
 }
 
-template <typename T>
+template <typename T, typename IndexT>
 __global__ void unsorted_segment_max_kernel(
     const T*       __restrict__ input,
-    const int32_t* __restrict__ segment_ids,
+    const IndexT*  __restrict__ segment_ids,
     T*             __restrict__ output,
     int32_t        N,
     int32_t        D,
@@ -294,16 +306,16 @@ __global__ void unsorted_segment_max_kernel(
     for (int64_t i = tid; i < total; i += step) {
         int32_t n = (int32_t)(i / (int64_t)D);
         int32_t d = (int32_t)(i - (int64_t)n * (int64_t)D);
-        int32_t s = segment_ids[n];
-        if (s < 0 || s >= num_segments) continue;
-        seg_atomic_max<T>(&output[(int64_t)s * (int64_t)D + (int64_t)d], input[i]);
+        int64_t s = (int64_t)segment_ids[n];
+        if (s < 0 || s >= (int64_t)num_segments) continue;
+        seg_atomic_max<T>(&output[s * (int64_t)D + (int64_t)d], input[i]);
     }
 }
 
-template <typename T>
+template <typename T, typename IndexT>
 __global__ void unsorted_segment_min_kernel(
     const T*       __restrict__ input,
-    const int32_t* __restrict__ segment_ids,
+    const IndexT*  __restrict__ segment_ids,
     T*             __restrict__ output,
     int32_t        N,
     int32_t        D,
@@ -315,9 +327,9 @@ __global__ void unsorted_segment_min_kernel(
     for (int64_t i = tid; i < total; i += step) {
         int32_t n = (int32_t)(i / (int64_t)D);
         int32_t d = (int32_t)(i - (int64_t)n * (int64_t)D);
-        int32_t s = segment_ids[n];
-        if (s < 0 || s >= num_segments) continue;
-        seg_atomic_min<T>(&output[(int64_t)s * (int64_t)D + (int64_t)d], input[i]);
+        int64_t s = (int64_t)segment_ids[n];
+        if (s < 0 || s >= (int64_t)num_segments) continue;
+        seg_atomic_min<T>(&output[s * (int64_t)D + (int64_t)d], input[i]);
     }
 }
 
@@ -342,9 +354,9 @@ __host__ inline void launch_init_fill(T* out, int64_t n, T value, cudaStream_t s
     init_fill_kernel<T><<<blocks, kBlock, 0, stream>>>(out, n, value);
 }
 
-template <typename T>
+template <typename T, typename IndexT>
 __host__ inline int32_t launch_unsorted_segment_sum(
-    const T* input, const int32_t* segment_ids, T* output,
+    const T* input, const IndexT* segment_ids, T* output,
     int32_t N, int32_t D, int32_t num_segments,
     cudaStream_t stream)
 {
@@ -366,15 +378,15 @@ __host__ inline int32_t launch_unsorted_segment_sum(
     int64_t blocks_i64 = (total + kBlock - 1) / kBlock;
     int blocks = static_cast<int>(blocks_i64 > kMaxBlocks ? kMaxBlocks : blocks_i64);
     if (blocks <= 0) blocks = 1;
-    unsorted_segment_sum_kernel<T><<<blocks, kBlock, 0, stream>>>(
+    unsorted_segment_sum_kernel<T, IndexT><<<blocks, kBlock, 0, stream>>>(
         input, segment_ids, output, N, D, num_segments);
     cudaError_t err = cudaGetLastError();
     return (err == cudaSuccess) ? 0 : 5;
 }
 
-template <typename T>
+template <typename T, typename IndexT>
 __host__ inline int32_t launch_unsorted_segment_max(
-    const T* input, const int32_t* segment_ids, T* output,
+    const T* input, const IndexT* segment_ids, T* output,
     int32_t N, int32_t D, int32_t num_segments,
     cudaStream_t stream)
 {
@@ -392,15 +404,15 @@ __host__ inline int32_t launch_unsorted_segment_max(
     int64_t blocks_i64 = (total + kBlock - 1) / kBlock;
     int blocks = static_cast<int>(blocks_i64 > kMaxBlocks ? kMaxBlocks : blocks_i64);
     if (blocks <= 0) blocks = 1;
-    unsorted_segment_max_kernel<T><<<blocks, kBlock, 0, stream>>>(
+    unsorted_segment_max_kernel<T, IndexT><<<blocks, kBlock, 0, stream>>>(
         input, segment_ids, output, N, D, num_segments);
     cudaError_t err = cudaGetLastError();
     return (err == cudaSuccess) ? 0 : 5;
 }
 
-template <typename T>
+template <typename T, typename IndexT>
 __host__ inline int32_t launch_unsorted_segment_min(
-    const T* input, const int32_t* segment_ids, T* output,
+    const T* input, const IndexT* segment_ids, T* output,
     int32_t N, int32_t D, int32_t num_segments,
     cudaStream_t stream)
 {
@@ -418,7 +430,7 @@ __host__ inline int32_t launch_unsorted_segment_min(
     int64_t blocks_i64 = (total + kBlock - 1) / kBlock;
     int blocks = static_cast<int>(blocks_i64 > kMaxBlocks ? kMaxBlocks : blocks_i64);
     if (blocks <= 0) blocks = 1;
-    unsorted_segment_min_kernel<T><<<blocks, kBlock, 0, stream>>>(
+    unsorted_segment_min_kernel<T, IndexT><<<blocks, kBlock, 0, stream>>>(
         input, segment_ids, output, N, D, num_segments);
     cudaError_t err = cudaGetLastError();
     return (err == cudaSuccess) ? 0 : 5;
@@ -432,17 +444,18 @@ __host__ inline int32_t launch_unsorted_segment_min(
 // FW computes the count inline from the binary-search range, so it
 // doesn't need this helper.
 
+template <typename IndexT>
 __global__ void seg_count_kernel(
-    const int32_t* __restrict__ segment_ids,
-    int32_t*       __restrict__ counts,    // [num_segments] zero-init
-    int32_t        N,
-    int32_t        num_segments)
+    const IndexT* __restrict__ segment_ids,
+    int32_t*      __restrict__ counts,    // [num_segments] zero-init
+    int32_t       N,
+    int32_t       num_segments)
 {
     int64_t tid  = (int64_t)blockIdx.x * (int64_t)blockDim.x + (int64_t)threadIdx.x;
     int64_t step = (int64_t)gridDim.x  * (int64_t)blockDim.x;
     for (int64_t i = tid; i < N; i += step) {
-        int32_t s = segment_ids[i];
-        if (s < 0 || s >= num_segments) continue;
+        int64_t s = (int64_t)segment_ids[i];
+        if (s < 0 || s >= (int64_t)num_segments) continue;
         atomicAdd(&counts[s], 1);
     }
 }
@@ -464,16 +477,16 @@ __global__ void seg_mean_divide_kernel(
     }
 }
 
-template <typename T>
+template <typename T, typename IndexT>
 __host__ inline int32_t launch_unsorted_segment_mean(
-    const T* input, const int32_t* segment_ids, T* output,
+    const T* input, const IndexT* segment_ids, T* output,
     int32_t* counts_workspace,            // [num_segments]
     int32_t N, int32_t D, int32_t num_segments,
     cudaStream_t stream)
 {
     if (N < 0 || D < 0 || num_segments < 0) return 2;
-    int32_t s = launch_unsorted_segment_sum<T>(input, segment_ids, output,
-                                               N, D, num_segments, stream);
+    int32_t s = launch_unsorted_segment_sum<T, IndexT>(input, segment_ids, output,
+                                                       N, D, num_segments, stream);
     if (s != 0) return s;
     if (num_segments == 0) return 0;
     if (counts_workspace == nullptr) return 4;
@@ -486,7 +499,7 @@ __host__ inline int32_t launch_unsorted_segment_mean(
         int64_t blocks_i64 = ((int64_t)N + kBlock - 1) / kBlock;
         int blocks = static_cast<int>(blocks_i64 > kMaxBlocks ? kMaxBlocks : blocks_i64);
         if (blocks <= 0) blocks = 1;
-        seg_count_kernel<<<blocks, kBlock, 0, stream>>>(
+        seg_count_kernel<IndexT><<<blocks, kBlock, 0, stream>>>(
             segment_ids, counts_workspace, N, num_segments);
     }
     int64_t out_total = (int64_t)num_segments * (int64_t)D;
@@ -518,10 +531,10 @@ __host__ inline int32_t launch_unsorted_segment_mean(
 //     kernel is simpler and amortizes across rows).
 //   - unsorted: same path.
 
-template <typename T>
+template <typename T, typename IndexT>
 __global__ void segment_sum_backward_kernel(
     const T*       __restrict__ d_output,     // [num_segments, D]
-    const int32_t* __restrict__ segment_ids,  // [N]
+    const IndexT*  __restrict__ segment_ids,  // [N]
     T*             __restrict__ d_input,      // [N, D]
     int32_t        N,
     int32_t        D,
@@ -533,18 +546,18 @@ __global__ void segment_sum_backward_kernel(
     for (int64_t i = tid; i < total; i += step) {
         int32_t n = (int32_t)(i / (int64_t)D);
         int32_t d = (int32_t)(i - (int64_t)n * (int64_t)D);
-        int32_t s = segment_ids[n];
+        int64_t s = (int64_t)segment_ids[n];
         T v = seg_zero<T>();
-        if (s >= 0 && s < num_segments) {
-            v = d_output[(int64_t)s * (int64_t)D + (int64_t)d];
+        if (s >= 0 && s < (int64_t)num_segments) {
+            v = d_output[s * (int64_t)D + (int64_t)d];
         }
         d_input[i] = v;
     }
 }
 
-template <typename T>
+template <typename T, typename IndexT>
 __host__ inline int32_t launch_segment_sum_backward(
-    const T* d_output, const int32_t* segment_ids, T* d_input,
+    const T* d_output, const IndexT* segment_ids, T* d_input,
     int32_t N, int32_t D, int32_t num_segments,
     cudaStream_t stream)
 {
@@ -557,16 +570,16 @@ __host__ inline int32_t launch_segment_sum_backward(
     int64_t blocks_i64 = (total + kBlock - 1) / kBlock;
     int blocks = static_cast<int>(blocks_i64 > kMaxBlocks ? kMaxBlocks : blocks_i64);
     if (blocks <= 0) blocks = 1;
-    segment_sum_backward_kernel<T><<<blocks, kBlock, 0, stream>>>(
+    segment_sum_backward_kernel<T, IndexT><<<blocks, kBlock, 0, stream>>>(
         d_output, segment_ids, d_input, N, D, num_segments);
     cudaError_t err = cudaGetLastError();
     return (err == cudaSuccess) ? 0 : 5;
 }
 
-template <typename T>
+template <typename T, typename IndexT>
 __global__ void segment_mean_backward_kernel(
     const T*       __restrict__ d_output,     // [num_segments, D]
-    const int32_t* __restrict__ segment_ids,  // [N]
+    const IndexT*  __restrict__ segment_ids,  // [N]
     const int32_t* __restrict__ counts,       // [num_segments]
     T*             __restrict__ d_input,      // [N, D]
     int32_t        N,
@@ -579,21 +592,21 @@ __global__ void segment_mean_backward_kernel(
     for (int64_t i = tid; i < total; i += step) {
         int32_t n = (int32_t)(i / (int64_t)D);
         int32_t d = (int32_t)(i - (int64_t)n * (int64_t)D);
-        int32_t s = segment_ids[n];
+        int64_t s = (int64_t)segment_ids[n];
         T v = seg_zero<T>();
-        if (s >= 0 && s < num_segments) {
+        if (s >= 0 && s < (int64_t)num_segments) {
             int32_t c = counts[s];
             if (c > 0) {
-                v = d_output[(int64_t)s * (int64_t)D + (int64_t)d] / (T)(double)c;
+                v = d_output[s * (int64_t)D + (int64_t)d] / (T)(double)c;
             }
         }
         d_input[i] = v;
     }
 }
 
-template <typename T>
+template <typename T, typename IndexT>
 __host__ inline int32_t launch_segment_mean_backward(
-    const T* d_output, const int32_t* segment_ids, T* d_input,
+    const T* d_output, const IndexT* segment_ids, T* d_input,
     int32_t* counts_workspace,                     // [num_segments]
     int32_t N, int32_t D, int32_t num_segments,
     cudaStream_t stream)
@@ -613,7 +626,7 @@ __host__ inline int32_t launch_segment_mean_backward(
             int64_t blocks_i64 = ((int64_t)N + kBlock - 1) / kBlock;
             int blocks = static_cast<int>(blocks_i64 > kMaxBlocks ? kMaxBlocks : blocks_i64);
             if (blocks <= 0) blocks = 1;
-            seg_count_kernel<<<blocks, kBlock, 0, stream>>>(
+            seg_count_kernel<IndexT><<<blocks, kBlock, 0, stream>>>(
                 segment_ids, counts_workspace, N, num_segments);
         }
     }
@@ -622,7 +635,7 @@ __host__ inline int32_t launch_segment_mean_backward(
     int64_t blocks_i64 = (total + kBlock - 1) / kBlock;
     int blocks = static_cast<int>(blocks_i64 > kMaxBlocks ? kMaxBlocks : blocks_i64);
     if (blocks <= 0) blocks = 1;
-    segment_mean_backward_kernel<T><<<blocks, kBlock, 0, stream>>>(
+    segment_mean_backward_kernel<T, IndexT><<<blocks, kBlock, 0, stream>>>(
         d_output, segment_ids, counts_workspace, d_input, N, D, num_segments);
     cudaError_t err = cudaGetLastError();
     return (err == cudaSuccess) ? 0 : 5;
@@ -660,7 +673,9 @@ __host__ inline int32_t launch_segment_mean_backward(
 //      buffer.
 // =============================================================================
 
-#define BARACUDA_KERNELS_SEGMENT_SORTED_INSTANTIATE(NAME, T, OP)                                  \
+// Phase 11.5: `INDEX_T` parameter selects the segment-id dtype
+// (`int32_t` or `int64_t`).
+#define BARACUDA_KERNELS_SEGMENT_SORTED_INSTANTIATE(NAME, T, OP, INDEX_T)                         \
     extern "C" int32_t baracuda_kernels_##NAME##_run(                                             \
         int32_t N, int32_t D, int32_t num_segments,                                               \
         const void* input,                                                                        \
@@ -675,14 +690,14 @@ __host__ inline int32_t launch_segment_mean_backward(
         if (output == nullptr) return 2;                                                          \
         if (N > 0 && (input == nullptr || segment_ids == nullptr)) return 2;                      \
         cudaStream_t stream = static_cast<cudaStream_t>(stream_ptr);                              \
-        return baracuda::segment::launch_segment_sorted<T, OP>(                                   \
+        return baracuda::segment::launch_segment_sorted<T, OP, INDEX_T>(                          \
             static_cast<const T*>(input),                                                         \
-            static_cast<const int32_t*>(segment_ids),                                             \
+            static_cast<const INDEX_T*>(segment_ids),                                             \
             static_cast<T*>(output),                                                              \
             N, D, num_segments, stream);                                                          \
     }
 
-#define BARACUDA_KERNELS_UNSORTED_SEGMENT_SUM_INSTANTIATE(NAME, T)                                \
+#define BARACUDA_KERNELS_UNSORTED_SEGMENT_SUM_INSTANTIATE(NAME, T, INDEX_T)                       \
     extern "C" int32_t baracuda_kernels_##NAME##_run(                                             \
         int32_t N, int32_t D, int32_t num_segments,                                               \
         const void* input,                                                                        \
@@ -692,14 +707,14 @@ __host__ inline int32_t launch_segment_mean_backward(
         void* stream_ptr)                                                                         \
     {                                                                                              \
         cudaStream_t stream = static_cast<cudaStream_t>(stream_ptr);                              \
-        return baracuda::segment::launch_unsorted_segment_sum<T>(                                 \
+        return baracuda::segment::launch_unsorted_segment_sum<T, INDEX_T>(                        \
             static_cast<const T*>(input),                                                         \
-            static_cast<const int32_t*>(segment_ids),                                             \
+            static_cast<const INDEX_T*>(segment_ids),                                             \
             static_cast<T*>(output),                                                              \
             N, D, num_segments, stream);                                                          \
     }
 
-#define BARACUDA_KERNELS_UNSORTED_SEGMENT_MAX_INSTANTIATE(NAME, T)                                \
+#define BARACUDA_KERNELS_UNSORTED_SEGMENT_MAX_INSTANTIATE(NAME, T, INDEX_T)                       \
     extern "C" int32_t baracuda_kernels_##NAME##_run(                                             \
         int32_t N, int32_t D, int32_t num_segments,                                               \
         const void* input,                                                                        \
@@ -709,14 +724,14 @@ __host__ inline int32_t launch_segment_mean_backward(
         void* stream_ptr)                                                                         \
     {                                                                                              \
         cudaStream_t stream = static_cast<cudaStream_t>(stream_ptr);                              \
-        return baracuda::segment::launch_unsorted_segment_max<T>(                                 \
+        return baracuda::segment::launch_unsorted_segment_max<T, INDEX_T>(                        \
             static_cast<const T*>(input),                                                         \
-            static_cast<const int32_t*>(segment_ids),                                             \
+            static_cast<const INDEX_T*>(segment_ids),                                             \
             static_cast<T*>(output),                                                              \
             N, D, num_segments, stream);                                                          \
     }
 
-#define BARACUDA_KERNELS_UNSORTED_SEGMENT_MIN_INSTANTIATE(NAME, T)                                \
+#define BARACUDA_KERNELS_UNSORTED_SEGMENT_MIN_INSTANTIATE(NAME, T, INDEX_T)                       \
     extern "C" int32_t baracuda_kernels_##NAME##_run(                                             \
         int32_t N, int32_t D, int32_t num_segments,                                               \
         const void* input,                                                                        \
@@ -726,14 +741,14 @@ __host__ inline int32_t launch_segment_mean_backward(
         void* stream_ptr)                                                                         \
     {                                                                                              \
         cudaStream_t stream = static_cast<cudaStream_t>(stream_ptr);                              \
-        return baracuda::segment::launch_unsorted_segment_min<T>(                                 \
+        return baracuda::segment::launch_unsorted_segment_min<T, INDEX_T>(                        \
             static_cast<const T*>(input),                                                         \
-            static_cast<const int32_t*>(segment_ids),                                             \
+            static_cast<const INDEX_T*>(segment_ids),                                             \
             static_cast<T*>(output),                                                              \
             N, D, num_segments, stream);                                                          \
     }
 
-#define BARACUDA_KERNELS_UNSORTED_SEGMENT_MEAN_INSTANTIATE(NAME, T)                               \
+#define BARACUDA_KERNELS_UNSORTED_SEGMENT_MEAN_INSTANTIATE(NAME, T, INDEX_T)                      \
     extern "C" int32_t baracuda_kernels_##NAME##_run(                                             \
         int32_t N, int32_t D, int32_t num_segments,                                               \
         const void* input,                                                                        \
@@ -747,15 +762,15 @@ __host__ inline int32_t launch_segment_mean_backward(
         if ((size_t)num_segments * sizeof(int32_t) > workspace_bytes && num_segments > 0)         \
             return 4;                                                                              \
         cudaStream_t stream = static_cast<cudaStream_t>(stream_ptr);                              \
-        return baracuda::segment::launch_unsorted_segment_mean<T>(                                \
+        return baracuda::segment::launch_unsorted_segment_mean<T, INDEX_T>(                       \
             static_cast<const T*>(input),                                                         \
-            static_cast<const int32_t*>(segment_ids),                                             \
+            static_cast<const INDEX_T*>(segment_ids),                                             \
             static_cast<T*>(output),                                                              \
             static_cast<int32_t*>(workspace),                                                     \
             N, D, num_segments, stream);                                                          \
     }
 
-#define BARACUDA_KERNELS_SEGMENT_SUM_BACKWARD_INSTANTIATE(NAME, T)                                \
+#define BARACUDA_KERNELS_SEGMENT_SUM_BACKWARD_INSTANTIATE(NAME, T, INDEX_T)                       \
     extern "C" int32_t baracuda_kernels_##NAME##_run(                                             \
         int32_t N, int32_t D, int32_t num_segments,                                               \
         const void* d_output,                                                                     \
@@ -765,14 +780,14 @@ __host__ inline int32_t launch_segment_mean_backward(
         void* stream_ptr)                                                                         \
     {                                                                                              \
         cudaStream_t stream = static_cast<cudaStream_t>(stream_ptr);                              \
-        return baracuda::segment::launch_segment_sum_backward<T>(                                 \
+        return baracuda::segment::launch_segment_sum_backward<T, INDEX_T>(                        \
             static_cast<const T*>(d_output),                                                      \
-            static_cast<const int32_t*>(segment_ids),                                             \
+            static_cast<const INDEX_T*>(segment_ids),                                             \
             static_cast<T*>(d_input),                                                             \
             N, D, num_segments, stream);                                                          \
     }
 
-#define BARACUDA_KERNELS_SEGMENT_MEAN_BACKWARD_INSTANTIATE(NAME, T)                               \
+#define BARACUDA_KERNELS_SEGMENT_MEAN_BACKWARD_INSTANTIATE(NAME, T, INDEX_T)                      \
     extern "C" int32_t baracuda_kernels_##NAME##_run(                                             \
         int32_t N, int32_t D, int32_t num_segments,                                               \
         const void* d_output,                                                                     \
@@ -786,9 +801,9 @@ __host__ inline int32_t launch_segment_mean_backward(
         if ((size_t)num_segments * sizeof(int32_t) > workspace_bytes && num_segments > 0)         \
             return 4;                                                                              \
         cudaStream_t stream = static_cast<cudaStream_t>(stream_ptr);                              \
-        return baracuda::segment::launch_segment_mean_backward<T>(                                \
+        return baracuda::segment::launch_segment_mean_backward<T, INDEX_T>(                       \
             static_cast<const T*>(d_output),                                                      \
-            static_cast<const int32_t*>(segment_ids),                                             \
+            static_cast<const INDEX_T*>(segment_ids),                                             \
             static_cast<T*>(d_input),                                                             \
             static_cast<int32_t*>(workspace),                                                     \
             N, D, num_segments, stream);                                                          \

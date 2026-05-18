@@ -27750,6 +27750,8 @@ unsafe extern "C" {
     /// Used by the CTC plan to describe the rank-3 `[T, B, C]`
     /// log-probability / gradient tensors that don't fit the rank-4
     /// `NCHW` / `NHWC` shape that [`cudnnSetTensor4dDescriptor`] expects.
+    /// Also used by Conv1d / Conv3d / ConvTranspose plans for rank-3
+    /// `[N, C, L]` and rank-5 `[N, C, D, H, W]` activation tensors.
     ///
     /// # Safety
     /// `desc` must be a live tensor descriptor; `dim_a` and `stride_a`
@@ -27760,6 +27762,65 @@ unsafe extern "C" {
         nb_dims: i32,
         dim_a: *const i32,
         stride_a: *const i32,
+    ) -> i32;
+
+    /// `cudnnSetFilterNdDescriptor(desc, dtype, format, nb_dims, dim_a)`
+    /// — configure an n-D filter descriptor. Returns 0 on success.
+    ///
+    /// Used by Conv1d / Conv3d / ConvTranspose plans to describe the
+    /// `[C_out, C_in_per_group, L_filt]` (rank-3) and `[C_out,
+    /// C_in_per_group, D_filt, H_filt, W_filt]` (rank-5) filter shapes.
+    /// The leading two axes are always `K = C_out` and `C =
+    /// C_in / groups`.
+    ///
+    /// # Safety
+    /// `desc` must be a live filter descriptor; `dim_a` must point to
+    /// at least `nb_dims` readable `i32` values.
+    pub fn cudnnSetFilterNdDescriptor(
+        desc: cudnnFilterDescriptor_t,
+        dtype: cudnnDataType_t,
+        format: cudnnTensorFormat_t,
+        nb_dims: i32,
+        dim_a: *const i32,
+    ) -> i32;
+
+    /// `cudnnSetConvolutionNdDescriptor(desc, array_length, pad_a,
+    /// stride_a, dilation_a, mode, compute_type)` — configure an n-D
+    /// convolution descriptor. Returns 0 on success.
+    ///
+    /// `array_length` is the spatial rank (1 for Conv1d, 2 for Conv2d,
+    /// 3 for Conv3d) — **not** the tensor rank. Activation and filter
+    /// tensors carry two extra axes (`[N, C, ...]` / `[K, C, ...]`)
+    /// not counted here. `pad_a` / `stride_a` / `dilation_a` must each
+    /// point to `array_length` `i32` values.
+    ///
+    /// # Safety
+    /// `desc` must be a live convolution descriptor; the three array
+    /// pointers must each point to at least `array_length` readable
+    /// `i32` values.
+    pub fn cudnnSetConvolutionNdDescriptor(
+        desc: cudnnConvolutionDescriptor_t,
+        array_length: i32,
+        pad_a: *const i32,
+        stride_a: *const i32,
+        dilation_a: *const i32,
+        mode: cudnnConvolutionMode_t,
+        compute_type: cudnnDataType_t,
+    ) -> i32;
+
+    /// `cudnnSetConvolutionGroupCount(desc, group_count)` — set the
+    /// group count for grouped / depthwise convolution. Returns 0 on
+    /// success. `group_count == 1` (the cuDNN default) is plain dense
+    /// convolution; `group_count == c_in` is depthwise.
+    ///
+    /// Must be called **after** `cudnnSetConvolution{2d,Nd}Descriptor`
+    /// — that call resets the group count to 1.
+    ///
+    /// # Safety
+    /// `desc` must be a live convolution descriptor.
+    pub fn cudnnSetConvolutionGroupCount(
+        desc: cudnnConvolutionDescriptor_t,
+        group_count: i32,
     ) -> i32;
 
     // ----- CTC loss --------------------------------------------------------
@@ -27901,6 +27962,37 @@ unsafe extern "C" {
         pad_w: i32,
         stride_h: i32,
         stride_w: i32,
+    ) -> i32;
+
+    /// `cudnnSetPoolingNdDescriptor(desc, mode, nan_prop, nb_dims,
+    /// window_a, padding_a, stride_a)` — configure an N-dimensional
+    /// pooling descriptor. `nb_dims` is the count of *spatial* axes
+    /// (1, 2, or 3 — i.e. excluding the leading `N` and `C` axes of
+    /// the data tensor). `window_a`, `padding_a`, and `stride_a` each
+    /// point to `nb_dims` readable `i32` values describing the window
+    /// extent, zero-padding, and stride along each spatial axis in
+    /// order. Returns 0 on success.
+    ///
+    /// Used by 1-D / 3-D pooling plans (and by the cuDNN approximation
+    /// of adaptive pool) — they bind a matching rank-3 / rank-5 tensor
+    /// descriptor via [`cudnnSetTensorNdDescriptor`] and then drive
+    /// [`cudnnPoolingForward`] / [`cudnnPoolingBackward`] with the
+    /// resulting Nd pooling descriptor. The exec entry points are
+    /// rank-agnostic — they don't take the rank as an argument and
+    /// instead read it off the descriptor.
+    ///
+    /// # Safety
+    /// `desc` must be a live pooling descriptor. `window_a`,
+    /// `padding_a`, and `stride_a` must each be readable for at least
+    /// `nb_dims` `i32` values.
+    pub fn cudnnSetPoolingNdDescriptor(
+        desc: cudnnPoolingDescriptor_t,
+        mode: cudnnPoolingMode_t,
+        nan_propagation: cudnnNanPropagation_t,
+        nb_dims: i32,
+        window_a: *const i32,
+        padding_a: *const i32,
+        stride_a: *const i32,
     ) -> i32;
 
     // ----- pooling exec ------------------------------------------------
@@ -28430,6 +28522,330 @@ unsafe extern "C" {
         stream: *mut c_void,
     ) -> i32;
 
+    // ---------- i64-index variants (Phase 11.5 / Fuel team feedback #7) ----------
+    //
+    // PyTorch defaults the index tensor to int64 for gather / scatter /
+    // index_select / one_hot. Casting an i64 index tensor down to i32
+    // on the host before each launch is a measurable overhead the
+    // safe layer wanted gone. Each `_i64idx_` symbol is identical to
+    // the i32 sibling above except the `index` / `idx` / `src`
+    // pointer dereferences int64.
+
+    /// `gather` FW — f32, i64 indices.
+    pub fn baracuda_kernels_gather_i64idx_f32_run(
+        out_numel: i64,
+        rank: i32,
+        gather_dim: i32,
+        src_dim_size: i32,
+        out_shape: *const i32,
+        stride_src: *const i64,
+        stride_index: *const i64,
+        stride_out: *const i64,
+        src: *const c_void,
+        index: *const c_void,
+        out: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `gather` FW — f64, i64 indices.
+    pub fn baracuda_kernels_gather_i64idx_f64_run(
+        out_numel: i64,
+        rank: i32,
+        gather_dim: i32,
+        src_dim_size: i32,
+        out_shape: *const i32,
+        stride_src: *const i64,
+        stride_index: *const i64,
+        stride_out: *const i64,
+        src: *const c_void,
+        index: *const c_void,
+        out: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `gather` FW — i32 values, i64 indices.
+    pub fn baracuda_kernels_gather_i64idx_i32_run(
+        out_numel: i64,
+        rank: i32,
+        gather_dim: i32,
+        src_dim_size: i32,
+        out_shape: *const i32,
+        stride_src: *const i64,
+        stride_index: *const i64,
+        stride_out: *const i64,
+        src: *const c_void,
+        index: *const c_void,
+        out: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `gather` BW — f32, i64 indices (atomicAdd).
+    pub fn baracuda_kernels_gather_backward_i64idx_f32_run(
+        out_numel: i64,
+        rank: i32,
+        gather_dim: i32,
+        src_dim_size: i32,
+        out_shape: *const i32,
+        stride_dout: *const i64,
+        stride_index: *const i64,
+        stride_dsrc: *const i64,
+        dout: *const c_void,
+        index: *const c_void,
+        dsrc: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `gather` BW — f64, i64 indices (atomicAdd).
+    pub fn baracuda_kernels_gather_backward_i64idx_f64_run(
+        out_numel: i64,
+        rank: i32,
+        gather_dim: i32,
+        src_dim_size: i32,
+        out_shape: *const i32,
+        stride_dout: *const i64,
+        stride_index: *const i64,
+        stride_dsrc: *const i64,
+        dout: *const c_void,
+        index: *const c_void,
+        dsrc: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `scatter_add` — f32, i64 indices (atomicAdd).
+    pub fn baracuda_kernels_scatter_add_i64idx_f32_run(
+        upd_numel: i64,
+        rank: i32,
+        scatter_dim: i32,
+        out_dim_size: i32,
+        upd_shape: *const i32,
+        stride_upd: *const i64,
+        stride_index: *const i64,
+        stride_out: *const i64,
+        updates: *const c_void,
+        index: *const c_void,
+        out: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `scatter_add` — f64, i64 indices.
+    pub fn baracuda_kernels_scatter_add_i64idx_f64_run(
+        upd_numel: i64,
+        rank: i32,
+        scatter_dim: i32,
+        out_dim_size: i32,
+        upd_shape: *const i32,
+        stride_upd: *const i64,
+        stride_index: *const i64,
+        stride_out: *const i64,
+        updates: *const c_void,
+        index: *const c_void,
+        out: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `index_select` — f32, i64 indices.
+    pub fn baracuda_kernels_index_select_i64idx_f32_run(
+        out_numel: i64,
+        rank: i32,
+        select_dim: i32,
+        src_dim_size: i32,
+        out_shape: *const i32,
+        stride_src: *const i64,
+        stride_out: *const i64,
+        src: *const c_void,
+        idx: *const c_void,
+        out: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `index_select` — f64, i64 indices.
+    pub fn baracuda_kernels_index_select_i64idx_f64_run(
+        out_numel: i64,
+        rank: i32,
+        select_dim: i32,
+        src_dim_size: i32,
+        out_shape: *const i32,
+        stride_src: *const i64,
+        stride_out: *const i64,
+        src: *const c_void,
+        idx: *const c_void,
+        out: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `index_select` — i32 values, i64 indices.
+    pub fn baracuda_kernels_index_select_i64idx_i32_run(
+        out_numel: i64,
+        rank: i32,
+        select_dim: i32,
+        src_dim_size: i32,
+        out_shape: *const i32,
+        stride_src: *const i64,
+        stride_out: *const i64,
+        src: *const c_void,
+        idx: *const c_void,
+        out: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `index_select` BW — f32, i64 indices.
+    pub fn baracuda_kernels_index_select_backward_i64idx_f32_run(
+        out_numel: i64,
+        rank: i32,
+        select_dim: i32,
+        src_dim_size: i32,
+        out_shape: *const i32,
+        stride_dout: *const i64,
+        stride_dsrc: *const i64,
+        dout: *const c_void,
+        idx: *const c_void,
+        dsrc: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `index_select` BW — f64, i64 indices.
+    pub fn baracuda_kernels_index_select_backward_i64idx_f64_run(
+        out_numel: i64,
+        rank: i32,
+        select_dim: i32,
+        src_dim_size: i32,
+        out_shape: *const i32,
+        stride_dout: *const i64,
+        stride_dsrc: *const i64,
+        dout: *const c_void,
+        idx: *const c_void,
+        dsrc: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `one_hot` — f32 output, i64 input class indices.
+    pub fn baracuda_kernels_one_hot_i64idx_f32_run(
+        out_numel: i64,
+        num_classes: i32,
+        src: *const c_void,
+        out: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `one_hot` — f64 output, i64 indices.
+    pub fn baracuda_kernels_one_hot_i64idx_f64_run(
+        out_numel: i64,
+        num_classes: i32,
+        src: *const c_void,
+        out: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `one_hot` — i32 output, i64 indices.
+    pub fn baracuda_kernels_one_hot_i64idx_i32_run(
+        out_numel: i64,
+        num_classes: i32,
+        src: *const c_void,
+        out: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `one_hot` — bool output, i64 indices.
+    pub fn baracuda_kernels_one_hot_i64idx_bool_run(
+        out_numel: i64,
+        num_classes: i32,
+        src: *const c_void,
+        out: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `nonzero` — f32 input, i64 output coords.
+    pub fn baracuda_kernels_nonzero_i64idx_f32_run(
+        numel: i64,
+        rank: i32,
+        max_nz: i32,
+        shape: *const i32,
+        stride_x: *const i64,
+        x: *const c_void,
+        out_coords: *mut c_void,
+        counter: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `nonzero` — f64 input, i64 output coords.
+    pub fn baracuda_kernels_nonzero_i64idx_f64_run(
+        numel: i64,
+        rank: i32,
+        max_nz: i32,
+        shape: *const i32,
+        stride_x: *const i64,
+        x: *const c_void,
+        out_coords: *mut c_void,
+        counter: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `nonzero` — i32 input, i64 output coords.
+    pub fn baracuda_kernels_nonzero_i64idx_i32_run(
+        numel: i64,
+        rank: i32,
+        max_nz: i32,
+        shape: *const i32,
+        stride_x: *const i64,
+        x: *const c_void,
+        out_coords: *mut c_void,
+        counter: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `nonzero` — bool input, i64 output coords.
+    pub fn baracuda_kernels_nonzero_i64idx_bool_run(
+        numel: i64,
+        rank: i32,
+        max_nz: i32,
+        shape: *const i32,
+        stride_x: *const i64,
+        x: *const c_void,
+        out_coords: *mut c_void,
+        counter: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
     // ---------- embedding (Phase 7 Milestone 7.5) ----------
     //
     // `out[n, :] = weight[indices[n], :]` with `padding_idx` zeroing
@@ -28444,7 +28860,7 @@ unsafe extern "C" {
         num_indices: i64,
         num_embeddings: i32,
         embedding_dim: i32,
-        padding_idx: i32,
+        padding_idx: i64,
         weight: *const c_void,
         indices: *const c_void,
         out: *mut c_void,
@@ -28458,7 +28874,7 @@ unsafe extern "C" {
         num_indices: i64,
         num_embeddings: i32,
         embedding_dim: i32,
-        padding_idx: i32,
+        padding_idx: i64,
         weight: *const c_void,
         indices: *const c_void,
         out: *mut c_void,
@@ -28472,7 +28888,7 @@ unsafe extern "C" {
         num_indices: i64,
         num_embeddings: i32,
         embedding_dim: i32,
-        padding_idx: i32,
+        padding_idx: i64,
         weight: *const c_void,
         indices: *const c_void,
         out: *mut c_void,
@@ -28486,7 +28902,7 @@ unsafe extern "C" {
         num_indices: i64,
         num_embeddings: i32,
         embedding_dim: i32,
-        padding_idx: i32,
+        padding_idx: i64,
         weight: *const c_void,
         indices: *const c_void,
         out: *mut c_void,
@@ -28501,7 +28917,7 @@ unsafe extern "C" {
         num_indices: i64,
         num_embeddings: i32,
         embedding_dim: i32,
-        padding_idx: i32,
+        padding_idx: i64,
         dout: *const c_void,
         indices: *const c_void,
         dweight: *mut c_void,
@@ -28515,7 +28931,7 @@ unsafe extern "C" {
         num_indices: i64,
         num_embeddings: i32,
         embedding_dim: i32,
-        padding_idx: i32,
+        padding_idx: i64,
         dout: *const c_void,
         indices: *const c_void,
         dweight: *mut c_void,
@@ -28538,7 +28954,7 @@ unsafe extern "C" {
         embedding_dim: i32,
         num_bags: i32,
         mode: i32,
-        padding_idx: i32,
+        padding_idx: i64,
         weight: *const c_void,
         indices: *const c_void,
         offsets: *const c_void,
@@ -28555,7 +28971,7 @@ unsafe extern "C" {
         embedding_dim: i32,
         num_bags: i32,
         mode: i32,
-        padding_idx: i32,
+        padding_idx: i64,
         weight: *const c_void,
         indices: *const c_void,
         offsets: *const c_void,
@@ -28572,7 +28988,7 @@ unsafe extern "C" {
         embedding_dim: i32,
         num_bags: i32,
         mode: i32,
-        padding_idx: i32,
+        padding_idx: i64,
         weight: *const c_void,
         indices: *const c_void,
         offsets: *const c_void,
@@ -28589,7 +29005,7 @@ unsafe extern "C" {
         embedding_dim: i32,
         num_bags: i32,
         mode: i32,
-        padding_idx: i32,
+        padding_idx: i64,
         weight: *const c_void,
         indices: *const c_void,
         offsets: *const c_void,
@@ -28606,7 +29022,7 @@ unsafe extern "C" {
         embedding_dim: i32,
         num_bags: i32,
         mode: i32,
-        padding_idx: i32,
+        padding_idx: i64,
         dout: *const c_void,
         indices: *const c_void,
         offsets: *const c_void,
@@ -28623,7 +29039,203 @@ unsafe extern "C" {
         embedding_dim: i32,
         num_bags: i32,
         mode: i32,
-        padding_idx: i32,
+        padding_idx: i64,
+        dout: *const c_void,
+        indices: *const c_void,
+        offsets: *const c_void,
+        dweight: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    // ---------- i64-index variants (Phase 11.5 / Fuel team feedback #7) ----------
+    //
+    // PyTorch defaults `embedding` / `embedding_bag` indices to int64.
+    // The legacy entry points above keep their i32 ABI; these new
+    // `_i64idx_` symbols accept int64 index buffers directly.
+    //
+    // `padding_idx` carries int64 in both surfaces — i32 callers
+    // sign-extend their value (or `i32::MIN` sentinel) into the
+    // 64-bit slot on the way in.
+
+    /// `embedding` FW — f32, i64 indices.
+    pub fn baracuda_kernels_embedding_i64idx_f32_run(
+        num_indices: i64,
+        num_embeddings: i32,
+        embedding_dim: i32,
+        padding_idx: i64,
+        weight: *const c_void,
+        indices: *const c_void,
+        out: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `embedding` FW — f64, i64 indices.
+    pub fn baracuda_kernels_embedding_i64idx_f64_run(
+        num_indices: i64,
+        num_embeddings: i32,
+        embedding_dim: i32,
+        padding_idx: i64,
+        weight: *const c_void,
+        indices: *const c_void,
+        out: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `embedding` FW — f16, i64 indices.
+    pub fn baracuda_kernels_embedding_i64idx_f16_run(
+        num_indices: i64,
+        num_embeddings: i32,
+        embedding_dim: i32,
+        padding_idx: i64,
+        weight: *const c_void,
+        indices: *const c_void,
+        out: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `embedding` FW — bf16, i64 indices.
+    pub fn baracuda_kernels_embedding_i64idx_bf16_run(
+        num_indices: i64,
+        num_embeddings: i32,
+        embedding_dim: i32,
+        padding_idx: i64,
+        weight: *const c_void,
+        indices: *const c_void,
+        out: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `embedding` BW — f32, i64 indices.
+    pub fn baracuda_kernels_embedding_backward_i64idx_f32_run(
+        num_indices: i64,
+        num_embeddings: i32,
+        embedding_dim: i32,
+        padding_idx: i64,
+        dout: *const c_void,
+        indices: *const c_void,
+        dweight: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `embedding` BW — f64, i64 indices.
+    pub fn baracuda_kernels_embedding_backward_i64idx_f64_run(
+        num_indices: i64,
+        num_embeddings: i32,
+        embedding_dim: i32,
+        padding_idx: i64,
+        dout: *const c_void,
+        indices: *const c_void,
+        dweight: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `embedding_bag` FW — f32, i64 indices.
+    pub fn baracuda_kernels_embedding_bag_i64idx_f32_run(
+        total_indices: i32,
+        num_embeddings: i32,
+        embedding_dim: i32,
+        num_bags: i32,
+        mode: i32,
+        padding_idx: i64,
+        weight: *const c_void,
+        indices: *const c_void,
+        offsets: *const c_void,
+        out: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `embedding_bag` FW — f64, i64 indices.
+    pub fn baracuda_kernels_embedding_bag_i64idx_f64_run(
+        total_indices: i32,
+        num_embeddings: i32,
+        embedding_dim: i32,
+        num_bags: i32,
+        mode: i32,
+        padding_idx: i64,
+        weight: *const c_void,
+        indices: *const c_void,
+        offsets: *const c_void,
+        out: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `embedding_bag` FW — f16, i64 indices.
+    pub fn baracuda_kernels_embedding_bag_i64idx_f16_run(
+        total_indices: i32,
+        num_embeddings: i32,
+        embedding_dim: i32,
+        num_bags: i32,
+        mode: i32,
+        padding_idx: i64,
+        weight: *const c_void,
+        indices: *const c_void,
+        offsets: *const c_void,
+        out: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `embedding_bag` FW — bf16, i64 indices.
+    pub fn baracuda_kernels_embedding_bag_i64idx_bf16_run(
+        total_indices: i32,
+        num_embeddings: i32,
+        embedding_dim: i32,
+        num_bags: i32,
+        mode: i32,
+        padding_idx: i64,
+        weight: *const c_void,
+        indices: *const c_void,
+        offsets: *const c_void,
+        out: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `embedding_bag` BW — f32, i64 indices.
+    pub fn baracuda_kernels_embedding_bag_backward_i64idx_f32_run(
+        total_indices: i32,
+        num_embeddings: i32,
+        embedding_dim: i32,
+        num_bags: i32,
+        mode: i32,
+        padding_idx: i64,
+        dout: *const c_void,
+        indices: *const c_void,
+        offsets: *const c_void,
+        dweight: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `embedding_bag` BW — f64, i64 indices.
+    pub fn baracuda_kernels_embedding_bag_backward_i64idx_f64_run(
+        total_indices: i32,
+        num_embeddings: i32,
+        embedding_dim: i32,
+        num_bags: i32,
+        mode: i32,
+        padding_idx: i64,
         dout: *const c_void,
         indices: *const c_void,
         offsets: *const c_void,
@@ -29025,6 +29637,41 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+
+    // ---------- segment / scatter-reduce i64 variants (Phase 11.5) ----------
+    //
+    // PyTorch / TensorFlow / JAX scatter-reduce segment ids default to
+    // int64. The `_i64idx_` symbols below mirror the i32 surface,
+    // differing only in the dereferenced type of the `segment_ids`
+    // buffer.
+    pub fn baracuda_kernels_segment_sum_i64idx_f32_run(n: i32, d: i32, num_segments: i32, input: *const c_void, segment_ids: *const c_void, output: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    pub fn baracuda_kernels_segment_sum_i64idx_f64_run(n: i32, d: i32, num_segments: i32, input: *const c_void, segment_ids: *const c_void, output: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    pub fn baracuda_kernels_segment_mean_i64idx_f32_run(n: i32, d: i32, num_segments: i32, input: *const c_void, segment_ids: *const c_void, output: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    pub fn baracuda_kernels_segment_mean_i64idx_f64_run(n: i32, d: i32, num_segments: i32, input: *const c_void, segment_ids: *const c_void, output: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    pub fn baracuda_kernels_segment_max_i64idx_f32_run(n: i32, d: i32, num_segments: i32, input: *const c_void, segment_ids: *const c_void, output: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    pub fn baracuda_kernels_segment_max_i64idx_f64_run(n: i32, d: i32, num_segments: i32, input: *const c_void, segment_ids: *const c_void, output: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    pub fn baracuda_kernels_segment_min_i64idx_f32_run(n: i32, d: i32, num_segments: i32, input: *const c_void, segment_ids: *const c_void, output: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    pub fn baracuda_kernels_segment_min_i64idx_f64_run(n: i32, d: i32, num_segments: i32, input: *const c_void, segment_ids: *const c_void, output: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    pub fn baracuda_kernels_segment_prod_i64idx_f32_run(n: i32, d: i32, num_segments: i32, input: *const c_void, segment_ids: *const c_void, output: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    pub fn baracuda_kernels_segment_prod_i64idx_f64_run(n: i32, d: i32, num_segments: i32, input: *const c_void, segment_ids: *const c_void, output: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+
+    pub fn baracuda_kernels_unsorted_segment_sum_i64idx_f32_run(n: i32, d: i32, num_segments: i32, input: *const c_void, segment_ids: *const c_void, output: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    pub fn baracuda_kernels_unsorted_segment_sum_i64idx_f64_run(n: i32, d: i32, num_segments: i32, input: *const c_void, segment_ids: *const c_void, output: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    pub fn baracuda_kernels_unsorted_segment_mean_i64idx_f32_run(n: i32, d: i32, num_segments: i32, input: *const c_void, segment_ids: *const c_void, output: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    pub fn baracuda_kernels_unsorted_segment_mean_i64idx_f64_run(n: i32, d: i32, num_segments: i32, input: *const c_void, segment_ids: *const c_void, output: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    pub fn baracuda_kernels_unsorted_segment_max_i64idx_f32_run(n: i32, d: i32, num_segments: i32, input: *const c_void, segment_ids: *const c_void, output: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    pub fn baracuda_kernels_unsorted_segment_max_i64idx_f64_run(n: i32, d: i32, num_segments: i32, input: *const c_void, segment_ids: *const c_void, output: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    pub fn baracuda_kernels_unsorted_segment_min_i64idx_f32_run(n: i32, d: i32, num_segments: i32, input: *const c_void, segment_ids: *const c_void, output: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    pub fn baracuda_kernels_unsorted_segment_min_i64idx_f64_run(n: i32, d: i32, num_segments: i32, input: *const c_void, segment_ids: *const c_void, output: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+
+    pub fn baracuda_kernels_segment_sum_backward_i64idx_f32_run(n: i32, d: i32, num_segments: i32, d_output: *const c_void, segment_ids: *const c_void, d_input: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    pub fn baracuda_kernels_segment_sum_backward_i64idx_f64_run(n: i32, d: i32, num_segments: i32, d_output: *const c_void, segment_ids: *const c_void, d_input: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    pub fn baracuda_kernels_unsorted_segment_sum_backward_i64idx_f32_run(n: i32, d: i32, num_segments: i32, d_output: *const c_void, segment_ids: *const c_void, d_input: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    pub fn baracuda_kernels_unsorted_segment_sum_backward_i64idx_f64_run(n: i32, d: i32, num_segments: i32, d_output: *const c_void, segment_ids: *const c_void, d_input: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    pub fn baracuda_kernels_segment_mean_backward_i64idx_f32_run(n: i32, d: i32, num_segments: i32, d_output: *const c_void, segment_ids: *const c_void, d_input: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    pub fn baracuda_kernels_segment_mean_backward_i64idx_f64_run(n: i32, d: i32, num_segments: i32, d_output: *const c_void, segment_ids: *const c_void, d_input: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    pub fn baracuda_kernels_unsorted_segment_mean_backward_i64idx_f32_run(n: i32, d: i32, num_segments: i32, d_output: *const c_void, segment_ids: *const c_void, d_input: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    pub fn baracuda_kernels_unsorted_segment_mean_backward_i64idx_f64_run(n: i32, d: i32, num_segments: i32, d_output: *const c_void, segment_ids: *const c_void, d_input: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
 }
 
 // ============================================================================
@@ -30594,9 +31241,11 @@ unsafe extern "C" {
 // block size: 32 for the type-0/1 qtypes (Q4_0 / Q4_1 / Q5_0 / Q5_1 /
 // Q8_0); 256 for the k-quants (Q2_K / Q3_K / Q4_K / Q5_K / Q6_K / Q8_K).
 //
-// Q8_K MMVQ is intentionally NOT shipped — llama.cpp / Fuel reserve
-// Q8_K as a CPU-side intermediate; no upstream MMVQ specialization
-// exists. Only dequant is exposed for Q8_K.
+// Q8_K MMVQ — added by baracuda in Phase 11.4 as a bespoke kernel
+// (not vendored). Upstream llama.cpp / Fuel ship only the dequant
+// kernel and treat Q8_K as a CPU-side intermediate; baracuda exposes
+// a fused MMVQ to avoid the 2× memory traffic of dequant-then-GEMV
+// on the inference decode step.
 
 #[cfg(any(feature = "sm80", feature = "sm89", feature = "sm90a"))]
 unsafe extern "C" {
@@ -30783,9 +31432,9 @@ unsafe extern "C" {
 
     // ---- MMVQ: k-quants (256-element blocks) ----
     //
-    // `Q8_K` MMVQ is NOT exposed — llama.cpp / Fuel reserve Q8_K as a
-    // CPU-side intermediate. The Rust plan returns `Error::Unsupported`
-    // when dispatched with `GgufBlockFormat::Q8K`.
+    // `Q8_K` MMVQ is exposed (Phase 11.4 — bespoke, not vendored). Upstream
+    // llama.cpp / Fuel ship only the Q8_K dequant kernel; baracuda adds a
+    // fused MMVQ to avoid the 2× memory traffic of dequant-then-GEMV.
 
     /// GGUF `Q2_K` MMVQ — FP-activation matrix-vector mul.
     /// `ncols` must be a multiple of 256.
@@ -30839,6 +31488,19 @@ unsafe extern "C" {
 
     /// GGUF `Q6_K` MMVQ. # Safety: as `Q2_K`.
     pub fn baracuda_kernels_mmvq_q6_K_run(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        y: *const c_void,
+        dst: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// GGUF `Q8_K` MMVQ — Phase 11.4 (bespoke, not vendored from
+    /// llama.cpp). `ncols` must be a multiple of 256. # Safety: as `Q2_K`.
+    pub fn baracuda_kernels_mmvq_q8_K_run(
         ncols: i32,
         nrows: i32,
         x: *const c_void,

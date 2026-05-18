@@ -16,8 +16,9 @@ use core::marker::PhantomData;
 use baracuda_cutlass::{Error, Result};
 use baracuda_driver::Stream;
 use baracuda_kernels_types::{
-    ArchSku, BackendKind, Element, ElementKind, IndexingKind, KernelSku, MathPrecision, OpCategory,
-    PlanPreference, PrecisionGuarantee, TensorMut, TensorRef, Workspace,
+    ArchSku, BackendKind, Element, ElementKind, IndexElement, IndexElementKind, IndexingKind,
+    KernelSku, MathPrecision, OpCategory, PlanPreference, PrecisionGuarantee, TensorMut,
+    TensorRef, Workspace,
 };
 
 use super::gather::map_status;
@@ -40,11 +41,14 @@ pub struct ScatterAddDescriptor<const N: usize> {
 }
 
 /// Args bundle for a `scatter_add` launch.
-pub struct ScatterAddArgs<'a, T: Element, const N: usize> {
+///
+/// Phase 11.5: `I: IndexElement` generic (`i32` or `i64`).
+pub struct ScatterAddArgs<'a, T: Element, const N: usize, I: IndexElement = i32> {
     /// Update values.
     pub updates: TensorRef<'a, T, N>,
-    /// Index tensor (i32). Same shape as `updates`.
-    pub index: TensorRef<'a, i32, N>,
+    /// Index tensor. Same shape as `updates`. `i32` (legacy) or `i64`
+    /// (PyTorch default).
+    pub index: TensorRef<'a, I, N>,
     /// Output. Accumulated into (atomicAdd) — caller must pre-zero or
     /// pre-populate.
     pub out: TensorMut<'a, T, N>,
@@ -154,7 +158,7 @@ impl<T: Element, const N: usize> ScatterAddPlan<T, N> {
 
     /// Validate `args` against the descriptor: shapes match, rank ≤ 8,
     /// device buffers are large enough.
-    pub fn can_implement(&self, args: &ScatterAddArgs<'_, T, N>) -> Result<()> {
+    pub fn can_implement<I: IndexElement>(&self, args: &ScatterAddArgs<'_, T, N, I>) -> Result<()> {
         if args.updates.shape != self.desc.upd_shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::ScatterAddPlan: updates shape mismatch with descriptor",
@@ -208,11 +212,14 @@ impl<T: Element, const N: usize> ScatterAddPlan<T, N> {
 
     /// Launch the kernel on `stream`. Caller must have zeroed (or
     /// pre-populated) `out` before this call. `workspace` ignored.
-    pub fn run(
+    ///
+    /// Phase 11.5: generic over `I: IndexElement` — dispatches to the
+    /// matching `_i64idx_` FFI symbol when `I == i64`.
+    pub fn run<I: IndexElement>(
         &self,
         stream: &Stream,
         _workspace: Workspace<'_>,
-        args: ScatterAddArgs<'_, T, N>,
+        args: ScatterAddArgs<'_, T, N, I>,
     ) -> Result<()> {
         self.can_implement(&args)?;
         let upd_numel = args.updates.numel();
@@ -230,41 +237,37 @@ impl<T: Element, const N: usize> ScatterAddPlan<T, N> {
         let stride_out = args.out.stride;
         let rank = N as i32;
 
-        let status = match T::KIND {
-            ElementKind::F32 => unsafe {
+        let status = match (T::KIND, I::KIND) {
+            (ElementKind::F32, IndexElementKind::I32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_scatter_add_f32_run(
-                    upd_numel,
-                    rank,
-                    self.desc.scatter_dim,
-                    self.desc.out_dim_size,
-                    upd_shape.as_ptr(),
-                    stride_upd.as_ptr(),
-                    stride_index.as_ptr(),
-                    stride_out.as_ptr(),
-                    upd_ptr,
-                    idx_ptr,
-                    out_ptr,
-                    core::ptr::null_mut(),
-                    0,
-                    stream_ptr,
+                    upd_numel, rank, self.desc.scatter_dim, self.desc.out_dim_size,
+                    upd_shape.as_ptr(), stride_upd.as_ptr(), stride_index.as_ptr(),
+                    stride_out.as_ptr(), upd_ptr, idx_ptr, out_ptr,
+                    core::ptr::null_mut(), 0, stream_ptr,
                 )
             },
-            ElementKind::F64 => unsafe {
+            (ElementKind::F64, IndexElementKind::I32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_scatter_add_f64_run(
-                    upd_numel,
-                    rank,
-                    self.desc.scatter_dim,
-                    self.desc.out_dim_size,
-                    upd_shape.as_ptr(),
-                    stride_upd.as_ptr(),
-                    stride_index.as_ptr(),
-                    stride_out.as_ptr(),
-                    upd_ptr,
-                    idx_ptr,
-                    out_ptr,
-                    core::ptr::null_mut(),
-                    0,
-                    stream_ptr,
+                    upd_numel, rank, self.desc.scatter_dim, self.desc.out_dim_size,
+                    upd_shape.as_ptr(), stride_upd.as_ptr(), stride_index.as_ptr(),
+                    stride_out.as_ptr(), upd_ptr, idx_ptr, out_ptr,
+                    core::ptr::null_mut(), 0, stream_ptr,
+                )
+            },
+            (ElementKind::F32, IndexElementKind::I64) => unsafe {
+                baracuda_kernels_sys::baracuda_kernels_scatter_add_i64idx_f32_run(
+                    upd_numel, rank, self.desc.scatter_dim, self.desc.out_dim_size,
+                    upd_shape.as_ptr(), stride_upd.as_ptr(), stride_index.as_ptr(),
+                    stride_out.as_ptr(), upd_ptr, idx_ptr, out_ptr,
+                    core::ptr::null_mut(), 0, stream_ptr,
+                )
+            },
+            (ElementKind::F64, IndexElementKind::I64) => unsafe {
+                baracuda_kernels_sys::baracuda_kernels_scatter_add_i64idx_f64_run(
+                    upd_numel, rank, self.desc.scatter_dim, self.desc.out_dim_size,
+                    upd_shape.as_ptr(), stride_upd.as_ptr(), stride_index.as_ptr(),
+                    stride_out.as_ptr(), upd_ptr, idx_ptr, out_ptr,
+                    core::ptr::null_mut(), 0, stream_ptr,
                 )
             },
             _ => {

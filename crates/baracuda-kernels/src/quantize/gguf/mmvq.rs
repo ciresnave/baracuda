@@ -5,9 +5,11 @@
 //! `out` are dense FP32. This is the inference-time "decode-step"
 //! matmul used by llama.cpp on GGUF weights.
 //!
-//! `GgufBlockFormat::Q8K` is NOT supported — llama.cpp / Fuel reserve
-//! Q8_K as a CPU-side intermediate and ship no MMVQ kernel for it.
-//! Plan `select()` returns `Error::Unsupported` for that case.
+//! All 11 GGUF block formats are supported. Q8_K MMVQ (Phase 11.4) is
+//! a bespoke baracuda addition — upstream llama.cpp / Fuel ship only
+//! the Q8_K dequant kernel and treat the format as a CPU-side
+//! intermediate. baracuda adds a fused MMVQ to avoid the 2× memory
+//! traffic of dequantize-then-GEMV on the inference decode step.
 
 use core::ffi::c_void;
 
@@ -56,9 +58,9 @@ pub struct GgufMmvqArgs<'a> {
 /// **Dtypes**: weight is GGUF-packed `u8` bytes; activation and
 /// output `f32`. `f16` / `bf16` activation deferred.
 ///
-/// **Block formats**: every k-quant + type-0/1 except `Q8_K` —
-/// llama.cpp / Fuel reserve `Q8_K` as a CPU-side intermediate and
-/// ship no MMVQ kernel. `select()` returns `Unsupported` for `Q8_K`.
+/// **Block formats**: all 11 GGUF block formats (type-0/1 + k-quants
+/// including `Q8_K`). The `Q8_K` kernel is a bespoke baracuda addition
+/// (Phase 11.4) — upstream llama.cpp ships only the dequant kernel.
 ///
 /// **Shape limits**: `ncols` must be a multiple of the block size;
 /// weight byte length must equal `nrows * (ncols / block_size) * type_size`.
@@ -73,8 +75,10 @@ pub struct GgufMmvqPlan {
 }
 
 impl GgufMmvqPlan {
-    /// Pick a kernel for `desc`. Errors on `Q8_K` (no upstream MMVQ),
-    /// non-positive dims, or `ncols` that doesn't tile to the block size.
+    /// Pick a kernel for `desc`. Errors on non-positive dims or `ncols`
+    /// that doesn't tile to the block size. All 11 GGUF block formats
+    /// are supported as of Phase 11.4 (Q8_K MMVQ is a bespoke baracuda
+    /// addition; upstream llama.cpp ships only the dequant kernel).
     pub fn select(
         _stream: &Stream,
         desc: &GgufMmvqDescriptor,
@@ -87,7 +91,7 @@ impl GgufMmvqPlan {
         }
         if !desc.block_format.has_mmvq() {
             return Err(Error::Unsupported(
-                "GgufMmvqPlan: Q8_K MMVQ is not supported (upstream llama.cpp ships no Q8_K MMVQ kernel)",
+                "GgufMmvqPlan: block format reports no MMVQ kernel",
             ));
         }
         let bs = desc.block_format.block_size() as i32;
@@ -203,11 +207,10 @@ impl GgufMmvqPlan {
                     ncols, nrows, w_ptr, y_ptr, dst_ptr,
                     core::ptr::null_mut(), 0, stream_ptr,
                 ),
-                GgufBlockFormat::Q8K => {
-                    return Err(Error::Unsupported(
-                        "GgufMmvqPlan: Q8_K MMVQ is not supported (select should have caught)",
-                    ));
-                }
+                GgufBlockFormat::Q8K => baracuda_kernels_sys::baracuda_kernels_mmvq_q8_K_run(
+                    ncols, nrows, w_ptr, y_ptr, dst_ptr,
+                    core::ptr::null_mut(), 0, stream_ptr,
+                ),
             }
         };
         map_status(status)

@@ -101,7 +101,7 @@ Dtype shorthand:
 |----|---------|--------|-----------------|----|----|-------|
 | `SoftmaxPlan<T, N>` | Bespoke | FP-family | rank ≤ 8, single axis | ✓ | ✓ via `SoftmaxBackwardPlan` | Kinds: `{Softmax, LogSoftmax}`. Length-preserving, numerically stable (max-shift). |
 | `GumbelSoftmaxPlan<T, N>` | Bespoke | FP-family | rank ≤ 8 | ✓ | ✓ via `GumbelSoftmaxBackwardPlan` | Uses cuRAND for Gumbel noise; BW reuses `softmax_backward_*` symbol (shape match). |
-| `SparsemaxPlan<T, N>` | Bespoke | FP-family | rank ≤ 8, extent along softmax axis ≤ `SPARSEMAX_MAX_EXTENT = 64` | ✓ | ✓ via `SparsemaxBackwardPlan` | Per-thread serial sort caps row size at 64. Larger extents land as a cooperative block-wide sort in future fanout. |
+| `SparsemaxPlan<T, N>` | Bespoke | FP-family | rank ≤ 8, extent along softmax axis ≤ `SPARSEMAX_MAX_EXTENT = 1024` | ✓ | ✓ via `SparsemaxBackwardPlan` | Phase 11.6 block-cooperative `cub::BlockRadixSort` + `cub::BlockScan` pipeline (one block per row, 2 compiled tile specs: 256 / 1024). |
 
 ---
 
@@ -364,7 +364,7 @@ The following items are scoped but not yet wired:
 - **Segment `Max` / `Min` / `Prod` BW** — needs argmax / argmin tracking in FW for Max/Min, and numerically stable `prod / x_n` for Prod.
 - **`EmbeddingBag Max` mode** — needs per-feature argmax tracking.
 - **i64 indices in indexing family** — `i32` only today.
-- **Sparsemax for extents > 64** — needs cooperative block-wide sort.
+- **Sparsemax for extents > 1024** — Phase 11.6 lifted the cap from 64 → 1024 via `cub::BlockRadixSort` + `cub::BlockScan`. Larger rows would need a multi-block / global sort pipeline.
 - **Conv 1-D / 3-D / transposed / depthwise** — Phase 7 fanout; Conv2d only today.
 - **Pool 1-D / 3-D / adaptive / LP-pool / fractional-max-pool** — Phase 7 fanout.
 - **f16 / bf16 atomicAdd backends for segment / indexing BW** — restricted to native-FP-atomic types today.

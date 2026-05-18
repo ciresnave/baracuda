@@ -256,6 +256,7 @@ fn run_fw_and_check<T, F, G>(
         stride_w: d.stride_w,
         dilation_h: d.dilation_h,
         dilation_w: d.dilation_w,
+        groups: 1,
         element: elem,
     };
     let plan = Conv2dPlan::<T>::select(stream, &desc, PlanPreference::default())
@@ -485,6 +486,7 @@ fn conv2d_f32_bw_data() {
         stride_w: d.stride_w,
         dilation_h: d.dilation_h,
         dilation_w: d.dilation_w,
+        groups: 1,
         element: ElementKind::F32,
     };
     let plan = Conv2dPlan::<f32>::select(&stream, &desc, PlanPreference::default()).expect("sel");
@@ -575,6 +577,7 @@ fn conv2d_f32_bw_filter() {
         stride_w: d.stride_w,
         dilation_h: d.dilation_h,
         dilation_w: d.dilation_w,
+        groups: 1,
         element: ElementKind::F32,
     };
     let plan = Conv2dPlan::<f32>::select(&stream, &desc, PlanPreference::default()).expect("sel");

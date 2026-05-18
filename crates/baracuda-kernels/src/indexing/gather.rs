@@ -19,8 +19,9 @@ use core::marker::PhantomData;
 use baracuda_cutlass::{Error, Result};
 use baracuda_driver::Stream;
 use baracuda_kernels_types::{
-    ArchSku, BackendKind, Element, ElementKind, IndexingKind, KernelSku, MathPrecision, OpCategory,
-    PlanPreference, PrecisionGuarantee, TensorMut, TensorRef, Workspace,
+    ArchSku, BackendKind, Element, ElementKind, IndexElement, IndexElementKind, IndexingKind,
+    KernelSku, MathPrecision, OpCategory, PlanPreference, PrecisionGuarantee, TensorMut,
+    TensorRef, Workspace,
 };
 
 /// Descriptor for a `gather` op.
@@ -45,11 +46,17 @@ pub struct GatherDescriptor<const N: usize> {
 }
 
 /// Args bundle for a `gather` launch.
-pub struct GatherArgs<'a, T: Element, const N: usize> {
+///
+/// Phase 11.5: the index tensor is generic over `I: IndexElement`
+/// (`i32` or `i64`). The plan dispatches to the matching `_i64idx_`
+/// FFI symbol when `I == i64` at launch time. `I` defaults to `i32`
+/// for source-compat with pre-Phase-11.5 callers.
+pub struct GatherArgs<'a, T: Element, const N: usize, I: IndexElement = i32> {
     /// Source tensor.
     pub src: TensorRef<'a, T, N>,
-    /// Index tensor (i32). Same shape as `out`.
-    pub index: TensorRef<'a, i32, N>,
+    /// Index tensor. Same shape as `out`. Type parameter `I` selects
+    /// `i32` (legacy) or `i64` (PyTorch default).
+    pub index: TensorRef<'a, I, N>,
     /// Output. Shape == index shape.
     pub out: TensorMut<'a, T, N>,
 }
@@ -156,7 +163,10 @@ impl<T: Element, const N: usize> GatherPlan<T, N> {
     /// Validate that `args` is compatible with this plan: output and
     /// index shapes match the descriptor, rank is ≤ 8, and every device
     /// buffer is large enough to address its declared `numel`.
-    pub fn can_implement(&self, args: &GatherArgs<'_, T, N>) -> Result<()> {
+    ///
+    /// Phase 11.5: generic over `I: IndexElement` so both i32 (legacy)
+    /// and i64 (PyTorch default) index buffers are accepted.
+    pub fn can_implement<I: IndexElement>(&self, args: &GatherArgs<'_, T, N, I>) -> Result<()> {
         if args.out.shape != self.desc.out_shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::GatherPlan: out shape mismatch with descriptor",
@@ -221,11 +231,14 @@ impl<T: Element, const N: usize> GatherPlan<T, N> {
     /// Launch the kernel on `stream`. Calls [`Self::can_implement`]
     /// first; returns early on zero-element output. `workspace` is
     /// ignored (gather requires none).
-    pub fn run(
+    ///
+    /// Phase 11.5: generic over `I: IndexElement`. Dispatches to the
+    /// matching `_i64idx_` FFI symbol when `I::KIND == IndexElementKind::I64`.
+    pub fn run<I: IndexElement>(
         &self,
         stream: &Stream,
         _workspace: Workspace<'_>,
-        args: GatherArgs<'_, T, N>,
+        args: GatherArgs<'_, T, N, I>,
     ) -> Result<()> {
         self.can_implement(&args)?;
         let out_numel = args.out.numel();
@@ -243,59 +256,53 @@ impl<T: Element, const N: usize> GatherPlan<T, N> {
         let stride_out = args.out.stride;
         let rank = N as i32;
 
-        let status = match T::KIND {
-            ElementKind::F32 => unsafe {
+        let status = match (T::KIND, I::KIND) {
+            (ElementKind::F32, IndexElementKind::I32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_gather_f32_run(
-                    out_numel,
-                    rank,
-                    self.desc.gather_dim,
-                    self.desc.src_dim_size,
-                    out_shape.as_ptr(),
-                    stride_src.as_ptr(),
-                    stride_index.as_ptr(),
-                    stride_out.as_ptr(),
-                    src_ptr,
-                    idx_ptr,
-                    out_ptr,
-                    core::ptr::null_mut(),
-                    0,
-                    stream_ptr,
+                    out_numel, rank, self.desc.gather_dim, self.desc.src_dim_size,
+                    out_shape.as_ptr(), stride_src.as_ptr(), stride_index.as_ptr(),
+                    stride_out.as_ptr(), src_ptr, idx_ptr, out_ptr,
+                    core::ptr::null_mut(), 0, stream_ptr,
                 )
             },
-            ElementKind::F64 => unsafe {
+            (ElementKind::F64, IndexElementKind::I32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_gather_f64_run(
-                    out_numel,
-                    rank,
-                    self.desc.gather_dim,
-                    self.desc.src_dim_size,
-                    out_shape.as_ptr(),
-                    stride_src.as_ptr(),
-                    stride_index.as_ptr(),
-                    stride_out.as_ptr(),
-                    src_ptr,
-                    idx_ptr,
-                    out_ptr,
-                    core::ptr::null_mut(),
-                    0,
-                    stream_ptr,
+                    out_numel, rank, self.desc.gather_dim, self.desc.src_dim_size,
+                    out_shape.as_ptr(), stride_src.as_ptr(), stride_index.as_ptr(),
+                    stride_out.as_ptr(), src_ptr, idx_ptr, out_ptr,
+                    core::ptr::null_mut(), 0, stream_ptr,
                 )
             },
-            ElementKind::I32 => unsafe {
+            (ElementKind::I32, IndexElementKind::I32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_gather_i32_run(
-                    out_numel,
-                    rank,
-                    self.desc.gather_dim,
-                    self.desc.src_dim_size,
-                    out_shape.as_ptr(),
-                    stride_src.as_ptr(),
-                    stride_index.as_ptr(),
-                    stride_out.as_ptr(),
-                    src_ptr,
-                    idx_ptr,
-                    out_ptr,
-                    core::ptr::null_mut(),
-                    0,
-                    stream_ptr,
+                    out_numel, rank, self.desc.gather_dim, self.desc.src_dim_size,
+                    out_shape.as_ptr(), stride_src.as_ptr(), stride_index.as_ptr(),
+                    stride_out.as_ptr(), src_ptr, idx_ptr, out_ptr,
+                    core::ptr::null_mut(), 0, stream_ptr,
+                )
+            },
+            (ElementKind::F32, IndexElementKind::I64) => unsafe {
+                baracuda_kernels_sys::baracuda_kernels_gather_i64idx_f32_run(
+                    out_numel, rank, self.desc.gather_dim, self.desc.src_dim_size,
+                    out_shape.as_ptr(), stride_src.as_ptr(), stride_index.as_ptr(),
+                    stride_out.as_ptr(), src_ptr, idx_ptr, out_ptr,
+                    core::ptr::null_mut(), 0, stream_ptr,
+                )
+            },
+            (ElementKind::F64, IndexElementKind::I64) => unsafe {
+                baracuda_kernels_sys::baracuda_kernels_gather_i64idx_f64_run(
+                    out_numel, rank, self.desc.gather_dim, self.desc.src_dim_size,
+                    out_shape.as_ptr(), stride_src.as_ptr(), stride_index.as_ptr(),
+                    stride_out.as_ptr(), src_ptr, idx_ptr, out_ptr,
+                    core::ptr::null_mut(), 0, stream_ptr,
+                )
+            },
+            (ElementKind::I32, IndexElementKind::I64) => unsafe {
+                baracuda_kernels_sys::baracuda_kernels_gather_i64idx_i32_run(
+                    out_numel, rank, self.desc.gather_dim, self.desc.src_dim_size,
+                    out_shape.as_ptr(), stride_src.as_ptr(), stride_index.as_ptr(),
+                    stride_out.as_ptr(), src_ptr, idx_ptr, out_ptr,
+                    core::ptr::null_mut(), 0, stream_ptr,
                 )
             },
             _ => {

@@ -7,10 +7,13 @@
 //! `y[i] = max(0, x[i] - τ)`.
 //!
 //! Wired today: `T ∈ {f32, f16, bf16, f64}`. Row extent (softmax axis
-//! size) limited to 64 — the kernel sorts in per-thread local memory
-//! using a fixed-size buffer. Larger extents return `Unsupported` at
-//! plan-select time. A future cooperative block-wide sort can lift
-//! this cap.
+//! size) limited to 1024 (Phase 11.6) — the kernel uses a
+//! `cub::BlockRadixSort` + `cub::BlockScan` block-cooperative
+//! algorithm: one CUDA thread block per row, 256 threads per block,
+//! and two compiled tile-size specializations
+//! (`ITEMS_PER_THREAD = 1` for extents ≤ 256, `ITEMS_PER_THREAD = 4`
+//! for extents 257..=1024). Larger extents return `Unsupported` at
+//! plan-select time.
 
 use core::ffi::c_void;
 use core::marker::PhantomData;
@@ -22,10 +25,12 @@ use baracuda_kernels_types::{
     PlanPreference, PrecisionGuarantee, SoftmaxKind, TensorMut, TensorRef, Workspace,
 };
 
-/// Maximum supported extent along the sparsemax axis. Trailblazer cap
-/// — see [`SparsemaxPlan`] docs. Mirrors the C++ macro
+/// Maximum supported extent along the sparsemax axis. Phase 11.6 lifts
+/// this from the trailblazer 64 → 1024 by switching the forward kernel
+/// from a per-thread serial sort to a block-cooperative
+/// `cub::BlockRadixSort` + `cub::BlockScan`. Mirrors the C++ macro
 /// `BARACUDA_SPARSEMAX_MAX_EXTENT`.
-pub const SPARSEMAX_MAX_EXTENT: i32 = 64;
+pub const SPARSEMAX_MAX_EXTENT: i32 = 1024;
 
 /// Descriptor for a Sparsemax forward op.
 #[derive(Copy, Clone, Debug)]
@@ -86,8 +91,8 @@ impl<T: Element, const N: usize> SparsemaxPlan<T, N> {
         let extent = desc.input_shape[desc.softmax_axis as usize];
         if extent > SPARSEMAX_MAX_EXTENT {
             return Err(Error::Unsupported(
-                "baracuda-kernels::SparsemaxPlan: extent along softmax_axis > 64 \
-                 not supported (per-thread serial sort caps the row size)",
+                "baracuda-kernels::SparsemaxPlan: extent along softmax_axis > 1024 \
+                 not supported (block-cooperative BlockRadixSort tile capped at 1024)",
             ));
         }
         let dtype_in_fp_family = matches!(

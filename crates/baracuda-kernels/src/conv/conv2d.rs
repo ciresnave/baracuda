@@ -21,8 +21,8 @@ use baracuda_kernels_sys::{
     cudnnDestroyTensorDescriptor, cudnnFilterDescriptor_t,
     cudnnGetConvolutionBackwardDataWorkspaceSize, cudnnGetConvolutionBackwardFilterWorkspaceSize,
     cudnnGetConvolutionForwardWorkspaceSize, cudnnHandle_t, cudnnSetConvolution2dDescriptor,
-    cudnnSetFilter4dDescriptor, cudnnSetStream, cudnnSetTensor4dDescriptor,
-    cudnnTensorDescriptor_t, CUDNN_CONVOLUTION_BWD_DATA_ALGO_1,
+    cudnnSetConvolutionGroupCount, cudnnSetFilter4dDescriptor, cudnnSetStream,
+    cudnnSetTensor4dDescriptor, cudnnTensorDescriptor_t, CUDNN_CONVOLUTION_BWD_DATA_ALGO_1,
     CUDNN_CONVOLUTION_BWD_FILTER_ALGO_1, CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_GEMM,
     CUDNN_CROSS_CORRELATION, CUDNN_DATA_BFLOAT16, CUDNN_DATA_DOUBLE, CUDNN_DATA_FLOAT,
     CUDNN_DATA_HALF, CUDNN_TENSOR_NCHW,
@@ -66,6 +66,13 @@ pub struct Conv2dDescriptor {
     pub dilation_h: i32,
     /// Dilation along the width axis.
     pub dilation_w: i32,
+    /// Group count (`1` for plain conv, `c_in` for depthwise, any
+    /// integer divisor of both `c_in` and `c_out` for grouped conv).
+    /// cuDNN's `cudnnSetConvolutionGroupCount` is called once on
+    /// descriptor build. The filter shape semantically becomes
+    /// `[c_out, c_in / groups, h_filt, w_filt]` — for `groups == 1`
+    /// this collapses to the standard `[c_out, c_in, ...]`.
+    pub groups: i32,
     /// Element dtype. Must be `F32`, `F64`, `F16`, or `Bf16`.
     pub element: ElementKind,
 }
@@ -206,6 +213,16 @@ impl<T: Element> Conv2dPlan<T> {
         if desc.pad_h < 0 || desc.pad_w < 0 {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::Conv2dPlan: padding must be >= 0",
+            ));
+        }
+        if desc.groups <= 0 {
+            return Err(Error::InvalidProblem(
+                "baracuda-kernels::Conv2dPlan: groups must be > 0",
+            ));
+        }
+        if desc.c_in % desc.groups != 0 || desc.c_out % desc.groups != 0 {
+            return Err(Error::InvalidProblem(
+                "baracuda-kernels::Conv2dPlan: groups must divide both c_in and c_out",
             ));
         }
         let (h_out, w_out) = compute_output_dims(desc);
@@ -682,13 +699,16 @@ impl<T: Element> Conv2dPlan<T> {
         // NB: cudnnSetFilter4dDescriptor argument order is (desc, dtype,
         // format, k, c, h, w) — dtype precedes format, opposite of
         // cudnnSetTensor4dDescriptor.
+        // cuDNN filter shape: [c_out, c_in / groups, h_filt, w_filt]
+        // (groups == 1 collapses to [c_out, c_in, ...]).
+        let c_in_per_group = self.desc.c_in / self.desc.groups;
         let status = unsafe {
             cudnnSetFilter4dDescriptor(
                 wd,
                 dt,
                 CUDNN_TENSOR_NCHW,
                 self.desc.c_out,
-                self.desc.c_in,
+                c_in_per_group,
                 self.desc.h_filt,
                 self.desc.w_filt,
             )
@@ -726,6 +746,16 @@ impl<T: Element> Conv2dPlan<T> {
             }
             return Err(Error::CutlassInternal(-status));
         }
+        // Set the group count (must follow Set*ConvolutionDescriptor —
+        // that call resets the group count to 1). For groups == 1 we
+        // still call it for uniformity; cuDNN treats it as a no-op.
+        let status = unsafe { cudnnSetConvolutionGroupCount(cd, self.desc.groups) };
+        if status != 0 {
+            unsafe {
+                let _ = cudnnDestroyConvolutionDescriptor(cd);
+            }
+            return Err(Error::CutlassInternal(-status));
+        }
         self.conv_desc.set(cd);
 
         Ok(())
@@ -740,7 +770,7 @@ impl<T: Element> Conv2dPlan<T> {
         let x_shape = [self.desc.batch, self.desc.c_in, self.desc.h_in, self.desc.w_in];
         let w_shape = [
             self.desc.c_out,
-            self.desc.c_in,
+            self.desc.c_in / self.desc.groups,
             self.desc.h_filt,
             self.desc.w_filt,
         ];
@@ -767,7 +797,7 @@ impl<T: Element> Conv2dPlan<T> {
         let (h_out, w_out) = compute_output_dims(&self.desc);
         let w_shape = [
             self.desc.c_out,
-            self.desc.c_in,
+            self.desc.c_in / self.desc.groups,
             self.desc.h_filt,
             self.desc.w_filt,
         ];
@@ -797,7 +827,7 @@ impl<T: Element> Conv2dPlan<T> {
         let dy_shape = [self.desc.batch, self.desc.c_out, h_out, w_out];
         let dw_shape = [
             self.desc.c_out,
-            self.desc.c_in,
+            self.desc.c_in / self.desc.groups,
             self.desc.h_filt,
             self.desc.w_filt,
         ];

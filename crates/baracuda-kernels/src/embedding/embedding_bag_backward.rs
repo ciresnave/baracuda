@@ -17,8 +17,9 @@ use core::marker::PhantomData;
 use baracuda_cutlass::{Error, Result};
 use baracuda_driver::Stream;
 use baracuda_kernels_types::{
-    ArchSku, BackendKind, Element, ElementKind, EmbeddingKind, KernelSku, MathPrecision,
-    OpCategory, PlanPreference, PrecisionGuarantee, TensorMut, TensorRef, Workspace,
+    ArchSku, BackendKind, Element, ElementKind, EmbeddingKind, IndexElement, IndexElementKind,
+    KernelSku, MathPrecision, OpCategory, PlanPreference, PrecisionGuarantee, TensorMut,
+    TensorRef, Workspace,
 };
 
 use crate::indexing::gather::map_status;
@@ -46,11 +47,13 @@ pub struct EmbeddingBagBackwardDescriptor {
 }
 
 /// Args bundle for an `embedding_bag_backward` launch.
-pub struct EmbeddingBagBackwardArgs<'a, T: Element> {
+///
+/// Phase 11.5: `I: IndexElement` generic (`i32` or `i64`) for indices.
+pub struct EmbeddingBagBackwardArgs<'a, T: Element, I: IndexElement = i32> {
     /// Upstream gradient `[num_bags, D]`. Row-major contiguous.
     pub dout: TensorRef<'a, T, 2>,
-    /// Flat index tensor `[total_indices]`, i32 (same as FW).
-    pub indices: TensorRef<'a, i32, 1>,
+    /// Flat index tensor `[total_indices]` (same as FW).
+    pub indices: TensorRef<'a, I, 1>,
     /// Per-bag offset table `[num_bags]`, i32 (same as FW).
     pub offsets: TensorRef<'a, i32, 1>,
     /// Gradient w.r.t. `weight` `[num_embeddings, D]`. Caller MUST pre-
@@ -148,7 +151,7 @@ impl<T: Element> EmbeddingBagBackwardPlan<T> {
     }
 
     /// Validate args.
-    pub fn can_implement(&self, args: &EmbeddingBagBackwardArgs<'_, T>) -> Result<()> {
+    pub fn can_implement<I: IndexElement>(&self, args: &EmbeddingBagBackwardArgs<'_, T, I>) -> Result<()> {
         if args.dout.shape[0] != self.desc.num_bags
             || args.dout.shape[1] != self.desc.embedding_dim
         {
@@ -229,11 +232,13 @@ impl<T: Element> EmbeddingBagBackwardPlan<T> {
     }
 
     /// Launch.
-    pub fn run(
+    ///
+    /// Phase 11.5: generic over `I: IndexElement`.
+    pub fn run<I: IndexElement>(
         &self,
         stream: &Stream,
         _workspace: Workspace<'_>,
-        args: EmbeddingBagBackwardArgs<'_, T>,
+        args: EmbeddingBagBackwardArgs<'_, T, I>,
     ) -> Result<()> {
         self.can_implement(&args)?;
         if self.desc.num_bags == 0 || self.desc.embedding_dim == 0 {
@@ -244,42 +249,41 @@ impl<T: Element> EmbeddingBagBackwardPlan<T> {
         let off_ptr = args.offsets.data.as_raw().0 as *const c_void;
         let dw_ptr = args.dweight.data.as_raw().0 as *mut c_void;
         let stream_ptr = stream.as_raw() as *mut c_void;
-        let padding_idx = self.desc.padding_idx.unwrap_or(PADDING_DISABLED);
+        // Phase 11.5: padding_idx widens to i64 across FFI.
+        let padding_idx: i64 = self.desc.padding_idx.unwrap_or(PADDING_DISABLED) as i64;
         let mode = self.desc.mode.ffi_tag();
 
-        let status = match T::KIND {
-            ElementKind::F32 => unsafe {
+        let status = match (T::KIND, I::KIND) {
+            (ElementKind::F32, IndexElementKind::I32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_embedding_bag_backward_f32_run(
-                    self.desc.total_indices,
-                    self.desc.num_embeddings,
-                    self.desc.embedding_dim,
-                    self.desc.num_bags,
-                    mode,
-                    padding_idx,
-                    dout_ptr,
-                    idx_ptr,
-                    off_ptr,
-                    dw_ptr,
-                    core::ptr::null_mut(),
-                    0,
-                    stream_ptr,
+                    self.desc.total_indices, self.desc.num_embeddings, self.desc.embedding_dim,
+                    self.desc.num_bags, mode, padding_idx,
+                    dout_ptr, idx_ptr, off_ptr, dw_ptr,
+                    core::ptr::null_mut(), 0, stream_ptr,
                 )
             },
-            ElementKind::F64 => unsafe {
+            (ElementKind::F64, IndexElementKind::I32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_embedding_bag_backward_f64_run(
-                    self.desc.total_indices,
-                    self.desc.num_embeddings,
-                    self.desc.embedding_dim,
-                    self.desc.num_bags,
-                    mode,
-                    padding_idx,
-                    dout_ptr,
-                    idx_ptr,
-                    off_ptr,
-                    dw_ptr,
-                    core::ptr::null_mut(),
-                    0,
-                    stream_ptr,
+                    self.desc.total_indices, self.desc.num_embeddings, self.desc.embedding_dim,
+                    self.desc.num_bags, mode, padding_idx,
+                    dout_ptr, idx_ptr, off_ptr, dw_ptr,
+                    core::ptr::null_mut(), 0, stream_ptr,
+                )
+            },
+            (ElementKind::F32, IndexElementKind::I64) => unsafe {
+                baracuda_kernels_sys::baracuda_kernels_embedding_bag_backward_i64idx_f32_run(
+                    self.desc.total_indices, self.desc.num_embeddings, self.desc.embedding_dim,
+                    self.desc.num_bags, mode, padding_idx,
+                    dout_ptr, idx_ptr, off_ptr, dw_ptr,
+                    core::ptr::null_mut(), 0, stream_ptr,
+                )
+            },
+            (ElementKind::F64, IndexElementKind::I64) => unsafe {
+                baracuda_kernels_sys::baracuda_kernels_embedding_bag_backward_i64idx_f64_run(
+                    self.desc.total_indices, self.desc.num_embeddings, self.desc.embedding_dim,
+                    self.desc.num_bags, mode, padding_idx,
+                    dout_ptr, idx_ptr, off_ptr, dw_ptr,
+                    core::ptr::null_mut(), 0, stream_ptr,
                 )
             },
             _ => {

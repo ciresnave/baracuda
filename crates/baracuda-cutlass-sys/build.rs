@@ -29,6 +29,11 @@ fn main() {
     println!("cargo:rerun-if-env-changed=BARACUDA_CUTLASS_HOME");
     println!("cargo:rerun-if-env-changed=DOCS_RS");
 
+    // Phase 11.2 — Fuel team feedback #3. Detect Git-for-Windows' fake
+    // `link.exe` (actually GNU coreutils `link`) shadowing the MSVC
+    // linker on PATH and warn loudly with a fix.
+    check_for_fake_link_exe();
+
     // docs.rs has no network access and a read-only $HOME, so the normal
     // git-sparse-checkout path is impossible. Short-circuit to an empty
     // include dir under OUT_DIR — rustdoc only needs the Rust sources to
@@ -395,3 +400,41 @@ fn git_invocation_error(operation: &str, err: io::Error) -> String {
         format!("git {operation} failed: {err}")
     }
 }
+
+/// Detect Git-for-Windows' fake `link.exe` (a GNU coreutils binary that
+/// creates a hard link) shadowing the MSVC linker on PATH. If a developer
+/// has `C:\Program Files\Git\usr\bin\` ahead of the MSVC linker on PATH,
+/// `cargo build` will invoke that coreutils binary instead of `link.exe`
+/// from the MSVC toolchain (or `lld-link.exe`), failing with cryptic
+/// errors about unknown `/OUT:` flags. Walk PATH in order, find the first
+/// `link.exe`, and warn if its path lives under `\Git\usr\bin\`.
+///
+/// No-op on non-Windows targets. Returns early (no warning) if no
+/// `link.exe` is anywhere on PATH — the MSVC linker may still be
+/// findable via the rustc / linker shim through other channels.
+#[cfg(windows)]
+fn check_for_fake_link_exe() {
+    let Some(path) = env::var_os("PATH") else {
+        return;
+    };
+    for entry in env::split_paths(&path) {
+        let candidate = entry.join("link.exe");
+        if candidate.is_file() {
+            let s = candidate.to_string_lossy().to_lowercase();
+            if s.contains("\\git\\usr\\bin\\") || s.contains("/git/usr/bin/") {
+                println!(
+                    "cargo:warning=Detected Git-for-Windows fake `link.exe` first on PATH \
+                     ({}). This is NOT the MSVC linker — it's GNU coreutils `link` and will \
+                     fail with a cryptic error when cargo invokes it. Fix: re-order PATH so \
+                     the MSVC linker (or LLVM's lld-link.exe) appears before Git's bin \
+                     directory.",
+                    candidate.display()
+                );
+            }
+            return; // first hit wins; PATH semantics
+        }
+    }
+}
+
+#[cfg(not(windows))]
+fn check_for_fake_link_exe() {}

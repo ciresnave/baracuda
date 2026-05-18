@@ -42,6 +42,10 @@ mod bias_sealed {
     pub trait Sealed {}
 }
 
+mod index_sealed {
+    pub trait Sealed {}
+}
+
 /// Sealed marker for the alpha/beta scalar type an [`Element`] uses.
 ///
 /// `f32` for f16/bf16/f32/[`F32Strict`] kernels (epilogue compute runs at
@@ -52,6 +56,15 @@ pub trait ScalarType: scalar_sealed::Sealed + Copy + Default + PartialEq + 'stat
     /// Discriminant used by the plan layer to dispatch to f32-scalar vs
     /// f64-scalar FFI entry points.
     const IS_F64: bool;
+
+    /// Additive identity (`0.0`). Useful when writing generic code over
+    /// `<S: ScalarType>` that needs to initialize accumulators or default
+    /// alpha/beta values.
+    const ZERO: Self;
+
+    /// Multiplicative identity (`1.0`). Useful when writing generic code
+    /// over `<S: ScalarType>` that needs a unit alpha value.
+    const ONE: Self;
 
     /// Convert to `f32`. Used by the plan layer to feed the f32-scalar
     /// FFI dispatchers when `IS_F64` is `false` (round-trip is lossless
@@ -66,6 +79,12 @@ pub trait ScalarType: scalar_sealed::Sealed + Copy + Default + PartialEq + 'stat
     /// underlying types.
     #[doc(hidden)]
     fn to_f64(self) -> f64;
+
+    /// Convert from `f32`. Lossless for the `f32` impl, widening for the
+    /// `f64` impl. Use this instead of `as` casts when writing generic
+    /// code over `<S: ScalarType>` — `S::from_f32(0.5)` works regardless
+    /// of which scalar type is bound.
+    fn from_f32(x: f32) -> Self;
 }
 
 impl scalar_sealed::Sealed for f32 {}
@@ -73,13 +92,19 @@ impl scalar_sealed::Sealed for f64 {}
 
 impl ScalarType for f32 {
     const IS_F64: bool = false;
+    const ZERO: Self = 0.0;
+    const ONE: Self = 1.0;
     #[inline] fn to_f32(self) -> f32 { self }
     #[inline] fn to_f64(self) -> f64 { self as f64 }
+    #[inline] fn from_f32(x: f32) -> Self { x }
 }
 impl ScalarType for f64 {
     const IS_F64: bool = true;
+    const ZERO: Self = 0.0;
+    const ONE: Self = 1.0;
     #[inline] fn to_f32(self) -> f32 { self as f32 }
     #[inline] fn to_f64(self) -> f64 { self }
+    #[inline] fn from_f32(x: f32) -> Self { x as f64 }
 }
 
 /// Element types supported by the kernel facade.
@@ -721,6 +746,42 @@ pub enum BiasElementKind {
     /// Signed 32-bit integer bias broadcast. Matches the convention
     /// TensorRT uses for int8 inference (per-channel int32 bias).
     I32,
+}
+
+/// Sealed marker trait for index-element types accepted by the
+/// indexing / embedding / segment kernel families.
+///
+/// Phase 11.5 (Fuel team feedback #7): split out as a sibling of
+/// [`Element`] so plans like [`crate::indexing::GatherPlan`] /
+/// [`crate::embedding::EmbeddingPlan`] / [`crate::segment::SegmentSumPlan`]
+/// can dispatch over the index dtype without coupling the value-dtype
+/// trait hierarchy. Today's members are `i32` (legacy) and `i64`
+/// (PyTorch default). Sealed because new members require a matching
+/// FFI entry point in the `*-kernels-sys` crate.
+pub trait IndexElement: DeviceRepr + index_sealed::Sealed + Copy + 'static {
+    /// Runtime tag for this index element type.
+    const KIND: IndexElementKind;
+}
+
+impl index_sealed::Sealed for i32 {}
+impl index_sealed::Sealed for i64 {}
+
+impl IndexElement for i32 {
+    const KIND: IndexElementKind = IndexElementKind::I32;
+}
+impl IndexElement for i64 {
+    const KIND: IndexElementKind = IndexElementKind::I64;
+}
+
+/// Runtime tag for an [`IndexElement`]. `i32` is the legacy default;
+/// `i64` was added in Phase 11.5 to match PyTorch's int64 index
+/// convention without an extra cast pass.
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
+pub enum IndexElementKind {
+    /// Signed 32-bit index dtype — legacy default.
+    I32,
+    /// Signed 64-bit index dtype — PyTorch default.
+    I64,
 }
 
 /// Strict-precision f32 element marker.

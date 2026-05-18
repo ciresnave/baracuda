@@ -12,8 +12,9 @@ use core::marker::PhantomData;
 use baracuda_cutlass::{Error, Result};
 use baracuda_driver::Stream;
 use baracuda_kernels_types::{
-    ArchSku, BackendKind, Element, ElementKind, IndexingKind, KernelSku, MathPrecision, OpCategory,
-    PlanPreference, PrecisionGuarantee, TensorMut, TensorRef, Workspace,
+    ArchSku, BackendKind, Element, ElementKind, IndexElement, IndexElementKind, IndexingKind,
+    KernelSku, MathPrecision, OpCategory, PlanPreference, PrecisionGuarantee, TensorMut,
+    TensorRef, Workspace,
 };
 
 use super::gather::map_status;
@@ -32,11 +33,13 @@ pub struct IndexSelectBackwardDescriptor<const N: usize> {
 }
 
 /// Args bundle for an `index_select_backward` launch.
-pub struct IndexSelectBackwardArgs<'a, T: Element, const N: usize> {
+///
+/// Phase 11.5: `I: IndexElement` generic (`i32` or `i64`).
+pub struct IndexSelectBackwardArgs<'a, T: Element, const N: usize, I: IndexElement = i32> {
     /// Upstream gradient.
     pub dout: TensorRef<'a, T, N>,
-    /// Index tensor (1-D, i32) from the FW pass.
-    pub idx: TensorRef<'a, i32, 1>,
+    /// Index tensor (1-D) from the FW pass.
+    pub idx: TensorRef<'a, I, 1>,
     /// Gradient w.r.t. `src`. Caller MUST zero this before launch.
     pub dsrc: TensorMut<'a, T, N>,
 }
@@ -128,7 +131,7 @@ impl<T: Element, const N: usize> IndexSelectBackwardPlan<T, N> {
     }
 
     /// Validate args.
-    pub fn can_implement(&self, args: &IndexSelectBackwardArgs<'_, T, N>) -> Result<()> {
+    pub fn can_implement<I: IndexElement>(&self, args: &IndexSelectBackwardArgs<'_, T, N, I>) -> Result<()> {
         if args.dout.shape != self.desc.out_shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::IndexSelectBackwardPlan: dout shape mismatch with descriptor",
@@ -184,11 +187,13 @@ impl<T: Element, const N: usize> IndexSelectBackwardPlan<T, N> {
     }
 
     /// Launch.
-    pub fn run(
+    ///
+    /// Phase 11.5: generic over `I: IndexElement`.
+    pub fn run<I: IndexElement>(
         &self,
         stream: &Stream,
         _workspace: Workspace<'_>,
-        args: IndexSelectBackwardArgs<'_, T, N>,
+        args: IndexSelectBackwardArgs<'_, T, N, I>,
     ) -> Result<()> {
         self.can_implement(&args)?;
         let out_numel = args.dout.numel();
@@ -205,39 +210,37 @@ impl<T: Element, const N: usize> IndexSelectBackwardPlan<T, N> {
         let stride_dsrc = args.dsrc.stride;
         let rank = N as i32;
 
-        let status = match T::KIND {
-            ElementKind::F32 => unsafe {
+        let status = match (T::KIND, I::KIND) {
+            (ElementKind::F32, IndexElementKind::I32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_index_select_backward_f32_run(
-                    out_numel,
-                    rank,
-                    self.desc.select_dim,
-                    self.desc.src_dim_size,
-                    out_shape.as_ptr(),
-                    stride_dout.as_ptr(),
-                    stride_dsrc.as_ptr(),
-                    dout_ptr,
-                    idx_ptr,
-                    dsrc_ptr,
-                    core::ptr::null_mut(),
-                    0,
-                    stream_ptr,
+                    out_numel, rank, self.desc.select_dim, self.desc.src_dim_size,
+                    out_shape.as_ptr(), stride_dout.as_ptr(), stride_dsrc.as_ptr(),
+                    dout_ptr, idx_ptr, dsrc_ptr,
+                    core::ptr::null_mut(), 0, stream_ptr,
                 )
             },
-            ElementKind::F64 => unsafe {
+            (ElementKind::F64, IndexElementKind::I32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_index_select_backward_f64_run(
-                    out_numel,
-                    rank,
-                    self.desc.select_dim,
-                    self.desc.src_dim_size,
-                    out_shape.as_ptr(),
-                    stride_dout.as_ptr(),
-                    stride_dsrc.as_ptr(),
-                    dout_ptr,
-                    idx_ptr,
-                    dsrc_ptr,
-                    core::ptr::null_mut(),
-                    0,
-                    stream_ptr,
+                    out_numel, rank, self.desc.select_dim, self.desc.src_dim_size,
+                    out_shape.as_ptr(), stride_dout.as_ptr(), stride_dsrc.as_ptr(),
+                    dout_ptr, idx_ptr, dsrc_ptr,
+                    core::ptr::null_mut(), 0, stream_ptr,
+                )
+            },
+            (ElementKind::F32, IndexElementKind::I64) => unsafe {
+                baracuda_kernels_sys::baracuda_kernels_index_select_backward_i64idx_f32_run(
+                    out_numel, rank, self.desc.select_dim, self.desc.src_dim_size,
+                    out_shape.as_ptr(), stride_dout.as_ptr(), stride_dsrc.as_ptr(),
+                    dout_ptr, idx_ptr, dsrc_ptr,
+                    core::ptr::null_mut(), 0, stream_ptr,
+                )
+            },
+            (ElementKind::F64, IndexElementKind::I64) => unsafe {
+                baracuda_kernels_sys::baracuda_kernels_index_select_backward_i64idx_f64_run(
+                    out_numel, rank, self.desc.select_dim, self.desc.src_dim_size,
+                    out_shape.as_ptr(), stride_dout.as_ptr(), stride_dsrc.as_ptr(),
+                    dout_ptr, idx_ptr, dsrc_ptr,
+                    core::ptr::null_mut(), 0, stream_ptr,
                 )
             },
             _ => {

@@ -35,6 +35,8 @@
 #include <cuda_fp16.h>
 #include <cuda_bf16.h>
 
+#include "baracuda_atomic.cuh"
+
 namespace baracuda { namespace indexing {
 
 inline constexpr int MAX_RANK = 8;
@@ -45,92 +47,35 @@ struct DimsI32 { int32_t v[MAX_RANK]; };
 struct DimsI64 { int64_t v[MAX_RANK]; };
 
 // =============================================================================
-// AtomicAdd helpers — handle the half / bfloat16 cases by routing through
-// the i32 emulated atomicCAS pattern (SM<6 lacks native fp16/bf16 atomics
-// but SM 6.0+ has __half2 + bf16 atomicAdd in cuda 11.0+; we use the
-// native intrinsics where available).
+// AtomicAdd helper — routes to the unified `baracuda::atomic::add<T>`
+// helper that always uses `atomicCAS` for `__half` / `__nv_bfloat16`
+// (Phase 11.3 / Fuel team feedback #6 — deterministic per-thread
+// arithmetic regardless of CUDA toolkit version) and native
+// `atomicAdd` for f32 / f64 / integer types.
+//
+// Name kept (`scatter_atomic_add`) for back-compat — embedding kernels
+// import it directly via `baracuda::indexing::scatter_atomic_add<T>`.
 // =============================================================================
 
 template <typename T>
-__device__ inline void scatter_atomic_add(T* addr, T val) {
-    atomicAdd(addr, val);
-}
-
-template <>
-__device__ inline void scatter_atomic_add<__half>(__half* addr, __half val) {
-#if __CUDA_ARCH__ >= 700
-    atomicAdd(addr, val);
-#else
-    // Fallback emulation via 32-bit atomicCAS on the containing pair.
-    unsigned int* aligned = reinterpret_cast<unsigned int*>(
-        reinterpret_cast<uintptr_t>(addr) & ~3ULL);
-    bool lo = (reinterpret_cast<uintptr_t>(addr) & 2) == 0;
-    unsigned int old = *aligned, assumed;
-    do {
-        assumed = old;
-        __half ax;
-        if (lo) {
-            ax = *reinterpret_cast<__half*>(&assumed);
-            __half nx = __hadd(ax, val);
-            unsigned int repl = (assumed & 0xFFFF0000u) | *reinterpret_cast<unsigned short*>(&nx);
-            old = atomicCAS(aligned, assumed, repl);
-        } else {
-            unsigned int hi = (assumed >> 16);
-            ax = *reinterpret_cast<__half*>(&hi);
-            __half nx = __hadd(ax, val);
-            unsigned int repl = (assumed & 0x0000FFFFu)
-                              | (((unsigned int)*reinterpret_cast<unsigned short*>(&nx)) << 16);
-            old = atomicCAS(aligned, assumed, repl);
-        }
-    } while (assumed != old);
-#endif
-}
-
-template <>
-__device__ inline void scatter_atomic_add<__nv_bfloat16>(__nv_bfloat16* addr, __nv_bfloat16 val) {
-#if __CUDA_ARCH__ >= 800
-    atomicAdd(addr, val);
-#else
-    // Fallback: f32 round-trip via 32-bit atomicCAS on the containing pair.
-    unsigned int* aligned = reinterpret_cast<unsigned int*>(
-        reinterpret_cast<uintptr_t>(addr) & ~3ULL);
-    bool lo = (reinterpret_cast<uintptr_t>(addr) & 2) == 0;
-    unsigned int old = *aligned, assumed;
-    float vf = __bfloat162float(val);
-    do {
-        assumed = old;
-        __nv_bfloat16 ax;
-        if (lo) {
-            unsigned short bits = (unsigned short)(assumed & 0xFFFF);
-            ax = *reinterpret_cast<__nv_bfloat16*>(&bits);
-            float sum = __bfloat162float(ax) + vf;
-            __nv_bfloat16 nx = __float2bfloat16(sum);
-            unsigned short nbits = *reinterpret_cast<unsigned short*>(&nx);
-            unsigned int repl = (assumed & 0xFFFF0000u) | (unsigned int)nbits;
-            old = atomicCAS(aligned, assumed, repl);
-        } else {
-            unsigned short bits = (unsigned short)((assumed >> 16) & 0xFFFF);
-            ax = *reinterpret_cast<__nv_bfloat16*>(&bits);
-            float sum = __bfloat162float(ax) + vf;
-            __nv_bfloat16 nx = __float2bfloat16(sum);
-            unsigned short nbits = *reinterpret_cast<unsigned short*>(&nx);
-            unsigned int repl = (assumed & 0x0000FFFFu) | (((unsigned int)nbits) << 16);
-            old = atomicCAS(aligned, assumed, repl);
-        }
-    } while (assumed != old);
-#endif
+__device__ __forceinline__ void scatter_atomic_add(T* addr, T val) {
+    baracuda::atomic::add<T>(addr, val);
 }
 
 // =============================================================================
 // gather kernel — `out[..., j, ...] = src[..., index[...j...], ...]` along
 // dim `d`. Output shape == index shape. `src` has same shape as index on
 // all axes except `d` (where src extent == src_dim_size).
+//
+// Phase 11.5 / Fuel team feedback #7: templated on the index dtype `IndexT`
+// (`int32_t` or `int64_t`). Per-index bounds-check is performed in the
+// index dtype's signed-range so negative i64 indices are still rejected.
 // =============================================================================
 
-template <typename T>
+template <typename T, typename IndexT>
 __global__ void gather_kernel(
     const T* __restrict__ src,
-    const int32_t* __restrict__ index,
+    const IndexT* __restrict__ index,
     T* __restrict__ out,
     int64_t out_numel,
     int32_t rank,
@@ -160,24 +105,26 @@ __global__ void gather_kernel(
             idx_off += coord[d] * stride_index.v[d];
             out_off += coord[d] * stride_out.v[d];
         }
-        int32_t idx_val = index[idx_off];
+        // Promote to int64 for the in-range check so an i64 idx can be
+        // compared against the i32 src_dim_size without truncation.
+        int64_t idx_val = (int64_t)index[idx_off];
         // Bounds check — skip on out-of-range (don't write garbage).
-        if (idx_val < 0 || idx_val >= src_dim_size) {
+        if (idx_val < 0 || idx_val >= (int64_t)src_dim_size) {
             continue;
         }
         // Source coord: replace gather_dim with idx_val.
         int64_t src_off = 0;
         for (int d = 0; d < rank; ++d) {
-            int64_t cc = (d == gather_dim) ? (int64_t)idx_val : coord[d];
+            int64_t cc = (d == gather_dim) ? idx_val : coord[d];
             src_off += cc * stride_src.v[d];
         }
         out[out_off] = src[src_off];
     }
 }
 
-template <typename T>
+template <typename T, typename IndexT>
 __host__ inline int32_t launch_gather(
-    const T* src, const int32_t* index, T* out,
+    const T* src, const IndexT* index, T* out,
     int64_t out_numel,
     int32_t rank,
     int32_t gather_dim,
@@ -203,7 +150,7 @@ __host__ inline int32_t launch_gather(
     int64_t blocks_i64 = (out_numel + kBlock - 1) / kBlock;
     int blocks = static_cast<int>(blocks_i64 > kMaxBlocks ? kMaxBlocks : blocks_i64);
     if (blocks <= 0) blocks = 1;
-    gather_kernel<T><<<blocks, kBlock, 0, stream>>>(
+    gather_kernel<T, IndexT><<<blocks, kBlock, 0, stream>>>(
         src, index, out, out_numel, rank, gather_dim, src_dim_size,
         sh, ss, si, so);
     cudaError_t err = cudaGetLastError();
@@ -216,10 +163,10 @@ __host__ inline int32_t launch_gather(
 // One thread per output (= index) element; atomicAdd into dsrc.
 // =============================================================================
 
-template <typename T>
+template <typename T, typename IndexT>
 __global__ void gather_backward_kernel(
     const T* __restrict__ dout,
-    const int32_t* __restrict__ index,
+    const IndexT* __restrict__ index,
     T* __restrict__ dsrc,
     int64_t out_numel,
     int32_t rank,
@@ -247,22 +194,22 @@ __global__ void gather_backward_kernel(
             idx_off += coord[d] * stride_index.v[d];
             dout_off += coord[d] * stride_dout.v[d];
         }
-        int32_t idx_val = index[idx_off];
-        if (idx_val < 0 || idx_val >= src_dim_size) {
+        int64_t idx_val = (int64_t)index[idx_off];
+        if (idx_val < 0 || idx_val >= (int64_t)src_dim_size) {
             continue;
         }
         int64_t dsrc_off = 0;
         for (int d = 0; d < rank; ++d) {
-            int64_t cc = (d == gather_dim) ? (int64_t)idx_val : coord[d];
+            int64_t cc = (d == gather_dim) ? idx_val : coord[d];
             dsrc_off += cc * stride_dsrc.v[d];
         }
         scatter_atomic_add<T>(&dsrc[dsrc_off], dout[dout_off]);
     }
 }
 
-template <typename T>
+template <typename T, typename IndexT>
 __host__ inline int32_t launch_gather_backward(
-    const T* dout, const int32_t* index, T* dsrc,
+    const T* dout, const IndexT* index, T* dsrc,
     int64_t out_numel,
     int32_t rank,
     int32_t gather_dim,
@@ -288,7 +235,7 @@ __host__ inline int32_t launch_gather_backward(
     int64_t blocks_i64 = (out_numel + kBlock - 1) / kBlock;
     int blocks = static_cast<int>(blocks_i64 > kMaxBlocks ? kMaxBlocks : blocks_i64);
     if (blocks <= 0) blocks = 1;
-    gather_backward_kernel<T><<<blocks, kBlock, 0, stream>>>(
+    gather_backward_kernel<T, IndexT><<<blocks, kBlock, 0, stream>>>(
         dout, index, dsrc, out_numel, rank, gather_dim, src_dim_size,
         sh, sd, si, sds);
     cudaError_t err = cudaGetLastError();
@@ -301,10 +248,10 @@ __host__ inline int32_t launch_gather_backward(
 // destination cell (duplicate indices summed correctly).
 // =============================================================================
 
-template <typename T>
+template <typename T, typename IndexT>
 __global__ void scatter_add_kernel(
     const T* __restrict__ updates,
-    const int32_t* __restrict__ index,
+    const IndexT* __restrict__ index,
     T* __restrict__ out,
     int64_t upd_numel,
     int32_t rank,
@@ -332,22 +279,22 @@ __global__ void scatter_add_kernel(
             idx_off += coord[d] * stride_index.v[d];
             upd_off += coord[d] * stride_upd.v[d];
         }
-        int32_t idx_val = index[idx_off];
-        if (idx_val < 0 || idx_val >= out_dim_size) {
+        int64_t idx_val = (int64_t)index[idx_off];
+        if (idx_val < 0 || idx_val >= (int64_t)out_dim_size) {
             continue;
         }
         int64_t out_off = 0;
         for (int d = 0; d < rank; ++d) {
-            int64_t cc = (d == scatter_dim) ? (int64_t)idx_val : coord[d];
+            int64_t cc = (d == scatter_dim) ? idx_val : coord[d];
             out_off += cc * stride_out.v[d];
         }
         scatter_atomic_add<T>(&out[out_off], updates[upd_off]);
     }
 }
 
-template <typename T>
+template <typename T, typename IndexT>
 __host__ inline int32_t launch_scatter_add(
-    const T* updates, const int32_t* index, T* out,
+    const T* updates, const IndexT* index, T* out,
     int64_t upd_numel,
     int32_t rank,
     int32_t scatter_dim,
@@ -373,7 +320,7 @@ __host__ inline int32_t launch_scatter_add(
     int64_t blocks_i64 = (upd_numel + kBlock - 1) / kBlock;
     int blocks = static_cast<int>(blocks_i64 > kMaxBlocks ? kMaxBlocks : blocks_i64);
     if (blocks <= 0) blocks = 1;
-    scatter_add_kernel<T><<<blocks, kBlock, 0, stream>>>(
+    scatter_add_kernel<T, IndexT><<<blocks, kBlock, 0, stream>>>(
         updates, index, out, upd_numel, rank, scatter_dim, out_dim_size,
         sh, su, si, so);
     cudaError_t err = cudaGetLastError();
@@ -386,10 +333,10 @@ __host__ inline int32_t launch_scatter_add(
 // shape is `src.shape` with dim `select_dim` replaced by `idx.numel()`.
 // =============================================================================
 
-template <typename T>
+template <typename T, typename IndexT>
 __global__ void index_select_kernel(
     const T* __restrict__ src,
-    const int32_t* __restrict__ idx,
+    const IndexT* __restrict__ idx,
     T* __restrict__ out,
     int64_t out_numel,
     int32_t rank,
@@ -411,24 +358,24 @@ __global__ void index_select_kernel(
             coord[d] = c;
         }
         // The select axis coord is used to look up the 1-D index.
-        int32_t idx_val = idx[coord[select_dim]];
-        if (idx_val < 0 || idx_val >= src_dim_size) {
+        int64_t idx_val = (int64_t)idx[coord[select_dim]];
+        if (idx_val < 0 || idx_val >= (int64_t)src_dim_size) {
             continue;
         }
         int64_t out_off = 0;
         int64_t src_off = 0;
         for (int d = 0; d < rank; ++d) {
             out_off += coord[d] * stride_out.v[d];
-            int64_t cc = (d == select_dim) ? (int64_t)idx_val : coord[d];
+            int64_t cc = (d == select_dim) ? idx_val : coord[d];
             src_off += cc * stride_src.v[d];
         }
         out[out_off] = src[src_off];
     }
 }
 
-template <typename T>
+template <typename T, typename IndexT>
 __host__ inline int32_t launch_index_select(
-    const T* src, const int32_t* idx, T* out,
+    const T* src, const IndexT* idx, T* out,
     int64_t out_numel,
     int32_t rank,
     int32_t select_dim,
@@ -452,7 +399,7 @@ __host__ inline int32_t launch_index_select(
     int64_t blocks_i64 = (out_numel + kBlock - 1) / kBlock;
     int blocks = static_cast<int>(blocks_i64 > kMaxBlocks ? kMaxBlocks : blocks_i64);
     if (blocks <= 0) blocks = 1;
-    index_select_kernel<T><<<blocks, kBlock, 0, stream>>>(
+    index_select_kernel<T, IndexT><<<blocks, kBlock, 0, stream>>>(
         src, idx, out, out_numel, rank, select_dim, src_dim_size,
         sh, ss, so);
     cudaError_t err = cudaGetLastError();
@@ -464,10 +411,10 @@ __host__ inline int32_t launch_index_select(
 //   dsrc[..., idx[j], ...] += dout[..., j, ...]
 // =============================================================================
 
-template <typename T>
+template <typename T, typename IndexT>
 __global__ void index_select_backward_kernel(
     const T* __restrict__ dout,
-    const int32_t* __restrict__ idx,
+    const IndexT* __restrict__ idx,
     T* __restrict__ dsrc,
     int64_t out_numel,
     int32_t rank,
@@ -488,24 +435,24 @@ __global__ void index_select_backward_kernel(
             if (s != 0) linear /= (int64_t)s;
             coord[d] = c;
         }
-        int32_t idx_val = idx[coord[select_dim]];
-        if (idx_val < 0 || idx_val >= src_dim_size) {
+        int64_t idx_val = (int64_t)idx[coord[select_dim]];
+        if (idx_val < 0 || idx_val >= (int64_t)src_dim_size) {
             continue;
         }
         int64_t dout_off = 0;
         int64_t dsrc_off = 0;
         for (int d = 0; d < rank; ++d) {
             dout_off += coord[d] * stride_dout.v[d];
-            int64_t cc = (d == select_dim) ? (int64_t)idx_val : coord[d];
+            int64_t cc = (d == select_dim) ? idx_val : coord[d];
             dsrc_off += cc * stride_dsrc.v[d];
         }
         scatter_atomic_add<T>(&dsrc[dsrc_off], dout[dout_off]);
     }
 }
 
-template <typename T>
+template <typename T, typename IndexT>
 __host__ inline int32_t launch_index_select_backward(
-    const T* dout, const int32_t* idx, T* dsrc,
+    const T* dout, const IndexT* idx, T* dsrc,
     int64_t out_numel,
     int32_t rank,
     int32_t select_dim,
@@ -529,7 +476,7 @@ __host__ inline int32_t launch_index_select_backward(
     int64_t blocks_i64 = (out_numel + kBlock - 1) / kBlock;
     int blocks = static_cast<int>(blocks_i64 > kMaxBlocks ? kMaxBlocks : blocks_i64);
     if (blocks <= 0) blocks = 1;
-    index_select_backward_kernel<T><<<blocks, kBlock, 0, stream>>>(
+    index_select_backward_kernel<T, IndexT><<<blocks, kBlock, 0, stream>>>(
         dout, idx, dsrc, out_numel, rank, select_dim, src_dim_size,
         sh, sd, sds);
     cudaError_t err = cudaGetLastError();
@@ -621,9 +568,9 @@ __host__ inline int32_t launch_masked_fill_backward(
 // output cell.
 // =============================================================================
 
-template <typename T>
+template <typename T, typename IndexT>
 __global__ void one_hot_kernel(
-    const int32_t* __restrict__ src,
+    const IndexT* __restrict__ src,
     T* __restrict__ out,
     int64_t out_numel,
     int32_t num_classes,
@@ -636,15 +583,15 @@ __global__ void one_hot_kernel(
         // Output is contig — last axis is num_classes. Decompose:
         //   out_idx = batch_idx * num_classes + c
         int64_t batch_idx = i / (int64_t)num_classes;
-        int32_t c = (int32_t)(i - batch_idx * (int64_t)num_classes);
-        int32_t src_val = src[batch_idx];
+        int64_t c = i - batch_idx * (int64_t)num_classes;
+        int64_t src_val = (int64_t)src[batch_idx];
         out[i] = (src_val == c) ? one : zero;
     }
 }
 
-template <typename T>
+template <typename T, typename IndexT>
 __host__ inline int32_t launch_one_hot(
-    const int32_t* src, T* out,
+    const IndexT* src, T* out,
     int64_t out_numel,
     int32_t num_classes,
     T one,
@@ -657,7 +604,7 @@ __host__ inline int32_t launch_one_hot(
     int64_t blocks_i64 = (out_numel + kBlock - 1) / kBlock;
     int blocks = static_cast<int>(blocks_i64 > kMaxBlocks ? kMaxBlocks : blocks_i64);
     if (blocks <= 0) blocks = 1;
-    one_hot_kernel<T><<<blocks, kBlock, 0, stream>>>(src, out, out_numel, num_classes, one, zero);
+    one_hot_kernel<T, IndexT><<<blocks, kBlock, 0, stream>>>(src, out, out_numel, num_classes, one, zero);
     cudaError_t err = cudaGetLastError();
     return (err == cudaSuccess) ? 0 : 5;
 }
@@ -692,14 +639,30 @@ __device__ inline bool is_nonzero_val<__nv_bfloat16>(__nv_bfloat16 v) {
     return __bfloat162float(v) != 0.0f;
 }
 
-template <typename T>
+// Atomic-add-1 dispatch for the nonzero counter: route to the matching
+// CUDA atomicAdd overload based on counter dtype. i32 → native; i64 →
+// reinterpret as `unsigned long long` (which CUDA's atomicAdd supports
+// since sm_60 — universally on baracuda's sm_80+ baseline).
+__device__ __forceinline__ int32_t nonzero_atomic_inc(int32_t* counter) {
+    return atomicAdd(counter, (int32_t)1);
+}
+__device__ __forceinline__ int64_t nonzero_atomic_inc(int64_t* counter) {
+    return (int64_t)atomicAdd(
+        reinterpret_cast<unsigned long long*>(counter), (unsigned long long)1);
+}
+
+// `IndexT` selects the output / counter dtype (i32 or i64). i64 was added
+// in Phase 11.5 (Fuel team feedback #7) — PyTorch's `torch.nonzero`
+// returns int64 indices, and large tensors blow past i32 range on a
+// single axis.
+template <typename T, typename IndexT>
 __global__ void nonzero_compact_kernel(
     const T* __restrict__ x,
-    int32_t* __restrict__ out_coords,    // [max_nz, rank]
-    int32_t* __restrict__ counter,       // single int32 atomic
+    IndexT* __restrict__ out_coords,     // [max_nz, rank]
+    IndexT* __restrict__ counter,        // single atomic counter
     int64_t numel,
     int32_t rank,
-    int32_t max_nz,
+    int64_t max_nz,
     DimsI32 shape,
     DimsI64 stride_x)
 {
@@ -721,32 +684,32 @@ __global__ void nonzero_compact_kernel(
             x_off += coord[d] * stride_x.v[d];
         }
         if (is_nonzero_val<T>(x[x_off])) {
-            int32_t slot = atomicAdd(counter, 1);
-            if (slot < max_nz) {
+            IndexT slot = nonzero_atomic_inc(counter);
+            if ((int64_t)slot < max_nz) {
                 for (int d = 0; d < rank; ++d) {
-                    out_coords[(int64_t)slot * (int64_t)rank + (int64_t)d] = (int32_t)coord[d];
+                    out_coords[(int64_t)slot * (int64_t)rank + (int64_t)d] = (IndexT)coord[d];
                 }
             }
         }
     }
 }
 
-template <typename T>
+template <typename T, typename IndexT>
 __host__ inline int32_t launch_nonzero(
     const T* x,
-    int32_t* out_coords,
-    int32_t* counter,           // device-resident, single int32
+    IndexT* out_coords,
+    IndexT* counter,           // device-resident, single i32 or i64
     int64_t numel,
     int32_t rank,
-    int32_t max_nz,
+    int64_t max_nz,
     const int32_t* shape_host,
     const int64_t* stride_x_host,
     cudaStream_t stream)
 {
     if (rank < 0 || rank > MAX_RANK) return 2;
     if (max_nz < 0) return 2;
-    // Zero the counter on the stream.
-    cudaError_t err = cudaMemsetAsync(counter, 0, sizeof(int32_t), stream);
+    // Zero the counter on the stream (works for either i32 or i64).
+    cudaError_t err = cudaMemsetAsync(counter, 0, sizeof(IndexT), stream);
     if (err != cudaSuccess) return 5;
     DimsI32 sh = {};
     DimsI64 sx = {};
@@ -760,7 +723,7 @@ __host__ inline int32_t launch_nonzero(
     int64_t blocks_i64 = (numel + kBlock - 1) / kBlock;
     int blocks = static_cast<int>(blocks_i64 > kMaxBlocks ? kMaxBlocks : blocks_i64);
     if (blocks <= 0) blocks = 1;
-    nonzero_compact_kernel<T><<<blocks, kBlock, 0, stream>>>(
+    nonzero_compact_kernel<T, IndexT><<<blocks, kBlock, 0, stream>>>(
         x, out_coords, counter, numel, rank, max_nz, sh, sx);
     err = cudaGetLastError();
     return (err == cudaSuccess) ? 0 : 5;
@@ -772,7 +735,11 @@ __host__ inline int32_t launch_nonzero(
 // INSTANTIATE macros — emit `extern "C"` launcher per (op, dtype) pair.
 // =============================================================================
 
-#define BARACUDA_KERNELS_GATHER_INSTANTIATE(NAME, T)                                              \
+// `INDEX_T` is the index-element type — `int32_t` or `int64_t`. Phase 11.5
+// (Fuel team feedback #7) added the i64 instantiations alongside the
+// original i32 ones; the macro is templated on both T (value dtype) and
+// INDEX_T (index dtype).
+#define BARACUDA_KERNELS_GATHER_INSTANTIATE(NAME, T, INDEX_T)                                     \
     extern "C" int32_t baracuda_kernels_##NAME##_run(                                             \
         int64_t out_numel,                                                                         \
         int32_t rank,                                                                              \
@@ -794,15 +761,15 @@ __host__ inline int32_t launch_nonzero(
         if (out_shape == nullptr || stride_src == nullptr ||                                      \
             stride_index == nullptr || stride_out == nullptr) return 2;                           \
         cudaStream_t stream = static_cast<cudaStream_t>(stream_ptr);                              \
-        return baracuda::indexing::launch_gather<T>(                                              \
+        return baracuda::indexing::launch_gather<T, INDEX_T>(                                     \
             static_cast<const T*>(src),                                                            \
-            static_cast<const int32_t*>(index),                                                    \
+            static_cast<const INDEX_T*>(index),                                                    \
             static_cast<T*>(out),                                                                  \
             out_numel, rank, gather_dim, src_dim_size,                                            \
             out_shape, stride_src, stride_index, stride_out, stream);                             \
     }
 
-#define BARACUDA_KERNELS_GATHER_BACKWARD_INSTANTIATE(NAME, T)                                     \
+#define BARACUDA_KERNELS_GATHER_BACKWARD_INSTANTIATE(NAME, T, INDEX_T)                            \
     extern "C" int32_t baracuda_kernels_##NAME##_run(                                             \
         int64_t out_numel,                                                                         \
         int32_t rank,                                                                              \
@@ -824,15 +791,15 @@ __host__ inline int32_t launch_nonzero(
         if (out_shape == nullptr || stride_dout == nullptr ||                                     \
             stride_index == nullptr || stride_dsrc == nullptr) return 2;                          \
         cudaStream_t stream = static_cast<cudaStream_t>(stream_ptr);                              \
-        return baracuda::indexing::launch_gather_backward<T>(                                     \
+        return baracuda::indexing::launch_gather_backward<T, INDEX_T>(                            \
             static_cast<const T*>(dout),                                                           \
-            static_cast<const int32_t*>(index),                                                    \
+            static_cast<const INDEX_T*>(index),                                                    \
             static_cast<T*>(dsrc),                                                                 \
             out_numel, rank, gather_dim, src_dim_size,                                            \
             out_shape, stride_dout, stride_index, stride_dsrc, stream);                           \
     }
 
-#define BARACUDA_KERNELS_SCATTER_ADD_INSTANTIATE(NAME, T)                                         \
+#define BARACUDA_KERNELS_SCATTER_ADD_INSTANTIATE(NAME, T, INDEX_T)                                \
     extern "C" int32_t baracuda_kernels_##NAME##_run(                                             \
         int64_t upd_numel,                                                                         \
         int32_t rank,                                                                              \
@@ -854,15 +821,15 @@ __host__ inline int32_t launch_nonzero(
         if (upd_shape == nullptr || stride_upd == nullptr ||                                      \
             stride_index == nullptr || stride_out == nullptr) return 2;                           \
         cudaStream_t stream = static_cast<cudaStream_t>(stream_ptr);                              \
-        return baracuda::indexing::launch_scatter_add<T>(                                         \
+        return baracuda::indexing::launch_scatter_add<T, INDEX_T>(                                \
             static_cast<const T*>(updates),                                                        \
-            static_cast<const int32_t*>(index),                                                    \
+            static_cast<const INDEX_T*>(index),                                                    \
             static_cast<T*>(out),                                                                  \
             upd_numel, rank, scatter_dim, out_dim_size,                                           \
             upd_shape, stride_upd, stride_index, stride_out, stream);                             \
     }
 
-#define BARACUDA_KERNELS_INDEX_SELECT_INSTANTIATE(NAME, T)                                        \
+#define BARACUDA_KERNELS_INDEX_SELECT_INSTANTIATE(NAME, T, INDEX_T)                               \
     extern "C" int32_t baracuda_kernels_##NAME##_run(                                             \
         int64_t out_numel,                                                                         \
         int32_t rank,                                                                              \
@@ -882,15 +849,15 @@ __host__ inline int32_t launch_nonzero(
         if (src == nullptr || idx == nullptr || out == nullptr) return 2;                         \
         if (out_shape == nullptr || stride_src == nullptr || stride_out == nullptr) return 2;     \
         cudaStream_t stream = static_cast<cudaStream_t>(stream_ptr);                              \
-        return baracuda::indexing::launch_index_select<T>(                                        \
+        return baracuda::indexing::launch_index_select<T, INDEX_T>(                               \
             static_cast<const T*>(src),                                                            \
-            static_cast<const int32_t*>(idx),                                                      \
+            static_cast<const INDEX_T*>(idx),                                                      \
             static_cast<T*>(out),                                                                  \
             out_numel, rank, select_dim, src_dim_size,                                            \
             out_shape, stride_src, stride_out, stream);                                           \
     }
 
-#define BARACUDA_KERNELS_INDEX_SELECT_BACKWARD_INSTANTIATE(NAME, T)                               \
+#define BARACUDA_KERNELS_INDEX_SELECT_BACKWARD_INSTANTIATE(NAME, T, INDEX_T)                      \
     extern "C" int32_t baracuda_kernels_##NAME##_run(                                             \
         int64_t out_numel,                                                                         \
         int32_t rank,                                                                              \
@@ -910,9 +877,9 @@ __host__ inline int32_t launch_nonzero(
         if (dout == nullptr || idx == nullptr || dsrc == nullptr) return 2;                       \
         if (out_shape == nullptr || stride_dout == nullptr || stride_dsrc == nullptr) return 2;   \
         cudaStream_t stream = static_cast<cudaStream_t>(stream_ptr);                              \
-        return baracuda::indexing::launch_index_select_backward<T>(                               \
+        return baracuda::indexing::launch_index_select_backward<T, INDEX_T>(                      \
             static_cast<const T*>(dout),                                                           \
-            static_cast<const int32_t*>(idx),                                                      \
+            static_cast<const INDEX_T*>(idx),                                                      \
             static_cast<T*>(dsrc),                                                                 \
             out_numel, rank, select_dim, src_dim_size,                                            \
             out_shape, stride_dout, stride_dsrc, stream);                                         \
@@ -971,7 +938,7 @@ __host__ inline int32_t launch_nonzero(
             numel, zero_val, stream);                                                              \
     }
 
-#define BARACUDA_KERNELS_ONE_HOT_INSTANTIATE(NAME, T, ONE_EXPR, ZERO_EXPR)                        \
+#define BARACUDA_KERNELS_ONE_HOT_INSTANTIATE(NAME, T, INDEX_T, ONE_EXPR, ZERO_EXPR)                \
     extern "C" int32_t baracuda_kernels_##NAME##_run(                                             \
         int64_t out_numel,                                                                         \
         int32_t num_classes,                                                                       \
@@ -986,13 +953,17 @@ __host__ inline int32_t launch_nonzero(
         cudaStream_t stream = static_cast<cudaStream_t>(stream_ptr);                              \
         T one_val  = (ONE_EXPR);                                                                   \
         T zero_val = (ZERO_EXPR);                                                                  \
-        return baracuda::indexing::launch_one_hot<T>(                                             \
-            static_cast<const int32_t*>(src),                                                      \
+        return baracuda::indexing::launch_one_hot<T, INDEX_T>(                                    \
+            static_cast<const INDEX_T*>(src),                                                      \
             static_cast<T*>(out),                                                                  \
             out_numel, num_classes, one_val, zero_val, stream);                                    \
     }
 
-#define BARACUDA_KERNELS_NONZERO_INSTANTIATE(NAME, T)                                             \
+// Phase 11.5: `INDEX_T` parameter selects the output / counter dtype
+// (i32 or i64). `max_nz` stays `int32_t` for FFI back-compat — a single
+// nonzero-count past 2^31 is well past what fits in any realistic
+// max_nz budget on current GPUs.
+#define BARACUDA_KERNELS_NONZERO_INSTANTIATE(NAME, T, INDEX_T)                                    \
     extern "C" int32_t baracuda_kernels_##NAME##_run(                                             \
         int64_t numel,                                                                             \
         int32_t rank,                                                                              \
@@ -1009,11 +980,11 @@ __host__ inline int32_t launch_nonzero(
         if (x == nullptr || out_coords == nullptr || counter == nullptr) return 2;                \
         if (shape == nullptr || stride_x == nullptr) return 2;                                    \
         cudaStream_t stream = static_cast<cudaStream_t>(stream_ptr);                              \
-        return baracuda::indexing::launch_nonzero<T>(                                             \
+        return baracuda::indexing::launch_nonzero<T, INDEX_T>(                                    \
             static_cast<const T*>(x),                                                              \
-            static_cast<int32_t*>(out_coords),                                                     \
-            static_cast<int32_t*>(counter),                                                        \
-            numel, rank, max_nz, shape, stride_x, stream);                                         \
+            static_cast<INDEX_T*>(out_coords),                                                     \
+            static_cast<INDEX_T*>(counter),                                                        \
+            numel, rank, (int64_t)max_nz, shape, stride_x, stream);                               \
     }
 
 #endif // BARACUDA_INDEXING_CUH

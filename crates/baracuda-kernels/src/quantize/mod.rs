@@ -58,7 +58,8 @@ pub mod quantized_linear;
 
 // --- Milestone 8.4 module — GGUF block-format quant family (vendored
 //     from llama.cpp via fuel-cuda-kernels). Full block-format coverage
-//     for dequant; everything except Q8_K for MMVQ. ----
+//     for both dequant and MMVQ. Phase 11.4 added a bespoke Q8_K MMVQ
+//     (upstream llama.cpp / Fuel ship only Q8_K dequant). ----
 pub mod gguf;
 
 pub use dequantize_per_channel::{

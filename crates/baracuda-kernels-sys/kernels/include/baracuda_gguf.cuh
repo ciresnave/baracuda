@@ -589,6 +589,12 @@ static __device__ void dequantize_mul_mat_vec(
 // k-quants MMVQ kernels are not template-shared with the type-0/1 path —
 // they live as `extern "C" __global__` functions in mmvq.cu (per-qtype
 // specialized math), wrapped by baracuda's `_run` launchers.
+//
+// Q8_K MMVQ (Phase 11.4) — added by baracuda to close the Fuel feedback
+// gap. Upstream llama.cpp ships only the dequant kernel for Q8_K (treats
+// it as a CPU-side intermediate); baracuda exposes a fused MMVQ to avoid
+// the 2× memory traffic of materializing the dequantized weight first.
+// Math: per super-block, dot(qs[0..256], y[0..256]) × d, accumulated.
 
 }} // namespace baracuda::gguf
 

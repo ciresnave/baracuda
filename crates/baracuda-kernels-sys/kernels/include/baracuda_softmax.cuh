@@ -20,9 +20,19 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <type_traits>
 #include <cuda_runtime.h>
 #include <cuda_fp16.h>
 #include <cuda_bf16.h>
+
+// CUB block primitives must be included at GLOBAL scope (they bring in
+// `cuda::std::...` symbols which would otherwise nest into whatever
+// namespace this header is included from). Used by the Phase 11.6
+// block-cooperative sparsemax FW kernel below.
+#include <cub/block/block_radix_sort.cuh>
+#include <cub/block/block_scan.cuh>
+#include <cub/block/block_reduce.cuh>
+#include <cuda/functional> // for cuda::maximum (replaces removed cub::Max)
 
 #include "baracuda_elementwise.cuh" // for DimsI32 / DimsI64 / MAX_RANK
 
@@ -957,93 +967,53 @@ __host__ inline int32_t launch_gumbel_softmax_fp(
 // (insertion sort, O(extent²)). Limit: `softmax_extent <= 64` —
 // trailblazer constraint, documented at the safe layer.
 
+// Phase 11.6 (Fuel #10): replace the per-thread serial sort with a
+// block-cooperative `cub::BlockRadixSort` + `cub::BlockScan` + per-tile
+// emit. One thread block per row; threads collectively sort the row
+// into descending order, scan its prefix sum, find the threshold index
+// K*, and then emit `max(0, x - τ)` for the tile of cells each thread
+// owns. Lifts the practical row-extent cap from 64 to 1024.
+//
+// Two block-cooperative specializations are compiled:
+//   - ITEMS_PER_THREAD = 1 → handles rows of size 1..=256.
+//   - ITEMS_PER_THREAD = 4 → handles rows of size 257..=1024.
+// Both use BLOCK_THREADS = 256. Unused tail slots are padded with
+// `-FLT_MAX` (or `-DBL_MAX`) so they sink to the bottom of the
+// descending sort and are ignored by the threshold scan.
+//
+// CUB ships with the CUDA toolkit; no extra dep is required and the
+// headers resolve on nvcc's default include path. (Headers are
+// `#include`d at global scope near the top of this file.)
+
 #ifndef BARACUDA_SPARSEMAX_MAX_EXTENT
-#define BARACUDA_SPARSEMAX_MAX_EXTENT 64
+#define BARACUDA_SPARSEMAX_MAX_EXTENT 1024
 #endif
 
-template <typename T>
-__global__ void sparsemax_fp_kernel(
-    const T* __restrict__ x,
-    T* __restrict__ y,
-    int64_t numel,
-    int32_t rank,
-    baracuda::elementwise::DimsI32 shape,
-    baracuda::elementwise::DimsI64 stride_x,
-    baracuda::elementwise::DimsI64 stride_y,
-    int32_t softmax_axis,
-    int32_t softmax_extent,
-    int64_t softmax_stride_x,
-    int64_t softmax_stride_y)
-{
-    int64_t tid  = (int64_t)blockIdx.x * (int64_t)blockDim.x + (int64_t)threadIdx.x;
-    int64_t step = (int64_t)gridDim.x  * (int64_t)blockDim.x;
-    for (int64_t i = tid; i < numel; i += step) {
-        int64_t linear = i;
-        int64_t off_y = 0;
-        int64_t off_x_base = 0;
-        int32_t k = 0;
-        for (int d = rank - 1; d >= 0; --d) {
-            int32_t s = shape.v[d];
-            int64_t coord = (s == 0) ? 0 : (linear % (int64_t)s);
-            if (s != 0) linear /= (int64_t)s;
-            off_y += coord * stride_y.v[d];
-            if (d != softmax_axis) {
-                off_x_base += coord * stride_x.v[d];
-            } else {
-                k = (int32_t)coord;
-            }
-        }
-        // Local sorted-descending copy of the row. Bounded by MAX_EXTENT.
-        float sorted[BARACUDA_SPARSEMAX_MAX_EXTENT];
-        int32_t K = softmax_extent;
-        if (K > BARACUDA_SPARSEMAX_MAX_EXTENT) {
-            // Cannot fit — write something safe and bail.
-            y[off_y] = store_from_acc<T>(0.0f);
-            continue;
-        }
-        // Load the row.
-        for (int32_t j = 0; j < K; ++j) {
-            int64_t off = off_x_base + (int64_t)j * softmax_stride_x;
-            sorted[j] = load_as_acc<T>(x[off]);
-        }
-        // Insertion sort descending.
-        for (int32_t a = 1; a < K; ++a) {
-            float v = sorted[a];
-            int32_t b = a - 1;
-            while (b >= 0 && sorted[b] < v) {
-                sorted[b + 1] = sorted[b];
-                --b;
-            }
-            sorted[b + 1] = v;
-        }
-        // Find τ. Walk the cumulative sum.
-        float cum = 0.0f;
-        float tau = 0.0f;
-        int32_t k_max = 0;
-        for (int32_t a = 0; a < K; ++a) {
-            cum += sorted[a];
-            // Condition: 1 + (a+1) * sorted[a] > cum  →  qualifies as
-            // an active index.
-            if (1.0f + (float)(a + 1) * sorted[a] > cum) {
-                k_max = a + 1;
-                tau = (cum - 1.0f) / (float)(a + 1);
-            }
-        }
-        (void)k_max;
-        // Per-cell BW formula.
-        int64_t off_xk = off_x_base + (int64_t)k * softmax_stride_x;
-        float xk = load_as_acc<T>(x[off_xk]);
-        float yk = xk - tau;
-        if (yk < 0.0f) yk = 0.0f;
-        y[off_y] = store_from_acc<T>(yk);
-    }
+#ifndef BARACUDA_SPARSEMAX_BLOCK_THREADS
+#define BARACUDA_SPARSEMAX_BLOCK_THREADS 256
+#endif
+
+// `f64` needs a different store path: store_from_acc<double>(float)
+// would lose precision. Provide an Acc-aware store helper.
+template <typename T, typename Acc>
+__device__ __forceinline__ T sparsemax_store(Acc v) {
+    return store_from_acc<T>((float)v);
+}
+template <>
+__device__ __forceinline__ double sparsemax_store<double, double>(double v) {
+    return v;
 }
 
-template <>
-__global__ void sparsemax_fp_kernel<double>(
-    const double* __restrict__ x,
-    double* __restrict__ y,
-    int64_t numel,
+// Block-cooperative sparsemax FW kernel. The accumulator type `Acc` is
+// `float` for {f32, f16, bf16} and `double` for `f64`. The per-block
+// tile size is `BLOCK_THREADS * ITEMS_PER_THREAD` and must be
+// `>= softmax_extent` (the launcher dispatches the smallest spec that
+// fits). One thread block per row.
+template <typename T, typename Acc, int BLOCK_THREADS, int ITEMS_PER_THREAD, bool IsF64>
+__global__ void sparsemax_block_kernel_v2(
+    const T* __restrict__ x,
+    T* __restrict__ y,
+    int64_t num_rows,
     int32_t rank,
     baracuda::elementwise::DimsI32 shape,
     baracuda::elementwise::DimsI64 stride_x,
@@ -1051,58 +1021,130 @@ __global__ void sparsemax_fp_kernel<double>(
     int32_t softmax_axis,
     int32_t softmax_extent,
     int64_t softmax_stride_x,
-    int64_t softmax_stride_y)
+    int64_t softmax_stride_y,
+    int64_t outer_size,
+    int64_t inner_size)
 {
-    int64_t tid  = (int64_t)blockIdx.x * (int64_t)blockDim.x + (int64_t)threadIdx.x;
-    int64_t step = (int64_t)gridDim.x  * (int64_t)blockDim.x;
-    for (int64_t i = tid; i < numel; i += step) {
-        int64_t linear = i;
-        int64_t off_y = 0;
-        int64_t off_x_base = 0;
-        int32_t k = 0;
-        for (int d = rank - 1; d >= 0; --d) {
+    using BlockRadixSortT = cub::BlockRadixSort<Acc, BLOCK_THREADS, ITEMS_PER_THREAD>;
+    using BlockScanT      = cub::BlockScan<Acc, BLOCK_THREADS>;
+    using BlockReduceT    = cub::BlockReduce<int, BLOCK_THREADS>;
+
+    __shared__ union {
+        typename BlockRadixSortT::TempStorage sort;
+        typename BlockScanT::TempStorage      scan;
+        typename BlockReduceT::TempStorage    reduce;
+    } temp_storage;
+    constexpr int kTile = BLOCK_THREADS * ITEMS_PER_THREAD;
+    __shared__ Acc cum_smem[kTile];
+    __shared__ Acc tau_smem;
+
+    int64_t row_id = (int64_t)blockIdx.x;
+    if (row_id >= num_rows) return;
+
+    int64_t off_x_base = 0;
+    int64_t off_y_base = 0;
+    {
+        int64_t inner_id = (inner_size > 0) ? (row_id % inner_size) : 0;
+        int64_t outer_id = (inner_size > 0) ? (row_id / inner_size) : row_id;
+        int64_t lin_inner = inner_id;
+        for (int d = rank - 1; d > softmax_axis; --d) {
             int32_t s = shape.v[d];
-            int64_t coord = (s == 0) ? 0 : (linear % (int64_t)s);
-            if (s != 0) linear /= (int64_t)s;
-            off_y += coord * stride_y.v[d];
-            if (d != softmax_axis) {
-                off_x_base += coord * stride_x.v[d];
+            int64_t coord = (s == 0) ? 0 : (lin_inner % (int64_t)s);
+            if (s != 0) lin_inner /= (int64_t)s;
+            off_x_base += coord * stride_x.v[d];
+            off_y_base += coord * stride_y.v[d];
+        }
+        int64_t lin_outer = outer_id;
+        for (int d = softmax_axis - 1; d >= 0; --d) {
+            int32_t s = shape.v[d];
+            int64_t coord = (s == 0) ? 0 : (lin_outer % (int64_t)s);
+            if (s != 0) lin_outer /= (int64_t)s;
+            off_x_base += coord * stride_x.v[d];
+            off_y_base += coord * stride_y.v[d];
+        }
+    }
+
+    // CUB's BlockRadixSort with descending sort uses the radix encoding
+    // of the key type. The "-inf" sentinel must be the smallest value
+    // representable in `Acc` so the padded slots sort to the bottom.
+    const Acc kNegInf = IsF64
+        ? (Acc)(-1.0e308) // close enough to -DBL_MAX for sparsemax (real inputs are O(1))
+        : (Acc)(-3.3e38); // close enough to -FLT_MAX
+
+    Acc items[ITEMS_PER_THREAD];
+    #pragma unroll
+    for (int it = 0; it < ITEMS_PER_THREAD; ++it) {
+        int idx = threadIdx.x + it * BLOCK_THREADS;
+        if (idx < softmax_extent) {
+            int64_t off = off_x_base + (int64_t)idx * softmax_stride_x;
+            if constexpr (IsF64) {
+                items[it] = (Acc)x[off];
             } else {
-                k = (int32_t)coord;
+                items[it] = (Acc)load_as_acc<T>(x[off]);
+            }
+        } else {
+            items[it] = kNegInf;
+        }
+    }
+    __syncthreads();
+
+    BlockRadixSortT(temp_storage.sort).SortDescending(items);
+    __syncthreads();
+
+    Acc cum_items[ITEMS_PER_THREAD];
+    BlockScanT(temp_storage.scan).InclusiveSum(items, cum_items);
+    __syncthreads();
+
+    #pragma unroll
+    for (int it = 0; it < ITEMS_PER_THREAD; ++it) {
+        int sorted_idx = threadIdx.x * ITEMS_PER_THREAD + it;
+        if (sorted_idx < softmax_extent) {
+            cum_smem[sorted_idx] = cum_items[it];
+        }
+    }
+    __syncthreads();
+
+    int my_k_max = 0;
+    #pragma unroll
+    for (int it = 0; it < ITEMS_PER_THREAD; ++it) {
+        int sorted_idx = threadIdx.x * ITEMS_PER_THREAD + it;
+        if (sorted_idx < softmax_extent) {
+            Acc sval = items[it];
+            Acc cval = cum_items[it];
+            if ((Acc)1 + (Acc)(sorted_idx + 1) * sval > cval) {
+                int cand = sorted_idx + 1;
+                if (cand > my_k_max) my_k_max = cand;
             }
         }
-        double sorted[BARACUDA_SPARSEMAX_MAX_EXTENT];
-        int32_t K = softmax_extent;
-        if (K > BARACUDA_SPARSEMAX_MAX_EXTENT) {
-            y[off_y] = 0.0;
-            continue;
+    }
+    int k_max = BlockReduceT(temp_storage.reduce).Reduce(my_k_max, ::cuda::maximum<int>{});
+    if (threadIdx.x == 0) {
+        if (k_max > 0) {
+            Acc sum_top = cum_smem[k_max - 1];
+            tau_smem = (sum_top - (Acc)1) / (Acc)k_max;
+        } else {
+            tau_smem = (Acc)0;
         }
-        for (int32_t j = 0; j < K; ++j) {
-            int64_t off = off_x_base + (int64_t)j * softmax_stride_x;
-            sorted[j] = x[off];
-        }
-        for (int32_t a = 1; a < K; ++a) {
-            double v = sorted[a];
-            int32_t b = a - 1;
-            while (b >= 0 && sorted[b] < v) {
-                sorted[b + 1] = sorted[b];
-                --b;
+    }
+    __syncthreads();
+    Acc tau = tau_smem;
+
+    #pragma unroll
+    for (int it = 0; it < ITEMS_PER_THREAD; ++it) {
+        int idx = threadIdx.x + it * BLOCK_THREADS;
+        if (idx < softmax_extent) {
+            int64_t off_x = off_x_base + (int64_t)idx * softmax_stride_x;
+            int64_t off_y = off_y_base + (int64_t)idx * softmax_stride_y;
+            Acc xv;
+            if constexpr (IsF64) {
+                xv = (Acc)x[off_x];
+            } else {
+                xv = (Acc)load_as_acc<T>(x[off_x]);
             }
-            sorted[b + 1] = v;
+            Acc yv = xv - tau;
+            if (yv < (Acc)0) yv = (Acc)0;
+            y[off_y] = sparsemax_store<T, Acc>(yv);
         }
-        double cum = 0.0;
-        double tau = 0.0;
-        for (int32_t a = 0; a < K; ++a) {
-            cum += sorted[a];
-            if (1.0 + (double)(a + 1) * sorted[a] > cum) {
-                tau = (cum - 1.0) / (double)(a + 1);
-            }
-        }
-        int64_t off_xk = off_x_base + (int64_t)k * softmax_stride_x;
-        double xk = x[off_xk];
-        double yk = xk - tau;
-        if (yk < 0.0) yk = 0.0;
-        y[off_y] = yk;
     }
 }
 
@@ -1125,22 +1167,45 @@ __host__ inline int32_t launch_sparsemax_fp(
     using baracuda::elementwise::DimsI64;
     if (rank < 0 || rank > MAX_RANK) return 2;
     if (softmax_axis < 0 || softmax_axis >= rank) return 2;
+    if (softmax_extent < 0) return 2;
     if (softmax_extent > BARACUDA_SPARSEMAX_MAX_EXTENT) return 3;
     DimsI32 shape = {};
     DimsI64 sx = {}, sy = {};
+    int64_t outer_size = 1;
+    int64_t inner_size = 1;
     for (int i = 0; i < rank; ++i) {
         shape.v[i] = shape_host[i];
         sx.v[i]    = stride_x_host[i];
         sy.v[i]    = stride_y_host[i];
+        if (i < softmax_axis) outer_size *= (int64_t)shape_host[i];
+        if (i > softmax_axis) inner_size *= (int64_t)shape_host[i];
     }
-    constexpr int kBlock = 256;
-    constexpr int64_t kMaxBlocks = 65535;
-    int64_t blocks_i64 = (numel + kBlock - 1) / kBlock;
-    int blocks = static_cast<int>(blocks_i64 > kMaxBlocks ? kMaxBlocks : blocks_i64);
-    if (blocks <= 0) blocks = 1;
-    sparsemax_fp_kernel<T><<<blocks, kBlock, 0, stream>>>(
-        x, y, numel, rank, shape, sx, sy,
-        softmax_axis, softmax_extent, softmax_stride_x, softmax_stride_y);
+    // Degenerate: extent of 0 along the axis ⇒ no rows.
+    if (softmax_extent == 0) return 0;
+    int64_t num_rows = outer_size * inner_size;
+    if (num_rows <= 0) return 0;
+
+    // Dispatch to the smallest tile-size specialization that fits.
+    constexpr int kBlock = BARACUDA_SPARSEMAX_BLOCK_THREADS;
+    using AccT = typename std::conditional<std::is_same<T, double>::value, double, float>::type;
+    constexpr bool kIsF64 = std::is_same<T, double>::value;
+
+    dim3 grid((unsigned)num_rows);
+    dim3 block((unsigned)kBlock);
+    if (softmax_extent <= kBlock) {
+        sparsemax_block_kernel_v2<T, AccT, kBlock, 1, kIsF64><<<grid, block, 0, stream>>>(
+            x, y, num_rows, rank, shape, sx, sy,
+            softmax_axis, softmax_extent, softmax_stride_x, softmax_stride_y,
+            outer_size, inner_size);
+    } else if (softmax_extent <= kBlock * 4) {
+        sparsemax_block_kernel_v2<T, AccT, kBlock, 4, kIsF64><<<grid, block, 0, stream>>>(
+            x, y, num_rows, rank, shape, sx, sy,
+            softmax_axis, softmax_extent, softmax_stride_x, softmax_stride_y,
+            outer_size, inner_size);
+    } else {
+        return 3;
+    }
+
     cudaError_t err = cudaGetLastError();
     return (err == cudaSuccess) ? 0 : 5;
 }

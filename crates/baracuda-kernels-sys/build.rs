@@ -189,6 +189,11 @@ fn main() {
     println!("cargo:rerun-if-changed=kernels");
     println!("cargo:rerun-if-env-changed=DOCS_RS");
 
+    // Phase 11.2 — Fuel team feedback #3. Detect Git-for-Windows' fake
+    // `link.exe` (actually GNU coreutils `link`) shadowing the MSVC
+    // linker on PATH and warn loudly with a fix.
+    check_for_fake_link_exe();
+
     if env::var_os("DOCS_RS").is_some() {
         println!(
             "cargo:warning=baracuda-kernels-sys: DOCS_RS=1 detected; skipping nvcc build."
@@ -756,9 +761,10 @@ fn collect_kernel_files() -> Vec<&'static str> {
             // (`kernels/include/baracuda_gguf.cuh`):
             //   * dequantize.cu — 11 `_run` symbols, one per block format
             //     (Q4_0/Q4_1/Q5_0/Q5_1/Q8_0 + Q2_K..Q8_K). f32 output.
-            //   * mmvq.cu — 10 `_run` symbols (no Q8_K — llama.cpp / Fuel
-            //     reserve Q8_K as a CPU-side intermediate and never wire
-            //     a Q8_K MMVQ kernel). f32 activation, f32 output.
+            //   * mmvq.cu — 11 `_run` symbols (one per block format).
+            //     Phase 11.4 added a bespoke Q8_K MMVQ (upstream
+            //     llama.cpp / Fuel ship only Q8_K dequant). f32
+            //     activation, f32 output.
             "gguf/dequantize.cu",
             "gguf/mmvq.cu",
             // Phase 8 Milestone 8.5 — Mixture-of-Experts forward
@@ -921,3 +927,41 @@ fn lib_static_path(out_dir: &str, name: &str) -> String {
         format!("{out_dir}/lib{name}.a")
     }
 }
+
+/// Detect Git-for-Windows' fake `link.exe` (a GNU coreutils binary that
+/// creates a hard link) shadowing the MSVC linker on PATH. If a developer
+/// has `C:\Program Files\Git\usr\bin\` ahead of the MSVC linker on PATH,
+/// `cargo build` will invoke that coreutils binary instead of `link.exe`
+/// from the MSVC toolchain (or `lld-link.exe`), failing with cryptic
+/// errors about unknown `/OUT:` flags. Walk PATH in order, find the first
+/// `link.exe`, and warn if its path lives under `\Git\usr\bin\`.
+///
+/// No-op on non-Windows targets. Returns early (no warning) if no
+/// `link.exe` is anywhere on PATH — the MSVC linker may still be
+/// findable via the rustc / linker shim through other channels.
+#[cfg(windows)]
+fn check_for_fake_link_exe() {
+    let Some(path) = std::env::var_os("PATH") else {
+        return;
+    };
+    for entry in std::env::split_paths(&path) {
+        let candidate = entry.join("link.exe");
+        if candidate.is_file() {
+            let s = candidate.to_string_lossy().to_lowercase();
+            if s.contains("\\git\\usr\\bin\\") || s.contains("/git/usr/bin/") {
+                println!(
+                    "cargo:warning=Detected Git-for-Windows fake `link.exe` first on PATH \
+                     ({}). This is NOT the MSVC linker — it's GNU coreutils `link` and will \
+                     fail with a cryptic error when cargo invokes it. Fix: re-order PATH so \
+                     the MSVC linker (or LLVM's lld-link.exe) appears before Git's bin \
+                     directory.",
+                    candidate.display()
+                );
+            }
+            return; // first hit wins; PATH semantics
+        }
+    }
+}
+
+#[cfg(not(windows))]
+fn check_for_fake_link_exe() {}
