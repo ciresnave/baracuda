@@ -46,6 +46,10 @@ mod index_sealed {
     pub trait Sealed {}
 }
 
+mod index_output_sealed {
+    pub trait Sealed {}
+}
+
 /// Sealed marker for the alpha/beta scalar type an [`Element`] uses.
 ///
 /// `f32` for f16/bf16/f32/[`F32Strict`] kernels (epilogue compute runs at
@@ -781,6 +785,54 @@ pub enum IndexElementKind {
     /// Signed 32-bit index dtype — legacy default.
     I32,
     /// Signed 64-bit index dtype — PyTorch default.
+    I64,
+}
+
+/// Sealed marker trait for the *output* index dtype produced by
+/// arg-reduction kernels (`argmax` / `argmin` axis ops).
+///
+/// Phase 12.2 (Fuel team feedback): split out as a sibling of
+/// [`IndexElement`] (which marks *input* index dtypes accepted by
+/// indexing / embedding / segment kernels) so plans like
+/// [`crate::ArgReduceKind`]-driven `ArgReducePlan` can dispatch over the
+/// output dtype without affecting the input-index trait hierarchy.
+///
+/// Today's members are `u32`, `i32`, and `i64`. PyTorch defaults to
+/// `i64`; CUB / NVIDIA libraries and some downstream frameworks (e.g.
+/// Fuel) prefer `u32`. The trait is sealed because new members require
+/// a matching FFI entry point in the `*-kernels-sys` crate.
+pub trait IndexOutputElement:
+    DeviceRepr + index_output_sealed::Sealed + Copy + Default + 'static
+{
+    /// Runtime tag for this output index element type.
+    const KIND: IndexOutputKind;
+}
+
+impl index_output_sealed::Sealed for u32 {}
+impl index_output_sealed::Sealed for i32 {}
+impl index_output_sealed::Sealed for i64 {}
+
+impl IndexOutputElement for u32 {
+    const KIND: IndexOutputKind = IndexOutputKind::U32;
+}
+impl IndexOutputElement for i32 {
+    const KIND: IndexOutputKind = IndexOutputKind::I32;
+}
+impl IndexOutputElement for i64 {
+    const KIND: IndexOutputKind = IndexOutputKind::I64;
+}
+
+/// Runtime tag for an [`IndexOutputElement`]. `i64` is the default
+/// (PyTorch convention) and the only variant prior to Phase 12.2;
+/// `u32` and `i32` were added so downstream frameworks that prefer
+/// narrower index dtypes (Fuel uses `u32`) can avoid a post-pass cast.
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
+pub enum IndexOutputKind {
+    /// Unsigned 32-bit output index dtype.
+    U32,
+    /// Signed 32-bit output index dtype.
+    I32,
+    /// Signed 64-bit output index dtype — PyTorch default.
     I64,
 }
 

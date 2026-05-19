@@ -2,14 +2,14 @@
 //!
 //! New plan shape from [`crate::ReducePlan`] because the output dtype
 //! differs from the input dtype: input is `T: Element` (value), output
-//! is always `i64` (index — PyTorch convention).
+//! is `I: IndexOutputElement` (defaults to `i64` — PyTorch convention).
 //!
 //! **When to use**: forward argmax / argmin. No backward — `argmax` /
 //! `argmin` are non-differentiable (gradient is zero almost everywhere).
 //!
 //! **Dtypes / shape**: `{Argmax, Argmin} × {f32, f16, bf16, f64}` value
-//! input, `i64` index output; tensor rank `1..=8`; reduce axis must be
-//! non-empty.
+//! input × `{u32, i32, i64}` index output; tensor rank `1..=8`; reduce
+//! axis must be non-empty.
 //!
 //! **Tie-breaking**: returns the first-occurrence index along the
 //! reduce axis (PyTorch convention).
@@ -18,6 +18,12 @@
 //!
 //! **Precision**: deterministic, bit-stable on the same hardware (one-
 //! thread-per-output-cell sequential scan over the reduce axis).
+//!
+//! Phase 12.2 (Fuel team feedback): output index dtype is now generic
+//! over [`IndexOutputElement`] (`u32` / `i32` / `i64`). The legacy
+//! default is `i64` so pre-Phase-12.2 callers compile unchanged; opt
+//! into `u32` / `i32` via the third type parameter, e.g.
+//! `ArgReducePlan::<f32, 3, u32>::select(...)`.
 
 use core::ffi::c_void;
 use core::marker::PhantomData;
@@ -25,8 +31,9 @@ use core::marker::PhantomData;
 use baracuda_cutlass::{Error, Result};
 use baracuda_driver::Stream;
 use baracuda_kernels_types::{
-    ArchSku, ArgReduceKind, BackendKind, Element, ElementKind, KernelSku, MathPrecision,
-    OpCategory, PlanPreference, PrecisionGuarantee, TensorMut, TensorRef, Workspace,
+    ArchSku, ArgReduceKind, BackendKind, Element, ElementKind, IndexOutputElement,
+    IndexOutputKind, KernelSku, MathPrecision, OpCategory, PlanPreference, PrecisionGuarantee,
+    TensorMut, TensorRef, Workspace,
 };
 
 /// Descriptor for an argmax / argmin axis reduction.
@@ -53,27 +60,33 @@ impl<const N: usize> ArgReduceDescriptor<N> {
 
 /// Args bundle for an arg-reduction launch.
 ///
-/// Note the asymmetric dtypes: `x` is the value dtype `T`, `y` is
-/// always `i64` (index).
-pub struct ArgReduceArgs<'a, T: Element, const N: usize> {
+/// Note the asymmetric dtypes: `x` is the value dtype `T`, `y` is the
+/// index dtype `I` (defaults to `i64` — PyTorch convention).
+pub struct ArgReduceArgs<'a, T: Element, const N: usize, I: IndexOutputElement = i64> {
     /// Input.
     pub x: TensorRef<'a, T, N>,
-    /// Output indices — i64, shape matches input with reduce axis = 1.
-    pub y: TensorMut<'a, i64, N>,
+    /// Output indices — shape matches input with reduce axis = 1. Type
+    /// parameter `I` selects `u32`, `i32`, or `i64` (default).
+    pub y: TensorMut<'a, I, N>,
 }
 
 /// Arg-reduce plan (argmax / argmin) — see module docs for dtypes,
 /// tie-breaking, and precision.
 ///
-/// `T: Element` is the value dtype; the output index dtype is always
-/// `i64`. `const N: usize` is the tensor rank (1..=8).
-pub struct ArgReducePlan<T: Element, const N: usize> {
+/// `T: Element` is the value (input) dtype; `I: IndexOutputElement` is
+/// the output index dtype (defaults to `i64`). `const N: usize` is the
+/// tensor rank (1..=8).
+///
+/// The `I = i64` default preserves source-compat for pre-Phase-12.2
+/// callers; new callers opt into narrower output dtypes via
+/// `ArgReducePlan::<T, N, u32>::select(...)` or `<T, N, i32>`.
+pub struct ArgReducePlan<T: Element, const N: usize, I: IndexOutputElement = i64> {
     desc: ArgReduceDescriptor<N>,
     sku: KernelSku,
-    _marker: PhantomData<T>,
+    _marker: PhantomData<(T, I)>,
 }
 
-impl<T: Element, const N: usize> ArgReducePlan<T, N> {
+impl<T: Element, const N: usize, I: IndexOutputElement> ArgReducePlan<T, N, I> {
     /// Pick a kernel for `desc`.
     pub fn select(
         _stream: &Stream,
@@ -118,14 +131,21 @@ impl<T: Element, const N: usize> ArgReducePlan<T, N> {
             bit_stable_on_same_hardware: true,
             deterministic: true,
         };
+        // Distinguish the three output-dtype SKUs via `aux_element`.
+        // `ElementKind` has I32 / I64 variants; for u32 we fall back to
+        // `None` (the only output dtype without a matching ElementKind
+        // — kernel selection is still uniquely keyed by `I::KIND` in
+        // `run`, this tag is informational).
+        let aux_element = match I::KIND {
+            IndexOutputKind::U32 => None,
+            IndexOutputKind::I32 => Some(ElementKind::I32),
+            IndexOutputKind::I64 => Some(ElementKind::I64),
+        };
         let sku = KernelSku {
             category: OpCategory::Reduction,
             op: desc.kind as u16,
             element: T::KIND,
-            // Output is i64; ElementKind doesn't have an I64 variant
-            // today, so leave aux_element None and rely on the
-            // op-discriminant + plan-shape tag.
-            aux_element: None,
+            aux_element,
             layout: None,
             epilogue: None,
             arch: ArchSku::Sm80,
@@ -140,7 +160,7 @@ impl<T: Element, const N: usize> ArgReducePlan<T, N> {
     }
 
     /// Validate args.
-    pub fn can_implement(&self, args: &ArgReduceArgs<'_, T, N>) -> Result<()> {
+    pub fn can_implement(&self, args: &ArgReduceArgs<'_, T, N, I>) -> Result<()> {
         if args.x.shape != self.desc.input_shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::ArgReducePlan: X shape mismatch with descriptor",
@@ -198,7 +218,7 @@ impl<T: Element, const N: usize> ArgReducePlan<T, N> {
         &self,
         stream: &Stream,
         _workspace: Workspace<'_>,
-        args: ArgReduceArgs<'_, T, N>,
+        args: ArgReduceArgs<'_, T, N, I>,
     ) -> Result<()> {
         self.can_implement(&args)?;
         let output_numel = args.y.numel();
@@ -217,147 +237,212 @@ impl<T: Element, const N: usize> ArgReducePlan<T, N> {
         let reduce_extent = self.desc.input_shape[self.desc.reduce_axis as usize];
         let reduce_stride_x = args.x.stride[self.desc.reduce_axis as usize];
 
-        let status = match (self.desc.kind, T::KIND) {
-            (ArgReduceKind::Argmax, ElementKind::F32) => unsafe {
+        let status = match (self.desc.kind, T::KIND, I::KIND) {
+            // -----------------------------------------------------------------
+            // i64 output (legacy / default).
+            // -----------------------------------------------------------------
+            (ArgReduceKind::Argmax, ElementKind::F32, IndexOutputKind::I64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_arg_reduce_argmax_f32_run(
-                    output_numel,
-                    rank,
-                    output_shape.as_ptr(),
-                    stride_x.as_ptr(),
-                    stride_y.as_ptr(),
-                    reduce_axis,
-                    reduce_extent,
-                    reduce_stride_x,
-                    x_ptr,
-                    y_ptr,
-                    core::ptr::null_mut(),
-                    0,
-                    stream_ptr,
+                    output_numel, rank, output_shape.as_ptr(),
+                    stride_x.as_ptr(), stride_y.as_ptr(),
+                    reduce_axis, reduce_extent, reduce_stride_x,
+                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
                 )
             },
-            (ArgReduceKind::Argmin, ElementKind::F32) => unsafe {
+            (ArgReduceKind::Argmin, ElementKind::F32, IndexOutputKind::I64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_arg_reduce_argmin_f32_run(
-                    output_numel,
-                    rank,
-                    output_shape.as_ptr(),
-                    stride_x.as_ptr(),
-                    stride_y.as_ptr(),
-                    reduce_axis,
-                    reduce_extent,
-                    reduce_stride_x,
-                    x_ptr,
-                    y_ptr,
-                    core::ptr::null_mut(),
-                    0,
-                    stream_ptr,
+                    output_numel, rank, output_shape.as_ptr(),
+                    stride_x.as_ptr(), stride_y.as_ptr(),
+                    reduce_axis, reduce_extent, reduce_stride_x,
+                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
                 )
             },
-            (ArgReduceKind::Argmax, ElementKind::F16) => unsafe {
+            (ArgReduceKind::Argmax, ElementKind::F16, IndexOutputKind::I64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_arg_reduce_argmax_f16_run(
-                    output_numel,
-                    rank,
-                    output_shape.as_ptr(),
-                    stride_x.as_ptr(),
-                    stride_y.as_ptr(),
-                    reduce_axis,
-                    reduce_extent,
-                    reduce_stride_x,
-                    x_ptr,
-                    y_ptr,
-                    core::ptr::null_mut(),
-                    0,
-                    stream_ptr,
+                    output_numel, rank, output_shape.as_ptr(),
+                    stride_x.as_ptr(), stride_y.as_ptr(),
+                    reduce_axis, reduce_extent, reduce_stride_x,
+                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
                 )
             },
-            (ArgReduceKind::Argmin, ElementKind::F16) => unsafe {
+            (ArgReduceKind::Argmin, ElementKind::F16, IndexOutputKind::I64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_arg_reduce_argmin_f16_run(
-                    output_numel,
-                    rank,
-                    output_shape.as_ptr(),
-                    stride_x.as_ptr(),
-                    stride_y.as_ptr(),
-                    reduce_axis,
-                    reduce_extent,
-                    reduce_stride_x,
-                    x_ptr,
-                    y_ptr,
-                    core::ptr::null_mut(),
-                    0,
-                    stream_ptr,
+                    output_numel, rank, output_shape.as_ptr(),
+                    stride_x.as_ptr(), stride_y.as_ptr(),
+                    reduce_axis, reduce_extent, reduce_stride_x,
+                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
                 )
             },
-            (ArgReduceKind::Argmax, ElementKind::Bf16) => unsafe {
+            (ArgReduceKind::Argmax, ElementKind::Bf16, IndexOutputKind::I64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_arg_reduce_argmax_bf16_run(
-                    output_numel,
-                    rank,
-                    output_shape.as_ptr(),
-                    stride_x.as_ptr(),
-                    stride_y.as_ptr(),
-                    reduce_axis,
-                    reduce_extent,
-                    reduce_stride_x,
-                    x_ptr,
-                    y_ptr,
-                    core::ptr::null_mut(),
-                    0,
-                    stream_ptr,
+                    output_numel, rank, output_shape.as_ptr(),
+                    stride_x.as_ptr(), stride_y.as_ptr(),
+                    reduce_axis, reduce_extent, reduce_stride_x,
+                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
                 )
             },
-            (ArgReduceKind::Argmin, ElementKind::Bf16) => unsafe {
+            (ArgReduceKind::Argmin, ElementKind::Bf16, IndexOutputKind::I64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_arg_reduce_argmin_bf16_run(
-                    output_numel,
-                    rank,
-                    output_shape.as_ptr(),
-                    stride_x.as_ptr(),
-                    stride_y.as_ptr(),
-                    reduce_axis,
-                    reduce_extent,
-                    reduce_stride_x,
-                    x_ptr,
-                    y_ptr,
-                    core::ptr::null_mut(),
-                    0,
-                    stream_ptr,
+                    output_numel, rank, output_shape.as_ptr(),
+                    stride_x.as_ptr(), stride_y.as_ptr(),
+                    reduce_axis, reduce_extent, reduce_stride_x,
+                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
                 )
             },
-            (ArgReduceKind::Argmax, ElementKind::F64) => unsafe {
+            (ArgReduceKind::Argmax, ElementKind::F64, IndexOutputKind::I64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_arg_reduce_argmax_f64_run(
-                    output_numel,
-                    rank,
-                    output_shape.as_ptr(),
-                    stride_x.as_ptr(),
-                    stride_y.as_ptr(),
-                    reduce_axis,
-                    reduce_extent,
-                    reduce_stride_x,
-                    x_ptr,
-                    y_ptr,
-                    core::ptr::null_mut(),
-                    0,
-                    stream_ptr,
+                    output_numel, rank, output_shape.as_ptr(),
+                    stride_x.as_ptr(), stride_y.as_ptr(),
+                    reduce_axis, reduce_extent, reduce_stride_x,
+                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
                 )
             },
-            (ArgReduceKind::Argmin, ElementKind::F64) => unsafe {
+            (ArgReduceKind::Argmin, ElementKind::F64, IndexOutputKind::I64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_arg_reduce_argmin_f64_run(
-                    output_numel,
-                    rank,
-                    output_shape.as_ptr(),
-                    stride_x.as_ptr(),
-                    stride_y.as_ptr(),
-                    reduce_axis,
-                    reduce_extent,
-                    reduce_stride_x,
-                    x_ptr,
-                    y_ptr,
-                    core::ptr::null_mut(),
-                    0,
-                    stream_ptr,
+                    output_numel, rank, output_shape.as_ptr(),
+                    stride_x.as_ptr(), stride_y.as_ptr(),
+                    reduce_axis, reduce_extent, reduce_stride_x,
+                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                )
+            },
+            // -----------------------------------------------------------------
+            // u32 output (Phase 12.2).
+            // -----------------------------------------------------------------
+            (ArgReduceKind::Argmax, ElementKind::F32, IndexOutputKind::U32) => unsafe {
+                baracuda_kernels_sys::baracuda_kernels_arg_reduce_argmax_f32_u32_run(
+                    output_numel, rank, output_shape.as_ptr(),
+                    stride_x.as_ptr(), stride_y.as_ptr(),
+                    reduce_axis, reduce_extent, reduce_stride_x,
+                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                )
+            },
+            (ArgReduceKind::Argmin, ElementKind::F32, IndexOutputKind::U32) => unsafe {
+                baracuda_kernels_sys::baracuda_kernels_arg_reduce_argmin_f32_u32_run(
+                    output_numel, rank, output_shape.as_ptr(),
+                    stride_x.as_ptr(), stride_y.as_ptr(),
+                    reduce_axis, reduce_extent, reduce_stride_x,
+                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                )
+            },
+            (ArgReduceKind::Argmax, ElementKind::F16, IndexOutputKind::U32) => unsafe {
+                baracuda_kernels_sys::baracuda_kernels_arg_reduce_argmax_f16_u32_run(
+                    output_numel, rank, output_shape.as_ptr(),
+                    stride_x.as_ptr(), stride_y.as_ptr(),
+                    reduce_axis, reduce_extent, reduce_stride_x,
+                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                )
+            },
+            (ArgReduceKind::Argmin, ElementKind::F16, IndexOutputKind::U32) => unsafe {
+                baracuda_kernels_sys::baracuda_kernels_arg_reduce_argmin_f16_u32_run(
+                    output_numel, rank, output_shape.as_ptr(),
+                    stride_x.as_ptr(), stride_y.as_ptr(),
+                    reduce_axis, reduce_extent, reduce_stride_x,
+                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                )
+            },
+            (ArgReduceKind::Argmax, ElementKind::Bf16, IndexOutputKind::U32) => unsafe {
+                baracuda_kernels_sys::baracuda_kernels_arg_reduce_argmax_bf16_u32_run(
+                    output_numel, rank, output_shape.as_ptr(),
+                    stride_x.as_ptr(), stride_y.as_ptr(),
+                    reduce_axis, reduce_extent, reduce_stride_x,
+                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                )
+            },
+            (ArgReduceKind::Argmin, ElementKind::Bf16, IndexOutputKind::U32) => unsafe {
+                baracuda_kernels_sys::baracuda_kernels_arg_reduce_argmin_bf16_u32_run(
+                    output_numel, rank, output_shape.as_ptr(),
+                    stride_x.as_ptr(), stride_y.as_ptr(),
+                    reduce_axis, reduce_extent, reduce_stride_x,
+                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                )
+            },
+            (ArgReduceKind::Argmax, ElementKind::F64, IndexOutputKind::U32) => unsafe {
+                baracuda_kernels_sys::baracuda_kernels_arg_reduce_argmax_f64_u32_run(
+                    output_numel, rank, output_shape.as_ptr(),
+                    stride_x.as_ptr(), stride_y.as_ptr(),
+                    reduce_axis, reduce_extent, reduce_stride_x,
+                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                )
+            },
+            (ArgReduceKind::Argmin, ElementKind::F64, IndexOutputKind::U32) => unsafe {
+                baracuda_kernels_sys::baracuda_kernels_arg_reduce_argmin_f64_u32_run(
+                    output_numel, rank, output_shape.as_ptr(),
+                    stride_x.as_ptr(), stride_y.as_ptr(),
+                    reduce_axis, reduce_extent, reduce_stride_x,
+                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                )
+            },
+            // -----------------------------------------------------------------
+            // i32 output (Phase 12.2).
+            // -----------------------------------------------------------------
+            (ArgReduceKind::Argmax, ElementKind::F32, IndexOutputKind::I32) => unsafe {
+                baracuda_kernels_sys::baracuda_kernels_arg_reduce_argmax_f32_i32_run(
+                    output_numel, rank, output_shape.as_ptr(),
+                    stride_x.as_ptr(), stride_y.as_ptr(),
+                    reduce_axis, reduce_extent, reduce_stride_x,
+                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                )
+            },
+            (ArgReduceKind::Argmin, ElementKind::F32, IndexOutputKind::I32) => unsafe {
+                baracuda_kernels_sys::baracuda_kernels_arg_reduce_argmin_f32_i32_run(
+                    output_numel, rank, output_shape.as_ptr(),
+                    stride_x.as_ptr(), stride_y.as_ptr(),
+                    reduce_axis, reduce_extent, reduce_stride_x,
+                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                )
+            },
+            (ArgReduceKind::Argmax, ElementKind::F16, IndexOutputKind::I32) => unsafe {
+                baracuda_kernels_sys::baracuda_kernels_arg_reduce_argmax_f16_i32_run(
+                    output_numel, rank, output_shape.as_ptr(),
+                    stride_x.as_ptr(), stride_y.as_ptr(),
+                    reduce_axis, reduce_extent, reduce_stride_x,
+                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                )
+            },
+            (ArgReduceKind::Argmin, ElementKind::F16, IndexOutputKind::I32) => unsafe {
+                baracuda_kernels_sys::baracuda_kernels_arg_reduce_argmin_f16_i32_run(
+                    output_numel, rank, output_shape.as_ptr(),
+                    stride_x.as_ptr(), stride_y.as_ptr(),
+                    reduce_axis, reduce_extent, reduce_stride_x,
+                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                )
+            },
+            (ArgReduceKind::Argmax, ElementKind::Bf16, IndexOutputKind::I32) => unsafe {
+                baracuda_kernels_sys::baracuda_kernels_arg_reduce_argmax_bf16_i32_run(
+                    output_numel, rank, output_shape.as_ptr(),
+                    stride_x.as_ptr(), stride_y.as_ptr(),
+                    reduce_axis, reduce_extent, reduce_stride_x,
+                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                )
+            },
+            (ArgReduceKind::Argmin, ElementKind::Bf16, IndexOutputKind::I32) => unsafe {
+                baracuda_kernels_sys::baracuda_kernels_arg_reduce_argmin_bf16_i32_run(
+                    output_numel, rank, output_shape.as_ptr(),
+                    stride_x.as_ptr(), stride_y.as_ptr(),
+                    reduce_axis, reduce_extent, reduce_stride_x,
+                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                )
+            },
+            (ArgReduceKind::Argmax, ElementKind::F64, IndexOutputKind::I32) => unsafe {
+                baracuda_kernels_sys::baracuda_kernels_arg_reduce_argmax_f64_i32_run(
+                    output_numel, rank, output_shape.as_ptr(),
+                    stride_x.as_ptr(), stride_y.as_ptr(),
+                    reduce_axis, reduce_extent, reduce_stride_x,
+                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                )
+            },
+            (ArgReduceKind::Argmin, ElementKind::F64, IndexOutputKind::I32) => unsafe {
+                baracuda_kernels_sys::baracuda_kernels_arg_reduce_argmin_f64_i32_run(
+                    output_numel, rank, output_shape.as_ptr(),
+                    stride_x.as_ptr(), stride_y.as_ptr(),
+                    reduce_axis, reduce_extent, reduce_stride_x,
+                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
                 )
             },
             _ => {
                 return Err(Error::Unsupported(
                     "baracuda-kernels::ArgReducePlan::run: only `{Argmax,Argmin} × \
-                     {f32,f16,bf16,f64}` wired today",
+                     {f32,f16,bf16,f64} × {u32,i32,i64}` wired today",
                 ));
             }
         };

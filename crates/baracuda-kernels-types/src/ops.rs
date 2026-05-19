@@ -271,6 +271,16 @@ pub enum UnaryKind {
     /// (`PReluPlan` / `PReluBackwardPlan`) because α is a tensor operand,
     /// not a scalar parameter. Wired in Milestone 5.3.
     PReLU = 120,
+    /// `powi(x; n) = x^n` for a fixed runtime *integer* exponent `n`.
+    /// Distinct from the generic [`BinaryKind::Pow`] (which takes an
+    /// f32 exponent tensor) because the integer-only path can use
+    /// power-by-squaring — faster than `__expf(n · __logf(x))` and
+    /// also well-defined for negative `x` (real `pow(-1.5, 2) = 2.25`,
+    /// no NaN). The exponent is threaded via the `params: [f32; 2]`
+    /// slot 0 with a host-side cast (`n as f32`); slot 1 is unused.
+    /// Reasonable |n| values round-trip through f32 exactly (≤ 2^24).
+    /// Phase 12.1 wires `{f32, f16, bf16, f64}` through `UnaryParamPlan`.
+    PowI = 121,
 
     // ---- Category B: dtype / scalar-shape ops ----
     /// `y = (TOut) x` — dtype conversion. Heterogeneous input / output

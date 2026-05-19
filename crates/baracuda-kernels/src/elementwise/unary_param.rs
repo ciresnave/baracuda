@@ -8,10 +8,16 @@
 //! `LeakyRelu(α)` would only consume `p0`) simply ignore the unused
 //! slot.
 //!
-//! Today wired: `Threshold` (`y = (x > t) ? x : v`; `t = params[0]`,
-//! `v = params[1]`) across `{f32, f16, bf16, f64}` — FW only here, the
-//! BW lives in [`crate::UnaryParamBackwardPlan`]. The existing
-//! single-param activation ops (`LeakyRelu(α)`, `ELU(α)`,
+//! Today wired:
+//!   * `Threshold` (`y = (x > t) ? x : v`; `t = params[0]`,
+//!     `v = params[1]`) across `{f32, f16, bf16, f64}` — FW + BW
+//!     (BW lives in [`crate::UnaryParamBackwardPlan`]).
+//!   * `PowI` (`y = x^n` integer exponent; `n = params[0] as i32`,
+//!     `params[1]` unused) across `{f32, f16, bf16, f64}` — Phase 12.1.
+//!     Power-by-squaring; well-defined for negative `x` (no NaN) and
+//!     bit-exact for `n = 2` (which collapses to `Square`).
+//!
+//! The existing single-param activation ops (`LeakyRelu(α)`, `ELU(α)`,
 //! `Hardshrink(λ)`, `Softshrink(λ)`) ship through the plain
 //! [`crate::UnaryPlan`] today with hardcoded PyTorch defaults; they
 //! could later re-emit through this parameterized plan to expose the
@@ -40,6 +46,7 @@ use baracuda_kernels_types::{
 /// | Op          | `params[0]` | `params[1]` |
 /// |-------------|-------------|-------------|
 /// | `Threshold` | `t`         | `v`         |
+/// | `PowI`      | `n as f32`  | unused      |
 ///
 /// We chose `[f32; 2]` rather than separate `t: f32, v: f32` fields so
 /// the descriptor shape doesn't shift as more 1- or 2-param ops join
@@ -96,19 +103,20 @@ impl<T: Element, const N: usize> UnaryParamPlan<T, N> {
             }
         }
 
-        // Today's wired matrix: {Threshold} × {f32, f16, bf16, f64}.
+        // Today's wired matrix: {Threshold, PowI} × {f32, f16, bf16, f64}.
         // Future params-bearing ops can extend `kind_in_scope` and add
         // match arms in `run`.
-        let kind_in_scope = matches!(desc.kind, UnaryKind::Threshold);
+        let kind_in_scope = matches!(desc.kind, UnaryKind::Threshold | UnaryKind::PowI);
         let dtype_in_scope = matches!(
             T::KIND,
             ElementKind::F32 | ElementKind::F16 | ElementKind::Bf16 | ElementKind::F64
         );
         if !(kind_in_scope && dtype_in_scope) {
             return Err(Error::Unsupported(
-                "baracuda-kernels::UnaryParamPlan: today only `Threshold × {f32, f16, bf16, f64}` \
-                 is wired; LeakyRelu / ELU / Hardshrink / Softshrink ship via UnaryPlan with \
-                 hardcoded PyTorch defaults today; PReLU needs a distinct (channel-vector) plan.",
+                "baracuda-kernels::UnaryParamPlan: today only `{Threshold, PowI} × \
+                 {f32, f16, bf16, f64}` is wired; LeakyRelu / ELU / Hardshrink / Softshrink \
+                 ship via UnaryPlan with hardcoded PyTorch defaults today; PReLU needs a \
+                 distinct (channel-vector) plan.",
             ));
         }
 
@@ -223,6 +231,30 @@ impl<T: Element, const N: usize> UnaryParamPlan<T, N> {
             },
             (UnaryKind::Threshold, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_threshold_f64_run(
+                    numel, x_ptr, y_ptr, p0, p1,
+                    core::ptr::null_mut(), 0, stream_ptr,
+                )
+            },
+            (UnaryKind::PowI, ElementKind::F32) => unsafe {
+                baracuda_kernels_sys::baracuda_kernels_unary_powi_f32_run(
+                    numel, x_ptr, y_ptr, p0, p1,
+                    core::ptr::null_mut(), 0, stream_ptr,
+                )
+            },
+            (UnaryKind::PowI, ElementKind::F16) => unsafe {
+                baracuda_kernels_sys::baracuda_kernels_unary_powi_f16_run(
+                    numel, x_ptr, y_ptr, p0, p1,
+                    core::ptr::null_mut(), 0, stream_ptr,
+                )
+            },
+            (UnaryKind::PowI, ElementKind::Bf16) => unsafe {
+                baracuda_kernels_sys::baracuda_kernels_unary_powi_bf16_run(
+                    numel, x_ptr, y_ptr, p0, p1,
+                    core::ptr::null_mut(), 0, stream_ptr,
+                )
+            },
+            (UnaryKind::PowI, ElementKind::F64) => unsafe {
+                baracuda_kernels_sys::baracuda_kernels_unary_powi_f64_run(
                     numel, x_ptr, y_ptr, p0, p1,
                     core::ptr::null_mut(), 0, stream_ptr,
                 )

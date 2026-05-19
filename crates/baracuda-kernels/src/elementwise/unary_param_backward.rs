@@ -5,8 +5,14 @@
 //! plus a saved forward input `x` — Threshold's BW formula is
 //! `dx = (x > t) ? dy : 0`, so we need `x` available at BW time.
 //!
-//! Today wired: `Threshold × {f32, f16, bf16, f64}`. The scalar params
-//! `(t, v)` are constants w.r.t. `x` — no gradient flows to them.
+//! Today wired:
+//!   * `Threshold × {f32, f16, bf16, f64}`. The scalar params `(t, v)`
+//!     are constants w.r.t. `x` — no gradient flows to them.
+//!   * `PowI × {f32, f16, bf16, f64}` — Phase 12.1. `dx = n · x^(n-1) · dy`
+//!     via power-by-squaring; `n` lives in `params[0]` (cast to i32 at
+//!     the kernel boundary), `params[1]` unused. Special-cased for
+//!     `n == 0` (gradient 0) and `n == 1` (gradient `dy`) inside the
+//!     CUDA functor.
 //!
 //! Trailblazer constraints: contig-only;
 //! `dy.shape == x.shape == dx.shape == desc.shape`.
@@ -72,14 +78,14 @@ impl<T: Element, const N: usize> UnaryParamBackwardPlan<T, N> {
             }
         }
 
-        let kind_in_scope = matches!(desc.kind, UnaryKind::Threshold);
+        let kind_in_scope = matches!(desc.kind, UnaryKind::Threshold | UnaryKind::PowI);
         let dtype_in_scope = matches!(
             T::KIND,
             ElementKind::F32 | ElementKind::F16 | ElementKind::Bf16 | ElementKind::F64
         );
         if !(kind_in_scope && dtype_in_scope) {
             return Err(Error::Unsupported(
-                "baracuda-kernels::UnaryParamBackwardPlan: today only `Threshold × \
+                "baracuda-kernels::UnaryParamBackwardPlan: today only `{Threshold, PowI} × \
                  {f32, f16, bf16, f64}` is wired; future params-bearing BWs land here.",
             ));
         }
@@ -199,6 +205,30 @@ impl<T: Element, const N: usize> UnaryParamBackwardPlan<T, N> {
             },
             (UnaryKind::Threshold, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_threshold_backward_f64_run(
+                    numel, dy_ptr, x_ptr, dx_ptr, p0, p1,
+                    core::ptr::null_mut(), 0, stream_ptr,
+                )
+            },
+            (UnaryKind::PowI, ElementKind::F32) => unsafe {
+                baracuda_kernels_sys::baracuda_kernels_unary_powi_backward_f32_run(
+                    numel, dy_ptr, x_ptr, dx_ptr, p0, p1,
+                    core::ptr::null_mut(), 0, stream_ptr,
+                )
+            },
+            (UnaryKind::PowI, ElementKind::F16) => unsafe {
+                baracuda_kernels_sys::baracuda_kernels_unary_powi_backward_f16_run(
+                    numel, dy_ptr, x_ptr, dx_ptr, p0, p1,
+                    core::ptr::null_mut(), 0, stream_ptr,
+                )
+            },
+            (UnaryKind::PowI, ElementKind::Bf16) => unsafe {
+                baracuda_kernels_sys::baracuda_kernels_unary_powi_backward_bf16_run(
+                    numel, dy_ptr, x_ptr, dx_ptr, p0, p1,
+                    core::ptr::null_mut(), 0, stream_ptr,
+                )
+            },
+            (UnaryKind::PowI, ElementKind::F64) => unsafe {
+                baracuda_kernels_sys::baracuda_kernels_unary_powi_backward_f64_run(
                     numel, dy_ptr, x_ptr, dx_ptr, p0, p1,
                     core::ptr::null_mut(), 0, stream_ptr,
                 )

@@ -634,6 +634,11 @@ fn collect_kernel_files() -> Vec<&'static str> {
             // tensor pointers — contig only, no strided variant.
             "elementwise/unary_threshold_fp.cu",
             "elementwise/unary_threshold_backward_fp.cu",
+            // Phase 12.1 — PowI (integer-exponent power-of-x): reuses
+            // the existing UNARY_PARAM_* ABI (n shipped via p0 cast to
+            // int at the kernel boundary, p1 unused).
+            "elementwise/unary_powi_fp.cu",
+            "elementwise/unary_powi_backward_fp.cu",
             "elementwise/binary_lerp_fp.cu",
             "elementwise/binary_lerp_backward_fp.cu",
             // Phase 3 Category C′ — gated activations (FW + BW × 4

@@ -2291,10 +2291,13 @@ __host__ inline int32_t launch_concat2_backward(
 // new_i, best_v, best_i)` predicate that returns true when the new
 // candidate should replace the current best.
 
-template <typename T, typename F>
+// Phase 12.2: generalized in the output dtype `OutI` (u32 / i32 / i64).
+// Internal best-index tracking stays `int64_t` (max range is the reduce
+// axis extent — i64 is safe); only the final store narrows to `OutI`.
+template <typename T, typename F, typename OutI>
 __global__ void arg_reduce_axis_kernel(
     const T* __restrict__ x,
-    int64_t* __restrict__ y,
+    OutI* __restrict__ y,
     int64_t output_numel,
     int32_t rank,
     DimsI32 output_shape,
@@ -2330,13 +2333,13 @@ __global__ void arg_reduce_axis_kernel(
                 best_i = (int64_t)k;
             }
         }
-        y[off_y] = best_i;
+        y[off_y] = static_cast<OutI>(best_i);
     }
 }
 
-template <typename T, typename F>
+template <typename T, typename F, typename OutI>
 __host__ inline int32_t launch_arg_reduce_axis(
-    const T* x, int64_t* y,
+    const T* x, OutI* y,
     int64_t output_numel,
     int32_t rank,
     const int32_t* output_shape_host,
@@ -2362,7 +2365,7 @@ __host__ inline int32_t launch_arg_reduce_axis(
     int64_t blocks_i64 = (output_numel + kBlock - 1) / kBlock;
     int blocks = static_cast<int>(blocks_i64 > kMaxBlocks ? kMaxBlocks : blocks_i64);
     if (blocks <= 0) blocks = 1;
-    arg_reduce_axis_kernel<T, F><<<blocks, kBlock, 0, stream>>>(
+    arg_reduce_axis_kernel<T, F, OutI><<<blocks, kBlock, 0, stream>>>(
         x, y, output_numel, rank, out_shape, sx, sy,
         reduce_axis, reduce_extent, reduce_stride_x);
     cudaError_t err = cudaGetLastError();
@@ -4949,8 +4952,16 @@ __host__ inline int32_t launch_gated_activation_backward_contig(
             shape, shifts, stride_x, stride_y, stream);                                           \
     }
 
-// Emit one ArgReduce-axis launcher (i64 output, T input).
-#define BARACUDA_KERNELS_ARG_REDUCE_AXIS_INSTANTIATE(NAME, T, FUNCTOR)                            \
+// Emit one ArgReduce-axis launcher.
+//
+// NAME    : symbol body — e.g. `arg_reduce_argmax_f32` (i64 output) or
+//           `arg_reduce_argmax_f32_u32` (u32 output).
+// T       : value (input) element type.
+// FUNCTOR : ArgmaxPolicy<T> / ArgminPolicy<T>.
+// OUT_I   : output index dtype — `int64_t` (default), `uint32_t`, or
+//           `int32_t`. Phase 12.2 generalized this from a hard-coded
+//           `int64_t*` to support Fuel's preferred `u32` output dtype.
+#define BARACUDA_KERNELS_ARG_REDUCE_AXIS_INSTANTIATE(NAME, T, FUNCTOR, OUT_I)                     \
     extern "C" int32_t baracuda_kernels_##NAME##_run(                                             \
         int64_t output_numel,                                                                      \
         int32_t rank,                                                                              \
@@ -4969,8 +4980,8 @@ __host__ inline int32_t launch_gated_activation_backward_contig(
         if (x == nullptr || y == nullptr) return 2;                                               \
         if (output_shape == nullptr || stride_x == nullptr || stride_y == nullptr) return 2;      \
         cudaStream_t stream = static_cast<cudaStream_t>(stream_ptr);                              \
-        return baracuda::elementwise::launch_arg_reduce_axis<T, FUNCTOR>(                         \
-            static_cast<const T*>(x), static_cast<int64_t*>(y), output_numel, rank,               \
+        return baracuda::elementwise::launch_arg_reduce_axis<T, FUNCTOR, OUT_I>(                  \
+            static_cast<const T*>(x), static_cast<OUT_I*>(y), output_numel, rank,                 \
             output_shape, stride_x, stride_y,                                                     \
             reduce_axis, reduce_extent, reduce_stride_x, stream);                                 \
     }

@@ -40,7 +40,7 @@ pub mod tensor;
 pub use element::{
     BiasElement, BiasElementKind, Bin, BinElement, Bool, Complex32, Complex64, Element,
     ElementKind, F32Strict, Fp8E4M3, Fp8E5M2, FpElement, IndexElement, IndexElementKind,
-    IntElement, MathPrecision, S4, S8, ScalarType, U4, U8,
+    IndexOutputElement, IndexOutputKind, IntElement, MathPrecision, S4, S8, ScalarType, U4, U8,
 };
 pub use layout::{ActivationKind, ArchSku, EpilogueKind, LayoutSku};
 pub use matrix::{MatrixMut, MatrixRef, VectorRef};
