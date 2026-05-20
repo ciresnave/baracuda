@@ -1,6 +1,6 @@
 # baracuda
 
-![A great barracuda — the project's namesake, minus one letter.](assets/barracuda.png)
+![A great barracuda — the project's namesake, minus one letter.](https://raw.githubusercontent.com/ciresnave/baracuda/refs/heads/main/assets/barracuda.png)
 
 > **About the name.** Yes, we know — it's spelled **barracuda** (two Rs). That
 > name was taken on crates.io, so we dropped one R and kept swimming.
@@ -8,9 +8,9 @@
 A unified Rust ML-op facade over the NVIDIA CUDA ecosystem.
 
 ![License](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue)
-![Status](https://img.shields.io/badge/status-alpha.25-orange)
+![Status](https://img.shields.io/badge/status-alpha.29-orange)
 ![CUDA](https://img.shields.io/badge/CUDA-12.x-76b900)
-![Tests](https://img.shields.io/badge/regression-1630%2F0-success)
+![Tests](https://img.shields.io/badge/regression-1852%2F0-success)
 
 ## What baracuda is
 
