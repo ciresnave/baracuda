@@ -78,6 +78,7 @@ pub use elementwise::{
     BinaryCmpDescriptor, BinaryCmpPlan, BinaryDescriptor, BinaryParamArgs,
     BinaryParamBackwardArgs, BinaryParamBackwardDescriptor, BinaryParamBackwardPlan,
     BinaryParamDescriptor, BinaryParamPlan, BinaryPlan, CastArgs, CastDescriptor, CastPlan,
+    CastSubByteArgs, CastSubByteDescriptor, CastSubBytePlan,
     GatedActivationArgs,
     GatedActivationBackwardArgs, GatedActivationBackwardDescriptor, GatedActivationBackwardPlan,
     GatedActivationDescriptor, GatedActivationPlan, TernaryArgs, TernaryBackwardArgs,
@@ -99,7 +100,8 @@ pub mod shape_layout;
 
 pub use shape_layout::{
     ConcatArgs, ConcatBackwardArgs, ConcatBackwardDescriptor, ConcatBackwardPlan,
-    ConcatDescriptor, ConcatPlan, FillArgs, FillDescriptor, FillPlan, FlipArgs,
+    ConcatDescriptor, ConcatPlan, ContiguizeArgs, ContiguizeDescriptor, ContiguizePlan,
+    FillArgs, FillDescriptor, FillPlan, FlipArgs,
     FlipBackwardArgs, FlipBackwardDescriptor,
     FlipBackwardPlan, FlipDescriptor, FlipPlan, PadArgs, PadBackwardArgs,
     PadBackwardDescriptor, PadBackwardPlan, PadDescriptor, PadPlan, PermuteArgs,
@@ -107,6 +109,10 @@ pub use shape_layout::{
     PermutePlan, RepeatArgs, RepeatBackwardArgs, RepeatBackwardDescriptor,
     RepeatBackwardPlan, RepeatDescriptor, RepeatPlan, RollArgs, RollBackwardArgs,
     RollBackwardDescriptor, RollBackwardPlan, RollDescriptor, RollPlan,
+    TrilArgs, TrilBackwardArgs, TrilBackwardDescriptor, TrilBackwardPlan,
+    TrilDescriptor, TrilPlan, TriuArgs, TriuBackwardArgs, TriuBackwardDescriptor,
+    TriuBackwardPlan, TriuDescriptor, TriuPlan,
+    WriteSliceArgs, WriteSliceDescriptor, WriteSlicePlan,
 };
 
 // Reduction op family — Phase 4 (Category E). Output shape differs

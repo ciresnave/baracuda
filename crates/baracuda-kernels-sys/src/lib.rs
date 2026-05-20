@@ -9252,6 +9252,258 @@ unsafe extern "C" {
 }
 
 // ============================================================================
+// Shape / layout — Contiguize (Phase 13.2, strided→contiguous copy)
+// ============================================================================
+//
+// Byte-width-templated, dtype-agnostic at the kernel level. One symbol
+// per natural element size (1 / 2 / 4 / 8 / 16 bytes) covers every
+// byte-aligned baracuda dtype (f16, bf16, f32, f64, F32Strict, i32,
+// i64, Bool, S8, U8, Fp8E4M3, Fp8E5M2, Complex32, Complex64). A
+// separate nibble symbol handles S4 / U4 with a documented innermost-
+// stride constraint (returns status 3 for unsupported source layouts).
+//
+// `source_strides` are SIGNED int64 (Flip ops produce negatives,
+// BroadcastTo produces zeros). `source_offset` is in ELEMENTS, not
+// bytes. Three host-side fast paths are baked into the launchers:
+//
+//   1. Source already contiguous + zero offset → single
+//      `cudaMemcpyAsync(DeviceToDevice)` of the full numel × element-size.
+//   2. Innermost stride == 1 → per-outer-coord contiguous run copy
+//      (halves divmod cost vs the generic path).
+//   3. Generic → one thread per output element; linear-index → multi-
+//      index unravel + signed-stride dot to compute source offset.
+
+#[cfg(any(feature = "sm80", feature = "sm89", feature = "sm90a"))]
+unsafe extern "C" {
+    /// Contiguize, 1-byte element (Bool, S8, U8, Fp8E4M3, Fp8E5M2).
+    pub fn baracuda_kernels_contiguize_b1_run(
+        dest: *mut c_void,
+        source: *const c_void,
+        shape: *const i32,
+        source_strides: *const i64,
+        source_offset: i64,
+        rank: i32,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// Contiguize, 2-byte element (f16, bf16).
+    pub fn baracuda_kernels_contiguize_b2_run(
+        dest: *mut c_void,
+        source: *const c_void,
+        shape: *const i32,
+        source_strides: *const i64,
+        source_offset: i64,
+        rank: i32,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// Contiguize, 4-byte element (f32, F32Strict, i32).
+    pub fn baracuda_kernels_contiguize_b4_run(
+        dest: *mut c_void,
+        source: *const c_void,
+        shape: *const i32,
+        source_strides: *const i64,
+        source_offset: i64,
+        rank: i32,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// Contiguize, 8-byte element (f64, i64, Complex32).
+    pub fn baracuda_kernels_contiguize_b8_run(
+        dest: *mut c_void,
+        source: *const c_void,
+        shape: *const i32,
+        source_strides: *const i64,
+        source_offset: i64,
+        rank: i32,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// Contiguize, 16-byte element (Complex64).
+    pub fn baracuda_kernels_contiguize_b16_run(
+        dest: *mut c_void,
+        source: *const c_void,
+        shape: *const i32,
+        source_strides: *const i64,
+        source_offset: i64,
+        rank: i32,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// Contiguize, nibble-packed (S4 / U4). Returns status 3
+    /// (Unsupported) when the source's innermost stride is not one of
+    /// `{1, -1, 2}` — i.e. when the source layout breaks nibble
+    /// alignment.
+    pub fn baracuda_kernels_contiguize_nibble_run(
+        dest: *mut c_void,
+        source: *const c_void,
+        shape: *const i32,
+        source_strides: *const i64,
+        source_offset: i64,
+        rank: i32,
+        stream: *mut c_void,
+    ) -> i32;
+}
+
+// ============================================================================
+// Shape / layout — Triu / Tril (Category N, triangular masks)
+// ============================================================================
+//
+// `torch.triu(input, diagonal)` / `torch.tril(input, diagonal)` mask
+// the last two dims of `input`: triu keeps `j >= i + diagonal`, tril
+// keeps `j <= i + diagonal`. The batch prefix (anything before the
+// last two dims) is masked independently. Output shape == input shape;
+// the kernel zeros the off-side. One templated kernel body covers both
+// ops via a Predicate functor; per-dtype symbols here.
+//
+// Differentiable: `d_input = triu(d_output, diagonal)` and `d_input =
+// tril(d_output, diagonal)` — the backward plans dispatch back to
+// these same symbols with `dy → input` and `dx → output`.
+
+#[cfg(any(feature = "sm80", feature = "sm89", feature = "sm90a"))]
+unsafe extern "C" {
+    /// Triu, f16.
+    pub fn baracuda_kernels_triu_f16_run(
+        input: *const c_void,
+        output: *mut c_void,
+        shape: *const i32,
+        rank: i32,
+        diagonal: i32,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// Triu, bf16.
+    pub fn baracuda_kernels_triu_bf16_run(
+        input: *const c_void,
+        output: *mut c_void,
+        shape: *const i32,
+        rank: i32,
+        diagonal: i32,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// Triu, f32.
+    pub fn baracuda_kernels_triu_f32_run(
+        input: *const c_void,
+        output: *mut c_void,
+        shape: *const i32,
+        rank: i32,
+        diagonal: i32,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// Triu, f64.
+    pub fn baracuda_kernels_triu_f64_run(
+        input: *const c_void,
+        output: *mut c_void,
+        shape: *const i32,
+        rank: i32,
+        diagonal: i32,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// Triu, i32.
+    pub fn baracuda_kernels_triu_i32_run(
+        input: *const c_void,
+        output: *mut c_void,
+        shape: *const i32,
+        rank: i32,
+        diagonal: i32,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// Triu, i64.
+    pub fn baracuda_kernels_triu_i64_run(
+        input: *const c_void,
+        output: *mut c_void,
+        shape: *const i32,
+        rank: i32,
+        diagonal: i32,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// Triu, Bool (storage = u8).
+    pub fn baracuda_kernels_triu_bool_run(
+        input: *const c_void,
+        output: *mut c_void,
+        shape: *const i32,
+        rank: i32,
+        diagonal: i32,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// Tril, f16.
+    pub fn baracuda_kernels_tril_f16_run(
+        input: *const c_void,
+        output: *mut c_void,
+        shape: *const i32,
+        rank: i32,
+        diagonal: i32,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// Tril, bf16.
+    pub fn baracuda_kernels_tril_bf16_run(
+        input: *const c_void,
+        output: *mut c_void,
+        shape: *const i32,
+        rank: i32,
+        diagonal: i32,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// Tril, f32.
+    pub fn baracuda_kernels_tril_f32_run(
+        input: *const c_void,
+        output: *mut c_void,
+        shape: *const i32,
+        rank: i32,
+        diagonal: i32,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// Tril, f64.
+    pub fn baracuda_kernels_tril_f64_run(
+        input: *const c_void,
+        output: *mut c_void,
+        shape: *const i32,
+        rank: i32,
+        diagonal: i32,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// Tril, i32.
+    pub fn baracuda_kernels_tril_i32_run(
+        input: *const c_void,
+        output: *mut c_void,
+        shape: *const i32,
+        rank: i32,
+        diagonal: i32,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// Tril, i64.
+    pub fn baracuda_kernels_tril_i64_run(
+        input: *const c_void,
+        output: *mut c_void,
+        shape: *const i32,
+        rank: i32,
+        diagonal: i32,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// Tril, Bool (storage = u8).
+    pub fn baracuda_kernels_tril_bool_run(
+        input: *const c_void,
+        output: *mut c_void,
+        shape: *const i32,
+        rank: i32,
+        diagonal: i32,
+        stream: *mut c_void,
+    ) -> i32;
+}
+
+// ============================================================================
 // Shape / layout — Repeat (Category N, per-axis tile)
 // ============================================================================
 
@@ -31259,6 +31511,149 @@ unsafe extern "C" {
     /// Implementability check for `cast_i8_i8`.
     pub fn baracuda_kernels_cast_i8_i8_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
 
+    // ============================================================================
+    // Phase 13.3 — sub-byte cast paths (Bool / Fp8 / S4 / U4).
+    //
+    // These cover dtypes that the classic `baracuda_cast.cuh` doesn't
+    // wire because their conversion semantics differ from a plain
+    // `static_cast<TOut>(x)`:
+    //
+    //   * Bool ↔ T: 0/non-zero truthiness normalization.
+    //   * Fp8 ↔ {f32, f16, bf16}: routes through f32 via NVIDIA's
+    //     `__nv_cvt_*_fp8` intrinsics with SATFINITE semantics.
+    //   * S4 / U4 ↔ {i32, i64, f32}: packed-pair nibble storage. UNPACK
+    //     (S4/U4 → wide) sign- or zero-extends; PACK (wide → S4/U4)
+    //     saturates to [-8, 7] or [0, 15] before nibble-masking.
+    //     `numel` is the element count and must be even; the packed
+    //     buffer holds `numel / 2` bytes.
+    // ============================================================================
+
+    // ----- Bool -> { i32, i64, f32, f16, bf16 } ----------------------------
+    /// Cast `Bool -> i32`. `x != 0 → 1`.
+    pub fn baracuda_kernels_cast_bool_i32_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    /// Implementability check for `cast_bool_i32`.
+    pub fn baracuda_kernels_cast_bool_i32_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+    /// Cast `Bool -> i64`.
+    pub fn baracuda_kernels_cast_bool_i64_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    /// Implementability check for `cast_bool_i64`.
+    pub fn baracuda_kernels_cast_bool_i64_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+    /// Cast `Bool -> f32`.
+    pub fn baracuda_kernels_cast_bool_f32_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    /// Implementability check for `cast_bool_f32`.
+    pub fn baracuda_kernels_cast_bool_f32_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+    /// Cast `Bool -> f16`.
+    pub fn baracuda_kernels_cast_bool_f16_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    /// Implementability check for `cast_bool_f16`.
+    pub fn baracuda_kernels_cast_bool_f16_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+    /// Cast `Bool -> bf16`.
+    pub fn baracuda_kernels_cast_bool_bf16_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    /// Implementability check for `cast_bool_bf16`.
+    pub fn baracuda_kernels_cast_bool_bf16_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+
+    // ----- { i32, i64, f32, f16, bf16 } -> Bool ----------------------------
+    /// Cast `i32 -> Bool`. `x != 0 → 1`.
+    pub fn baracuda_kernels_cast_i32_bool_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    /// Implementability check for `cast_i32_bool`.
+    pub fn baracuda_kernels_cast_i32_bool_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+    /// Cast `i64 -> Bool`.
+    pub fn baracuda_kernels_cast_i64_bool_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    /// Implementability check for `cast_i64_bool`.
+    pub fn baracuda_kernels_cast_i64_bool_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+    /// Cast `f32 -> Bool`.
+    pub fn baracuda_kernels_cast_f32_bool_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    /// Implementability check for `cast_f32_bool`.
+    pub fn baracuda_kernels_cast_f32_bool_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+    /// Cast `f16 -> Bool`.
+    pub fn baracuda_kernels_cast_f16_bool_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    /// Implementability check for `cast_f16_bool`.
+    pub fn baracuda_kernels_cast_f16_bool_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+    /// Cast `bf16 -> Bool`.
+    pub fn baracuda_kernels_cast_bf16_bool_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    /// Implementability check for `cast_bf16_bool`.
+    pub fn baracuda_kernels_cast_bf16_bool_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+
+    // ----- Fp8E4M3 ↔ { f32, f16, bf16 } ------------------------------------
+    /// Cast `Fp8E4M3 -> f32`.
+    pub fn baracuda_kernels_cast_fp8e4m3_f32_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    pub fn baracuda_kernels_cast_fp8e4m3_f32_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+    /// Cast `Fp8E4M3 -> f16`.
+    pub fn baracuda_kernels_cast_fp8e4m3_f16_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    pub fn baracuda_kernels_cast_fp8e4m3_f16_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+    /// Cast `Fp8E4M3 -> bf16`.
+    pub fn baracuda_kernels_cast_fp8e4m3_bf16_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    pub fn baracuda_kernels_cast_fp8e4m3_bf16_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+    /// Cast `f32 -> Fp8E4M3` (saturates to ±448).
+    pub fn baracuda_kernels_cast_f32_fp8e4m3_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    pub fn baracuda_kernels_cast_f32_fp8e4m3_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+    /// Cast `f16 -> Fp8E4M3`.
+    pub fn baracuda_kernels_cast_f16_fp8e4m3_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    pub fn baracuda_kernels_cast_f16_fp8e4m3_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+    /// Cast `bf16 -> Fp8E4M3`.
+    pub fn baracuda_kernels_cast_bf16_fp8e4m3_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    pub fn baracuda_kernels_cast_bf16_fp8e4m3_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+
+    // ----- Fp8E5M2 ↔ { f32, f16, bf16 } ------------------------------------
+    /// Cast `Fp8E5M2 -> f32`.
+    pub fn baracuda_kernels_cast_fp8e5m2_f32_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    pub fn baracuda_kernels_cast_fp8e5m2_f32_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+    /// Cast `Fp8E5M2 -> f16`.
+    pub fn baracuda_kernels_cast_fp8e5m2_f16_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    pub fn baracuda_kernels_cast_fp8e5m2_f16_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+    /// Cast `Fp8E5M2 -> bf16`.
+    pub fn baracuda_kernels_cast_fp8e5m2_bf16_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    pub fn baracuda_kernels_cast_fp8e5m2_bf16_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+    /// Cast `f32 -> Fp8E5M2` (saturates to ±57344).
+    pub fn baracuda_kernels_cast_f32_fp8e5m2_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    pub fn baracuda_kernels_cast_f32_fp8e5m2_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+    /// Cast `f16 -> Fp8E5M2`.
+    pub fn baracuda_kernels_cast_f16_fp8e5m2_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    pub fn baracuda_kernels_cast_f16_fp8e5m2_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+    /// Cast `bf16 -> Fp8E5M2`.
+    pub fn baracuda_kernels_cast_bf16_fp8e5m2_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    pub fn baracuda_kernels_cast_bf16_fp8e5m2_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+
+    // ----- S4 ↔ { i32, i64, f32 } — packed nibble ------------------------
+    // UNPACK (S4 → wide): `numel` must be even; sign-extends each nibble.
+    /// Cast `S4 -> i32` (unpack: sign-extend nibble to int32).
+    pub fn baracuda_kernels_cast_s4_i32_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    pub fn baracuda_kernels_cast_s4_i32_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+    /// Cast `S4 -> i64`.
+    pub fn baracuda_kernels_cast_s4_i64_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    pub fn baracuda_kernels_cast_s4_i64_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+    /// Cast `S4 -> f32`.
+    pub fn baracuda_kernels_cast_s4_f32_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    pub fn baracuda_kernels_cast_s4_f32_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+    // PACK (wide → S4): `numel` must be even; saturates inputs to [-8, +7].
+    /// Cast `i32 -> S4` (pack: saturate to [-8, +7] then nibble-mask).
+    pub fn baracuda_kernels_cast_i32_s4_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    pub fn baracuda_kernels_cast_i32_s4_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+    /// Cast `i64 -> S4`.
+    pub fn baracuda_kernels_cast_i64_s4_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    pub fn baracuda_kernels_cast_i64_s4_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+    /// Cast `f32 -> S4` (round-to-nearest then saturate).
+    pub fn baracuda_kernels_cast_f32_s4_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    pub fn baracuda_kernels_cast_f32_s4_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+
+    // ----- U4 ↔ { i32, i64, f32 } — packed nibble ------------------------
+    /// Cast `U4 -> i32` (unpack: zero-extend nibble to int32).
+    pub fn baracuda_kernels_cast_u4_i32_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    pub fn baracuda_kernels_cast_u4_i32_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+    /// Cast `U4 -> i64`.
+    pub fn baracuda_kernels_cast_u4_i64_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    pub fn baracuda_kernels_cast_u4_i64_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+    /// Cast `U4 -> f32`.
+    pub fn baracuda_kernels_cast_u4_f32_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    pub fn baracuda_kernels_cast_u4_f32_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+    /// Cast `i32 -> U4` (pack: saturate to [0, 15] then nibble-mask).
+    pub fn baracuda_kernels_cast_i32_u4_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    pub fn baracuda_kernels_cast_i32_u4_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+    /// Cast `i64 -> U4`.
+    pub fn baracuda_kernels_cast_i64_u4_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    pub fn baracuda_kernels_cast_i64_u4_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+    /// Cast `f32 -> U4` (round-to-nearest then saturate).
+    pub fn baracuda_kernels_cast_f32_u4_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    pub fn baracuda_kernels_cast_f32_u4_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+
     // ----- Fill ------------------------------------------------------------
 
     /// Fill `y` with `value`, f32 dtype.
@@ -32880,6 +33275,115 @@ unsafe extern "C" {
         sorted_seq: *const c_void,
         values: *const c_void,
         output: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    // ----- WriteSlice (Phase 13.1) -----------------------------------------
+    //
+    // `dest[start_0..end_0, ..., start_{N-1}..end_{N-1}] = source`
+    // (assign, not accumulate). Both tensors contiguous, zero-offset.
+    // 1 <= rank <= 8. Five byte-width-dispatched symbols cover all
+    // byte-aligned dtypes (one per `sizeof(T)` ∈ {1, 2, 4, 8, 16});
+    // one nibble-packed symbol covers S4 / U4 with the even-alignment
+    // constraint on the innermost axis.
+
+    /// WriteSlice, 1-byte element (i8 / u8 / S8 / U8 / Bool / Fp8E4M3 /
+    /// Fp8E5M2). Generic per-slab-element memcpy kernel.
+    ///
+    /// # Safety
+    /// `dest` must be a contiguous device buffer of at least
+    /// `prod(dest_shape) * 1` bytes. `source` must be a contiguous device
+    /// buffer of at least `source_numel * 1` bytes. `dest_shape`,
+    /// `source_shape`, `range_start` are host-side `int32_t` arrays of
+    /// length `rank`. `stream` must be a live CUDA stream.
+    pub fn baracuda_kernels_write_slice_b1_run(
+        dest: *mut c_void,
+        source: *const c_void,
+        source_numel: i64,
+        rank: i32,
+        dest_shape: *const i32,
+        source_shape: *const i32,
+        range_start: *const i32,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// WriteSlice, 2-byte element (f16 / bf16). See `b1` variant for
+    /// the contract.
+    pub fn baracuda_kernels_write_slice_b2_run(
+        dest: *mut c_void,
+        source: *const c_void,
+        source_numel: i64,
+        rank: i32,
+        dest_shape: *const i32,
+        source_shape: *const i32,
+        range_start: *const i32,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// WriteSlice, 4-byte element (f32 / F32Strict / i32).
+    pub fn baracuda_kernels_write_slice_b4_run(
+        dest: *mut c_void,
+        source: *const c_void,
+        source_numel: i64,
+        rank: i32,
+        dest_shape: *const i32,
+        source_shape: *const i32,
+        range_start: *const i32,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// WriteSlice, 8-byte element (f64 / i64 / Complex32).
+    pub fn baracuda_kernels_write_slice_b8_run(
+        dest: *mut c_void,
+        source: *const c_void,
+        source_numel: i64,
+        rank: i32,
+        dest_shape: *const i32,
+        source_shape: *const i32,
+        range_start: *const i32,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// WriteSlice, 16-byte element (Complex64).
+    pub fn baracuda_kernels_write_slice_b16_run(
+        dest: *mut c_void,
+        source: *const c_void,
+        source_numel: i64,
+        rank: i32,
+        dest_shape: *const i32,
+        source_shape: *const i32,
+        range_start: *const i32,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// WriteSlice, nibble-packed (S4 / U4 — two elements per byte).
+    /// Constraint: `range_start[rank-1]` and `range_end[rank-1]` must
+    /// both be even so no read-modify-write straddles a byte boundary.
+    /// Shape / range_start arrays passed in are *byte*-counted on the
+    /// innermost axis (Rust side halves before calling).
+    ///
+    /// # Safety
+    /// Same buffer / stream contract as the byte-aligned variants.
+    pub fn baracuda_kernels_write_slice_nibble_run(
+        dest: *mut c_void,
+        source: *const c_void,
+        source_byte_numel: i64,
+        rank: i32,
+        dest_byte_shape: *const i32,
+        source_byte_shape: *const i32,
+        range_start_bytes: *const i32,
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,

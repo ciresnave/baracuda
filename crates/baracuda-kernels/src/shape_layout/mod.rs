@@ -13,6 +13,7 @@
 
 pub mod concat;
 pub mod concat_backward;
+pub mod contiguize;
 pub mod fill;
 pub mod flip;
 pub mod flip_backward;
@@ -24,8 +25,14 @@ pub mod repeat;
 pub mod repeat_backward;
 pub mod roll;
 pub mod roll_backward;
+pub mod tril;
+pub mod tril_backward;
+pub mod triu;
+pub mod triu_backward;
+pub mod write_slice;
 
 pub use concat::{ConcatArgs, ConcatDescriptor, ConcatPlan};
+pub use contiguize::{ContiguizeArgs, ContiguizeDescriptor, ContiguizePlan};
 pub use fill::{FillArgs, FillDescriptor, FillPlan};
 pub use concat_backward::{
     ConcatBackwardArgs, ConcatBackwardDescriptor, ConcatBackwardPlan,
@@ -42,3 +49,8 @@ pub use repeat::{RepeatArgs, RepeatDescriptor, RepeatPlan};
 pub use repeat_backward::{RepeatBackwardArgs, RepeatBackwardDescriptor, RepeatBackwardPlan};
 pub use roll::{RollArgs, RollDescriptor, RollPlan};
 pub use roll_backward::{RollBackwardArgs, RollBackwardDescriptor, RollBackwardPlan};
+pub use tril::{TrilArgs, TrilDescriptor, TrilPlan};
+pub use tril_backward::{TrilBackwardArgs, TrilBackwardDescriptor, TrilBackwardPlan};
+pub use triu::{TriuArgs, TriuDescriptor, TriuPlan};
+pub use triu_backward::{TriuBackwardArgs, TriuBackwardDescriptor, TriuBackwardPlan};
+pub use write_slice::{WriteSliceArgs, WriteSliceDescriptor, WriteSlicePlan};

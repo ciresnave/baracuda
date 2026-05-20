@@ -1,6 +1,6 @@
 [package]
 name = "baracuda-cutlass-sys"
-version = "0.0.1-alpha.28"
+version = "0.0.1-alpha.29"
 description = "Header acquisition for NVIDIA CUTLASS as a baracuda workspace dependency. Sparse-checkout fetch with file-locked caching; emits cargo:include for downstream build.rs consumers."
 edition.workspace = true
 rust-version.workspace = true

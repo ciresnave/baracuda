@@ -372,6 +372,10 @@ fn collect_kernel_files() -> Vec<&'static str> {
             "elementwise/permute_fp.cu",
             "elementwise/flip_fp.cu",
             "elementwise/roll_fp.cu",
+            // Phase 13.2 — Contiguize (strided→contiguous copy). Lives
+            // in its own `shape_layout/` subdir; byte-width-templated,
+            // dtype-agnostic at the kernel level.
+            "shape_layout/contiguize.cu",
             "elementwise/arg_reduce_fp.cu",
             "elementwise/repeat_fp.cu",
             "elementwise/reduce_var_std_fp.cu",
@@ -790,6 +794,15 @@ fn collect_kernel_files() -> Vec<&'static str> {
             // the standard SPDX header. Contig-only fast path; baracuda's
             // plan layer materializes strided views upstream.
             "elementwise/cast.cu",
+            // Phase 13.3 — sub-byte cast paths (Bool / Fp8 / S4 / U4).
+            // Bool ↔ T uses 0/non-zero truthiness; Fp8 routes through f32
+            // via NVIDIA's `__nv_cvt_*_fp8` intrinsics with SATFINITE
+            // semantics; S4/U4 unpack/pack handle nibble-packed storage
+            // (numel must be even, packed buffer is numel/2 bytes).
+            "elementwise/cast_subbyte_bool.cu",
+            "elementwise/cast_subbyte_fp8.cu",
+            "elementwise/cast_subbyte_s4.cu",
+            "elementwise/cast_subbyte_u4.cu",
             "elementwise/fill.cu",
             "elementwise/affine.cu",
             // Phase 9 Category T — image / spatial transforms. Bespoke
@@ -815,6 +828,17 @@ fn collect_kernel_files() -> Vec<&'static str> {
             "sort/unique.cu",
             "sort/histogram.cu",
             "sort/searchsorted.cu",
+            // Phase 13.1 — WriteSlice (Category N / ShapeLayoutKind::
+            // WriteSlice). Byte-width-dispatched memcpy kernel (one
+            // symbol per sizeof(T) ∈ {1, 2, 4, 8, 16}) plus a
+            // nibble-packed symbol for S4 / U4. Drives Fuel team's
+            // persistent KV-cache append during autoregressive decoding.
+            "shape_layout/write_slice.cu",
+            // Phase 13.4 — Triu / Tril (upper / lower triangular masks).
+            // Per-dtype fanout across {f16, bf16, f32, f64, i32, i64,
+            // Bool}; one templated kernel body covers both ops via a
+            // predicate functor.
+            "shape_layout/triu_tril.cu",
         ] {
             if std::path::Path::new(&format!("kernels/{f}")).exists() {
                 kernels.push(*f);

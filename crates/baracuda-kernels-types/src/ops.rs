@@ -401,6 +401,31 @@ pub enum ShapeLayoutKind {
     /// element of an output tensor with a scalar constant. Wired from
     /// `fuel-cuda-kernels/fill.cu`.
     Fill = 7,
+    /// `dest[start_0..end_0, ..., start_{N-1}..end_{N-1}] = source`
+    /// (assign, not accumulate). Per-axis range write. Phase 13.1
+    /// trailblazer — driven by Fuel team's persistent KV-cache append
+    /// (autoregressive decoding). See
+    /// `baracuda_kernels::WriteSlicePlan`.
+    WriteSlice = 8,
+    /// Strided→contiguous materialization (`torch.Tensor.contiguous`).
+    /// Phase 13.2: closes the D2H→CPU contiguize→H2D fallback cliff
+    /// for non-contiguous CUDA inputs. Byte-level dtype-agnostic
+    /// (sizeof-templated kernel) covering every byte-aligned dtype;
+    /// nibble (S4 / U4) shipped behind a documented innermost-stride
+    /// constraint. See `baracuda_kernels::ContiguizePlan`.
+    Contiguize = 9,
+    /// `torch.triu(input, diagonal)` — keep upper triangular part of
+    /// the last two dims of `input`; zero everything below the
+    /// `diagonal`-th diagonal. Batch dims (anything before the last
+    /// two) are independently masked. Phase 13.4 trailblazer — driven
+    /// by Fuel team's CPU-only triu/tril gap. See
+    /// `baracuda_kernels::TriuPlan`.
+    Triu = 10,
+    /// `torch.tril(input, diagonal)` — keep lower triangular part of
+    /// the last two dims of `input`; zero everything above the
+    /// `diagonal`-th diagonal. Sibling of [`Self::Triu`] with the
+    /// predicate flipped. See `baracuda_kernels::TrilPlan`.
+    Tril = 11,
 }
 
 /// Index-returning reduction discriminant — Phase 4 (`ArgReducePlan`).
