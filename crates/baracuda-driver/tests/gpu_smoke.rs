@@ -106,3 +106,32 @@ fn vector_add_kernel_launch() {
     d_c.copy_to_host(&mut got).expect("D2H");
     assert_eq!(expected, got);
 }
+
+#[test]
+#[ignore = "requires an NVIDIA GPU; run with `cargo test -- --ignored`"]
+fn zero_reuses_existing_buffer() {
+    let (_dev, ctx, stream) = setup().expect("setup");
+
+    // Allocate + fill with a non-zero pattern.
+    let host: Vec<f32> = (0..1024).map(|i| (i as f32) + 1.0).collect();
+    let buf = DeviceBuffer::from_slice(&ctx, &host).expect("alloc + H2D");
+
+    // Synchronous zero.
+    buf.zero().expect("zero");
+    let mut got = vec![f32::NAN; host.len()];
+    buf.copy_to_host(&mut got).expect("D2H");
+    assert!(got.iter().all(|&x| x == 0.0), "sync zero left non-zero bytes");
+
+    // Refill, then async zero.
+    buf.copy_from_host(&host).expect("H2D refill");
+    buf.zero_async(&stream).expect("zero_async");
+    stream.synchronize().expect("sync");
+    let mut got2 = vec![f32::NAN; host.len()];
+    buf.copy_to_host(&mut got2).expect("D2H");
+    assert!(got2.iter().all(|&x| x == 0.0), "async zero left non-zero bytes");
+
+    // Zero-length buffer is a no-op (no FFI call) and must not error.
+    let empty: DeviceBuffer<f32> = DeviceBuffer::new(&ctx, 0).expect("empty");
+    empty.zero().expect("zero on empty");
+    empty.zero_async(&stream).expect("zero_async on empty");
+}

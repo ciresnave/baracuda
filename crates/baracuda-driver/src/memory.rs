@@ -138,6 +138,33 @@ impl<T: DeviceRepr> DeviceBuffer<T> {
         Ok(buf)
     }
 
+    /// Synchronously fill this buffer with zero bytes via `cuMemsetD8`.
+    /// Empty buffers are a no-op (no FFI call). Use this to reuse an
+    /// existing allocation when you want zeroed contents without paying
+    /// the allocation cost a second time.
+    pub fn zero(&self) -> Result<()> {
+        let bytes = self.len * size_of::<T>();
+        if bytes == 0 {
+            return Ok(());
+        }
+        let d = driver()?;
+        let cu = d.cu_memset_d8()?;
+        check(unsafe { cu(self.ptr, 0, bytes) })
+    }
+
+    /// Stream-ordered zero-fill via `cuMemsetD8Async`. Empty buffers are
+    /// a no-op. The fill is ordered with respect to other work submitted
+    /// to `stream`; synchronize the stream before reading from the host.
+    pub fn zero_async(&self, stream: &Stream) -> Result<()> {
+        let bytes = self.len * size_of::<T>();
+        if bytes == 0 {
+            return Ok(());
+        }
+        let d = driver()?;
+        let cu = d.cu_memset_d8_async()?;
+        check(unsafe { cu(self.ptr, 0, bytes, stream.as_raw()) })
+    }
+
     /// Allocate and copy `src` synchronously from host memory. Empty
     /// slices produce a sentinel zero-length buffer (no CUDA calls).
     pub fn from_slice(context: &Context, src: &[T]) -> Result<Self> {
