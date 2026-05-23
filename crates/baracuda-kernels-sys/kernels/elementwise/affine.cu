@@ -23,3 +23,20 @@ BARACUDA_KERNELS_AFFINE_INSTANTIATE(affine_i8,  int8_t)
 // f32-accumulator precision-guarantee contract.
 BARACUDA_KERNELS_AFFINE_INSTANTIATE_F16(affine_f16)
 BARACUDA_KERNELS_AFFINE_INSTANTIATE_BF16(affine_bf16)
+
+// =============================================================================
+// Strided sibling — Phase 14.1.
+// =============================================================================
+//
+// One thread per output element; thread decomposes its output linear
+// index into a multi-coord and dots with the per-axis input / output
+// strides to derive source / dest element offsets. Covers Fuel's
+// 7-dtype request: f32, f64, f16, bf16, i32, i64, u8.
+
+BARACUDA_KERNELS_AFFINE_STRIDED_INSTANTIATE(affine_f32, float)
+BARACUDA_KERNELS_AFFINE_STRIDED_INSTANTIATE(affine_f64, double)
+BARACUDA_KERNELS_AFFINE_STRIDED_INSTANTIATE(affine_i32, int32_t)
+BARACUDA_KERNELS_AFFINE_STRIDED_INSTANTIATE(affine_i64, int64_t)
+BARACUDA_KERNELS_AFFINE_STRIDED_INSTANTIATE(affine_u8,  uint8_t)
+BARACUDA_KERNELS_AFFINE_STRIDED_INSTANTIATE_F16(affine_f16)
+BARACUDA_KERNELS_AFFINE_STRIDED_INSTANTIATE_BF16(affine_bf16)

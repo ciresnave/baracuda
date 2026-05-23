@@ -349,6 +349,319 @@ __host__ inline int32_t launch_rope_backward_fp(
 }
 
 // =============================================================================
+// RoPE strided FW / BW — Phase 14.4
+// =============================================================================
+//
+// Outer dims (batch, heads, seq) may have arbitrary signed-i64 strides;
+// the innermost `head_dim` axis MUST have stride 1 because RoPE rotates
+// adjacent pairs (2i, 2i+1) which must sit next to each other in memory.
+// The Rust plan layer enforces that contract before crossing the FFI.
+//
+// One thread per output cell. The thread unravels its linear index into
+// (b, h, s, d) coords, then uses (stride_x_b, stride_x_h, stride_x_s)
+// plus a literal +1 / +0 on the head_dim axis to compute the read and
+// write byte offsets.
+
+template <typename T>
+__global__ void rope_strided_fp_kernel(
+    const T* __restrict__ x,
+    const int64_t* __restrict__ positions,
+    T* __restrict__ y,
+    int32_t batch,
+    int32_t heads,
+    int32_t seq,
+    int32_t head_dim,
+    int64_t stride_x_b, int64_t stride_x_h, int64_t stride_x_s,
+    int64_t stride_y_b, int64_t stride_y_h, int64_t stride_y_s,
+    float base,
+    int32_t pos_default_flag)
+{
+    int64_t total = (int64_t)batch * heads * seq * head_dim;
+    int64_t tid  = (int64_t)blockIdx.x * (int64_t)blockDim.x + (int64_t)threadIdx.x;
+    int64_t step = (int64_t)gridDim.x  * (int64_t)blockDim.x;
+    float inv_d = 1.0f / (float)head_dim;
+    for (int64_t lin = tid; lin < total; lin += step) {
+        int32_t d = (int32_t)(lin % (int64_t)head_dim);
+        int64_t rest = lin / (int64_t)head_dim;
+        int32_t s = (int32_t)(rest % (int64_t)seq);
+        rest /= (int64_t)seq;
+        int32_t h = (int32_t)(rest % (int64_t)heads);
+        int32_t b = (int32_t)(rest / (int64_t)heads);
+        int32_t pair = d >> 1;
+        int32_t d_even = pair << 1;
+        bool is_high = (d & 1) != 0;
+        float pos_f;
+        if (pos_default_flag != 0) {
+            pos_f = (float)s;
+        } else {
+            pos_f = (float)positions[s];
+        }
+        float exponent = -(float)d_even * inv_d;
+        float freq = __powf(base, exponent);
+        float theta = pos_f * freq;
+        float c = __cosf(theta);
+        float si = __sinf(theta);
+        int64_t off_x_outer = (int64_t)b * stride_x_b
+                             + (int64_t)h * stride_x_h
+                             + (int64_t)s * stride_x_s;
+        int64_t off_y_outer = (int64_t)b * stride_y_b
+                             + (int64_t)h * stride_y_h
+                             + (int64_t)s * stride_y_s;
+        // head_dim stride is implicit 1 — pair partners sit at d_even and d_even+1.
+        int64_t off_x_e = off_x_outer + (int64_t)d_even;
+        int64_t off_x_o = off_x_e + 1;
+        int64_t off_y   = off_y_outer + (int64_t)d;
+        float x_e = load_as_f32<T>(x[off_x_e]);
+        float x_o = load_as_f32<T>(x[off_x_o]);
+        float out;
+        if (!is_high) {
+            out = x_e * c - x_o * si;
+        } else {
+            out = x_o * c + x_e * si;
+        }
+        y[off_y] = store_from_f32<T>(out);
+    }
+}
+
+template <>
+__global__ void rope_strided_fp_kernel<double>(
+    const double* __restrict__ x,
+    const int64_t* __restrict__ positions,
+    double* __restrict__ y,
+    int32_t batch,
+    int32_t heads,
+    int32_t seq,
+    int32_t head_dim,
+    int64_t stride_x_b, int64_t stride_x_h, int64_t stride_x_s,
+    int64_t stride_y_b, int64_t stride_y_h, int64_t stride_y_s,
+    float base,
+    int32_t pos_default_flag)
+{
+    int64_t total = (int64_t)batch * heads * seq * head_dim;
+    int64_t tid  = (int64_t)blockIdx.x * (int64_t)blockDim.x + (int64_t)threadIdx.x;
+    int64_t step = (int64_t)gridDim.x  * (int64_t)blockDim.x;
+    double inv_d = 1.0 / (double)head_dim;
+    double base_d = (double)base;
+    for (int64_t lin = tid; lin < total; lin += step) {
+        int32_t d = (int32_t)(lin % (int64_t)head_dim);
+        int64_t rest = lin / (int64_t)head_dim;
+        int32_t s = (int32_t)(rest % (int64_t)seq);
+        rest /= (int64_t)seq;
+        int32_t h = (int32_t)(rest % (int64_t)heads);
+        int32_t b = (int32_t)(rest / (int64_t)heads);
+        int32_t pair = d >> 1;
+        int32_t d_even = pair << 1;
+        bool is_high = (d & 1) != 0;
+        double pos_d;
+        if (pos_default_flag != 0) {
+            pos_d = (double)s;
+        } else {
+            pos_d = (double)positions[s];
+        }
+        double exponent = -(double)d_even * inv_d;
+        double freq = pow(base_d, exponent);
+        double theta = pos_d * freq;
+        double c = cos(theta);
+        double si = sin(theta);
+        int64_t off_x_outer = (int64_t)b * stride_x_b
+                             + (int64_t)h * stride_x_h
+                             + (int64_t)s * stride_x_s;
+        int64_t off_y_outer = (int64_t)b * stride_y_b
+                             + (int64_t)h * stride_y_h
+                             + (int64_t)s * stride_y_s;
+        int64_t off_x_e = off_x_outer + (int64_t)d_even;
+        int64_t off_x_o = off_x_e + 1;
+        int64_t off_y   = off_y_outer + (int64_t)d;
+        double x_e = x[off_x_e];
+        double x_o = x[off_x_o];
+        double out;
+        if (!is_high) {
+            out = x_e * c - x_o * si;
+        } else {
+            out = x_o * c + x_e * si;
+        }
+        y[off_y] = out;
+    }
+}
+
+template <typename T>
+__host__ inline int32_t launch_rope_strided_fp(
+    const T* x, const int64_t* positions, T* y,
+    int32_t batch, int32_t heads, int32_t seq, int32_t head_dim,
+    int64_t stride_x_b, int64_t stride_x_h, int64_t stride_x_s,
+    int64_t stride_y_b, int64_t stride_y_h, int64_t stride_y_s,
+    float base, int32_t pos_default_flag,
+    cudaStream_t stream)
+{
+    if (batch < 0 || heads < 0 || seq < 0 || head_dim < 0) return 2;
+    if (head_dim % 2 != 0) return 2;
+    int64_t total = (int64_t)batch * heads * seq * head_dim;
+    if (total == 0) return 0;
+    constexpr int kBlock = 256;
+    constexpr int64_t kMaxBlocks = 65535;
+    int64_t blocks_i64 = (total + kBlock - 1) / kBlock;
+    int blocks = static_cast<int>(blocks_i64 > kMaxBlocks ? kMaxBlocks : blocks_i64);
+    if (blocks <= 0) blocks = 1;
+    rope_strided_fp_kernel<T><<<blocks, kBlock, 0, stream>>>(
+        x, positions, y, batch, heads, seq, head_dim,
+        stride_x_b, stride_x_h, stride_x_s,
+        stride_y_b, stride_y_h, stride_y_s,
+        base, pos_default_flag);
+    cudaError_t err = cudaGetLastError();
+    return (err == cudaSuccess) ? 0 : 5;
+}
+
+// RoPE BW strided — same shape, swapped trig signs.
+
+template <typename T>
+__global__ void rope_backward_strided_fp_kernel(
+    const T* __restrict__ dy,
+    const int64_t* __restrict__ positions,
+    T* __restrict__ dx,
+    int32_t batch,
+    int32_t heads,
+    int32_t seq,
+    int32_t head_dim,
+    int64_t stride_dy_b, int64_t stride_dy_h, int64_t stride_dy_s,
+    int64_t stride_dx_b, int64_t stride_dx_h, int64_t stride_dx_s,
+    float base,
+    int32_t pos_default_flag)
+{
+    int64_t total = (int64_t)batch * heads * seq * head_dim;
+    int64_t tid  = (int64_t)blockIdx.x * (int64_t)blockDim.x + (int64_t)threadIdx.x;
+    int64_t step = (int64_t)gridDim.x  * (int64_t)blockDim.x;
+    float inv_d = 1.0f / (float)head_dim;
+    for (int64_t lin = tid; lin < total; lin += step) {
+        int32_t d = (int32_t)(lin % (int64_t)head_dim);
+        int64_t rest = lin / (int64_t)head_dim;
+        int32_t s = (int32_t)(rest % (int64_t)seq);
+        rest /= (int64_t)seq;
+        int32_t h = (int32_t)(rest % (int64_t)heads);
+        int32_t b = (int32_t)(rest / (int64_t)heads);
+        int32_t pair = d >> 1;
+        int32_t d_even = pair << 1;
+        bool is_high = (d & 1) != 0;
+        float pos_f;
+        if (pos_default_flag != 0) {
+            pos_f = (float)s;
+        } else {
+            pos_f = (float)positions[s];
+        }
+        float exponent = -(float)d_even * inv_d;
+        float freq = __powf(base, exponent);
+        float theta = pos_f * freq;
+        float c = __cosf(theta);
+        float si = __sinf(theta);
+        int64_t off_dy_outer = (int64_t)b * stride_dy_b
+                              + (int64_t)h * stride_dy_h
+                              + (int64_t)s * stride_dy_s;
+        int64_t off_dx_outer = (int64_t)b * stride_dx_b
+                              + (int64_t)h * stride_dx_h
+                              + (int64_t)s * stride_dx_s;
+        int64_t off_dy_e = off_dy_outer + (int64_t)d_even;
+        int64_t off_dy_o = off_dy_e + 1;
+        int64_t off_dx   = off_dx_outer + (int64_t)d;
+        float dy_e = load_as_f32<T>(dy[off_dy_e]);
+        float dy_o = load_as_f32<T>(dy[off_dy_o]);
+        float out;
+        if (!is_high) {
+            out = dy_e * c + dy_o * si;
+        } else {
+            out = dy_o * c - dy_e * si;
+        }
+        dx[off_dx] = store_from_f32<T>(out);
+    }
+}
+
+template <>
+__global__ void rope_backward_strided_fp_kernel<double>(
+    const double* __restrict__ dy,
+    const int64_t* __restrict__ positions,
+    double* __restrict__ dx,
+    int32_t batch,
+    int32_t heads,
+    int32_t seq,
+    int32_t head_dim,
+    int64_t stride_dy_b, int64_t stride_dy_h, int64_t stride_dy_s,
+    int64_t stride_dx_b, int64_t stride_dx_h, int64_t stride_dx_s,
+    float base,
+    int32_t pos_default_flag)
+{
+    int64_t total = (int64_t)batch * heads * seq * head_dim;
+    int64_t tid  = (int64_t)blockIdx.x * (int64_t)blockDim.x + (int64_t)threadIdx.x;
+    int64_t step = (int64_t)gridDim.x  * (int64_t)blockDim.x;
+    double inv_d = 1.0 / (double)head_dim;
+    double base_d = (double)base;
+    for (int64_t lin = tid; lin < total; lin += step) {
+        int32_t d = (int32_t)(lin % (int64_t)head_dim);
+        int64_t rest = lin / (int64_t)head_dim;
+        int32_t s = (int32_t)(rest % (int64_t)seq);
+        rest /= (int64_t)seq;
+        int32_t h = (int32_t)(rest % (int64_t)heads);
+        int32_t b = (int32_t)(rest / (int64_t)heads);
+        int32_t pair = d >> 1;
+        int32_t d_even = pair << 1;
+        bool is_high = (d & 1) != 0;
+        double pos_d;
+        if (pos_default_flag != 0) {
+            pos_d = (double)s;
+        } else {
+            pos_d = (double)positions[s];
+        }
+        double exponent = -(double)d_even * inv_d;
+        double freq = pow(base_d, exponent);
+        double theta = pos_d * freq;
+        double c = cos(theta);
+        double si = sin(theta);
+        int64_t off_dy_outer = (int64_t)b * stride_dy_b
+                              + (int64_t)h * stride_dy_h
+                              + (int64_t)s * stride_dy_s;
+        int64_t off_dx_outer = (int64_t)b * stride_dx_b
+                              + (int64_t)h * stride_dx_h
+                              + (int64_t)s * stride_dx_s;
+        int64_t off_dy_e = off_dy_outer + (int64_t)d_even;
+        int64_t off_dy_o = off_dy_e + 1;
+        int64_t off_dx   = off_dx_outer + (int64_t)d;
+        double dy_e = dy[off_dy_e];
+        double dy_o = dy[off_dy_o];
+        double out;
+        if (!is_high) {
+            out = dy_e * c + dy_o * si;
+        } else {
+            out = dy_o * c - dy_e * si;
+        }
+        dx[off_dx] = out;
+    }
+}
+
+template <typename T>
+__host__ inline int32_t launch_rope_backward_strided_fp(
+    const T* dy, const int64_t* positions, T* dx,
+    int32_t batch, int32_t heads, int32_t seq, int32_t head_dim,
+    int64_t stride_dy_b, int64_t stride_dy_h, int64_t stride_dy_s,
+    int64_t stride_dx_b, int64_t stride_dx_h, int64_t stride_dx_s,
+    float base, int32_t pos_default_flag,
+    cudaStream_t stream)
+{
+    if (batch < 0 || heads < 0 || seq < 0 || head_dim < 0) return 2;
+    if (head_dim % 2 != 0) return 2;
+    int64_t total = (int64_t)batch * heads * seq * head_dim;
+    if (total == 0) return 0;
+    constexpr int kBlock = 256;
+    constexpr int64_t kMaxBlocks = 65535;
+    int64_t blocks_i64 = (total + kBlock - 1) / kBlock;
+    int blocks = static_cast<int>(blocks_i64 > kMaxBlocks ? kMaxBlocks : blocks_i64);
+    if (blocks <= 0) blocks = 1;
+    rope_backward_strided_fp_kernel<T><<<blocks, kBlock, 0, stream>>>(
+        dy, positions, dx, batch, heads, seq, head_dim,
+        stride_dy_b, stride_dy_h, stride_dy_s,
+        stride_dx_b, stride_dx_h, stride_dx_s,
+        base, pos_default_flag);
+    cudaError_t err = cudaGetLastError();
+    return (err == cudaSuccess) ? 0 : 5;
+}
+
+// =============================================================================
 // ALiBi FW kernel
 // =============================================================================
 //
@@ -739,6 +1052,79 @@ __host__ inline int32_t launch_kv_cache_append(
             static_cast<const int64_t*>(positions),                                             \
             static_cast<T*>(dx),                                                                \
             batch, heads, seq, head_dim, base, pos_default_flag,                                \
+            stream);                                                                            \
+    }
+
+// Strided sibling INSTANTIATEs — Phase 14.4. One symbol per dtype:
+// `baracuda_kernels_rope_<dtype>_strided_run` and
+// `baracuda_kernels_rope_backward_<dtype>_strided_run`. The innermost
+// `head_dim` axis is implicitly stride=1 (caller-enforced); only the
+// three outer dims (batch, heads, seq) carry signed-i64 strides.
+#define BARACUDA_KERNELS_ROPE_STRIDED_INSTANTIATE(NAME, T)                                      \
+    extern "C" int32_t baracuda_kernels_##NAME##_strided_run(                                   \
+        int32_t batch,                                                                          \
+        int32_t heads,                                                                          \
+        int32_t seq,                                                                            \
+        int32_t head_dim,                                                                       \
+        int64_t stride_x_b, int64_t stride_x_h, int64_t stride_x_s,                             \
+        int64_t stride_y_b, int64_t stride_y_h, int64_t stride_y_s,                             \
+        float base,                                                                             \
+        int32_t pos_default_flag,                                                               \
+        const void* x,                                                                          \
+        const void* positions,                                                                  \
+        void* y,                                                                                \
+        void* /*workspace*/, size_t /*workspace_bytes*/,                                        \
+        void* stream_ptr)                                                                       \
+    {                                                                                            \
+        if (batch < 0 || heads < 0 || seq < 0 || head_dim < 0) return 2;                        \
+        if (head_dim % 2 != 0) return 2;                                                        \
+        int64_t total = (int64_t)batch * heads * seq * head_dim;                                \
+        if (total == 0) return 0;                                                               \
+        if (x == nullptr || y == nullptr) return 2;                                             \
+        if (pos_default_flag == 0 && positions == nullptr) return 2;                            \
+        cudaStream_t stream = static_cast<cudaStream_t>(stream_ptr);                            \
+        return baracuda::attention::launch_rope_strided_fp<T>(                                  \
+            static_cast<const T*>(x),                                                           \
+            static_cast<const int64_t*>(positions),                                             \
+            static_cast<T*>(y),                                                                 \
+            batch, heads, seq, head_dim,                                                        \
+            stride_x_b, stride_x_h, stride_x_s,                                                 \
+            stride_y_b, stride_y_h, stride_y_s,                                                 \
+            base, pos_default_flag,                                                             \
+            stream);                                                                            \
+    }
+
+#define BARACUDA_KERNELS_ROPE_BACKWARD_STRIDED_INSTANTIATE(NAME, T)                             \
+    extern "C" int32_t baracuda_kernels_##NAME##_strided_run(                                   \
+        int32_t batch,                                                                          \
+        int32_t heads,                                                                          \
+        int32_t seq,                                                                            \
+        int32_t head_dim,                                                                       \
+        int64_t stride_dy_b, int64_t stride_dy_h, int64_t stride_dy_s,                          \
+        int64_t stride_dx_b, int64_t stride_dx_h, int64_t stride_dx_s,                          \
+        float base,                                                                             \
+        int32_t pos_default_flag,                                                               \
+        const void* dy,                                                                         \
+        const void* positions,                                                                  \
+        void* dx,                                                                               \
+        void* /*workspace*/, size_t /*workspace_bytes*/,                                        \
+        void* stream_ptr)                                                                       \
+    {                                                                                            \
+        if (batch < 0 || heads < 0 || seq < 0 || head_dim < 0) return 2;                        \
+        if (head_dim % 2 != 0) return 2;                                                        \
+        int64_t total = (int64_t)batch * heads * seq * head_dim;                                \
+        if (total == 0) return 0;                                                               \
+        if (dy == nullptr || dx == nullptr) return 2;                                           \
+        if (pos_default_flag == 0 && positions == nullptr) return 2;                            \
+        cudaStream_t stream = static_cast<cudaStream_t>(stream_ptr);                            \
+        return baracuda::attention::launch_rope_backward_strided_fp<T>(                         \
+            static_cast<const T*>(dy),                                                          \
+            static_cast<const int64_t*>(positions),                                             \
+            static_cast<T*>(dx),                                                                \
+            batch, heads, seq, head_dim,                                                        \
+            stride_dy_b, stride_dy_h, stride_dy_s,                                              \
+            stride_dx_b, stride_dx_h, stride_dx_s,                                              \
+            base, pos_default_flag,                                                             \
             stream);                                                                            \
     }
 

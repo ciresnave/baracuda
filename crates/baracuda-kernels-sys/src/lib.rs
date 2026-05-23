@@ -9504,6 +9504,203 @@ unsafe extern "C" {
 }
 
 // ============================================================================
+// Shape / layout — Triu / Tril strided siblings (Phase 14.3)
+// ============================================================================
+//
+// Companion launchers to the Triu / Tril contig fast path above. The
+// Rust dispatcher picks contig vs strided at launch time based on
+// whether both input and output are canonical row-major contiguous.
+// The strided kernel reads the input at signed-stride offsets and
+// writes the output at signed-stride offsets; the mask predicate
+// (`j >= i + diagonal` for triu; `j <= i + diagonal` for tril) is
+// evaluated on the last-two-dim coords as in the contig kernel.
+//
+// ABI:
+//   input               — source device pointer (T const*).
+//   output              — dest device pointer (T*).
+//   shape               — points to `[i32; rank]` on the host stack.
+//   rank                — i32, number of valid axes in [2, 8].
+//   stride_x / stride_y — points to `[i64; rank]` on the host stack,
+//                         the per-axis SIGNED element stride for input
+//                         and output respectively. Stride 0 marks a
+//                         broadcast axis. Stride may be negative.
+//   diagonal            — i32 mask offset (same semantics as contig).
+//   stream              — cudaStream_t cast to `*mut c_void`.
+//
+// Status codes mirror the GEMM family (see crate-level doc).
+
+#[cfg(any(feature = "sm80", feature = "sm89", feature = "sm90a"))]
+unsafe extern "C" {
+    /// Triu strided, f16.
+    pub fn baracuda_kernels_triu_f16_strided_run(
+        input: *const c_void,
+        output: *mut c_void,
+        shape: *const i32,
+        rank: i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        diagonal: i32,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// Triu strided, bf16.
+    pub fn baracuda_kernels_triu_bf16_strided_run(
+        input: *const c_void,
+        output: *mut c_void,
+        shape: *const i32,
+        rank: i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        diagonal: i32,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// Triu strided, f32.
+    pub fn baracuda_kernels_triu_f32_strided_run(
+        input: *const c_void,
+        output: *mut c_void,
+        shape: *const i32,
+        rank: i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        diagonal: i32,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// Triu strided, f64.
+    pub fn baracuda_kernels_triu_f64_strided_run(
+        input: *const c_void,
+        output: *mut c_void,
+        shape: *const i32,
+        rank: i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        diagonal: i32,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// Triu strided, i32.
+    pub fn baracuda_kernels_triu_i32_strided_run(
+        input: *const c_void,
+        output: *mut c_void,
+        shape: *const i32,
+        rank: i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        diagonal: i32,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// Triu strided, i64.
+    pub fn baracuda_kernels_triu_i64_strided_run(
+        input: *const c_void,
+        output: *mut c_void,
+        shape: *const i32,
+        rank: i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        diagonal: i32,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// Triu strided, Bool (storage = u8).
+    pub fn baracuda_kernels_triu_bool_strided_run(
+        input: *const c_void,
+        output: *mut c_void,
+        shape: *const i32,
+        rank: i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        diagonal: i32,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// Tril strided, f16.
+    pub fn baracuda_kernels_tril_f16_strided_run(
+        input: *const c_void,
+        output: *mut c_void,
+        shape: *const i32,
+        rank: i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        diagonal: i32,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// Tril strided, bf16.
+    pub fn baracuda_kernels_tril_bf16_strided_run(
+        input: *const c_void,
+        output: *mut c_void,
+        shape: *const i32,
+        rank: i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        diagonal: i32,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// Tril strided, f32.
+    pub fn baracuda_kernels_tril_f32_strided_run(
+        input: *const c_void,
+        output: *mut c_void,
+        shape: *const i32,
+        rank: i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        diagonal: i32,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// Tril strided, f64.
+    pub fn baracuda_kernels_tril_f64_strided_run(
+        input: *const c_void,
+        output: *mut c_void,
+        shape: *const i32,
+        rank: i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        diagonal: i32,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// Tril strided, i32.
+    pub fn baracuda_kernels_tril_i32_strided_run(
+        input: *const c_void,
+        output: *mut c_void,
+        shape: *const i32,
+        rank: i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        diagonal: i32,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// Tril strided, i64.
+    pub fn baracuda_kernels_tril_i64_strided_run(
+        input: *const c_void,
+        output: *mut c_void,
+        shape: *const i32,
+        rank: i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        diagonal: i32,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// Tril strided, Bool (storage = u8).
+    pub fn baracuda_kernels_tril_bool_strided_run(
+        input: *const c_void,
+        output: *mut c_void,
+        shape: *const i32,
+        rank: i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        diagonal: i32,
+        stream: *mut c_void,
+    ) -> i32;
+}
+
+// ============================================================================
 // Shape / layout — Repeat (Category N, per-axis tile)
 // ============================================================================
 
@@ -24369,6 +24566,150 @@ unsafe extern "C" {
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
     ) -> i32;
 
+    // ---- PowI strided FW (param: p0 = n as float, p1 unused) — Phase 14.2 ----
+    //
+    // Strided sibling of the contig PowI FW launchers above. One thread
+    // per output cell: each thread decomposes its linear index into a
+    // multi-coord against `shape`, then dots with `stride_x` / `stride_y`
+    // (signed i64) to derive the operand offsets. Same `p0` / `p1` ABI
+    // as the contig launchers — `p0` carries `n as f32`, `p1` ignored.
+    // `shape`, `stride_x`, `stride_y` are host pointers (read at launch).
+
+    /// `powi` FW, f32, strided.
+    ///
+    /// # Safety
+    /// Same device-pointer / stream contract as the contig launcher;
+    /// `shape`, `stride_x`, `stride_y` point to host arrays of length
+    /// `rank` and remain valid through the call (read at launch, not
+    /// during kernel execution). `p0` carries the integer exponent.
+    pub fn baracuda_kernels_unary_powi_f32_strided_run(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        x: *const c_void, y: *mut c_void,
+        p0: f32, p1: f32,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// `powi` FW, f16, strided.
+    ///
+    /// # Safety
+    /// Same contract as `baracuda_kernels_unary_powi_f32_strided_run`;
+    /// `x` / `y` point to `__half` storage.
+    pub fn baracuda_kernels_unary_powi_f16_strided_run(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        x: *const c_void, y: *mut c_void,
+        p0: f32, p1: f32,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// `powi` FW, bf16, strided.
+    ///
+    /// # Safety
+    /// Same contract as `baracuda_kernels_unary_powi_f32_strided_run`;
+    /// `x` / `y` point to `__nv_bfloat16` storage.
+    pub fn baracuda_kernels_unary_powi_bf16_strided_run(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        x: *const c_void, y: *mut c_void,
+        p0: f32, p1: f32,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// `powi` FW, f64, strided.
+    ///
+    /// # Safety
+    /// Same contract as `baracuda_kernels_unary_powi_f32_strided_run`;
+    /// `x` / `y` point to `double` storage.
+    pub fn baracuda_kernels_unary_powi_f64_strided_run(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        x: *const c_void, y: *mut c_void,
+        p0: f32, p1: f32,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    // ---- PowI strided BW (saved-x; param: p0 = n as float, p1 unused) — Phase 14.2 ----
+    //
+    // Strided sibling of the contig PowI BW launchers. Carries three
+    // independent stride arrays — `stride_x`, `stride_dy`, `stride_dx`
+    // — so each of the three operands may be a different view.
+
+    /// `powi` BW, f32, strided.
+    ///
+    /// # Safety
+    /// Same device-pointer / stream contract as the contig BW launcher.
+    /// `shape`, `stride_x`, `stride_dy`, `stride_dx` are host arrays of
+    /// length `rank`. `p0` is the integer exponent; `p1` ignored.
+    pub fn baracuda_kernels_unary_powi_backward_f32_strided_run(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_x: *const i64,
+        stride_dy: *const i64,
+        stride_dx: *const i64,
+        x: *const c_void, dy: *const c_void, dx: *mut c_void,
+        p0: f32, p1: f32,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// `powi` BW, f16, strided.
+    ///
+    /// # Safety
+    /// Same contract as `baracuda_kernels_unary_powi_backward_f32_strided_run`;
+    /// all tensor pointers reference `__half` storage.
+    pub fn baracuda_kernels_unary_powi_backward_f16_strided_run(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_x: *const i64,
+        stride_dy: *const i64,
+        stride_dx: *const i64,
+        x: *const c_void, dy: *const c_void, dx: *mut c_void,
+        p0: f32, p1: f32,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// `powi` BW, bf16, strided.
+    ///
+    /// # Safety
+    /// Same contract as `baracuda_kernels_unary_powi_backward_f32_strided_run`;
+    /// all tensor pointers reference `__nv_bfloat16` storage.
+    pub fn baracuda_kernels_unary_powi_backward_bf16_strided_run(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_x: *const i64,
+        stride_dy: *const i64,
+        stride_dx: *const i64,
+        x: *const c_void, dy: *const c_void, dx: *mut c_void,
+        p0: f32, p1: f32,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// `powi` BW, f64, strided.
+    ///
+    /// # Safety
+    /// Same contract as `baracuda_kernels_unary_powi_backward_f32_strided_run`;
+    /// all tensor pointers reference `double` storage.
+    pub fn baracuda_kernels_unary_powi_backward_f64_strided_run(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_x: *const i64,
+        stride_dy: *const i64,
+        stride_dx: *const i64,
+        x: *const c_void, dy: *const c_void, dx: *mut c_void,
+        p0: f32, p1: f32,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
     // ---- Lerp FW (param: weight) ----
 
     /// Binary elementwise `lerp(a, b; weight) = a + weight·(b - a)`, f32, contig.
@@ -24838,6 +25179,152 @@ unsafe extern "C" {
         stream: *mut c_void,
     ) -> i32;
 
+    // ---- RoPE strided FW + BW × 4 dtypes — Phase 14.4 ----
+    //
+    // Outer dims (batch, heads, seq) carry signed-i64 element strides.
+    // The innermost `head_dim` axis is implicitly stride=1 (RoPE
+    // rotates adjacent pairs (2i, 2i+1) which must sit next to each
+    // other in memory). The Rust plan layer rejects any non-unit
+    // stride on head_dim before crossing the FFI.
+
+    /// RoPE FW strided, f32.
+    pub fn baracuda_kernels_rope_f32_strided_run(
+        batch: i32,
+        heads: i32,
+        seq: i32,
+        head_dim: i32,
+        stride_x_b: i64, stride_x_h: i64, stride_x_s: i64,
+        stride_y_b: i64, stride_y_h: i64, stride_y_s: i64,
+        base: f32,
+        pos_default_flag: i32,
+        x: *const c_void,
+        positions: *const c_void,
+        y: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    /// RoPE FW strided, f16.
+    pub fn baracuda_kernels_rope_f16_strided_run(
+        batch: i32,
+        heads: i32,
+        seq: i32,
+        head_dim: i32,
+        stride_x_b: i64, stride_x_h: i64, stride_x_s: i64,
+        stride_y_b: i64, stride_y_h: i64, stride_y_s: i64,
+        base: f32,
+        pos_default_flag: i32,
+        x: *const c_void,
+        positions: *const c_void,
+        y: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    /// RoPE FW strided, bf16.
+    pub fn baracuda_kernels_rope_bf16_strided_run(
+        batch: i32,
+        heads: i32,
+        seq: i32,
+        head_dim: i32,
+        stride_x_b: i64, stride_x_h: i64, stride_x_s: i64,
+        stride_y_b: i64, stride_y_h: i64, stride_y_s: i64,
+        base: f32,
+        pos_default_flag: i32,
+        x: *const c_void,
+        positions: *const c_void,
+        y: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    /// RoPE FW strided, f64.
+    pub fn baracuda_kernels_rope_f64_strided_run(
+        batch: i32,
+        heads: i32,
+        seq: i32,
+        head_dim: i32,
+        stride_x_b: i64, stride_x_h: i64, stride_x_s: i64,
+        stride_y_b: i64, stride_y_h: i64, stride_y_s: i64,
+        base: f32,
+        pos_default_flag: i32,
+        x: *const c_void,
+        positions: *const c_void,
+        y: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// RoPE BW strided, f32. Strides apply to `dy` (input) and `dx` (output).
+    pub fn baracuda_kernels_rope_backward_f32_strided_run(
+        batch: i32,
+        heads: i32,
+        seq: i32,
+        head_dim: i32,
+        stride_dy_b: i64, stride_dy_h: i64, stride_dy_s: i64,
+        stride_dx_b: i64, stride_dx_h: i64, stride_dx_s: i64,
+        base: f32,
+        pos_default_flag: i32,
+        dy: *const c_void,
+        positions: *const c_void,
+        dx: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    /// RoPE BW strided, f16.
+    pub fn baracuda_kernels_rope_backward_f16_strided_run(
+        batch: i32,
+        heads: i32,
+        seq: i32,
+        head_dim: i32,
+        stride_dy_b: i64, stride_dy_h: i64, stride_dy_s: i64,
+        stride_dx_b: i64, stride_dx_h: i64, stride_dx_s: i64,
+        base: f32,
+        pos_default_flag: i32,
+        dy: *const c_void,
+        positions: *const c_void,
+        dx: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    /// RoPE BW strided, bf16.
+    pub fn baracuda_kernels_rope_backward_bf16_strided_run(
+        batch: i32,
+        heads: i32,
+        seq: i32,
+        head_dim: i32,
+        stride_dy_b: i64, stride_dy_h: i64, stride_dy_s: i64,
+        stride_dx_b: i64, stride_dx_h: i64, stride_dx_s: i64,
+        base: f32,
+        pos_default_flag: i32,
+        dy: *const c_void,
+        positions: *const c_void,
+        dx: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    /// RoPE BW strided, f64.
+    pub fn baracuda_kernels_rope_backward_f64_strided_run(
+        batch: i32,
+        heads: i32,
+        seq: i32,
+        head_dim: i32,
+        stride_dy_b: i64, stride_dy_h: i64, stride_dy_s: i64,
+        stride_dx_b: i64, stride_dx_h: i64, stride_dx_s: i64,
+        base: f32,
+        pos_default_flag: i32,
+        dy: *const c_void,
+        positions: *const c_void,
+        dx: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
     /// ALiBi FW, f32. `y[b, h, i, j] = scores[b, h, i, j] + slopes[h] · (j - i)`.
     pub fn baracuda_kernels_alibi_f32_run(
         batch: i32,
@@ -25120,6 +25607,243 @@ unsafe extern "C" {
         k_len: i32,
         d_k: i32,
         d_v: i32,
+        scale: f32,
+        q: *const c_void,
+        k: *const c_void,
+        v: *const c_void,
+        attn: *const c_void,
+        dy: *const c_void,
+        dscores_ws: *mut c_void,
+        dQ: *mut c_void,
+        dK: *mut c_void,
+        dV: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    // ---- SDPA strided FW + BW × 4 dtypes — Phase 14.4 ----
+    //
+    // Per-tensor stride arrays: each is `*const i64` of length 3 (one
+    // per outer dim: batch, heads, seq). The innermost head_dim axis
+    // is implicitly stride=1, enforced by the Rust plan layer. mask
+    // and attn (FW) / dscores_ws (BW) stay contig (no stride args).
+    //
+    // GQA broadcast: `stride_k[1]` (head axis) may be zero — kernel
+    // reads the same K row for every Q-head in the group. Same for V.
+    // BW does NOT support zero strides on K/V (would require atomic
+    // reduction over Q-head groups); Rust plan rejects.
+    //
+    // attn buffer (FW intermediate / BW saved softmax) stays contig
+    // [B, H, Q, K]. dscores_ws (BW) is similarly contig.
+
+    /// SDPA FW strided, f32.
+    pub fn baracuda_kernels_sdpa_f32_strided_run(
+        batch: i32,
+        heads: i32,
+        q_len: i32,
+        k_len: i32,
+        d_k: i32,
+        d_v: i32,
+        stride_q: *const i64,
+        stride_k: *const i64,
+        stride_v: *const i64,
+        stride_mask: *const i64,
+        stride_y: *const i64,
+        scale: f32,
+        is_causal: i32,
+        has_mask: i32,
+        q: *const c_void,
+        k: *const c_void,
+        v: *const c_void,
+        mask: *const c_void,
+        attn: *mut c_void,
+        y: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    /// SDPA FW strided, f16.
+    pub fn baracuda_kernels_sdpa_f16_strided_run(
+        batch: i32,
+        heads: i32,
+        q_len: i32,
+        k_len: i32,
+        d_k: i32,
+        d_v: i32,
+        stride_q: *const i64,
+        stride_k: *const i64,
+        stride_v: *const i64,
+        stride_mask: *const i64,
+        stride_y: *const i64,
+        scale: f32,
+        is_causal: i32,
+        has_mask: i32,
+        q: *const c_void,
+        k: *const c_void,
+        v: *const c_void,
+        mask: *const c_void,
+        attn: *mut c_void,
+        y: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    /// SDPA FW strided, bf16.
+    pub fn baracuda_kernels_sdpa_bf16_strided_run(
+        batch: i32,
+        heads: i32,
+        q_len: i32,
+        k_len: i32,
+        d_k: i32,
+        d_v: i32,
+        stride_q: *const i64,
+        stride_k: *const i64,
+        stride_v: *const i64,
+        stride_mask: *const i64,
+        stride_y: *const i64,
+        scale: f32,
+        is_causal: i32,
+        has_mask: i32,
+        q: *const c_void,
+        k: *const c_void,
+        v: *const c_void,
+        mask: *const c_void,
+        attn: *mut c_void,
+        y: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    /// SDPA FW strided, f64.
+    pub fn baracuda_kernels_sdpa_f64_strided_run(
+        batch: i32,
+        heads: i32,
+        q_len: i32,
+        k_len: i32,
+        d_k: i32,
+        d_v: i32,
+        stride_q: *const i64,
+        stride_k: *const i64,
+        stride_v: *const i64,
+        stride_mask: *const i64,
+        stride_y: *const i64,
+        scale: f32,
+        is_causal: i32,
+        has_mask: i32,
+        q: *const c_void,
+        k: *const c_void,
+        v: *const c_void,
+        mask: *const c_void,
+        attn: *mut c_void,
+        y: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// SDPA BW strided, f32.
+    pub fn baracuda_kernels_sdpa_backward_f32_strided_run(
+        batch: i32,
+        heads: i32,
+        q_len: i32,
+        k_len: i32,
+        d_k: i32,
+        d_v: i32,
+        stride_q: *const i64,
+        stride_k: *const i64,
+        stride_v: *const i64,
+        stride_dy: *const i64,
+        stride_dq: *const i64,
+        stride_dk: *const i64,
+        stride_dv: *const i64,
+        scale: f32,
+        q: *const c_void,
+        k: *const c_void,
+        v: *const c_void,
+        attn: *const c_void,
+        dy: *const c_void,
+        dscores_ws: *mut c_void,
+        dQ: *mut c_void,
+        dK: *mut c_void,
+        dV: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    /// SDPA BW strided, f16.
+    pub fn baracuda_kernels_sdpa_backward_f16_strided_run(
+        batch: i32,
+        heads: i32,
+        q_len: i32,
+        k_len: i32,
+        d_k: i32,
+        d_v: i32,
+        stride_q: *const i64,
+        stride_k: *const i64,
+        stride_v: *const i64,
+        stride_dy: *const i64,
+        stride_dq: *const i64,
+        stride_dk: *const i64,
+        stride_dv: *const i64,
+        scale: f32,
+        q: *const c_void,
+        k: *const c_void,
+        v: *const c_void,
+        attn: *const c_void,
+        dy: *const c_void,
+        dscores_ws: *mut c_void,
+        dQ: *mut c_void,
+        dK: *mut c_void,
+        dV: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    /// SDPA BW strided, bf16.
+    pub fn baracuda_kernels_sdpa_backward_bf16_strided_run(
+        batch: i32,
+        heads: i32,
+        q_len: i32,
+        k_len: i32,
+        d_k: i32,
+        d_v: i32,
+        stride_q: *const i64,
+        stride_k: *const i64,
+        stride_v: *const i64,
+        stride_dy: *const i64,
+        stride_dq: *const i64,
+        stride_dk: *const i64,
+        stride_dv: *const i64,
+        scale: f32,
+        q: *const c_void,
+        k: *const c_void,
+        v: *const c_void,
+        attn: *const c_void,
+        dy: *const c_void,
+        dscores_ws: *mut c_void,
+        dQ: *mut c_void,
+        dK: *mut c_void,
+        dV: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    /// SDPA BW strided, f64.
+    pub fn baracuda_kernels_sdpa_backward_f64_strided_run(
+        batch: i32,
+        heads: i32,
+        q_len: i32,
+        k_len: i32,
+        d_k: i32,
+        d_v: i32,
+        stride_q: *const i64,
+        stride_k: *const i64,
+        stride_v: *const i64,
+        stride_dy: *const i64,
+        stride_dq: *const i64,
+        stride_dk: *const i64,
+        stride_dv: *const i64,
         scale: f32,
         q: *const c_void,
         k: *const c_void,
@@ -31975,6 +32699,172 @@ unsafe extern "C" {
         x: *const c_void,
         y: *const c_void,
     ) -> i32;
+
+    // ------------------------------------------------------------------------
+    // Strided sibling — Phase 14.1.
+    //
+    // One thread per output element; thread decomposes its output
+    // linear index into a multi-coord and dots with the per-axis
+    // input / output strides (signed i64) to derive source / dest
+    // element offsets, then computes `y = a*x + b` at the same
+    // precision as the contig sibling.
+    //
+    // Common ABI:
+    //   numel       : total output element count (product of `shape`).
+    //   rank        : tensor rank, in `[0, 8]`.
+    //   shape       : `*const i32` of `rank` entries; logical extents.
+    //   stride_x    : `*const i64` of `rank` entries; SIGNED input strides
+    //                 (negative = flipped axis, zero = broadcast).
+    //   stride_y    : `*const i64` of `rank` entries; SIGNED output strides.
+    //   x / y       : device pointers to element-typed storage.
+    //   a / b       : scalar multiplier / bias. Same dtype as the contig
+    //                 sibling (f32 for f16/bf16 paths; T otherwise).
+    //   workspace / workspace_bytes : unused (kept for ABI symmetry).
+    //   stream      : CUDA stream handle (cast to `cudaStream_t`).
+    //
+    // Status codes mirror the contig variant:
+    //   0 success, 2 invalid problem, 5 internal launch error.
+
+    /// Strided affine `y = a*x + b`, f32 dtype.
+    ///
+    /// # Safety
+    /// `x` / `y` must hold at least `numel` f32 elements, indexable via
+    /// the per-element offsets implied by (`shape`, `stride_x` / `stride_y`).
+    /// Aliasing `y` with `x` is safe so long as no two output indices
+    /// resolve to the same `x` element (in-place over a strided view).
+    pub fn baracuda_kernels_affine_f32_strided_run(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        x: *const c_void,
+        y: *mut c_void,
+        a: f32,
+        b: f32,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// Strided affine `y = a*x + b`, f64 dtype.
+    ///
+    /// # Safety
+    /// Same as the f32-strided variant; storage is f64.
+    pub fn baracuda_kernels_affine_f64_strided_run(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        x: *const c_void,
+        y: *mut c_void,
+        a: f64,
+        b: f64,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// Strided affine `y = a*x + b`, i32 dtype.
+    ///
+    /// # Safety
+    /// Same as the f32-strided variant; storage is i32.
+    pub fn baracuda_kernels_affine_i32_strided_run(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        x: *const c_void,
+        y: *mut c_void,
+        a: i32,
+        b: i32,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// Strided affine `y = a*x + b`, i64 dtype.
+    ///
+    /// # Safety
+    /// Same as the f32-strided variant; storage is i64.
+    pub fn baracuda_kernels_affine_i64_strided_run(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        x: *const c_void,
+        y: *mut c_void,
+        a: i64,
+        b: i64,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// Strided affine `y = a*x + b`, u8 dtype.
+    ///
+    /// # Safety
+    /// Same as the f32-strided variant; storage is u8. Wraps on overflow
+    /// (mod 256), matching the C `uint8_t` `*` / `+` operator semantics.
+    pub fn baracuda_kernels_affine_u8_strided_run(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        x: *const c_void,
+        y: *mut c_void,
+        a: u8,
+        b: u8,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// Strided affine `y = a*x + b`, f16 storage / f32 compute. `a` /
+    /// `b` arrive as `f32`.
+    ///
+    /// # Safety
+    /// `x` / `y` must hold at least `numel` `__half` elements; index
+    /// pattern follows (`shape`, `stride_x` / `stride_y`).
+    pub fn baracuda_kernels_affine_f16_strided_run(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        x: *const c_void,
+        y: *mut c_void,
+        a: f32,
+        b: f32,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// Strided affine `y = a*x + b`, bf16 storage / f32 compute. `a` /
+    /// `b` arrive as `f32`.
+    ///
+    /// # Safety
+    /// `x` / `y` must hold at least `numel` `__nv_bfloat16` elements;
+    /// index pattern follows (`shape`, `stride_x` / `stride_y`).
+    pub fn baracuda_kernels_affine_bf16_strided_run(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        x: *const c_void,
+        y: *mut c_void,
+        a: f32,
+        b: f32,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
 }
 
 // ============================================================================
@@ -32268,6 +33158,189 @@ unsafe extern "C" {
         ncols: i32,
         nrows: i32,
         x: *const c_void,
+        y: *const c_void,
+        dst: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    // ----- Activation-strided + W-offset MMVQ — Phase 14.5 ----------------
+    //
+    // Three runtime params added vs. the contig MMVQ FFI:
+    //
+    //   * `w_start_byte_offset` (`i64`) — affine byte offset into W's
+    //     allocation. Lets a single device buffer host multiple GGUF
+    //     matrices; the launcher does the pointer arithmetic host-side
+    //     and the kernel is unchanged on the W side. Zero cost at
+    //     offset = 0.
+    //   * `stride_y` (`i64`) — element stride along the activation's
+    //     `ncols` axis. Signed.
+    //       - `stride_y == 1` matches the contig kernel exactly.
+    //       - `stride_y == 0` broadcasts the single-element activation
+    //         across every column (the GQA "kv-head-axis-stride-0"
+    //         degenerate case is still the rank-2 host-batched arm; at
+    //         the kernel-level FFI this just shows up as the host
+    //         launching one MMVQ call per Q-head with the same `y`
+    //         pointer).
+    //       - other values walk a strided view.
+    //   * Activation rank is implicitly 1 at the kernel-level FFI; the
+    //     host loops over higher dims (batch / sequence / Q-head) if
+    //     needed. This keeps the kernel surface narrow — MMVQ is by
+    //     construction matrix × vector.
+    //
+    // Status codes match the contig family: 0 success, 2 invalid problem,
+    // 5 internal launch error.
+
+    /// Strided MMVQ — GGUF `Q4_0`. # Safety: as the contig Q4_0 variant,
+    /// plus `(y[k * stride_y])_k=0..ncols` must be a valid f32 read.
+    pub fn baracuda_kernels_mmvq_q4_0_actstrided_run(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        w_start_byte_offset: i64,
+        stride_y: i64,
+        y: *const c_void,
+        dst: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// Strided MMVQ — GGUF `Q4_1`. # Safety: as the contig sibling.
+    pub fn baracuda_kernels_mmvq_q4_1_actstrided_run(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        w_start_byte_offset: i64,
+        stride_y: i64,
+        y: *const c_void,
+        dst: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// Strided MMVQ — GGUF `Q5_0`. # Safety: as the contig sibling.
+    pub fn baracuda_kernels_mmvq_q5_0_actstrided_run(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        w_start_byte_offset: i64,
+        stride_y: i64,
+        y: *const c_void,
+        dst: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// Strided MMVQ — GGUF `Q5_1`. # Safety: as the contig sibling.
+    pub fn baracuda_kernels_mmvq_q5_1_actstrided_run(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        w_start_byte_offset: i64,
+        stride_y: i64,
+        y: *const c_void,
+        dst: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// Strided MMVQ — GGUF `Q8_0`. # Safety: as the contig sibling.
+    pub fn baracuda_kernels_mmvq_q8_0_actstrided_run(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        w_start_byte_offset: i64,
+        stride_y: i64,
+        y: *const c_void,
+        dst: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// Strided MMVQ — GGUF `Q2_K`. # Safety: as the contig sibling.
+    pub fn baracuda_kernels_mmvq_q2_K_actstrided_run(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        w_start_byte_offset: i64,
+        stride_y: i64,
+        y: *const c_void,
+        dst: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// Strided MMVQ — GGUF `Q3_K`. # Safety: as the contig sibling.
+    pub fn baracuda_kernels_mmvq_q3_K_actstrided_run(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        w_start_byte_offset: i64,
+        stride_y: i64,
+        y: *const c_void,
+        dst: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// Strided MMVQ — GGUF `Q4_K`. # Safety: as the contig sibling.
+    pub fn baracuda_kernels_mmvq_q4_K_actstrided_run(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        w_start_byte_offset: i64,
+        stride_y: i64,
+        y: *const c_void,
+        dst: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// Strided MMVQ — GGUF `Q5_K`. # Safety: as the contig sibling.
+    pub fn baracuda_kernels_mmvq_q5_K_actstrided_run(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        w_start_byte_offset: i64,
+        stride_y: i64,
+        y: *const c_void,
+        dst: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// Strided MMVQ — GGUF `Q6_K`. # Safety: as the contig sibling.
+    pub fn baracuda_kernels_mmvq_q6_K_actstrided_run(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        w_start_byte_offset: i64,
+        stride_y: i64,
+        y: *const c_void,
+        dst: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// Strided MMVQ — GGUF `Q8_K` (bespoke; Phase 11.4 + 14.5).
+    /// # Safety: as the contig sibling.
+    pub fn baracuda_kernels_mmvq_q8_K_actstrided_run(
+        ncols: i32,
+        nrows: i32,
+        x: *const c_void,
+        w_start_byte_offset: i64,
+        stride_y: i64,
         y: *const c_void,
         dst: *mut c_void,
         workspace: *mut c_void,

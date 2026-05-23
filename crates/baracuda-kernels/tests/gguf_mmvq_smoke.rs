@@ -78,6 +78,7 @@ fn gguf_mmvq_q8_0_2x32() {
         nrows,
         ncols,
         block_format: GgufBlockFormat::Q8_0,
+        w_start_byte_offset: 0,
     };
     let plan = GgufMmvqPlan::select(&stream, &desc, PlanPreference::default()).expect("select");
     let args = GgufMmvqArgs {
@@ -174,6 +175,7 @@ fn gguf_mmvq_q8_K_2x256() {
         nrows,
         ncols,
         block_format: GgufBlockFormat::Q8K,
+        w_start_byte_offset: 0,
     };
     let plan = GgufMmvqPlan::select(&stream, &desc, PlanPreference::default())
         .expect("Q8_K MMVQ select (Phase 11.4) should succeed");

@@ -364,6 +364,147 @@ __host__ inline int32_t launch_unary_param_backward(
     return (err == cudaSuccess) ? 0 : 5;
 }
 
+// =============================================================================
+// Parameterized unary strided kernels — Phase 14.2 (PowI)
+// =============================================================================
+//
+// Sibling of `unary_param_pointwise_contig_kernel` that walks non-contig
+// input / output views. One thread per output cell — for each linear
+// output index we decompose into a multi-coord, then dot with `stride_x`
+// and `stride_y` (signed i64) to land at the operand offsets. Same
+// 1-thread-per-element pattern as `unary_pointwise_strided_kernel`,
+// extended with `p0`/`p1` passthrough to the functor.
+//
+// Backward sibling: same shape, but with three stride arrays
+// (`stride_x`, `stride_dy`, `stride_dx`) so the BW launcher can route
+// each of the three operands through its own view.
+
+template <typename T, typename F>
+__global__ void unary_param_pointwise_strided_kernel(
+    const T* __restrict__ x,
+    T* __restrict__ y,
+    int64_t numel,
+    int32_t rank,
+    DimsI32 shape,
+    DimsI64 stride_x,
+    DimsI64 stride_y,
+    float p0,
+    float p1,
+    F op)
+{
+    int64_t tid  = (int64_t)blockIdx.x * (int64_t)blockDim.x + (int64_t)threadIdx.x;
+    int64_t step = (int64_t)gridDim.x  * (int64_t)blockDim.x;
+    for (int64_t i = tid; i < numel; i += step) {
+        int64_t linear = i;
+        int64_t off_x = 0, off_y = 0;
+        for (int d = rank - 1; d >= 0; --d) {
+            int32_t s = shape.v[d];
+            int64_t coord = (s == 0) ? 0 : (linear % (int64_t)s);
+            if (s != 0) linear /= (int64_t)s;
+            off_x += coord * stride_x.v[d];
+            off_y += coord * stride_y.v[d];
+        }
+        y[off_y] = op(x[off_x], p0, p1);
+    }
+}
+
+template <typename T, typename F>
+__host__ inline int32_t launch_unary_param_pointwise_strided(
+    const T* x, T* y,
+    int64_t numel,
+    int32_t rank,
+    const int32_t* shape_host,
+    const int64_t* stride_x_host,
+    const int64_t* stride_y_host,
+    float p0, float p1,
+    cudaStream_t stream)
+{
+    if (rank < 0 || rank > MAX_RANK) return 2;
+    DimsI32 shape = {};
+    DimsI64 sx    = {};
+    DimsI64 sy    = {};
+    for (int i = 0; i < rank; ++i) {
+        shape.v[i] = shape_host[i];
+        sx.v[i]    = stride_x_host[i];
+        sy.v[i]    = stride_y_host[i];
+    }
+    constexpr int kBlock = 256;
+    constexpr int64_t kMaxBlocks = 65535;
+    int64_t blocks_i64 = (numel + kBlock - 1) / kBlock;
+    int blocks = static_cast<int>(blocks_i64 > kMaxBlocks ? kMaxBlocks : blocks_i64);
+    if (blocks <= 0) blocks = 1;
+    unary_param_pointwise_strided_kernel<T, F><<<blocks, kBlock, 0, stream>>>(
+        x, y, numel, rank, shape, sx, sy, p0, p1, F{});
+    cudaError_t err = cudaGetLastError();
+    return (err == cudaSuccess) ? 0 : 5;
+}
+
+template <typename T, typename F>
+__global__ void unary_param_backward_strided_kernel(
+    const T* __restrict__ dy,
+    const T* __restrict__ x,
+    T* __restrict__ dx,
+    int64_t numel,
+    int32_t rank,
+    DimsI32 shape,
+    DimsI64 stride_x,
+    DimsI64 stride_dy,
+    DimsI64 stride_dx,
+    float p0,
+    float p1,
+    F op)
+{
+    int64_t tid  = (int64_t)blockIdx.x * (int64_t)blockDim.x + (int64_t)threadIdx.x;
+    int64_t step = (int64_t)gridDim.x  * (int64_t)blockDim.x;
+    for (int64_t i = tid; i < numel; i += step) {
+        int64_t linear = i;
+        int64_t off_x = 0, off_dy = 0, off_dx = 0;
+        for (int d = rank - 1; d >= 0; --d) {
+            int32_t s = shape.v[d];
+            int64_t coord = (s == 0) ? 0 : (linear % (int64_t)s);
+            if (s != 0) linear /= (int64_t)s;
+            off_x  += coord * stride_x.v[d];
+            off_dy += coord * stride_dy.v[d];
+            off_dx += coord * stride_dx.v[d];
+        }
+        dx[off_dx] = op(dy[off_dy], x[off_x], p0, p1);
+    }
+}
+
+template <typename T, typename F>
+__host__ inline int32_t launch_unary_param_backward_strided(
+    const T* dy, const T* x, T* dx,
+    int64_t numel,
+    int32_t rank,
+    const int32_t* shape_host,
+    const int64_t* stride_x_host,
+    const int64_t* stride_dy_host,
+    const int64_t* stride_dx_host,
+    float p0, float p1,
+    cudaStream_t stream)
+{
+    if (rank < 0 || rank > MAX_RANK) return 2;
+    DimsI32 shape = {};
+    DimsI64 sx    = {};
+    DimsI64 sdy   = {};
+    DimsI64 sdx   = {};
+    for (int i = 0; i < rank; ++i) {
+        shape.v[i] = shape_host[i];
+        sx.v[i]    = stride_x_host[i];
+        sdy.v[i]   = stride_dy_host[i];
+        sdx.v[i]   = stride_dx_host[i];
+    }
+    constexpr int kBlock = 256;
+    constexpr int64_t kMaxBlocks = 65535;
+    int64_t blocks_i64 = (numel + kBlock - 1) / kBlock;
+    int blocks = static_cast<int>(blocks_i64 > kMaxBlocks ? kMaxBlocks : blocks_i64);
+    if (blocks <= 0) blocks = 1;
+    unary_param_backward_strided_kernel<T, F><<<blocks, kBlock, 0, stream>>>(
+        dy, x, dx, numel, rank, shape, sx, sdy, sdx, p0, p1, F{});
+    cudaError_t err = cudaGetLastError();
+    return (err == cudaSuccess) ? 0 : 5;
+}
+
 template <typename T, typename F>
 __global__ void binary_param_pointwise_contig_kernel(
     const T* __restrict__ a,
@@ -5962,6 +6103,42 @@ __host__ inline int32_t launch_gated_activation_backward_contig(
             static_cast<const T*>(x), static_cast<T*>(y), numel, p0, p1, stream);                 \
     }
 
+// Emit one strided parameterized unary launcher (Phase 14.2).
+//
+// Companion to BARACUDA_KERNELS_UNARY_PARAM_INSTANTIATE that handles
+// non-contig input / output views. The Rust dispatcher picks contig vs
+// strided based on `is_contiguous()` of both operands at launch time;
+// both launchers are emitted per (op, dtype) cell.
+//
+// ABI:
+//   `(numel, rank, shape, stride_x, stride_y, x, y, p0, p1,
+//     ws, ws_bytes, stream) -> int32`
+//
+// NAME    : symbol body — e.g. `unary_powi_f32` (joins with `_strided_run`).
+// T       : scalar element type.
+// FUNCTOR : functor with `__device__ T operator()(T x, float p0, float p1) const`.
+#define BARACUDA_KERNELS_UNARY_PARAM_INSTANTIATE_STRIDED(NAME, T, FUNCTOR)                        \
+    extern "C" int32_t baracuda_kernels_##NAME##_strided_run(                                     \
+        int64_t numel,                                                                             \
+        int32_t rank,                                                                              \
+        const int32_t* shape,                                                                     \
+        const int64_t* stride_x,                                                                  \
+        const int64_t* stride_y,                                                                  \
+        const void* x, void* y,                                                                   \
+        float p0, float p1,                                                                       \
+        void* /*workspace*/, size_t /*workspace_bytes*/,                                          \
+        void* stream_ptr)                                                                          \
+    {                                                                                              \
+        if (numel < 0) return 2;                                                                  \
+        if (numel == 0) return 0;                                                                 \
+        if (x == nullptr || y == nullptr) return 2;                                               \
+        if (shape == nullptr || stride_x == nullptr || stride_y == nullptr) return 2;             \
+        cudaStream_t stream = static_cast<cudaStream_t>(stream_ptr);                              \
+        return baracuda::elementwise::launch_unary_param_pointwise_strided<T, FUNCTOR>(           \
+            static_cast<const T*>(x), static_cast<T*>(y),                                         \
+            numel, rank, shape, stride_x, stride_y, p0, p1, stream);                              \
+    }
+
 // Emit one parameterized unary backward launcher. The kernel takes the
 // saved forward input `x` plus two scalar parameters and writes `dx`.
 //
@@ -5986,6 +6163,45 @@ __host__ inline int32_t launch_gated_activation_backward_contig(
         return baracuda::elementwise::launch_unary_param_backward<T, FUNCTOR>(                    \
             static_cast<const T*>(dy), static_cast<const T*>(x),                                  \
             static_cast<T*>(dx), numel, p0, p1, stream);                                          \
+    }
+
+// Emit one strided parameterized unary backward launcher (Phase 14.2).
+//
+// Companion to BARACUDA_KERNELS_UNARY_PARAM_BACKWARD_INSTANTIATE for
+// non-contig views. Carries three independent stride arrays — `dy`, `x`,
+// and `dx` may each be strided differently.
+//
+// ABI:
+//   `(numel, rank, shape, stride_x, stride_dy, stride_dx,
+//     x, dy, dx, p0, p1, ws, ws_bytes, stream) -> int32`
+//
+// NAME    : symbol body — e.g. `unary_powi_backward_f32`.
+// T       : scalar element type.
+// FUNCTOR : functor with
+//   `__device__ T operator()(T dy, T x, float p0, float p1) const`.
+#define BARACUDA_KERNELS_UNARY_PARAM_BACKWARD_INSTANTIATE_STRIDED(NAME, T, FUNCTOR)                \
+    extern "C" int32_t baracuda_kernels_##NAME##_strided_run(                                     \
+        int64_t numel,                                                                             \
+        int32_t rank,                                                                              \
+        const int32_t* shape,                                                                     \
+        const int64_t* stride_x,                                                                  \
+        const int64_t* stride_dy,                                                                 \
+        const int64_t* stride_dx,                                                                 \
+        const void* x, const void* dy, void* dx,                                                  \
+        float p0, float p1,                                                                       \
+        void* /*workspace*/, size_t /*workspace_bytes*/,                                          \
+        void* stream_ptr)                                                                          \
+    {                                                                                              \
+        if (numel < 0) return 2;                                                                  \
+        if (numel == 0) return 0;                                                                 \
+        if (dy == nullptr || x == nullptr || dx == nullptr) return 2;                             \
+        if (shape == nullptr || stride_x == nullptr || stride_dy == nullptr ||                    \
+            stride_dx == nullptr) return 2;                                                       \
+        cudaStream_t stream = static_cast<cudaStream_t>(stream_ptr);                              \
+        return baracuda::elementwise::launch_unary_param_backward_strided<T, FUNCTOR>(            \
+            static_cast<const T*>(dy), static_cast<const T*>(x),                                  \
+            static_cast<T*>(dx), numel, rank, shape,                                              \
+            stride_x, stride_dy, stride_dx, p0, p1, stream);                                      \
     }
 
 // Emit one parameterized binary pointwise launcher. Sibling of

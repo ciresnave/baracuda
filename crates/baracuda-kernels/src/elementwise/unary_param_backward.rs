@@ -14,8 +14,12 @@
 //!     `n == 0` (gradient 0) and `n == 1` (gradient `dy`) inside the
 //!     CUDA functor.
 //!
-//! Trailblazer constraints: contig-only;
-//! `dy.shape == x.shape == dx.shape == desc.shape`.
+//! Layout constraints: `dy.shape == x.shape == dx.shape == desc.shape`.
+//!
+//! `Threshold` BW remains contig-only today; `PowI` BW got a strided
+//! sibling in Phase 14.2 — the run dispatcher checks `is_contiguous()`
+//! across `dy` / `x` / `dx` and routes to `*_strided_run` when any of
+//! the three is a non-canonical view.
 
 use core::ffi::c_void;
 use core::marker::PhantomData;
@@ -131,9 +135,14 @@ impl<T: Element, const N: usize> UnaryParamBackwardPlan<T, N> {
                 "baracuda-kernels::UnaryParamBackwardPlan: dx shape mismatch",
             ));
         }
-        if !args.dy.is_contiguous() || !args.x.is_contiguous() || !args.dx.is_contiguous() {
+        // PowI BW got a strided sibling in Phase 14.2; Threshold BW
+        // remains contig-only until its strided launcher is wired.
+        let all_contig =
+            args.dy.is_contiguous() && args.x.is_contiguous() && args.dx.is_contiguous();
+        if !all_contig && !matches!(self.desc.kind, UnaryKind::PowI) {
             return Err(Error::Unsupported(
-                "baracuda-kernels::UnaryParamBackwardPlan: contig-only trailblazer",
+                "baracuda-kernels::UnaryParamBackwardPlan: this op is contig-only today; \
+                 strided fanout lands later (PowI is the trailblazer in Phase 14.2)",
             ));
         }
         let numel = args.dy.numel();
@@ -183,6 +192,17 @@ impl<T: Element, const N: usize> UnaryParamBackwardPlan<T, N> {
         let stream_ptr = stream.as_raw() as *mut c_void;
         let p0 = self.desc.params[0];
         let p1 = self.desc.params[1];
+
+        // Strided fast-fall: only PowI BW has the strided sibling wired
+        // today (Phase 14.2). Other kinds were rejected in
+        // `can_implement` when any operand was non-contig.
+        let all_contig =
+            args.dy.is_contiguous() && args.x.is_contiguous() && args.dx.is_contiguous();
+        if !all_contig && matches!(self.desc.kind, UnaryKind::PowI) {
+            return self.run_strided(
+                stream_ptr, dy_ptr, x_ptr, dx_ptr, numel, &args, p0, p1,
+            );
+        }
 
         let status = match (self.desc.kind, T::KIND) {
             (UnaryKind::Threshold, ElementKind::F32) => unsafe {
@@ -237,6 +257,70 @@ impl<T: Element, const N: usize> UnaryParamBackwardPlan<T, N> {
                 return Err(Error::Unsupported(
                     "baracuda-kernels::UnaryParamBackwardPlan: dispatcher reached an \
                      unimplemented (kind, dtype) pair — select() should have caught this",
+                ));
+            }
+        };
+        map_status(status)
+    }
+}
+
+impl<T: Element, const N: usize> UnaryParamBackwardPlan<T, N> {
+    /// Strided dispatcher — called by [`Self::run`] when any of `dy`,
+    /// `x`, `dx` is non-contig. Today only `PowI` reaches this path.
+    fn run_strided(
+        &self,
+        stream_ptr: *mut c_void,
+        dy_ptr: *const c_void,
+        x_ptr: *const c_void,
+        dx_ptr: *mut c_void,
+        numel: i64,
+        args: &UnaryParamBackwardArgs<'_, T, N>,
+        p0: f32,
+        p1: f32,
+    ) -> Result<()> {
+        let shape = args.dx.shape;
+        let stride_x = args.x.stride;
+        let stride_dy = args.dy.stride;
+        let stride_dx = args.dx.stride;
+        let rank = N as i32;
+
+        let status = match (self.desc.kind, T::KIND) {
+            (UnaryKind::PowI, ElementKind::F32) => unsafe {
+                baracuda_kernels_sys::baracuda_kernels_unary_powi_backward_f32_strided_run(
+                    numel, rank, shape.as_ptr(),
+                    stride_x.as_ptr(), stride_dy.as_ptr(), stride_dx.as_ptr(),
+                    x_ptr, dy_ptr, dx_ptr, p0, p1,
+                    core::ptr::null_mut(), 0, stream_ptr,
+                )
+            },
+            (UnaryKind::PowI, ElementKind::F16) => unsafe {
+                baracuda_kernels_sys::baracuda_kernels_unary_powi_backward_f16_strided_run(
+                    numel, rank, shape.as_ptr(),
+                    stride_x.as_ptr(), stride_dy.as_ptr(), stride_dx.as_ptr(),
+                    x_ptr, dy_ptr, dx_ptr, p0, p1,
+                    core::ptr::null_mut(), 0, stream_ptr,
+                )
+            },
+            (UnaryKind::PowI, ElementKind::Bf16) => unsafe {
+                baracuda_kernels_sys::baracuda_kernels_unary_powi_backward_bf16_strided_run(
+                    numel, rank, shape.as_ptr(),
+                    stride_x.as_ptr(), stride_dy.as_ptr(), stride_dx.as_ptr(),
+                    x_ptr, dy_ptr, dx_ptr, p0, p1,
+                    core::ptr::null_mut(), 0, stream_ptr,
+                )
+            },
+            (UnaryKind::PowI, ElementKind::F64) => unsafe {
+                baracuda_kernels_sys::baracuda_kernels_unary_powi_backward_f64_strided_run(
+                    numel, rank, shape.as_ptr(),
+                    stride_x.as_ptr(), stride_dy.as_ptr(), stride_dx.as_ptr(),
+                    x_ptr, dy_ptr, dx_ptr, p0, p1,
+                    core::ptr::null_mut(), 0, stream_ptr,
+                )
+            },
+            _ => {
+                return Err(Error::Unsupported(
+                    "baracuda-kernels::UnaryParamBackwardPlan::run_strided: only PowI is \
+                     wired for the strided path today (Phase 14.2 trailblazer)",
                 ));
             }
         };

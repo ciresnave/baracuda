@@ -175,6 +175,13 @@ impl<T: Element, const N: usize> TriuPlan<T, N> {
     }
 
     /// Launch.
+    ///
+    /// Dispatch policy: if both `input` and `output` are canonical
+    /// row-major contiguous, route to the contig fast path
+    /// (`baracuda_kernels_triu_<dtype>_run`). Otherwise route to the
+    /// strided sibling (`baracuda_kernels_triu_<dtype>_strided_run`,
+    /// Phase 14.3) which threads per-axis signed strides for input
+    /// and output through the kernel parameter block.
     pub fn run(
         &self,
         stream: &Stream,
@@ -192,6 +199,67 @@ impl<T: Element, const N: usize> TriuPlan<T, N> {
         let shape = self.desc.shape;
         let rank = N as i32;
         let diagonal = self.desc.diagonal;
+
+        // Canonical-contig fast path: both operands canonical row-major.
+        // Any other layout (transposed, sliced, broadcast, flipped)
+        // routes to the strided sibling.
+        let all_contig = args.input.is_contiguous() && args.output.is_contiguous();
+
+        if !all_contig {
+            let stride_x = args.input.stride;
+            let stride_y = args.output.stride;
+            let status = match T::KIND {
+                ElementKind::F16 => unsafe {
+                    baracuda_kernels_sys::baracuda_kernels_triu_f16_strided_run(
+                        input_ptr, output_ptr, shape.as_ptr(), rank,
+                        stride_x.as_ptr(), stride_y.as_ptr(), diagonal, stream_ptr,
+                    )
+                },
+                ElementKind::Bf16 => unsafe {
+                    baracuda_kernels_sys::baracuda_kernels_triu_bf16_strided_run(
+                        input_ptr, output_ptr, shape.as_ptr(), rank,
+                        stride_x.as_ptr(), stride_y.as_ptr(), diagonal, stream_ptr,
+                    )
+                },
+                ElementKind::F32 => unsafe {
+                    baracuda_kernels_sys::baracuda_kernels_triu_f32_strided_run(
+                        input_ptr, output_ptr, shape.as_ptr(), rank,
+                        stride_x.as_ptr(), stride_y.as_ptr(), diagonal, stream_ptr,
+                    )
+                },
+                ElementKind::F64 => unsafe {
+                    baracuda_kernels_sys::baracuda_kernels_triu_f64_strided_run(
+                        input_ptr, output_ptr, shape.as_ptr(), rank,
+                        stride_x.as_ptr(), stride_y.as_ptr(), diagonal, stream_ptr,
+                    )
+                },
+                ElementKind::I32 => unsafe {
+                    baracuda_kernels_sys::baracuda_kernels_triu_i32_strided_run(
+                        input_ptr, output_ptr, shape.as_ptr(), rank,
+                        stride_x.as_ptr(), stride_y.as_ptr(), diagonal, stream_ptr,
+                    )
+                },
+                ElementKind::I64 => unsafe {
+                    baracuda_kernels_sys::baracuda_kernels_triu_i64_strided_run(
+                        input_ptr, output_ptr, shape.as_ptr(), rank,
+                        stride_x.as_ptr(), stride_y.as_ptr(), diagonal, stream_ptr,
+                    )
+                },
+                ElementKind::Bool => unsafe {
+                    baracuda_kernels_sys::baracuda_kernels_triu_bool_strided_run(
+                        input_ptr, output_ptr, shape.as_ptr(), rank,
+                        stride_x.as_ptr(), stride_y.as_ptr(), diagonal, stream_ptr,
+                    )
+                },
+                _ => {
+                    return Err(Error::Unsupported(
+                        "baracuda-kernels::TriuPlan::run: dtype not wired (strided) \
+                         (should have been rejected at select())",
+                    ));
+                }
+            };
+            return map_status(status);
+        }
 
         let status = match T::KIND {
             ElementKind::F16 => unsafe {

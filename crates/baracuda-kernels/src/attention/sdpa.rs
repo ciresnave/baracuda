@@ -240,14 +240,34 @@ impl<T: Element> SdpaPlan<T> {
                 "baracuda-kernels::SdpaPlan: y shape mismatch",
             ));
         }
-        if !args.q.is_contiguous()
-            || !args.k.is_contiguous()
-            || !args.v.is_contiguous()
-            || !args.y.is_contiguous()
-            || !args.attn.is_contiguous()
-        {
+        // Phase 14.4: attn must remain contig (it's both raw-scores
+        // scratch and saved-softmax storage that the in-place row-
+        // softmax kernel writes to). For Q / K / V / Y we allow
+        // arbitrary outer strides as long as the innermost head_dim
+        // axis is stride=1.
+        if !args.attn.is_contiguous() {
             return Err(Error::Unsupported(
-                "baracuda-kernels::SdpaPlan: trailblazer requires contiguous tensors",
+                "baracuda-kernels::SdpaPlan: attn must be contiguous",
+            ));
+        }
+        if args.q.stride[3] != 1 {
+            return Err(Error::InvalidProblem(
+                "baracuda-kernels::SdpaPlan: Q head_dim axis (stride[3]) must be 1",
+            ));
+        }
+        if args.k.stride[3] != 1 {
+            return Err(Error::InvalidProblem(
+                "baracuda-kernels::SdpaPlan: K head_dim axis (stride[3]) must be 1",
+            ));
+        }
+        if args.v.stride[3] != 1 {
+            return Err(Error::InvalidProblem(
+                "baracuda-kernels::SdpaPlan: V head_dim axis (stride[3]) must be 1",
+            ));
+        }
+        if args.y.stride[3] != 1 {
+            return Err(Error::InvalidProblem(
+                "baracuda-kernels::SdpaPlan: y head_dim axis (stride[3]) must be 1",
             ));
         }
         match (&args.mask, self.desc.has_mask) {
@@ -259,7 +279,7 @@ impl<T: Element> SdpaPlan<T> {
                 }
                 if !m.is_contiguous() {
                     return Err(Error::Unsupported(
-                        "baracuda-kernels::SdpaPlan: trailblazer requires contiguous mask",
+                        "baracuda-kernels::SdpaPlan: mask must be contiguous",
                     ));
                 }
                 let mn = m.numel();
@@ -277,20 +297,38 @@ impl<T: Element> SdpaPlan<T> {
                 ));
             }
         }
+        // Buffer-size check: only meaningful for contig tensors (strided
+        // views may legitimately point into a larger backing buffer).
         let attn_n = args.attn.numel();
         let y_n = args.y.numel();
-        let q_n = args.q.numel();
-        let k_n = args.k.numel();
-        let v_n = args.v.numel();
-        if (args.q.data.len() as i64) < q_n
-            || (args.k.data.len() as i64) < k_n
-            || (args.v.data.len() as i64) < v_n
-            || (args.attn.data.len() as i64) < attn_n
-            || (args.y.data.len() as i64) < y_n
-        {
+        if (args.attn.data.len() as i64) < attn_n {
             return Err(Error::BufferTooSmall {
-                needed: attn_n.max(y_n).max(q_n).max(k_n).max(v_n) as usize,
-                got: 0,
+                needed: attn_n as usize,
+                got: args.attn.data.len(),
+            });
+        }
+        if args.q.is_contiguous() && (args.q.data.len() as i64) < args.q.numel() {
+            return Err(Error::BufferTooSmall {
+                needed: args.q.numel() as usize,
+                got: args.q.data.len(),
+            });
+        }
+        if args.k.is_contiguous() && (args.k.data.len() as i64) < args.k.numel() {
+            return Err(Error::BufferTooSmall {
+                needed: args.k.numel() as usize,
+                got: args.k.data.len(),
+            });
+        }
+        if args.v.is_contiguous() && (args.v.data.len() as i64) < args.v.numel() {
+            return Err(Error::BufferTooSmall {
+                needed: args.v.numel() as usize,
+                got: args.v.data.len(),
+            });
+        }
+        if args.y.is_contiguous() && (args.y.data.len() as i64) < y_n {
+            return Err(Error::BufferTooSmall {
+                needed: y_n as usize,
+                got: args.y.data.len(),
             });
         }
         Ok(())
@@ -317,6 +355,11 @@ impl<T: Element> SdpaPlan<T> {
 
     /// Launch all three sub-kernels (scores / row-softmax / out) in
     /// pipeline on the supplied stream.
+    ///
+    /// Phase 14.4: dispatches between the contig fast path and the
+    /// strided sibling FFI. The strided path supports GQA broadcast
+    /// via `stride_k[1] == 0` or `stride_v[1] == 0` (kernel reads the
+    /// same K/V row for every Q-head in the group).
     pub fn run(
         &self,
         stream: &Stream,
@@ -340,99 +383,232 @@ impl<T: Element> SdpaPlan<T> {
         let attn_ptr = args.attn.data.as_raw().0 as *mut c_void;
         let y_ptr = args.y.data.as_raw().0 as *mut c_void;
 
-        let status = match T::KIND {
-            ElementKind::F32 => unsafe {
-                baracuda_kernels_sys::baracuda_kernels_sdpa_f32_run(
-                    self.desc.batch_size,
-                    self.desc.num_heads,
-                    self.desc.query_len,
-                    self.desc.key_len,
-                    self.desc.d_k,
-                    self.desc.d_v,
-                    self.desc.scale,
-                    is_causal_flag,
-                    has_mask_flag,
-                    q_ptr,
-                    k_ptr,
-                    v_ptr,
-                    mask_ptr,
-                    attn_ptr,
-                    y_ptr,
-                    core::ptr::null_mut(),
-                    0,
-                    stream_ptr,
-                )
-            },
-            ElementKind::F16 => unsafe {
-                baracuda_kernels_sys::baracuda_kernels_sdpa_f16_run(
-                    self.desc.batch_size,
-                    self.desc.num_heads,
-                    self.desc.query_len,
-                    self.desc.key_len,
-                    self.desc.d_k,
-                    self.desc.d_v,
-                    self.desc.scale,
-                    is_causal_flag,
-                    has_mask_flag,
-                    q_ptr,
-                    k_ptr,
-                    v_ptr,
-                    mask_ptr,
-                    attn_ptr,
-                    y_ptr,
-                    core::ptr::null_mut(),
-                    0,
-                    stream_ptr,
-                )
-            },
-            ElementKind::Bf16 => unsafe {
-                baracuda_kernels_sys::baracuda_kernels_sdpa_bf16_run(
-                    self.desc.batch_size,
-                    self.desc.num_heads,
-                    self.desc.query_len,
-                    self.desc.key_len,
-                    self.desc.d_k,
-                    self.desc.d_v,
-                    self.desc.scale,
-                    is_causal_flag,
-                    has_mask_flag,
-                    q_ptr,
-                    k_ptr,
-                    v_ptr,
-                    mask_ptr,
-                    attn_ptr,
-                    y_ptr,
-                    core::ptr::null_mut(),
-                    0,
-                    stream_ptr,
-                )
-            },
-            ElementKind::F64 => unsafe {
-                baracuda_kernels_sys::baracuda_kernels_sdpa_f64_run(
-                    self.desc.batch_size,
-                    self.desc.num_heads,
-                    self.desc.query_len,
-                    self.desc.key_len,
-                    self.desc.d_k,
-                    self.desc.d_v,
-                    self.desc.scale,
-                    is_causal_flag,
-                    has_mask_flag,
-                    q_ptr,
-                    k_ptr,
-                    v_ptr,
-                    mask_ptr,
-                    attn_ptr,
-                    y_ptr,
-                    core::ptr::null_mut(),
-                    0,
-                    stream_ptr,
-                )
-            },
-            _ => {
-                return Err(Error::Unsupported(
-                    "baracuda-kernels::SdpaPlan::run reached an unimplemented dtype",
-                ));
+        let contig = args.q.is_contiguous()
+            && args.k.is_contiguous()
+            && args.v.is_contiguous()
+            && args.y.is_contiguous();
+
+        let status = unsafe {
+            if contig {
+                match T::KIND {
+                    ElementKind::F32 => baracuda_kernels_sys::baracuda_kernels_sdpa_f32_run(
+                        self.desc.batch_size,
+                        self.desc.num_heads,
+                        self.desc.query_len,
+                        self.desc.key_len,
+                        self.desc.d_k,
+                        self.desc.d_v,
+                        self.desc.scale,
+                        is_causal_flag,
+                        has_mask_flag,
+                        q_ptr,
+                        k_ptr,
+                        v_ptr,
+                        mask_ptr,
+                        attn_ptr,
+                        y_ptr,
+                        core::ptr::null_mut(),
+                        0,
+                        stream_ptr,
+                    ),
+                    ElementKind::F16 => baracuda_kernels_sys::baracuda_kernels_sdpa_f16_run(
+                        self.desc.batch_size,
+                        self.desc.num_heads,
+                        self.desc.query_len,
+                        self.desc.key_len,
+                        self.desc.d_k,
+                        self.desc.d_v,
+                        self.desc.scale,
+                        is_causal_flag,
+                        has_mask_flag,
+                        q_ptr,
+                        k_ptr,
+                        v_ptr,
+                        mask_ptr,
+                        attn_ptr,
+                        y_ptr,
+                        core::ptr::null_mut(),
+                        0,
+                        stream_ptr,
+                    ),
+                    ElementKind::Bf16 => baracuda_kernels_sys::baracuda_kernels_sdpa_bf16_run(
+                        self.desc.batch_size,
+                        self.desc.num_heads,
+                        self.desc.query_len,
+                        self.desc.key_len,
+                        self.desc.d_k,
+                        self.desc.d_v,
+                        self.desc.scale,
+                        is_causal_flag,
+                        has_mask_flag,
+                        q_ptr,
+                        k_ptr,
+                        v_ptr,
+                        mask_ptr,
+                        attn_ptr,
+                        y_ptr,
+                        core::ptr::null_mut(),
+                        0,
+                        stream_ptr,
+                    ),
+                    ElementKind::F64 => baracuda_kernels_sys::baracuda_kernels_sdpa_f64_run(
+                        self.desc.batch_size,
+                        self.desc.num_heads,
+                        self.desc.query_len,
+                        self.desc.key_len,
+                        self.desc.d_k,
+                        self.desc.d_v,
+                        self.desc.scale,
+                        is_causal_flag,
+                        has_mask_flag,
+                        q_ptr,
+                        k_ptr,
+                        v_ptr,
+                        mask_ptr,
+                        attn_ptr,
+                        y_ptr,
+                        core::ptr::null_mut(),
+                        0,
+                        stream_ptr,
+                    ),
+                    _ => {
+                        return Err(Error::Unsupported(
+                            "baracuda-kernels::SdpaPlan::run reached an unimplemented dtype",
+                        ));
+                    }
+                }
+            } else {
+                // Strided sibling. Build per-tensor outer-dim stride
+                // arrays (length 3, one per outer dim: batch, heads,
+                // seq). head_dim axis is implicitly stride=1.
+                let stride_q: [i64; 3] =
+                    [args.q.stride[0], args.q.stride[1], args.q.stride[2]];
+                let stride_k: [i64; 3] =
+                    [args.k.stride[0], args.k.stride[1], args.k.stride[2]];
+                let stride_v: [i64; 3] =
+                    [args.v.stride[0], args.v.stride[1], args.v.stride[2]];
+                let stride_y: [i64; 3] =
+                    [args.y.stride[0], args.y.stride[1], args.y.stride[2]];
+                // mask is always contig at the plan layer; the strided
+                // FFI ignores stride_mask but we pass a valid pointer
+                // (its strides) to keep the contract simple.
+                let stride_mask_zero: [i64; 4] = [0, 0, 0, 0];
+                let stride_mask_ptr: *const i64 = if self.desc.has_mask {
+                    if let Some(ref m) = args.mask {
+                        m.stride.as_ptr()
+                    } else {
+                        stride_mask_zero.as_ptr()
+                    }
+                } else {
+                    core::ptr::null()
+                };
+                match T::KIND {
+                    ElementKind::F32 => baracuda_kernels_sys::baracuda_kernels_sdpa_f32_strided_run(
+                        self.desc.batch_size,
+                        self.desc.num_heads,
+                        self.desc.query_len,
+                        self.desc.key_len,
+                        self.desc.d_k,
+                        self.desc.d_v,
+                        stride_q.as_ptr(),
+                        stride_k.as_ptr(),
+                        stride_v.as_ptr(),
+                        stride_mask_ptr,
+                        stride_y.as_ptr(),
+                        self.desc.scale,
+                        is_causal_flag,
+                        has_mask_flag,
+                        q_ptr,
+                        k_ptr,
+                        v_ptr,
+                        mask_ptr,
+                        attn_ptr,
+                        y_ptr,
+                        core::ptr::null_mut(),
+                        0,
+                        stream_ptr,
+                    ),
+                    ElementKind::F16 => baracuda_kernels_sys::baracuda_kernels_sdpa_f16_strided_run(
+                        self.desc.batch_size,
+                        self.desc.num_heads,
+                        self.desc.query_len,
+                        self.desc.key_len,
+                        self.desc.d_k,
+                        self.desc.d_v,
+                        stride_q.as_ptr(),
+                        stride_k.as_ptr(),
+                        stride_v.as_ptr(),
+                        stride_mask_ptr,
+                        stride_y.as_ptr(),
+                        self.desc.scale,
+                        is_causal_flag,
+                        has_mask_flag,
+                        q_ptr,
+                        k_ptr,
+                        v_ptr,
+                        mask_ptr,
+                        attn_ptr,
+                        y_ptr,
+                        core::ptr::null_mut(),
+                        0,
+                        stream_ptr,
+                    ),
+                    ElementKind::Bf16 => baracuda_kernels_sys::baracuda_kernels_sdpa_bf16_strided_run(
+                        self.desc.batch_size,
+                        self.desc.num_heads,
+                        self.desc.query_len,
+                        self.desc.key_len,
+                        self.desc.d_k,
+                        self.desc.d_v,
+                        stride_q.as_ptr(),
+                        stride_k.as_ptr(),
+                        stride_v.as_ptr(),
+                        stride_mask_ptr,
+                        stride_y.as_ptr(),
+                        self.desc.scale,
+                        is_causal_flag,
+                        has_mask_flag,
+                        q_ptr,
+                        k_ptr,
+                        v_ptr,
+                        mask_ptr,
+                        attn_ptr,
+                        y_ptr,
+                        core::ptr::null_mut(),
+                        0,
+                        stream_ptr,
+                    ),
+                    ElementKind::F64 => baracuda_kernels_sys::baracuda_kernels_sdpa_f64_strided_run(
+                        self.desc.batch_size,
+                        self.desc.num_heads,
+                        self.desc.query_len,
+                        self.desc.key_len,
+                        self.desc.d_k,
+                        self.desc.d_v,
+                        stride_q.as_ptr(),
+                        stride_k.as_ptr(),
+                        stride_v.as_ptr(),
+                        stride_mask_ptr,
+                        stride_y.as_ptr(),
+                        self.desc.scale,
+                        is_causal_flag,
+                        has_mask_flag,
+                        q_ptr,
+                        k_ptr,
+                        v_ptr,
+                        mask_ptr,
+                        attn_ptr,
+                        y_ptr,
+                        core::ptr::null_mut(),
+                        0,
+                        stream_ptr,
+                    ),
+                    _ => {
+                        return Err(Error::Unsupported(
+                            "baracuda-kernels::SdpaPlan::run reached an unimplemented dtype",
+                        ));
+                    }
+                }
             }
         };
         map_status(status)

@@ -8,9 +8,9 @@
 A unified Rust ML-op facade over the NVIDIA CUDA ecosystem.
 
 ![License](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue)
-![Status](https://img.shields.io/badge/status-alpha.30-orange)
+![Status](https://img.shields.io/badge/status-alpha.31-orange)
 ![CUDA](https://img.shields.io/badge/CUDA-12.x-76b900)
-![Tests](https://img.shields.io/badge/regression-1853%2F0-success)
+![Tests](https://img.shields.io/badge/regression-1890%2F0-success)
 
 ## What baracuda is
 
@@ -40,8 +40,8 @@ talk to one library directly.
 
 ## Status
 
-**In active development — alpha.30.** Roughly **1853 GPU tests passing**
-on an RTX 4070 (sm_89), across **596 binary targets**.
+**In active development — alpha.31.** Roughly **1890 GPU tests passing**
+on an RTX 4070 (sm_89), across **602 binary targets**.
 
 Phase coverage (see [`ARCHITECTURE.md`](ARCHITECTURE.md) for the phase
 matrix):
@@ -71,8 +71,8 @@ Add the kernel facade and the driver crate:
 
 ```toml
 [dependencies]
-baracuda-kernels = { version = "0.0.1-alpha.30", features = ["sm89", "cudnn"] }
-baracuda-driver  = "0.0.1-alpha.30"
+baracuda-kernels = { version = "0.0.1-alpha.31", features = ["sm89", "cudnn"] }
+baracuda-driver  = "0.0.1-alpha.31"
 ```
 
 A representative example — single-axis numerically stable softmax over a

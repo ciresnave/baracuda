@@ -10,3 +10,10 @@ BARACUDA_KERNELS_ROPE_INSTANTIATE(rope_f32, float)
 BARACUDA_KERNELS_ROPE_INSTANTIATE(rope_f16, __half)
 BARACUDA_KERNELS_ROPE_INSTANTIATE(rope_bf16, __nv_bfloat16)
 BARACUDA_KERNELS_ROPE_INSTANTIATE(rope_f64, double)
+
+// Phase 14.4 strided siblings — outer-dim strides only (head_dim
+// must remain stride=1, enforced by the Rust plan layer).
+BARACUDA_KERNELS_ROPE_STRIDED_INSTANTIATE(rope_f32, float)
+BARACUDA_KERNELS_ROPE_STRIDED_INSTANTIATE(rope_f16, __half)
+BARACUDA_KERNELS_ROPE_STRIDED_INSTANTIATE(rope_bf16, __nv_bfloat16)
+BARACUDA_KERNELS_ROPE_STRIDED_INSTANTIATE(rope_f64, double)

@@ -596,6 +596,68 @@ static __device__ void dequantize_mul_mat_vec(
 // the 2× memory traffic of materializing the dequantized weight first.
 // Math: per super-block, dot(qs[0..256], y[0..256]) × d, accumulated.
 
+// =============================================================================
+// Activation-strided MMVQ — Phase 14.5.
+// =============================================================================
+//
+// Same math + thread geometry as `dequantize_mul_mat_vec`, but every read
+// of `y[col]` becomes `y[col * stride_y]` (element stride, signed i64).
+// Use cases:
+//   * `stride_y == 1` → identical to the contig variant (sanity arm).
+//   * `stride_y == 0` → broadcast: every thread reads `y[0]`.
+//   * other values    → strided view into a larger activation tensor
+//                       (e.g. GQA where the kv-head axis has stride 0
+//                       and the kernel is launched once per Q-head batch
+//                       slot at the host level).
+//
+// W-allocation-sharing: the launcher accepts `w_start_byte_offset`
+// (host-side i64). The launcher does the pointer arithmetic on the host
+// (`vx_adjusted = (const u8*)vx + w_start_byte_offset`) so the kernel is
+// unchanged on the W side. Zero perf cost when offset = 0.
+
+template <int qk, int qr, dequantize_kernel_t dequantize_kernel>
+static __device__ void dequantize_mul_mat_vec_actstrided(
+    const void * __restrict__ vx, const dfloat * __restrict__ y,
+    float * __restrict__ dst, const int ncols, const int nrows,
+    const int64_t stride_y)
+{
+    const int row = blockIdx.x*blockDim.y + threadIdx.y;
+    if (row >= nrows) return;
+
+    const int tid = threadIdx.x;
+    const int iter_stride = 2*GGML_CUDA_DMMV_X;
+    const int vals_per_iter = iter_stride / WARP_SIZE;
+    const int y_offset = qr == 1 ? 1 : qk/2;
+
+    float tmp = 0.0f;
+
+    for (int i = 0; i < ncols; i += iter_stride) {
+        const int col = i + vals_per_iter*tid;
+        const int ib = (row*ncols + col)/qk;
+        const int iqs = (col%qk)/qr;
+        const int iybs = col - col%qk;
+
+#pragma unroll
+        for (int j = 0; j < vals_per_iter; j += 2) {
+            dfloat2 v;
+            dequantize_kernel(vx, ib, iqs + j/qr, v);
+            const int64_t y0 = (int64_t)(iybs + iqs + j/qr + 0) * stride_y;
+            const int64_t y1 = (int64_t)(iybs + iqs + j/qr + y_offset) * stride_y;
+            tmp += v.x * y[y0];
+            tmp += v.y * y[y1];
+        }
+    }
+
+#pragma unroll
+    for (int mask = 16; mask > 0; mask >>= 1) {
+        tmp += __shfl_xor_sync(0xffffffff, tmp, mask, 32);
+    }
+
+    if (tid == 0) {
+        dst[row] = tmp;
+    }
+}
+
 }} // namespace baracuda::gguf
 
 #endif  // BARACUDA_GGUF_CUH

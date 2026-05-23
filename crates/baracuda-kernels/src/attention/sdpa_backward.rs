@@ -242,18 +242,39 @@ impl<T: Element> SdpaBackwardPlan<T> {
                 "baracuda-kernels::SdpaBackwardPlan: dV shape mismatch with V",
             ));
         }
-        if !args.q.is_contiguous()
-            || !args.k.is_contiguous()
-            || !args.v.is_contiguous()
-            || !args.attn.is_contiguous()
-            || !args.dy.is_contiguous()
-            || !args.dscores_ws.is_contiguous()
-            || !args.dq.is_contiguous()
-            || !args.dk.is_contiguous()
-            || !args.dv.is_contiguous()
-        {
+        // Phase 14.4: attn + dscores_ws must remain contig (algorithm
+        // requires linear sweeps over the [B, H, Q, K] dimension). The
+        // outer (B, H, S) strides on Q/K/V/dy/dQ/dK/dV may be
+        // arbitrary; the innermost head_dim axis must remain stride=1.
+        if !args.attn.is_contiguous() {
             return Err(Error::Unsupported(
-                "baracuda-kernels::SdpaBackwardPlan: trailblazer requires contiguous tensors",
+                "baracuda-kernels::SdpaBackwardPlan: attn must be contiguous",
+            ));
+        }
+        if !args.dscores_ws.is_contiguous() {
+            return Err(Error::Unsupported(
+                "baracuda-kernels::SdpaBackwardPlan: dscores_ws must be contiguous",
+            ));
+        }
+        if args.q.stride[3] != 1
+            || args.k.stride[3] != 1
+            || args.v.stride[3] != 1
+            || args.dy.stride[3] != 1
+            || args.dq.stride[3] != 1
+            || args.dk.stride[3] != 1
+            || args.dv.stride[3] != 1
+        {
+            return Err(Error::InvalidProblem(
+                "baracuda-kernels::SdpaBackwardPlan: head_dim axis stride must be 1 \
+                 for Q / K / V / dy / dQ / dK / dV",
+            ));
+        }
+        // BW does not support GQA broadcast (would require atomicAdd
+        // over Q-head groups). Reject zero strides on K / V heads.
+        if args.k.stride[1] == 0 || args.v.stride[1] == 0 {
+            return Err(Error::Unsupported(
+                "baracuda-kernels::SdpaBackwardPlan: BW does not support zero-stride \
+                 (GQA broadcast) on K or V — caller must expand before BW",
             ));
         }
         Ok(())
@@ -279,6 +300,10 @@ impl<T: Element> SdpaBackwardPlan<T> {
     }
 
     /// Launch all five sub-kernels in pipeline.
+    ///
+    /// Phase 14.4: dispatches between the contig fast path and the
+    /// strided sibling FFI. BW does NOT support GQA broadcast (zero
+    /// strides on K/V); the strided path's `can_implement` rejects.
     pub fn run(
         &self,
         stream: &Stream,
@@ -300,103 +325,146 @@ impl<T: Element> SdpaBackwardPlan<T> {
         let dk_ptr = args.dk.data.as_raw().0 as *mut c_void;
         let dv_ptr = args.dv.data.as_raw().0 as *mut c_void;
 
-        let status = match T::KIND {
-            ElementKind::F32 => unsafe {
-                baracuda_kernels_sys::baracuda_kernels_sdpa_backward_f32_run(
-                    self.desc.batch_size,
-                    self.desc.num_heads,
-                    self.desc.query_len,
-                    self.desc.key_len,
-                    self.desc.d_k,
-                    self.desc.d_v,
-                    self.desc.scale,
-                    q_ptr,
-                    k_ptr,
-                    v_ptr,
-                    attn_ptr,
-                    dy_ptr,
-                    ws_ptr,
-                    dq_ptr,
-                    dk_ptr,
-                    dv_ptr,
-                    core::ptr::null_mut(),
-                    0,
-                    stream_ptr,
-                )
-            },
-            ElementKind::F16 => unsafe {
-                baracuda_kernels_sys::baracuda_kernels_sdpa_backward_f16_run(
-                    self.desc.batch_size,
-                    self.desc.num_heads,
-                    self.desc.query_len,
-                    self.desc.key_len,
-                    self.desc.d_k,
-                    self.desc.d_v,
-                    self.desc.scale,
-                    q_ptr,
-                    k_ptr,
-                    v_ptr,
-                    attn_ptr,
-                    dy_ptr,
-                    ws_ptr,
-                    dq_ptr,
-                    dk_ptr,
-                    dv_ptr,
-                    core::ptr::null_mut(),
-                    0,
-                    stream_ptr,
-                )
-            },
-            ElementKind::Bf16 => unsafe {
-                baracuda_kernels_sys::baracuda_kernels_sdpa_backward_bf16_run(
-                    self.desc.batch_size,
-                    self.desc.num_heads,
-                    self.desc.query_len,
-                    self.desc.key_len,
-                    self.desc.d_k,
-                    self.desc.d_v,
-                    self.desc.scale,
-                    q_ptr,
-                    k_ptr,
-                    v_ptr,
-                    attn_ptr,
-                    dy_ptr,
-                    ws_ptr,
-                    dq_ptr,
-                    dk_ptr,
-                    dv_ptr,
-                    core::ptr::null_mut(),
-                    0,
-                    stream_ptr,
-                )
-            },
-            ElementKind::F64 => unsafe {
-                baracuda_kernels_sys::baracuda_kernels_sdpa_backward_f64_run(
-                    self.desc.batch_size,
-                    self.desc.num_heads,
-                    self.desc.query_len,
-                    self.desc.key_len,
-                    self.desc.d_k,
-                    self.desc.d_v,
-                    self.desc.scale,
-                    q_ptr,
-                    k_ptr,
-                    v_ptr,
-                    attn_ptr,
-                    dy_ptr,
-                    ws_ptr,
-                    dq_ptr,
-                    dk_ptr,
-                    dv_ptr,
-                    core::ptr::null_mut(),
-                    0,
-                    stream_ptr,
-                )
-            },
-            _ => {
-                return Err(Error::Unsupported(
-                    "baracuda-kernels::SdpaBackwardPlan::run reached an unimplemented dtype",
-                ));
+        let contig = args.q.is_contiguous()
+            && args.k.is_contiguous()
+            && args.v.is_contiguous()
+            && args.dy.is_contiguous()
+            && args.dq.is_contiguous()
+            && args.dk.is_contiguous()
+            && args.dv.is_contiguous();
+
+        let status = unsafe {
+            if contig {
+                match T::KIND {
+                    ElementKind::F32 => baracuda_kernels_sys::baracuda_kernels_sdpa_backward_f32_run(
+                        self.desc.batch_size,
+                        self.desc.num_heads,
+                        self.desc.query_len,
+                        self.desc.key_len,
+                        self.desc.d_k,
+                        self.desc.d_v,
+                        self.desc.scale,
+                        q_ptr, k_ptr, v_ptr, attn_ptr, dy_ptr,
+                        ws_ptr, dq_ptr, dk_ptr, dv_ptr,
+                        core::ptr::null_mut(), 0, stream_ptr,
+                    ),
+                    ElementKind::F16 => baracuda_kernels_sys::baracuda_kernels_sdpa_backward_f16_run(
+                        self.desc.batch_size,
+                        self.desc.num_heads,
+                        self.desc.query_len,
+                        self.desc.key_len,
+                        self.desc.d_k,
+                        self.desc.d_v,
+                        self.desc.scale,
+                        q_ptr, k_ptr, v_ptr, attn_ptr, dy_ptr,
+                        ws_ptr, dq_ptr, dk_ptr, dv_ptr,
+                        core::ptr::null_mut(), 0, stream_ptr,
+                    ),
+                    ElementKind::Bf16 => baracuda_kernels_sys::baracuda_kernels_sdpa_backward_bf16_run(
+                        self.desc.batch_size,
+                        self.desc.num_heads,
+                        self.desc.query_len,
+                        self.desc.key_len,
+                        self.desc.d_k,
+                        self.desc.d_v,
+                        self.desc.scale,
+                        q_ptr, k_ptr, v_ptr, attn_ptr, dy_ptr,
+                        ws_ptr, dq_ptr, dk_ptr, dv_ptr,
+                        core::ptr::null_mut(), 0, stream_ptr,
+                    ),
+                    ElementKind::F64 => baracuda_kernels_sys::baracuda_kernels_sdpa_backward_f64_run(
+                        self.desc.batch_size,
+                        self.desc.num_heads,
+                        self.desc.query_len,
+                        self.desc.key_len,
+                        self.desc.d_k,
+                        self.desc.d_v,
+                        self.desc.scale,
+                        q_ptr, k_ptr, v_ptr, attn_ptr, dy_ptr,
+                        ws_ptr, dq_ptr, dk_ptr, dv_ptr,
+                        core::ptr::null_mut(), 0, stream_ptr,
+                    ),
+                    _ => {
+                        return Err(Error::Unsupported(
+                            "baracuda-kernels::SdpaBackwardPlan::run reached an unimplemented dtype",
+                        ));
+                    }
+                }
+            } else {
+                let stride_q: [i64; 3] = [args.q.stride[0], args.q.stride[1], args.q.stride[2]];
+                let stride_k: [i64; 3] = [args.k.stride[0], args.k.stride[1], args.k.stride[2]];
+                let stride_v: [i64; 3] = [args.v.stride[0], args.v.stride[1], args.v.stride[2]];
+                let stride_dy: [i64; 3] = [args.dy.stride[0], args.dy.stride[1], args.dy.stride[2]];
+                let stride_dq: [i64; 3] = [args.dq.stride[0], args.dq.stride[1], args.dq.stride[2]];
+                let stride_dk: [i64; 3] = [args.dk.stride[0], args.dk.stride[1], args.dk.stride[2]];
+                let stride_dv: [i64; 3] = [args.dv.stride[0], args.dv.stride[1], args.dv.stride[2]];
+                match T::KIND {
+                    ElementKind::F32 => baracuda_kernels_sys::baracuda_kernels_sdpa_backward_f32_strided_run(
+                        self.desc.batch_size,
+                        self.desc.num_heads,
+                        self.desc.query_len,
+                        self.desc.key_len,
+                        self.desc.d_k,
+                        self.desc.d_v,
+                        stride_q.as_ptr(), stride_k.as_ptr(), stride_v.as_ptr(),
+                        stride_dy.as_ptr(),
+                        stride_dq.as_ptr(), stride_dk.as_ptr(), stride_dv.as_ptr(),
+                        self.desc.scale,
+                        q_ptr, k_ptr, v_ptr, attn_ptr, dy_ptr,
+                        ws_ptr, dq_ptr, dk_ptr, dv_ptr,
+                        core::ptr::null_mut(), 0, stream_ptr,
+                    ),
+                    ElementKind::F16 => baracuda_kernels_sys::baracuda_kernels_sdpa_backward_f16_strided_run(
+                        self.desc.batch_size,
+                        self.desc.num_heads,
+                        self.desc.query_len,
+                        self.desc.key_len,
+                        self.desc.d_k,
+                        self.desc.d_v,
+                        stride_q.as_ptr(), stride_k.as_ptr(), stride_v.as_ptr(),
+                        stride_dy.as_ptr(),
+                        stride_dq.as_ptr(), stride_dk.as_ptr(), stride_dv.as_ptr(),
+                        self.desc.scale,
+                        q_ptr, k_ptr, v_ptr, attn_ptr, dy_ptr,
+                        ws_ptr, dq_ptr, dk_ptr, dv_ptr,
+                        core::ptr::null_mut(), 0, stream_ptr,
+                    ),
+                    ElementKind::Bf16 => baracuda_kernels_sys::baracuda_kernels_sdpa_backward_bf16_strided_run(
+                        self.desc.batch_size,
+                        self.desc.num_heads,
+                        self.desc.query_len,
+                        self.desc.key_len,
+                        self.desc.d_k,
+                        self.desc.d_v,
+                        stride_q.as_ptr(), stride_k.as_ptr(), stride_v.as_ptr(),
+                        stride_dy.as_ptr(),
+                        stride_dq.as_ptr(), stride_dk.as_ptr(), stride_dv.as_ptr(),
+                        self.desc.scale,
+                        q_ptr, k_ptr, v_ptr, attn_ptr, dy_ptr,
+                        ws_ptr, dq_ptr, dk_ptr, dv_ptr,
+                        core::ptr::null_mut(), 0, stream_ptr,
+                    ),
+                    ElementKind::F64 => baracuda_kernels_sys::baracuda_kernels_sdpa_backward_f64_strided_run(
+                        self.desc.batch_size,
+                        self.desc.num_heads,
+                        self.desc.query_len,
+                        self.desc.key_len,
+                        self.desc.d_k,
+                        self.desc.d_v,
+                        stride_q.as_ptr(), stride_k.as_ptr(), stride_v.as_ptr(),
+                        stride_dy.as_ptr(),
+                        stride_dq.as_ptr(), stride_dk.as_ptr(), stride_dv.as_ptr(),
+                        self.desc.scale,
+                        q_ptr, k_ptr, v_ptr, attn_ptr, dy_ptr,
+                        ws_ptr, dq_ptr, dk_ptr, dv_ptr,
+                        core::ptr::null_mut(), 0, stream_ptr,
+                    ),
+                    _ => {
+                        return Err(Error::Unsupported(
+                            "baracuda-kernels::SdpaBackwardPlan::run reached an unimplemented dtype",
+                        ));
+                    }
+                }
             }
         };
         map_status(status)

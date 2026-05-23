@@ -114,3 +114,25 @@ BARACUDA_KERNELS_UNARY_PARAM_INSTANTIATE(
     unary_powi_f64,
     double,
     baracuda::elementwise::PowIFunctor<double>)
+
+// Phase 14.2 — strided sibling. Emits `*_strided_run` for the same
+// (op, dtype) matrix as the contig path above.
+BARACUDA_KERNELS_UNARY_PARAM_INSTANTIATE_STRIDED(
+    unary_powi_f32,
+    float,
+    baracuda::elementwise::PowIFunctor<float>)
+
+BARACUDA_KERNELS_UNARY_PARAM_INSTANTIATE_STRIDED(
+    unary_powi_f16,
+    __half,
+    baracuda::elementwise::PowIFunctor<__half>)
+
+BARACUDA_KERNELS_UNARY_PARAM_INSTANTIATE_STRIDED(
+    unary_powi_bf16,
+    __nv_bfloat16,
+    baracuda::elementwise::PowIFunctor<__nv_bfloat16>)
+
+BARACUDA_KERNELS_UNARY_PARAM_INSTANTIATE_STRIDED(
+    unary_powi_f64,
+    double,
+    baracuda::elementwise::PowIFunctor<double>)

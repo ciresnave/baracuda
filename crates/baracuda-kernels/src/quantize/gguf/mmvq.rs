@@ -32,6 +32,24 @@ pub struct GgufMmvqDescriptor {
     pub ncols: i32,
     /// GGUF block format of the packed weight matrix.
     pub block_format: GgufBlockFormat,
+    /// Byte offset into the `weight` allocation at which this matrix
+    /// starts. `0` is the default and falls through the contig fast
+    /// path; non-zero engages the actstrided FFI sibling and lets a
+    /// single device allocation host multiple GGUF matrices.
+    ///
+    /// Phase 14.5 — defaults to `0` for source-compat.
+    pub w_start_byte_offset: i64,
+}
+
+impl Default for GgufMmvqDescriptor {
+    fn default() -> Self {
+        Self {
+            nrows: 0,
+            ncols: 0,
+            block_format: GgufBlockFormat::Q8_0,
+            w_start_byte_offset: 0,
+        }
+    }
 }
 
 /// Args bundle for a GGUF MMVQ launch.
@@ -121,9 +139,22 @@ impl GgufMmvqPlan {
         let blocks_per_row = self.desc.ncols / self.desc.block_format.block_size() as i32;
         let expected_bytes =
             (self.desc.nrows as i64) * (blocks_per_row as i64) * (self.desc.block_format.type_size() as i64);
-        if args.weight.shape != [expected_bytes as i32] {
+        // When the host shares one allocation across multiple GGUF
+        // matrices (`w_start_byte_offset > 0`) the weight TensorRef's
+        // shape covers the *whole* allocation, not just this matrix.
+        // Require the slice to start at the matrix's first byte (i.e.
+        // shape[0] == matrix_bytes when offset == 0) and otherwise to
+        // simply contain enough bytes after the offset.
+        let weight_len_bytes = args.weight.shape[0] as i64;
+        if self.desc.w_start_byte_offset < 0 {
             return Err(Error::InvalidProblem(
-                "GgufMmvqPlan: weight byte length != nrows * blocks_per_row * type_size",
+                "GgufMmvqPlan: w_start_byte_offset must be non-negative",
+            ));
+        }
+        let need_bytes = self.desc.w_start_byte_offset + expected_bytes;
+        if weight_len_bytes < need_bytes {
+            return Err(Error::InvalidProblem(
+                "GgufMmvqPlan: weight byte length < w_start_byte_offset + nrows * blocks_per_row * type_size",
             ));
         }
         Ok(())
@@ -148,6 +179,11 @@ impl GgufMmvqPlan {
     }
 
     /// Launch.
+    ///
+    /// Dispatch policy (Phase 14.5):
+    ///   * `w_start_byte_offset == 0 && activation.stride[0] == 1`
+    ///     → existing contig FFI (no overhead).
+    ///   * otherwise → activation-strided + W-offset sibling FFI.
     pub fn run(
         &self,
         stream: &Stream,
@@ -164,53 +200,106 @@ impl GgufMmvqPlan {
         let stream_ptr = stream.as_raw() as *mut c_void;
         let ncols = self.desc.ncols;
         let nrows = self.desc.nrows;
+        let w_off = self.desc.w_start_byte_offset;
+        let stride_y = args.activation.stride[0];
+
+        let use_strided = w_off != 0 || stride_y != 1;
 
         let status = unsafe {
-            match self.desc.block_format {
-                GgufBlockFormat::Q4_0 => baracuda_kernels_sys::baracuda_kernels_mmvq_q4_0_run(
-                    ncols, nrows, w_ptr, y_ptr, dst_ptr,
-                    core::ptr::null_mut(), 0, stream_ptr,
-                ),
-                GgufBlockFormat::Q4_1 => baracuda_kernels_sys::baracuda_kernels_mmvq_q4_1_run(
-                    ncols, nrows, w_ptr, y_ptr, dst_ptr,
-                    core::ptr::null_mut(), 0, stream_ptr,
-                ),
-                GgufBlockFormat::Q5_0 => baracuda_kernels_sys::baracuda_kernels_mmvq_q5_0_run(
-                    ncols, nrows, w_ptr, y_ptr, dst_ptr,
-                    core::ptr::null_mut(), 0, stream_ptr,
-                ),
-                GgufBlockFormat::Q5_1 => baracuda_kernels_sys::baracuda_kernels_mmvq_q5_1_run(
-                    ncols, nrows, w_ptr, y_ptr, dst_ptr,
-                    core::ptr::null_mut(), 0, stream_ptr,
-                ),
-                GgufBlockFormat::Q8_0 => baracuda_kernels_sys::baracuda_kernels_mmvq_q8_0_run(
-                    ncols, nrows, w_ptr, y_ptr, dst_ptr,
-                    core::ptr::null_mut(), 0, stream_ptr,
-                ),
-                GgufBlockFormat::Q2K => baracuda_kernels_sys::baracuda_kernels_mmvq_q2_K_run(
-                    ncols, nrows, w_ptr, y_ptr, dst_ptr,
-                    core::ptr::null_mut(), 0, stream_ptr,
-                ),
-                GgufBlockFormat::Q3K => baracuda_kernels_sys::baracuda_kernels_mmvq_q3_K_run(
-                    ncols, nrows, w_ptr, y_ptr, dst_ptr,
-                    core::ptr::null_mut(), 0, stream_ptr,
-                ),
-                GgufBlockFormat::Q4K => baracuda_kernels_sys::baracuda_kernels_mmvq_q4_K_run(
-                    ncols, nrows, w_ptr, y_ptr, dst_ptr,
-                    core::ptr::null_mut(), 0, stream_ptr,
-                ),
-                GgufBlockFormat::Q5K => baracuda_kernels_sys::baracuda_kernels_mmvq_q5_K_run(
-                    ncols, nrows, w_ptr, y_ptr, dst_ptr,
-                    core::ptr::null_mut(), 0, stream_ptr,
-                ),
-                GgufBlockFormat::Q6K => baracuda_kernels_sys::baracuda_kernels_mmvq_q6_K_run(
-                    ncols, nrows, w_ptr, y_ptr, dst_ptr,
-                    core::ptr::null_mut(), 0, stream_ptr,
-                ),
-                GgufBlockFormat::Q8K => baracuda_kernels_sys::baracuda_kernels_mmvq_q8_K_run(
-                    ncols, nrows, w_ptr, y_ptr, dst_ptr,
-                    core::ptr::null_mut(), 0, stream_ptr,
-                ),
+            if !use_strided {
+                match self.desc.block_format {
+                    GgufBlockFormat::Q4_0 => baracuda_kernels_sys::baracuda_kernels_mmvq_q4_0_run(
+                        ncols, nrows, w_ptr, y_ptr, dst_ptr,
+                        core::ptr::null_mut(), 0, stream_ptr,
+                    ),
+                    GgufBlockFormat::Q4_1 => baracuda_kernels_sys::baracuda_kernels_mmvq_q4_1_run(
+                        ncols, nrows, w_ptr, y_ptr, dst_ptr,
+                        core::ptr::null_mut(), 0, stream_ptr,
+                    ),
+                    GgufBlockFormat::Q5_0 => baracuda_kernels_sys::baracuda_kernels_mmvq_q5_0_run(
+                        ncols, nrows, w_ptr, y_ptr, dst_ptr,
+                        core::ptr::null_mut(), 0, stream_ptr,
+                    ),
+                    GgufBlockFormat::Q5_1 => baracuda_kernels_sys::baracuda_kernels_mmvq_q5_1_run(
+                        ncols, nrows, w_ptr, y_ptr, dst_ptr,
+                        core::ptr::null_mut(), 0, stream_ptr,
+                    ),
+                    GgufBlockFormat::Q8_0 => baracuda_kernels_sys::baracuda_kernels_mmvq_q8_0_run(
+                        ncols, nrows, w_ptr, y_ptr, dst_ptr,
+                        core::ptr::null_mut(), 0, stream_ptr,
+                    ),
+                    GgufBlockFormat::Q2K => baracuda_kernels_sys::baracuda_kernels_mmvq_q2_K_run(
+                        ncols, nrows, w_ptr, y_ptr, dst_ptr,
+                        core::ptr::null_mut(), 0, stream_ptr,
+                    ),
+                    GgufBlockFormat::Q3K => baracuda_kernels_sys::baracuda_kernels_mmvq_q3_K_run(
+                        ncols, nrows, w_ptr, y_ptr, dst_ptr,
+                        core::ptr::null_mut(), 0, stream_ptr,
+                    ),
+                    GgufBlockFormat::Q4K => baracuda_kernels_sys::baracuda_kernels_mmvq_q4_K_run(
+                        ncols, nrows, w_ptr, y_ptr, dst_ptr,
+                        core::ptr::null_mut(), 0, stream_ptr,
+                    ),
+                    GgufBlockFormat::Q5K => baracuda_kernels_sys::baracuda_kernels_mmvq_q5_K_run(
+                        ncols, nrows, w_ptr, y_ptr, dst_ptr,
+                        core::ptr::null_mut(), 0, stream_ptr,
+                    ),
+                    GgufBlockFormat::Q6K => baracuda_kernels_sys::baracuda_kernels_mmvq_q6_K_run(
+                        ncols, nrows, w_ptr, y_ptr, dst_ptr,
+                        core::ptr::null_mut(), 0, stream_ptr,
+                    ),
+                    GgufBlockFormat::Q8K => baracuda_kernels_sys::baracuda_kernels_mmvq_q8_K_run(
+                        ncols, nrows, w_ptr, y_ptr, dst_ptr,
+                        core::ptr::null_mut(), 0, stream_ptr,
+                    ),
+                }
+            } else {
+                match self.desc.block_format {
+                    GgufBlockFormat::Q4_0 => baracuda_kernels_sys::baracuda_kernels_mmvq_q4_0_actstrided_run(
+                        ncols, nrows, w_ptr, w_off, stride_y, y_ptr, dst_ptr,
+                        core::ptr::null_mut(), 0, stream_ptr,
+                    ),
+                    GgufBlockFormat::Q4_1 => baracuda_kernels_sys::baracuda_kernels_mmvq_q4_1_actstrided_run(
+                        ncols, nrows, w_ptr, w_off, stride_y, y_ptr, dst_ptr,
+                        core::ptr::null_mut(), 0, stream_ptr,
+                    ),
+                    GgufBlockFormat::Q5_0 => baracuda_kernels_sys::baracuda_kernels_mmvq_q5_0_actstrided_run(
+                        ncols, nrows, w_ptr, w_off, stride_y, y_ptr, dst_ptr,
+                        core::ptr::null_mut(), 0, stream_ptr,
+                    ),
+                    GgufBlockFormat::Q5_1 => baracuda_kernels_sys::baracuda_kernels_mmvq_q5_1_actstrided_run(
+                        ncols, nrows, w_ptr, w_off, stride_y, y_ptr, dst_ptr,
+                        core::ptr::null_mut(), 0, stream_ptr,
+                    ),
+                    GgufBlockFormat::Q8_0 => baracuda_kernels_sys::baracuda_kernels_mmvq_q8_0_actstrided_run(
+                        ncols, nrows, w_ptr, w_off, stride_y, y_ptr, dst_ptr,
+                        core::ptr::null_mut(), 0, stream_ptr,
+                    ),
+                    GgufBlockFormat::Q2K => baracuda_kernels_sys::baracuda_kernels_mmvq_q2_K_actstrided_run(
+                        ncols, nrows, w_ptr, w_off, stride_y, y_ptr, dst_ptr,
+                        core::ptr::null_mut(), 0, stream_ptr,
+                    ),
+                    GgufBlockFormat::Q3K => baracuda_kernels_sys::baracuda_kernels_mmvq_q3_K_actstrided_run(
+                        ncols, nrows, w_ptr, w_off, stride_y, y_ptr, dst_ptr,
+                        core::ptr::null_mut(), 0, stream_ptr,
+                    ),
+                    GgufBlockFormat::Q4K => baracuda_kernels_sys::baracuda_kernels_mmvq_q4_K_actstrided_run(
+                        ncols, nrows, w_ptr, w_off, stride_y, y_ptr, dst_ptr,
+                        core::ptr::null_mut(), 0, stream_ptr,
+                    ),
+                    GgufBlockFormat::Q5K => baracuda_kernels_sys::baracuda_kernels_mmvq_q5_K_actstrided_run(
+                        ncols, nrows, w_ptr, w_off, stride_y, y_ptr, dst_ptr,
+                        core::ptr::null_mut(), 0, stream_ptr,
+                    ),
+                    GgufBlockFormat::Q6K => baracuda_kernels_sys::baracuda_kernels_mmvq_q6_K_actstrided_run(
+                        ncols, nrows, w_ptr, w_off, stride_y, y_ptr, dst_ptr,
+                        core::ptr::null_mut(), 0, stream_ptr,
+                    ),
+                    GgufBlockFormat::Q8K => baracuda_kernels_sys::baracuda_kernels_mmvq_q8_K_actstrided_run(
+                        ncols, nrows, w_ptr, w_off, stride_y, y_ptr, dst_ptr,
+                        core::ptr::null_mut(), 0, stream_ptr,
+                    ),
+                }
             }
         };
         map_status(status)

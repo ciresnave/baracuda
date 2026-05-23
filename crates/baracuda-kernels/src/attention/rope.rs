@@ -168,9 +168,13 @@ impl<T: Element> RopePlan<T> {
                 "baracuda-kernels::RopePlan: y shape mismatch with descriptor",
             ));
         }
-        if !args.x.is_contiguous() || !args.y.is_contiguous() {
-            return Err(Error::Unsupported(
-                "baracuda-kernels::RopePlan: trailblazer requires contiguous x / y",
+        // Phase 14.4: strided variant supports arbitrary outer strides
+        // but the innermost head_dim axis MUST remain stride=1 because
+        // RoPE rotates adjacent pairs (2i, 2i+1).
+        if args.x.stride[3] != 1 || args.y.stride[3] != 1 {
+            return Err(Error::InvalidProblem(
+                "baracuda-kernels::RopePlan: head_dim axis must have stride=1 \
+                 (RoPE rotates adjacent pairs)",
             ));
         }
         if let Some(ref p) = args.positions {
@@ -186,12 +190,21 @@ impl<T: Element> RopePlan<T> {
                 });
             }
         }
-        let numel = args.x.numel();
-        if (args.x.data.len() as i64) < numel || (args.y.data.len() as i64) < numel {
-            return Err(Error::BufferTooSmall {
-                needed: numel as usize,
-                got: args.x.data.len().min(args.y.data.len()),
-            });
+        // Buffer size check: only meaningful for contiguous tensors —
+        // strided views may legitimately read every-other element of a
+        // larger backing buffer (and the kernel's last accessed offset
+        // is at most max-over-coords of dot(coord, stride)). For the
+        // trailblazer we only assert for contig; strided is caller's
+        // responsibility (same convention as other Phase 14 strided
+        // siblings).
+        if args.x.is_contiguous() && args.y.is_contiguous() {
+            let numel = args.x.numel();
+            if (args.x.data.len() as i64) < numel || (args.y.data.len() as i64) < numel {
+                return Err(Error::BufferTooSmall {
+                    needed: numel as usize,
+                    got: args.x.data.len().min(args.y.data.len()),
+                });
+            }
         }
         Ok(())
     }
@@ -215,6 +228,12 @@ impl<T: Element> RopePlan<T> {
     }
 
     /// Launch.
+    ///
+    /// Phase 14.4: dispatches between the contig fast path (all dims
+    /// canonical row-major contig) and the strided sibling FFI (any
+    /// outer-dim stride differs from canonical). The innermost
+    /// `head_dim` axis must be stride=1 either way; non-unit stride
+    /// is rejected at `can_implement`.
     pub fn run(
         &self,
         stream: &Stream,
@@ -234,75 +253,149 @@ impl<T: Element> RopePlan<T> {
             None => (core::ptr::null::<c_void>(), 1i32),
         };
 
-        let status = match T::KIND {
-            ElementKind::F32 => unsafe {
-                baracuda_kernels_sys::baracuda_kernels_rope_f32_run(
-                    self.desc.batch_size,
-                    self.desc.num_heads,
-                    self.desc.seq_len,
-                    self.desc.head_dim,
-                    self.desc.base,
-                    pos_default_flag,
-                    x_ptr,
-                    pos_ptr,
-                    y_ptr,
-                    core::ptr::null_mut(),
-                    0,
-                    stream_ptr,
-                )
-            },
-            ElementKind::F16 => unsafe {
-                baracuda_kernels_sys::baracuda_kernels_rope_f16_run(
-                    self.desc.batch_size,
-                    self.desc.num_heads,
-                    self.desc.seq_len,
-                    self.desc.head_dim,
-                    self.desc.base,
-                    pos_default_flag,
-                    x_ptr,
-                    pos_ptr,
-                    y_ptr,
-                    core::ptr::null_mut(),
-                    0,
-                    stream_ptr,
-                )
-            },
-            ElementKind::Bf16 => unsafe {
-                baracuda_kernels_sys::baracuda_kernels_rope_bf16_run(
-                    self.desc.batch_size,
-                    self.desc.num_heads,
-                    self.desc.seq_len,
-                    self.desc.head_dim,
-                    self.desc.base,
-                    pos_default_flag,
-                    x_ptr,
-                    pos_ptr,
-                    y_ptr,
-                    core::ptr::null_mut(),
-                    0,
-                    stream_ptr,
-                )
-            },
-            ElementKind::F64 => unsafe {
-                baracuda_kernels_sys::baracuda_kernels_rope_f64_run(
-                    self.desc.batch_size,
-                    self.desc.num_heads,
-                    self.desc.seq_len,
-                    self.desc.head_dim,
-                    self.desc.base,
-                    pos_default_flag,
-                    x_ptr,
-                    pos_ptr,
-                    y_ptr,
-                    core::ptr::null_mut(),
-                    0,
-                    stream_ptr,
-                )
-            },
-            _ => {
-                return Err(Error::Unsupported(
-                    "baracuda-kernels::RopePlan::run reached an unimplemented dtype",
-                ));
+        let contig = args.x.is_contiguous() && args.y.is_contiguous();
+
+        let status = unsafe {
+            if contig {
+                match T::KIND {
+                    ElementKind::F32 => baracuda_kernels_sys::baracuda_kernels_rope_f32_run(
+                        self.desc.batch_size,
+                        self.desc.num_heads,
+                        self.desc.seq_len,
+                        self.desc.head_dim,
+                        self.desc.base,
+                        pos_default_flag,
+                        x_ptr,
+                        pos_ptr,
+                        y_ptr,
+                        core::ptr::null_mut(),
+                        0,
+                        stream_ptr,
+                    ),
+                    ElementKind::F16 => baracuda_kernels_sys::baracuda_kernels_rope_f16_run(
+                        self.desc.batch_size,
+                        self.desc.num_heads,
+                        self.desc.seq_len,
+                        self.desc.head_dim,
+                        self.desc.base,
+                        pos_default_flag,
+                        x_ptr,
+                        pos_ptr,
+                        y_ptr,
+                        core::ptr::null_mut(),
+                        0,
+                        stream_ptr,
+                    ),
+                    ElementKind::Bf16 => baracuda_kernels_sys::baracuda_kernels_rope_bf16_run(
+                        self.desc.batch_size,
+                        self.desc.num_heads,
+                        self.desc.seq_len,
+                        self.desc.head_dim,
+                        self.desc.base,
+                        pos_default_flag,
+                        x_ptr,
+                        pos_ptr,
+                        y_ptr,
+                        core::ptr::null_mut(),
+                        0,
+                        stream_ptr,
+                    ),
+                    ElementKind::F64 => baracuda_kernels_sys::baracuda_kernels_rope_f64_run(
+                        self.desc.batch_size,
+                        self.desc.num_heads,
+                        self.desc.seq_len,
+                        self.desc.head_dim,
+                        self.desc.base,
+                        pos_default_flag,
+                        x_ptr,
+                        pos_ptr,
+                        y_ptr,
+                        core::ptr::null_mut(),
+                        0,
+                        stream_ptr,
+                    ),
+                    _ => {
+                        return Err(Error::Unsupported(
+                            "baracuda-kernels::RopePlan::run reached an unimplemented dtype",
+                        ));
+                    }
+                }
+            } else {
+                // Strided sibling. Pass per-outer-dim strides for x and y.
+                // head_dim axis stride is implicitly 1 (enforced above).
+                let sxb = args.x.stride[0];
+                let sxh = args.x.stride[1];
+                let sxs = args.x.stride[2];
+                let syb = args.y.stride[0];
+                let syh = args.y.stride[1];
+                let sys = args.y.stride[2];
+                match T::KIND {
+                    ElementKind::F32 => baracuda_kernels_sys::baracuda_kernels_rope_f32_strided_run(
+                        self.desc.batch_size,
+                        self.desc.num_heads,
+                        self.desc.seq_len,
+                        self.desc.head_dim,
+                        sxb, sxh, sxs, syb, syh, sys,
+                        self.desc.base,
+                        pos_default_flag,
+                        x_ptr,
+                        pos_ptr,
+                        y_ptr,
+                        core::ptr::null_mut(),
+                        0,
+                        stream_ptr,
+                    ),
+                    ElementKind::F16 => baracuda_kernels_sys::baracuda_kernels_rope_f16_strided_run(
+                        self.desc.batch_size,
+                        self.desc.num_heads,
+                        self.desc.seq_len,
+                        self.desc.head_dim,
+                        sxb, sxh, sxs, syb, syh, sys,
+                        self.desc.base,
+                        pos_default_flag,
+                        x_ptr,
+                        pos_ptr,
+                        y_ptr,
+                        core::ptr::null_mut(),
+                        0,
+                        stream_ptr,
+                    ),
+                    ElementKind::Bf16 => baracuda_kernels_sys::baracuda_kernels_rope_bf16_strided_run(
+                        self.desc.batch_size,
+                        self.desc.num_heads,
+                        self.desc.seq_len,
+                        self.desc.head_dim,
+                        sxb, sxh, sxs, syb, syh, sys,
+                        self.desc.base,
+                        pos_default_flag,
+                        x_ptr,
+                        pos_ptr,
+                        y_ptr,
+                        core::ptr::null_mut(),
+                        0,
+                        stream_ptr,
+                    ),
+                    ElementKind::F64 => baracuda_kernels_sys::baracuda_kernels_rope_f64_strided_run(
+                        self.desc.batch_size,
+                        self.desc.num_heads,
+                        self.desc.seq_len,
+                        self.desc.head_dim,
+                        sxb, sxh, sxs, syb, syh, sys,
+                        self.desc.base,
+                        pos_default_flag,
+                        x_ptr,
+                        pos_ptr,
+                        y_ptr,
+                        core::ptr::null_mut(),
+                        0,
+                        stream_ptr,
+                    ),
+                    _ => {
+                        return Err(Error::Unsupported(
+                            "baracuda-kernels::RopePlan::run reached an unimplemented dtype",
+                        ));
+                    }
+                }
             }
         };
         map_status(status)

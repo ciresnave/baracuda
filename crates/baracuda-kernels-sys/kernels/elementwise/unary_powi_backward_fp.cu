@@ -109,3 +109,21 @@ BARACUDA_KERNELS_UNARY_PARAM_BACKWARD_INSTANTIATE(
 BARACUDA_KERNELS_UNARY_PARAM_BACKWARD_INSTANTIATE(
     unary_powi_backward_f64, double,
     baracuda::elementwise::PowIBackwardFunctor<double>)
+
+// Phase 14.2 — strided sibling. Emits `*_strided_run` for the same
+// (op, dtype) matrix as the contig path above.
+BARACUDA_KERNELS_UNARY_PARAM_BACKWARD_INSTANTIATE_STRIDED(
+    unary_powi_backward_f32, float,
+    baracuda::elementwise::PowIBackwardFunctor<float>)
+
+BARACUDA_KERNELS_UNARY_PARAM_BACKWARD_INSTANTIATE_STRIDED(
+    unary_powi_backward_f16, __half,
+    baracuda::elementwise::PowIBackwardFunctor<__half>)
+
+BARACUDA_KERNELS_UNARY_PARAM_BACKWARD_INSTANTIATE_STRIDED(
+    unary_powi_backward_bf16, __nv_bfloat16,
+    baracuda::elementwise::PowIBackwardFunctor<__nv_bfloat16>)
+
+BARACUDA_KERNELS_UNARY_PARAM_BACKWARD_INSTANTIATE_STRIDED(
+    unary_powi_backward_f64, double,
+    baracuda::elementwise::PowIBackwardFunctor<double>)
