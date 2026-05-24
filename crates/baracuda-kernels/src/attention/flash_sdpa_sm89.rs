@@ -72,14 +72,23 @@ pub struct FlashSdpaSm89Descriptor {
 }
 
 /// Args bundle. Identical layout to [`FlashSdpaArgs`](super::FlashSdpaArgs).
+///
+/// Phase 17.1: Q / K / V / Y accept arbitrary outer strides as long as
+/// the innermost head_dim axis is stride=1. GQA broadcast is supported
+/// via `k.stride[1] == 0` (or `v.stride[1] == 0`). `lse` stays contig
+/// (BW path routes through the sm_80 baseline).
 pub struct FlashSdpaSm89Args<'a, T: Element> {
-    /// Query tensor — shape `[B, H, Q, D_k]`, contiguous.
+    /// Query tensor — shape `[B, H, Q, D_k]`. Outer strides arbitrary;
+    /// head_dim axis (`stride[3]`) must be 1.
     pub q: TensorRef<'a, T, 4>,
-    /// Key tensor — shape `[B, H, K, D_k]`, contiguous.
+    /// Key tensor — shape `[B, H, K, D_k]`. Outer strides arbitrary;
+    /// head_dim axis (`stride[3]`) must be 1. `stride[1] == 0` for GQA.
     pub k: TensorRef<'a, T, 4>,
-    /// Value tensor — shape `[B, H, K, D_v]`, contiguous.
+    /// Value tensor — shape `[B, H, K, D_v]`. Outer strides arbitrary;
+    /// head_dim axis (`stride[3]`) must be 1. `stride[1] == 0` for GQA.
     pub v: TensorRef<'a, T, 4>,
-    /// Output tensor — shape `[B, H, Q, D_v]`, contiguous.
+    /// Output tensor — shape `[B, H, Q, D_v]`. Outer strides arbitrary;
+    /// head_dim axis (`stride[3]`) must be 1.
     pub y: TensorMut<'a, T, 4>,
     /// Saved log-sum-exp — shape `[B, H, Q]`, contiguous.
     pub lse: TensorMut<'a, T, 3>,
@@ -221,30 +230,69 @@ impl<T: Element> FlashSdpaSm89Plan<T> {
                 "baracuda-kernels::FlashSdpaSm89Plan: lse shape must be [B, H, Q]",
             ));
         }
-        if !args.q.is_contiguous()
-            || !args.k.is_contiguous()
-            || !args.v.is_contiguous()
-            || !args.y.is_contiguous()
-            || !args.lse.is_contiguous()
-        {
+        // Phase 17.1: relax contig requirement on Q / K / V / Y — the
+        // strided sibling kernel propagates per-tensor strides into the
+        // `cp.async` tile loads. `lse` stays contig (BW path routes
+        // through sm_80 baseline which has its own LSE handling). The
+        // SMEM tile layout assumes contiguous head_dim, so the innermost
+        // axis must remain stride=1 on all four tensors.
+        if !args.lse.is_contiguous() {
             return Err(Error::Unsupported(
-                "baracuda-kernels::FlashSdpaSm89Plan: trailblazer requires contiguous tensors",
+                "baracuda-kernels::FlashSdpaSm89Plan: lse must be contiguous \
+                 (BW path routes through sm_80 baseline)",
             ));
         }
-        let q_n = args.q.numel();
-        let k_n = args.k.numel();
-        let v_n = args.v.numel();
-        let y_n = args.y.numel();
+        if args.q.stride[3] != 1 {
+            return Err(Error::InvalidProblem(
+                "baracuda-kernels::FlashSdpaSm89Plan: Q head_dim axis (stride[3]) must be 1",
+            ));
+        }
+        if args.k.stride[3] != 1 {
+            return Err(Error::InvalidProblem(
+                "baracuda-kernels::FlashSdpaSm89Plan: K head_dim axis (stride[3]) must be 1",
+            ));
+        }
+        if args.v.stride[3] != 1 {
+            return Err(Error::InvalidProblem(
+                "baracuda-kernels::FlashSdpaSm89Plan: V head_dim axis (stride[3]) must be 1",
+            ));
+        }
+        if args.y.stride[3] != 1 {
+            return Err(Error::InvalidProblem(
+                "baracuda-kernels::FlashSdpaSm89Plan: y head_dim axis (stride[3]) must be 1",
+            ));
+        }
+        // Buffer-size check: only meaningful for contig tensors (strided
+        // views may legitimately point into a larger backing buffer).
         let l_n = args.lse.numel();
-        if (args.q.data.len() as i64) < q_n
-            || (args.k.data.len() as i64) < k_n
-            || (args.v.data.len() as i64) < v_n
-            || (args.y.data.len() as i64) < y_n
-            || (args.lse.data.len() as i64) < l_n
-        {
+        if (args.lse.data.len() as i64) < l_n {
             return Err(Error::BufferTooSmall {
-                needed: y_n.max(l_n).max(q_n).max(k_n).max(v_n) as usize,
-                got: 0,
+                needed: l_n as usize,
+                got: args.lse.data.len(),
+            });
+        }
+        if args.q.is_contiguous() && (args.q.data.len() as i64) < args.q.numel() {
+            return Err(Error::BufferTooSmall {
+                needed: args.q.numel() as usize,
+                got: args.q.data.len(),
+            });
+        }
+        if args.k.is_contiguous() && (args.k.data.len() as i64) < args.k.numel() {
+            return Err(Error::BufferTooSmall {
+                needed: args.k.numel() as usize,
+                got: args.k.data.len(),
+            });
+        }
+        if args.v.is_contiguous() && (args.v.data.len() as i64) < args.v.numel() {
+            return Err(Error::BufferTooSmall {
+                needed: args.v.numel() as usize,
+                got: args.v.data.len(),
+            });
+        }
+        if args.y.is_contiguous() && (args.y.data.len() as i64) < args.y.numel() {
+            return Err(Error::BufferTooSmall {
+                needed: args.y.numel() as usize,
+                got: args.y.data.len(),
             });
         }
         Ok(())
@@ -270,6 +318,11 @@ impl<T: Element> FlashSdpaSm89Plan<T> {
     }
 
     /// Launch the sm_89 fused FW kernel on the supplied stream.
+    ///
+    /// Phase 17.1: dispatches between the contig fast path and the
+    /// strided sibling FFI. The strided path supports GQA broadcast
+    /// via `k.stride[1] == 0` or `v.stride[1] == 0` (kernel reads the
+    /// same K/V row for every Q-head in the group).
     pub fn run(
         &self,
         stream: &Stream,
@@ -288,52 +341,129 @@ impl<T: Element> FlashSdpaSm89Plan<T> {
         let lse_ptr = args.lse.data.as_raw().0 as *mut c_void;
         let is_causal_flag = if self.desc.is_causal { 1 } else { 0 };
 
-        let status = match T::KIND {
-            ElementKind::F16 => unsafe {
-                baracuda_kernels_sys::baracuda_kernels_flash_sdpa_sm89_f16_run(
-                    self.desc.batch_size,
-                    self.desc.num_heads,
-                    self.desc.query_len,
-                    self.desc.key_len,
-                    self.desc.d_k,
-                    self.desc.d_v,
-                    self.desc.scale,
-                    is_causal_flag,
-                    q_ptr,
-                    k_ptr,
-                    v_ptr,
-                    y_ptr,
-                    lse_ptr,
-                    core::ptr::null_mut(),
-                    0,
-                    stream_ptr,
-                )
-            },
-            ElementKind::Bf16 => unsafe {
-                baracuda_kernels_sys::baracuda_kernels_flash_sdpa_sm89_bf16_run(
-                    self.desc.batch_size,
-                    self.desc.num_heads,
-                    self.desc.query_len,
-                    self.desc.key_len,
-                    self.desc.d_k,
-                    self.desc.d_v,
-                    self.desc.scale,
-                    is_causal_flag,
-                    q_ptr,
-                    k_ptr,
-                    v_ptr,
-                    y_ptr,
-                    lse_ptr,
-                    core::ptr::null_mut(),
-                    0,
-                    stream_ptr,
-                )
-            },
-            _ => {
-                return Err(Error::Unsupported(
-                    "baracuda-kernels::FlashSdpaSm89Plan::run reached an unsupported dtype \
-                     (f16 / bf16 only — use FlashSdpaPlan for f32 / f64)",
-                ));
+        let contig = args.q.is_contiguous()
+            && args.k.is_contiguous()
+            && args.v.is_contiguous()
+            && args.y.is_contiguous();
+
+        let status = unsafe {
+            if contig {
+                match T::KIND {
+                    ElementKind::F16 => {
+                        baracuda_kernels_sys::baracuda_kernels_flash_sdpa_sm89_f16_run(
+                            self.desc.batch_size,
+                            self.desc.num_heads,
+                            self.desc.query_len,
+                            self.desc.key_len,
+                            self.desc.d_k,
+                            self.desc.d_v,
+                            self.desc.scale,
+                            is_causal_flag,
+                            q_ptr,
+                            k_ptr,
+                            v_ptr,
+                            y_ptr,
+                            lse_ptr,
+                            core::ptr::null_mut(),
+                            0,
+                            stream_ptr,
+                        )
+                    }
+                    ElementKind::Bf16 => {
+                        baracuda_kernels_sys::baracuda_kernels_flash_sdpa_sm89_bf16_run(
+                            self.desc.batch_size,
+                            self.desc.num_heads,
+                            self.desc.query_len,
+                            self.desc.key_len,
+                            self.desc.d_k,
+                            self.desc.d_v,
+                            self.desc.scale,
+                            is_causal_flag,
+                            q_ptr,
+                            k_ptr,
+                            v_ptr,
+                            y_ptr,
+                            lse_ptr,
+                            core::ptr::null_mut(),
+                            0,
+                            stream_ptr,
+                        )
+                    }
+                    _ => {
+                        return Err(Error::Unsupported(
+                            "baracuda-kernels::FlashSdpaSm89Plan::run reached an unsupported \
+                             dtype (f16 / bf16 only — use FlashSdpaPlan for f32 / f64)",
+                        ));
+                    }
+                }
+            } else {
+                // Strided sibling. Per-tensor outer-dim stride arrays
+                // (length 3, one per outer dim: batch, heads, seq).
+                // The head_dim axis is implicitly stride=1.
+                let stride_q: [i64; 3] =
+                    [args.q.stride[0], args.q.stride[1], args.q.stride[2]];
+                let stride_k: [i64; 3] =
+                    [args.k.stride[0], args.k.stride[1], args.k.stride[2]];
+                let stride_v: [i64; 3] =
+                    [args.v.stride[0], args.v.stride[1], args.v.stride[2]];
+                let stride_y: [i64; 3] =
+                    [args.y.stride[0], args.y.stride[1], args.y.stride[2]];
+                match T::KIND {
+                    ElementKind::F16 => {
+                        baracuda_kernels_sys::baracuda_kernels_flash_sdpa_sm89_f16_strided_run(
+                            self.desc.batch_size,
+                            self.desc.num_heads,
+                            self.desc.query_len,
+                            self.desc.key_len,
+                            self.desc.d_k,
+                            self.desc.d_v,
+                            stride_q.as_ptr(),
+                            stride_k.as_ptr(),
+                            stride_v.as_ptr(),
+                            stride_y.as_ptr(),
+                            self.desc.scale,
+                            is_causal_flag,
+                            q_ptr,
+                            k_ptr,
+                            v_ptr,
+                            y_ptr,
+                            lse_ptr,
+                            core::ptr::null_mut(),
+                            0,
+                            stream_ptr,
+                        )
+                    }
+                    ElementKind::Bf16 => {
+                        baracuda_kernels_sys::baracuda_kernels_flash_sdpa_sm89_bf16_strided_run(
+                            self.desc.batch_size,
+                            self.desc.num_heads,
+                            self.desc.query_len,
+                            self.desc.key_len,
+                            self.desc.d_k,
+                            self.desc.d_v,
+                            stride_q.as_ptr(),
+                            stride_k.as_ptr(),
+                            stride_v.as_ptr(),
+                            stride_y.as_ptr(),
+                            self.desc.scale,
+                            is_causal_flag,
+                            q_ptr,
+                            k_ptr,
+                            v_ptr,
+                            y_ptr,
+                            lse_ptr,
+                            core::ptr::null_mut(),
+                            0,
+                            stream_ptr,
+                        )
+                    }
+                    _ => {
+                        return Err(Error::Unsupported(
+                            "baracuda-kernels::FlashSdpaSm89Plan::run reached an unsupported \
+                             dtype (f16 / bf16 only — use FlashSdpaPlan for f32 / f64)",
+                        ));
+                    }
+                }
             }
         };
         map_status(status)

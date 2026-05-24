@@ -26190,6 +26190,70 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+
+    // Phase 17.1 — strided FW siblings.
+    //
+    // Same shape semantics as the Phase 14.4 naive SDPA strided FFI:
+    // stride_q / stride_k / stride_v / stride_y are `*const i64` length 3
+    // (one per outer dim: batch, heads, seq). The innermost head_dim axis
+    // is implicitly stride=1 (enforced by the Rust plan layer).
+    //
+    // GQA broadcast: pass `stride_k[1] == 0` (or `stride_v[1] == 0`) and
+    // multiple Q-heads in the same kv-head group dereference the same
+    // K/V row.
+    //
+    // `lse` stays contig `[B, H, Q]` (BW path routes through sm_80
+    // baseline). Mask is not supported on this strided path — masked
+    // callers must use the non-strided sm_89 plan (when contig) or the
+    // sm_80 naive-SDPA strided plan.
+
+    /// Flash SDPA FW, f16, sm_89 strided sibling.
+    pub fn baracuda_kernels_flash_sdpa_sm89_f16_strided_run(
+        batch: i32,
+        heads: i32,
+        q_len: i32,
+        k_len: i32,
+        d_k: i32,
+        d_v: i32,
+        stride_q: *const i64,
+        stride_k: *const i64,
+        stride_v: *const i64,
+        stride_y: *const i64,
+        scale: f32,
+        is_causal: i32,
+        q: *const c_void,
+        k: *const c_void,
+        v: *const c_void,
+        y: *mut c_void,
+        lse: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// Flash SDPA FW, bf16, sm_89 strided sibling.
+    pub fn baracuda_kernels_flash_sdpa_sm89_bf16_strided_run(
+        batch: i32,
+        heads: i32,
+        q_len: i32,
+        k_len: i32,
+        d_k: i32,
+        d_v: i32,
+        stride_q: *const i64,
+        stride_k: *const i64,
+        stride_v: *const i64,
+        stride_y: *const i64,
+        scale: f32,
+        is_causal: i32,
+        q: *const c_void,
+        k: *const c_void,
+        v: *const c_void,
+        y: *mut c_void,
+        lse: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
 }
 
 // ============================================================================

@@ -7,8 +7,8 @@ effort within each category. Authoritative status per op lives in
 [`OP-MATRIX.md`](OP-MATRIX.md); historical phase summaries live in
 [`ARCHITECTURE.md`](ARCHITECTURE.md).
 
-The current tag is **v0.0.1-alpha.33** with **1916 GPU tests
-passing** on RTX 4070 (sm_89) across **607 binary targets**.
+The current tag is **v0.0.1-alpha.34** with **1920 GPU tests
+passing** on RTX 4070 (sm_89) across **608 binary targets**.
 
 ---
 
@@ -78,29 +78,32 @@ Carry-forward from Phase 16:
 - FractionalMaxPool exact PyTorch formula (current is approximation).
 - LpPool 3d (current scope was 1d/2d only).
 
-## Phase 17 — SDPA / attention completion (proposed)
+## Phase 17 — SDPA / attention completion (complete; shipped alpha.34)
 
-- **Flash SDPA sm_89 strided sibling** — the existing Phase 10
-  `FlashSdpaSm89Plan` hardcodes `bh_off * q_len * d_k +
-  qbase * d_k` offsets internally; the kernel is not stride-driven.
-  Rewriting it as stride-driven would unlock strided attention on
-  the perf-critical sm_89 path (the user's RTX 4070). Effort:
-  medium-large — needs to thread strides through the `cp.async`
-  double-buffer + SMEM-tile loops without losing the existing
-  tuning. The generic naive `SdpaPlan` strided sibling already
-  shipped in Phase 14.4; this would bring the sm_89 Flash variant
-  to feature parity.
-- **SDPA backward + GQA broadcast** — Phase 14.4 plan layer rejects
-  `stride_k[head_axis] == 0` / `stride_v[head_axis] == 0` for the
-  backward path with `Error::Unsupported`. Lifting this requires an
-  atomicAdd-based dK / dV accumulation kernel for the broadcast
-  axis (the `atomicAdd_via_cas` helper from Phase 11.3 already
-  exists for the bf16 / f16 case). Effort: medium — design pass
-  needed on the accumulation pattern; smoke tests need a reference
-  that fans out the broadcast and compares against the naive
-  expanded version.
-- **Paged FlashAttention** — original Phase 6 milestone never landed.
-  Effort: large — separate design effort.
+- **Flash SDPA sm_89 strided FW sibling** ✓ Phase 17.1. Rewrote the
+  hardcoded contiguous addressing (`bh_off * q_len * d_k`) to take
+  caller-provided per-dim strides. Touches 5 offset lines + Q-load
+  loop + Y-finalize loop + 4 `cp.async` call sites. 2 new FFI
+  symbols (f16 + bf16). GQA broadcast works via strides.
+  `head_dim` must stay `stride==1` (SMEM tile layout). LSE output
+  stays contig (BW routes through sm_80 baseline).
+- **SDPA backward + GQA broadcast** ✓ Phase 17.2. Lifted the Phase
+  14.4 `Error::Unsupported` rejection. Added `template <bool
+  gqa_broadcast>` to `sdpa_dV_strided_kernel` + `sdpa_dK_strided_
+  kernel`; host launcher dispatches based on stride detection;
+  `if constexpr` routes to `baracuda::atomic::add<T>` (Phase 11.3
+  helper) on broadcast. 0 new FFI symbols. Caller MUST pre-zero
+  dK/dV under broadcast.
+
+Carry-forward from Phase 17:
+
+- **Flash SDPA sm_89 BW strided** — sm_89 plan remains FW-only
+  (BW routes through sm_80 baseline). Future work would add an
+  sm_89 Flash BW kernel using `cp.async` + tensor cores.
+- **Flash SDPA sm_89 mask support** — sm_89 FW doesn't accept a
+  mask at all (in contig or strided form). Separate feature.
+- **Paged FlashAttention** — original Phase 6 milestone never
+  landed. Separate design effort.
 
 ## Phase 18 — sub-byte + quantized completeness
 

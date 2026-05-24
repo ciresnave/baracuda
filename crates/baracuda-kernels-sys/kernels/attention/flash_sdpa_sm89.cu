@@ -11,3 +11,7 @@
 
 BARACUDA_KERNELS_FLASH_SDPA_SM89_INSTANTIATE(flash_sdpa_sm89_f16,  __half)
 BARACUDA_KERNELS_FLASH_SDPA_SM89_INSTANTIATE(flash_sdpa_sm89_bf16, __nv_bfloat16)
+
+// Phase 17.1 — strided FW siblings (transposed / GQA-broadcast inputs).
+BARACUDA_KERNELS_FLASH_SDPA_SM89_STRIDED_INSTANTIATE(flash_sdpa_sm89_f16,  __half)
+BARACUDA_KERNELS_FLASH_SDPA_SM89_STRIDED_INSTANTIATE(flash_sdpa_sm89_bf16, __nv_bfloat16)

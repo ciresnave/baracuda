@@ -42,6 +42,8 @@
 #include <cuda_fp16.h>
 #include <cuda_bf16.h>
 
+#include "baracuda_atomic.cuh"
+
 namespace baracuda { namespace sdpa {
 
 // =============================================================================
@@ -1053,16 +1055,24 @@ __host__ inline int32_t launch_sdpa_strided_fp(
 // BW strided kernels. Q / K / V are strided inputs; dQ / dK / dV are
 // strided outputs. attn + dy + dscores_ws stay contig.
 //
-// IMPORTANT GQA caveat: dK and dV are NOT defined when K or V has a
-// broadcast stride (stride_h == 0 for K means multiple Q heads share
-// the same K head — so dK for that head receives contributions from
-// every Q head, which requires an atomicAdd or per-Q-head allocation
-// followed by a reduction). For the trailblazer we DO support the FW
-// path with zero strides (GQA inference / inference-style use cases),
-// and we reject zero strides on K/V for the BW path at the Rust plan
-// layer.
+// GQA broadcast (Phase 17.2): when `stride_k_h == 0` or `stride_v_h == 0`,
+// multiple Q heads in a kv-head group read the same K / V row in FW.
+// In BW, that means every Q-head's dK / dV contribution lands on the
+// same kv-head slot, requiring an atomicAdd-style accumulation. We
+// handle this with a compile-time template bool `gqa_broadcast`:
+//   * `false` — fast path: plain stores into dK / dV.
+//   * `true`  — atomicAdd into dK / dV via `baracuda::atomic::add<T>`
+//               (CAS-loop for f16 / bf16, native for f32 / f64).
+// The host launcher picks the specialization based on the stride args.
+//
+// Caller contract for the broadcast path: dK and dV MUST be pre-zeroed.
+// The kernel adds into them — non-broadcast cells also touched if any
+// path collapses to a broadcast layout. The Rust plan documents this.
+//
+// dQ never aliases across heads in the broadcast case (Q dim still has
+// full per-head fanout), so it always uses the plain-store path.
 
-template <typename T>
+template <typename T, bool gqa_broadcast = false>
 __global__ void sdpa_dV_strided_kernel(
     const T* __restrict__ attn,
     const T* __restrict__ dy,
@@ -1090,12 +1100,18 @@ __global__ void sdpa_dV_strided_kernel(
             acc += a * d;
         }
         int64_t dv_off = (int64_t)b * sdvb + (int64_t)h * sdvh + (int64_t)kk * sdvs + (int64_t)dv;
-        dV[dv_off] = store_from_f32<T>(acc);
+        if constexpr (gqa_broadcast) {
+            baracuda::atomic::add<T>(&dV[dv_off], store_from_f32<T>(acc));
+        } else {
+            dV[dv_off] = store_from_f32<T>(acc);
+        }
     }
 }
 
+// Full explicit specializations for double — bypass the f32 detour and
+// keep native f64 arithmetic. One spec per `gqa_broadcast` value.
 template <>
-__global__ void sdpa_dV_strided_kernel<double>(
+__global__ void sdpa_dV_strided_kernel<double, false>(
     const double* __restrict__ attn,
     const double* __restrict__ dy,
     double* __restrict__ dV,
@@ -1121,6 +1137,36 @@ __global__ void sdpa_dV_strided_kernel<double>(
         }
         int64_t dv_off = (int64_t)b * sdvb + (int64_t)h * sdvh + (int64_t)kk * sdvs + (int64_t)dv;
         dV[dv_off] = acc;
+    }
+}
+
+template <>
+__global__ void sdpa_dV_strided_kernel<double, true>(
+    const double* __restrict__ attn,
+    const double* __restrict__ dy,
+    double* __restrict__ dV,
+    int32_t batch, int32_t heads, int32_t q_len, int32_t k_len, int32_t d_v,
+    int64_t sdyb, int64_t sdyh, int64_t sdys,
+    int64_t sdvb, int64_t sdvh, int64_t sdvs)
+{
+    int64_t total = (int64_t)batch * heads * k_len * d_v;
+    int64_t tid  = (int64_t)blockIdx.x * (int64_t)blockDim.x + (int64_t)threadIdx.x;
+    int64_t step = (int64_t)gridDim.x  * (int64_t)blockDim.x;
+    for (int64_t lin = tid; lin < total; lin += step) {
+        int32_t dv = (int32_t)(lin % (int64_t)d_v);
+        int64_t r = lin / (int64_t)d_v;
+        int32_t kk = (int32_t)(r % (int64_t)k_len);
+        r /= (int64_t)k_len;
+        int32_t h = (int32_t)(r % (int64_t)heads);
+        int32_t b = (int32_t)(r / (int64_t)heads);
+        int64_t a_col_base = (((int64_t)b * heads + h) * q_len) * k_len + kk;
+        double acc = 0.0;
+        for (int32_t i = 0; i < q_len; ++i) {
+            int64_t dy_off = (int64_t)b * sdyb + (int64_t)h * sdyh + (int64_t)i * sdys + (int64_t)dv;
+            acc += attn[a_col_base + (int64_t)i * k_len] * dy[dy_off];
+        }
+        int64_t dv_off = (int64_t)b * sdvb + (int64_t)h * sdvh + (int64_t)kk * sdvs + (int64_t)dv;
+        baracuda::atomic::add<double>(&dV[dv_off], acc);
     }
 }
 
@@ -1249,7 +1295,7 @@ __global__ void sdpa_dQ_strided_kernel<double>(
     }
 }
 
-template <typename T>
+template <typename T, bool gqa_broadcast = false>
 __global__ void sdpa_dK_strided_kernel(
     const T* __restrict__ dscores,
     const T* __restrict__ q_in,
@@ -1278,12 +1324,16 @@ __global__ void sdpa_dK_strided_kernel(
             acc += ds * qv;
         }
         int64_t dk_off = (int64_t)b * sdkb + (int64_t)h * sdkh + (int64_t)kk * sdks + (int64_t)d;
-        dK[dk_off] = store_from_f32<T>(acc * scale);
+        if constexpr (gqa_broadcast) {
+            baracuda::atomic::add<T>(&dK[dk_off], store_from_f32<T>(acc * scale));
+        } else {
+            dK[dk_off] = store_from_f32<T>(acc * scale);
+        }
     }
 }
 
 template <>
-__global__ void sdpa_dK_strided_kernel<double>(
+__global__ void sdpa_dK_strided_kernel<double, false>(
     const double* __restrict__ dscores,
     const double* __restrict__ q_in,
     double* __restrict__ dK,
@@ -1311,6 +1361,38 @@ __global__ void sdpa_dK_strided_kernel<double>(
         }
         int64_t dk_off = (int64_t)b * sdkb + (int64_t)h * sdkh + (int64_t)kk * sdks + (int64_t)d;
         dK[dk_off] = acc * scale_d;
+    }
+}
+
+template <>
+__global__ void sdpa_dK_strided_kernel<double, true>(
+    const double* __restrict__ dscores,
+    const double* __restrict__ q_in,
+    double* __restrict__ dK,
+    int32_t batch, int32_t heads, int32_t q_len, int32_t k_len, int32_t d_k,
+    int64_t sqb, int64_t sqh, int64_t sqs,
+    int64_t sdkb, int64_t sdkh, int64_t sdks,
+    float scale)
+{
+    int64_t total = (int64_t)batch * heads * k_len * d_k;
+    int64_t tid  = (int64_t)blockIdx.x * (int64_t)blockDim.x + (int64_t)threadIdx.x;
+    int64_t step = (int64_t)gridDim.x  * (int64_t)blockDim.x;
+    double scale_d = (double)scale;
+    for (int64_t lin = tid; lin < total; lin += step) {
+        int32_t d = (int32_t)(lin % (int64_t)d_k);
+        int64_t r = lin / (int64_t)d_k;
+        int32_t kk = (int32_t)(r % (int64_t)k_len);
+        r /= (int64_t)k_len;
+        int32_t h = (int32_t)(r % (int64_t)heads);
+        int32_t b = (int32_t)(r / (int64_t)heads);
+        int64_t ds_col_base = (((int64_t)b * heads + h) * q_len) * k_len + kk;
+        double acc = 0.0;
+        for (int32_t i = 0; i < q_len; ++i) {
+            int64_t q_off = (int64_t)b * sqb + (int64_t)h * sqh + (int64_t)i * sqs + (int64_t)d;
+            acc += dscores[ds_col_base + (int64_t)i * k_len] * q_in[q_off];
+        }
+        int64_t dk_off = (int64_t)b * sdkb + (int64_t)h * sdkh + (int64_t)kk * sdks + (int64_t)d;
+        baracuda::atomic::add<double>(&dK[dk_off], acc * scale_d);
     }
 }
 
@@ -1345,14 +1427,31 @@ __host__ inline int32_t launch_sdpa_backward_strided_fp(
         return blocks;
     };
 
+    // GQA broadcast detection: when stride_v_h == 0 (multiple Q heads
+    // share the same V row), multiple Q-head dV contributions land on the
+    // same physical slot — needs atomicAdd. Same for K → dK when stride_k_h == 0.
+    // dQ never aliases (Q dim has full per-head fanout).
+    //
+    // Caller contract: when broadcasting, dK / dV MUST be pre-zeroed by
+    // the caller because the kernel atomicAdd-accumulates into them.
+    bool dv_broadcast = (svh == 0);
+    bool dk_broadcast = (skh == 0);
+
     // B1 — dV (strided dy in, strided dV out, contig attn)
     {
         int64_t total = (int64_t)batch * heads * k_len * d_v;
         if (total > 0) {
-            sdpa_dV_strided_kernel<T><<<grid_for(total), kBlock, 0, stream>>>(
-                attn, dy, dV,
-                batch, heads, q_len, k_len, d_v,
-                sdyb, sdyh, sdys, sdvb, sdvh, sdvs);
+            if (dv_broadcast) {
+                sdpa_dV_strided_kernel<T, /*gqa_broadcast=*/true><<<grid_for(total), kBlock, 0, stream>>>(
+                    attn, dy, dV,
+                    batch, heads, q_len, k_len, d_v,
+                    sdyb, sdyh, sdys, sdvb, sdvh, sdvs);
+            } else {
+                sdpa_dV_strided_kernel<T, /*gqa_broadcast=*/false><<<grid_for(total), kBlock, 0, stream>>>(
+                    attn, dy, dV,
+                    batch, heads, q_len, k_len, d_v,
+                    sdyb, sdyh, sdys, sdvb, sdvh, sdvs);
+            }
             cudaError_t err = cudaGetLastError();
             if (err != cudaSuccess) return 5;
         }
@@ -1374,7 +1473,7 @@ __host__ inline int32_t launch_sdpa_backward_strided_fp(
         cudaError_t err = cudaGetLastError();
         if (err != cudaSuccess) return 5;
     }
-    // B4 — dQ = dscores @ K * scale (strided K + dQ)
+    // B4 — dQ = dscores @ K * scale (strided K + dQ). dQ never aliases.
     {
         int64_t total = (int64_t)batch * heads * q_len * d_k;
         if (total > 0) {
@@ -1390,10 +1489,17 @@ __host__ inline int32_t launch_sdpa_backward_strided_fp(
     {
         int64_t total = (int64_t)batch * heads * k_len * d_k;
         if (total > 0) {
-            sdpa_dK_strided_kernel<T><<<grid_for(total), kBlock, 0, stream>>>(
-                dscores_ws, q, dK,
-                batch, heads, q_len, k_len, d_k,
-                sqb, sqh, sqs, sdkb, sdkh, sdks, scale);
+            if (dk_broadcast) {
+                sdpa_dK_strided_kernel<T, /*gqa_broadcast=*/true><<<grid_for(total), kBlock, 0, stream>>>(
+                    dscores_ws, q, dK,
+                    batch, heads, q_len, k_len, d_k,
+                    sqb, sqh, sqs, sdkb, sdkh, sdks, scale);
+            } else {
+                sdpa_dK_strided_kernel<T, /*gqa_broadcast=*/false><<<grid_for(total), kBlock, 0, stream>>>(
+                    dscores_ws, q, dK,
+                    batch, heads, q_len, k_len, d_k,
+                    sqb, sqh, sqs, sdkb, sdkh, sdks, scale);
+            }
             cudaError_t err = cudaGetLastError();
             if (err != cudaSuccess) return 5;
         }
@@ -1550,10 +1656,15 @@ __host__ inline int32_t launch_sdpa_backward_strided_fp(
             stream);                                                                                \
     }
 
-// Strided BW sibling INSTANTIATE — Phase 14.4.
+// Strided BW sibling INSTANTIATE — Phase 14.4 (+ Phase 17.2 GQA BW).
 // Strides on Q/K/V/dy/dQ/dK/dV. attn + dscores_ws stay contig.
-// NOTE: BW does NOT support zero strides on K or V (would require
-// atomicAdd-style reduction over Q-head groups). Rust plan enforces.
+//
+// Phase 17.2: BW now supports zero strides on K or V (GQA broadcast).
+// When `stride_k[1] == 0` (or `stride_v[1] == 0`), the launcher
+// dispatches a `gqa_broadcast=true` kernel specialization that uses
+// `baracuda::atomic::add<T>` to accumulate dK / dV into the shared
+// kv-head slot. Caller contract: dK / dV MUST be pre-zeroed when
+// broadcasting (the Rust plan documents this).
 #define BARACUDA_KERNELS_SDPA_BACKWARD_STRIDED_INSTANTIATE(NAME, T)                                 \
     extern "C" int32_t baracuda_kernels_##NAME##_strided_run(                                       \
         int32_t batch,                                                                              \

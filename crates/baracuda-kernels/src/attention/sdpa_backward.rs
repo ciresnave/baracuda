@@ -95,7 +95,19 @@ pub struct SdpaBackwardArgs<'a, T: Element> {
 /// H, Q, K]`) rather than a flat byte scratch.
 ///
 /// **Precision guarantee**: deterministic; bit-stable on the same
-/// hardware. No atomicAdd.
+/// hardware in the non-broadcast path (no atomicAdd). In the GQA
+/// broadcast path (`stride_k[1] == 0` or `stride_v[1] == 0` — Phase
+/// 17.2), `dK` / `dV` are accumulated via `atomicAdd`, so atomic
+/// ordering across launches is non-deterministic. The per-Q-head
+/// arithmetic remains bit-stable; only the inter-Q-head reduction
+/// order varies.
+///
+/// **GQA broadcast caller contract (Phase 17.2)**: when either
+/// `args.k.stride[1] == 0` or `args.v.stride[1] == 0`, the caller MUST
+/// pre-zero the `dK` / `dV` output buffers before the launch. The
+/// kernel atomicAdd-accumulates Q-head contributions into the shared
+/// kv-head slot. The non-broadcast path performs plain stores and is
+/// safe with any initial buffer contents.
 pub struct SdpaBackwardPlan<T: Element> {
     desc: SdpaBackwardDescriptor,
     sku: KernelSku,
@@ -143,7 +155,13 @@ impl<T: Element> SdpaBackwardPlan<T> {
         let precision_guarantee = PrecisionGuarantee {
             math_precision: MathPrecision::F32,
             accumulator: ElementKind::F32,
-            // Per-cell deterministic — no atomic ops.
+            // Per-cell deterministic in the non-broadcast path (no
+            // atomic ops). The GQA broadcast path (Phase 17.2) routes
+            // dK / dV through atomicAdd; per-Q-head arithmetic is
+            // bit-stable but the inter-Q-head reduction order can vary.
+            // The plan-level guarantee reflects the non-broadcast
+            // fast-path commitment; callers using broadcast accept a
+            // weaker per-launch ordering.
             bit_stable_on_same_hardware: true,
             deterministic: true,
         };
@@ -269,14 +287,9 @@ impl<T: Element> SdpaBackwardPlan<T> {
                  for Q / K / V / dy / dQ / dK / dV",
             ));
         }
-        // BW does not support GQA broadcast (would require atomicAdd
-        // over Q-head groups). Reject zero strides on K / V heads.
-        if args.k.stride[1] == 0 || args.v.stride[1] == 0 {
-            return Err(Error::Unsupported(
-                "baracuda-kernels::SdpaBackwardPlan: BW does not support zero-stride \
-                 (GQA broadcast) on K or V — caller must expand before BW",
-            ));
-        }
+        // Phase 17.2: BW now supports GQA broadcast (zero strides on K
+        // or V) via an atomicAdd-accumulating kernel specialization. The
+        // caller must pre-zero dK / dV in that case — see plan rustdoc.
         Ok(())
     }
 
@@ -302,8 +315,10 @@ impl<T: Element> SdpaBackwardPlan<T> {
     /// Launch all five sub-kernels in pipeline.
     ///
     /// Phase 14.4: dispatches between the contig fast path and the
-    /// strided sibling FFI. BW does NOT support GQA broadcast (zero
-    /// strides on K/V); the strided path's `can_implement` rejects.
+    /// strided sibling FFI. Phase 17.2: the strided sibling now handles
+    /// GQA broadcast (`stride_k[1] == 0` or `stride_v[1] == 0`) by
+    /// atomicAdd-accumulating dK / dV. The caller MUST pre-zero dK /
+    /// dV in the broadcast case (see plan rustdoc).
     pub fn run(
         &self,
         stream: &Stream,
