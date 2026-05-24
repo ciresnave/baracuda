@@ -33411,6 +33411,334 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+
+    // ===== Phase 18.1 — f16 / bf16 activation MMVQ ============================
+    //
+    // 11 block formats × {f16, bf16} × {contig, actstrided} = 44 new symbols.
+    //
+    // Convention vs. the f32 baseline:
+    //   * `y` and `dst` share the same dtype (PyTorch convention: f16 activation
+    //     → f16 dst; bf16 → bf16). The dtype is encoded in the symbol suffix
+    //     (`_f16_run` / `_bf16_run` / `_actstrided_f16_run` / `_actstrided_bf16_run`).
+    //   * The existing un-suffixed symbol (`*_run`, `*_actstrided_run`) keeps
+    //     f32 activation + f32 output, preserved for back-compat.
+    //   * Internal accumulator stays f32 in every variant — the f16 / bf16 cast
+    //     happens at the load (activation read) and store (dst write) sites.
+    //
+    // Status codes match the f32 family: 0 success, 2 invalid problem,
+    // 5 internal launch error.
+
+    /// MMVQ — Q4_0, f16 activation + f16 output. # Safety: as the f32 sibling
+    /// with `y` / `dst` typed `__half` device-resident.
+    pub fn baracuda_kernels_mmvq_q4_0_f16_run(
+        ncols: i32, nrows: i32,
+        x: *const c_void, y: *const c_void, dst: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// MMVQ — Q4_0, bf16 activation + bf16 output. # Safety: as the f32 sibling
+    /// with `y` / `dst` typed `__nv_bfloat16` device-resident.
+    pub fn baracuda_kernels_mmvq_q4_0_bf16_run(
+        ncols: i32, nrows: i32,
+        x: *const c_void, y: *const c_void, dst: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// MMVQ — Q4_1, f16 activation + f16 output. # Safety: as Q4_0 f16.
+    pub fn baracuda_kernels_mmvq_q4_1_f16_run(
+        ncols: i32, nrows: i32,
+        x: *const c_void, y: *const c_void, dst: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// MMVQ — Q4_1, bf16 activation + bf16 output. # Safety: as Q4_0 bf16.
+    pub fn baracuda_kernels_mmvq_q4_1_bf16_run(
+        ncols: i32, nrows: i32,
+        x: *const c_void, y: *const c_void, dst: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// MMVQ — Q5_0, f16. # Safety: as Q4_0 f16.
+    pub fn baracuda_kernels_mmvq_q5_0_f16_run(
+        ncols: i32, nrows: i32,
+        x: *const c_void, y: *const c_void, dst: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// MMVQ — Q5_0, bf16. # Safety: as Q4_0 bf16.
+    pub fn baracuda_kernels_mmvq_q5_0_bf16_run(
+        ncols: i32, nrows: i32,
+        x: *const c_void, y: *const c_void, dst: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// MMVQ — Q5_1, f16. # Safety: as Q4_0 f16.
+    pub fn baracuda_kernels_mmvq_q5_1_f16_run(
+        ncols: i32, nrows: i32,
+        x: *const c_void, y: *const c_void, dst: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// MMVQ — Q5_1, bf16. # Safety: as Q4_0 bf16.
+    pub fn baracuda_kernels_mmvq_q5_1_bf16_run(
+        ncols: i32, nrows: i32,
+        x: *const c_void, y: *const c_void, dst: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// MMVQ — Q8_0, f16. # Safety: as Q4_0 f16.
+    pub fn baracuda_kernels_mmvq_q8_0_f16_run(
+        ncols: i32, nrows: i32,
+        x: *const c_void, y: *const c_void, dst: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// MMVQ — Q8_0, bf16. # Safety: as Q4_0 bf16.
+    pub fn baracuda_kernels_mmvq_q8_0_bf16_run(
+        ncols: i32, nrows: i32,
+        x: *const c_void, y: *const c_void, dst: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// MMVQ — Q2_K, f16. # Safety: as Q4_0 f16, ncols must be multiple of 256.
+    pub fn baracuda_kernels_mmvq_q2_K_f16_run(
+        ncols: i32, nrows: i32,
+        x: *const c_void, y: *const c_void, dst: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// MMVQ — Q2_K, bf16. # Safety: as Q4_0 bf16, ncols must be multiple of 256.
+    pub fn baracuda_kernels_mmvq_q2_K_bf16_run(
+        ncols: i32, nrows: i32,
+        x: *const c_void, y: *const c_void, dst: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// MMVQ — Q3_K, f16. # Safety: as Q2_K f16.
+    pub fn baracuda_kernels_mmvq_q3_K_f16_run(
+        ncols: i32, nrows: i32,
+        x: *const c_void, y: *const c_void, dst: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// MMVQ — Q3_K, bf16. # Safety: as Q2_K bf16.
+    pub fn baracuda_kernels_mmvq_q3_K_bf16_run(
+        ncols: i32, nrows: i32,
+        x: *const c_void, y: *const c_void, dst: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// MMVQ — Q4_K, f16. # Safety: as Q2_K f16.
+    pub fn baracuda_kernels_mmvq_q4_K_f16_run(
+        ncols: i32, nrows: i32,
+        x: *const c_void, y: *const c_void, dst: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// MMVQ — Q4_K, bf16. # Safety: as Q2_K bf16.
+    pub fn baracuda_kernels_mmvq_q4_K_bf16_run(
+        ncols: i32, nrows: i32,
+        x: *const c_void, y: *const c_void, dst: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// MMVQ — Q5_K, f16. # Safety: as Q2_K f16.
+    pub fn baracuda_kernels_mmvq_q5_K_f16_run(
+        ncols: i32, nrows: i32,
+        x: *const c_void, y: *const c_void, dst: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// MMVQ — Q5_K, bf16. # Safety: as Q2_K bf16.
+    pub fn baracuda_kernels_mmvq_q5_K_bf16_run(
+        ncols: i32, nrows: i32,
+        x: *const c_void, y: *const c_void, dst: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// MMVQ — Q6_K, f16. # Safety: as Q2_K f16.
+    pub fn baracuda_kernels_mmvq_q6_K_f16_run(
+        ncols: i32, nrows: i32,
+        x: *const c_void, y: *const c_void, dst: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// MMVQ — Q6_K, bf16. # Safety: as Q2_K bf16.
+    pub fn baracuda_kernels_mmvq_q6_K_bf16_run(
+        ncols: i32, nrows: i32,
+        x: *const c_void, y: *const c_void, dst: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// MMVQ — Q8_K, f16 (bespoke; Phase 11.4 + 18.1). # Safety: as Q2_K f16.
+    pub fn baracuda_kernels_mmvq_q8_K_f16_run(
+        ncols: i32, nrows: i32,
+        x: *const c_void, y: *const c_void, dst: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// MMVQ — Q8_K, bf16 (bespoke; Phase 11.4 + 18.1). # Safety: as Q2_K bf16.
+    pub fn baracuda_kernels_mmvq_q8_K_bf16_run(
+        ncols: i32, nrows: i32,
+        x: *const c_void, y: *const c_void, dst: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    // ---- Phase 18.1 strided f16 / bf16 siblings ------------------------------
+
+    /// Strided MMVQ — Q4_0, f16. # Safety: as the f32 strided sibling.
+    pub fn baracuda_kernels_mmvq_q4_0_actstrided_f16_run(
+        ncols: i32, nrows: i32, x: *const c_void,
+        w_start_byte_offset: i64, stride_y: i64,
+        y: *const c_void, dst: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// Strided MMVQ — Q4_0, bf16. # Safety: as the f32 strided sibling.
+    pub fn baracuda_kernels_mmvq_q4_0_actstrided_bf16_run(
+        ncols: i32, nrows: i32, x: *const c_void,
+        w_start_byte_offset: i64, stride_y: i64,
+        y: *const c_void, dst: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// Strided MMVQ — Q4_1, f16. # Safety: as Q4_0 strided f16.
+    pub fn baracuda_kernels_mmvq_q4_1_actstrided_f16_run(
+        ncols: i32, nrows: i32, x: *const c_void,
+        w_start_byte_offset: i64, stride_y: i64,
+        y: *const c_void, dst: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// Strided MMVQ — Q4_1, bf16. # Safety: as Q4_0 strided bf16.
+    pub fn baracuda_kernels_mmvq_q4_1_actstrided_bf16_run(
+        ncols: i32, nrows: i32, x: *const c_void,
+        w_start_byte_offset: i64, stride_y: i64,
+        y: *const c_void, dst: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// Strided MMVQ — Q5_0, f16. # Safety: as Q4_0 strided f16.
+    pub fn baracuda_kernels_mmvq_q5_0_actstrided_f16_run(
+        ncols: i32, nrows: i32, x: *const c_void,
+        w_start_byte_offset: i64, stride_y: i64,
+        y: *const c_void, dst: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// Strided MMVQ — Q5_0, bf16. # Safety: as Q4_0 strided bf16.
+    pub fn baracuda_kernels_mmvq_q5_0_actstrided_bf16_run(
+        ncols: i32, nrows: i32, x: *const c_void,
+        w_start_byte_offset: i64, stride_y: i64,
+        y: *const c_void, dst: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// Strided MMVQ — Q5_1, f16. # Safety: as Q4_0 strided f16.
+    pub fn baracuda_kernels_mmvq_q5_1_actstrided_f16_run(
+        ncols: i32, nrows: i32, x: *const c_void,
+        w_start_byte_offset: i64, stride_y: i64,
+        y: *const c_void, dst: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// Strided MMVQ — Q5_1, bf16. # Safety: as Q4_0 strided bf16.
+    pub fn baracuda_kernels_mmvq_q5_1_actstrided_bf16_run(
+        ncols: i32, nrows: i32, x: *const c_void,
+        w_start_byte_offset: i64, stride_y: i64,
+        y: *const c_void, dst: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// Strided MMVQ — Q8_0, f16. # Safety: as Q4_0 strided f16.
+    pub fn baracuda_kernels_mmvq_q8_0_actstrided_f16_run(
+        ncols: i32, nrows: i32, x: *const c_void,
+        w_start_byte_offset: i64, stride_y: i64,
+        y: *const c_void, dst: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// Strided MMVQ — Q8_0, bf16. # Safety: as Q4_0 strided bf16.
+    pub fn baracuda_kernels_mmvq_q8_0_actstrided_bf16_run(
+        ncols: i32, nrows: i32, x: *const c_void,
+        w_start_byte_offset: i64, stride_y: i64,
+        y: *const c_void, dst: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// Strided MMVQ — Q2_K, f16. # Safety: as Q4_0 strided f16, ncols mul of 256.
+    pub fn baracuda_kernels_mmvq_q2_K_actstrided_f16_run(
+        ncols: i32, nrows: i32, x: *const c_void,
+        w_start_byte_offset: i64, stride_y: i64,
+        y: *const c_void, dst: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// Strided MMVQ — Q2_K, bf16. # Safety: as Q2_K strided f16.
+    pub fn baracuda_kernels_mmvq_q2_K_actstrided_bf16_run(
+        ncols: i32, nrows: i32, x: *const c_void,
+        w_start_byte_offset: i64, stride_y: i64,
+        y: *const c_void, dst: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// Strided MMVQ — Q3_K, f16. # Safety: as Q2_K strided f16.
+    pub fn baracuda_kernels_mmvq_q3_K_actstrided_f16_run(
+        ncols: i32, nrows: i32, x: *const c_void,
+        w_start_byte_offset: i64, stride_y: i64,
+        y: *const c_void, dst: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// Strided MMVQ — Q3_K, bf16. # Safety: as Q2_K strided bf16.
+    pub fn baracuda_kernels_mmvq_q3_K_actstrided_bf16_run(
+        ncols: i32, nrows: i32, x: *const c_void,
+        w_start_byte_offset: i64, stride_y: i64,
+        y: *const c_void, dst: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// Strided MMVQ — Q4_K, f16. # Safety: as Q2_K strided f16.
+    pub fn baracuda_kernels_mmvq_q4_K_actstrided_f16_run(
+        ncols: i32, nrows: i32, x: *const c_void,
+        w_start_byte_offset: i64, stride_y: i64,
+        y: *const c_void, dst: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// Strided MMVQ — Q4_K, bf16. # Safety: as Q2_K strided bf16.
+    pub fn baracuda_kernels_mmvq_q4_K_actstrided_bf16_run(
+        ncols: i32, nrows: i32, x: *const c_void,
+        w_start_byte_offset: i64, stride_y: i64,
+        y: *const c_void, dst: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// Strided MMVQ — Q5_K, f16. # Safety: as Q2_K strided f16.
+    pub fn baracuda_kernels_mmvq_q5_K_actstrided_f16_run(
+        ncols: i32, nrows: i32, x: *const c_void,
+        w_start_byte_offset: i64, stride_y: i64,
+        y: *const c_void, dst: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// Strided MMVQ — Q5_K, bf16. # Safety: as Q2_K strided bf16.
+    pub fn baracuda_kernels_mmvq_q5_K_actstrided_bf16_run(
+        ncols: i32, nrows: i32, x: *const c_void,
+        w_start_byte_offset: i64, stride_y: i64,
+        y: *const c_void, dst: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// Strided MMVQ — Q6_K, f16. # Safety: as Q2_K strided f16.
+    pub fn baracuda_kernels_mmvq_q6_K_actstrided_f16_run(
+        ncols: i32, nrows: i32, x: *const c_void,
+        w_start_byte_offset: i64, stride_y: i64,
+        y: *const c_void, dst: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// Strided MMVQ — Q6_K, bf16. # Safety: as Q2_K strided bf16.
+    pub fn baracuda_kernels_mmvq_q6_K_actstrided_bf16_run(
+        ncols: i32, nrows: i32, x: *const c_void,
+        w_start_byte_offset: i64, stride_y: i64,
+        y: *const c_void, dst: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// Strided MMVQ — Q8_K, f16 (bespoke). # Safety: as Q2_K strided f16.
+    pub fn baracuda_kernels_mmvq_q8_K_actstrided_f16_run(
+        ncols: i32, nrows: i32, x: *const c_void,
+        w_start_byte_offset: i64, stride_y: i64,
+        y: *const c_void, dst: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// Strided MMVQ — Q8_K, bf16 (bespoke). # Safety: as Q2_K strided bf16.
+    pub fn baracuda_kernels_mmvq_q8_K_actstrided_bf16_run(
+        ncols: i32, nrows: i32, x: *const c_void,
+        w_start_byte_offset: i64, stride_y: i64,
+        y: *const c_void, dst: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
 }
 
 // ============================================================================

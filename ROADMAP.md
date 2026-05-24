@@ -7,8 +7,8 @@ effort within each category. Authoritative status per op lives in
 [`OP-MATRIX.md`](OP-MATRIX.md); historical phase summaries live in
 [`ARCHITECTURE.md`](ARCHITECTURE.md).
 
-The current tag is **v0.0.1-alpha.34** with **1920 GPU tests
-passing** on RTX 4070 (sm_89) across **608 binary targets**.
+The current tag is **v0.0.1-alpha.35** with **1936 GPU tests
+passing** on RTX 4070 (sm_89) across **610 binary targets**.
 
 ---
 
@@ -105,15 +105,25 @@ Carry-forward from Phase 17:
 - **Paged FlashAttention** — original Phase 6 milestone never
   landed. Separate design effort.
 
-## Phase 18 — sub-byte + quantized completeness
+## Phase 18 — sub-byte + quantized completeness (complete; shipped alpha.35)
 
-- **f16 / bf16 activations for `GgufMmvqPlan`** — f32 only today.
-  llama.cpp upstream has these paths; need to vendor + adapt.
+- **f16 / bf16 activations for `GgufMmvqPlan`** ✓ Phase 18.1. All
+  11 block formats × 2 new activation dtypes × contig + strided =
+  44 new FFI symbols. Dst dtype matches activation (PyTorch
+  convention); f32 accumulator. Type-0/1 formats use templated
+  `dequantize_mul_mat_vec<ActT, DstT, BlockT>`; k-quants got
+  per-format mechanical rewrites matching the Phase 14.5 actstrided
+  pattern. Existing f32-only FFI untouched.
+
+Carry-forward from Phase 18:
+
 - **MMVQ multi-dim activation strides** — Phase 14.5 chose a single
   `stride_y: i64` model (MMVQ is rank-1 at the kernel surface).
-  If Fuel hits a case where they need rank > 1 at the FFI level
-  (instead of host-loop batching), revisit and add the multi-dim
-  shape + stride params.
+  Still no signal from Fuel that multi-dim FFI strides are needed.
+  Defer until concrete use case.
+- **Mixed-dtype paths** (f16 activation → f32 dst, or vice versa) —
+  not implemented; callers can post-cast if they need the alternative.
+  Output dtype always matches activation dtype.
 
 ## Phase 19 — segment + embedding BW completion
 

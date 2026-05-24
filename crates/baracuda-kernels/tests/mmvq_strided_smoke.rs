@@ -609,7 +609,7 @@ fn mmvq_w_offset_alignment_aligned_ok() {
             block_format: fmt,
             w_start_byte_offset: off,
         };
-        let r = GgufMmvqPlan::select(&stream, &desc, PlanPreference::default());
+        let r = GgufMmvqPlan::<f32>::select(&stream, &desc, PlanPreference::default());
         assert!(
             r.is_ok(),
             "expected aligned offset {off} for {fmt:?} to be accepted; got {:?}",
@@ -659,7 +659,7 @@ fn mmvq_w_offset_alignment_misaligned_rejected_debug() {
             block_format: fmt,
             w_start_byte_offset: off,
         };
-        let r = GgufMmvqPlan::select(&stream, &desc, PlanPreference::default());
+        let r = GgufMmvqPlan::<f32>::select(&stream, &desc, PlanPreference::default());
         match r {
             Err(Error::InvalidProblem(_)) => {} // expected
             Err(e) => panic!(
@@ -692,7 +692,7 @@ fn mmvq_w_offset_alignment_two_byte_ok_on_2aligned() {
             block_format: fmt,
             w_start_byte_offset: 2,
         };
-        let r = GgufMmvqPlan::select(&stream, &desc, PlanPreference::default());
+        let r = GgufMmvqPlan::<f32>::select(&stream, &desc, PlanPreference::default());
         assert!(
             r.is_ok(),
             "expected offset=2 on {fmt:?} (2-byte aligned) to be accepted; got {:?}",

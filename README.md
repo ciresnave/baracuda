@@ -8,9 +8,9 @@
 A unified Rust ML-op facade over the NVIDIA CUDA ecosystem.
 
 ![License](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue)
-![Status](https://img.shields.io/badge/status-alpha.34-orange)
+![Status](https://img.shields.io/badge/status-alpha.35-orange)
 ![CUDA](https://img.shields.io/badge/CUDA-12.x-76b900)
-![Tests](https://img.shields.io/badge/regression-1920%2F0-success)
+![Tests](https://img.shields.io/badge/regression-1936%2F0-success)
 
 ## What baracuda is
 
@@ -40,8 +40,8 @@ talk to one library directly.
 
 ## Status
 
-**In active development — alpha.34.** Roughly **1920 GPU tests passing**
-on an RTX 4070 (sm_89), across **608 binary targets**.
+**In active development — alpha.35.** Roughly **1936 GPU tests passing**
+on an RTX 4070 (sm_89), across **610 binary targets**.
 
 Phase coverage (see [`ARCHITECTURE.md`](ARCHITECTURE.md) for the phase
 matrix):
@@ -66,7 +66,8 @@ matrix):
 | 15 | Quick wins + correctness cleanup (alpha.32) — MMVQ alignment guard, OneHot/Nonzero i64 wrappers, MoE fixture race fix | done |
 | 16 | Pool completion (alpha.33) — bit-exact adaptive pool {1,2,3}d, bespoke LpPool {1,2}d, bespoke FractionalMaxPool {2,3}d; 48 new FFI symbols | done |
 | 17 | SDPA / attention completion (alpha.34) — Flash SDPA sm_89 strided FW + SDPA BW GQA-broadcast atomicAdd | done |
-| 18+ | Sub-byte / quantized completeness, segment + embedding BW, linalg completion, Hopper / Blackwell, 1.0 freeze | pending (see [`ROADMAP.md`](ROADMAP.md)) |
+| 18 | Sub-byte / quantized completeness (alpha.35) — f16/bf16 activations for `GgufMmvqPlan` across all 11 block formats × contig + strided; 44 new FFI symbols | done |
+| 19+ | Segment + embedding BW completion, linalg completion, Hopper / Blackwell, 1.0 freeze | pending (see [`ROADMAP.md`](ROADMAP.md)) |
 
 API stability is **not** promised before beta.0. Breaking changes ship in
 each alpha bump and are documented in the workspace `CHANGELOG.md`.
@@ -77,8 +78,8 @@ Add the kernel facade and the driver crate:
 
 ```toml
 [dependencies]
-baracuda-kernels = { version = "0.0.1-alpha.34", features = ["sm89", "cudnn"] }
-baracuda-driver  = "0.0.1-alpha.34"
+baracuda-kernels = { version = "0.0.1-alpha.35", features = ["sm89", "cudnn"] }
+baracuda-driver  = "0.0.1-alpha.35"
 ```
 
 A representative example — single-axis numerically stable softmax over a

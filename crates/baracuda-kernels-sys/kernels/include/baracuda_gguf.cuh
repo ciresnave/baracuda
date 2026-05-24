@@ -194,6 +194,37 @@ static_assert(sizeof(block_q8_K) == sizeof(float) + QK_K + QK_K/16*sizeof(int16_
               "wrong q8_K block size/padding");
 
 // =============================================================================
+// Activation / destination dtype cast helpers — Phase 18.1.
+//
+// The MMVQ accumulator stays f32 for every supported activation dtype
+// (f32 / f16 / bf16). These helpers fold the f32↔dtype conversion at the
+// read/write sites of the kernel; the dequant arithmetic and the
+// warp-shuffle reduction are entirely f32-typed.
+// =============================================================================
+
+template <typename T>
+struct mmvq_io {
+    __device__ __forceinline__ static float load(const T * p) { return *p; }
+    __device__ __forceinline__ static void  store(T * p, float v) { *p = v; }
+};
+
+template <>
+struct mmvq_io<__half> {
+    __device__ __forceinline__ static float load(const __half * p) { return __half2float(*p); }
+    __device__ __forceinline__ static void  store(__half * p, float v) { *p = __float2half(v); }
+};
+
+template <>
+struct mmvq_io<__nv_bfloat16> {
+    __device__ __forceinline__ static float load(const __nv_bfloat16 * p) {
+        return __bfloat162float(*p);
+    }
+    __device__ __forceinline__ static void  store(__nv_bfloat16 * p, float v) {
+        *p = __float2bfloat16(v);
+    }
+};
+
+// =============================================================================
 // Per-block dequant primitives (used by the type-0/1 dequantize_block path
 // and by the FP-activation MMVQ path).
 // =============================================================================
@@ -546,10 +577,11 @@ static __device__ void dequantize_block_q8_K_tmpl(
 // Dequantize-mul-mat-vec (FP-activation MMVQ) kernels. Block: WARP_SIZE x mmv_y.
 // =============================================================================
 
-template <int qk, int qr, dequantize_kernel_t dequantize_kernel>
+template <int qk, int qr, dequantize_kernel_t dequantize_kernel,
+          typename ActT = float, typename DstT = float>
 static __device__ void dequantize_mul_mat_vec(
-    const void * __restrict__ vx, const dfloat * __restrict__ y,
-    float * __restrict__ dst, const int ncols, const int nrows)
+    const void * __restrict__ vx, const ActT * __restrict__ y,
+    DstT * __restrict__ dst, const int ncols, const int nrows)
 {
     const int row = blockIdx.x*blockDim.y + threadIdx.y;
     if (row >= nrows) return;
@@ -571,8 +603,8 @@ static __device__ void dequantize_mul_mat_vec(
         for (int j = 0; j < vals_per_iter; j += 2) {
             dfloat2 v;
             dequantize_kernel(vx, ib, iqs + j/qr, v);
-            tmp += v.x * y[iybs + iqs + j/qr + 0];
-            tmp += v.y * y[iybs + iqs + j/qr + y_offset];
+            tmp += v.x * mmvq_io<ActT>::load(&y[iybs + iqs + j/qr + 0]);
+            tmp += v.y * mmvq_io<ActT>::load(&y[iybs + iqs + j/qr + y_offset]);
         }
     }
 
@@ -582,7 +614,7 @@ static __device__ void dequantize_mul_mat_vec(
     }
 
     if (tid == 0) {
-        dst[row] = tmp;
+        mmvq_io<DstT>::store(&dst[row], tmp);
     }
 }
 
@@ -615,10 +647,11 @@ static __device__ void dequantize_mul_mat_vec(
 // (`vx_adjusted = (const u8*)vx + w_start_byte_offset`) so the kernel is
 // unchanged on the W side. Zero perf cost when offset = 0.
 
-template <int qk, int qr, dequantize_kernel_t dequantize_kernel>
+template <int qk, int qr, dequantize_kernel_t dequantize_kernel,
+          typename ActT = float, typename DstT = float>
 static __device__ void dequantize_mul_mat_vec_actstrided(
-    const void * __restrict__ vx, const dfloat * __restrict__ y,
-    float * __restrict__ dst, const int ncols, const int nrows,
+    const void * __restrict__ vx, const ActT * __restrict__ y,
+    DstT * __restrict__ dst, const int ncols, const int nrows,
     const int64_t stride_y)
 {
     const int row = blockIdx.x*blockDim.y + threadIdx.y;
@@ -643,8 +676,8 @@ static __device__ void dequantize_mul_mat_vec_actstrided(
             dequantize_kernel(vx, ib, iqs + j/qr, v);
             const int64_t y0 = (int64_t)(iybs + iqs + j/qr + 0) * stride_y;
             const int64_t y1 = (int64_t)(iybs + iqs + j/qr + y_offset) * stride_y;
-            tmp += v.x * y[y0];
-            tmp += v.y * y[y1];
+            tmp += v.x * mmvq_io<ActT>::load(&y[y0]);
+            tmp += v.y * mmvq_io<ActT>::load(&y[y1]);
         }
     }
 
@@ -654,7 +687,7 @@ static __device__ void dequantize_mul_mat_vec_actstrided(
     }
 
     if (tid == 0) {
-        dst[row] = tmp;
+        mmvq_io<DstT>::store(&dst[row], tmp);
     }
 }
 
