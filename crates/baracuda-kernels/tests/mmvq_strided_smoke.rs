@@ -13,7 +13,7 @@
 
 use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
 use baracuda_kernels::{
-    contiguous_stride, BlockQ8K, BlockQ8_0, BlockQ4_0, GgufBlockFormat, GgufMmvqArgs,
+    contiguous_stride, BlockQ8K, BlockQ8_0, BlockQ4_0, Error, GgufBlockFormat, GgufMmvqArgs,
     GgufMmvqDescriptor, GgufMmvqPlan, PlanPreference, TensorMut, TensorRef, Workspace, U8,
 };
 
@@ -571,4 +571,132 @@ fn mmvq_q8_k_stride0_broadcast() {
     let mut got = [0f32; 1];
     dev_o.copy_to_host(&mut got).expect("dl");
     check_close(&got, &expected, 1e-3, "Q8_K stride0 broadcast");
+}
+
+// ---- Phase 15.1: debug-build alignment guard for w_start_byte_offset ------
+
+/// Aligned offset passes `select()` for every block format.
+///
+/// Q4_0 / Q5_0 / Q8_0 / Q3_K / Q6_K require 2-byte alignment; Q4_1 /
+/// Q5_1 / Q2_K / Q4_K / Q5_K / Q8_K require 4-byte. Pass each format
+/// an offset that satisfies its requirement and confirm `select()`
+/// returns Ok.
+#[test]
+#[ignore]
+fn mmvq_w_offset_alignment_aligned_ok() {
+    let (_ctx, stream) = setup();
+    // Each entry: (format, an aligned non-zero offset).
+    // All chosen offsets are multiples of the format's block byte size
+    // (i.e. type_size()), which is the natural caller pattern — bumping
+    // the offset by one full matrix's worth of bytes.
+    let cases: &[(GgufBlockFormat, i64)] = &[
+        (GgufBlockFormat::Q4_0, 18),
+        (GgufBlockFormat::Q4_1, 20),
+        (GgufBlockFormat::Q5_0, 22),
+        (GgufBlockFormat::Q5_1, 24),
+        (GgufBlockFormat::Q8_0, 34),
+        (GgufBlockFormat::Q2K, 84),
+        (GgufBlockFormat::Q3K, 110),
+        (GgufBlockFormat::Q4K, 144),
+        (GgufBlockFormat::Q5K, 176),
+        (GgufBlockFormat::Q6K, 210),
+        (GgufBlockFormat::Q8K, 292),
+    ];
+    for &(fmt, off) in cases {
+        let desc = GgufMmvqDescriptor {
+            nrows: 1,
+            ncols: fmt.block_size() as i32,
+            block_format: fmt,
+            w_start_byte_offset: off,
+        };
+        let r = GgufMmvqPlan::select(&stream, &desc, PlanPreference::default());
+        assert!(
+            r.is_ok(),
+            "expected aligned offset {off} for {fmt:?} to be accepted; got {:?}",
+            r.err()
+        );
+    }
+}
+
+/// Misaligned offsets are rejected with `Error::InvalidProblem` in
+/// debug builds.
+///
+/// Half-aligned (offset = 1) is invalid for every format — half / half2
+/// / float all require ≥ 2. Two-aligned (offset = 2) is invalid for the
+/// 4-byte-aligned formats (Q4_1 / Q5_1 / Q2_K / Q4_K / Q5_K / Q8_K).
+#[test]
+#[ignore]
+fn mmvq_w_offset_alignment_misaligned_rejected_debug() {
+    let (_ctx, stream) = setup();
+
+    // (format, misaligned offset that the debug guard must reject).
+    let cases: &[(GgufBlockFormat, i64)] = &[
+        // offset=1 is bad for everyone.
+        (GgufBlockFormat::Q4_0, 1),
+        (GgufBlockFormat::Q4_1, 1),
+        (GgufBlockFormat::Q5_0, 1),
+        (GgufBlockFormat::Q5_1, 1),
+        (GgufBlockFormat::Q8_0, 1),
+        (GgufBlockFormat::Q2K, 1),
+        (GgufBlockFormat::Q3K, 1),
+        (GgufBlockFormat::Q4K, 1),
+        (GgufBlockFormat::Q5K, 1),
+        (GgufBlockFormat::Q6K, 1),
+        (GgufBlockFormat::Q8K, 1),
+        // offset=2 is bad for the 4-byte-aligned k-quants and Q4_1/Q5_1.
+        (GgufBlockFormat::Q4_1, 2),
+        (GgufBlockFormat::Q5_1, 2),
+        (GgufBlockFormat::Q2K, 2),
+        (GgufBlockFormat::Q4K, 2),
+        (GgufBlockFormat::Q5K, 2),
+        (GgufBlockFormat::Q8K, 2),
+    ];
+
+    for &(fmt, off) in cases {
+        let desc = GgufMmvqDescriptor {
+            nrows: 1,
+            ncols: fmt.block_size() as i32,
+            block_format: fmt,
+            w_start_byte_offset: off,
+        };
+        let r = GgufMmvqPlan::select(&stream, &desc, PlanPreference::default());
+        match r {
+            Err(Error::InvalidProblem(_)) => {} // expected
+            Err(e) => panic!(
+                "expected InvalidProblem for {fmt:?} @ offset {off}; got Err({e:?})"
+            ),
+            Ok(_) => panic!(
+                "expected InvalidProblem for {fmt:?} @ offset {off}; got Ok(_)"
+            ),
+        }
+    }
+}
+
+/// 2-byte offset is fine on the 2-byte-aligned formats — sanity check
+/// that the guard isn't over-rejecting.
+#[test]
+#[ignore]
+fn mmvq_w_offset_alignment_two_byte_ok_on_2aligned() {
+    let (_ctx, stream) = setup();
+    let cases: &[GgufBlockFormat] = &[
+        GgufBlockFormat::Q4_0,
+        GgufBlockFormat::Q5_0,
+        GgufBlockFormat::Q8_0,
+        GgufBlockFormat::Q3K,
+        GgufBlockFormat::Q6K,
+    ];
+    for &fmt in cases {
+        let desc = GgufMmvqDescriptor {
+            nrows: 1,
+            ncols: fmt.block_size() as i32,
+            block_format: fmt,
+            w_start_byte_offset: 2,
+        };
+        let r = GgufMmvqPlan::select(&stream, &desc, PlanPreference::default());
+        assert!(
+            r.is_ok(),
+            "expected offset=2 on {fmt:?} (2-byte aligned) to be accepted; got {:?}",
+            r.err()
+        );
+    }
 }

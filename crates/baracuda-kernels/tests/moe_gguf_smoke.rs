@@ -1,9 +1,24 @@
 //! Real-GPU smoke test for `MoePlan::ScalarGguf` — Phase 8 Milestone 8.5.
 //!
-//! Tiny fixture (T=4 tokens, num_experts=2, top_k=2, D_model=32 — must
+//! Tiny fixture (T=4 tokens, num_experts=2, top_k=1, D_model=32 — must
 //! be a multiple of the Q8_0 block size, D_expert=32) with Q8_0-packed
 //! expert weights. Verifies the kernel output against a CPU reference
 //! that dequantizes each block and dispatches manually.
+//!
+//! ## Routing convention (Phase 15.3 re-derivation)
+//!
+//! The vendored Fuel/llama.cpp kernel writes `out[token_id, row] = v`
+//! *without* accumulation — the same address gets overwritten if
+//! multiple `m_idx` entries share a `token_id`. CUDA block execution
+//! order is non-deterministic, so when `top_k > 1` and several experts
+//! route to the same token, the result of any cell is the value from
+//! whichever expert block happened to write last. To get a
+//! deterministic, race-free comparison against a CPU reference, this
+//! fixture uses `top_k = 1` with each token routed to a single,
+//! distinct expert (token `t` → expert `t % num_experts`). Production
+//! callers that need per-token mixing across `top_k > 1` experts must
+//! pre-allocate an [`MoePlan::Wmma`]-style scratch + accumulate
+//! upstream of the kernel.
 //!
 //! Marked `#[ignore]` per project convention.
 
@@ -29,7 +44,7 @@ fn moe_scalar_gguf_q8_0_small_fixture() {
 
     const T: i32 = 4;
     const NE: i32 = 2;
-    const K: i32 = 2;
+    const K: i32 = 1; // top_k = 1: each token routes to exactly one expert (no race).
     const DM: i32 = 32; // = QK8_0 block size, so D_model = 1 block per row
     const DE: i32 = 32;
 
@@ -44,8 +59,8 @@ fn moe_scalar_gguf_q8_0_small_fixture() {
     // Per-expert weights as Q8_0 blocks. One block per (expert, n) row.
     let mut blocks_host = Vec::<BlockQ8_0>::with_capacity((NE * DE) as usize);
     // To keep the reference exact, encode weights such that
-    //   w[e, n, k] = scale_e * (q[e, n, k] - offset)
-    // with offset = 0 and a known per-row scale.
+    //   w[e, n, k] = scale_e * q[e, n, k]
+    // with a known per-row scale.
     let mut weights_dequant = vec![0.0f32; (NE * DE * DM) as usize];
     for e in 0..NE {
         for n in 0..DE {
@@ -76,38 +91,25 @@ fn moe_scalar_gguf_q8_0_small_fixture() {
     let weights_u8: Vec<U8> = weights_bytes.iter().copied().map(U8).collect();
     let weights_bytes_len = weights_u8.len() as i32;
 
-    // Routing: every token routes to both experts (k=2) with weights
-    // 0.6 + 0.4.
-    let mut sorted_token_ids = Vec::<i32>::with_capacity((T * K) as usize);
-    let mut flat_expert_ids = Vec::<i32>::with_capacity((T * K) as usize);
+    // Routing: token t -> expert (t % NE), top_k=1. One m_idx per token,
+    // so every output cell is written exactly once (no last-write-wins
+    // race). `topk_weights` is per-token (length T) and read by the
+    // kernel via `topk_weights[token_id]`.
+    let mut sorted_token_ids = Vec::<i32>::with_capacity(T as usize);
+    let mut flat_expert_ids = Vec::<i32>::with_capacity(T as usize);
     let mut topk_weight_flat = Vec::<f32>::with_capacity(T as usize);
-    // The scalar GGUF kernel reads `topk_weights[token_id]` (per-token
-    // scaling) when `topk_weights != null` — length T, not T*K.
     for t in 0..T {
         sorted_token_ids.push(t);
-        flat_expert_ids.push(0);
-    }
-    for t in 0..T {
-        sorted_token_ids.push(t);
-        flat_expert_ids.push(1);
-    }
-    for t in 0..T {
-        // single mixing factor per token (Fuel's convention when topk_weights
-        // is non-null and length == T).
-        topk_weight_flat.push(0.6 + (t as f32) * 0.0); // constant 0.6
+        flat_expert_ids.push(t % NE);
+        topk_weight_flat.push(0.6); // constant mixing factor
     }
     let m_total = sorted_token_ids.len() as i32;
 
     // Reference: scalar GGUF kernel writes
-    //   out[token_id, n] = topk_weights[token_id] * Σ_k act[input_index, k] * w[expert, n, k]
-    // for each (m_idx -> (token_id, expert)) pair. With per-token
-    // topk_weights the same row is written twice (once per expert) —
-    // **last write wins** in the scalar kernel (no accumulation).
-    // For our fixture the last write for token t is from expert 1.
+    //   out[token_id, n] = topk_weights[token_id] * Σ_k act[token_id, k] * w[expert, n, k]
+    // for each (m_idx -> (token_id, expert)) pair. With top_k=1
+    // routing, every cell is written exactly once.
     let mut expected = vec![0.0f32; (T * DE) as usize];
-    // Replay the kernel's write order: m = 0..T (expert 0), then m =
-    // T..2T (expert 1). The last write for each token comes from
-    // expert 1.
     for m in 0..m_total {
         let token_id = sorted_token_ids[m as usize];
         let expert = flat_expert_ids[m as usize];
@@ -197,19 +199,20 @@ fn moe_scalar_gguf_q8_0_small_fixture() {
 
     let mut got = vec![0f32; (T * DE) as usize];
     out_dev.copy_to_host(&mut got).expect("dl");
+
+    // Tolerance: kernel stages f32 activations through q8_1 (per-token
+    // amax / 127 quantization), introducing ~1/127 ≈ 0.8% per-element
+    // rounding error in the activation factor. Weights are exact Q8_0
+    // (test-built). Per-cell relative tolerance ~1.5% to absorb that
+    // plus warp-reduce ordering.
     for i in 0..(T * DE) as usize {
         let g = got[i];
         let e = expected[i];
-        // TODO(moe-ref-convention): the CPU reference math here doesn't
-        // match the vendored kernel's actual semantics (got/expected
-        // ratio = 0.5, suggesting a topk_weight indexing or accumulation
-        // convention mismatch). The kernel itself is llama.cpp-lineage
-        // production code via Fuel — it runs without crashing and
-        // returns plausible output. Smoke-test the dispatch path only
-        // until the reference math is re-derived against the actual
-        // kernel convention; full correctness verification deferred to
-        // a follow-up milestone. See [moe-cpu-reference-mismatch] memo.
-        let _ = (g, e);
-        let _ = i;
+        let abs_tol = 0.015 * e.abs().max(0.01);
+        assert!(
+            (g - e).abs() <= abs_tol,
+            "moe_scalar_gguf: cell {i}: got={g:.6} expected={e:.6} diff={:.6} tol={abs_tol:.6}",
+            (g - e).abs(),
+        );
     }
 }

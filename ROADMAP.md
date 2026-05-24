@@ -24,29 +24,34 @@ passing** on RTX 4070 (sm_89) across **602 binary targets**.
 
 ---
 
-## Phase 15 — quick wins + correctness bugs (proposed)
+## Phase 15 — quick wins + correctness bugs (complete; shipped alpha.32)
 
-Small, well-understood items grouped to clear the easy backlog in one
-release. None are blocking; all are well-scoped.
+- **MMVQ `w_start_byte_offset` alignment guard** ✓ Phase 15.1. Debug-
+  build assertion in `GgufMmvqPlan::select()` gated on
+  `#[cfg(debug_assertions)]` (release builds elide the check).
+  Per-block-format alignment requirements: 2 bytes for
+  Q4_0/Q5_0/Q8_0/Q3_K/Q6_K; 4 bytes for Q4_1/Q5_1/Q2_K/Q4_K/Q5_K/Q8_K.
+- **OneHot / Nonzero i64 Rust wrappers** ✓ Phase 15.2. Both
+  refactored to take `I: IndexElement = i32` (default preserves
+  source-compat). MaskedFill correctly out of scope — it takes a
+  `u8` Bool mask, not an index tensor (Phase 11.5's grouping was
+  wrong; no `masked_fill_i64idx_*` FFI symbols exist).
+- **MoE fixture race fix** ✓ Phase 15.3. The previous `top_k=2`
+  test fixture had two experts writing to the same output address
+  with no kernel-side synchronization. Rewrote to `top_k=1` with
+  `token t → expert t % num_experts`. Reference math was already
+  correct; the kernel's no-synchronization contract is now
+  surfaced in `OP-MATRIX.md` (MoE row) so callers know.
 
-- **MMVQ `w_start_byte_offset` alignment guard** — Phase 14.5 added
-  the offset parameter but no debug-build assertion for block formats
-  that require alignment (Q4_K is 16-byte aligned; Q5_K, Q6_K
-  similar). Misuse is silent-wrong today. Effort: ~10 LOC + a
-  smoke test per affected block format.
-- **OneHot / Nonzero / MaskedFill i64 Rust wrappers** — Phase 11.5
-  shipped the `*_i64idx_*` FFI symbols, but the Rust plan wrappers
-  for these three plans are still `i32`-only. Effort: refactor each
-  plan to take `I: IndexElement = i32` (mirrors the Phase 11.5
-  pattern applied to Gather / Scatter / IndexSelect / Embedding).
-- **CTC backward γ-accumulation bug** — Phase 5 known issue. Forward
-  validated against PyTorch; backward only smoke-tested. Finite-
-  difference helper code retained for re-validation after fix.
-- **MoE CPU-reference math fix** — Phase 8 vendor. Kernel runs and
-  is smoke-tested; the host-side reference math is wrong so the
-  numerical-assertion code is currently disabled. Pure test-layer
-  work — the kernel is already validated against the smoke
-  contract; this is about restoring the reference comparison.
+Items pre-emptively listed here in an earlier ROADMAP revision but
+no longer outstanding:
+
+- ~~**CTC backward γ-accumulation bug**~~ — already fixed
+  2026-05-16 (see `loss_ctc_backward_smoke.rs` header comment). The
+  earlier ROADMAP entry was stale agent-memory inheritance. Hand-
+  computed and PyTorch-invariant tests cover f32/f16/bf16/f64.
+- ~~**MoE CPU-reference math fix**~~ — turned out to be a fixture
+  race, fixed in 15.3 above.
 
 ## Phase 16 — pool completion (proposed)
 

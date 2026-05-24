@@ -1,13 +1,20 @@
 //! Real-GPU smoke test for `MoePlan::WmmaGguf` — Phase 8 Milestone 8.5.
 //!
-//! Same fixture as `moe_gguf_smoke.rs` (T=4, NE=2, K=2, DM=32, DE=32)
-//! with Q8_0-packed expert weights but f16 activations and the WMMA
-//! + GGUF combined path. Compares against a CPU reference that
-//! dequantizes the Q8_0 blocks then dispatches manually.
+//! Same fixture style as `moe_gguf_smoke.rs` (T=4, NE=2, K=1, DM=32,
+//! DE=32) with Q8_0-packed expert weights but f16 activations and
+//! the WMMA + GGUF combined path. Compares against a CPU reference
+//! that dequantizes the Q8_0 blocks then dispatches manually.
 //!
-//! The WMMA path includes per-token accumulation across experts when
-//! `topk_weights` is non-null (unlike the scalar path which last-write
-//! wins).
+//! ## Routing convention (Phase 15.3 re-derivation)
+//!
+//! See `moe_gguf_smoke.rs` for the full rationale. The vendored
+//! Fuel/llama.cpp WMMA+GGUF prefill kernel writes
+//! `output[token_index * size_n + n_global] = val` (assignment, not
+//! accumulation, line ~1106 of `baracuda_moe.cuh`). When `top_k > 1`
+//! and multiple experts share a `token_id`, the result is the value
+//! from whichever block wrote last, with non-deterministic CUDA
+//! block scheduling. This fixture uses `top_k = 1` for a
+//! deterministic comparison.
 //!
 //! Marked `#[ignore]` per project convention.
 
@@ -33,7 +40,7 @@ fn moe_wmma_gguf_q8_0_small_fixture() {
 
     const T: i32 = 4;
     const NE: i32 = 2;
-    const K: i32 = 2;
+    const K: i32 = 1;
     const DM: i32 = 32;
     const DE: i32 = 32;
 
@@ -76,40 +83,30 @@ fn moe_wmma_gguf_q8_0_small_fixture() {
     let weights_u8: Vec<U8> = weights_bytes.iter().copied().map(U8).collect();
     let weights_bytes_len = weights_u8.len() as i32;
 
-    // Routing: tokens 0..T -> expert 0 (weight 0.6), then expert 1 (0.4).
-    let mut sorted_token_ids = Vec::<i32>::with_capacity((T * K) as usize);
-    let mut flat_expert_ids = Vec::<i32>::with_capacity((T * K) as usize);
-    let mut topk_weight_flat = Vec::<f32>::with_capacity((T * K) as usize);
-    for t in 0..T {
-        sorted_token_ids.push(t);
-        flat_expert_ids.push(0);
-        topk_weight_flat.push(0.6);
-    }
-    for t in 0..T {
-        sorted_token_ids.push(t);
-        flat_expert_ids.push(1);
-        topk_weight_flat.push(0.4);
-    }
+    // Routing: token t -> expert (t % NE), top_k=1. Pre-sorted by expert.
+    let mut routing: Vec<(i32, i32)> = (0..T).map(|t| (t % NE, t)).collect();
+    routing.sort_by_key(|x| x.0);
+    let flat_expert_ids: Vec<i32> = routing.iter().map(|x| x.0).collect();
+    let sorted_token_ids: Vec<i32> = routing.iter().map(|x| x.1).collect();
+    let topk_weight_per_m: Vec<f32> = vec![0.6; T as usize];
     let m_total = sorted_token_ids.len() as i32;
 
     // Reference: WMMA+GGUF kernel writes
-    //   out[token_id, n] = topk_weights[token_id] * Σ_k acts[input_index, k] * w[expert, n, k]
-    // where input_index = token_id when topk_weights is non-null.
-    // Last write wins (no accumulation in the prefill kernel as
-    // currently shipped — kernel uses `output[...] = val`, not `+= val`).
+    //   out[token_id, n] = topk_weights[token_id] * Σ_k acts[token_id, k] * w[expert, n, k]
+    // (assignment; with top_k=1 each cell written once.)
     let mut expected = vec![0.0f32; (T * DE) as usize];
-    for m in 0..m_total {
-        let token_id = sorted_token_ids[m as usize];
-        let expert = flat_expert_ids[m as usize];
-        let scale = topk_weight_flat[token_id as usize];
-        for n in 0..DE {
+    for m in 0..m_total as usize {
+        let token_id = sorted_token_ids[m] as usize;
+        let expert = flat_expert_ids[m] as usize;
+        let scale = topk_weight_per_m[m];
+        for n in 0..DE as usize {
             let mut acc = 0.0f32;
-            for k in 0..DM {
-                let a = acts_host[(token_id * DM + k) as usize].to_f32();
-                let w = weights_dequant[((expert * DE + n) * DM + k) as usize];
+            for k in 0..DM as usize {
+                let a = acts_host[token_id * DM as usize + k].to_f32();
+                let w = weights_dequant[(expert * DE as usize + n) * DM as usize + k];
                 acc += a * w;
             }
-            expected[(token_id * DE + n) as usize] = scale * acc;
+            expected[token_id * DE as usize + n] = scale * acc;
         }
     }
 
@@ -118,9 +115,7 @@ fn moe_wmma_gguf_q8_0_small_fixture() {
     let weights_dev: DeviceBuffer<U8> = DeviceBuffer::from_slice(&ctx, &weights_u8).expect("up w");
     let sorted_dev: DeviceBuffer<i32> = DeviceBuffer::from_slice(&ctx, &sorted_token_ids).expect("up s");
     let eids_dev: DeviceBuffer<i32> = DeviceBuffer::from_slice(&ctx, &flat_expert_ids).expect("up eids");
-    let tk_dev: DeviceBuffer<f32> = DeviceBuffer::from_slice(&ctx, &topk_weight_flat).expect("up tk");
-    // WmmaGguf writes f32 output.
-    let out_dev: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, (T * DE) as usize).expect("alloc out");
+    let tk_dev: DeviceBuffer<f32> = DeviceBuffer::from_slice(&ctx, &topk_weight_per_m).expect("up tk");
     let mut ec_dev: DeviceBuffer<i32> = DeviceBuffer::zeros(&ctx, NE as usize).expect("ec");
     let mut eo_dev: DeviceBuffer<i32> = DeviceBuffer::zeros(&ctx, (NE + 1) as usize).expect("eo");
     let ew_dev: DeviceBuffer<f16> = DeviceBuffer::zeros(&ctx, (T * K) as usize).expect("ew");
@@ -138,34 +133,12 @@ fn moe_wmma_gguf_q8_0_small_fixture() {
     };
     let plan = MoePlan::select(&stream, &desc, PlanPreference::default()).expect("select");
 
-    // The output tensor in MoeArgs is generic over T = activation
-    // element. For the WmmaGguf path the kernel writes f32, but the
-    // FFI's `out_ptr` is a `*mut c_void` so casting through the
-    // f16-typed view is safe — the byte storage is interpreted as
-    // f32 by the kernel.
-    let out_dev_f16_view: DeviceBuffer<f16> = unsafe {
-        // Allocate a *separate* f16 buffer of the same byte length;
-        // we'll never read from it directly. The kernel writes via
-        // raw pointer to `out_dev` (f32 storage).
-        DeviceBuffer::zeros(&ctx, (T * DE * 2) as usize).expect("alloc placeholder")
-    };
-    // Use `out_dev` (f32) for the actual output via a manual cast
-    // through bytes — see MoeArgs::output below.
-    drop(out_dev_f16_view);
-
-    // We pass the f32 output buffer typed as f16 for the args struct;
-    // the kernel ignores the element type at the FFI surface (it
-    // dispatches on `desc.element` for input dtype only and writes
-    // f32 unconditionally for WmmaGguf).
-    // Allocate the output as f16 storage with 2x slots (= byte count
-    // of [T * DE] f32) so the lifetime check passes. The kernel
-    // writes f32 over the same memory.
-    let mut out_dev_typed: DeviceBuffer<f16> = unsafe {
-        // Re-interpret: the kernel writes f32 into the byte storage
-        // backing this f16 buffer. Allocate 2*T*DE f16 slots == T*DE
-        // f32 slots worth of bytes.
-        DeviceBuffer::zeros(&ctx, (T * DE * 2) as usize).expect("alloc out typed")
-    };
+    // WmmaGguf writes f32 output. The MoeArgs::output is generic over
+    // T = activation element (f16). We allocate an f16-typed buffer
+    // with 2× the slot count so the byte storage holds T*DE f32
+    // values. The kernel writes f32 directly through the raw pointer.
+    let mut out_dev_typed: DeviceBuffer<f16> =
+        DeviceBuffer::zeros(&ctx, (T * DE * 2) as usize).expect("alloc out typed");
 
     let args = MoeArgs::<f16> {
         activations: TensorRef {
@@ -241,16 +214,19 @@ fn moe_wmma_gguf_q8_0_small_fixture() {
             f32::from_le_bytes([lo[0], lo[1], hi[0], hi[1]])
         })
         .collect();
+
+    // Tolerance: f16 acts + f16 dequant (via half-precision Q8_0
+    // dequant), WMMA tensor-core MMA with f32 accumulator, then
+    // assignment to f32 output. Per-cell relative tolerance ~3%
+    // absorbs the f16 dequant + ramp rounding.
     for i in 0..(T * DE) as usize {
         let g = got_f32[i];
         let e = expected[i];
-        // Moderate tolerance — WMMA path goes through f16 activations
-        // + f16 dequant weights; the round-trip leaves ~3-4 ULPs of
-        // fp32 + the f16 dequant scale rounding (~ 1e-3 relative).
-        // See moe_gguf_smoke.rs TODO(moe-ref-convention) — same fixture
-        // bug class; smoke-test the dispatch path only until the
-        // reference math matches the kernel's actual semantics.
-        let _ = (g, e);
-        let _ = i;
+        let abs_tol = 0.03 * e.abs().max(1e-3);
+        assert!(
+            (g - e).abs() <= abs_tol,
+            "moe_wmma_gguf: cell {i}: got={g:.6} expected={e:.6} diff={:.6} tol={abs_tol:.6}",
+            (g - e).abs(),
+        );
     }
 }

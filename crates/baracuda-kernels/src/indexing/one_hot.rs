@@ -3,10 +3,11 @@
 //! `out[indices..., c] = 1 if c == src[indices...] else 0`. PyTorch
 //! `torch.nn.functional.one_hot`.
 //!
-//! Input is always `i32` (class indices). Output dtype is configurable
-//! and selected at the plan layer (`f32, f64, i32, bool`). The output
-//! rank is `input_rank + 1` — the new last axis has extent
-//! `num_classes`. Out-of-range src values yield an all-zero row.
+//! Class-index input dtype is generic over [`IndexElement`] (`i32` or
+//! `i64`); output dtype is configurable and selected at the plan layer
+//! (`f32, f64, i32, bool`). The output rank is `input_rank + 1` — the
+//! new last axis has extent `num_classes`. Out-of-range src values yield
+//! an all-zero row.
 //!
 //! The kernel assumes contiguous output (row-major, last axis =
 //! `num_classes`); the caller passes a flat numel for the kernel to
@@ -18,8 +19,9 @@ use core::marker::PhantomData;
 use baracuda_cutlass::{Error, Result};
 use baracuda_driver::Stream;
 use baracuda_kernels_types::{
-    ArchSku, BackendKind, Element, ElementKind, IndexingKind, KernelSku, MathPrecision, OpCategory,
-    PlanPreference, PrecisionGuarantee, TensorMut, TensorRef, Workspace,
+    ArchSku, BackendKind, Element, ElementKind, IndexElement, IndexElementKind, IndexingKind,
+    KernelSku, MathPrecision, OpCategory, PlanPreference, PrecisionGuarantee, TensorMut, TensorRef,
+    Workspace,
 };
 
 use super::gather::map_status;
@@ -40,13 +42,20 @@ pub struct OneHotDescriptor<const N: usize> {
 
 /// Args bundle for a `one_hot` launch.
 ///
-/// The input is a rank-`N-1` tensor of i32 class indices; we expose it
-/// here as a 1-D flat view (callers reshape via `TensorRef`'s strides
-/// since the kernel walks it via `batch_idx = i / num_classes`).
-pub struct OneHotArgs<'a, T: Element, const N: usize> {
+/// The input is a rank-`N-1` tensor of class indices (`i32` or `i64`);
+/// we expose it here as a 1-D flat view (callers reshape via
+/// `TensorRef`'s strides since the kernel walks it via
+/// `batch_idx = i / num_classes`).
+///
+/// Phase 15.2: the index tensor is generic over `I: IndexElement` (`i32`
+/// or `i64`). The plan dispatches to the matching `_i64idx_` FFI symbol
+/// when `I == i64` at launch time. `I` defaults to `i32` for
+/// source-compat with pre-Phase-15.2 callers.
+pub struct OneHotArgs<'a, T: Element, const N: usize, I: IndexElement = i32> {
     /// Class-index input. Treated as a 1-D contiguous array of
-    /// `out_numel / num_classes` cells by the kernel.
-    pub src: TensorRef<'a, i32, 1>,
+    /// `out_numel / num_classes` cells by the kernel. Type parameter
+    /// `I` selects `i32` (legacy) or `i64` (PyTorch default).
+    pub src: TensorRef<'a, I, 1>,
     /// One-hot output. Contiguous, row-major, last axis = num_classes.
     pub out: TensorMut<'a, T, N>,
 }
@@ -59,7 +68,8 @@ pub struct OneHotArgs<'a, T: Element, const N: usize> {
 /// **When to use**: forward one-hot encoding of class indices. No
 /// backward — class indices are non-differentiable.
 ///
-/// **Dtypes**: input always `i32`; output `{f32, f64, i32, bool}`.
+/// **Dtypes**: input index tensor `{i32, i64}`; output
+/// `{f32, f64, i32, bool}`.
 ///
 /// **Shape limits**: output rank `N ∈ [1, 8]`; `num_classes > 0`;
 /// `out_shape[N-1] == num_classes`. Output is row-major contiguous.
@@ -146,7 +156,10 @@ impl<T: Element, const N: usize> OneHotPlan<T, N> {
     }
 
     /// Validate args.
-    pub fn can_implement(&self, args: &OneHotArgs<'_, T, N>) -> Result<()> {
+    ///
+    /// Phase 15.2: generic over `I: IndexElement` so both i32 (legacy)
+    /// and i64 (PyTorch default) class-index buffers are accepted.
+    pub fn can_implement<I: IndexElement>(&self, args: &OneHotArgs<'_, T, N, I>) -> Result<()> {
         if args.out.shape != self.desc.out_shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::OneHotPlan: out shape mismatch with descriptor",
@@ -205,11 +218,15 @@ impl<T: Element, const N: usize> OneHotPlan<T, N> {
     }
 
     /// Launch.
-    pub fn run(
+    ///
+    /// Phase 15.2: generic over `I: IndexElement`. Dispatches to the
+    /// matching `_i64idx_` FFI symbol when
+    /// `I::KIND == IndexElementKind::I64`.
+    pub fn run<I: IndexElement>(
         &self,
         stream: &Stream,
         _workspace: Workspace<'_>,
-        args: OneHotArgs<'_, T, N>,
+        args: OneHotArgs<'_, T, N, I>,
     ) -> Result<()> {
         self.can_implement(&args)?;
         let out_numel = args.out.numel();
@@ -220,8 +237,8 @@ impl<T: Element, const N: usize> OneHotPlan<T, N> {
         let out_ptr = args.out.data.as_raw().0 as *mut c_void;
         let stream_ptr = stream.as_raw() as *mut c_void;
 
-        let status = match T::KIND {
-            ElementKind::F32 => unsafe {
+        let status = match (T::KIND, I::KIND) {
+            (ElementKind::F32, IndexElementKind::I32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_one_hot_f32_run(
                     out_numel,
                     self.desc.num_classes,
@@ -232,7 +249,7 @@ impl<T: Element, const N: usize> OneHotPlan<T, N> {
                     stream_ptr,
                 )
             },
-            ElementKind::F64 => unsafe {
+            (ElementKind::F64, IndexElementKind::I32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_one_hot_f64_run(
                     out_numel,
                     self.desc.num_classes,
@@ -243,7 +260,7 @@ impl<T: Element, const N: usize> OneHotPlan<T, N> {
                     stream_ptr,
                 )
             },
-            ElementKind::I32 => unsafe {
+            (ElementKind::I32, IndexElementKind::I32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_one_hot_i32_run(
                     out_numel,
                     self.desc.num_classes,
@@ -254,8 +271,52 @@ impl<T: Element, const N: usize> OneHotPlan<T, N> {
                     stream_ptr,
                 )
             },
-            ElementKind::Bool => unsafe {
+            (ElementKind::Bool, IndexElementKind::I32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_one_hot_bool_run(
+                    out_numel,
+                    self.desc.num_classes,
+                    src_ptr,
+                    out_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
+                )
+            },
+            (ElementKind::F32, IndexElementKind::I64) => unsafe {
+                baracuda_kernels_sys::baracuda_kernels_one_hot_i64idx_f32_run(
+                    out_numel,
+                    self.desc.num_classes,
+                    src_ptr,
+                    out_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
+                )
+            },
+            (ElementKind::F64, IndexElementKind::I64) => unsafe {
+                baracuda_kernels_sys::baracuda_kernels_one_hot_i64idx_f64_run(
+                    out_numel,
+                    self.desc.num_classes,
+                    src_ptr,
+                    out_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
+                )
+            },
+            (ElementKind::I32, IndexElementKind::I64) => unsafe {
+                baracuda_kernels_sys::baracuda_kernels_one_hot_i64idx_i32_run(
+                    out_numel,
+                    self.desc.num_classes,
+                    src_ptr,
+                    out_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
+                )
+            },
+            (ElementKind::Bool, IndexElementKind::I64) => unsafe {
+                baracuda_kernels_sys::baracuda_kernels_one_hot_i64idx_bool_run(
                     out_numel,
                     self.desc.num_classes,
                     src_ptr,

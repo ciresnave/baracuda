@@ -1,12 +1,14 @@
 //! `nonzero` plan — Category L (non-differentiable).
 //!
 //! Returns the coordinates where the input is non-zero. Output is a
-//! flat `[max_nz, rank]` i32 coordinate table plus a single-element
-//! i32 counter that the launcher zeros via `cudaMemsetAsync` before
-//! the kernel runs.
+//! flat `[max_nz, rank]` coordinate table plus a single-element counter
+//! that the launcher zeros via `cudaMemsetAsync` before the kernel runs.
 //!
-//! Trailblazer dtype coverage: `f32, f64, i32, bool` input. Output is
-//! always i32 coordinates.
+//! Phase 15.2: the output coord dtype is generic over [`IndexElement`]
+//! (`i32` or `i64`); the counter shares the same dtype. Default
+//! `I = i32` for source-compat with pre-Phase-15.2 callers.
+//!
+//! Trailblazer dtype coverage: `f32, f64, i32, bool` input.
 //!
 //! **Output ordering caveat**: the kernel uses a single global atomic
 //! counter for slot assignment, so the output is NOT row-major (rather
@@ -22,8 +24,9 @@ use core::marker::PhantomData;
 use baracuda_cutlass::{Error, Result};
 use baracuda_driver::Stream;
 use baracuda_kernels_types::{
-    ArchSku, BackendKind, Element, ElementKind, IndexingKind, KernelSku, MathPrecision, OpCategory,
-    PlanPreference, PrecisionGuarantee, TensorMut, TensorRef, Workspace,
+    ArchSku, BackendKind, Element, ElementKind, IndexElement, IndexElementKind, IndexingKind,
+    KernelSku, MathPrecision, OpCategory, PlanPreference, PrecisionGuarantee, TensorMut, TensorRef,
+    Workspace,
 };
 
 use super::gather::map_status;
@@ -43,30 +46,36 @@ pub struct NonzeroDescriptor<const N: usize> {
 }
 
 /// Args bundle for a `nonzero` launch.
-pub struct NonzeroArgs<'a, T: Element, const N: usize> {
+///
+/// Phase 15.2: the output coord dtype is generic over `I: IndexElement`
+/// (`i32` or `i64`). The counter shares the same dtype. Defaults to
+/// `I = i32` for source-compat with pre-Phase-15.2 callers (the i64
+/// variant matches PyTorch's `torch.nonzero` convention).
+pub struct NonzeroArgs<'a, T: Element, const N: usize, I: IndexElement = i32> {
     /// Input tensor.
     pub x: TensorRef<'a, T, N>,
-    /// Output coordinate table — 1-D flat i32 view of a logical
-    /// `[max_nz, rank]` table. Length must be at least
-    /// `max_nz * rank` cells.
-    pub out_coords: TensorMut<'a, i32, 1>,
-    /// Single-element i32 counter (launcher zeros it on the stream
-    /// before the kernel runs; after the run, the counter holds the
-    /// actual number of nonzero coords, which may be ≥ max_nz if some
-    /// were discarded).
-    pub counter: TensorMut<'a, i32, 1>,
+    /// Output coordinate table — 1-D flat view of a logical
+    /// `[max_nz, rank]` table. Length must be at least `max_nz * rank`
+    /// cells. Type parameter `I` selects `i32` (legacy) or `i64`
+    /// (PyTorch convention).
+    pub out_coords: TensorMut<'a, I, 1>,
+    /// Single-element counter (launcher zeros it on the stream before
+    /// the kernel runs; after the run, the counter holds the actual
+    /// number of nonzero coords, which may be ≥ max_nz if some were
+    /// discarded). Shares the index dtype `I` with `out_coords`.
+    pub counter: TensorMut<'a, I, 1>,
 }
 
 /// `nonzero` plan.
 ///
 /// Emits the multi-index coordinates of every nonzero element of `x`
-/// into a flat `[max_nz, rank]` `i32` table. Non-differentiable.
+/// into a flat `[max_nz, rank]` index-dtype table. Non-differentiable.
 ///
 /// **When to use**: extract sparse indices from a dense tensor (mask
 /// → coords, sparse-from-dense conversion).
 ///
-/// **Dtypes**: input `{f32, f64, i32, bool}`; output always `i32`
-/// coords.
+/// **Dtypes**: input `{f32, f64, i32, bool}`; output coords `{i32, i64}`
+/// (generic over [`IndexElement`], default `i32` for source-compat).
 ///
 /// **Shape limits**: input rank `N ∈ [1, 8]`. Output table length
 /// must be ≥ `max_nz * N`. Caller picks `max_nz` (set to `numel`
@@ -164,7 +173,10 @@ impl<T: Element, const N: usize> NonzeroPlan<T, N> {
     }
 
     /// Validate args.
-    pub fn can_implement(&self, args: &NonzeroArgs<'_, T, N>) -> Result<()> {
+    ///
+    /// Phase 15.2: generic over `I: IndexElement` so both i32 (legacy)
+    /// and i64 (PyTorch default) output-coord buffers are accepted.
+    pub fn can_implement<I: IndexElement>(&self, args: &NonzeroArgs<'_, T, N, I>) -> Result<()> {
         if args.x.shape != self.desc.shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::NonzeroPlan: x shape mismatch with descriptor",
@@ -222,11 +234,16 @@ impl<T: Element, const N: usize> NonzeroPlan<T, N> {
     }
 
     /// Launch.
-    pub fn run(
+    ///
+    /// Phase 15.2: generic over `I: IndexElement`. Dispatches to the
+    /// matching `_i64idx_` FFI symbol when
+    /// `I::KIND == IndexElementKind::I64` (the i64-output-coords
+    /// variant); default `I = i32` keeps the legacy path.
+    pub fn run<I: IndexElement>(
         &self,
         stream: &Stream,
         _workspace: Workspace<'_>,
-        args: NonzeroArgs<'_, T, N>,
+        args: NonzeroArgs<'_, T, N, I>,
     ) -> Result<()> {
         self.can_implement(&args)?;
         let numel = args.x.numel();
@@ -239,8 +256,8 @@ impl<T: Element, const N: usize> NonzeroPlan<T, N> {
         let stride_x = args.x.stride;
         let rank = N as i32;
 
-        let status = match T::KIND {
-            ElementKind::F32 => unsafe {
+        let status = match (T::KIND, I::KIND) {
+            (ElementKind::F32, IndexElementKind::I32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_nonzero_f32_run(
                     numel,
                     rank,
@@ -255,7 +272,7 @@ impl<T: Element, const N: usize> NonzeroPlan<T, N> {
                     stream_ptr,
                 )
             },
-            ElementKind::F64 => unsafe {
+            (ElementKind::F64, IndexElementKind::I32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_nonzero_f64_run(
                     numel,
                     rank,
@@ -270,7 +287,7 @@ impl<T: Element, const N: usize> NonzeroPlan<T, N> {
                     stream_ptr,
                 )
             },
-            ElementKind::I32 => unsafe {
+            (ElementKind::I32, IndexElementKind::I32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_nonzero_i32_run(
                     numel,
                     rank,
@@ -285,8 +302,68 @@ impl<T: Element, const N: usize> NonzeroPlan<T, N> {
                     stream_ptr,
                 )
             },
-            ElementKind::Bool => unsafe {
+            (ElementKind::Bool, IndexElementKind::I32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_nonzero_bool_run(
+                    numel,
+                    rank,
+                    self.desc.max_nz,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    x_ptr,
+                    coords_ptr,
+                    counter_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
+                )
+            },
+            (ElementKind::F32, IndexElementKind::I64) => unsafe {
+                baracuda_kernels_sys::baracuda_kernels_nonzero_i64idx_f32_run(
+                    numel,
+                    rank,
+                    self.desc.max_nz,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    x_ptr,
+                    coords_ptr,
+                    counter_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
+                )
+            },
+            (ElementKind::F64, IndexElementKind::I64) => unsafe {
+                baracuda_kernels_sys::baracuda_kernels_nonzero_i64idx_f64_run(
+                    numel,
+                    rank,
+                    self.desc.max_nz,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    x_ptr,
+                    coords_ptr,
+                    counter_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
+                )
+            },
+            (ElementKind::I32, IndexElementKind::I64) => unsafe {
+                baracuda_kernels_sys::baracuda_kernels_nonzero_i64idx_i32_run(
+                    numel,
+                    rank,
+                    self.desc.max_nz,
+                    shape.as_ptr(),
+                    stride_x.as_ptr(),
+                    x_ptr,
+                    coords_ptr,
+                    counter_ptr,
+                    core::ptr::null_mut(),
+                    0,
+                    stream_ptr,
+                )
+            },
+            (ElementKind::Bool, IndexElementKind::I64) => unsafe {
+                baracuda_kernels_sys::baracuda_kernels_nonzero_i64idx_bool_run(
                     numel,
                     rank,
                     self.desc.max_nz,

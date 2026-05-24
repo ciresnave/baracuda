@@ -118,6 +118,27 @@ impl GgufMmvqPlan {
                 "GgufMmvqPlan: ncols must be a multiple of the block size",
             ));
         }
+        // Phase 15.1 — debug-build alignment guard for the W-offset.
+        // GGUF block structs have natural alignment ≥ 2 (`half`) or
+        // ≥ 4 (`half2` / `float`). A misaligned `w_start_byte_offset`
+        // turns the host-side pointer arithmetic `(const u8*)x + off`
+        // into a misaligned `const block_qX_*` reload inside the
+        // kernel — silently producing garbage results. Reject up-front
+        // in debug builds; release builds skip the check (zero cost).
+        #[cfg(debug_assertions)]
+        {
+            if desc.w_start_byte_offset < 0 {
+                return Err(Error::InvalidProblem(
+                    "GgufMmvqPlan: w_start_byte_offset must be non-negative",
+                ));
+            }
+            let alignment = required_alignment(desc.block_format);
+            if desc.w_start_byte_offset % alignment != 0 {
+                return Err(Error::InvalidProblem(
+                    "GgufMmvqPlan: w_start_byte_offset must be aligned to the block format's natural alignment (Q4_1/Q5_1/Q2K/Q4K/Q5K/Q8K = 4, others = 2)",
+                ));
+            }
+        }
         Ok(Self {
             desc: *desc,
             sku: build_sku(desc.block_format),
@@ -303,6 +324,39 @@ impl GgufMmvqPlan {
             }
         };
         map_status(status)
+    }
+}
+
+/// Natural byte alignment of a packed GGUF block struct, derived from
+/// the layouts in `baracuda_gguf.cuh`:
+///
+/// * `block_q4_0` / `block_q5_0` / `block_q8_0` — `half d` first
+///   → alignment 2.
+/// * `block_q3_K` / `block_q6_K` — `half d` (after `uint8_t[]` arrays
+///   that are 1-aligned) → alignment 2.
+/// * `block_q4_1` / `block_q5_1` / `block_q2_K` / `block_q4_K` /
+///   `block_q5_K` — contain `half2 dm` → alignment 4.
+/// * `block_q8_K` — `float d` first + `int16_t bsums[]` → alignment 4.
+///
+/// Used only by the Phase 15.1 debug-build alignment guard for
+/// `w_start_byte_offset`. Release builds elide the call entirely.
+#[cfg(debug_assertions)]
+#[inline]
+fn required_alignment(format: GgufBlockFormat) -> i64 {
+    match format {
+        // `half`-first or `half`-only fp scale → 2-byte aligned.
+        GgufBlockFormat::Q4_0
+        | GgufBlockFormat::Q5_0
+        | GgufBlockFormat::Q8_0
+        | GgufBlockFormat::Q3K
+        | GgufBlockFormat::Q6K => 2,
+        // `half2 dm` (4-byte aligned) or `float d` → 4-byte aligned.
+        GgufBlockFormat::Q4_1
+        | GgufBlockFormat::Q5_1
+        | GgufBlockFormat::Q2K
+        | GgufBlockFormat::Q4K
+        | GgufBlockFormat::Q5K
+        | GgufBlockFormat::Q8K => 4,
     }
 }
 

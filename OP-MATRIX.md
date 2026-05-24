@@ -344,6 +344,24 @@ scaling for `dequantize_*`.
 
 ## OpCategory: MoE (Mixture-of-Experts)
 
+**Caller contract (important)**: The MoE kernels do **straight
+assignment** to the output (`out[token_id, n] = …`), not accumulation.
+There is **no kernel-side synchronization** for the case where multiple
+dispatch entries write to the same `(token_id, n)` cell. Callers must
+ensure each output cell is written by at most one dispatch:
+
+- **Single-expert routing**: `top_k = 1` (each token goes to exactly
+  one expert) is always safe.
+- **Multi-expert routing**: `top_k > 1` requires the caller to
+  pre-sort routing so each `(token_id, expert)` pair maps to a
+  distinct output row. The kernel does NOT fan-out multi-expert
+  outputs to one cell; the caller does that downstream (e.g. a
+  weighted sum kernel over the per-expert outputs).
+
+Violating this contract produces silent-wrong results — the last
+writer wins on each contested cell, ordering is non-deterministic.
+Surfaced during the Phase 15.3 fixture-race investigation.
+
 | Op | Backend | Dtypes | Shapes / Limits | FW | BW | Notes |
 |----|---------|--------|-----------------|----|----|-------|
 | `MoePlan` | Bespoke (vendored from `attention.rs`) | varies by variant (see below) | `[num_tokens, d_model]` | ✓ | N/A | Phase 8.5. Three variants: `ScalarGguf` (scalar dequant + GEMV per expert, `f32` activations), `Wmma` (sm_70+ tensor cores, `{f16, bf16}` activations), `WmmaGguf` (fused tensor-core + GGUF dequant; `{f16, bf16}` activations, `f32` output). |
@@ -405,26 +423,15 @@ The live backlog with priority + effort estimates lives in
   `Pow(p)` unary plan first). FractionalMaxPool 2d/3d bespoke kernel.
 - **Sparsemax for extents > 1024** — would need multi-block / global
   sort pipeline.
-- **Indexing wrappers**: `OneHotPlan` / `NonzeroPlan` /
-  `MaskedFillPlan` Rust plan wrappers are still i32-only;
-  Phase 11.5 FFI symbols (`*_i64idx_*`) exist but the Rust wrapper
-  doesn't expose `I: IndexElement` yet.
 - **Segment**: `Max` / `Min` / `Prod` BW (needs argmax / argmin
   tracking from FW; numerically stable `prod / x_n` for Prod).
 - **EmbeddingBag**: `Max` mode (per-feature argmax tracking).
 - **`BatchedOrmqrWyPlan` complex variants** — `{f32, f64}` ship;
   complex would need `cunmqr` rather than `cusolverDnXormqr`.
 - **f16 / bf16 activations for `GgufMmvqPlan`** — f32 only today.
-- **Correctness bugs**:
-  - CtcLossBackward γ-accumulation (FW validated; BW only smoke-
-    tested; FD helper retained for re-validation after fix).
-  - MoE CPU-reference math mismatch (Phase 8 vendor; kernel
-    smoke-tested but the host-side reference is wrong, so assertions
-    are disabled — pure test-layer follow-up).
-  - MMVQ `w_start_byte_offset` alignment guard (Phase 14.5 added the
-    offset parameter but no debug-build assertion for block formats
-    that require alignment — Q4_K is 16-byte aligned; misuse is
-    silent-wrong today).
+- **Correctness bugs**: none currently tracked. (Phase 15 closed
+  CTC γ-accumulation [fixed 2026-05-16], MoE fixture race [15.3],
+  and MMVQ alignment guard [15.1].)
 - **Long-arc roadmap items** (from the original comprehensive plan,
   pre-empted by Fuel-driven Phase 11+ work):
   - sm_90a (Hopper async) specialization + Blackwell forward-compat

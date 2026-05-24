@@ -8,9 +8,9 @@
 A unified Rust ML-op facade over the NVIDIA CUDA ecosystem.
 
 ![License](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue)
-![Status](https://img.shields.io/badge/status-alpha.31-orange)
+![Status](https://img.shields.io/badge/status-alpha.32-orange)
 ![CUDA](https://img.shields.io/badge/CUDA-12.x-76b900)
-![Tests](https://img.shields.io/badge/regression-1890%2F0-success)
+![Tests](https://img.shields.io/badge/regression-1900%2F0-success)
 
 ## What baracuda is
 
@@ -40,8 +40,8 @@ talk to one library directly.
 
 ## Status
 
-**In active development — alpha.31.** Roughly **1890 GPU tests passing**
-on an RTX 4070 (sm_89), across **602 binary targets**.
+**In active development — alpha.32.** Roughly **1900 GPU tests passing**
+on an RTX 4070 (sm_89), across **604 binary targets**.
 
 Phase coverage (see [`ARCHITECTURE.md`](ARCHITECTURE.md) for the phase
 matrix):
@@ -59,8 +59,12 @@ matrix):
 | 8 | Quantization helpers + GGUF + MoE (Category P, V) | done |
 | 9 | Sort / topk / image / NMS (Categories O, T) | done |
 | 10 | sm_89 (Ada Lovelace) tuning sweep | done |
-| 11 | sm_90a (Hopper) / Blackwell forward-compat | pending |
-| 12 | API freeze + 1.0 stability + benchmark suite | pending |
+| 11 | Fuel feedback integration (alpha.27) — ScalarType ergonomics, Conv/Pool fanout, GGUF Q8_K MMVQ, i64 indices, Sparsemax cap lift, atomicAdd-via-CAS, build-env probe | done |
+| 12 | PowI + ArgMax/Min u32/i32 outputs (alpha.28) — `IndexOutputElement` sealed trait | done |
+| 13 | WriteSlice + Contiguize + sub-byte casts + Triu/Tril (alpha.29) — KV-cache fast path, retires Fuel's D2H/CPU/H2D fallback, plus `DeviceBuffer::zero()` (alpha.30) | done |
+| 14 | Strided FFI siblings (alpha.31) — Affine, PowI, Triu/Tril, RoPE+SDPA, GGUF MMVQ activation-strided + W byte offset; 56 new FFI symbols | done |
+| 15 | Quick wins + correctness cleanup (alpha.32) — MMVQ alignment guard, OneHot/Nonzero i64 wrappers, MoE fixture race fix | done |
+| 16+ | Pool completion, Flash SDPA sm_89 strided, SDPA BW GQA, Hopper / Blackwell, 1.0 freeze | pending (see [`ROADMAP.md`](ROADMAP.md)) |
 
 API stability is **not** promised before beta.0. Breaking changes ship in
 each alpha bump and are documented in the workspace `CHANGELOG.md`.
@@ -71,8 +75,8 @@ Add the kernel facade and the driver crate:
 
 ```toml
 [dependencies]
-baracuda-kernels = { version = "0.0.1-alpha.31", features = ["sm89", "cudnn"] }
-baracuda-driver  = "0.0.1-alpha.31"
+baracuda-kernels = { version = "0.0.1-alpha.32", features = ["sm89", "cudnn"] }
+baracuda-driver  = "0.0.1-alpha.32"
 ```
 
 A representative example — single-axis numerically stable softmax over a
