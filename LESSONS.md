@@ -19,6 +19,7 @@ Where a lesson has a deeper-dive memory file, the lesson links to it.
 6. Workspace and library-convention drift
 7. CUTLASS vendoring stop-rules
 8. Test-flake patterns
+9. CUDA 13 / CCCL / cuDNN evolution gotchas (Phases 12-14)
 
 ---
 
@@ -1104,6 +1105,252 @@ cancellation problem. The weighted bound
 flat-eps with a fudged K is not.
 
 See §4.2 for the principled fix.
+
+---
+
+## 9. CUDA 13 / CCCL / cuDNN evolution gotchas (Phases 12-14)
+
+Lessons added during the Fuel-driven Phase 11-14 work. These post-date
+Sections 1-8 and reflect the state of CUDA 13 + CCCL + cuDNN 9+ as
+shipped in the user's RTX 4070 + CUDA toolkit environment.
+
+### 9.1 `cub::Max` / `cub::Min` are gone in CUDA 13's bundled CCCL
+
+**Mistake.** Used `cub::Max` / `cub::Min` as the reduction operator in
+`cub::BlockReduce::Reduce(value, cub::Max{})` while implementing the
+Phase 11.6 block-cooperative Sparsemax rewrite.
+
+**Fingerprint.** NVCC compile error: `cub::Max is undefined` or
+`'Max' is not a member of namespace 'cub'`.
+
+**Fix.** Replace with `::cuda::maximum<T>{}` / `::cuda::minimum<T>{}`
+from `<cuda/functional>`. These are functors (object-constructed at the
+call site), not constants. Include `<cuda/functional>` at global scope.
+
+**Why.** CCCL (the unified CUB + Thrust + libcudacxx repo NVIDIA ships
+with CUDA 13) consolidated the reduction-operator vocabulary into
+`::cuda::*` and dropped the CUB-side aliases.
+
+**Where first hit.** Phase 11.6 Sparsemax block-cooperative sort
+rewrite.
+
+### 9.2 CUB headers must be `#include`d at global scope
+
+**Mistake.** Included `<cub/block/block_radix_sort.cuh>` inside a
+`namespace baracuda::softmax { ... }` block in the new Sparsemax
+kernel file.
+
+**Fingerprint.** Cascade of `cuda::std::*` symbol resolution errors —
+`cuda::std::pair`, `cuda::std::tuple`, internal CUB types — fail to
+qualify even though their definitions look correct. Often manifests as
+an error pointing inside a CUB header at a line that compiled fine
+elsewhere.
+
+**Fix.** Move every CUB `#include` above the file's outer namespace
+declaration. CUB internals expect `cuda::std::*` at the unqualified
+global namespace; nesting a CUB include re-anchors those symbols under
+the enclosing namespace and they no longer match their qualified
+references.
+
+**Where first hit.** Phase 11.6 Sparsemax (same agent run as §9.1).
+
+### 9.3 `__bfloat16_as_ushort` is not universally available
+
+**Mistake.** Wrote a bf16 atomicAdd-via-CAS helper using
+`__bfloat16_as_ushort(val)` to extract the 16-bit bit pattern for the
+CAS-slot manipulation.
+
+**Fingerprint.** NVCC error: `'__bfloat16_as_ushort' was not declared
+in this scope` on some CUDA / `cuda_bf16.h` revisions. Works on others
+(making this look like a transient that re-appears across CUDA bumps).
+
+**Fix.** Use `memcpy` byte-bit-casts in both directions:
+`memcpy(&bits, &val, sizeof(bits));` and `memcpy(&val, &bits,
+sizeof(val));`. Always include `<cstring>` not `<string.h>` and never
+write `__builtin_memcpy` (see §1.2 — MSVC nvcc rejects it).
+
+**Why.** The `__half_as_ushort` / `__ushort_as_half` pair has been
+stable for years; the bf16 counterparts arrived later and are still
+intermittently shipped/dropped across `cuda_bf16.h` revisions.
+
+**Where first hit.** Phase 11.3 bf16 / f16 `atomicAdd_via_cas`
+helper.
+
+### 9.4 cuDNN's NdDescriptor APIs reject `nb_dims < 4`
+
+**Mistake.** Phase 11.7 Conv1D / ConvTranspose1D first implementation
+used `cudnnSetTensorNdDescriptor(desc, dt, /*nb_dims=*/3, dims,
+strides)` and `cudnnSetConvolutionNdDescriptor(cd, /*array_length=*/1,
+…)` — the natural 1-D shape.
+
+**Fingerprint.** Workspace-size query (`cudnnGetConvolutionForwardWorkspaceSize`
+or `BackwardData` / `BackwardFilter`) returns
+`CUDNN_STATUS_BAD_PARAM` (-3000). The descriptor-set call itself does
+**not** fail — the error surfaces later when the descriptor is used.
+
+**Fix.** Internally pad the rank-3 NCL shape to rank-4 NCLW with
+`W = 1` (singleton trailing spatial dim) for tensor + filter
+descriptors; set `array_length = 2` on the convolution descriptor with
+the trailing axis zero-padded / unit-strided / unit-dilated. The dummy
+axis is transparent to callers — output stays logically rank-3 NCL.
+
+**Why.** cuDNN treats anything below 4-D as "not a valid spatial
+convolution layout" and refuses to compute workspace bounds for it.
+The error is delayed because cuDNN does minimal validation at
+`SetNdDescriptor` time — full validation happens at the first
+`GetWorkspaceSize` / `Convolution{Forward,Backward}` call that
+references the descriptor.
+
+**3D doesn't need this** — NCDHW is rank-5, comfortably above the
+threshold. Only 1D triggers it.
+
+**Where first hit.** Phase 11.7 Conv1D smoke test. Phase 11.8 Pool
+agent independently discovered the same constraint for
+`cudnnSetPoolingNdDescriptor` and padded its 1D pool plans similarly.
+
+### 9.5 `f64::powi(small_n)` is not bit-exact to repeated multiplication
+
+**Mistake.** Phase 12.1 PowI smoke test for `n=2` over f64 asserted
+bit-exact equality between the GPU kernel output (which collapses
+power-by-squaring to a single `x * x` for n=2) and Rust's `f64::powi(2)`
+host reference.
+
+**Fingerprint.** `assertion failed: g.to_bits() == e.to_bits()` with
+the two bit patterns differing by exactly 1 ULP at random elements.
+Reproduces deterministically per element but the *set* of failing
+elements depends on the input distribution.
+
+**Fix.** Use `x * x` directly in the host reference, matching exactly
+what the kernel does. The test was implicitly testing two different
+math paths and expecting them to agree.
+
+**Why.** Rust's `f64::powi` lowers to the LLVM `llvm.powi.f64`
+intrinsic. On the target the user runs on (Windows x86_64), that
+intrinsic may route through libm's `pow(x, n_as_double)` rather than
+a literal `x * x` reduction. The two paths differ by ≤ 1 ULP because
+`pow` internally goes through `exp(n * log(x))` with higher
+intermediate precision.
+
+**Lesson.** For kernel-test references that need bit-exact agreement,
+compute the kernel's actual operation directly (`x * x` for n=2,
+`x * x * x` for n=3, etc.). Don't lean on `.powi(n)` or `.pow(n as f32)`
+or anything that gives you "the math result" — you want "the same
+floating-point sequence the kernel evaluates."
+
+**Where first hit.** Phase 12.1 PowI smoke test.
+
+### 9.6 Strided plans need buffer-size checks relaxed
+
+**Mistake.** Phase 14 strided FFI siblings reused the existing
+contig path's `data.len() >= numel` guard in `can_implement` /
+`run`.
+
+**Fingerprint.** `Error::BufferTooSmall { needed: N, got: M }`
+returned at `run()` time on legitimately-correct strided views. The
+"needed" value is the logical numel, the "got" is the underlying
+buffer length — but for a transposed view of a `[B, S, H, D]`
+allocation viewed as `[B, H, S, D]`, the buffer is much larger than
+the logical numel.
+
+**Fix.** Apply the `data.len() >= numel` check only when the tensor
+is canonical-contiguous. For strided views, the buffer behind the
+view is opaque to baracuda-kernels (the caller owns the contract that
+the view's strides + start-offset are within the underlying buffer).
+
+**Where first hit.** Phase 14.4 SDPA strided FFI sibling. The same
+relaxation was needed for every other Phase 14 strided sibling (and
+became part of the standard "strided-sibling" template in
+`crates/baracuda-kernels/src/shape_layout/contiguize.rs`, which is
+the canonical reference for the pattern).
+
+### 9.7 Nibble-packed dtypes count differently in shape vs. storage
+
+**Mistake.** Phase 13.2 Contiguize's first `can_implement` check
+compared `args.dest.numel()` (logical element count from shape
+product) against `args.dest.data.len()` (storage element count for
+the typed `DeviceBuffer<T>` slice). For S4 / U4 where 2 nibbles pack
+into 1 storage byte, the storage requirement is `ceil(numel / 2)`,
+not `numel`.
+
+**Fingerprint.** `Error::BufferTooSmall { needed: 8, got: 4 }` on a
+legitimately-correct S4 buffer (rank-1 shape `[8]` = 8 nibbles = 4
+bytes of storage in a `DeviceBuffer<S4>` of length 4).
+
+**Fix.** Dispatch on `desc.element` in the size check:
+
+```rust
+let needed_storage = match self.desc.element {
+    ElementKind::S4 | ElementKind::U4 => (numel + 1) / 2,
+    _ => numel,
+};
+if dest_len < needed_storage { return Err(BufferTooSmall { … }); }
+```
+
+**Why.** baracuda's `S4(pub u8)` / `U4(pub u8)` are 1-byte storage
+newtypes that hold one nibble in the low half. The shape vector
+counts logical elements; the storage vector counts bytes. They
+diverge by factor 2 for nibble-packed dtypes.
+
+**Where first hit.** Phase 13.2 Contiguize. Phase 13.1 WriteSlice
+had the same check correctly from the start — the WriteSlice agent
+saw the nibble distinction; the Contiguize agent didn't. Caught by
+Phase 13 regression and fixed in the same release.
+
+### 9.8 SDPA backward + GQA broadcast needs atomicAdd
+
+**Mistake.** Phase 14.4 SDPA strided FFI assumed the BW path could
+handle GQA-broadcast K/V the same way the FW path does (treating
+`stride_k[head_axis] == 0` as "read the same K value for every Q
+head in the group").
+
+**Fingerprint.** Correct results in FW; silent wrong results in BW
+when the broadcast pattern is active (`dK` / `dV` accumulate only the
+last Q-head group's contribution, dropping the rest).
+
+**Fix.** Reject `stride_k[head_axis] == 0` and
+`stride_v[head_axis] == 0` at the BW plan layer with
+`Error::Unsupported("SDPA backward with GQA broadcast requires
+atomicAdd-based dK/dV accumulation, deferred")`. FW continues to
+accept the broadcast normally.
+
+**Why.** FW reads K / V — broadcast just means multiple Q heads see
+the same K / V. BW writes dK / dV — broadcast means multiple Q heads
+contribute gradients to the same K / V slot. Without atomicAdd,
+those concurrent writes race and the kernel keeps only one. The fix
+is mechanically a kernel rewrite using `atomicAdd_via_cas` (per §9.3)
+for the head-broadcast axis only; tracked in [`ROADMAP.md`](ROADMAP.md).
+
+**Where first hit.** Phase 14.4 SDPA strided FFI sibling, caught by
+the agent during implementation rather than at test time.
+
+### 9.9 crates.io rewrites README image paths from the **crate** dir, not the README's dir
+
+**Mistake.** The workspace `README.md` lives at the repo root and
+contains `![hero](assets/barracuda.png)` (relative path). The
+`baracuda` crate at `crates/baracuda/Cargo.toml` exposes it via
+`readme = "../../README.md"`. GitHub renders the image correctly
+(resolves relative to the README's location); crates.io shows a
+broken-image icon.
+
+**Fingerprint.** Broken image on `crates.io/crates/baracuda` but
+fine on `github.com/<user>/baracuda`. Crates.io tries to load from
+`https://github.com/<user>/baracuda/raw/HEAD/crates/baracuda/assets/barracuda.png`
+(the crate's dir + the relative path) instead of from the repo root
+where the README actually lives.
+
+**Fix.** Use absolute `raw.githubusercontent.com` URLs for images in
+workspace READMEs re-exported via `readme = "../../README.md"`:
+`![hero](https://raw.githubusercontent.com/<user>/<repo>/refs/heads/main/assets/barracuda.png)`.
+Works on both GitHub and crates.io.
+
+**Why.** crates.io anchors relative URLs in rendered READMEs to the
+**crate's directory location** in the source tree, regardless of where
+the README file physically lives. There's no setting that changes
+this; absolute URLs are the workaround.
+
+**Where first hit.** alpha.30 release prep, after Fuel team flagged
+the broken image on crates.io. The README badge-update memory
+entry was created in the same session.
 
 ---
 

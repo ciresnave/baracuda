@@ -440,8 +440,16 @@ MoE expert kernels (FP WMMA, scalar GGUF, combined WMMA+GGUF).
 
 ## Phase roadmap
 
-The full plan is in `~/.claude/plans/baracuda-kernels-comprehensive.md`.
-The condensed list:
+The original comprehensive plan is in
+`~/.claude/plans/baracuda-kernels-comprehensive.md` and
+`baracuda-kernels-design-notes.md`. The numbered phases through 10
+followed that plan; from Phase 11 onward the work has been
+**downstream-driven** — Fuel team integration feedback and follow-on
+asks have set the agenda, so the phase numbering no longer maps to
+the original Hopper / 1.0-freeze roadmap. Outstanding deferrals from
+all phases are tracked in [`ROADMAP.md`](ROADMAP.md).
+
+### Phases 0-10 — planned roadmap (complete)
 
 - **Phase 0** — Crate scaffolding: `baracuda-kernels-types`,
   `baracuda-kernels-sys`, `baracuda-kernels`. Migrate the shared type
@@ -477,10 +485,54 @@ The condensed list:
   affine_grid + pixel_shuffle + roi_align + roi_pool + NMS.
 - **Phase 10** — sm_89 (Ada Lovelace) tuning sweep. Sibling plans for
   Flash Attention; bench harness; populated baseline table.
-- **Phase 11** — sm_90a (Hopper async) specialization and Blackwell
-  forward-compat.
-- **Phase 12** — API freeze + 1.0 stability + benchmark suite against
-  PyTorch / cuDNN / cuBLAS references.
 
-Phase 11 and 12 are the outstanding work; Phases 0-10 are complete at
-the current alpha.25 tag.
+### Phases 11-14 — Fuel-driven (complete)
+
+Phase numbering 11 onward was redirected by Fuel team's integration
+feedback. The original "Phase 11 = sm_90a Hopper" and "Phase 12 =
+1.0 freeze" items are now tracked as backlog rather than the next
+work — they remain valid targets but are sequenced behind ongoing
+downstream-driven work.
+
+- **Phase 11 (alpha.27)** — Eight items from Fuel's alpha.26
+  integration feedback: `ScalarType::ZERO/ONE/from_f32` ergonomics;
+  Git-for-Windows fake-`link.exe` probe in `build.rs`; bf16 / f16
+  `atomicAdd_via_cas` for indexing & segment BW; GGUF Q8_K MMVQ
+  (bespoke — no llama.cpp upstream); i64 indices across the indexing
+  family via new `IndexElement` sealed trait; Sparsemax row cap lifted
+  64 → 1024 via `cub::BlockRadixSort` + `BlockScan`; Conv 1D / 3D /
+  Transpose / depthwise fanout via cuDNN (Conv2dDescriptor gained
+  `groups` field — breaking literal-init change); Pool 1D / 3D +
+  Adaptive fanout (FractionalMaxPool / LpPool stubbed).
+- **Phase 12 (alpha.28)** — PowI parameterized unary plan (FW + BW,
+  4 fp dtypes) and ArgMaxDim / ArgMinDim u32 / i32 output dtypes via
+  new `IndexOutputElement` sealed trait (default `i64` preserves
+  source-compat).
+- **Phase 13 (alpha.29)** — WriteSlice (KV-cache append fast path) +
+  Contiguize (signed strides for Flip; retires Fuel's D2H → CPU →
+  H2D fallback) + sub-byte cast paths (Fp8 / S4 / U4 ↔ fp / int —
+  34 FFI symbols) + Triu / Tril plans (FW + BW; mask is self-adjoint
+  so BW reuses FW kernel). Introduced the `T: DeviceRepr + Copy`
+  trait-bound pragma for plans that need to cover sub-byte dtypes
+  alongside `Element` types.
+- **Phase 13.5 (alpha.30)** — `DeviceBuffer::zero()` + `zero_async()`
+  for re-zeroing an existing allocation without realloc. README
+  freshness fixes (absolute image URL for crates.io; status +
+  regression badges bumped).
+- **Phase 14 (alpha.31)** — Strided FFI siblings for Affine, PowI,
+  Triu / Tril, RoPE + SDPA, and GGUF MMVQ (activation-strided +
+  `w_start_byte_offset`). 56 new FFI symbols, all sibling — contig
+  FFIs untouched so existing callers compile without change.
+  Plan-layer dispatch routes canonical-contig inputs to the existing
+  fast path; non-canonical inputs route to the new strided FFI.
+
+### Outstanding work
+
+Outstanding items (deferrals from Phases 5-14, plus the original
+"Phase 11 = Hopper" and "Phase 12 = 1.0 freeze" roadmap items) are
+tracked in [`ROADMAP.md`](ROADMAP.md). The order in which we tackle
+them is driven by Fuel's near-term integration needs in tension with
+the long-arc 1.0 freeze target.
+
+The current tag is **v0.0.1-alpha.31** with **1890 GPU tests
+passing** on RTX 4070 across **602 binary targets**.

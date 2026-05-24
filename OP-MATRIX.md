@@ -1,7 +1,7 @@
 # Op Coverage Matrix
 
-Generated for **baracuda-kernels v0.0.1-alpha.25** on **RTX 4070 (sm_89)** —
-2026-05-17 sweep at 1491/0 regression across 324 binaries.
+Generated for **baracuda-kernels v0.0.1-alpha.31** on **RTX 4070 (sm_89)** —
+2026-05-21 sweep at 1890/0 regression across 602 binaries.
 
 This file is the authoritative reference for "what ops are implemented and at
 what dtypes / shapes / backends." Each row corresponds to a `pub struct *Plan`
@@ -48,13 +48,15 @@ Dtype shorthand:
 | Op | Backend | Dtypes | Shapes / Limits | FW | BW | Notes |
 |----|---------|--------|-----------------|----|----|-------|
 | `UnaryPlan<T, N>` | Bespoke | FP-family | rank N (compile-time) | ✓ | ✓ via `UnaryBackwardPlan` | ~50 kinds: `{Neg, Abs, Sign, Reciprocal, Square, Cube, Sqrt, Rsqrt, Cbrt, Exp, Exp2, Expm1, Log, Log2, Log10, Log1p, Sin, Cos, Tan, Asin, Acos, Atan, Sinh, Cosh, Tanh, Asinh, Acosh, Atanh, Floor, Ceil, Round, Trunc, Frac, Relu, Gelu, GeluTanh, Silu, Mish, Sigmoid, Softplus, Hardswish, Hardsigmoid, Hardtanh, Erf, Erfc, Lgamma, Logit, Softsign, Tanhshrink, Relu6, Selu, LeakyRelu, Elu, Hardshrink, Softshrink}`. Both contig + strided. Activation BWs use weighted tolerance (cancellation-aware). |
-| `UnaryParamPlan<T, N>` | Bespoke | FP-family | rank N | ✓ | ✓ via `UnaryParamBackwardPlan` | Unary with one scalar param: `{Threshold, LeakyReluA, EluA, HardtanhAB, …}`. |
+| `UnaryParamPlan<T, N>` | Bespoke | FP-family | rank N | ✓ | ✓ via `UnaryParamBackwardPlan` | Unary with one scalar param: `{Threshold, LeakyReluA, EluA, HardtanhAB, PowI, …}`. PowI added in Phase 12.1 (integer-exponent power-by-squaring; FW + BW; correct on negative bases — no NaN). Phase 14.2 added strided FFI sibling. |
 | `BinaryPlan<T, N>` | Bespoke | FP-family + `{i32, i64}` for bitwise + `Bool` for logical | broadcast-compatible (axis match or `dim==1 && stride==0`) | ✓ | ✓ via `BinaryBackwardPlan` | FP kinds: `{Add, Sub, Mul, Div, Pow, Atan2, Hypot, Copysign, Nextafter, Fmin, Fmax, Maximum, Minimum, FloorDivide, Mod, Remainder}`. Int kinds: `{BitwiseAnd/Or/Xor/LeftShift/RightShift}`. Bool kinds: `{LogicalAnd, LogicalOr, LogicalXor}` (contig only). |
 | `BinaryParamPlan<T, N>` | Bespoke | FP-family | rank N | ✓ | ✓ via `BinaryParamBackwardPlan` | Binary with one scalar param: `{Lerp(weight), …}`. |
 | `BinaryCmpPlan<T, N>` | Bespoke | FP-family | broadcast-compatible | ✓ | N/A | Comparison ops: `{Eq, Ne, Lt, Le, Gt, Ge}`. Output is `Bool`. |
 | `TernaryPlan<T, N>` | Bespoke | FP-family | rank N | ✓ | ✓ via `TernaryBackwardPlan` | Kinds: `{Clamp, Fma, Addcmul, Addcdiv}`. |
 | `WherePlan<T, N>` | Bespoke | FP-family (cond: `Bool`) | broadcast-compatible | ✓ | ✓ via `WhereBackwardPlan` | `y = cond ? x : y_alt`. |
 | `CastPlan<TIn, TOut>` | Bespoke | full FP-family × `{i32, i64}` cross product | rank N | ✓ | N/A | 36-cell cross product; no Bool input/output. F32 accumulator for FP→FP. |
+| `CastSubBytePlan<TIn, TOut>` | Bespoke | sub-byte endpoints: `Bool`, `Fp8E4M3`, `Fp8E5M2`, `S4`, `U4` ↔ FP / int peers | rank N | ✓ | N/A | Phase 13.3 sibling to `CastPlan` (relaxed trait bound `T: DeviceRepr + Copy` since S4/U4/Fp8 don't impl `Element`). 34 FFI symbols. Uses `__nv_cvt_fp8_to_halfraw` / `__nv_cvt_float_to_fp8`. S4/U4 pack+unpack both directions. |
+| `AffinePlan<T, N>` | Bespoke | `{f32, f64, i32, i64, u8, f16, bf16}` | rank N | ✓ | N/A | `y = mul * x + add`. Phase 11.x core; Phase 14.1 added strided FFI sibling (canonical-contig fast-path → existing contig FFI; non-canonical → strided). |
 | `AffinePlan<T>` | Bespoke | `{f32, f64, f16, bf16, i32, i64}` | rank-1 contig | ✓ | N/A | Fused `y = a·x + b` with scalar `a, b`. Contig only. |
 | `PReluPlan<T, N>` | Bespoke | FP-family | rank N, per-channel `α` | ✓ | ✓ via `PReluBackwardPlan` | Parametric ReLU with per-channel slope. |
 | `GatedActivationPlan<T, N>` | Bespoke | FP-family | rank N | ✓ | ✓ via `GatedActivationBackwardPlan` | Kinds: `{SwiGlu, Glu, ReGlu, GeGlu}`. Input is `[..., 2D]` halved along last axis. |
@@ -72,6 +74,10 @@ Dtype shorthand:
 | `RepeatPlan<T, N>` | Bespoke | `{f32, f16, f64}` (no bf16) | rank N | ✓ | ✓ via `RepeatBackwardPlan` | f16/f64 added in Phase 3.5 fanout. |
 | `ConcatPlan<T, N>` | Bespoke | FP-family | rank N | ✓ | ✓ via `ConcatBackwardPlan` | Multi-input concat along one axis. |
 | `FillPlan<T>` | Bespoke | `{f32, f64, f16, bf16, i32, i64}` | numel ≥ 0 | ✓ | N/A | Scalar fill. No Bool. |
+| `WriteSlicePlan<T, N>` | Bespoke | byte-aligned dtypes (5 byte-width symbols) + S4/U4 nibble | rank 1-8 | ✓ | N/A | Phase 13.1. In-place rectangular slab assignment (not add). Fast paths: full-dest cuMemcpyDtoDAsync + KV-cache contiguous-chunk cuMemcpyDtoDAsync. S4/U4 requires even start/end on innermost axis. No BW (non-differentiable per Fuel's IR). |
+| `ContiguizePlan<T, N>` | Bespoke | byte-aligned + nibble | rank 1-8 | ✓ | N/A | Phase 13.2. Strided → contiguous copy. Signed i64 strides (Flip support) + zero strides (broadcast). Fast paths: already-contig early-out + innermost-stride-1 row-memcpy. S4/U4 requires innermost stride ∈ {1, -1, 2}. |
+| `TriuPlan<T, N>` | Bespoke | `{f16, bf16, f32, f64, i32, i64, Bool}` | rank ≥ 2 | ✓ | ✓ via `TriuBackwardPlan` (reuses FW kernel; mask is self-adjoint) | Phase 13.4. Phase 14.3 added strided sibling FFI. |
+| `TrilPlan<T, N>` | Bespoke | `{f16, bf16, f32, f64, i32, i64, Bool}` | rank ≥ 2 | ✓ | ✓ via `TrilBackwardPlan` (reuses FW kernel) | Phase 13.4. Phase 14.3 added strided sibling FFI. |
 
 ---
 
@@ -80,7 +86,7 @@ Dtype shorthand:
 | Op | Backend | Dtypes | Shapes / Limits | FW | BW | Notes |
 |----|---------|--------|-----------------|----|----|-------|
 | `ReducePlan<T, N>` | Bespoke | FP-family | rank ≤ 8, single axis | ✓ | ✓ via `ReduceBackwardPlan` | Kinds: `{Sum, Mean, Max, Min, Prod, Norm2, LogSumExp, Var, Std}`. BWs cover all 9 kinds (Prod/Norm2/Var/Std added 2026-05-15). |
-| `ArgReducePlan<T, N>` | Bespoke | FP-family input → `i64` output | rank ≤ 8 | ✓ | N/A | Kinds: `{ArgMax, ArgMin}`. Reduce axis must be non-empty. |
+| `ArgReducePlan<T, N, I>` | Bespoke | FP-family input → `I ∈ {u32, i32, i64}` output | rank ≤ 8 | ✓ | N/A | Kinds: `{ArgMax, ArgMin}`. Reduce axis must be non-empty. Phase 12.2 added u32/i32 output dtypes via new `IndexOutputElement` sealed trait (default `I = i64` preserves source-compat). |
 | `BoolReducePlan<T, N>` | Bespoke | `{f32, f16, bf16, f64, i32, i64, Bool}` input → `Bool` output | rank ≤ 8 | ✓ | N/A | Kinds: `{Any, All}`. Pure integer AND/OR — bit-stable, deterministic. |
 | `CountReducePlan<T, N>` | Bespoke | `{f32, f16, bf16, f64, i32, i64, Bool}` input → `i64` output | rank ≤ 8 | ✓ | N/A | Kind: `CountNonzero`. i64 accumulator. |
 | `TracePlan<T>` | Bespoke | FP-family | rank-2 only | ✓ | N/A | Sum of diagonal (both axes reduced). Scalar output. |
@@ -162,10 +168,10 @@ support `{None, Mean, Sum}` reduction. CtcLossCudnnPlan is the exception
 
 | Op | Backend | Dtypes | Shapes / Limits | FW | BW | Notes |
 |----|---------|--------|-----------------|----|----|-------|
-| `SdpaPlan<T>` | Bespoke | FP-family | `[B, H, S, D]` | ✓ | ✓ via `SdpaBackwardPlan` | Reference (non-flash) scaled-dot-product attention. |
-| `FlashSdpaPlan<T>` | Bespoke (sm_80) | FP-family | `head_dim ≤ FLASH_SDPA_MAX_D = 128` | ✓ | ✓ via `FlashSdpaBackwardPlan` | Tile-streamed online softmax. Paged variant deferred (Phase 6). |
-| `FlashSdpaSm89Plan<T>` | Bespoke (sm_89) | `{f16, bf16}` only | `head_dim ≤ 128` | ✓ | N/A | Phase 10.3 — Ada Lovelace variant with `cp.async` double-buffered K/V loads. Gated by `sm89` feature. |
-| `RopePlan<T>` | Bespoke | FP-family | `head_dim` must be even | ✓ | ✓ via `RopeBackwardPlan` | Rotary positional encoding (Llama / Mistral / Gemma). Default base 10000.0. |
+| `SdpaPlan<T>` | Bespoke | FP-family | `[B, H, S, D]` | ✓ | ✓ via `SdpaBackwardPlan` | Reference (non-flash) scaled-dot-product attention. Phase 14.4 added strided FFI sibling. **SDPA BW + GQA broadcast (`stride_k[head_axis] == 0`) is `Error::Unsupported`** — would need atomicAdd for dK/dV accumulation. SDPA FW accepts it normally. |
+| `FlashSdpaPlan<T>` | Bespoke (sm_80) | FP-family | `head_dim ≤ FLASH_SDPA_MAX_D = 128` | ✓ | ✓ via `FlashSdpaBackwardPlan` | Tile-streamed online softmax. Paged variant deferred. |
+| `FlashSdpaSm89Plan<T>` | Bespoke (sm_89) | `{f16, bf16}` only | `head_dim ≤ 128` | ✓ | N/A | Phase 10.3 — Ada Lovelace variant with `cp.async` double-buffered K/V loads. Gated by `sm89` feature. **Strided sibling deferred** — kernel hardcodes offsets internally (not stride-driven). |
+| `RopePlan<T>` | Bespoke | FP-family | `head_dim` must be even | ✓ | ✓ via `RopeBackwardPlan` | Rotary positional encoding (Llama / Mistral / Gemma). Default base 10000.0. Phase 14.4 added strided FFI sibling — head_dim axis must remain stride=1 (RoPE rotates adjacent pairs); enforced at plan layer. |
 | `AlibiPlan<T>` | Bespoke | FP-family | `[B, H, S, S]` bias | ✓ | ✓ via `AlibiBackwardPlan` | Linear-bias attention (MPT / BLOOM). |
 | `KvCacheAppendPlan<T>` | Bespoke | FP-family | append along seq axis | ✓ | N/A | Inference-time KV append. |
 
@@ -214,31 +220,57 @@ cuFFT-backed. f32 + f64 only (cuFFT's main API does not expose f16 / bf16).
 
 ## OpCategory: Convolution
 
-cuDNN-backed. Gated by `cudnn` cargo feature. Today NCHW Conv2d only;
-1-D / 3-D / transposed / depthwise follow in fanout milestones.
+cuDNN-backed. Gated by `cudnn` cargo feature. Conv2d shipped in Phase 7;
+Phase 11.7 added the 1D / 3D / Transpose / depthwise fanout. `Conv2dDescriptor`
+gained a `groups: i32` field in Phase 11.7 (breaking change to literal-init
+sites — depthwise = `groups == c_in == c_out`). 1D plans pad rank-3 → rank-4
+internally because cuDNN's `cudnnSetTensorNdDescriptor` rejects `nb_dims < 4`.
 
 | Op | Backend | Dtypes | Shapes / Limits | FW | BW | Notes |
 |----|---------|--------|-----------------|----|----|-------|
-| `Conv2dPlan<T>` | Cudnn | FP-family | NCHW, 4-D | ✓ | ✓ (data + filter) | One cuDNN handle + 4 lazy descriptors per plan. BW data = `IMPLICIT_GEMM` algo 1; BW filter = `ALGO_1`. F64 math through F64; F16/Bf16 math via F32 promotion (cuDNN convention). |
+| `Conv1dPlan<T>` | Cudnn | FP-family | NCL, rank-3 (padded to rank-4 NCLW with W=1 internally) | ✓ | ✓ (data + filter) | Phase 11.7. |
+| `Conv2dPlan<T>` | Cudnn | FP-family | NCHW, 4-D | ✓ | ✓ (data + filter) | Phase 7. Phase 11.7 added `groups` field (depthwise). One cuDNN handle + 4 lazy descriptors per plan. BW data = `IMPLICIT_GEMM` algo 1; BW filter = `ALGO_1`. F64 math through F64; F16/Bf16 math via F32 promotion (cuDNN convention). |
+| `Conv3dPlan<T>` | Cudnn | FP-family | NCDHW, rank-5 | ✓ | ✓ (data + filter) | Phase 11.7. |
+| `ConvTranspose1dPlan<T>` | Cudnn | FP-family | NCL, rank-3 | ✓ | ✓ | Phase 11.7. Implemented via cuDNN's `BackwardData` with input/output roles swapped (standard transposed-conv trick). |
+| `ConvTranspose2dPlan<T>` | Cudnn | FP-family | NCHW, 4-D | ✓ | ✓ | Phase 11.7. |
+| `ConvTranspose3dPlan<T>` | Cudnn | FP-family | NCDHW, rank-5 | ✓ | ✓ | Phase 11.7. |
 
 ---
 
 ## OpCategory: Pooling
 
-cuDNN-backed. Gated by `cudnn` cargo feature. Today NCHW 2-D only.
+cuDNN-backed. Gated by `cudnn` cargo feature. Conv2d / Pool2d shipped in
+Phase 7; Phase 11.8 added 1D / 3D + Adaptive fanout via the rank-agnostic
+`cudnnPoolingNdDescriptor`. Adaptive pool uses the
+`kernel = ceil(in/out); stride = floor(in/out); pad = 0` approximation —
+diverges from PyTorch by ±1 input cell when `in_i % out_i != 0` (bit-exact
+adaptive pool deferred — see [`ROADMAP.md`](ROADMAP.md)). FractionalMaxPool
+and LpPool are stubbed (`Error::Unsupported` at `select()`) pending bespoke
+kernels.
 
 | Op | Backend | Dtypes | Shapes / Limits | FW | BW | Notes |
 |----|---------|--------|-----------------|----|----|-------|
-| `MaxPool2dPlan<T>` | Cudnn | FP-family | NCHW, 4-D | ✓ | ✓ | Shares pool descriptor with `AvgPool2d`. |
-| `AvgPool2dPlan<T>` | Cudnn | FP-family | NCHW, 4-D | ✓ | ✓ | |
+| `MaxPool1dPlan<T>` | Cudnn | FP-family | NCL, rank-3 (padded internally) | ✓ | ✓ | Phase 11.8. |
+| `MaxPool2dPlan<T>` | Cudnn | FP-family | NCHW, 4-D | ✓ | ✓ | Phase 7. Shares pool descriptor with `AvgPool2d`. |
+| `MaxPool3dPlan<T>` | Cudnn | FP-family | NCDHW, rank-5 | ✓ | ✓ | Phase 11.8. |
+| `AvgPool1dPlan<T>` | Cudnn | FP-family | NCL, rank-3 | ✓ | ✓ | Phase 11.8. |
+| `AvgPool2dPlan<T>` | Cudnn | FP-family | NCHW, 4-D | ✓ | ✓ | Phase 7. |
+| `AvgPool3dPlan<T>` | Cudnn | FP-family | NCDHW, rank-5 | ✓ | ✓ | Phase 11.8. |
+| `AdaptiveAvgPool{1,2,3}dPlan<T>` | Cudnn | FP-family | various ranks | ✓ | ✓ | Phase 11.8. cuDNN approximation — not bit-exact PyTorch for non-divisible cases. |
+| `AdaptiveMaxPool{1,2,3}dPlan<T>` | Cudnn | FP-family | various ranks | ✓ | ✓ | Phase 11.8. Same approximation caveat. |
+| `FractionalMaxPool{2,3}dPlan<T>` | — | — | — | ✗ stub | — | Phase 11.8 stub. Returns `Error::Unsupported` at `select()` pending bespoke kernel (cuDNN doesn't expose this). |
+| `LpPool{1,2}dPlan<T>` | — | — | — | ✗ stub | — | Phase 11.8 stub. Would be a composite `pow → avg_pool → pow`; needs parameterized `Pow(p)` unary plan first. |
 
 ---
 
 ## OpCategory: Indexing / Scatter / Gather
 
-Index dtype is `i32` only (i64 deferred). Out-of-bounds + negative indices
-are silently skipped (no PyTorch-style wrap-around). BWs use `atomicAdd`,
-so BW dtype coverage is restricted to native-FP-atomic types.
+Index dtype: `i32` (default) and `i64` (Phase 11.5 — opt-in via the
+`IndexElement` sealed trait; default `I = i32` preserves source-compat).
+Out-of-bounds + negative indices are silently skipped (no PyTorch-style
+wrap-around). BWs use `atomicAdd`. As of Phase 11.3, bf16 / f16 indexing
+& segment BW route through `atomicAdd_via_cas` (deterministic, available
+on every supported arch); `{f32, f64}` continue to use native atomicAdd.
 
 | Op | Backend | Dtypes | Shapes / Limits | FW | BW | Notes |
 |----|---------|--------|-----------------|----|----|-------|
@@ -253,10 +285,14 @@ so BW dtype coverage is restricted to native-FP-atomic types.
 
 ## OpCategory: Embedding
 
+Index dtype (Phase 11.5): `i32` (default) or `i64` (opt-in via `IndexElement`).
+As of Phase 11.3, all BW dtypes are wired (bf16 / f16 route through
+`atomicAdd_via_cas`).
+
 | Op | Backend | Dtypes | Shapes / Limits | FW | BW | Notes |
 |----|---------|--------|-----------------|----|----|-------|
-| `EmbeddingPlan<T>` | Bespoke | FW: FP-family · BW: `{f32, f64}` | `[N, embedding_dim]` weight | ✓ | ✓ via `EmbeddingBackwardPlan` | Optional `padding_idx` skip. BW atomicAdd (non-deterministic). |
-| `EmbeddingBagPlan<T>` | Bespoke | FW: FP-family · BW: `{f32, f64}` | `[N, dim]` weight, `[bag_size]` offsets | ✓ | ✓ via `EmbeddingBagBackwardPlan` | Modes: `{Sum, Mean}`. `Max` deferred (needs per-feature argmax tracking). |
+| `EmbeddingPlan<T, I>` | Bespoke | FW + BW: FP-family | `[N, embedding_dim]` weight; `I ∈ {i32, i64}` | ✓ | ✓ via `EmbeddingBackwardPlan` | Optional `padding_idx` skip. BW atomicAdd (non-deterministic). |
+| `EmbeddingBagPlan<T, I>` | Bespoke | FW + BW: FP-family | `[N, dim]` weight, `[bag_size]` offsets; `I ∈ {i32, i64}` | ✓ | ✓ via `EmbeddingBagBackwardPlan` | Modes: `{Sum, Mean}`. `Max` mode deferred (needs per-feature argmax tracking). |
 
 ---
 
@@ -302,7 +338,7 @@ scaling for `dequantize_*`.
 | `DynamicRangeQuantizePlan<TIn, TOut>` | Bespoke | `TIn ∈ {f32, f64}`, `TOut = S8` | rank ≤ 8 | ✓ | N/A | One-shot min/max-driven dynamic-range W8 quant. |
 | `QuantizedLinearPlan<TIn, TWQ>` | Bespoke | `TIn ∈ {f32, f64}`, `TWQ = S8` | matmul shape | ✓ | N/A | Composing quant op — fused dequant + matmul. |
 | `GgufDequantizePlan` | Bespoke (vendored llama.cpp) | block → `f32` (`f16` for Q8K) | per-block-format size | ✓ | N/A | Block formats: `{Q4_0, Q4_1, Q5_0, Q5_1, Q8_0, Q2K, Q3K, Q4K, Q5K, Q6K, Q8K}`. Q8K is dequant-only (no MMVQ). |
-| `GgufMmvqPlan` | Bespoke (vendored llama.cpp) | activation: `f32`; weights: GGUF block | matrix-vector | ✓ | N/A | Fused dequant + matrix-vector multiply. Q8K not supported. f16 / bf16 activation deferred. |
+| `GgufMmvqPlan` | Bespoke (Q8_K is bespoke baracuda; rest vendored llama.cpp) | activation: `f32`; weights: GGUF block | matrix-vector | ✓ | N/A | Fused dequant + matrix-vector multiply. **All 11 block formats wired** as of Phase 11.4 (Q8_K added bespoke; no llama.cpp upstream). Phase 14.5 added an activation-strided sibling FFI (single `stride_y: i64` + `w_start_byte_offset` for "multiple matrices in one allocation"). f16 / bf16 activation deferred. |
 
 ---
 
@@ -356,16 +392,43 @@ f16 + bf16 (memory-bound, no math).
 
 ## Deferred / Out of Scope
 
-The following items are scoped but not yet wired:
+The live backlog with priority + effort estimates lives in
+[`ROADMAP.md`](ROADMAP.md). The summary by category:
 
-- **Paged FlashAttention** — Phase 6 attention milestone, not yet on disk.
-- **`BatchedOrmqrWyPlan` complex variants** — Phase 10.4. Real `{f32, f64}` ship today; complex needs `cunmqr` rather than `cusolverDnXormqr`.
-- **CtcLossBackward γ-accumulation bug** — Phase 5 Milestone 5.5 known issue. FW validated; BW only smoke-tested. FD helper retained.
-- **Segment `Max` / `Min` / `Prod` BW** — needs argmax / argmin tracking in FW for Max/Min, and numerically stable `prod / x_n` for Prod.
-- **`EmbeddingBag Max` mode** — needs per-feature argmax tracking.
-- **i64 indices in indexing family** — `i32` only today.
-- **Sparsemax for extents > 1024** — Phase 11.6 lifted the cap from 64 → 1024 via `cub::BlockRadixSort` + `cub::BlockScan`. Larger rows would need a multi-block / global sort pipeline.
-- **Conv 1-D / 3-D / transposed / depthwise** — Phase 7 fanout; Conv2d only today.
-- **Pool 1-D / 3-D / adaptive / LP-pool / fractional-max-pool** — Phase 7 fanout.
-- **f16 / bf16 atomicAdd backends for segment / indexing BW** — restricted to native-FP-atomic types today.
+- **Attention**: Flash SDPA sm_89 strided sibling (kernel hardcodes
+  offsets internally; rewrite needed). SDPA BW + GQA broadcast
+  (atomicAdd path for dK/dV accumulation across broadcast Q-head
+  groups). Paged FlashAttention.
+- **Pool completeness**: bit-exact AdaptiveAvgPool / AdaptiveMaxPool
+  (current cuDNN approximation diverges ±1 input cell when
+  `in_i % out_i != 0`). LpPool 1d/2d composite (needs parameterized
+  `Pow(p)` unary plan first). FractionalMaxPool 2d/3d bespoke kernel.
+- **Sparsemax for extents > 1024** — would need multi-block / global
+  sort pipeline.
+- **Indexing wrappers**: `OneHotPlan` / `NonzeroPlan` /
+  `MaskedFillPlan` Rust plan wrappers are still i32-only;
+  Phase 11.5 FFI symbols (`*_i64idx_*`) exist but the Rust wrapper
+  doesn't expose `I: IndexElement` yet.
+- **Segment**: `Max` / `Min` / `Prod` BW (needs argmax / argmin
+  tracking from FW; numerically stable `prod / x_n` for Prod).
+- **EmbeddingBag**: `Max` mode (per-feature argmax tracking).
+- **`BatchedOrmqrWyPlan` complex variants** — `{f32, f64}` ship;
+  complex would need `cunmqr` rather than `cusolverDnXormqr`.
 - **f16 / bf16 activations for `GgufMmvqPlan`** — f32 only today.
+- **Correctness bugs**:
+  - CtcLossBackward γ-accumulation (FW validated; BW only smoke-
+    tested; FD helper retained for re-validation after fix).
+  - MoE CPU-reference math mismatch (Phase 8 vendor; kernel
+    smoke-tested but the host-side reference is wrong, so assertions
+    are disabled — pure test-layer follow-up).
+  - MMVQ `w_start_byte_offset` alignment guard (Phase 14.5 added the
+    offset parameter but no debug-build assertion for block formats
+    that require alignment — Q4_K is 16-byte aligned; misuse is
+    silent-wrong today).
+- **Long-arc roadmap items** (from the original comprehensive plan,
+  pre-empted by Fuel-driven Phase 11+ work):
+  - sm_90a (Hopper async) specialization + Blackwell forward-compat
+    (was the original "Phase 11").
+  - API freeze + 1.0 stability + benchmark suite against
+    PyTorch / cuDNN / cuBLAS references (was the original
+    "Phase 12").
