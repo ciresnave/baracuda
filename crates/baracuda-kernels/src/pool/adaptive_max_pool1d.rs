@@ -1,38 +1,30 @@
-//! AdaptiveMaxPool1d — NCL adaptive max-pool via cuDNN.
+//! AdaptiveMaxPool1d — NCL adaptive max-pool, bit-exact PyTorch
+//! (Phase 16.1 bespoke kernel).
 //!
-//! See [`super::adaptive_avg_pool1d`] for the cuDNN-approximation
-//! caveat — same `(kernel, stride)` derivation, same bit-exact-PyTorch
-//! deviation when `input_size % output_size != 0`.
+//! See [`super::adaptive_avg_pool1d`] for the FW window formula and the
+//! cuDNN-approximation history. MaxPool BW recomputes the per-window
+//! argmax from saved `x` (no separate `indices` tensor — keeps the
+//! Phase 11.8 args shape intact). half / bf16 BW atomics route through
+//! `baracuda_atomic.cuh`'s CAS helper.
 
-use core::cell::Cell;
+use core::ffi::c_void;
 use core::marker::PhantomData;
 
 use baracuda_cutlass::Result;
 use baracuda_driver::Stream;
-use baracuda_kernels_sys::{cudnnHandle_t, cudnnPoolingDescriptor_t, cudnnTensorDescriptor_t};
 use baracuda_kernels_types::{
     Element, KernelSku, PlanPreference, PoolKind, PrecisionGuarantee, Workspace,
 };
 
 use super::adaptive_avg_pool1d::{
-    check_bw_args, check_fw_args, validate_descriptor, AdaptivePool1dBwArgs,
-    AdaptivePool1dDescriptor, AdaptivePool1dFwArgs,
-};
-use super::max_pool2d::{build_sku, PoolMode};
-use super::pool_nd::{
-    adaptive_kernel_stride, bind_stream, drop_descriptors_nd, ensure_descriptors_nd, ensure_handle,
-    run_bw_nd, run_fw_nd,
+    build_sku, check_bw_args, check_fw_args, dispatch_max_bw, dispatch_max_fw, map_status,
+    validate_descriptor, AdaptivePool1dBwArgs, AdaptivePool1dDescriptor, AdaptivePool1dFwArgs,
 };
 
-/// Adaptive 1-D max-pool plan (cuDNN approximation).
+/// Adaptive 1-D max-pool plan (bit-exact PyTorch, bespoke kernel).
 pub struct AdaptiveMaxPool1dPlan<T: Element> {
     desc: AdaptivePool1dDescriptor,
-    derived: (i32, i32),
     sku: KernelSku,
-    handle: Cell<cudnnHandle_t>,
-    x_desc: Cell<cudnnTensorDescriptor_t>,
-    y_desc: Cell<cudnnTensorDescriptor_t>,
-    pool_desc: Cell<cudnnPoolingDescriptor_t>,
     _marker: PhantomData<T>,
 }
 
@@ -44,16 +36,10 @@ impl<T: Element> AdaptiveMaxPool1dPlan<T> {
         _pref: PlanPreference,
     ) -> Result<Self> {
         validate_descriptor::<T>(desc)?;
-        let derived = adaptive_kernel_stride(desc.l_in, desc.l_out);
         let sku = build_sku::<T>(PoolKind::AdaptiveMaxPool1d);
         Ok(Self {
             desc: *desc,
-            derived,
             sku,
-            handle: Cell::new(core::ptr::null_mut()),
-            x_desc: Cell::new(core::ptr::null_mut()),
-            y_desc: Cell::new(core::ptr::null_mut()),
-            pool_desc: Cell::new(core::ptr::null_mut()),
             _marker: PhantomData,
         })
     }
@@ -76,10 +62,15 @@ impl<T: Element> AdaptiveMaxPool1dPlan<T> {
         0
     }
 
-    /// Internal `(kernel, stride)` derived from the descriptor.
+    /// Deprecated. Always returns `(0, 0)` — see
+    /// [`super::AdaptiveAvgPool1dPlan::derived_kernel_stride`].
     #[inline]
+    #[deprecated(
+        since = "0.0.1-alpha.33",
+        note = "Phase 16.1 uses bit-exact per-output-cell windows; no single (kernel, stride) pair applies."
+    )]
     pub fn derived_kernel_stride(&self) -> (i32, i32) {
-        self.derived
+        (0, 0)
     }
 
     /// Run the forward pass.
@@ -90,20 +81,24 @@ impl<T: Element> AdaptiveMaxPool1dPlan<T> {
         args: AdaptivePool1dFwArgs<'_, T>,
     ) -> Result<()> {
         check_fw_args(&self.desc, &args)?;
-        let h = ensure_handle(&self.handle)?;
-        bind_stream(h, stream)?;
-        self.ensure_descs()?;
-        run_fw_nd::<T>(
-            h,
-            self.pool_desc.get(),
-            self.x_desc.get(),
-            self.y_desc.get(),
-            args.x.data.as_raw().0,
-            args.y.data.as_raw().0,
-        )
+        let stream_ptr = stream.as_raw() as *mut c_void;
+        let x_ptr = args.x.data.as_raw().0 as *const c_void;
+        let y_ptr = args.y.data.as_raw().0 as *mut c_void;
+        let nc = self.desc.batch * self.desc.channels;
+        let status = dispatch_max_fw::<T>(
+            x_ptr,
+            y_ptr,
+            nc,
+            1, // spatial_rank
+            1, 1, self.desc.l_in,
+            1, 1, self.desc.l_out,
+            stream_ptr,
+        );
+        map_status(status)
     }
 
-    /// Run the backward pass.
+    /// Run the backward pass. Recomputes argmax from saved `x`; zeros
+    /// `dx` internally before atomic-scatter.
     pub fn run_bw(
         &self,
         stream: &Stream,
@@ -111,43 +106,21 @@ impl<T: Element> AdaptiveMaxPool1dPlan<T> {
         args: AdaptivePool1dBwArgs<'_, T>,
     ) -> Result<()> {
         check_bw_args(&self.desc, &args)?;
-        let h = ensure_handle(&self.handle)?;
-        bind_stream(h, stream)?;
-        self.ensure_descs()?;
-        run_bw_nd::<T>(
-            h,
-            self.pool_desc.get(),
-            self.x_desc.get(),
-            self.y_desc.get(),
-            args.y.data.as_raw().0,
-            args.dy.data.as_raw().0,
-            args.x.data.as_raw().0,
-            args.dx.data.as_raw().0,
-        )
-    }
-
-    fn ensure_descs(&self) -> Result<()> {
-        let x_dims = [self.desc.batch, self.desc.channels, self.desc.l_in];
-        let y_dims = [self.desc.batch, self.desc.channels, self.desc.l_out];
-        let window = [self.derived.0];
-        let padding = [0i32];
-        let stride = [self.derived.1];
-        ensure_descriptors_nd::<T>(
-            &x_dims,
-            &y_dims,
-            &window,
-            &padding,
-            &stride,
-            PoolMode::Max,
-            &self.x_desc,
-            &self.y_desc,
-            &self.pool_desc,
-        )
-    }
-}
-
-impl<T: Element> Drop for AdaptiveMaxPool1dPlan<T> {
-    fn drop(&mut self) {
-        drop_descriptors_nd(&self.x_desc, &self.y_desc, &self.pool_desc, &self.handle);
+        let stream_ptr = stream.as_raw() as *mut c_void;
+        let x_ptr = args.x.data.as_raw().0 as *const c_void;
+        let dy_ptr = args.dy.data.as_raw().0 as *const c_void;
+        let dx_ptr = args.dx.data.as_raw().0 as *mut c_void;
+        let nc = self.desc.batch * self.desc.channels;
+        let status = dispatch_max_bw::<T>(
+            x_ptr,
+            dy_ptr,
+            dx_ptr,
+            nc,
+            1,
+            1, 1, self.desc.l_in,
+            1, 1, self.desc.l_out,
+            stream_ptr,
+        );
+        map_status(status)
     }
 }

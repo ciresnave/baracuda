@@ -1,36 +1,27 @@
-//! AdaptiveMaxPool3d — NCDHW adaptive max-pool via cuDNN.
-//!
-//! See [`super::adaptive_avg_pool3d`] for the cuDNN-approximation caveat.
+//! AdaptiveMaxPool3d — NCDHW adaptive max-pool, bit-exact PyTorch
+//! (Phase 16.1 bespoke kernel).
 
-use core::cell::Cell;
+use core::ffi::c_void;
 use core::marker::PhantomData;
 
 use baracuda_cutlass::Result;
 use baracuda_driver::Stream;
-use baracuda_kernels_sys::{cudnnHandle_t, cudnnPoolingDescriptor_t, cudnnTensorDescriptor_t};
 use baracuda_kernels_types::{
     Element, KernelSku, PlanPreference, PoolKind, PrecisionGuarantee, Workspace,
 };
 
+use super::adaptive_avg_pool1d::{
+    build_sku, dispatch_max_bw, dispatch_max_fw, map_status,
+};
 use super::adaptive_avg_pool3d::{
     check_bw_args, check_fw_args, validate_descriptor, AdaptivePool3dBwArgs,
     AdaptivePool3dDescriptor, AdaptivePool3dFwArgs,
 };
-use super::max_pool2d::{build_sku, PoolMode};
-use super::pool_nd::{
-    adaptive_kernel_stride, bind_stream, drop_descriptors_nd, ensure_descriptors_nd, ensure_handle,
-    run_bw_nd, run_fw_nd,
-};
 
-/// Adaptive 3-D max-pool plan (cuDNN approximation).
+/// Adaptive 3-D max-pool plan (bit-exact PyTorch, bespoke kernel).
 pub struct AdaptiveMaxPool3dPlan<T: Element> {
     desc: AdaptivePool3dDescriptor,
-    derived: ((i32, i32), (i32, i32), (i32, i32)),
     sku: KernelSku,
-    handle: Cell<cudnnHandle_t>,
-    x_desc: Cell<cudnnTensorDescriptor_t>,
-    y_desc: Cell<cudnnTensorDescriptor_t>,
-    pool_desc: Cell<cudnnPoolingDescriptor_t>,
     _marker: PhantomData<T>,
 }
 
@@ -42,18 +33,10 @@ impl<T: Element> AdaptiveMaxPool3dPlan<T> {
         _pref: PlanPreference,
     ) -> Result<Self> {
         validate_descriptor::<T>(desc)?;
-        let d = adaptive_kernel_stride(desc.d_in, desc.d_out);
-        let h = adaptive_kernel_stride(desc.h_in, desc.h_out);
-        let w = adaptive_kernel_stride(desc.w_in, desc.w_out);
         let sku = build_sku::<T>(PoolKind::AdaptiveMaxPool3d);
         Ok(Self {
             desc: *desc,
-            derived: (d, h, w),
             sku,
-            handle: Cell::new(core::ptr::null_mut()),
-            x_desc: Cell::new(core::ptr::null_mut()),
-            y_desc: Cell::new(core::ptr::null_mut()),
-            pool_desc: Cell::new(core::ptr::null_mut()),
             _marker: PhantomData,
         })
     }
@@ -76,10 +59,14 @@ impl<T: Element> AdaptiveMaxPool3dPlan<T> {
         0
     }
 
-    /// Per-axis `(kernel, stride)` triple derived at `select` time.
+    /// Deprecated. Always returns three `(0, 0)` pairs.
     #[inline]
+    #[deprecated(
+        since = "0.0.1-alpha.33",
+        note = "Phase 16.1 uses bit-exact per-output-cell windows; no single (kernel, stride) pair applies."
+    )]
     pub fn derived_kernel_stride(&self) -> ((i32, i32), (i32, i32), (i32, i32)) {
-        self.derived
+        ((0, 0), (0, 0), (0, 0))
     }
 
     /// Run the forward pass.
@@ -90,17 +77,20 @@ impl<T: Element> AdaptiveMaxPool3dPlan<T> {
         args: AdaptivePool3dFwArgs<'_, T>,
     ) -> Result<()> {
         check_fw_args(&self.desc, &args)?;
-        let h = ensure_handle(&self.handle)?;
-        bind_stream(h, stream)?;
-        self.ensure_descs()?;
-        run_fw_nd::<T>(
-            h,
-            self.pool_desc.get(),
-            self.x_desc.get(),
-            self.y_desc.get(),
-            args.x.data.as_raw().0,
-            args.y.data.as_raw().0,
-        )
+        let stream_ptr = stream.as_raw() as *mut c_void;
+        let x_ptr = args.x.data.as_raw().0 as *const c_void;
+        let y_ptr = args.y.data.as_raw().0 as *mut c_void;
+        let nc = self.desc.batch * self.desc.channels;
+        let status = dispatch_max_fw::<T>(
+            x_ptr,
+            y_ptr,
+            nc,
+            3,
+            self.desc.d_in, self.desc.h_in, self.desc.w_in,
+            self.desc.d_out, self.desc.h_out, self.desc.w_out,
+            stream_ptr,
+        );
+        map_status(status)
     }
 
     /// Run the backward pass.
@@ -111,55 +101,21 @@ impl<T: Element> AdaptiveMaxPool3dPlan<T> {
         args: AdaptivePool3dBwArgs<'_, T>,
     ) -> Result<()> {
         check_bw_args(&self.desc, &args)?;
-        let h = ensure_handle(&self.handle)?;
-        bind_stream(h, stream)?;
-        self.ensure_descs()?;
-        run_bw_nd::<T>(
-            h,
-            self.pool_desc.get(),
-            self.x_desc.get(),
-            self.y_desc.get(),
-            args.y.data.as_raw().0,
-            args.dy.data.as_raw().0,
-            args.x.data.as_raw().0,
-            args.dx.data.as_raw().0,
-        )
-    }
-
-    fn ensure_descs(&self) -> Result<()> {
-        let x_dims = [
-            self.desc.batch,
-            self.desc.channels,
-            self.desc.d_in,
-            self.desc.h_in,
-            self.desc.w_in,
-        ];
-        let y_dims = [
-            self.desc.batch,
-            self.desc.channels,
-            self.desc.d_out,
-            self.desc.h_out,
-            self.desc.w_out,
-        ];
-        let window = [self.derived.0 .0, self.derived.1 .0, self.derived.2 .0];
-        let padding = [0i32, 0i32, 0i32];
-        let stride = [self.derived.0 .1, self.derived.1 .1, self.derived.2 .1];
-        ensure_descriptors_nd::<T>(
-            &x_dims,
-            &y_dims,
-            &window,
-            &padding,
-            &stride,
-            PoolMode::Max,
-            &self.x_desc,
-            &self.y_desc,
-            &self.pool_desc,
-        )
-    }
-}
-
-impl<T: Element> Drop for AdaptiveMaxPool3dPlan<T> {
-    fn drop(&mut self) {
-        drop_descriptors_nd(&self.x_desc, &self.y_desc, &self.pool_desc, &self.handle);
+        let stream_ptr = stream.as_raw() as *mut c_void;
+        let x_ptr = args.x.data.as_raw().0 as *const c_void;
+        let dy_ptr = args.dy.data.as_raw().0 as *const c_void;
+        let dx_ptr = args.dx.data.as_raw().0 as *mut c_void;
+        let nc = self.desc.batch * self.desc.channels;
+        let status = dispatch_max_bw::<T>(
+            x_ptr,
+            dy_ptr,
+            dx_ptr,
+            nc,
+            3,
+            self.desc.d_in, self.desc.h_in, self.desc.w_in,
+            self.desc.d_out, self.desc.h_out, self.desc.w_out,
+            stream_ptr,
+        );
+        map_status(status)
     }
 }

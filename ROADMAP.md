@@ -7,8 +7,8 @@ effort within each category. Authoritative status per op lives in
 [`OP-MATRIX.md`](OP-MATRIX.md); historical phase summaries live in
 [`ARCHITECTURE.md`](ARCHITECTURE.md).
 
-The current tag is **v0.0.1-alpha.31** with **1890 GPU tests
-passing** on RTX 4070 (sm_89) across **602 binary targets**.
+The current tag is **v0.0.1-alpha.33** with **1916 GPU tests
+passing** on RTX 4070 (sm_89) across **607 binary targets**.
 
 ---
 
@@ -53,25 +53,30 @@ no longer outstanding:
 - ~~**MoE CPU-reference math fix**~~ — turned out to be a fixture
   race, fixed in 15.3 above.
 
-## Phase 16 — pool completion (proposed)
+## Phase 16 — pool completion (complete; shipped alpha.33)
 
-- **Bit-exact AdaptiveAvgPool / AdaptiveMaxPool** — current cuDNN
-  approximation (`kernel = ceil(in/out); stride = floor(in/out);
-  pad = 0`) diverges from PyTorch by ±1 input cell when
-  `in_i % out_i != 0`. cuDNN doesn't expose a true adaptive pool —
-  needs a bespoke CUDA kernel that computes per-output-cell kernel
-  bounds. PyTorch convention: `start = floor(i * in_i / out_i)`,
-  `end = ceil((i+1) * in_i / out_i)`.
-- **LpPool 1d / 2d** — `LpPool(p, kernel) = (avg_pool(input^p))^(1/p)`.
-  Could be a composite plan (`pow → avg_pool → pow`); blocked on a
-  parameterized `Pow(p)` unary plan that doesn't exist yet (today's
-  Pow is binary; the unary parameterized PowI from Phase 12 takes
-  integer exponents only). Two paths: add `PowFloat(p)` parameterized
-  unary, then compose; OR ship a bespoke fused kernel.
-- **FractionalMaxPool 2d / 3d** — bespoke kernel needed (cuDNN
-  doesn't support this). PyTorch uses pseudorandom sampling to
-  decide kernel-window offsets. Effort: medium — design pass needed
-  on the RNG interface.
+- **Bit-exact AdaptiveAvgPool / AdaptiveMaxPool {1,2,3}d** ✓
+  Phase 16.1. Replaces cuDNN approximation with bespoke rank-
+  agnostic CUDA kernel implementing PyTorch's exact
+  `start = floor(i*in/out); end = ceil((i+1)*in/out)`. 16 FFI
+  symbols (FW + BW × 4 fp dtypes). MaxPool BW recomputes argmax
+  from saved `x` to preserve `*BwArgs` API source-compat. Existing
+  callers depending on the approximation will see ±1 input cell
+  behavior change on non-divisible cases.
+- **LpPool {1,2}d** ✓ Phase 16.2. Bespoke fused kernel —
+  `y = (Σ|x|^p)^(1/p)` over the window in one launch. FW + BW × 4
+  dtypes. `p == 1` simplifies naturally; `p == ∞` rejected (use
+  MaxPool). **Breaking**: descriptor gained `ceil_mode: bool` field.
+- **FractionalMaxPool {2,3}d** ✓ Phase 16.3. Bespoke kernel with
+  caller-supplied `random_samples: TensorRef<f32, 3>`
+  (`[N, C, num_axes]`); no internal RNG state. Window placement
+  formula: evenly-spaced base + α perturbation. **Documented
+  divergence** from PyTorch's exact `start_index/end_index`
+  derivation — bit-exact PyTorch match is a future item if needed.
+
+Carry-forward from Phase 16:
+- FractionalMaxPool exact PyTorch formula (current is approximation).
+- LpPool 3d (current scope was 1d/2d only).
 
 ## Phase 17 — SDPA / attention completion (proposed)
 

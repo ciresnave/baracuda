@@ -839,6 +839,30 @@ fn collect_kernel_files() -> Vec<&'static str> {
             // Bool}; one templated kernel body covers both ops via a
             // predicate functor.
             "shape_layout/triu_tril.cu",
+            // Phase 16.1 — bit-exact PyTorch adaptive pooling (Avg /
+            // Max, 1D / 2D / 3D, FW + BW). Single rank-agnostic kernel
+            // template parameterized on (spatial_rank, in_dhw, out_dhw)
+            // with per-dtype instantiations for {f16, bf16, f32, f64}.
+            // Replaces the Phase 11.8 cuDNN-approximation path (uniform
+            // `kernel=ceil(in/out)` / `stride=floor(in/out)`) with
+            // PyTorch's non-uniform per-output-cell window convention.
+            "pool/adaptive_pool.cu",
+            // Phase 16.2 — LpPool 1d/2d fused bespoke kernels (FW + BW
+            // × {f32, f64, f16, bf16}). cuDNN has no native LpPool; the
+            // fused kernel computes `y = (Σ |x|^p)^(1/p)` per window in
+            // one launch (avoids the 3-launch pow→avg_pool→pow stack +
+            // the missing parameterized `Pow(p)` unary plan dependency).
+            // BW uses one-thread-per-output-cell atomicAdd scatter for
+            // uniformity with the rest of the pool BW family.
+            "pool/lp_pool.cu",
+            // Phase 16.3 — FractionalMaxPool 2-D + 3-D (FW + BW × 4 FP
+            // dtypes). Bespoke kernel; cuDNN has no fractional-pool
+            // primitive. Caller-provided f32 random samples
+            // ([N, C, num_axes]) drive per-output-cell window
+            // placement; the FW writes both `y` and a saved-indices
+            // tensor (i64, argmax linear index) consumed by the BW
+            // atomicAdd scatter.
+            "pool/fractional_max_pool.cu",
         ] {
             if std::path::Path::new(&format!("kernels/{f}")).exists() {
                 kernels.push(*f);

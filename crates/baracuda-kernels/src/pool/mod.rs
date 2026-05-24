@@ -75,7 +75,9 @@ pub mod avg_pool3d;
 pub mod fractional_max_pool2d;
 pub mod fractional_max_pool3d;
 pub mod lp_pool1d;
+pub mod lp_pool1d_backward;
 pub mod lp_pool2d;
+pub mod lp_pool2d_backward;
 pub mod max_pool1d;
 pub mod max_pool2d;
 pub mod max_pool3d;
@@ -113,8 +115,41 @@ pub use adaptive_max_pool1d::AdaptiveMaxPool1dPlan;
 pub use adaptive_max_pool2d::AdaptiveMaxPool2dPlan;
 pub use adaptive_max_pool3d::AdaptiveMaxPool3dPlan;
 
-// Stubbed pools (bespoke kernel required — see per-module rustdoc).
-pub use fractional_max_pool2d::{FractionalMaxPool2dDescriptor, FractionalMaxPool2dPlan};
-pub use fractional_max_pool3d::{FractionalMaxPool3dDescriptor, FractionalMaxPool3dPlan};
-pub use lp_pool1d::{LpPool1dDescriptor, LpPool1dPlan};
-pub use lp_pool2d::{LpPool2dDescriptor, LpPool2dPlan};
+// Fractional max-pool — bespoke kernel (Phase 16.3). FW + BW × 4 FP
+// dtypes; caller supplies a `[N, C, num_axes]` f32 `random_samples`
+// tensor and retains a saved-`indices` i64 tensor between FW and BW.
+pub use fractional_max_pool2d::{
+    FractionalMaxPool2dBwArgs, FractionalMaxPool2dDescriptor, FractionalMaxPool2dFwArgs,
+    FractionalMaxPool2dPlan,
+};
+pub use fractional_max_pool3d::{
+    FractionalMaxPool3dBwArgs, FractionalMaxPool3dDescriptor, FractionalMaxPool3dFwArgs,
+    FractionalMaxPool3dPlan,
+};
+// LpPool — bespoke fused kernel (Phase 16.2). FW + BW × 4 FP dtypes.
+// cuDNN has no native LpPool; the fused kernel does the full
+// `y = (Σ |x|^p)^(1/p)` reduction in one launch (avoids the
+// pow → avg_pool → pow stack + the missing parameterized Pow(p) plan).
+pub use lp_pool1d::{LpPool1dDescriptor, LpPool1dFwArgs, LpPool1dPlan};
+pub use lp_pool1d_backward::{LpPool1dBackwardPlan, LpPool1dBwArgs};
+pub use lp_pool2d::{LpPool2dDescriptor, LpPool2dFwArgs, LpPool2dPlan};
+pub use lp_pool2d_backward::{LpPool2dBackwardPlan, LpPool2dBwArgs};
+
+use baracuda_cutlass::{Error, Result};
+
+/// Shared status-code mapper for the LpPool family. Mirrors the sort/
+/// indexing family's `map_status` pattern.
+pub(crate) fn map_lp_pool_status(code: i32) -> Result<()> {
+    match code {
+        0 => Ok(()),
+        1 => Err(Error::MisalignedOperand),
+        2 => Err(Error::InvalidProblem(
+            "baracuda-kernels-sys::lp_pool reported invalid problem",
+        )),
+        3 => Err(Error::Unsupported(
+            "baracuda-kernels-sys::lp_pool reported unsupported configuration",
+        )),
+        4 => Err(Error::WorkspaceTooSmall { needed: 0, got: 0 }),
+        n => Err(Error::CutlassInternal(n)),
+    }
+}

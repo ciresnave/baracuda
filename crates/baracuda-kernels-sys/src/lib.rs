@@ -34461,4 +34461,520 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+
+    // ========================================================================
+    // Phase 16.2 — LpPool 1d/2d fused bespoke kernels.
+    // ========================================================================
+    //
+    // `y = (Σ_{k in window} |x_k|^p)^(1/p)` over an NCL (1d) / NCHW (2d)
+    // tensor. No padding (PyTorch's `LpPool*d` has no `pad` argument).
+    // Window clamps to input boundary when `ceil_mode = true` produces a
+    // window that overhangs.
+    //
+    // `norm_p` is `f32` for every dtype (f64 path included — the
+    // exponent precision rarely matters past 5 decimal places and the
+    // f32 ABI keeps the symbol set uniform).
+    //
+    // BW caller must zero `dx` before launch — kernel uses atomicAdd
+    // scatter.
+    //
+    // The `ceil_mode` flag is accepted for ABI uniformity but is
+    // *unused* by the kernel — the safe layer computes the output
+    // extent under the requested ceil_mode and passes it as `l_out` /
+    // `(h_out, w_out)`. Kernel just iterates `[0, l_out)`.
+
+    /// LpPool 1d FW, f32.
+    pub fn baracuda_kernels_lp_pool_1d_f32_run(
+        x: *const c_void, y: *mut c_void,
+        batch: i32, channels: i32, l_in: i32,
+        kernel: i32, stride: i32, l_out: i32,
+        norm_p: f32, ceil_mode: i32,
+        stream: *mut c_void,
+    ) -> i32;
+    /// LpPool 1d FW, f64.
+    pub fn baracuda_kernels_lp_pool_1d_f64_run(
+        x: *const c_void, y: *mut c_void,
+        batch: i32, channels: i32, l_in: i32,
+        kernel: i32, stride: i32, l_out: i32,
+        norm_p: f32, ceil_mode: i32,
+        stream: *mut c_void,
+    ) -> i32;
+    /// LpPool 1d FW, f16.
+    pub fn baracuda_kernels_lp_pool_1d_f16_run(
+        x: *const c_void, y: *mut c_void,
+        batch: i32, channels: i32, l_in: i32,
+        kernel: i32, stride: i32, l_out: i32,
+        norm_p: f32, ceil_mode: i32,
+        stream: *mut c_void,
+    ) -> i32;
+    /// LpPool 1d FW, bf16.
+    pub fn baracuda_kernels_lp_pool_1d_bf16_run(
+        x: *const c_void, y: *mut c_void,
+        batch: i32, channels: i32, l_in: i32,
+        kernel: i32, stride: i32, l_out: i32,
+        norm_p: f32, ceil_mode: i32,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// LpPool 1d BW, f32. Caller must zero `dx` first.
+    pub fn baracuda_kernels_lp_pool_1d_f32_backward_run(
+        x: *const c_void, y: *const c_void, dy: *const c_void, dx: *mut c_void,
+        batch: i32, channels: i32, l_in: i32,
+        kernel: i32, stride: i32, l_out: i32,
+        norm_p: f32, ceil_mode: i32,
+        stream: *mut c_void,
+    ) -> i32;
+    /// LpPool 1d BW, f64.
+    pub fn baracuda_kernels_lp_pool_1d_f64_backward_run(
+        x: *const c_void, y: *const c_void, dy: *const c_void, dx: *mut c_void,
+        batch: i32, channels: i32, l_in: i32,
+        kernel: i32, stride: i32, l_out: i32,
+        norm_p: f32, ceil_mode: i32,
+        stream: *mut c_void,
+    ) -> i32;
+    /// LpPool 1d BW, f16.
+    pub fn baracuda_kernels_lp_pool_1d_f16_backward_run(
+        x: *const c_void, y: *const c_void, dy: *const c_void, dx: *mut c_void,
+        batch: i32, channels: i32, l_in: i32,
+        kernel: i32, stride: i32, l_out: i32,
+        norm_p: f32, ceil_mode: i32,
+        stream: *mut c_void,
+    ) -> i32;
+    /// LpPool 1d BW, bf16.
+    pub fn baracuda_kernels_lp_pool_1d_bf16_backward_run(
+        x: *const c_void, y: *const c_void, dy: *const c_void, dx: *mut c_void,
+        batch: i32, channels: i32, l_in: i32,
+        kernel: i32, stride: i32, l_out: i32,
+        norm_p: f32, ceil_mode: i32,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// LpPool 2d FW, f32.
+    pub fn baracuda_kernels_lp_pool_2d_f32_run(
+        x: *const c_void, y: *mut c_void,
+        batch: i32, channels: i32, h_in: i32, w_in: i32,
+        kh: i32, kw: i32, sh: i32, sw: i32,
+        h_out: i32, w_out: i32,
+        norm_p: f32, ceil_mode: i32,
+        stream: *mut c_void,
+    ) -> i32;
+    /// LpPool 2d FW, f64.
+    pub fn baracuda_kernels_lp_pool_2d_f64_run(
+        x: *const c_void, y: *mut c_void,
+        batch: i32, channels: i32, h_in: i32, w_in: i32,
+        kh: i32, kw: i32, sh: i32, sw: i32,
+        h_out: i32, w_out: i32,
+        norm_p: f32, ceil_mode: i32,
+        stream: *mut c_void,
+    ) -> i32;
+    /// LpPool 2d FW, f16.
+    pub fn baracuda_kernels_lp_pool_2d_f16_run(
+        x: *const c_void, y: *mut c_void,
+        batch: i32, channels: i32, h_in: i32, w_in: i32,
+        kh: i32, kw: i32, sh: i32, sw: i32,
+        h_out: i32, w_out: i32,
+        norm_p: f32, ceil_mode: i32,
+        stream: *mut c_void,
+    ) -> i32;
+    /// LpPool 2d FW, bf16.
+    pub fn baracuda_kernels_lp_pool_2d_bf16_run(
+        x: *const c_void, y: *mut c_void,
+        batch: i32, channels: i32, h_in: i32, w_in: i32,
+        kh: i32, kw: i32, sh: i32, sw: i32,
+        h_out: i32, w_out: i32,
+        norm_p: f32, ceil_mode: i32,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// LpPool 2d BW, f32. Caller must zero `dx` first.
+    pub fn baracuda_kernels_lp_pool_2d_f32_backward_run(
+        x: *const c_void, y: *const c_void, dy: *const c_void, dx: *mut c_void,
+        batch: i32, channels: i32, h_in: i32, w_in: i32,
+        kh: i32, kw: i32, sh: i32, sw: i32,
+        h_out: i32, w_out: i32,
+        norm_p: f32, ceil_mode: i32,
+        stream: *mut c_void,
+    ) -> i32;
+    /// LpPool 2d BW, f64.
+    pub fn baracuda_kernels_lp_pool_2d_f64_backward_run(
+        x: *const c_void, y: *const c_void, dy: *const c_void, dx: *mut c_void,
+        batch: i32, channels: i32, h_in: i32, w_in: i32,
+        kh: i32, kw: i32, sh: i32, sw: i32,
+        h_out: i32, w_out: i32,
+        norm_p: f32, ceil_mode: i32,
+        stream: *mut c_void,
+    ) -> i32;
+    /// LpPool 2d BW, f16.
+    pub fn baracuda_kernels_lp_pool_2d_f16_backward_run(
+        x: *const c_void, y: *const c_void, dy: *const c_void, dx: *mut c_void,
+        batch: i32, channels: i32, h_in: i32, w_in: i32,
+        kh: i32, kw: i32, sh: i32, sw: i32,
+        h_out: i32, w_out: i32,
+        norm_p: f32, ceil_mode: i32,
+        stream: *mut c_void,
+    ) -> i32;
+    /// LpPool 2d BW, bf16.
+    pub fn baracuda_kernels_lp_pool_2d_bf16_backward_run(
+        x: *const c_void, y: *const c_void, dy: *const c_void, dx: *mut c_void,
+        batch: i32, channels: i32, h_in: i32, w_in: i32,
+        kh: i32, kw: i32, sh: i32, sw: i32,
+        h_out: i32, w_out: i32,
+        norm_p: f32, ceil_mode: i32,
+        stream: *mut c_void,
+    ) -> i32;
+
+    // ========================================================================
+    // Phase 16.3 — FractionalMaxPool 2-D + 3-D (FW + BW × 4 FP dtypes).
+    // ========================================================================
+    //
+    // Bespoke kernel; cuDNN has no fractional-pool primitive. Caller
+    // provides a `[N, C, num_axes]` f32 `random_samples` buffer (one α
+    // per (batch, channel, axis); see baracuda_fractional_max_pool.cuh
+    // for the "evenly-spaced base + α perturbation" window-placement
+    // formula and the note on PyTorch divergence).
+    //
+    // FW writes both `y` (per-window max, dtype `T`) and `indices`
+    // (per-window argmax linear index into `x`, dtype i64) — the
+    // saved-indices pattern shared with MaxPool BW.
+    //
+    // BW: one thread per output cell; reads `dy[i]` + `indices[i]`,
+    // atomicAdd's `dy[i]` into `dx[indices[i]]`. Caller must zero `dx`
+    // before launch. half / bf16 route through the atomicCAS helper
+    // (Phase 11.3 / Fuel feedback #6).
+
+    /// FractionalMaxPool2d FW, f32.
+    pub fn baracuda_kernels_fractional_max_pool_2d_fw_f32_run(
+        x: *const c_void, y: *mut c_void,
+        indices: *mut c_void,
+        random_samples: *const f32,
+        batch: i32, channels: i32,
+        h_in: i32, w_in: i32,
+        h_out: i32, w_out: i32,
+        kh: i32, kw: i32,
+        stream: *mut c_void,
+    ) -> i32;
+    /// FractionalMaxPool2d FW, f64.
+    pub fn baracuda_kernels_fractional_max_pool_2d_fw_f64_run(
+        x: *const c_void, y: *mut c_void,
+        indices: *mut c_void,
+        random_samples: *const f32,
+        batch: i32, channels: i32,
+        h_in: i32, w_in: i32,
+        h_out: i32, w_out: i32,
+        kh: i32, kw: i32,
+        stream: *mut c_void,
+    ) -> i32;
+    /// FractionalMaxPool2d FW, f16.
+    pub fn baracuda_kernels_fractional_max_pool_2d_fw_f16_run(
+        x: *const c_void, y: *mut c_void,
+        indices: *mut c_void,
+        random_samples: *const f32,
+        batch: i32, channels: i32,
+        h_in: i32, w_in: i32,
+        h_out: i32, w_out: i32,
+        kh: i32, kw: i32,
+        stream: *mut c_void,
+    ) -> i32;
+    /// FractionalMaxPool2d FW, bf16.
+    pub fn baracuda_kernels_fractional_max_pool_2d_fw_bf16_run(
+        x: *const c_void, y: *mut c_void,
+        indices: *mut c_void,
+        random_samples: *const f32,
+        batch: i32, channels: i32,
+        h_in: i32, w_in: i32,
+        h_out: i32, w_out: i32,
+        kh: i32, kw: i32,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// FractionalMaxPool2d BW, f32.
+    pub fn baracuda_kernels_fractional_max_pool_2d_bw_f32_run(
+        dy: *const c_void,
+        indices: *const c_void,
+        dx: *mut c_void,
+        batch: i32, channels: i32,
+        h_in: i32, w_in: i32,
+        h_out: i32, w_out: i32,
+        stream: *mut c_void,
+    ) -> i32;
+    /// FractionalMaxPool2d BW, f64.
+    pub fn baracuda_kernels_fractional_max_pool_2d_bw_f64_run(
+        dy: *const c_void,
+        indices: *const c_void,
+        dx: *mut c_void,
+        batch: i32, channels: i32,
+        h_in: i32, w_in: i32,
+        h_out: i32, w_out: i32,
+        stream: *mut c_void,
+    ) -> i32;
+    /// FractionalMaxPool2d BW, f16.
+    pub fn baracuda_kernels_fractional_max_pool_2d_bw_f16_run(
+        dy: *const c_void,
+        indices: *const c_void,
+        dx: *mut c_void,
+        batch: i32, channels: i32,
+        h_in: i32, w_in: i32,
+        h_out: i32, w_out: i32,
+        stream: *mut c_void,
+    ) -> i32;
+    /// FractionalMaxPool2d BW, bf16.
+    pub fn baracuda_kernels_fractional_max_pool_2d_bw_bf16_run(
+        dy: *const c_void,
+        indices: *const c_void,
+        dx: *mut c_void,
+        batch: i32, channels: i32,
+        h_in: i32, w_in: i32,
+        h_out: i32, w_out: i32,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// FractionalMaxPool3d FW, f32.
+    pub fn baracuda_kernels_fractional_max_pool_3d_fw_f32_run(
+        x: *const c_void, y: *mut c_void,
+        indices: *mut c_void,
+        random_samples: *const f32,
+        batch: i32, channels: i32,
+        d_in: i32, h_in: i32, w_in: i32,
+        d_out: i32, h_out: i32, w_out: i32,
+        kd: i32, kh: i32, kw: i32,
+        stream: *mut c_void,
+    ) -> i32;
+    /// FractionalMaxPool3d FW, f64.
+    pub fn baracuda_kernels_fractional_max_pool_3d_fw_f64_run(
+        x: *const c_void, y: *mut c_void,
+        indices: *mut c_void,
+        random_samples: *const f32,
+        batch: i32, channels: i32,
+        d_in: i32, h_in: i32, w_in: i32,
+        d_out: i32, h_out: i32, w_out: i32,
+        kd: i32, kh: i32, kw: i32,
+        stream: *mut c_void,
+    ) -> i32;
+    /// FractionalMaxPool3d FW, f16.
+    pub fn baracuda_kernels_fractional_max_pool_3d_fw_f16_run(
+        x: *const c_void, y: *mut c_void,
+        indices: *mut c_void,
+        random_samples: *const f32,
+        batch: i32, channels: i32,
+        d_in: i32, h_in: i32, w_in: i32,
+        d_out: i32, h_out: i32, w_out: i32,
+        kd: i32, kh: i32, kw: i32,
+        stream: *mut c_void,
+    ) -> i32;
+    /// FractionalMaxPool3d FW, bf16.
+    pub fn baracuda_kernels_fractional_max_pool_3d_fw_bf16_run(
+        x: *const c_void, y: *mut c_void,
+        indices: *mut c_void,
+        random_samples: *const f32,
+        batch: i32, channels: i32,
+        d_in: i32, h_in: i32, w_in: i32,
+        d_out: i32, h_out: i32, w_out: i32,
+        kd: i32, kh: i32, kw: i32,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// FractionalMaxPool3d BW, f32.
+    pub fn baracuda_kernels_fractional_max_pool_3d_bw_f32_run(
+        dy: *const c_void,
+        indices: *const c_void,
+        dx: *mut c_void,
+        batch: i32, channels: i32,
+        d_in: i32, h_in: i32, w_in: i32,
+        d_out: i32, h_out: i32, w_out: i32,
+        stream: *mut c_void,
+    ) -> i32;
+    /// FractionalMaxPool3d BW, f64.
+    pub fn baracuda_kernels_fractional_max_pool_3d_bw_f64_run(
+        dy: *const c_void,
+        indices: *const c_void,
+        dx: *mut c_void,
+        batch: i32, channels: i32,
+        d_in: i32, h_in: i32, w_in: i32,
+        d_out: i32, h_out: i32, w_out: i32,
+        stream: *mut c_void,
+    ) -> i32;
+    /// FractionalMaxPool3d BW, f16.
+    pub fn baracuda_kernels_fractional_max_pool_3d_bw_f16_run(
+        dy: *const c_void,
+        indices: *const c_void,
+        dx: *mut c_void,
+        batch: i32, channels: i32,
+        d_in: i32, h_in: i32, w_in: i32,
+        d_out: i32, h_out: i32, w_out: i32,
+        stream: *mut c_void,
+    ) -> i32;
+    /// FractionalMaxPool3d BW, bf16.
+    pub fn baracuda_kernels_fractional_max_pool_3d_bw_bf16_run(
+        dy: *const c_void,
+        indices: *const c_void,
+        dx: *mut c_void,
+        batch: i32, channels: i32,
+        d_in: i32, h_in: i32, w_in: i32,
+        d_out: i32, h_out: i32, w_out: i32,
+        stream: *mut c_void,
+    ) -> i32;
+
+    // ========================================================================
+    // Phase 16.1 — bit-exact PyTorch adaptive pooling (Avg / Max,
+    // 1D / 2D / 3D, FW + BW × 4 FP dtypes).
+    // ========================================================================
+    //
+    // Rank-agnostic kernel template; the Rust side packs the 1D / 2D /
+    // 3D spatial shape into the `(in_d, in_h, in_w)` / `(out_d, out_h,
+    // out_w)` i32 args with degenerate `1`s filling unused leading
+    // axes (1D → in_d=1, in_h=1, in_w=L; 2D → in_d=1, in_h=H, in_w=W;
+    // 3D → in_d=D, in_h=H, in_w=W).
+    //
+    // `nc` is the outer batch×channels product (the kernels iterate
+    // each NC slice independently with PyTorch's non-uniform
+    // per-output-cell window formula). `spatial_rank ∈ {1, 2, 3}`.
+    //
+    // MaxPool FW writes an i64 argmax `indices` tensor (linear offset
+    // within each per-NC spatial slab). MaxPool BW consumes that
+    // saved-indices tensor and atomically adds `dy` into the saved
+    // positions.
+    //
+    // AvgPool BW + MaxPool BW both zero `dx` internally before the
+    // scatter — callers do NOT need to pre-zero. half / bf16 atomics
+    // route through `baracuda::atomic::add` (Phase 11.3 atomicCAS
+    // helper).
+    //
+    // Replaces the Phase 11.8 cuDNN-approximation path (uniform
+    // `kernel = ceil(in/out)` / `stride = floor(in/out)`).
+
+    /// Adaptive AvgPool FW, f16. Rank-agnostic (`spatial_rank ∈ {1,2,3}`).
+    pub fn baracuda_kernels_adaptive_avg_pool_f16_fw_run(
+        x: *const c_void, y: *mut c_void,
+        nc: i32, spatial_rank: i32,
+        in_d: i32, in_h: i32, in_w: i32,
+        out_d: i32, out_h: i32, out_w: i32,
+        stream: *mut c_void,
+    ) -> i32;
+    /// Adaptive AvgPool FW, bf16.
+    pub fn baracuda_kernels_adaptive_avg_pool_bf16_fw_run(
+        x: *const c_void, y: *mut c_void,
+        nc: i32, spatial_rank: i32,
+        in_d: i32, in_h: i32, in_w: i32,
+        out_d: i32, out_h: i32, out_w: i32,
+        stream: *mut c_void,
+    ) -> i32;
+    /// Adaptive AvgPool FW, f32.
+    pub fn baracuda_kernels_adaptive_avg_pool_f32_fw_run(
+        x: *const c_void, y: *mut c_void,
+        nc: i32, spatial_rank: i32,
+        in_d: i32, in_h: i32, in_w: i32,
+        out_d: i32, out_h: i32, out_w: i32,
+        stream: *mut c_void,
+    ) -> i32;
+    /// Adaptive AvgPool FW, f64.
+    pub fn baracuda_kernels_adaptive_avg_pool_f64_fw_run(
+        x: *const c_void, y: *mut c_void,
+        nc: i32, spatial_rank: i32,
+        in_d: i32, in_h: i32, in_w: i32,
+        out_d: i32, out_h: i32, out_w: i32,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// Adaptive AvgPool BW, f16. Zeros `dx` internally, then atomic-scatters.
+    pub fn baracuda_kernels_adaptive_avg_pool_f16_bw_run(
+        dy: *const c_void, dx: *mut c_void,
+        nc: i32, spatial_rank: i32,
+        in_d: i32, in_h: i32, in_w: i32,
+        out_d: i32, out_h: i32, out_w: i32,
+        stream: *mut c_void,
+    ) -> i32;
+    /// Adaptive AvgPool BW, bf16.
+    pub fn baracuda_kernels_adaptive_avg_pool_bf16_bw_run(
+        dy: *const c_void, dx: *mut c_void,
+        nc: i32, spatial_rank: i32,
+        in_d: i32, in_h: i32, in_w: i32,
+        out_d: i32, out_h: i32, out_w: i32,
+        stream: *mut c_void,
+    ) -> i32;
+    /// Adaptive AvgPool BW, f32.
+    pub fn baracuda_kernels_adaptive_avg_pool_f32_bw_run(
+        dy: *const c_void, dx: *mut c_void,
+        nc: i32, spatial_rank: i32,
+        in_d: i32, in_h: i32, in_w: i32,
+        out_d: i32, out_h: i32, out_w: i32,
+        stream: *mut c_void,
+    ) -> i32;
+    /// Adaptive AvgPool BW, f64.
+    pub fn baracuda_kernels_adaptive_avg_pool_f64_bw_run(
+        dy: *const c_void, dx: *mut c_void,
+        nc: i32, spatial_rank: i32,
+        in_d: i32, in_h: i32, in_w: i32,
+        out_d: i32, out_h: i32, out_w: i32,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// Adaptive MaxPool FW, f16. Writes `y` only — the matching BW
+    /// recomputes the argmax internally from the saved `x` (keeps the
+    /// Phase 11.8 args shape; no separate indices tensor).
+    pub fn baracuda_kernels_adaptive_max_pool_f16_fw_run(
+        x: *const c_void, y: *mut c_void,
+        nc: i32, spatial_rank: i32,
+        in_d: i32, in_h: i32, in_w: i32,
+        out_d: i32, out_h: i32, out_w: i32,
+        stream: *mut c_void,
+    ) -> i32;
+    /// Adaptive MaxPool FW, bf16.
+    pub fn baracuda_kernels_adaptive_max_pool_bf16_fw_run(
+        x: *const c_void, y: *mut c_void,
+        nc: i32, spatial_rank: i32,
+        in_d: i32, in_h: i32, in_w: i32,
+        out_d: i32, out_h: i32, out_w: i32,
+        stream: *mut c_void,
+    ) -> i32;
+    /// Adaptive MaxPool FW, f32.
+    pub fn baracuda_kernels_adaptive_max_pool_f32_fw_run(
+        x: *const c_void, y: *mut c_void,
+        nc: i32, spatial_rank: i32,
+        in_d: i32, in_h: i32, in_w: i32,
+        out_d: i32, out_h: i32, out_w: i32,
+        stream: *mut c_void,
+    ) -> i32;
+    /// Adaptive MaxPool FW, f64.
+    pub fn baracuda_kernels_adaptive_max_pool_f64_fw_run(
+        x: *const c_void, y: *mut c_void,
+        nc: i32, spatial_rank: i32,
+        in_d: i32, in_h: i32, in_w: i32,
+        out_d: i32, out_h: i32, out_w: i32,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// Adaptive MaxPool BW, f16. Recomputes the per-window argmax from
+    /// the saved `x`, zeros `dx` internally, then atomic-scatters `dy`
+    /// into the argmax positions.
+    pub fn baracuda_kernels_adaptive_max_pool_f16_bw_run(
+        x: *const c_void, dy: *const c_void, dx: *mut c_void,
+        nc: i32, spatial_rank: i32,
+        in_d: i32, in_h: i32, in_w: i32,
+        out_d: i32, out_h: i32, out_w: i32,
+        stream: *mut c_void,
+    ) -> i32;
+    /// Adaptive MaxPool BW, bf16.
+    pub fn baracuda_kernels_adaptive_max_pool_bf16_bw_run(
+        x: *const c_void, dy: *const c_void, dx: *mut c_void,
+        nc: i32, spatial_rank: i32,
+        in_d: i32, in_h: i32, in_w: i32,
+        out_d: i32, out_h: i32, out_w: i32,
+        stream: *mut c_void,
+    ) -> i32;
+    /// Adaptive MaxPool BW, f32.
+    pub fn baracuda_kernels_adaptive_max_pool_f32_bw_run(
+        x: *const c_void, dy: *const c_void, dx: *mut c_void,
+        nc: i32, spatial_rank: i32,
+        in_d: i32, in_h: i32, in_w: i32,
+        out_d: i32, out_h: i32, out_w: i32,
+        stream: *mut c_void,
+    ) -> i32;
+    /// Adaptive MaxPool BW, f64.
+    pub fn baracuda_kernels_adaptive_max_pool_f64_bw_run(
+        x: *const c_void, dy: *const c_void, dx: *mut c_void,
+        nc: i32, spatial_rank: i32,
+        in_d: i32, in_h: i32, in_w: i32,
+        out_d: i32, out_h: i32, out_w: i32,
+        stream: *mut c_void,
+    ) -> i32;
 }

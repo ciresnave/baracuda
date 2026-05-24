@@ -1,32 +1,30 @@
-//! AdaptiveAvgPool2d — NCHW adaptive average-pool via cuDNN.
+//! AdaptiveAvgPool2d — NCHW adaptive average-pool, bit-exact PyTorch
+//! (Phase 16.1 bespoke kernel).
 //!
-//! See [`super::adaptive_avg_pool1d`] for the cuDNN-approximation
-//! caveat. Per-axis kernel/stride derivation:
+//! Replaces the Phase 11.8 cuDNN-approximation path. PyTorch's
+//! non-uniform per-output-cell window formula is applied independently
+//! per spatial axis:
 //!
 //! ```text
-//! kernel_h = ceil(H_in / H_out); stride_h = floor(H_in / H_out)
-//! kernel_w = ceil(W_in / W_out); stride_w = floor(W_in / W_out)
-//! padding  = 0
+//! start_i = floor(i * in / out)
+//! end_i   = ceil((i + 1) * in / out)
 //! ```
 //!
-//! Bit-exact PyTorch only when `H_in % H_out == 0 && W_in % W_out == 0`;
-//! within ±1 input cell of the true window in the non-divisible case.
+//! See [`super::adaptive_avg_pool1d`] for the full algorithmic / BW
+//! / determinism story.
 
-use core::cell::Cell;
+use core::ffi::c_void;
 use core::marker::PhantomData;
 
 use baracuda_cutlass::{Error, Result};
 use baracuda_driver::Stream;
-use baracuda_kernels_sys::{cudnnHandle_t, cudnnPoolingDescriptor_t, cudnnTensorDescriptor_t};
 use baracuda_kernels_types::{
     Element, ElementKind, KernelSku, PlanPreference, PoolKind, PrecisionGuarantee, TensorMut,
     TensorRef, Workspace,
 };
 
-use super::max_pool2d::{build_sku, PoolMode};
-use super::pool_nd::{
-    adaptive_kernel_stride, bind_stream, drop_descriptors_nd, ensure_descriptors_nd, ensure_handle,
-    run_bw_nd, run_fw_nd, validate_dtype,
+use super::adaptive_avg_pool1d::{
+    build_sku, dispatch_avg_bw, dispatch_avg_fw, map_status, validate_dtype,
 };
 
 /// Descriptor for an adaptive 2-D pooling op over NCHW tensors.
@@ -56,28 +54,24 @@ pub struct AdaptivePool2dFwArgs<'a, T: Element> {
     pub y: TensorMut<'a, T, 4>,
 }
 
-/// BW args.
+/// BW args. `y` retained for API symmetry with [`super::AdaptiveMaxPool2dPlan`]
+/// (MaxPool BW uses `x`; AvgPool BW uses neither — only `dy` and `dx`).
 pub struct AdaptivePool2dBwArgs<'a, T: Element> {
-    /// Saved FW output.
+    /// Saved FW output (unused by AvgPool BW; retained for API symmetry).
     pub y: TensorRef<'a, T, 4>,
     /// Upstream gradient.
     pub dy: TensorRef<'a, T, 4>,
-    /// Saved FW input.
+    /// Saved FW input (unused by AvgPool BW; retained for API symmetry).
     pub x: TensorRef<'a, T, 4>,
-    /// Output gradient.
+    /// Output gradient. Fully overwritten by the launch (kernel zeros
+    /// internally before atomic-scattering into it).
     pub dx: TensorMut<'a, T, 4>,
 }
 
-/// Adaptive 2-D average-pool plan (cuDNN approximation).
+/// Adaptive 2-D average-pool plan (bit-exact PyTorch, bespoke kernel).
 pub struct AdaptiveAvgPool2dPlan<T: Element> {
     desc: AdaptivePool2dDescriptor,
-    /// `((kernel_h, stride_h), (kernel_w, stride_w))`.
-    derived: ((i32, i32), (i32, i32)),
     sku: KernelSku,
-    handle: Cell<cudnnHandle_t>,
-    x_desc: Cell<cudnnTensorDescriptor_t>,
-    y_desc: Cell<cudnnTensorDescriptor_t>,
-    pool_desc: Cell<cudnnPoolingDescriptor_t>,
     _marker: PhantomData<T>,
 }
 
@@ -89,17 +83,10 @@ impl<T: Element> AdaptiveAvgPool2dPlan<T> {
         _pref: PlanPreference,
     ) -> Result<Self> {
         validate_descriptor::<T>(desc)?;
-        let h = adaptive_kernel_stride(desc.h_in, desc.h_out);
-        let w = adaptive_kernel_stride(desc.w_in, desc.w_out);
         let sku = build_sku::<T>(PoolKind::AdaptiveAvgPool2d);
         Ok(Self {
             desc: *desc,
-            derived: (h, w),
             sku,
-            handle: Cell::new(core::ptr::null_mut()),
-            x_desc: Cell::new(core::ptr::null_mut()),
-            y_desc: Cell::new(core::ptr::null_mut()),
-            pool_desc: Cell::new(core::ptr::null_mut()),
             _marker: PhantomData,
         })
     }
@@ -122,10 +109,15 @@ impl<T: Element> AdaptiveAvgPool2dPlan<T> {
         0
     }
 
-    /// `((kernel_h, stride_h), (kernel_w, stride_w))` derived per axis.
+    /// Deprecated. Always returns `((0, 0), (0, 0))` — see
+    /// [`super::AdaptiveAvgPool1dPlan::derived_kernel_stride`].
     #[inline]
+    #[deprecated(
+        since = "0.0.1-alpha.33",
+        note = "Phase 16.1 uses bit-exact per-output-cell windows; no single (kernel, stride) pair applies."
+    )]
     pub fn derived_kernel_stride(&self) -> ((i32, i32), (i32, i32)) {
-        self.derived
+        ((0, 0), (0, 0))
     }
 
     /// Run the forward pass.
@@ -136,17 +128,20 @@ impl<T: Element> AdaptiveAvgPool2dPlan<T> {
         args: AdaptivePool2dFwArgs<'_, T>,
     ) -> Result<()> {
         check_fw_args(&self.desc, &args)?;
-        let h = ensure_handle(&self.handle)?;
-        bind_stream(h, stream)?;
-        self.ensure_descs(PoolMode::AvgExcludePad)?;
-        run_fw_nd::<T>(
-            h,
-            self.pool_desc.get(),
-            self.x_desc.get(),
-            self.y_desc.get(),
-            args.x.data.as_raw().0,
-            args.y.data.as_raw().0,
-        )
+        let stream_ptr = stream.as_raw() as *mut c_void;
+        let x_ptr = args.x.data.as_raw().0 as *const c_void;
+        let y_ptr = args.y.data.as_raw().0 as *mut c_void;
+        let nc = self.desc.batch * self.desc.channels;
+        let status = dispatch_avg_fw::<T>(
+            x_ptr,
+            y_ptr,
+            nc,
+            2, // spatial_rank
+            1, self.desc.h_in, self.desc.w_in,
+            1, self.desc.h_out, self.desc.w_out,
+            stream_ptr,
+        );
+        map_status(status)
     }
 
     /// Run the backward pass.
@@ -157,44 +152,20 @@ impl<T: Element> AdaptiveAvgPool2dPlan<T> {
         args: AdaptivePool2dBwArgs<'_, T>,
     ) -> Result<()> {
         check_bw_args(&self.desc, &args)?;
-        let h = ensure_handle(&self.handle)?;
-        bind_stream(h, stream)?;
-        self.ensure_descs(PoolMode::AvgExcludePad)?;
-        run_bw_nd::<T>(
-            h,
-            self.pool_desc.get(),
-            self.x_desc.get(),
-            self.y_desc.get(),
-            args.y.data.as_raw().0,
-            args.dy.data.as_raw().0,
-            args.x.data.as_raw().0,
-            args.dx.data.as_raw().0,
-        )
-    }
-
-    fn ensure_descs(&self, mode: PoolMode) -> Result<()> {
-        let x_dims = [self.desc.batch, self.desc.channels, self.desc.h_in, self.desc.w_in];
-        let y_dims = [self.desc.batch, self.desc.channels, self.desc.h_out, self.desc.w_out];
-        let window = [self.derived.0 .0, self.derived.1 .0];
-        let padding = [0i32, 0i32];
-        let stride = [self.derived.0 .1, self.derived.1 .1];
-        ensure_descriptors_nd::<T>(
-            &x_dims,
-            &y_dims,
-            &window,
-            &padding,
-            &stride,
-            mode,
-            &self.x_desc,
-            &self.y_desc,
-            &self.pool_desc,
-        )
-    }
-}
-
-impl<T: Element> Drop for AdaptiveAvgPool2dPlan<T> {
-    fn drop(&mut self) {
-        drop_descriptors_nd(&self.x_desc, &self.y_desc, &self.pool_desc, &self.handle);
+        let stream_ptr = stream.as_raw() as *mut c_void;
+        let dy_ptr = args.dy.data.as_raw().0 as *const c_void;
+        let dx_ptr = args.dx.data.as_raw().0 as *mut c_void;
+        let nc = self.desc.batch * self.desc.channels;
+        let status = dispatch_avg_bw::<T>(
+            dy_ptr,
+            dx_ptr,
+            nc,
+            2,
+            1, self.desc.h_in, self.desc.w_in,
+            1, self.desc.h_out, self.desc.w_out,
+            stream_ptr,
+        );
+        map_status(status)
     }
 }
 

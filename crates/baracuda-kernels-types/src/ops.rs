@@ -1111,14 +1111,27 @@ pub enum PoolKind {
     AdaptiveMaxPool3d = 34,
     /// Adaptive max-pool 3-D backward.
     AdaptiveMaxPool3dBackward = 35,
-    /// LP-pool 1-D (composite: pow → avg_pool1d → pow).
+    /// LP-pool 1-D (Phase 16.2 — bespoke fused kernel:
+    /// `y = (Σ |x|^p)^(1/p)` over each pool window in one launch).
     LpPool1d = 36,
-    /// LP-pool 2-D (composite: pow → avg_pool2d → pow).
+    /// LP-pool 2-D (Phase 16.2 — bespoke fused kernel).
     LpPool2d = 37,
-    /// Fractional max-pool 2-D — stubbed (bespoke kernel required).
+    /// Fractional max-pool 2-D (Phase 16.3 — bespoke kernel; cuDNN has
+    /// no fractional-pool primitive).
     FractionalMaxPool2d = 38,
-    /// Fractional max-pool 3-D — stubbed (bespoke kernel required).
+    /// Fractional max-pool 3-D (Phase 16.3 — bespoke kernel).
     FractionalMaxPool3d = 39,
+    /// LP-pool 1-D backward (Phase 16.2 — atomicAdd scatter from
+    /// each output cell over its source window).
+    LpPool1dBackward = 40,
+    /// LP-pool 2-D backward (Phase 16.2 — atomicAdd scatter).
+    LpPool2dBackward = 41,
+    /// Fractional max-pool 2-D backward (Phase 16.3 — atomicAdd scatter
+    /// from each output cell into `dx[indices[cell]]` via saved
+    /// argmax). half / bf16 atomicAdd routes through atomicCAS.
+    FractionalMaxPool2dBackward = 42,
+    /// Fractional max-pool 3-D backward (Phase 16.3 — atomicAdd scatter).
+    FractionalMaxPool3dBackward = 43,
 }
 
 /// Attention-family op discriminant — Category K from the comprehensive

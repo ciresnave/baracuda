@@ -1,49 +1,46 @@
-//! AdaptiveAvgPool1d — NCL adaptive average-pool via cuDNN.
+//! AdaptiveAvgPool1d — NCL adaptive average-pool, bit-exact PyTorch.
 //!
-//! **APPROXIMATION**: cuDNN does not have a direct adaptive-pool entry
-//! point. This plan derives `(kernel, stride)` from `(input_size,
-//! output_size)` using PyTorch's common-case formula:
+//! **Phase 16.1 rewrite.** Previously this plan dispatched through cuDNN
+//! with a uniform-window approximation (`kernel = ceil(L_in/L_out)`,
+//! `stride = floor(L_in/L_out)`) — bit-exact only when `L_in % L_out
+//! == 0`. The new path routes to a bespoke CUDA kernel that implements
+//! PyTorch's non-uniform per-output-cell window convention:
 //!
 //! ```text
-//! kernel = ceil(input_size / output_size)
-//! stride = floor(input_size / output_size)
-//! padding = 0
+//! start_i = floor(i * L_in / L_out)
+//! end_i   = ceil((i + 1) * L_in / L_out)
+//! y[i]    = mean(x[start_i..end_i])     (denominator = end_i - start_i)
 //! ```
 //!
-//! and then drives a regular average-pool (count-exclude-padding) over
-//! the implied uniform window. **This is NOT bit-exact PyTorch
-//! `nn.AdaptiveAvgPool1d`** when `input_size % output_size != 0` —
-//! PyTorch's reference implementation uses *non-uniform* per-output-cell
-//! kernel sizes on the boundary so that the entire input range is
-//! tiled exactly. The uniform-kernel approximation here matches PyTorch
-//! exactly when `input_size % output_size == 0` and degrades gracefully
-//! (within ±1 input cell of the true window) otherwise.
+//! The plan struct and public API (descriptor, args, `select`, `run_fw`,
+//! `run_bw`) are unchanged; only the internal dispatch flipped.
 //!
-//! For a true bit-exact adaptive pool, a bespoke kernel is needed —
-//! deferred to a future milestone. File a feature request if needed.
+//! **Dtypes**: `{f16, bf16, f32, f64}`. Integer adaptive pool has no
+//! Fuel ask and the rounding semantics are dtype-dependent.
+//!
+//! **BW**: one thread per output cell scatters `dy[i] / win_size_i`
+//! into every input cell in the window via `atomicAdd`. Boundary
+//! windows overlap (when non-divisible), so atomic scatter is required.
+//! half / bf16 atomics route through `baracuda_atomic.cuh`'s CAS
+//! helper for determinism on those dtypes. `dx` is zeroed internally
+//! by the launcher before the scatter — callers do NOT need to
+//! pre-zero.
 
-use core::cell::Cell;
+use core::ffi::c_void;
 use core::marker::PhantomData;
 
 use baracuda_cutlass::{Error, Result};
 use baracuda_driver::Stream;
-use baracuda_kernels_sys::{cudnnHandle_t, cudnnPoolingDescriptor_t, cudnnTensorDescriptor_t};
 use baracuda_kernels_types::{
-    Element, ElementKind, KernelSku, PlanPreference, PoolKind, PrecisionGuarantee, TensorMut,
-    TensorRef, Workspace,
-};
-
-use super::max_pool2d::{build_sku, PoolMode};
-use super::pool_nd::{
-    adaptive_kernel_stride, bind_stream, drop_descriptors_nd, ensure_descriptors_nd, ensure_handle,
-    run_bw_nd, run_fw_nd, validate_dtype,
+    ArchSku, BackendKind, Element, ElementKind, KernelSku, MathPrecision, OpCategory,
+    PlanPreference, PoolKind, PrecisionGuarantee, TensorMut, TensorRef, Workspace,
 };
 
 /// Descriptor for an adaptive 1-D pooling op over NCL tensors.
 ///
 /// Input `[N, C, L_in]` → output `[N, C, L_out]` for caller-supplied
-/// `L_out`. The plan internally computes the cuDNN-uniform kernel /
-/// stride (see module docs).
+/// `L_out`. PyTorch's bit-exact window-bounds formula is applied
+/// internally — no caller-side kernel/stride knobs.
 #[derive(Copy, Clone, Debug)]
 pub struct AdaptivePool1dDescriptor {
     /// Batch `N`.
@@ -66,30 +63,27 @@ pub struct AdaptivePool1dFwArgs<'a, T: Element> {
     pub y: TensorMut<'a, T, 3>,
 }
 
-/// BW args (cuDNN's pool-bw requires both `y` and `x`).
+/// BW args. `y` / `x` are retained for API symmetry with the prior
+/// cuDNN-driven plan but the bespoke AvgPool BW kernel only reads
+/// `dy` + writes `dx`.
 pub struct AdaptivePool1dBwArgs<'a, T: Element> {
-    /// Saved FW output `[N, C, L_out]`.
+    /// Saved FW output `[N, C, L_out]` (unused by AvgPool BW; retained
+    /// for API symmetry with [`super::AdaptiveMaxPool1dPlan`]).
     pub y: TensorRef<'a, T, 3>,
     /// Upstream gradient `[N, C, L_out]`.
     pub dy: TensorRef<'a, T, 3>,
-    /// Saved FW input `[N, C, L_in]`.
+    /// Saved FW input `[N, C, L_in]` (unused by AvgPool BW; retained
+    /// for API symmetry).
     pub x: TensorRef<'a, T, 3>,
-    /// Output gradient `[N, C, L_in]`.
+    /// Output gradient `[N, C, L_in]`. Fully overwritten by the launch
+    /// (kernel zeros it internally before atomic-scattering into it).
     pub dx: TensorMut<'a, T, 3>,
 }
 
-/// Adaptive 1-D average-pool plan (cuDNN approximation; see module
-/// docs for the bit-exact-PyTorch caveat).
+/// Adaptive 1-D average-pool plan (bit-exact PyTorch, bespoke kernel).
 pub struct AdaptiveAvgPool1dPlan<T: Element> {
     desc: AdaptivePool1dDescriptor,
-    /// Cached `(kernel, stride)` derived from the descriptor at
-    /// `select` time.
-    derived: (i32, i32),
     sku: KernelSku,
-    handle: Cell<cudnnHandle_t>,
-    x_desc: Cell<cudnnTensorDescriptor_t>,
-    y_desc: Cell<cudnnTensorDescriptor_t>,
-    pool_desc: Cell<cudnnPoolingDescriptor_t>,
     _marker: PhantomData<T>,
 }
 
@@ -105,16 +99,10 @@ impl<T: Element> AdaptiveAvgPool1dPlan<T> {
         _pref: PlanPreference,
     ) -> Result<Self> {
         validate_descriptor::<T>(desc)?;
-        let derived = adaptive_kernel_stride(desc.l_in, desc.l_out);
         let sku = build_sku::<T>(PoolKind::AdaptiveAvgPool1d);
         Ok(Self {
             desc: *desc,
-            derived,
             sku,
-            handle: Cell::new(core::ptr::null_mut()),
-            x_desc: Cell::new(core::ptr::null_mut()),
-            y_desc: Cell::new(core::ptr::null_mut()),
-            pool_desc: Cell::new(core::ptr::null_mut()),
             _marker: PhantomData,
         })
     }
@@ -137,12 +125,18 @@ impl<T: Element> AdaptiveAvgPool1dPlan<T> {
         0
     }
 
-    /// Internal `(kernel, stride)` derived from the descriptor. Exposed
-    /// for visibility into the cuDNN-approximation behavior — not part
-    /// of any stable contract.
+    /// Deprecated. Returned the cuDNN-approximation `(kernel, stride)`
+    /// derived from `(L_in, L_out)` in the previous implementation.
+    /// Phase 16.1 implements PyTorch's per-output-cell variable window
+    /// directly — no single `(kernel, stride)` pair represents the op.
+    /// Always returns `(0, 0)` as a stable poison value.
     #[inline]
+    #[deprecated(
+        since = "0.0.1-alpha.33",
+        note = "Phase 16.1 uses bit-exact per-output-cell windows; no single (kernel, stride) pair applies."
+    )]
     pub fn derived_kernel_stride(&self) -> (i32, i32) {
-        self.derived
+        (0, 0)
     }
 
     /// Run the forward pass.
@@ -153,20 +147,24 @@ impl<T: Element> AdaptiveAvgPool1dPlan<T> {
         args: AdaptivePool1dFwArgs<'_, T>,
     ) -> Result<()> {
         check_fw_args(&self.desc, &args)?;
-        let h = ensure_handle(&self.handle)?;
-        bind_stream(h, stream)?;
-        self.ensure_descs()?;
-        run_fw_nd::<T>(
-            h,
-            self.pool_desc.get(),
-            self.x_desc.get(),
-            self.y_desc.get(),
-            args.x.data.as_raw().0,
-            args.y.data.as_raw().0,
-        )
+        let stream_ptr = stream.as_raw() as *mut c_void;
+        let x_ptr = args.x.data.as_raw().0 as *const c_void;
+        let y_ptr = args.y.data.as_raw().0 as *mut c_void;
+        let nc = self.desc.batch * self.desc.channels;
+        let status = dispatch_avg_fw::<T>(
+            x_ptr,
+            y_ptr,
+            nc,
+            1, // spatial_rank
+            1, 1, self.desc.l_in,
+            1, 1, self.desc.l_out,
+            stream_ptr,
+        );
+        map_status(status)
     }
 
-    /// Run the backward pass.
+    /// Run the backward pass. Kernel internally zeros `dx` before
+    /// atomic-scattering — callers do not need to pre-zero.
     pub fn run_bw(
         &self,
         stream: &Stream,
@@ -174,44 +172,20 @@ impl<T: Element> AdaptiveAvgPool1dPlan<T> {
         args: AdaptivePool1dBwArgs<'_, T>,
     ) -> Result<()> {
         check_bw_args(&self.desc, &args)?;
-        let h = ensure_handle(&self.handle)?;
-        bind_stream(h, stream)?;
-        self.ensure_descs()?;
-        run_bw_nd::<T>(
-            h,
-            self.pool_desc.get(),
-            self.x_desc.get(),
-            self.y_desc.get(),
-            args.y.data.as_raw().0,
-            args.dy.data.as_raw().0,
-            args.x.data.as_raw().0,
-            args.dx.data.as_raw().0,
-        )
-    }
-
-    fn ensure_descs(&self) -> Result<()> {
-        let x_dims = [self.desc.batch, self.desc.channels, self.desc.l_in];
-        let y_dims = [self.desc.batch, self.desc.channels, self.desc.l_out];
-        let window = [self.derived.0];
-        let padding = [0i32];
-        let stride = [self.derived.1];
-        ensure_descriptors_nd::<T>(
-            &x_dims,
-            &y_dims,
-            &window,
-            &padding,
-            &stride,
-            PoolMode::AvgExcludePad,
-            &self.x_desc,
-            &self.y_desc,
-            &self.pool_desc,
-        )
-    }
-}
-
-impl<T: Element> Drop for AdaptiveAvgPool1dPlan<T> {
-    fn drop(&mut self) {
-        drop_descriptors_nd(&self.x_desc, &self.y_desc, &self.pool_desc, &self.handle);
+        let stream_ptr = stream.as_raw() as *mut c_void;
+        let dy_ptr = args.dy.data.as_raw().0 as *const c_void;
+        let dx_ptr = args.dx.data.as_raw().0 as *mut c_void;
+        let nc = self.desc.batch * self.desc.channels;
+        let status = dispatch_avg_bw::<T>(
+            dy_ptr,
+            dx_ptr,
+            nc,
+            1,
+            1, 1, self.desc.l_in,
+            1, 1, self.desc.l_out,
+            stream_ptr,
+        );
+        map_status(status)
     }
 }
 
@@ -278,4 +252,224 @@ pub(crate) fn check_bw_args<T: Element>(
         ));
     }
     Ok(())
+}
+
+// =============================================================================
+// Shared dispatch helpers used by all six adaptive-pool plans.
+// =============================================================================
+
+pub(crate) fn validate_dtype<T: Element>() -> Result<()> {
+    if !matches!(
+        T::KIND,
+        ElementKind::F32 | ElementKind::F64 | ElementKind::F16 | ElementKind::Bf16
+    ) {
+        return Err(Error::Unsupported(
+            "baracuda-kernels::AdaptivePoolPlan: adaptive pooling supports f32 / f64 / f16 / bf16",
+        ));
+    }
+    Ok(())
+}
+
+pub(crate) fn build_sku<T: Element>(op: PoolKind) -> KernelSku {
+    let math_precision = match T::KIND {
+        ElementKind::F64 => MathPrecision::F64,
+        ElementKind::F16 => MathPrecision::F16,
+        ElementKind::Bf16 => MathPrecision::Bf16,
+        _ => MathPrecision::F32,
+    };
+    let accumulator = match T::KIND {
+        ElementKind::F64 => ElementKind::F64,
+        _ => ElementKind::F32,
+    };
+    let precision_guarantee = PrecisionGuarantee {
+        math_precision,
+        accumulator,
+        // BW uses atomicAdd scatter — non-deterministic ordering across
+        // launches, but per-window mean / max arithmetic is bit-stable.
+        bit_stable_on_same_hardware: false,
+        deterministic: true,
+    };
+    KernelSku {
+        category: OpCategory::Pooling,
+        op: op as u16,
+        element: T::KIND,
+        aux_element: None,
+        layout: None,
+        epilogue: None,
+        arch: ArchSku::Sm80,
+        backend: BackendKind::Bespoke,
+        precision_guarantee,
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn dispatch_avg_fw<T: Element>(
+    x: *const c_void,
+    y: *mut c_void,
+    nc: i32,
+    spatial_rank: i32,
+    in_d: i32,
+    in_h: i32,
+    in_w: i32,
+    out_d: i32,
+    out_h: i32,
+    out_w: i32,
+    stream: *mut c_void,
+) -> i32 {
+    match T::KIND {
+        ElementKind::F16 => unsafe {
+            baracuda_kernels_sys::baracuda_kernels_adaptive_avg_pool_f16_fw_run(
+                x, y, nc, spatial_rank, in_d, in_h, in_w, out_d, out_h, out_w, stream,
+            )
+        },
+        ElementKind::Bf16 => unsafe {
+            baracuda_kernels_sys::baracuda_kernels_adaptive_avg_pool_bf16_fw_run(
+                x, y, nc, spatial_rank, in_d, in_h, in_w, out_d, out_h, out_w, stream,
+            )
+        },
+        ElementKind::F32 => unsafe {
+            baracuda_kernels_sys::baracuda_kernels_adaptive_avg_pool_f32_fw_run(
+                x, y, nc, spatial_rank, in_d, in_h, in_w, out_d, out_h, out_w, stream,
+            )
+        },
+        ElementKind::F64 => unsafe {
+            baracuda_kernels_sys::baracuda_kernels_adaptive_avg_pool_f64_fw_run(
+                x, y, nc, spatial_rank, in_d, in_h, in_w, out_d, out_h, out_w, stream,
+            )
+        },
+        _ => 3, // unsupported — should be unreachable post-select
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn dispatch_avg_bw<T: Element>(
+    dy: *const c_void,
+    dx: *mut c_void,
+    nc: i32,
+    spatial_rank: i32,
+    in_d: i32,
+    in_h: i32,
+    in_w: i32,
+    out_d: i32,
+    out_h: i32,
+    out_w: i32,
+    stream: *mut c_void,
+) -> i32 {
+    match T::KIND {
+        ElementKind::F16 => unsafe {
+            baracuda_kernels_sys::baracuda_kernels_adaptive_avg_pool_f16_bw_run(
+                dy, dx, nc, spatial_rank, in_d, in_h, in_w, out_d, out_h, out_w, stream,
+            )
+        },
+        ElementKind::Bf16 => unsafe {
+            baracuda_kernels_sys::baracuda_kernels_adaptive_avg_pool_bf16_bw_run(
+                dy, dx, nc, spatial_rank, in_d, in_h, in_w, out_d, out_h, out_w, stream,
+            )
+        },
+        ElementKind::F32 => unsafe {
+            baracuda_kernels_sys::baracuda_kernels_adaptive_avg_pool_f32_bw_run(
+                dy, dx, nc, spatial_rank, in_d, in_h, in_w, out_d, out_h, out_w, stream,
+            )
+        },
+        ElementKind::F64 => unsafe {
+            baracuda_kernels_sys::baracuda_kernels_adaptive_avg_pool_f64_bw_run(
+                dy, dx, nc, spatial_rank, in_d, in_h, in_w, out_d, out_h, out_w, stream,
+            )
+        },
+        _ => 3,
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn dispatch_max_fw<T: Element>(
+    x: *const c_void,
+    y: *mut c_void,
+    nc: i32,
+    spatial_rank: i32,
+    in_d: i32,
+    in_h: i32,
+    in_w: i32,
+    out_d: i32,
+    out_h: i32,
+    out_w: i32,
+    stream: *mut c_void,
+) -> i32 {
+    match T::KIND {
+        ElementKind::F16 => unsafe {
+            baracuda_kernels_sys::baracuda_kernels_adaptive_max_pool_f16_fw_run(
+                x, y, nc, spatial_rank, in_d, in_h, in_w, out_d, out_h, out_w, stream,
+            )
+        },
+        ElementKind::Bf16 => unsafe {
+            baracuda_kernels_sys::baracuda_kernels_adaptive_max_pool_bf16_fw_run(
+                x, y, nc, spatial_rank, in_d, in_h, in_w, out_d, out_h, out_w, stream,
+            )
+        },
+        ElementKind::F32 => unsafe {
+            baracuda_kernels_sys::baracuda_kernels_adaptive_max_pool_f32_fw_run(
+                x, y, nc, spatial_rank, in_d, in_h, in_w, out_d, out_h, out_w, stream,
+            )
+        },
+        ElementKind::F64 => unsafe {
+            baracuda_kernels_sys::baracuda_kernels_adaptive_max_pool_f64_fw_run(
+                x, y, nc, spatial_rank, in_d, in_h, in_w, out_d, out_h, out_w, stream,
+            )
+        },
+        _ => 3,
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn dispatch_max_bw<T: Element>(
+    x: *const c_void,
+    dy: *const c_void,
+    dx: *mut c_void,
+    nc: i32,
+    spatial_rank: i32,
+    in_d: i32,
+    in_h: i32,
+    in_w: i32,
+    out_d: i32,
+    out_h: i32,
+    out_w: i32,
+    stream: *mut c_void,
+) -> i32 {
+    match T::KIND {
+        ElementKind::F16 => unsafe {
+            baracuda_kernels_sys::baracuda_kernels_adaptive_max_pool_f16_bw_run(
+                x, dy, dx, nc, spatial_rank, in_d, in_h, in_w, out_d, out_h, out_w, stream,
+            )
+        },
+        ElementKind::Bf16 => unsafe {
+            baracuda_kernels_sys::baracuda_kernels_adaptive_max_pool_bf16_bw_run(
+                x, dy, dx, nc, spatial_rank, in_d, in_h, in_w, out_d, out_h, out_w, stream,
+            )
+        },
+        ElementKind::F32 => unsafe {
+            baracuda_kernels_sys::baracuda_kernels_adaptive_max_pool_f32_bw_run(
+                x, dy, dx, nc, spatial_rank, in_d, in_h, in_w, out_d, out_h, out_w, stream,
+            )
+        },
+        ElementKind::F64 => unsafe {
+            baracuda_kernels_sys::baracuda_kernels_adaptive_max_pool_f64_bw_run(
+                x, dy, dx, nc, spatial_rank, in_d, in_h, in_w, out_d, out_h, out_w, stream,
+            )
+        },
+        _ => 3,
+    }
+}
+
+pub(crate) fn map_status(code: i32) -> Result<()> {
+    match code {
+        0 => Ok(()),
+        1 => Err(Error::MisalignedOperand),
+        2 => Err(Error::InvalidProblem(
+            "baracuda-kernels-sys reported invalid problem (adaptive pool)",
+        )),
+        3 => Err(Error::Unsupported(
+            "baracuda-kernels-sys reported unsupported configuration (adaptive pool)",
+        )),
+        4 => Err(Error::WorkspaceTooSmall { needed: 0, got: 0 }),
+        n => Err(Error::CutlassInternal(n)),
+    }
 }

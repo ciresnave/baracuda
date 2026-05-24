@@ -35,7 +35,14 @@ fn adaptive_avg_pool1d_8_to_4_f32() {
     };
     let plan = AdaptiveAvgPool1dPlan::<f32>::select(&stream, &desc, PlanPreference::default())
         .expect("sel");
-    assert_eq!(plan.derived_kernel_stride(), (2, 2));
+    // `derived_kernel_stride` was deprecated in Phase 16.1 — the
+    // bespoke kernel uses per-output-cell variable windows; no single
+    // (kernel, stride) pair represents the op. The deprecated getter
+    // returns `(0, 0)` for source-compat.
+    #[allow(deprecated)]
+    {
+        assert_eq!(plan.derived_kernel_stride(), (0, 0));
+    }
     plan.run_fw(&stream, Workspace::None, AdaptivePool1dFwArgs {
         x: TensorRef { data: dev_x.as_slice(), shape: [1, 1, 8], stride: contiguous_stride([1, 1, 8]) },
         y: TensorMut { data: dev_y.as_slice_mut(), shape: [1, 1, 4], stride: contiguous_stride([1, 1, 4]) },
@@ -163,9 +170,14 @@ fn adaptive_max_pool3d_2x2x2_to_1x1x1_f32() {
 // behind `#[ignore]` for consistency with the rest of the smoke suite.
 // ---------------------------------------------------------------------------
 
+// Phase 16.3 — FractionalMaxPool is now implemented as a bespoke
+// kernel with caller-supplied uniform random samples. `select()`
+// accepts well-formed descriptors. Full FW + BW coverage lives in
+// `fractional_max_pool_smoke.rs`.
+
 #[test]
 #[ignore]
-fn fractional_max_pool2d_select_rejects() {
+fn fractional_max_pool2d_select_accepts() {
     let (_ctx, stream) = setup();
     let desc = FractionalMaxPool2dDescriptor {
         batch: 1, channels: 1, h_in: 8, w_in: 8,
@@ -173,12 +185,12 @@ fn fractional_max_pool2d_select_rejects() {
         element: ElementKind::F32,
     };
     let r = FractionalMaxPool2dPlan::<f32>::select(&stream, &desc, PlanPreference::default());
-    assert!(r.is_err(), "FractionalMaxPool2d should reject select");
+    assert!(r.is_ok(), "FractionalMaxPool2d should accept well-formed select");
 }
 
 #[test]
 #[ignore]
-fn fractional_max_pool3d_select_rejects() {
+fn fractional_max_pool3d_select_accepts() {
     let (_ctx, stream) = setup();
     let desc = FractionalMaxPool3dDescriptor {
         batch: 1, channels: 1, d_in: 4, h_in: 8, w_in: 8,
@@ -187,30 +199,35 @@ fn fractional_max_pool3d_select_rejects() {
         element: ElementKind::F32,
     };
     let r = FractionalMaxPool3dPlan::<f32>::select(&stream, &desc, PlanPreference::default());
-    assert!(r.is_err(), "FractionalMaxPool3d should reject select");
+    assert!(r.is_ok(), "FractionalMaxPool3d should accept well-formed select");
 }
+
+// Phase 16.2 — LpPool is now implemented as a bespoke fused kernel.
+// `select()` accepts well-formed descriptors and only rejects p=∞,
+// non-finite p, or shape errors. Bit-exact FW + BW coverage lives in
+// `lp_pool_smoke.rs`.
 
 #[test]
 #[ignore]
-fn lp_pool1d_select_rejects() {
+fn lp_pool1d_select_accepts() {
     let (_ctx, stream) = setup();
     let desc = LpPool1dDescriptor {
         batch: 1, channels: 1, l_in: 8, window: 2, stride: 2,
-        p: 2.0, element: ElementKind::F32,
+        p: 2.0, ceil_mode: false, element: ElementKind::F32,
     };
     let r = LpPool1dPlan::<f32>::select(&stream, &desc, PlanPreference::default());
-    assert!(r.is_err(), "LpPool1d should reject select");
+    assert!(r.is_ok(), "LpPool1d should accept select for p=2");
 }
 
 #[test]
 #[ignore]
-fn lp_pool2d_select_rejects() {
+fn lp_pool2d_select_accepts() {
     let (_ctx, stream) = setup();
     let desc = LpPool2dDescriptor {
         batch: 1, channels: 1, h_in: 8, w_in: 8,
         window_h: 2, window_w: 2, stride_h: 2, stride_w: 2,
-        p: 2.0, element: ElementKind::F32,
+        p: 2.0, ceil_mode: false, element: ElementKind::F32,
     };
     let r = LpPool2dPlan::<f32>::select(&stream, &desc, PlanPreference::default());
-    assert!(r.is_err(), "LpPool2d should reject select");
+    assert!(r.is_ok(), "LpPool2d should accept select for p=2");
 }

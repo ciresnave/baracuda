@@ -340,16 +340,18 @@ pub(crate) fn validate_dtype<T: Element>() -> Result<()> {
     Ok(())
 }
 
-/// PyTorch's adaptive-pool kernel-size / stride derivation:
+/// PyTorch's adaptive-pool kernel-size / stride derivation (the
+/// uniform-window cuDNN approximation):
 /// `kernel = ceil(in / out)`, `stride = floor(in / out)`, `pad = 0`.
 ///
-/// **This is NOT bit-exact PyTorch.** PyTorch's adaptive pool uses
-/// non-uniform per-output-cell kernel sizes when `in % out != 0`; cuDNN
-/// only supports uniform kernels across all output cells. The uniform
-/// approximation here matches the common case `in % out == 0` exactly
-/// and degrades gracefully (within ±1 input cell of the true window) for
-/// the non-divisible case.
+/// **No longer used as of Phase 16.1.** The six adaptive-pool plans
+/// (`AdaptiveAvgPool{1,2,3}d` / `AdaptiveMaxPool{1,2,3}d`) now route
+/// to a bespoke bit-exact PyTorch kernel that supports non-uniform
+/// per-output-cell windows. This helper is retained dead-code-allowed
+/// for one alpha cycle in case downstream code reached in (the
+/// `#[deprecated]` getter on each plan also returns a poison `(0, 0)`).
 #[inline]
+#[allow(dead_code)]
 pub(crate) fn adaptive_kernel_stride(in_dim: i32, out_dim: i32) -> (i32, i32) {
     debug_assert!(in_dim > 0 && out_dim > 0);
     let stride = in_dim / out_dim;

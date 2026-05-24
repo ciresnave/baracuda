@@ -1,9 +1,12 @@
 #![cfg(feature = "cudnn")]
 //! Real-GPU smoke test for `AdaptiveAvgPool2dPlan` FW.
 //!
-//! Verifies the **cuDNN approximation** matches a hand-computed expected
-//! for a 4×4 → 2×2 case (in this divisible case the approximation is
-//! exact: `kernel=2, stride=2, pad=0`).
+//! Verifies the **bit-exact PyTorch** bespoke kernel (Phase 16.1)
+//! matches a hand-computed expected for a 4×4 → 2×2 case. In this
+//! divisible case (`4 % 2 == 0`) the PyTorch formula collapses to a
+//! uniform `kernel=2, stride=2, pad=0` window per axis — same answer
+//! the prior cuDNN approximation produced. Non-divisible regression
+//! coverage lives in `adaptive_pool_bitexact_smoke.rs`.
 //!
 //! Each output cell averages a disjoint 2×2 input tile:
 //!
@@ -51,10 +54,16 @@ fn adaptive_avg_pool2d_4x4_to_2x2_f32() {
     let plan = AdaptiveAvgPool2dPlan::<f32>::select(&stream, &desc, PlanPreference::default())
         .expect("sel");
 
-    // Sanity-check the derived kernel/stride for the 4×4 → 2×2 case.
-    let ((kh, sh), (kw, sw)) = plan.derived_kernel_stride();
-    assert_eq!((kh, sh), (2, 2));
-    assert_eq!((kw, sw), (2, 2));
+    // `derived_kernel_stride` was deprecated in Phase 16.1 — the
+    // bespoke kernel uses per-output-cell variable windows; no single
+    // (kernel, stride) pair represents the op. The deprecated getter
+    // now returns `((0,0), (0,0))` for source-compat.
+    #[allow(deprecated)]
+    {
+        let ((kh, sh), (kw, sw)) = plan.derived_kernel_stride();
+        assert_eq!((kh, sh), (0, 0));
+        assert_eq!((kw, sw), (0, 0));
+    }
 
     let x_shape = [n, c, h_in, w_in];
     let y_shape = [n, c, h_out, w_out];
