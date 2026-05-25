@@ -1014,6 +1014,16 @@ pub enum ConvKind {
     ConvTranspose3dBackwardData = 20,
     /// 3-D transposed convolution filter-gradient.
     ConvTranspose3dBackwardFilter = 21,
+    /// 2-D im2col — `torch.nn.functional.unfold` (Phase 19.3). Extracts
+    /// sliding windows from an NCHW input into an
+    /// `[N, C·kh·kw, h_out·w_out]` column-shaped matrix. Distinct from
+    /// the reserved [`Self::Unfold`] discriminant for forward-source-
+    /// compat; the 19.3 wiring routes through this discriminant.
+    Im2Col2d = 22,
+    /// 1-D im2col (NCL → `[N, C·kl, l_out]`).
+    Im2Col1d = 23,
+    /// 1-D col2im — inverse of [`Self::Im2Col1d`]. Atomic-add scatter.
+    Col2Im1d = 24,
 }
 
 /// Pooling-family op discriminant — Category J from the comprehensive

@@ -282,13 +282,14 @@ pub mod conv;
 
 #[cfg(feature = "cudnn")]
 pub use conv::{
-    Conv1dArgs, Conv1dBwArgs, Conv1dDescriptor, Conv1dDwArgs, Conv1dPlan, Conv2dArgs,
-    Conv2dBwArgs, Conv2dDescriptor, Conv2dDwArgs, Conv2dPlan, Conv3dArgs, Conv3dBwArgs,
-    Conv3dDescriptor, Conv3dDwArgs, Conv3dPlan, ConvTranspose1dArgs, ConvTranspose1dBwArgs,
-    ConvTranspose1dDescriptor, ConvTranspose1dDwArgs, ConvTranspose1dPlan, ConvTranspose2dArgs,
-    ConvTranspose2dBwArgs, ConvTranspose2dDescriptor, ConvTranspose2dDwArgs,
-    ConvTranspose2dPlan, ConvTranspose3dArgs, ConvTranspose3dBwArgs, ConvTranspose3dDescriptor,
-    ConvTranspose3dDwArgs, ConvTranspose3dPlan,
+    Col2Im1dArgs, Col2Im1dDescriptor, Col2Im1dPlan, Conv1dArgs, Conv1dBwArgs, Conv1dDescriptor,
+    Conv1dDwArgs, Conv1dPlan, Conv2dArgs, Conv2dBwArgs, Conv2dDescriptor, Conv2dDwArgs,
+    Conv2dPlan, Conv3dArgs, Conv3dBwArgs, Conv3dDescriptor, Conv3dDwArgs, Conv3dPlan,
+    ConvTranspose1dArgs, ConvTranspose1dBwArgs, ConvTranspose1dDescriptor, ConvTranspose1dDwArgs,
+    ConvTranspose1dPlan, ConvTranspose2dArgs, ConvTranspose2dBwArgs, ConvTranspose2dDescriptor,
+    ConvTranspose2dDwArgs, ConvTranspose2dPlan, ConvTranspose3dArgs, ConvTranspose3dBwArgs,
+    ConvTranspose3dDescriptor, ConvTranspose3dDwArgs, ConvTranspose3dPlan, Im2Col1dArgs,
+    Im2Col1dDescriptor, Im2Col1dPlan, Im2ColArgs, Im2ColDescriptor, Im2ColPlan,
 };
 
 // Pooling family — Phase 7 Milestone 7.2 (Category Pooling). Wraps

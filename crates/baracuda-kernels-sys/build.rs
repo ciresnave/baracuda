@@ -816,6 +816,13 @@ fn collect_kernel_files() -> Vec<&'static str> {
             "image/pixel_shuffle.cu",
             "image/roi.cu",
             "image/nms.cu",
+            // Phase 19.2 — upsample nearest-2D FW + BW × 4 fp dtypes.
+            // Standalone `_run` symbols complete the upsample FFI
+            // surface alongside the existing `interpolate_bilinear_2d_*`
+            // symbols (which are re-exported under the new
+            // `upsample_bilinear_2d_*` namespace via Rust aliases
+            // declared in src/lib.rs).
+            "image/upsample.cu",
             // Phase 9 Milestone Category O — sort / topk / kthvalue /
             // unique / msort / histogram / bincount / searchsorted.
             // Block-bitonic primitive shared by sort + topk + msort;
@@ -863,6 +870,14 @@ fn collect_kernel_files() -> Vec<&'static str> {
             // tensor (i64, argmax linear index) consumed by the BW
             // atomicAdd scatter.
             "pool/fractional_max_pool.cu",
+            // Phase 19.3 — im2col / im2col1d / col2im1d bespoke
+            // kernels (Category Convolution). Building blocks for
+            // Fuel's conv-via-im2col-and-GEMM fallback lowering +
+            // the conv-backward filter-gradient path. One .cu file
+            // ships 12 `_run` symbols (3 ops × 4 FP dtypes); no
+            // cuDNN dependency. col2im_1d uses atomicAdd scatter
+            // (half/bf16 via `baracuda::atomic::add`).
+            "conv/im2col.cu",
         ] {
             if std::path::Path::new(&format!("kernels/{f}")).exists() {
                 kernels.push(*f);

@@ -7,8 +7,8 @@ effort within each category. Authoritative status per op lives in
 [`OP-MATRIX.md`](OP-MATRIX.md); historical phase summaries live in
 [`ARCHITECTURE.md`](ARCHITECTURE.md).
 
-The current tag is **v0.0.1-alpha.35** with **1936 GPU tests
-passing** on RTX 4070 (sm_89) across **610 binary targets**.
+The current tag is **v0.0.1-alpha.36** with **1957 GPU tests
+passing** on RTX 4070 (sm_89) across **614 binary targets**.
 
 ---
 
@@ -125,7 +125,89 @@ Carry-forward from Phase 18:
   not implemented; callers can post-cast if they need the alternative.
   Output dtype always matches activation dtype.
 
-## Phase 19 — segment + embedding BW completion
+## Phase 19 — Fuel retirement asks: pool/conv FFI facade + im2col (complete; shipped alpha.36)
+
+Supersedes the original "segment + embedding BW" plan in this slot —
+those move to Phase 21+. Phase 19 addresses items 1 + 2 + 3
+from Fuel's 2026-05-25 comprehensive retirement ask.
+
+- **Non-adaptive Pool FFI surface** (Item 1) — Avg/MaxPool 1/2/3d
+  exist as cuDNN-backed Rust plans (Phase 7 + 11.8) but have NO
+  `baracuda-kernels-sys` FFI symbols. Add thin C-ABI wrappers
+  exposing `(kernel_size, stride, padding)` params; route through
+  the existing cuDNN handle setup.
+- **Conv FFI surface** (Item 2) — same gap for Conv1/2/3d +
+  ConvTranspose1/2/3d (Phase 11.7) and Upsample (Nearest2d +
+  Bilinear2d from `InterpolatePlan`). Add FFI wrappers.
+- **NEW im2col / im2col1d / col2im1d** (Item 2) — baracuda has
+  none today; bespoke kernels needed. Fuel uses these for the
+  conv-via-im2col-and-GEMM fallback lowering + the conv backward
+  filter-gradient path.
+- **Vendor Fuel's Q8_1 staging kernels for inspection** (Item 3) —
+  copy `fuel-cuda-kernels/src/quantized.cu` into
+  `crates/baracuda-kernels-sys/vendor/fuel-q8_1/` before Fuel
+  deletes it. Not built; inspection-only. Evaluate against
+  baracuda's existing MMVQ for shape-specific perf wins.
+  Companion task: actually do the comparison; if a Q8_1-staging
+  inner-loop or SMEM-tile structure beats the current MMVQ
+  implementation at some shape class, port it into the
+  corresponding `baracuda_kernels_mmvq_<qtype>_run` kernel.
+
+## Design correction surfaced during Phase 19
+
+The Phase 19 recon revealed a meta-architectural flaw: **only
+bespoke kernels in `baracuda-kernels-sys` get the FFI facade
+treatment.** Plans backed by NVIDIA libraries (cuDNN, cuBLAS,
+cuSOLVER, cuFFT, cuRAND, cuSPARSE, cuTENSOR, NPP, CV-CUDA) only
+exist as Rust plans — there's no `baracuda-kernels-sys` FFI symbol
+a caller can use directly. This breaks baracuda's "single unified
+CUDA-stack facade" premise.
+
+Phase 19 closes the gap for the Fuel-blocking subset (pool +
+conv + upsample). **Pre-1.0 freeze task**: audit every other
+library-backed Rust plan and add the corresponding
+`baracuda-kernels-sys` FFI wrapper. Rough inventory:
+
+- **cuSOLVER-backed**: Cholesky, LU, QR (real + complex, batched +
+  non-batched), SVD (real + complex, batched + non-batched), eigh,
+  eig, lstsq, solve, inverse, ormqr (real ships; complex pending).
+- **cuFFT-backed**: fft 1d/2d/3d, fftshift.
+- **cuRAND-backed**: random sampling (uniform, normal, gamma, etc.).
+- **cuSPARSE-backed**: sparse ops (limited scope today).
+- **cuTENSOR-backed**: einsum-style ops (if any landed).
+- **NPP-backed**: image transforms (if any landed beyond what
+  shipped via bespoke).
+- **CV-CUDA-backed**: image/spatial transforms (if any landed).
+- **Cutlass-backed**: GEMM is the big one; `baracuda-cutlass` is
+  itself an FFI-shaped crate but the unified `baracuda-kernels-sys`
+  re-export surface is missing.
+
+This is mechanical work but substantial in volume (rough estimate:
+40-60 new FFI wrappers across the library-backed families). Tracked
+as a 1.0-freeze prerequisite — no caller should have to wonder
+which crate hosts a given kernel.
+
+## Phase 20 — Fuel retirement asks: MoE (planned, alpha.37)
+
+Item 4 from Fuel's 2026-05-25 ask. Ship **both** Option 1 and
+Option 2 together.
+
+- **Option 1: batched MMVQ × N-experts** — new kernel family with
+  a single launch processing all (token, expert) pairs via a
+  routing triple `(sorted_token_ids, expert_offsets, topk_weights)`.
+  Mirror the existing MMVQ matrix: 11 GGUF block formats + FP
+  variants for f16/bf16. ~22+ new FFI symbols.
+- **Option 2: refresh + expose existing MoE kernels** — baracuda's
+  `MoeVariant::{ScalarGguf, Wmma, WmmaGguf}` (Phase 8.5) was
+  originally vendored from Fuel's `moe/*.cu` files. Refresh
+  against Fuel's current state (in case improvements landed since
+  the vendor), and add direct `baracuda-kernels-sys` FFI surface
+  so Fuel can call them without going through the Rust plan layer
+  (consistent with the Phase 19 FFI facade work).
+
+Once Phase 20 ships, Fuel's `fuel-cuda-kernels` crate retires.
+
+## Phase 21 — segment + embedding BW completion (deferred from previous Phase 19 slot)
 
 - **Segment `Max` / `Min` BW** — needs argmax / argmin tracking in
   the FW (output a paired index tensor alongside the value output;
@@ -140,7 +222,7 @@ Carry-forward from Phase 18:
 - **`EmbeddingBag Max` mode** — needs per-feature argmax tracking
   (same pattern as Segment Max).
 
-## Phase 20 — linalg completion
+## Phase 22 — linalg completion
 
 - **`BatchedOrmqrWyPlan` complex variants** — real `{f32, f64}` ship
   today; complex needs `cunmqr` rather than `cusolverDnXormqr`.

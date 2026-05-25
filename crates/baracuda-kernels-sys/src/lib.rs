@@ -29467,6 +29467,16 @@ unsafe extern "C" {
 #[cfg(feature = "cudnn")]
 pub use cudnn_ffi::*;
 
+// Phase 19.1 — cuDNN pool FFI facade (non-adaptive MaxPool / AvgPool
+// 1D / 2D / 3D, FW + BW × 4 fp dtypes). Pure-Rust `#[no_mangle]`
+// wrappers exposing the cuDNN-backed pool plans as flat C symbols for
+// non-Rust callers (Fuel). See module docs for the handle-lifecycle
+// + indices contract.
+#[cfg(feature = "cudnn")]
+mod pool_cudnn_facade;
+#[cfg(feature = "cudnn")]
+pub use pool_cudnn_facade::*;
+
 // ============================================================================
 // Phase 7 Milestone 7.3 — Indexing / scatter / gather (Category L)
 // ============================================================================
@@ -35369,4 +35379,386 @@ unsafe extern "C" {
         out_d: i32, out_h: i32, out_w: i32,
         stream: *mut c_void,
     ) -> i32;
+
+    // ========================================================================
+    // Phase 19.3 — im2col / im2col1d / col2im1d bespoke kernels.
+    // ========================================================================
+    //
+    // Building blocks for Fuel's conv-via-im2col-and-GEMM fallback
+    // lowering + the conv-backward filter-gradient path. Three ops ×
+    // four FP dtypes (f16, bf16, f32, f64) = 12 FFI symbols.
+    //
+    // im2col_2d: NCHW input `[N, C, H_in, W_in]` →
+    //            col output `[N, C·kh·kw, h_out·w_out]`.
+    // im2col_1d: NCL  input `[N, C, L_in]` →
+    //            col output `[N, C·kl, l_out]`.
+    // col2im_1d: col  input `[N, C·kl, l_out]` →
+    //            NCL  output `[N, C, L_in]` — inverse of im2col_1d.
+    //
+    // Output extents follow the standard PyTorch / cuDNN formula:
+    //   h_out = (H_in + 2·pad_h - dilation_h·(kh-1) - 1) / stride_h + 1
+    //   w_out, l_out: analogous.
+    //
+    // col2im_1d uses atomicAdd scatter for overlapping window cells
+    // (when stride < kernel). half/bf16 route through the 32-bit CAS
+    // path in `baracuda::atomic::add<T>` for universal availability.
+    // **Caller must pre-zero the output buffer before col2im_1d.**
+
+    /// im2col 2-D, f32.
+    pub fn baracuda_kernels_im2col_2d_f32_run(
+        batch: i32, channels: i32,
+        h_in: i32, w_in: i32,
+        h_out: i32, w_out: i32,
+        kh: i32, kw: i32,
+        stride_h: i32, stride_w: i32,
+        pad_h: i32, pad_w: i32,
+        dilation_h: i32, dilation_w: i32,
+        input: *const c_void,
+        output: *mut c_void,
+        stream: *mut c_void,
+    ) -> i32;
+    /// im2col 2-D, f64.
+    pub fn baracuda_kernels_im2col_2d_f64_run(
+        batch: i32, channels: i32,
+        h_in: i32, w_in: i32,
+        h_out: i32, w_out: i32,
+        kh: i32, kw: i32,
+        stride_h: i32, stride_w: i32,
+        pad_h: i32, pad_w: i32,
+        dilation_h: i32, dilation_w: i32,
+        input: *const c_void,
+        output: *mut c_void,
+        stream: *mut c_void,
+    ) -> i32;
+    /// im2col 2-D, f16.
+    pub fn baracuda_kernels_im2col_2d_f16_run(
+        batch: i32, channels: i32,
+        h_in: i32, w_in: i32,
+        h_out: i32, w_out: i32,
+        kh: i32, kw: i32,
+        stride_h: i32, stride_w: i32,
+        pad_h: i32, pad_w: i32,
+        dilation_h: i32, dilation_w: i32,
+        input: *const c_void,
+        output: *mut c_void,
+        stream: *mut c_void,
+    ) -> i32;
+    /// im2col 2-D, bf16.
+    pub fn baracuda_kernels_im2col_2d_bf16_run(
+        batch: i32, channels: i32,
+        h_in: i32, w_in: i32,
+        h_out: i32, w_out: i32,
+        kh: i32, kw: i32,
+        stride_h: i32, stride_w: i32,
+        pad_h: i32, pad_w: i32,
+        dilation_h: i32, dilation_w: i32,
+        input: *const c_void,
+        output: *mut c_void,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// im2col 1-D, f32.
+    pub fn baracuda_kernels_im2col_1d_f32_run(
+        batch: i32, channels: i32,
+        l_in: i32, l_out: i32,
+        kl: i32, stride_l: i32, pad_l: i32, dilation_l: i32,
+        input: *const c_void,
+        output: *mut c_void,
+        stream: *mut c_void,
+    ) -> i32;
+    /// im2col 1-D, f64.
+    pub fn baracuda_kernels_im2col_1d_f64_run(
+        batch: i32, channels: i32,
+        l_in: i32, l_out: i32,
+        kl: i32, stride_l: i32, pad_l: i32, dilation_l: i32,
+        input: *const c_void,
+        output: *mut c_void,
+        stream: *mut c_void,
+    ) -> i32;
+    /// im2col 1-D, f16.
+    pub fn baracuda_kernels_im2col_1d_f16_run(
+        batch: i32, channels: i32,
+        l_in: i32, l_out: i32,
+        kl: i32, stride_l: i32, pad_l: i32, dilation_l: i32,
+        input: *const c_void,
+        output: *mut c_void,
+        stream: *mut c_void,
+    ) -> i32;
+    /// im2col 1-D, bf16.
+    pub fn baracuda_kernels_im2col_1d_bf16_run(
+        batch: i32, channels: i32,
+        l_in: i32, l_out: i32,
+        kl: i32, stride_l: i32, pad_l: i32, dilation_l: i32,
+        input: *const c_void,
+        output: *mut c_void,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// col2im 1-D, f32. Caller must zero `output` first.
+    pub fn baracuda_kernels_col2im_1d_f32_run(
+        batch: i32, channels: i32,
+        l_in: i32, l_out: i32,
+        kl: i32, stride_l: i32, pad_l: i32, dilation_l: i32,
+        input: *const c_void,
+        output: *mut c_void,
+        stream: *mut c_void,
+    ) -> i32;
+    /// col2im 1-D, f64. Caller must zero `output` first.
+    pub fn baracuda_kernels_col2im_1d_f64_run(
+        batch: i32, channels: i32,
+        l_in: i32, l_out: i32,
+        kl: i32, stride_l: i32, pad_l: i32, dilation_l: i32,
+        input: *const c_void,
+        output: *mut c_void,
+        stream: *mut c_void,
+    ) -> i32;
+    /// col2im 1-D, f16. Caller must zero `output` first.
+    pub fn baracuda_kernels_col2im_1d_f16_run(
+        batch: i32, channels: i32,
+        l_in: i32, l_out: i32,
+        kl: i32, stride_l: i32, pad_l: i32, dilation_l: i32,
+        input: *const c_void,
+        output: *mut c_void,
+        stream: *mut c_void,
+    ) -> i32;
+    /// col2im 1-D, bf16. Caller must zero `output` first.
+    pub fn baracuda_kernels_col2im_1d_bf16_run(
+        batch: i32, channels: i32,
+        l_in: i32, l_out: i32,
+        kl: i32, stride_l: i32, pad_l: i32, dilation_l: i32,
+        input: *const c_void,
+        output: *mut c_void,
+        stream: *mut c_void,
+    ) -> i32;
 }
+
+// ============================================================================
+// Phase 19.2 — upsample (nearest 2D) FFI surface
+// ============================================================================
+//
+// Adds the missing `nearest-2D` mode (FW + BW × 4 fp dtypes = 8 symbols)
+// under the new `upsample_*` namespace specified by Phase 19.2's
+// design-correction plan. The existing `interpolate_bilinear_2d_*`
+// symbols (kernels/image/interpolate.cu) are re-exported under the
+// `upsample_bilinear_2d_*` namespace via the alias block immediately
+// below — same machine code, two symbol names. Bilinear coverage
+// remains f32 + f64 only (matching the bespoke kernel set); f16 / bf16
+// bilinear fanout is a fanout-milestone follow-up.
+//
+// BW kernels scatter via `atomicAdd` — **caller must pre-zero
+// `dinput`** before launch (matches the bilinear BW contract).
+
+#[cfg(any(feature = "sm80", feature = "sm89", feature = "sm90a"))]
+unsafe extern "C" {
+    // ---- upsample_nearest_2d FW (4 fp dtypes) ----
+
+    /// `upsample(x, mode='nearest')` FW, f32.
+    /// `input`: `[N, C, IH, IW]`; `output`: `[N, C, OH, OW]`. NCHW.
+    /// Coordinate mapping: nearest under `align_corners=false`.
+    /// # Safety: all pointers must be live device memory; `stream` valid.
+    pub fn baracuda_kernels_upsample_nearest_2d_fw_f32_run(
+        N: i32, C: i32, IH: i32, IW: i32, OH: i32, OW: i32,
+        input: *const c_void,
+        output: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `upsample_nearest_2d` FW, f64. # Safety: as f32.
+    pub fn baracuda_kernels_upsample_nearest_2d_fw_f64_run(
+        N: i32, C: i32, IH: i32, IW: i32, OH: i32, OW: i32,
+        input: *const c_void,
+        output: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `upsample_nearest_2d` FW, f16. # Safety: as f32.
+    pub fn baracuda_kernels_upsample_nearest_2d_fw_f16_run(
+        N: i32, C: i32, IH: i32, IW: i32, OH: i32, OW: i32,
+        input: *const c_void,
+        output: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `upsample_nearest_2d` FW, bf16. # Safety: as f32.
+    pub fn baracuda_kernels_upsample_nearest_2d_fw_bf16_run(
+        N: i32, C: i32, IH: i32, IW: i32, OH: i32, OW: i32,
+        input: *const c_void,
+        output: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    // ---- upsample_nearest_2d BW (4 fp dtypes; caller pre-zeros dinput) ----
+
+    /// `upsample_nearest_2d` BW, f32. Caller pre-zeros `dinput`.
+    /// # Safety: as FW.
+    pub fn baracuda_kernels_upsample_nearest_2d_bw_f32_run(
+        N: i32, C: i32, IH: i32, IW: i32, OH: i32, OW: i32,
+        dout: *const c_void,
+        dinput: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `upsample_nearest_2d` BW, f64. # Safety: as f32 BW.
+    pub fn baracuda_kernels_upsample_nearest_2d_bw_f64_run(
+        N: i32, C: i32, IH: i32, IW: i32, OH: i32, OW: i32,
+        dout: *const c_void,
+        dinput: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `upsample_nearest_2d` BW, f16. # Safety: as f32 BW. Uses the
+    /// `baracuda::atomic::add<__half>` (CAS-based) helper.
+    pub fn baracuda_kernels_upsample_nearest_2d_bw_f16_run(
+        N: i32, C: i32, IH: i32, IW: i32, OH: i32, OW: i32,
+        dout: *const c_void,
+        dinput: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `upsample_nearest_2d` BW, bf16. # Safety: as f32 BW.
+    pub fn baracuda_kernels_upsample_nearest_2d_bw_bf16_run(
+        N: i32, C: i32, IH: i32, IW: i32, OH: i32, OW: i32,
+        dout: *const c_void,
+        dinput: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+}
+
+// ============================================================================
+// Phase 19.2 — upsample (bilinear 2D) aliases
+// ============================================================================
+//
+// Thin Rust-side aliases mapping the new `upsample_bilinear_2d_*`
+// naming convention to the existing `interpolate_bilinear_2d_*`
+// symbols. Same C-ABI, same machine code; the two namespaces co-exist
+// so callers on either side of the rename keep working. Coverage
+// remains f32 + f64 — the underlying kernels haven't grown f16 / bf16
+// instantiations yet (fanout milestone follow-up).
+//
+// These are `pub fn` Rust wrappers (`#[inline]`) rather than alias
+// symbols to keep `baracuda-kernels-sys` self-contained — downstream
+// consumers can `use baracuda_kernels_sys::baracuda_kernels_upsample_bilinear_2d_fw_f32_run`
+// uniformly with the rest of the upsample family.
+
+/// Alias for [`baracuda_kernels_interpolate_bilinear_2d_f32_run`] under
+/// the new Phase 19.2 `upsample_*` naming convention.
+///
+/// # Safety
+/// As [`baracuda_kernels_interpolate_bilinear_2d_f32_run`].
+#[cfg(any(feature = "sm80", feature = "sm89", feature = "sm90a"))]
+#[inline]
+pub unsafe fn baracuda_kernels_upsample_bilinear_2d_fw_f32_run(
+    n: i32, c: i32, ih: i32, iw: i32, oh: i32, ow: i32,
+    input: *const c_void,
+    output: *mut c_void,
+    workspace: *mut c_void,
+    workspace_bytes: usize,
+    stream: *mut c_void,
+) -> i32 {
+    unsafe {
+        baracuda_kernels_interpolate_bilinear_2d_f32_run(
+            n, c, ih, iw, oh, ow, input, output, workspace, workspace_bytes, stream,
+        )
+    }
+}
+
+/// Alias for [`baracuda_kernels_interpolate_bilinear_2d_f64_run`].
+///
+/// # Safety
+/// As [`baracuda_kernels_interpolate_bilinear_2d_f64_run`].
+#[cfg(any(feature = "sm80", feature = "sm89", feature = "sm90a"))]
+#[inline]
+pub unsafe fn baracuda_kernels_upsample_bilinear_2d_fw_f64_run(
+    n: i32, c: i32, ih: i32, iw: i32, oh: i32, ow: i32,
+    input: *const c_void,
+    output: *mut c_void,
+    workspace: *mut c_void,
+    workspace_bytes: usize,
+    stream: *mut c_void,
+) -> i32 {
+    unsafe {
+        baracuda_kernels_interpolate_bilinear_2d_f64_run(
+            n, c, ih, iw, oh, ow, input, output, workspace, workspace_bytes, stream,
+        )
+    }
+}
+
+/// Alias for [`baracuda_kernels_interpolate_bilinear_2d_backward_f32_run`].
+///
+/// # Safety
+/// As [`baracuda_kernels_interpolate_bilinear_2d_backward_f32_run`].
+/// Caller pre-zeros `dinput`.
+#[cfg(any(feature = "sm80", feature = "sm89", feature = "sm90a"))]
+#[inline]
+pub unsafe fn baracuda_kernels_upsample_bilinear_2d_bw_f32_run(
+    n: i32, c: i32, ih: i32, iw: i32, oh: i32, ow: i32,
+    dout: *const c_void,
+    dinput: *mut c_void,
+    workspace: *mut c_void,
+    workspace_bytes: usize,
+    stream: *mut c_void,
+) -> i32 {
+    unsafe {
+        baracuda_kernels_interpolate_bilinear_2d_backward_f32_run(
+            n, c, ih, iw, oh, ow, dout, dinput, workspace, workspace_bytes, stream,
+        )
+    }
+}
+
+/// Alias for [`baracuda_kernels_interpolate_bilinear_2d_backward_f64_run`].
+///
+/// # Safety
+/// As [`baracuda_kernels_interpolate_bilinear_2d_backward_f64_run`].
+/// Caller pre-zeros `dinput`.
+#[cfg(any(feature = "sm80", feature = "sm89", feature = "sm90a"))]
+#[inline]
+pub unsafe fn baracuda_kernels_upsample_bilinear_2d_bw_f64_run(
+    n: i32, c: i32, ih: i32, iw: i32, oh: i32, ow: i32,
+    dout: *const c_void,
+    dinput: *mut c_void,
+    workspace: *mut c_void,
+    workspace_bytes: usize,
+    stream: *mut c_void,
+) -> i32 {
+    unsafe {
+        baracuda_kernels_interpolate_bilinear_2d_backward_f64_run(
+            n, c, ih, iw, oh, ow, dout, dinput, workspace, workspace_bytes, stream,
+        )
+    }
+}
+
+// ============================================================================
+// Phase 19.2 — Conv / ConvTranspose cuDNN FFI facade
+// ============================================================================
+//
+// Rust `extern "C"` wrappers around the cuDNN convolution family —
+// `Conv{1,2,3}d` + `ConvTranspose{1,2,3}d`, each across {f32, f64,
+// f16, bf16} for FW + BW-data + BW-filter (72 symbols total).
+// Implemented in `conv_cudnn_facade.rs`; re-exported here so callers
+// `use baracuda_kernels_sys::baracuda_kernels_conv_2d_fw_f32_run`
+// works uniformly with the rest of the FFI surface.
+//
+// Gated behind `feature = "cudnn"` — same gate as the cuDNN extern
+// block + library link line.
+
+#[cfg(feature = "cudnn")]
+mod conv_cudnn_facade;
+
+#[cfg(feature = "cudnn")]
+pub use conv_cudnn_facade::*;

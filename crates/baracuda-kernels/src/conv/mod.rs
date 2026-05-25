@@ -83,6 +83,13 @@ pub mod conv_transpose1d;
 pub mod conv_transpose2d;
 pub mod conv_transpose3d;
 
+// Phase 19.3 — bespoke im2col / im2col1d / col2im1d (sliding-window
+// unfold + 1-D inverse). No cuDNN dependency; building blocks for
+// Fuel's conv-via-im2col-and-GEMM lowering.
+pub mod col2im1d;
+pub mod im2col;
+pub mod im2col1d;
+
 pub use conv1d::{Conv1dArgs, Conv1dBwArgs, Conv1dDescriptor, Conv1dDwArgs, Conv1dPlan};
 pub use conv2d::{Conv2dArgs, Conv2dBwArgs, Conv2dDescriptor, Conv2dDwArgs, Conv2dPlan};
 pub use conv3d::{Conv3dArgs, Conv3dBwArgs, Conv3dDescriptor, Conv3dDwArgs, Conv3dPlan};
@@ -98,3 +105,7 @@ pub use conv_transpose3d::{
     ConvTranspose3dArgs, ConvTranspose3dBwArgs, ConvTranspose3dDescriptor,
     ConvTranspose3dDwArgs, ConvTranspose3dPlan,
 };
+
+pub use col2im1d::{Col2Im1dArgs, Col2Im1dDescriptor, Col2Im1dPlan};
+pub use im2col::{Im2ColArgs, Im2ColDescriptor, Im2ColPlan};
+pub use im2col1d::{Im2Col1dArgs, Im2Col1dDescriptor, Im2Col1dPlan};

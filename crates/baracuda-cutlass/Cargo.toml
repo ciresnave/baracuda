@@ -1,6 +1,6 @@
 [package]
 name = "baracuda-cutlass"
-version = "0.0.1-alpha.35"
+version = "0.0.1-alpha.36"
 description = "Safe Rust wrapper for compiled CUTLASS kernels: plan-based GEMM and grouped GEMM with caller-supplied workspace, typed device-buffer arguments, and capture-safe launch."
 edition.workspace = true
 rust-version.workspace = true
