@@ -33749,6 +33749,345 @@ unsafe extern "C" {
         y: *const c_void, dst: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
     ) -> i32;
+
+    // ===== Phase 20.1 — batched MMVQ × N-experts ==============================
+    //
+    // 11 block formats × 3 activation dtypes (f32 / f16 / bf16) = 33 quant
+    // symbols, plus 3 pure-FP symbols = 36 new FFI entry points.
+    //
+    // Op shape:
+    //   For each dispatch i ∈ [0, M_total):
+    //     token  = sorted_token_ids[i]
+    //     expert = find_e(expert_offsets, i)  // precomputed once via prelude
+    //     w      = topk_weights[i] (or 1.0 if topk_weights == nullptr)
+    //     for r ∈ [0, n_rows_per_expert):
+    //       output[token, r] (+)= w * dot(weights[expert, r, :], activations[token, :])
+    //
+    //   (+)= is a regular store when top_k == 1 (no output aliasing) and an
+    //   atomicAdd (via `baracuda::atomic::add<T>`) when top_k > 1. The caller
+    //   MUST zero-initialize `output` before the call when top_k > 1.
+    //
+    // Convention:
+    //   * `_batched_run`        — f32 activation + output (un-suffixed = canonical).
+    //   * `_batched_f16_run`    — f16 activation + output.
+    //   * `_batched_bf16_run`   — bf16 activation + output.
+    //   * `mmvq_batched_<dt>_run` — pure-FP (no quant) variants.
+    //
+    // Workspace: `m_total * sizeof(i32)` bytes. The launcher derives
+    // `m_total = workspace_bytes / sizeof(i32)` (caller's responsibility to
+    // size accurately). Buffer is used for the `dispatch_to_expert[]`
+    // prelude (avoids per-block binary search over `expert_offsets[]`).
+    //
+    // Status codes: 0 success, 2 invalid problem (nullptrs / non-positive
+    // dims), 4 workspace too small, 5 internal launch failure.
+
+    // ---- Quant: type-0/1 (f32 = un-suffixed canonical) -------------------
+
+    /// Batched MMVQ — Q4_0, f32 activation + output. # Safety: device-resident
+    /// pointers; valid stream; `workspace` ≥ `m_total * 4` bytes.
+    pub fn baracuda_kernels_mmvq_q4_0_batched_run(
+        n_experts: i32, n_rows_per_expert: i32, n_cols: i32,
+        weights: *const c_void, activations: *const c_void,
+        sorted_token_ids: *const i32, expert_offsets: *const i32,
+        topk_weights: *const f32, output: *mut c_void, top_k: i32,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// Batched MMVQ — Q4_0, f16. # Safety: as Q4_0 f32.
+    pub fn baracuda_kernels_mmvq_q4_0_batched_f16_run(
+        n_experts: i32, n_rows_per_expert: i32, n_cols: i32,
+        weights: *const c_void, activations: *const c_void,
+        sorted_token_ids: *const i32, expert_offsets: *const i32,
+        topk_weights: *const f32, output: *mut c_void, top_k: i32,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// Batched MMVQ — Q4_0, bf16. # Safety: as Q4_0 f32.
+    pub fn baracuda_kernels_mmvq_q4_0_batched_bf16_run(
+        n_experts: i32, n_rows_per_expert: i32, n_cols: i32,
+        weights: *const c_void, activations: *const c_void,
+        sorted_token_ids: *const i32, expert_offsets: *const i32,
+        topk_weights: *const f32, output: *mut c_void, top_k: i32,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// Batched MMVQ — Q4_1, f32. # Safety: as Q4_0.
+    pub fn baracuda_kernels_mmvq_q4_1_batched_run(
+        n_experts: i32, n_rows_per_expert: i32, n_cols: i32,
+        weights: *const c_void, activations: *const c_void,
+        sorted_token_ids: *const i32, expert_offsets: *const i32,
+        topk_weights: *const f32, output: *mut c_void, top_k: i32,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// Batched MMVQ — Q4_1, f16. # Safety: as Q4_0.
+    pub fn baracuda_kernels_mmvq_q4_1_batched_f16_run(
+        n_experts: i32, n_rows_per_expert: i32, n_cols: i32,
+        weights: *const c_void, activations: *const c_void,
+        sorted_token_ids: *const i32, expert_offsets: *const i32,
+        topk_weights: *const f32, output: *mut c_void, top_k: i32,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// Batched MMVQ — Q4_1, bf16. # Safety: as Q4_0.
+    pub fn baracuda_kernels_mmvq_q4_1_batched_bf16_run(
+        n_experts: i32, n_rows_per_expert: i32, n_cols: i32,
+        weights: *const c_void, activations: *const c_void,
+        sorted_token_ids: *const i32, expert_offsets: *const i32,
+        topk_weights: *const f32, output: *mut c_void, top_k: i32,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// Batched MMVQ — Q5_0, f32. # Safety: as Q4_0.
+    pub fn baracuda_kernels_mmvq_q5_0_batched_run(
+        n_experts: i32, n_rows_per_expert: i32, n_cols: i32,
+        weights: *const c_void, activations: *const c_void,
+        sorted_token_ids: *const i32, expert_offsets: *const i32,
+        topk_weights: *const f32, output: *mut c_void, top_k: i32,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// Batched MMVQ — Q5_0, f16. # Safety: as Q4_0.
+    pub fn baracuda_kernels_mmvq_q5_0_batched_f16_run(
+        n_experts: i32, n_rows_per_expert: i32, n_cols: i32,
+        weights: *const c_void, activations: *const c_void,
+        sorted_token_ids: *const i32, expert_offsets: *const i32,
+        topk_weights: *const f32, output: *mut c_void, top_k: i32,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// Batched MMVQ — Q5_0, bf16. # Safety: as Q4_0.
+    pub fn baracuda_kernels_mmvq_q5_0_batched_bf16_run(
+        n_experts: i32, n_rows_per_expert: i32, n_cols: i32,
+        weights: *const c_void, activations: *const c_void,
+        sorted_token_ids: *const i32, expert_offsets: *const i32,
+        topk_weights: *const f32, output: *mut c_void, top_k: i32,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// Batched MMVQ — Q5_1, f32. # Safety: as Q4_0.
+    pub fn baracuda_kernels_mmvq_q5_1_batched_run(
+        n_experts: i32, n_rows_per_expert: i32, n_cols: i32,
+        weights: *const c_void, activations: *const c_void,
+        sorted_token_ids: *const i32, expert_offsets: *const i32,
+        topk_weights: *const f32, output: *mut c_void, top_k: i32,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// Batched MMVQ — Q5_1, f16. # Safety: as Q4_0.
+    pub fn baracuda_kernels_mmvq_q5_1_batched_f16_run(
+        n_experts: i32, n_rows_per_expert: i32, n_cols: i32,
+        weights: *const c_void, activations: *const c_void,
+        sorted_token_ids: *const i32, expert_offsets: *const i32,
+        topk_weights: *const f32, output: *mut c_void, top_k: i32,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// Batched MMVQ — Q5_1, bf16. # Safety: as Q4_0.
+    pub fn baracuda_kernels_mmvq_q5_1_batched_bf16_run(
+        n_experts: i32, n_rows_per_expert: i32, n_cols: i32,
+        weights: *const c_void, activations: *const c_void,
+        sorted_token_ids: *const i32, expert_offsets: *const i32,
+        topk_weights: *const f32, output: *mut c_void, top_k: i32,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// Batched MMVQ — Q8_0, f32. # Safety: as Q4_0.
+    pub fn baracuda_kernels_mmvq_q8_0_batched_run(
+        n_experts: i32, n_rows_per_expert: i32, n_cols: i32,
+        weights: *const c_void, activations: *const c_void,
+        sorted_token_ids: *const i32, expert_offsets: *const i32,
+        topk_weights: *const f32, output: *mut c_void, top_k: i32,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// Batched MMVQ — Q8_0, f16. # Safety: as Q4_0.
+    pub fn baracuda_kernels_mmvq_q8_0_batched_f16_run(
+        n_experts: i32, n_rows_per_expert: i32, n_cols: i32,
+        weights: *const c_void, activations: *const c_void,
+        sorted_token_ids: *const i32, expert_offsets: *const i32,
+        topk_weights: *const f32, output: *mut c_void, top_k: i32,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// Batched MMVQ — Q8_0, bf16. # Safety: as Q4_0.
+    pub fn baracuda_kernels_mmvq_q8_0_batched_bf16_run(
+        n_experts: i32, n_rows_per_expert: i32, n_cols: i32,
+        weights: *const c_void, activations: *const c_void,
+        sorted_token_ids: *const i32, expert_offsets: *const i32,
+        topk_weights: *const f32, output: *mut c_void, top_k: i32,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    // ---- Quant: k-quants (256-elt blocks) --------------------------------
+
+    /// Batched MMVQ — Q2_K, f32. # Safety: as Q4_0, ncols mul of 256.
+    pub fn baracuda_kernels_mmvq_q2_K_batched_run(
+        n_experts: i32, n_rows_per_expert: i32, n_cols: i32,
+        weights: *const c_void, activations: *const c_void,
+        sorted_token_ids: *const i32, expert_offsets: *const i32,
+        topk_weights: *const f32, output: *mut c_void, top_k: i32,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// Batched MMVQ — Q2_K, f16. # Safety: as Q2_K f32.
+    pub fn baracuda_kernels_mmvq_q2_K_batched_f16_run(
+        n_experts: i32, n_rows_per_expert: i32, n_cols: i32,
+        weights: *const c_void, activations: *const c_void,
+        sorted_token_ids: *const i32, expert_offsets: *const i32,
+        topk_weights: *const f32, output: *mut c_void, top_k: i32,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// Batched MMVQ — Q2_K, bf16. # Safety: as Q2_K f32.
+    pub fn baracuda_kernels_mmvq_q2_K_batched_bf16_run(
+        n_experts: i32, n_rows_per_expert: i32, n_cols: i32,
+        weights: *const c_void, activations: *const c_void,
+        sorted_token_ids: *const i32, expert_offsets: *const i32,
+        topk_weights: *const f32, output: *mut c_void, top_k: i32,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// Batched MMVQ — Q3_K, f32. # Safety: as Q2_K.
+    pub fn baracuda_kernels_mmvq_q3_K_batched_run(
+        n_experts: i32, n_rows_per_expert: i32, n_cols: i32,
+        weights: *const c_void, activations: *const c_void,
+        sorted_token_ids: *const i32, expert_offsets: *const i32,
+        topk_weights: *const f32, output: *mut c_void, top_k: i32,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// Batched MMVQ — Q3_K, f16. # Safety: as Q2_K.
+    pub fn baracuda_kernels_mmvq_q3_K_batched_f16_run(
+        n_experts: i32, n_rows_per_expert: i32, n_cols: i32,
+        weights: *const c_void, activations: *const c_void,
+        sorted_token_ids: *const i32, expert_offsets: *const i32,
+        topk_weights: *const f32, output: *mut c_void, top_k: i32,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// Batched MMVQ — Q3_K, bf16. # Safety: as Q2_K.
+    pub fn baracuda_kernels_mmvq_q3_K_batched_bf16_run(
+        n_experts: i32, n_rows_per_expert: i32, n_cols: i32,
+        weights: *const c_void, activations: *const c_void,
+        sorted_token_ids: *const i32, expert_offsets: *const i32,
+        topk_weights: *const f32, output: *mut c_void, top_k: i32,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// Batched MMVQ — Q4_K, f32. # Safety: as Q2_K.
+    pub fn baracuda_kernels_mmvq_q4_K_batched_run(
+        n_experts: i32, n_rows_per_expert: i32, n_cols: i32,
+        weights: *const c_void, activations: *const c_void,
+        sorted_token_ids: *const i32, expert_offsets: *const i32,
+        topk_weights: *const f32, output: *mut c_void, top_k: i32,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// Batched MMVQ — Q4_K, f16. # Safety: as Q2_K.
+    pub fn baracuda_kernels_mmvq_q4_K_batched_f16_run(
+        n_experts: i32, n_rows_per_expert: i32, n_cols: i32,
+        weights: *const c_void, activations: *const c_void,
+        sorted_token_ids: *const i32, expert_offsets: *const i32,
+        topk_weights: *const f32, output: *mut c_void, top_k: i32,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// Batched MMVQ — Q4_K, bf16. # Safety: as Q2_K.
+    pub fn baracuda_kernels_mmvq_q4_K_batched_bf16_run(
+        n_experts: i32, n_rows_per_expert: i32, n_cols: i32,
+        weights: *const c_void, activations: *const c_void,
+        sorted_token_ids: *const i32, expert_offsets: *const i32,
+        topk_weights: *const f32, output: *mut c_void, top_k: i32,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// Batched MMVQ — Q5_K, f32. # Safety: as Q2_K.
+    pub fn baracuda_kernels_mmvq_q5_K_batched_run(
+        n_experts: i32, n_rows_per_expert: i32, n_cols: i32,
+        weights: *const c_void, activations: *const c_void,
+        sorted_token_ids: *const i32, expert_offsets: *const i32,
+        topk_weights: *const f32, output: *mut c_void, top_k: i32,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// Batched MMVQ — Q5_K, f16. # Safety: as Q2_K.
+    pub fn baracuda_kernels_mmvq_q5_K_batched_f16_run(
+        n_experts: i32, n_rows_per_expert: i32, n_cols: i32,
+        weights: *const c_void, activations: *const c_void,
+        sorted_token_ids: *const i32, expert_offsets: *const i32,
+        topk_weights: *const f32, output: *mut c_void, top_k: i32,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// Batched MMVQ — Q5_K, bf16. # Safety: as Q2_K.
+    pub fn baracuda_kernels_mmvq_q5_K_batched_bf16_run(
+        n_experts: i32, n_rows_per_expert: i32, n_cols: i32,
+        weights: *const c_void, activations: *const c_void,
+        sorted_token_ids: *const i32, expert_offsets: *const i32,
+        topk_weights: *const f32, output: *mut c_void, top_k: i32,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// Batched MMVQ — Q6_K, f32. # Safety: as Q2_K.
+    pub fn baracuda_kernels_mmvq_q6_K_batched_run(
+        n_experts: i32, n_rows_per_expert: i32, n_cols: i32,
+        weights: *const c_void, activations: *const c_void,
+        sorted_token_ids: *const i32, expert_offsets: *const i32,
+        topk_weights: *const f32, output: *mut c_void, top_k: i32,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// Batched MMVQ — Q6_K, f16. # Safety: as Q2_K.
+    pub fn baracuda_kernels_mmvq_q6_K_batched_f16_run(
+        n_experts: i32, n_rows_per_expert: i32, n_cols: i32,
+        weights: *const c_void, activations: *const c_void,
+        sorted_token_ids: *const i32, expert_offsets: *const i32,
+        topk_weights: *const f32, output: *mut c_void, top_k: i32,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// Batched MMVQ — Q6_K, bf16. # Safety: as Q2_K.
+    pub fn baracuda_kernels_mmvq_q6_K_batched_bf16_run(
+        n_experts: i32, n_rows_per_expert: i32, n_cols: i32,
+        weights: *const c_void, activations: *const c_void,
+        sorted_token_ids: *const i32, expert_offsets: *const i32,
+        topk_weights: *const f32, output: *mut c_void, top_k: i32,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// Batched MMVQ — Q8_K (bespoke), f32. # Safety: as Q2_K.
+    pub fn baracuda_kernels_mmvq_q8_K_batched_run(
+        n_experts: i32, n_rows_per_expert: i32, n_cols: i32,
+        weights: *const c_void, activations: *const c_void,
+        sorted_token_ids: *const i32, expert_offsets: *const i32,
+        topk_weights: *const f32, output: *mut c_void, top_k: i32,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// Batched MMVQ — Q8_K (bespoke), f16. # Safety: as Q2_K.
+    pub fn baracuda_kernels_mmvq_q8_K_batched_f16_run(
+        n_experts: i32, n_rows_per_expert: i32, n_cols: i32,
+        weights: *const c_void, activations: *const c_void,
+        sorted_token_ids: *const i32, expert_offsets: *const i32,
+        topk_weights: *const f32, output: *mut c_void, top_k: i32,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// Batched MMVQ — Q8_K (bespoke), bf16. # Safety: as Q2_K.
+    pub fn baracuda_kernels_mmvq_q8_K_batched_bf16_run(
+        n_experts: i32, n_rows_per_expert: i32, n_cols: i32,
+        weights: *const c_void, activations: *const c_void,
+        sorted_token_ids: *const i32, expert_offsets: *const i32,
+        topk_weights: *const f32, output: *mut c_void, top_k: i32,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    // ---- Pure FP (non-quant) batched MMVQ --------------------------------
+
+    /// Batched MMV (non-quant) — f32 weights + activation + output.
+    /// # Safety: device-resident pointers; valid stream; workspace ≥ m_total*4.
+    pub fn baracuda_kernels_mmvq_batched_f32_run(
+        n_experts: i32, n_rows_per_expert: i32, n_cols: i32,
+        weights: *const c_void, activations: *const c_void,
+        sorted_token_ids: *const i32, expert_offsets: *const i32,
+        topk_weights: *const f32, output: *mut c_void, top_k: i32,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// Batched MMV (non-quant) — f16. # Safety: as f32.
+    pub fn baracuda_kernels_mmvq_batched_f16_run(
+        n_experts: i32, n_rows_per_expert: i32, n_cols: i32,
+        weights: *const c_void, activations: *const c_void,
+        sorted_token_ids: *const i32, expert_offsets: *const i32,
+        topk_weights: *const f32, output: *mut c_void, top_k: i32,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// Batched MMV (non-quant) — bf16. # Safety: as f32.
+    pub fn baracuda_kernels_mmvq_batched_bf16_run(
+        n_experts: i32, n_rows_per_expert: i32, n_cols: i32,
+        weights: *const c_void, activations: *const c_void,
+        sorted_token_ids: *const i32, expert_offsets: *const i32,
+        topk_weights: *const f32, output: *mut c_void, top_k: i32,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
 }
 
 // ============================================================================
@@ -33758,6 +34097,31 @@ unsafe extern "C" {
 // Vendored from `attention.rs` via fuel-cuda-kernels. See
 // `kernels/include/baracuda_moe.cuh` and
 // `LICENSE-thirdparty.md` for lineage notes.
+//
+// ## Phase 20.2 — Fuel-replacement contract (2026-05-25)
+//
+// These symbols are the canonical baracuda MoE surface. Fuel's
+// `fuel-cuda-kernels/src/moe/` is retired in favour of direct calls to
+// the symbols below. Recon (2026-05-25) confirmed Fuel's source has
+// not changed since the original Phase 8.5 vendor (single commit
+// touching those paths), so baracuda's kernel bodies are already
+// current — no refresh diff to apply.
+//
+// Symbol-shape vs Fuel's pre-20.2 `ffi.rs`:
+//
+// | Fuel (retired)         | baracuda (canonical)                            |
+// | ---------------------- | ----------------------------------------------- |
+// | `moe_gemm_wmma`        | `baracuda_kernels_moe_wmma_{f16,bf16}_run`      |
+// | `moe_gemm_gguf`        | `baracuda_kernels_moe_scalar_gguf_run`          |
+// | `moe_gemm_gguf_prefill`| `baracuda_kernels_moe_wmma_gguf_{f16,bf16}_run` |
+//
+// Baracuda collapses activation-dtype into the symbol name (the
+// project-wide FFI convention) and adds the
+// `(workspace, workspace_bytes)` pair before `stream` (also project-
+// wide). Fuel callers pass `(nullptr, 0)` for workspace and otherwise
+// have a 1:1 parameter mapping. See
+// `crates/baracuda-kernels/tests/moe_ffi_direct_smoke.rs` for the
+// reference direct-FFI call pattern.
 //
 // Three variants:
 //   * `_moe_scalar_gguf_*_run` — f32 activations, GGUF-packed expert

@@ -108,8 +108,12 @@ original kernel body is the load-bearing prior art.
   `moe_gemm_wmma.cu`, and `moe_wmma_gguf.cu` (the three fused
   per-token-dispatch + expert-matmul + accumulate kernels).
 - **License**: MIT (compatible with baracuda's MIT-OR-Apache-2.0).
-- **Routing**: vendored via `fuel-cuda-kernels/src/moe/`, which carries
-  near-verbatim ports of the attention.rs originals.
+- **Routing**: vendored via `fuel-cuda-kernels/src/moe/`. Phase 20.2
+  recon (2026-05-25) confirmed Fuel's source has not changed since the
+  Phase 8.5 vendor (one commit on those paths); baracuda's bodies are
+  already current. Fuel's `fuel-cuda-kernels/src/moe/` is being retired
+  in favour of direct calls to the `baracuda_kernels_moe_*_run` FFI
+  symbols.
 - **Adapted files**:
   - `kernels/include/baracuda_moe.cuh` — the three kernel templates
     plus the q8_1-staging support family (`block_q8_1`,

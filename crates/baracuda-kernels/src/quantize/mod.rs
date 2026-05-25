@@ -130,6 +130,13 @@ pub use gguf::{
     GgufMmvqArgs, GgufMmvqDescriptor, GgufMmvqPlan,
 };
 
+// --- Phase 20.1 export — GGUF batched MMVQ × N-experts (general-purpose
+//     routing primitive). 33 quant FFI symbols + 3 pure-FP FFI symbols. ---
+pub use gguf::{
+    GgufMmvqBatchedActivation, GgufMmvqBatchedArgs, GgufMmvqBatchedDescriptor,
+    GgufMmvqBatchedFormat, GgufMmvqBatchedPlan,
+};
+
 use baracuda_cutlass::{Error, Result};
 
 /// Shared status-code mapper (mirrors `indexing::gather::map_status` and

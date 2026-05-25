@@ -436,6 +436,12 @@ pub use quantize::{
     GgufMmvqArgs, GgufMmvqDescriptor, GgufMmvqPlan,
 };
 
+// Phase 20.1 — GGUF batched MMVQ × N-experts (general-purpose routing primitive).
+pub use quantize::{
+    GgufMmvqBatchedActivation, GgufMmvqBatchedArgs, GgufMmvqBatchedDescriptor,
+    GgufMmvqBatchedFormat, GgufMmvqBatchedPlan,
+};
+
 // Milestone 8.5 — Mixture-of-Experts inference forward (Category V).
 // Vendored from attention.rs via fuel-cuda-kernels.
 pub mod moe;

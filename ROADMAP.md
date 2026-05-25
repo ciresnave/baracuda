@@ -7,8 +7,8 @@ effort within each category. Authoritative status per op lives in
 [`OP-MATRIX.md`](OP-MATRIX.md); historical phase summaries live in
 [`ARCHITECTURE.md`](ARCHITECTURE.md).
 
-The current tag is **v0.0.1-alpha.36** with **1957 GPU tests
-passing** on RTX 4070 (sm_89) across **614 binary targets**.
+The current tag is **v0.0.1-alpha.37** with **1958 GPU tests
+passing** on RTX 4070 (sm_89) across **616 binary targets**.
 
 ---
 
@@ -124,6 +124,18 @@ Carry-forward from Phase 18:
 - **Mixed-dtype paths** (f16 activation → f32 dst, or vice versa) —
   not implemented; callers can post-cast if they need the alternative.
   Output dtype always matches activation dtype.
+- **Type-0/1 MMVQ `ncols ≥ 64` debug-build assertion** — surfaced
+  during Phase 20.1 test-fixture debugging. The type-0/1 MMVQ kernels
+  (Q4_0/Q4_1/Q5_0/Q5_1/Q8_0) have an implicit `ncols ≥ 2 *
+  GGML_CUDA_DMMV_X = 64` requirement (threads `tid=16..31` always
+  read columns `32..62`). Safe for single-matrix callers (OOB lands
+  in unallocated zero memory) but **unsafe for any contiguous-batched
+  caller** — the OOB reads land in the next token's activation row.
+  Add a debug-build `#[cfg(debug_assertions)]` assertion in
+  `GgufMmvqPlan::select()` rejecting `ncols < 64` for type-0/1
+  formats. Caught by Phase 20.1's batched-MMVQ test fixture
+  accidentally; would be silent-wrong for production callers
+  batching activations contiguously.
 
 ## Phase 19 — Fuel retirement asks: pool/conv FFI facade + im2col (complete; shipped alpha.36)
 

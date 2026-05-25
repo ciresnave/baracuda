@@ -21,6 +21,16 @@
 //! attribution chain and `kernels/include/baracuda_moe.cuh` for kernel-
 //! level lineage notes.
 //!
+//! ## Phase 20.2 — Fuel-replacement FFI surface (2026-05-25)
+//!
+//! The `baracuda_kernels_moe_*_run` C symbols are the canonical MoE
+//! surface; `fuel-cuda-kernels/src/moe/` retires in favour of direct
+//! calls to those symbols. Callers can bypass [`MoePlan`] entirely
+//! and call the FFI directly — see
+//! `crates/baracuda-kernels/tests/moe_ffi_direct_smoke.rs` for the
+//! reference call pattern. The plan layer (this module) and the FFI
+//! layer both reach the same kernel bodies in `baracuda_moe.cuh`.
+//!
 //! ## Block-format coverage
 //!
 //! The GGUF variants support `Q8_0`, `Q2_K`, `Q3_K`, `Q4_K`, `Q5_K`,

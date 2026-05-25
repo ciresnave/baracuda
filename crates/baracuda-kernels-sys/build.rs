@@ -776,6 +776,13 @@ fn collect_kernel_files() -> Vec<&'static str> {
             //     activation, f32 output.
             "gguf/dequantize.cu",
             "gguf/mmvq.cu",
+            // Phase 20.1 — batched MMVQ × N-experts (general-purpose
+            // routing primitive). 33 quant FFI symbols (11 block formats
+            // × 3 activation dtypes) + 3 pure-FP FFI symbols. Shares
+            // the per-row dot-product math with `gguf/mmvq.cu`; the
+            // batched template adds (token, expert, topk_weight)
+            // routing semantics + atomic-vs-store dispatch.
+            "gguf/mmvq_batched.cu",
             // Phase 8 Milestone 8.5 — Mixture-of-Experts forward
             // (Category V). Three fused per-token-dispatch + expert-
             // matmul + accumulate kernels vendored from Fuel / attention.rs.
