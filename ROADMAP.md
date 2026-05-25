@@ -7,7 +7,7 @@ effort within each category. Authoritative status per op lives in
 [`OP-MATRIX.md`](OP-MATRIX.md); historical phase summaries live in
 [`ARCHITECTURE.md`](ARCHITECTURE.md).
 
-The current tag is **v0.0.1-alpha.37** with **1958 GPU tests
+The current tag is **v0.0.1-alpha.38** with **1963 GPU tests
 passing** on RTX 4070 (sm_89) across **616 binary targets**.
 
 ---

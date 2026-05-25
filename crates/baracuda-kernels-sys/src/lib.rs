@@ -34285,9 +34285,22 @@ unsafe extern "C" {
 #[cfg(any(feature = "sm80", feature = "sm89", feature = "sm90a"))]
 unsafe extern "C" {
     // ---- interpolate (bilinear 2D) ----
+    //
+    // Phase 21 signature: the three trailing params before `stream`
+    // (`align_corners`, `scale_h_factor`, `scale_w_factor`) are new.
+    // `align_corners=0` matches `F.interpolate` PyTorch default;
+    // nonzero matches `nn.Upsample(align_corners=True)`. Scale-factor
+    // sentinel `0.0` means "derive from sizes"; any nonzero value is
+    // interpreted as PyTorch-style SCALE (output_size / input_size)
+    // and overrides the size-derived ratio.
+    //
+    // Dtype coverage: f32, f64, f16, bf16 (FW + BW each).
 
-    /// `interpolate(x, mode='bilinear', align_corners=false)` FW, f32.
+    /// `interpolate(x, mode='bilinear')` FW, f32.
     /// `input`: `[N, C, IH, IW]`; `output`: `[N, C, OH, OW]`. NCHW.
+    /// `align_corners`: 0 = false (PyTorch default), nonzero = true.
+    /// `scale_h_factor` / `scale_w_factor`: 0.0 = derive from
+    /// sizes; nonzero = use as SCALE override.
     /// # Safety: all pointers must be live device memory; `stream` valid.
     pub fn baracuda_kernels_interpolate_bilinear_2d_f32_run(
         N: i32, C: i32, IH: i32, IW: i32, OH: i32, OW: i32,
@@ -34295,6 +34308,9 @@ unsafe extern "C" {
         output: *mut c_void,
         workspace: *mut c_void,
         workspace_bytes: usize,
+        align_corners: i32,
+        scale_h_factor: f64,
+        scale_w_factor: f64,
         stream: *mut c_void,
     ) -> i32;
 
@@ -34305,6 +34321,37 @@ unsafe extern "C" {
         output: *mut c_void,
         workspace: *mut c_void,
         workspace_bytes: usize,
+        align_corners: i32,
+        scale_h_factor: f64,
+        scale_w_factor: f64,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `interpolate_bilinear_2d` FW, f16 (half). Cast-at-read / f32
+    /// accumulator / cast-at-write. # Safety: as f32.
+    pub fn baracuda_kernels_interpolate_bilinear_2d_f16_run(
+        N: i32, C: i32, IH: i32, IW: i32, OH: i32, OW: i32,
+        input: *const c_void,
+        output: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        align_corners: i32,
+        scale_h_factor: f64,
+        scale_w_factor: f64,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `interpolate_bilinear_2d` FW, bf16. Cast-at-read / f32
+    /// accumulator / cast-at-write. # Safety: as f32.
+    pub fn baracuda_kernels_interpolate_bilinear_2d_bf16_run(
+        N: i32, C: i32, IH: i32, IW: i32, OH: i32, OW: i32,
+        input: *const c_void,
+        output: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        align_corners: i32,
+        scale_h_factor: f64,
+        scale_w_factor: f64,
         stream: *mut c_void,
     ) -> i32;
 
@@ -34316,6 +34363,9 @@ unsafe extern "C" {
         dinput: *mut c_void,
         workspace: *mut c_void,
         workspace_bytes: usize,
+        align_corners: i32,
+        scale_h_factor: f64,
+        scale_w_factor: f64,
         stream: *mut c_void,
     ) -> i32;
 
@@ -34326,6 +34376,37 @@ unsafe extern "C" {
         dinput: *mut c_void,
         workspace: *mut c_void,
         workspace_bytes: usize,
+        align_corners: i32,
+        scale_h_factor: f64,
+        scale_w_factor: f64,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `interpolate_bilinear_2d` BW, f16. Caller pre-zeros `dinput`.
+    /// `atomicCAS`-based half atomic add. # Safety: as f32 BW.
+    pub fn baracuda_kernels_interpolate_bilinear_2d_backward_f16_run(
+        N: i32, C: i32, IH: i32, IW: i32, OH: i32, OW: i32,
+        dout: *const c_void,
+        dinput: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        align_corners: i32,
+        scale_h_factor: f64,
+        scale_w_factor: f64,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `interpolate_bilinear_2d` BW, bf16. Caller pre-zeros `dinput`.
+    /// `atomicCAS`-based bf16 atomic add. # Safety: as f32 BW.
+    pub fn baracuda_kernels_interpolate_bilinear_2d_backward_bf16_run(
+        N: i32, C: i32, IH: i32, IW: i32, OH: i32, OW: i32,
+        dout: *const c_void,
+        dinput: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        align_corners: i32,
+        scale_h_factor: f64,
+        scale_w_factor: f64,
         stream: *mut c_void,
     ) -> i32;
 
@@ -36011,9 +36092,12 @@ unsafe extern "C" {
 // Thin Rust-side aliases mapping the new `upsample_bilinear_2d_*`
 // naming convention to the existing `interpolate_bilinear_2d_*`
 // symbols. Same C-ABI, same machine code; the two namespaces co-exist
-// so callers on either side of the rename keep working. Coverage
-// remains f32 + f64 — the underlying kernels haven't grown f16 / bf16
-// instantiations yet (fanout milestone follow-up).
+// so callers on either side of the rename keep working.
+//
+// Phase 21: dtype coverage extended to {f32, f64, f16, bf16} and the
+// signature gained `align_corners` + `scale_h_factor` +
+// `scale_w_factor` params (forwarded unchanged to the underlying
+// `interpolate_*` symbol).
 //
 // These are `pub fn` Rust wrappers (`#[inline]`) rather than alias
 // symbols to keep `baracuda-kernels-sys` self-contained — downstream
@@ -36033,11 +36117,15 @@ pub unsafe fn baracuda_kernels_upsample_bilinear_2d_fw_f32_run(
     output: *mut c_void,
     workspace: *mut c_void,
     workspace_bytes: usize,
+    align_corners: i32,
+    scale_h_factor: f64,
+    scale_w_factor: f64,
     stream: *mut c_void,
 ) -> i32 {
     unsafe {
         baracuda_kernels_interpolate_bilinear_2d_f32_run(
-            n, c, ih, iw, oh, ow, input, output, workspace, workspace_bytes, stream,
+            n, c, ih, iw, oh, ow, input, output, workspace, workspace_bytes,
+            align_corners, scale_h_factor, scale_w_factor, stream,
         )
     }
 }
@@ -36054,11 +36142,65 @@ pub unsafe fn baracuda_kernels_upsample_bilinear_2d_fw_f64_run(
     output: *mut c_void,
     workspace: *mut c_void,
     workspace_bytes: usize,
+    align_corners: i32,
+    scale_h_factor: f64,
+    scale_w_factor: f64,
     stream: *mut c_void,
 ) -> i32 {
     unsafe {
         baracuda_kernels_interpolate_bilinear_2d_f64_run(
-            n, c, ih, iw, oh, ow, input, output, workspace, workspace_bytes, stream,
+            n, c, ih, iw, oh, ow, input, output, workspace, workspace_bytes,
+            align_corners, scale_h_factor, scale_w_factor, stream,
+        )
+    }
+}
+
+/// Alias for [`baracuda_kernels_interpolate_bilinear_2d_f16_run`].
+///
+/// # Safety
+/// As [`baracuda_kernels_interpolate_bilinear_2d_f16_run`].
+#[cfg(any(feature = "sm80", feature = "sm89", feature = "sm90a"))]
+#[inline]
+pub unsafe fn baracuda_kernels_upsample_bilinear_2d_fw_f16_run(
+    n: i32, c: i32, ih: i32, iw: i32, oh: i32, ow: i32,
+    input: *const c_void,
+    output: *mut c_void,
+    workspace: *mut c_void,
+    workspace_bytes: usize,
+    align_corners: i32,
+    scale_h_factor: f64,
+    scale_w_factor: f64,
+    stream: *mut c_void,
+) -> i32 {
+    unsafe {
+        baracuda_kernels_interpolate_bilinear_2d_f16_run(
+            n, c, ih, iw, oh, ow, input, output, workspace, workspace_bytes,
+            align_corners, scale_h_factor, scale_w_factor, stream,
+        )
+    }
+}
+
+/// Alias for [`baracuda_kernels_interpolate_bilinear_2d_bf16_run`].
+///
+/// # Safety
+/// As [`baracuda_kernels_interpolate_bilinear_2d_bf16_run`].
+#[cfg(any(feature = "sm80", feature = "sm89", feature = "sm90a"))]
+#[inline]
+pub unsafe fn baracuda_kernels_upsample_bilinear_2d_fw_bf16_run(
+    n: i32, c: i32, ih: i32, iw: i32, oh: i32, ow: i32,
+    input: *const c_void,
+    output: *mut c_void,
+    workspace: *mut c_void,
+    workspace_bytes: usize,
+    align_corners: i32,
+    scale_h_factor: f64,
+    scale_w_factor: f64,
+    stream: *mut c_void,
+) -> i32 {
+    unsafe {
+        baracuda_kernels_interpolate_bilinear_2d_bf16_run(
+            n, c, ih, iw, oh, ow, input, output, workspace, workspace_bytes,
+            align_corners, scale_h_factor, scale_w_factor, stream,
         )
     }
 }
@@ -36076,11 +36218,15 @@ pub unsafe fn baracuda_kernels_upsample_bilinear_2d_bw_f32_run(
     dinput: *mut c_void,
     workspace: *mut c_void,
     workspace_bytes: usize,
+    align_corners: i32,
+    scale_h_factor: f64,
+    scale_w_factor: f64,
     stream: *mut c_void,
 ) -> i32 {
     unsafe {
         baracuda_kernels_interpolate_bilinear_2d_backward_f32_run(
-            n, c, ih, iw, oh, ow, dout, dinput, workspace, workspace_bytes, stream,
+            n, c, ih, iw, oh, ow, dout, dinput, workspace, workspace_bytes,
+            align_corners, scale_h_factor, scale_w_factor, stream,
         )
     }
 }
@@ -36098,11 +36244,67 @@ pub unsafe fn baracuda_kernels_upsample_bilinear_2d_bw_f64_run(
     dinput: *mut c_void,
     workspace: *mut c_void,
     workspace_bytes: usize,
+    align_corners: i32,
+    scale_h_factor: f64,
+    scale_w_factor: f64,
     stream: *mut c_void,
 ) -> i32 {
     unsafe {
         baracuda_kernels_interpolate_bilinear_2d_backward_f64_run(
-            n, c, ih, iw, oh, ow, dout, dinput, workspace, workspace_bytes, stream,
+            n, c, ih, iw, oh, ow, dout, dinput, workspace, workspace_bytes,
+            align_corners, scale_h_factor, scale_w_factor, stream,
+        )
+    }
+}
+
+/// Alias for [`baracuda_kernels_interpolate_bilinear_2d_backward_f16_run`].
+///
+/// # Safety
+/// As [`baracuda_kernels_interpolate_bilinear_2d_backward_f16_run`].
+/// Caller pre-zeros `dinput`.
+#[cfg(any(feature = "sm80", feature = "sm89", feature = "sm90a"))]
+#[inline]
+pub unsafe fn baracuda_kernels_upsample_bilinear_2d_bw_f16_run(
+    n: i32, c: i32, ih: i32, iw: i32, oh: i32, ow: i32,
+    dout: *const c_void,
+    dinput: *mut c_void,
+    workspace: *mut c_void,
+    workspace_bytes: usize,
+    align_corners: i32,
+    scale_h_factor: f64,
+    scale_w_factor: f64,
+    stream: *mut c_void,
+) -> i32 {
+    unsafe {
+        baracuda_kernels_interpolate_bilinear_2d_backward_f16_run(
+            n, c, ih, iw, oh, ow, dout, dinput, workspace, workspace_bytes,
+            align_corners, scale_h_factor, scale_w_factor, stream,
+        )
+    }
+}
+
+/// Alias for [`baracuda_kernels_interpolate_bilinear_2d_backward_bf16_run`].
+///
+/// # Safety
+/// As [`baracuda_kernels_interpolate_bilinear_2d_backward_bf16_run`].
+/// Caller pre-zeros `dinput`.
+#[cfg(any(feature = "sm80", feature = "sm89", feature = "sm90a"))]
+#[inline]
+pub unsafe fn baracuda_kernels_upsample_bilinear_2d_bw_bf16_run(
+    n: i32, c: i32, ih: i32, iw: i32, oh: i32, ow: i32,
+    dout: *const c_void,
+    dinput: *mut c_void,
+    workspace: *mut c_void,
+    workspace_bytes: usize,
+    align_corners: i32,
+    scale_h_factor: f64,
+    scale_w_factor: f64,
+    stream: *mut c_void,
+) -> i32 {
+    unsafe {
+        baracuda_kernels_interpolate_bilinear_2d_backward_bf16_run(
+            n, c, ih, iw, oh, ow, dout, dinput, workspace, workspace_bytes,
+            align_corners, scale_h_factor, scale_w_factor, stream,
         )
     }
 }

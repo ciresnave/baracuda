@@ -38,6 +38,12 @@ pub struct InterpolateBackwardDescriptor {
     pub mode: InterpolateMode,
     /// Value element type.
     pub element: ElementKind,
+    /// Coordinate alignment mode. Must match the FW descriptor.
+    pub align_corners: bool,
+    /// Per-axis SCALE override for height. Must match the FW descriptor.
+    pub scale_h: Option<f64>,
+    /// Per-axis SCALE override for width. Must match the FW descriptor.
+    pub scale_w: Option<f64>,
 }
 
 /// Args bundle for an `interpolate_backward` launch.
@@ -56,7 +62,8 @@ pub struct InterpolateBackwardArgs<'a, T: Element> {
 ///
 /// **When to use**: BW for [`InterpolatePlan`](crate::InterpolatePlan).
 ///
-/// **Dtypes**: `{f32, f64}` (FP atomicAdd only).
+/// **Dtypes**: `{f32, f64, f16, bf16}`. Half-precision atomic adds go
+/// through `atomicCAS` (per `baracuda::atomic::add<T>`).
 ///
 /// **Shape limits**: rank-4 NCHW; `dout` matches FW output;
 /// `dinput` matches FW input.
@@ -93,10 +100,27 @@ impl<T: Element> InterpolateBackwardPlan<T> {
                 "baracuda-kernels::InterpolateBackwardPlan: all extents must be non-negative",
             ));
         }
-        if !matches!(T::KIND, ElementKind::F32 | ElementKind::F64) {
+        if !matches!(
+            T::KIND,
+            ElementKind::F32 | ElementKind::F64 | ElementKind::F16 | ElementKind::Bf16
+        ) {
             return Err(Error::Unsupported(
-                "baracuda-kernels::InterpolateBackwardPlan: only `f32`, `f64` wired",
+                "baracuda-kernels::InterpolateBackwardPlan: only `f32`, `f64`, `f16`, `bf16` wired",
             ));
+        }
+        if let Some(s) = desc.scale_h {
+            if !s.is_finite() || s <= 0.0 {
+                return Err(Error::InvalidProblem(
+                    "baracuda-kernels::InterpolateBackwardPlan: scale_h must be positive and finite",
+                ));
+            }
+        }
+        if let Some(s) = desc.scale_w {
+            if !s.is_finite() || s <= 0.0 {
+                return Err(Error::InvalidProblem(
+                    "baracuda-kernels::InterpolateBackwardPlan: scale_w must be positive and finite",
+                ));
+            }
         }
         let precision_guarantee = PrecisionGuarantee {
             math_precision: if T::KIND == ElementKind::F64 {
@@ -104,7 +128,11 @@ impl<T: Element> InterpolateBackwardPlan<T> {
             } else {
                 MathPrecision::F32
             },
-            accumulator: T::KIND,
+            accumulator: if matches!(T::KIND, ElementKind::F16 | ElementKind::Bf16) {
+                ElementKind::F32
+            } else {
+                T::KIND
+            },
             // atomicAdd scatter — non-deterministic across launches.
             bit_stable_on_same_hardware: false,
             deterministic: false,
@@ -188,13 +216,18 @@ impl<T: Element> InterpolateBackwardPlan<T> {
         let dout_ptr = args.dout.data.as_raw().0 as *const c_void;
         let din_ptr = args.dinput.data.as_raw().0 as *mut c_void;
         let stream_ptr = stream.as_raw() as *mut c_void;
+        let ac: i32 = if self.desc.align_corners { 1 } else { 0 };
+        let sh: f64 = self.desc.scale_h.unwrap_or(0.0);
+        let sw: f64 = self.desc.scale_w.unwrap_or(0.0);
         let status = match T::KIND {
             ElementKind::F32 => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_interpolate_bilinear_2d_backward_f32_run(
                     self.desc.n, self.desc.c, self.desc.ih, self.desc.iw,
                     self.desc.oh, self.desc.ow,
                     dout_ptr, din_ptr,
-                    core::ptr::null_mut(), 0, stream_ptr,
+                    core::ptr::null_mut(), 0,
+                    ac, sh, sw,
+                    stream_ptr,
                 )
             },
             ElementKind::F64 => unsafe {
@@ -202,7 +235,29 @@ impl<T: Element> InterpolateBackwardPlan<T> {
                     self.desc.n, self.desc.c, self.desc.ih, self.desc.iw,
                     self.desc.oh, self.desc.ow,
                     dout_ptr, din_ptr,
-                    core::ptr::null_mut(), 0, stream_ptr,
+                    core::ptr::null_mut(), 0,
+                    ac, sh, sw,
+                    stream_ptr,
+                )
+            },
+            ElementKind::F16 => unsafe {
+                baracuda_kernels_sys::baracuda_kernels_interpolate_bilinear_2d_backward_f16_run(
+                    self.desc.n, self.desc.c, self.desc.ih, self.desc.iw,
+                    self.desc.oh, self.desc.ow,
+                    dout_ptr, din_ptr,
+                    core::ptr::null_mut(), 0,
+                    ac, sh, sw,
+                    stream_ptr,
+                )
+            },
+            ElementKind::Bf16 => unsafe {
+                baracuda_kernels_sys::baracuda_kernels_interpolate_bilinear_2d_backward_bf16_run(
+                    self.desc.n, self.desc.c, self.desc.ih, self.desc.iw,
+                    self.desc.oh, self.desc.ow,
+                    dout_ptr, din_ptr,
+                    core::ptr::null_mut(), 0,
+                    ac, sh, sw,
+                    stream_ptr,
                 )
             },
             _ => {

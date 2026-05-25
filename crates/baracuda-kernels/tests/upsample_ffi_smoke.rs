@@ -148,6 +148,9 @@ fn ffi_upsample_nearest_2d_f32_bw_matches_cpu() {
 /// as the underlying `interpolate_bilinear_2d_*` symbols — they're
 /// declared as `#[inline]` Rust wrappers that forward unchanged, so
 /// bit-exact match is the contract.
+///
+/// Phase 21 update: exercises the new `align_corners` + scale-factor
+/// params end-to-end through the alias to verify forwarding.
 #[test]
 #[ignore]
 fn ffi_upsample_bilinear_2d_f32_fw_matches_interpolate_alias() {
@@ -163,6 +166,12 @@ fn ffi_upsample_bilinear_2d_f32_fw_matches_interpolate_alias() {
     let mut dev_out_b: DeviceBuffer<f32> =
         DeviceBuffer::zeros(&ctx, (n * c * oh * ow) as usize).expect("alloc out b");
 
+    // Use align_corners=true + scale_factor override to exercise the
+    // new params through the alias.
+    let ac: i32 = 1;
+    let scale_h: f64 = 2.5;
+    let scale_w: f64 = 2.5;
+
     // a: under the original `interpolate_*` symbol.
     let s_a = unsafe {
         baracuda_kernels_sys::baracuda_kernels_interpolate_bilinear_2d_f32_run(
@@ -170,6 +179,7 @@ fn ffi_upsample_bilinear_2d_f32_fw_matches_interpolate_alias() {
             dev_in_a.as_slice().as_raw().0 as *const c_void,
             dev_out_a.as_slice_mut().as_raw().0 as *mut c_void,
             core::ptr::null_mut(), 0,
+            ac, scale_h, scale_w,
             stream.as_raw() as *mut c_void,
         )
     };
@@ -181,6 +191,7 @@ fn ffi_upsample_bilinear_2d_f32_fw_matches_interpolate_alias() {
             dev_in_b.as_slice().as_raw().0 as *const c_void,
             dev_out_b.as_slice_mut().as_raw().0 as *mut c_void,
             core::ptr::null_mut(), 0,
+            ac, scale_h, scale_w,
             stream.as_raw() as *mut c_void,
         )
     };
@@ -192,5 +203,79 @@ fn ffi_upsample_bilinear_2d_f32_fw_matches_interpolate_alias() {
     dev_out_b.copy_to_host(&mut b).expect("dl b");
     for (i, (x, y)) in a.iter().zip(b.iter()).enumerate() {
         assert_eq!(x, y, "alias mismatch @ {i}: interpolate={x}, upsample={y}");
+    }
+}
+
+/// Phase 21 — exercise the f16 + bf16 bilinear FW + BW aliases purely
+/// as smoke (status==0 + grad-mass plausibility). Per-cell correctness
+/// is covered by `interpolate_smoke.rs` against the f32 CPU reference.
+#[test]
+#[ignore]
+fn ffi_upsample_bilinear_2d_f16_fw_returns_status_zero() {
+    use half::f16;
+    let (ctx, stream) = setup();
+    let (n, c, ih, iw) = (1i32, 1i32, 2i32, 2i32);
+    let (oh, ow) = (4i32, 4i32);
+    let host_in: Vec<f16> = vec![
+        f16::from_f32(1.0), f16::from_f32(2.0),
+        f16::from_f32(3.0), f16::from_f32(4.0),
+    ];
+    let dev_in = DeviceBuffer::from_slice(&ctx, &host_in).expect("up");
+    let mut dev_out: DeviceBuffer<f16> =
+        DeviceBuffer::zeros(&ctx, (n * c * oh * ow) as usize).expect("alloc");
+    let status = unsafe {
+        baracuda_kernels_sys::baracuda_kernels_upsample_bilinear_2d_fw_f16_run(
+            n, c, ih, iw, oh, ow,
+            dev_in.as_slice().as_raw().0 as *const c_void,
+            dev_out.as_slice_mut().as_raw().0 as *mut c_void,
+            core::ptr::null_mut(), 0,
+            0, 0.0, 0.0,
+            stream.as_raw() as *mut c_void,
+        )
+    };
+    assert_eq!(status, 0, "upsample_bilinear_2d FW f16 alias failed");
+    stream.synchronize().expect("sync");
+    let mut got = vec![f16::ZERO; (n * c * oh * ow) as usize];
+    dev_out.copy_to_host(&mut got).expect("dl");
+    // Output should fall within the [1.0, 4.0] convex hull (up to f16
+    // rounding).
+    for &v in &got {
+        let f = v.to_f32();
+        assert!(f >= 0.95 && f <= 4.05, "f16 FW out-of-range: {f}");
+    }
+}
+
+#[test]
+#[ignore]
+fn ffi_upsample_bilinear_2d_bf16_bw_returns_status_zero() {
+    use half::bf16;
+    let (ctx, stream) = setup();
+    let (n, c, ih, iw) = (1i32, 1i32, 2i32, 2i32);
+    let (oh, ow) = (4i32, 4i32);
+    let host_dout: Vec<bf16> = (0..(n * c * oh * ow) as usize)
+        .map(|i| bf16::from_f32(0.1 + (i as f32) * 0.05))
+        .collect();
+    let dev_dout = DeviceBuffer::from_slice(&ctx, &host_dout).expect("up");
+    let mut dev_din: DeviceBuffer<bf16> =
+        DeviceBuffer::zeros(&ctx, (n * c * ih * iw) as usize).expect("alloc");
+    let status = unsafe {
+        baracuda_kernels_sys::baracuda_kernels_upsample_bilinear_2d_bw_bf16_run(
+            n, c, ih, iw, oh, ow,
+            dev_dout.as_slice().as_raw().0 as *const c_void,
+            dev_din.as_slice_mut().as_raw().0 as *mut c_void,
+            core::ptr::null_mut(), 0,
+            0, 0.0, 0.0,
+            stream.as_raw() as *mut c_void,
+        )
+    };
+    assert_eq!(status, 0, "upsample_bilinear_2d BW bf16 alias failed");
+    stream.synchronize().expect("sync");
+    let mut got = vec![bf16::ZERO; (n * c * ih * iw) as usize];
+    dev_din.copy_to_host(&mut got).expect("dl");
+    // Each input cell should have received nonzero gradient mass for
+    // this 2x2 → 4x4 upsample (every input is the corner of a unique
+    // 2x2 tile in the output).
+    for (i, &v) in got.iter().enumerate() {
+        assert!(v.to_f32() > 0.0, "bf16 BW dgrad @ {i} not positive: {}", v.to_f32());
     }
 }

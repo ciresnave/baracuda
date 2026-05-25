@@ -8,9 +8,9 @@
 A unified Rust ML-op facade over the NVIDIA CUDA ecosystem.
 
 ![License](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue)
-![Status](https://img.shields.io/badge/status-alpha.37-orange)
+![Status](https://img.shields.io/badge/status-alpha.38-orange)
 ![CUDA](https://img.shields.io/badge/CUDA-12.x-76b900)
-![Tests](https://img.shields.io/badge/regression-1958%2F0-success)
+![Tests](https://img.shields.io/badge/regression-1963%2F0-success)
 
 ## What baracuda is
 
@@ -40,7 +40,7 @@ talk to one library directly.
 
 ## Status
 
-**In active development — alpha.37.** Roughly **1958 GPU tests passing**
+**In active development — alpha.38.** Roughly **1963 GPU tests passing**
 on an RTX 4070 (sm_89), across **616 binary targets**.
 
 Phase coverage (see [`ARCHITECTURE.md`](ARCHITECTURE.md) for the phase
@@ -69,7 +69,8 @@ matrix):
 | 18 | Sub-byte / quantized completeness (alpha.35) — f16/bf16 activations for `GgufMmvqPlan` across all 11 block formats × contig + strided; 44 new FFI symbols | done |
 | 19 | Fuel retirement asks (alpha.36) — pool/conv FFI facade for cuDNN-backed plans + Upsample Nearest2d + NEW im2col/im2col1d/col2im1d bespoke; vendored Fuel Q8_1 for inspection; 140 new FFI symbols. Surfaced 1.0-freeze prereq for broader library-backed FFI facade audit | done |
 | 20 | MoE — Item 4 from Fuel retirement (alpha.37): batched MMVQ × N-experts (36 new FFI symbols across 11 GGUF block formats × 3 activation dtypes + 3 pure-FP); MoE absorb-and-expose proved to be a no-op (Fuel hadn't evolved their kernels since Phase 8.5 vendor; 5 baracuda-side symbols already match) + 2 direct-FFI smoke tests | done |
-| 21+ | Broader FFI facade audit (1.0-freeze prereq), segment + embedding BW completion, linalg completion, Hopper / Blackwell, 1.0 freeze | pending (see [`ROADMAP.md`](ROADMAP.md)) |
+| 21 | Bilinear interpolate expansion (alpha.38): `align_corners` + scale-factor overrides + f16/bf16 fanout (FW+BW). Breaking change to existing f32/f64 signatures. | done |
+| 22+ | Broader FFI facade audit (1.0-freeze prereq), segment + embedding BW completion, linalg completion, Hopper / Blackwell, 1.0 freeze | pending (see [`ROADMAP.md`](ROADMAP.md)) |
 
 API stability is **not** promised before beta.0. Breaking changes ship in
 each alpha bump and are documented in the workspace `CHANGELOG.md`.
@@ -80,8 +81,8 @@ Add the kernel facade and the driver crate:
 
 ```toml
 [dependencies]
-baracuda-kernels = { version = "0.0.1-alpha.37", features = ["sm89", "cudnn"] }
-baracuda-driver  = "0.0.1-alpha.37"
+baracuda-kernels = { version = "0.0.1-alpha.38", features = ["sm89", "cudnn"] }
+baracuda-driver  = "0.0.1-alpha.38"
 ```
 
 A representative example — single-axis numerically stable softmax over a
