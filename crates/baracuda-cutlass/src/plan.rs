@@ -4,6 +4,7 @@ use core::ffi::c_void;
 use core::marker::PhantomData;
 
 use baracuda_driver::{Context, PinnedBuffer, Stream};
+use baracuda_kernels_types::BackendKind;
 
 use crate::error::{status_to_result, Error, Result};
 use crate::types::{
@@ -1977,13 +1978,242 @@ fn check_args<T: CutlassElement>(desc: &GemmDescriptor, args: &GemmArgs<'_, T>) 
 }
 
 // ============================================================================
+// cuBLAS backend — Phase 30 fast-path for f16/bf16 decode-regime FP GEMM
+// ============================================================================
+//
+// Background (from `crates/baracuda-kernels-bench/BENCHMARKS.md`, Phase 29):
+// baracuda's CUTLASS RCR plan emits `_sm80_` kernels (Ampere-tuned) for
+// f16/bf16. On Ada (sm_89, RTX 4070) cuBLAS auto-dispatches to the
+// sm_89 tensor-core path with an f32 accumulator and wins 2–4× at
+// low-M (M=1 / M=32) decode shapes, narrowing to ~parity at M=128.
+// This module hosts the cuBLAS Gemm fallback path that the
+// [`GemmPlan::select`] heuristic dispatches to for those shapes.
+//
+// Coverage:
+//   - f16, bf16, f32: `cublasGemmEx` with `CUBLAS_COMPUTE_32F`
+//     (CUBLAS_GEMM_DEFAULT_TENSOR_OP algo, value 99).
+//   - f64: `cublasDgemm` (no GemmEx needed — DGEMM is plenty fast).
+//   - F32Strict: not supported (cuBLAS doesn't expose a strict-IEEE
+//     SIMT path the way CUTLASS does; F32Strict callers stay on the
+//     CUTLASS SIMT kernels for bit-stability).
+//   - Bias / Bias* epilogues: not supported (cuBLAS-classic has no
+//     fused-bias-activation; cuBLASLt does but is a separate API
+//     surface). Forcing Cublas backend on a Bias* epilogue returns
+//     `Error::Unsupported` from `select`.
+//
+// Layout mapping (baracuda Row/Col/Row → cuBLAS column-major):
+// baracuda's RCR means A row-major [M, K], B column-major [K, N], D
+// row-major [M, N]. cuBLAS is column-major, so we use the standard
+// "C^T = B^T · A^T" trick: pass B as the first operand, A as the
+// second, with `transa = Op::T` on both, and the resulting D in
+// col-major IS our row-major D. For RRR the mapping changes the
+// second `transa` to `Op::N`.
+
+mod cublas_backend {
+    use core::cell::RefCell;
+
+    use baracuda_cublas::Handle as CublasHandle;
+    use baracuda_driver::Stream;
+
+    // Per-thread cache of cuBLAS handles, keyed by the raw context
+    // pointer the handle was created against.
+    //
+    // cuBLAS handles are tied to the CUDA context current at the time
+    // of `cublasCreate`. Caching by (thread, ctx-raw-ptr) means the
+    // first call into the cuBLAS backend on a given thread pays the
+    // (~100µs–ms) `cublasCreate` cost; subsequent calls reuse the
+    // handle. Per-thread storage sidesteps the cuBLAS-handle `!Sync`
+    // constraint (NVIDIA documents that a handle should only be
+    // touched from one host thread at a time) and keeps
+    // `super::GemmPlan` `Send + Sync` (the plan stores no handle —
+    // it looks one up out of the thread-local on each `run`).
+    //
+    // A `Vec` keyed by raw context pointer is fine here: production
+    // callers have one context per process, and even
+    // multi-context callers rarely exceed a handful.
+    thread_local! {
+        static HANDLE_CACHE: RefCell<Vec<(usize, CublasHandle)>> =
+            const { RefCell::new(Vec::new()) };
+    }
+
+    /// Fetch (or lazily create) the cuBLAS handle bound to `stream`'s
+    /// context, with the handle's stream binding set to `stream`.
+    ///
+    /// The returned handle is `Clone`able (the inner state is `Arc`'d
+    /// inside [`baracuda_cublas::Handle`]) so the caller can move it
+    /// into the closure that calls `gemm_ex` / `gemm` without holding
+    /// the thread-local `RefCell` borrow across the launch.
+    pub(super) fn handle_for(stream: &Stream) -> crate::Result<CublasHandle> {
+        // Use the context's raw pointer as the cache key. baracuda's
+        // `Context` doesn't expose a stable id, but the inner CUDA
+        // context pointer is unique per process and stable for the
+        // context's lifetime.
+        let ctx_key = stream.context().as_raw() as usize;
+        let handle = HANDLE_CACHE.with(|cache| -> crate::Result<CublasHandle> {
+            let mut cache = cache.borrow_mut();
+            if let Some((_, h)) = cache.iter().find(|(k, _)| *k == ctx_key) {
+                return Ok(h.clone());
+            }
+            // First touch on this thread for this context — create.
+            // The current context must be the stream's context for
+            // `cublasCreate` to bind correctly. baracuda's Context API
+            // is push-based; we call `set_current` (idempotent if
+            // already current) before the cuBLAS create.
+            stream
+                .context()
+                .set_current()
+                .map_err(crate::Error::Driver)?;
+            let h = CublasHandle::new()
+                .map_err(|_| crate::Error::Unsupported(
+                    "cuBLAS handle creation failed (library missing or device unavailable)",
+                ))?;
+            cache.push((ctx_key, h.clone()));
+            Ok(h)
+        })?;
+        // Bind to the launch stream so the GEMM enqueues on the
+        // caller-supplied stream rather than the default stream. The
+        // bind is per-handle, sticky across calls — but a previously
+        // cached handle could have been bound to a *different* stream
+        // last time. Always re-bind.
+        handle
+            .set_stream(stream)
+            .map_err(|_| crate::Error::Unsupported(
+                "cuBLAS set_stream failed",
+            ))?;
+        Ok(handle)
+    }
+}
+
+/// Algo selector for `cublasGemmEx`.
+///
+/// `-1` corresponds to `CUBLAS_GEMM_DEFAULT` / `CUBLAS_GEMM_DFALT` — the
+/// "let cuBLAS pick" heuristic. In modern cuBLAS (CUDA 12+) when
+/// `compute_type = Compute32F` the algo selector is largely advisory:
+/// cuBLAS picks the kernel from its internal heuristic based on
+/// (M, N, K, dtype) regardless of the value here. The Phase-29 bench's
+/// reference cuBLAS-direct path passes `0` (CUBLAS_GEMM_ALGO0), which
+/// is also routed through the same heuristic; both produce the same
+/// kernel selection on the f16/bf16/f32 GemmEx paths.
+///
+/// `CUBLAS_GEMM_DEFAULT_TENSOR_OP` (= 99) would force a tensor-op
+/// kernel even at very low M where cuBLAS's heuristic prefers a CUDA-
+/// core kernel; benchmarking showed it was ~3× slower than `DEFAULT`
+/// at M=1 on RTX 4070. Stick with `DEFAULT` (`-1`).
+const CUBLAS_GEMM_ALGO: i32 = -1;
+
+/// Backend the plan picked for this descriptor. Stored privately on
+/// the plan; surfaced through [`GemmPlan::backend`].
+///
+/// Differs from `GemmSku::arch` in that it answers a *higher-level*
+/// question: "which kernel library does this plan call into?" The arch
+/// SKU only meaningfully describes the CUTLASS variant — CUTLASS itself
+/// is one of several backends now that the Phase-30 cuBLAS fast-path
+/// joined the dispatch surface.
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+enum BackendChoice {
+    /// Compiled CUTLASS template instantiation in
+    /// `baracuda-cutlass-kernels-sys`. `arch` records which CUTLASS
+    /// SKU (sm_80 today).
+    Cutlass { arch: ArchSku },
+    /// `cublasGemmEx` (f16/bf16/f32) or `cublasDgemm` (f64) via the
+    /// `baracuda-cublas` wrapper. Used as the Phase-30 fast path for
+    /// f16/bf16 low-M decode shapes on sm_89 hardware.
+    Cublas,
+}
+
+impl BackendChoice {
+    fn as_public(self) -> BackendKind {
+        match self {
+            BackendChoice::Cutlass { .. } => BackendKind::Cutlass,
+            BackendChoice::Cublas => BackendKind::Cublas,
+        }
+    }
+}
+
+/// Heuristic that decides whether to route an FP-family GEMM through
+/// cuBLAS or CUTLASS. Caller `pref.prefer_backend` overrides whatever
+/// the heuristic would have picked (subject to availability checks).
+///
+/// Today's heuristic (Phase 30, validated on RTX 4070):
+///
+/// - f16/bf16 with `2 ≤ M < 128`: cuBLAS. The decode-batch regime
+///   where cuBLAS's sm_89 tensor-core kernels beat baracuda's
+///   CUTLASS sm_80 RCR plan by 2–3×.
+/// - f16/bf16 with `M == 1` (pure GEMV-shape): CUTLASS. Counter-
+///   intuitive given Phase-29's M=1 perf gap, but the layout
+///   `transa=T` we must use to bridge baracuda's row-major contract
+///   to cuBLAS's col-major API forces cuBLAS to materialize a B^T
+///   transpose, which is slower than the unmaterialized
+///   CUTLASS-RCR-sm_80 GEMV-tile at the K=N=4096 shape (185µs vs
+///   108µs measured). For pure single-token decode, callers wanting
+///   the bench's "all-1's mathematically-wrong" speed can force
+///   `prefer_backend = Some(Cublas)` and accept the routing.
+/// - f16/bf16 with `M >= 128`: CUTLASS. Tie zone; the existing
+///   sm_80 RCR is known-stable.
+/// - f32: CUTLASS. Phase-29 bench shows CUTLASS f32 RCR beats cuBLAS
+///   `sgemm` at M=128; ~parity at low-M; not worth the routing churn.
+/// - f64: CUTLASS (back-compat). Callers can force cuBLAS via
+///   `prefer_backend` for decode-shaped f64 workloads.
+/// - F32Strict: CUTLASS (cuBLAS has no strict-IEEE SIMT path).
+///
+/// Bias* epilogues always route through CUTLASS regardless of
+/// (M, dtype) — cuBLAS-classic has no fused-bias-activation.
+fn should_use_cublas_for_fp(
+    desc: &GemmDescriptor,
+    element: ElementKind,
+) -> bool {
+    // Bias / Bias* epilogues — cuBLAS-classic has no fused path.
+    if desc.epilogue.requires_bias() {
+        return false;
+    }
+    match element {
+        // The 2 ≤ M < 128 window is where cuBLAS wins. M=1 is excluded
+        // because the `transa=T` mapping costs more than cuBLAS-direct
+        // saves over CUTLASS at K=N=4096-ish shapes. M=128+ is excluded
+        // because CUTLASS sm_80 catches up at prefill scale.
+        ElementKind::F16 | ElementKind::Bf16 => desc.m >= 2 && desc.m < 128,
+        // f32 stays on CUTLASS by default — Phase 29 bench shows
+        // CUTLASS f32 RCR beats cuBLAS sgemm at the M=128 prefill
+        // shape. Callers can force via PlanPreference if needed.
+        ElementKind::F32 => false,
+        // F32Strict: CUTLASS SIMT path is the only bit-stable option.
+        ElementKind::F32Strict => false,
+        // f64: keep CUTLASS by default (back-compat). Callers can
+        // force-prefer cuBLAS if their f64 workload is decode-shaped.
+        ElementKind::F64 => false,
+        // Any other element type isn't reachable through `GemmPlan<T>`
+        // (the `Element` bound rejects non-FP types), but the match
+        // arm needs to be exhaustive.
+        _ => false,
+    }
+}
+
+/// Map a baracuda [`ElementKind`] to the cuBLAS [`cudaDataType_t`].
+/// Returns `None` for element kinds that don't have a cuBLAS GemmEx
+/// dtype (F32Strict, integer, FP8, …). Callers should fall back to
+/// CUTLASS in the `None` case.
+fn cublas_dtype_for(kind: ElementKind) -> Option<baracuda_cublas_sys::functions::cudaDataType_t> {
+    use baracuda_cublas_sys::functions::cudaDataType_t;
+    match kind {
+        ElementKind::F16 => Some(cudaDataType_t::R_16F),
+        ElementKind::Bf16 => Some(cudaDataType_t::R_16BF),
+        ElementKind::F32 => Some(cudaDataType_t::R_32F),
+        ElementKind::F64 => Some(cudaDataType_t::R_64F),
+        _ => None,
+    }
+}
+
+// ============================================================================
 // GemmPlan
 // ============================================================================
 
 /// Selected GEMM kernel and the host-side metadata needed to launch it.
 ///
 /// Plans are cheap to construct, hold no device memory, and are
-/// `Send + Sync` for the same reason — they're pure host data.
+/// `Send + Sync` for the same reason — they're pure host data. The
+/// Phase-30 cuBLAS fast-path adds no per-plan state: cuBLAS handles
+/// live in a thread-local cache so the plan itself stays trivially
+/// thread-safe.
 ///
 /// See the crate root for usage; key methods:
 /// - [`select`](Self::select) — pick a kernel for a problem shape.
@@ -1991,10 +2221,15 @@ fn check_args<T: CutlassElement>(desc: &GemmDescriptor, args: &GemmArgs<'_, T>) 
 /// - [`workspace_size`](Self::workspace_size) — bytes of scratch needed.
 /// - [`run`](Self::run) — launch on a stream.
 /// - [`sku`](Self::sku) — identity of the chosen kernel.
+/// - [`backend`](Self::backend) — which backend (CUTLASS / cuBLAS) was
+///   picked. Phase 30 added the cuBLAS fast-path for f16/bf16 low-M
+///   decode shapes; the heuristic is documented on
+///   [`should_use_cublas_for_fp`](self::should_use_cublas_for_fp).
 #[derive(Debug)]
 pub struct GemmPlan<T: CutlassElement> {
     desc: GemmDescriptor,
     sku: GemmSku,
+    backend: BackendChoice,
     _element: PhantomData<T>,
 }
 
@@ -2002,10 +2237,14 @@ impl<T: CutlassElement> GemmPlan<T> {
     /// Pick a kernel for `desc`.
     ///
     /// Queries the stream's device for its compute capability and selects
-    /// between sm_80 (forward-compatible across Ampere / Ada / Hopper) and
-    /// sm_90a (Hopper-specialized, when feature-enabled and the device
-    /// actually is Hopper). Build features filter what kernels are
-    /// *available*; the device cap decides what to *use*.
+    /// between the CUTLASS-sm_80 (forward-compatible across Ampere /
+    /// Ada / Hopper), CUTLASS-sm_90a (Hopper-specialized, when feature-
+    /// enabled and the device actually is Hopper), and the Phase-30
+    /// cuBLAS fast-path. Build features filter what kernels are
+    /// *available*; the device cap and the f16/bf16-low-M heuristic
+    /// decide what to *use*. See [`should_use_cublas_for_fp`] for the
+    /// dispatch rules. Override the heuristic via
+    /// [`PlanPreference::prefer_backend`].
     pub fn select(stream: &Stream, desc: &GemmDescriptor, pref: PlanPreference) -> Result<Self> {
         check_descriptor(desc)?;
         // Bias-family kernels currently cover every `(Layout, ElementKind)`
@@ -2021,12 +2260,60 @@ impl<T: CutlassElement> GemmPlan<T> {
         // have bias instantiations, reinstate a gate here that returns
         // `Error::Unsupported` so callers don't get a runtime status 3
         // deep inside the launch path.
-        let arch = pick_arch(stream, desc, pref)?;
+
+        // Phase 30: pick the backend (CUTLASS vs cuBLAS) before the
+        // arch. Caller may force a backend via `pref.prefer_backend`;
+        // otherwise the f16/bf16-low-M heuristic chooses.
+        let element = T::KIND;
+        let use_cublas = match pref.prefer_backend {
+            Some(BackendKind::Cublas) => {
+                // Force-Cublas: validate that cuBLAS actually supports
+                // this (layout, epilogue, element) triple. Bias*
+                // epilogues are not supported (cuBLAS-classic has no
+                // fused-bias-activation). F32Strict has no cuBLAS dtype.
+                if desc.epilogue.requires_bias() {
+                    return Err(Error::Unsupported(
+                        "cuBLAS backend doesn't fuse bias activations \
+                         (use Cutlass backend for Bias* epilogues)",
+                    ));
+                }
+                if cublas_dtype_for(element).is_none() {
+                    return Err(Error::Unsupported(
+                        "cuBLAS backend has no GemmEx dtype for this element \
+                         (F32Strict / integer / FP8 stay on Cutlass)",
+                    ));
+                }
+                true
+            }
+            Some(BackendKind::Cutlass) => false,
+            Some(_) => {
+                // Other backend hints aren't meaningful for GEMM; treat
+                // as "let the heuristic decide".
+                should_use_cublas_for_fp(desc, element)
+                    && cublas_dtype_for(element).is_some()
+            }
+            None => {
+                should_use_cublas_for_fp(desc, element)
+                    && cublas_dtype_for(element).is_some()
+            }
+        };
+
+        let (backend, sku_arch) = if use_cublas {
+            // Capture device arch for the SKU record (so telemetry /
+            // autotuner caches still see the real silicon), but the
+            // backend choice routes through cuBLAS.
+            let arch_for_sku = pick_arch(stream, desc, pref)?;
+            (BackendChoice::Cublas, arch_for_sku)
+        } else {
+            let arch = pick_arch(stream, desc, pref)?;
+            (BackendChoice::Cutlass { arch }, arch)
+        };
+
         let sku = GemmSku {
-            arch,
+            arch: sku_arch,
             layout: desc.layout,
             epilogue: desc.epilogue,
-            element: T::KIND,
+            element,
             // Float-family bias kernels imply bias element = element type;
             // `None` distinguishes them from the int-family bias kernels
             // (which encode the bias element explicitly because it's
@@ -2036,8 +2323,18 @@ impl<T: CutlassElement> GemmPlan<T> {
         Ok(Self {
             desc: *desc,
             sku,
+            backend,
             _element: PhantomData,
         })
+    }
+
+    /// Which backend this plan picked.
+    ///
+    /// CUTLASS (the default path) or cuBLAS (the Phase-30 fast-path
+    /// for f16/bf16 low-M decode shapes). The dispatch heuristic is
+    /// documented on [`should_use_cublas_for_fp`].
+    pub fn backend(&self) -> BackendKind {
+        self.backend.as_public()
     }
 
     /// Validate that this plan can actually launch with `args`.
@@ -2054,6 +2351,15 @@ impl<T: CutlassElement> GemmPlan<T> {
     /// `run` call will succeed barring runtime CUDA errors.
     pub fn can_implement(&self, args: &GemmArgs<'_, T>) -> Result<()> {
         check_args(&self.desc, args)?;
+
+        // Phase 30: even when the plan picked the cuBLAS backend, we
+        // still run the CUTLASS-side `can_implement` FFI check.
+        // Rationale: the cuBLAS path falls back to CUTLASS under graph
+        // capture (cuBLAS-classic calls aren't capture-safe), so the
+        // CUTLASS launch path may execute regardless of which backend
+        // the plan nominally targets. Better to validate the CUTLASS
+        // path up front than discover an alignment problem deep in the
+        // capture replay.
 
         let a_ptr = args.a.data.as_raw().0 as *const c_void;
         let b_ptr = args.b.data.as_raw().0 as *const c_void;
@@ -2145,6 +2451,16 @@ impl<T: CutlassElement> GemmPlan<T> {
     ///
     /// Returns 0 when the kernel's launch is workspace-free; pass
     /// [`Workspace::None`] in that case.
+    ///
+    /// Phase 30 note: even when the plan picked the cuBLAS backend
+    /// (which manages its own scratch internally), this method
+    /// reports the **CUTLASS-side** workspace requirement. The cuBLAS
+    /// path falls back to CUTLASS under graph capture (cuBLAS-classic
+    /// calls aren't capture-safe), so the caller must size the
+    /// workspace for the CUTLASS path in case the fallback triggers.
+    /// In practice CUTLASS Identity-epilogue GEMM on sm_80 reports
+    /// 0 bytes for most (M, N, K), so this conservative reporting
+    /// rarely costs anything.
     pub fn workspace_size(&self) -> usize {
         let bias_family = self.sku.epilogue.requires_bias();
         match (self.sku.arch, bias_family) {
@@ -2254,6 +2570,41 @@ impl<T: CutlassElement> GemmPlan<T> {
         let beta_eff = if args.c.is_some() { args.beta } else { <T::Scalar as Default>::default() };
         let stream_raw = stream.as_raw();
 
+        // Phase 30: cuBLAS fast-path. Dispatches to `cublasGemmEx`
+        // (f16/bf16/f32) or `cublasDgemm` (f64). cuBLAS is column-major;
+        // we apply the row-major-from-col-major trick: compute
+        // `D^T = (op_b B)^T · (op_a A)^T` in cuBLAS terms, which
+        // lets us pass A/B straight through and read D row-major.
+        //
+        // For RCR (A row-major, B col-major, D row-major):
+        //   cuBLAS sees A as col-major A^T [K, M] (lda = K),
+        //   cuBLAS sees B as col-major B [K, N] (ldb = K),
+        //   D^T col-major [N, M] (ldd = N) IS D row-major [M, N].
+        //   So we call gemmEx(transa = T, transb = N, m=N, n=M, k=K,
+        //                     B, ldb=K, A, lda=K, D, ldd=N).
+        // For RRR (A row-major, B row-major, D row-major):
+        //   B viewed as col-major is B^T [N, K] (ldb = N),
+        //   so transb stays N (no transpose) but the operands are
+        //   B^T·A^T = (A·B)^T → identical call shape with transa=N.
+        //
+        // Capture-mode guard: cuBLAS-classic calls aren't capture-safe
+        // (they perform host-side handle-state mutations and may issue
+        // host allocations / branches that break graph capture). Fall
+        // back to CUTLASS when the stream is in capture mode. The
+        // `is_capturing` query itself is graph-safe (it just reads
+        // driver state).
+        if matches!(self.backend, BackendChoice::Cublas) {
+            let capturing = stream.is_capturing().unwrap_or(false);
+            if !capturing {
+                return self.run_cublas(stream, args, beta_eff);
+            }
+            // Fall through to the CUTLASS dispatch below. The
+            // BackendChoice::Cublas flag stays set on the plan for
+            // telemetry / sku() consistency; only this launch falls
+            // back. Subsequent launches outside capture will route
+            // back to cuBLAS.
+        }
+
         let bias_family = self.sku.epilogue.requires_bias();
         let status = match (self.sku.arch, bias_family) {
             // Fork on T::Scalar::IS_F64 to pick the matching FFI dispatcher.
@@ -2342,6 +2693,228 @@ impl<T: CutlassElement> GemmPlan<T> {
         };
 
         status_to_result(status)
+    }
+
+    /// Phase-30 cuBLAS fast-path launch.
+    ///
+    /// Caller already validated host-side shape / strides via
+    /// [`Self::can_implement`] and confirmed the chosen backend is
+    /// [`BackendChoice::Cublas`]. This method translates baracuda's
+    /// row-major operands into cuBLAS's column-major convention via
+    /// the standard "compute D^T in col-major" trick, then dispatches
+    /// to `cublasGemmEx` (f16/bf16/f32) or `cublasDgemm` (f64).
+    fn run_cublas(
+        &self,
+        stream: &Stream,
+        args: GemmArgs<'_, T>,
+        beta_eff: T::Scalar,
+    ) -> Result<()> {
+        use baracuda_cublas::Op as CublasOp;
+        use baracuda_cublas_sys::functions::cublasComputeType_t;
+
+        // Bias / Bias* epilogues aren't supported on the cuBLAS path —
+        // `select` already rejected them. Belt-and-suspenders here.
+        if self.sku.epilogue.requires_bias() {
+            return Err(Error::Unsupported(
+                "cuBLAS backend doesn't fuse bias activations \
+                 (caller forced a Bias* epilogue onto the cuBLAS path)",
+            ));
+        }
+
+        let handle = cublas_backend::handle_for(stream)?;
+
+        let m = self.desc.m;
+        let n = self.desc.n;
+        let k = self.desc.k;
+        let a_ptr = args.a.data.as_raw().0 as *const c_void;
+        let b_ptr = args.b.data.as_raw().0 as *const c_void;
+        let d_ptr = args.d.data.as_raw().0 as *mut c_void;
+        // C must equal D for cuBLAS's `C = α·op(A)·op(B) + β·C` shape
+        // when the safe-layer caller passed C=None (treated as β=0).
+        // When C is Some, we route it through. cuBLAS reads C with the
+        // same layout/ldc as it writes D, so the same row-major-from-
+        // col-major mapping applies.
+        let (c_ptr, ldc_arg) = match &args.c {
+            // cuBLAS expects β*C added in; pass the caller's C directly.
+            Some(c) => (c.data.as_raw().0 as *mut c_void, c.ld as i32),
+            None => (d_ptr, args.d.ld as i32),
+        };
+
+        // Row-major-from-col-major mapping for baracuda's Rcr/Rrr:
+        //
+        // baracuda Rcr: A row-major [M, K] (lda = K),
+        //               B col-major [K, N] (ldb = K),
+        //               D row-major [M, N] (ldd = N).
+        //
+        // cuBLAS sees the same memory column-major:
+        //   - A_raw[i*K + kk] col-major (lda=K) → A_blas[kk, i] = A[i, kk]
+        //     ⇒ cuBLAS view of A is A^T, shape [K, M], lda=K.
+        //   - B_raw[j*K + kk] col-major (ldb=K) → B_blas[kk, j] = B[kk, j]
+        //     ⇒ cuBLAS view of B IS B, shape [K, N], ldb=K.
+        //   - D_raw[i*N + j] col-major (ldd=N) → D_blas[j, i] = D[i, j]
+        //     ⇒ cuBLAS view of D is D^T, shape [N, M], ldd=N.
+        //
+        // The target identity is D[i,j] = Σ_kk A[i,kk]·B[kk,j], which in
+        // cuBLAS view is D_blas[j,i] = Σ_kk B_blas[kk,j] · A_blas[kk,i].
+        // Expressed as a cuBLAS GEMM `D_blas = op(X)·op(Y)` with
+        // D_blas shape (M_blas, N_blas) = (N, M):
+        //   - op(X) shape (M_blas, K) = (N, K) ⇐ B_blas with Op::T
+        //     (B_blas is [K, N], B_blas^T = [N, K]).
+        //   - op(Y) shape (K, N_blas) = (K, M) ⇐ A_blas with Op::N
+        //     (A_blas is already [K, M]).
+        // So pass B as the first operand to gemmEx with Op::T and A as
+        // the second operand with Op::N.
+        //
+        // For Rrr (A row-major [M,K], B row-major [K,N], D row-major
+        // [M,N]):
+        //   - B_raw[kk*N + j] col-major (ldb=N) → B_blas[j, kk] = B[kk, j]
+        //     ⇒ cuBLAS view of B is B^T, shape [N, K], ldb=N.
+        //   - First operand needs (M_blas, K) = (N, K) ⇐ B^T-as-stored
+        //     with Op::N (no further transpose).
+        //   - Second operand same as Rcr: A with Op::N, lda=K.
+        //
+        // `cublas_lda` and `cublas_ldb` below name the ld values *as
+        // gemmEx expects them*: cublas_lda is the leading dim of the
+        // first operand (which in our call is baracuda's B), and
+        // cublas_ldb is the leading dim of the second operand (which
+        // is baracuda's A). For both Rcr and Rrr, cublas_lda = args.b.ld
+        // and cublas_ldb = args.a.ld; the only thing that changes is
+        // the op on the first operand.
+        let (transa, transb) = match self.desc.layout {
+            LayoutSku::Rcr => (CublasOp::T, CublasOp::N),
+            LayoutSku::Rrr => (CublasOp::N, CublasOp::N),
+        };
+        let cublas_lda = args.b.ld as i32; // first operand (B) ld
+        let cublas_ldb = args.a.ld as i32; // second operand (A) ld
+        let ldd_arg = args.d.ld as i32;
+
+        // Pick compute path by `T::Scalar` (the FP family bound on
+        // CutlassElement guarantees f32 or f64). f64 routes through
+        // `cublasDgemm`; everything else uses `cublasGemmEx` with
+        // `CUBLAS_COMPUTE_32F` (f32 accumulator regardless of operand
+        // dtype, matching cuBLAS's tensor-core path).
+        if <T::Scalar as ScalarType>::IS_F64 {
+            // f64 path: cublasDgemm. No GemmEx needed; α/β are f64.
+            use baracuda_cublas_sys::cublasOperation_t;
+
+            // Translate cublasOperation_t for the raw helper.
+            let to_raw = |op: CublasOp| match op {
+                CublasOp::N => cublasOperation_t::N,
+                CublasOp::T => cublasOperation_t::T,
+                CublasOp::C => cublasOperation_t::C,
+            };
+            // cublasDgemm signature: (handle, transa, transb, m, n, k,
+            //   alpha, A, lda, B, ldb, beta, C, ldc).
+            // Layout-mapped operand order: B first, A second, output D.
+            let alpha_f64 = args.alpha.to_f64();
+            let beta_f64 = beta_eff.to_f64();
+            let c_api = baracuda_cublas_sys::cublas()
+                .map_err(|_| Error::Unsupported("cuBLAS library unavailable"))?;
+            let dgemm = c_api
+                .cublas_dgemm()
+                .map_err(|_| Error::Unsupported("cublasDgemm symbol unavailable"))?;
+            // SAFETY: every pointer is from a live DeviceBuffer with
+            // the correct dtype; sizes were validated via check_args;
+            // the handle is bound to `stream`'s context.
+            let status = unsafe {
+                dgemm(
+                    handle.as_raw(),
+                    to_raw(transa),
+                    to_raw(transb),
+                    n,
+                    m,
+                    k,
+                    &alpha_f64,
+                    b_ptr as *const f64,
+                    cublas_lda,
+                    a_ptr as *const f64,
+                    cublas_ldb,
+                    &beta_f64,
+                    // cublasDgemm uses C as both input and output. Pass
+                    // C-or-D depending on whether caller supplied C.
+                    if args.c.is_some() {
+                        // Caller passed a separate C. cuBLAS writes
+                        // back into the same buffer it reads from, so
+                        // we'd need a copy step to materialize into D.
+                        // For now, restrict the cuBLAS f64 path to
+                        // C=None (the common decode case).
+                        return Err(Error::Unsupported(
+                            "cuBLAS f64 GEMM with explicit C operand is not yet wired \
+                             (D and C alias differently than cuBLAS expects); \
+                             use Cutlass backend or set c = None",
+                        ));
+                    } else {
+                        d_ptr as *mut f64
+                    },
+                    ldd_arg,
+                )
+            };
+            return match status {
+                baracuda_cublas_sys::cublasStatus_t::SUCCESS => Ok(()),
+                _ => Err(Error::CutlassInternal(status.0)),
+            };
+        }
+
+        // f16/bf16/f32 path: cublasGemmEx with Compute32F accumulator
+        // and the tensor-op default algo selector.
+        let dtype = cublas_dtype_for(self.sku.element).ok_or(Error::Unsupported(
+            "cuBLAS backend selected for element kind without a cuBLAS dtype mapping",
+        ))?;
+        // For the col-major-mapped problem the operands swap order; the
+        // dtype tag is the same for A, B, and D since all three carry
+        // the same `T`.
+        let a_type = dtype;
+        let b_type = dtype;
+        let c_type = dtype;
+        // Alpha/beta as f32 (the host scalars cuBLAS expects when
+        // compute_type = Compute32F).
+        let alpha_f32 = args.alpha.to_f32();
+        let beta_f32 = beta_eff.to_f32();
+
+        // Caller passed an explicit C: cuBLAS gemmEx writes C in-place
+        // (treats C as the output too). When `args.c == Some` and the
+        // caller wants D != C, we'd need a memcpy step. For simplicity
+        // (and matching the bench's no-C decode case) reject the
+        // explicit-C path on the cuBLAS branch and tell the caller to
+        // use Cutlass backend. The Identity / no-bias path is the
+        // common decode shape we're optimizing.
+        if args.c.is_some() {
+            return Err(Error::Unsupported(
+                "cuBLAS GemmPlan path requires c = None \
+                 (cublasGemmEx writes the output in-place into the C operand; \
+                 explicit-C with D ≠ C requires an extra copy step — \
+                 force Cutlass backend if you need it)",
+            ));
+        }
+        let _ = (c_ptr, ldc_arg); // suppress unused-let warning
+
+        // SAFETY: every pointer is from a live DeviceBuffer with the
+        // correct dtype; sizes were validated via check_args; the
+        // handle is bound to `stream`'s context.
+        unsafe {
+            baracuda_cublas::gemm_ex(
+                &handle,
+                transa,
+                transb,
+                n,
+                m,
+                k,
+                &alpha_f32 as *const f32 as *const c_void,
+                b_ptr,
+                b_type,
+                cublas_lda,
+                a_ptr,
+                a_type,
+                cublas_ldb,
+                &beta_f32 as *const f32 as *const c_void,
+                d_ptr,
+                c_type,
+                ldd_arg,
+                cublasComputeType_t::Compute32F,
+                CUBLAS_GEMM_ALGO,
+            )
+            .map_err(|_| Error::CutlassInternal(-1))
+        }
     }
 }
 

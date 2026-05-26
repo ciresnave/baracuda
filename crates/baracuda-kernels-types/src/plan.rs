@@ -5,6 +5,7 @@
 use baracuda_driver::DeviceSliceMut;
 
 use crate::element::{ElementKind, MathPrecision};
+use crate::sku::BackendKind;
 
 /// Caller-supplied workspace for a launch.
 ///
@@ -43,6 +44,25 @@ pub struct PlanPreference {
     /// effect when the `sm90a` feature is off in the underlying kernel
     /// crate (no such kernels exist in the build).
     pub allow_sm90a: bool,
+    /// Force a particular backend at plan-selection time, bypassing the
+    /// plan's built-in heuristic.
+    ///
+    /// `None` (the default) lets the plan's per-op-category heuristic
+    /// decide. `Some(BackendKind::Cublas)` / `Some(BackendKind::Cutlass)`
+    /// override the heuristic when a caller has profiling-driven
+    /// information the heuristic doesn't have (or wants deterministic
+    /// kernel selection for golden-output testing).
+    ///
+    /// Plans surface their actual choice through their `sku()` accessor —
+    /// inspect `sku.backend` to see what the heuristic picked.
+    ///
+    /// Returns `Error::Unsupported` from `select` if the requested
+    /// backend doesn't have a kernel for the requested
+    /// `(layout, epilogue, element)` triple. For example, the cuBLAS
+    /// backend doesn't support `EpilogueKind::BiasRelu` (cuBLAS has no
+    /// fused-bias-activation GEMM); forcing it on a Bias* epilogue
+    /// returns an error rather than silently falling back to CUTLASS.
+    pub prefer_backend: Option<BackendKind>,
 }
 
 impl Default for PlanPreference {
@@ -50,6 +70,7 @@ impl Default for PlanPreference {
         Self {
             max_workspace_bytes: usize::MAX,
             allow_sm90a: true,
+            prefer_backend: None,
         }
     }
 }

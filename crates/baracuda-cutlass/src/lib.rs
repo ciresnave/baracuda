@@ -58,9 +58,9 @@ pub mod types;
 pub use error::{Error, Result};
 pub use plan::{BatchedGemmPlan, GemmPlan, GroupedGemmPlan, IntGemmPlan, PreparedGroupedGemm};
 pub use types::{
-    ActivationKind, ArchSku, BatchedGemmArgs, BatchedGemmDescriptor, BiasElement, BiasElementKind,
-    CutlassElement, ElementKind, EpilogueKind, F32Strict, GemmArgs, GemmDescriptor, GemmSku,
-    GroupedPlanPreference, GroupedProblem, GroupedScheduleMode, IntElement, IntGemmArgs,
-    IntGemmDescriptor, LayoutSku, MathPrecision, MatrixMut, MatrixRef, PlanPreference,
-    PrecisionGuarantee, S8, ScalarType, U8, VectorRef, Workspace,
+    ActivationKind, ArchSku, BackendKind, BatchedGemmArgs, BatchedGemmDescriptor, BiasElement,
+    BiasElementKind, CutlassElement, ElementKind, EpilogueKind, F32Strict, GemmArgs,
+    GemmDescriptor, GemmSku, GroupedPlanPreference, GroupedProblem, GroupedScheduleMode,
+    IntElement, IntGemmArgs, IntGemmDescriptor, LayoutSku, MathPrecision, MatrixMut, MatrixRef,
+    PlanPreference, PrecisionGuarantee, S8, ScalarType, U8, VectorRef, Workspace,
 };

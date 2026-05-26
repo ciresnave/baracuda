@@ -1,6 +1,6 @@
 [package]
 name = "baracuda-cutensor"
-version = "0.0.1-alpha.44"
+version = "0.0.1-alpha.45"
 description = "Safe Rust wrappers for NVIDIA cuTENSOR. Scaffolding at v0.1."
 edition.workspace = true
 rust-version.workspace = true

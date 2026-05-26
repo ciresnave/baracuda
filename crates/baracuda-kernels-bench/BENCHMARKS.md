@@ -96,6 +96,8 @@ dedicated decode-step kernel.
 
 ### gemm (f16) — RTX 4070, 2026-05-26, `-- --quick`
 
+**Phase 29 baseline** (CUTLASS sm_80 only):
+
 | Shape | baracuda (us) | cuBLAS GemmEx (us) | delta |
 | --- | --- | --- | --- |
 | M1_N2048_K2048 | 55.8 | 13.3 | 0.24 |
@@ -112,7 +114,39 @@ cuBLAS is using the sm_89 tensor-core path with f32 accumulator;
 baracuda's CUTLASS RCR plan emits a generic Ampere/SM80 path — this
 falls inside the Phase 27 / Tier A optimization scope.
 
+**Phase 30 after** — `GemmPlan` cuBLAS fast-path (RTX 4070, `--quick`):
+
+| Shape | baracuda (us) | cuBLAS GemmEx (us) | delta | Backend picked |
+| --- | --- | --- | --- | --- |
+| M1_N2048_K2048 | ~67–86 (noisy) | ~16–19 | ~0.20 | CUTLASS (M=1 stays — see heuristic) |
+| **M32_N2048_K2048** | **~18.3** | ~20.0 | **~1.10** | **cuBLAS** (3.0× speedup, parity with direct) |
+| M128_N2048_K2048 | ~59.4 | ~38 | 0.64 | CUTLASS (M≥128 stays) |
+| M1_N4096_K4096 | ~126 | ~65 | 0.52 | CUTLASS |
+| **M32_N4096_K4096** | **~99.4** | ~89.9 | **~0.91** | **cuBLAS** (close to direct) |
+| M128_N4096_K4096 | ~206 | ~178 | 0.86 | CUTLASS |
+
+**Reading**: the Phase-30 cuBLAS routing **closes the gap to direct
+cuBLAS at the 2 ≤ M < 128 decode-batch window** (M=32 hits parity with
+cuBLAS direct on both K=N=2048 and K=N=4096). M=1 *stays on CUTLASS*
+by the heuristic — see [`GemmPlan::backend`] rustdoc and
+`should_use_cublas_for_fp` in `baracuda-cutlass/src/plan.rs` for why
+(short version: cuBLAS forces a `transa=T` materialization for the
+row-major-from-col-major mapping, which is slower than the
+CUTLASS-sm_80 GEMV-tile at pure M=1).
+
+`--quick` has 20-30% measurement variance at the M=1 shape, hence the
+"~" prefixes; the M=32 numbers are stable to <5%.
+
+**Force-cuBLAS override**: callers wanting cuBLAS at M=1 or M≥128 (e.g.
+to validate output against a known cuBLAS reference, or because they
+have profiling data the heuristic doesn't) can pass
+`PlanPreference { prefer_backend: Some(BackendKind::Cublas), .. }` —
+the plan will route through cuBLAS at any shape (subject to dtype
+support: F32Strict / FP8 / integer have no cuBLAS path).
+
 ### gemm (bf16) — RTX 4070, 2026-05-26, `-- --quick`
+
+**Phase 29 baseline** (CUTLASS sm_80 only):
 
 | Shape | baracuda (us) | cuBLAS GemmEx (us) | delta |
 | --- | --- | --- | --- |
@@ -125,6 +159,8 @@ falls inside the Phase 27 / Tier A optimization scope.
 
 **Reading**: identical shape to the f16 picture above — bf16 hits the
 same tensor-core path as f16 on Ada / Hopper, so the gap is the same.
+The Phase-30 cuBLAS fast-path applies identically to bf16; see the f16
+"after" table above for the closed-gap numbers.
 
 ### mmvq
 

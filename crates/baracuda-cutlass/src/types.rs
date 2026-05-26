@@ -20,9 +20,9 @@
 // referencing these types via `crate::types::Foo`) continues to work
 // unchanged.
 pub use baracuda_kernels_types::{
-    ActivationKind, ArchSku, BiasElement, BiasElementKind, Element, ElementKind, EpilogueKind,
-    F32Strict, IntElement, LayoutSku, MathPrecision, MatrixMut, MatrixRef, PlanPreference,
-    PrecisionGuarantee, S8, ScalarType, U8, VectorRef, Workspace,
+    ActivationKind, ArchSku, BackendKind, BiasElement, BiasElementKind, Element, ElementKind,
+    EpilogueKind, F32Strict, IntElement, LayoutSku, MathPrecision, MatrixMut, MatrixRef,
+    PlanPreference, PrecisionGuarantee, S8, ScalarType, U8, VectorRef, Workspace,
 };
 
 /// Back-compat alias for [`Element`].

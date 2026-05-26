@@ -7,18 +7,17 @@ effort within each category. Authoritative status per op lives in
 [`OP-MATRIX.md`](OP-MATRIX.md); historical phase summaries live in
 [`ARCHITECTURE.md`](ARCHITECTURE.md).
 
-The current tag is **v0.0.1-alpha.44** with **2172+ GPU tests
-passing** on RTX 4070 (sm_89) across **628+ binary targets**
-(`--include-ignored --no-fail-fast`). Phase 29 alpha.44 adds the
-cross-implementation benchmark suite (10 new bench files comparing
-baracuda vs cuBLAS / cuDNN); no behavior change so the regression
-count matches Phase 28. Known pre-existing failures excluded.
+The current tag is **v0.0.1-alpha.45** with **2181+ GPU tests
+passing** on RTX 4070 (sm_89). Phase 30 alpha.45 closes the
+f16/bf16 GEMM decode-batch gap surfaced by Phase 29 by routing
+`2 ≤ M < 128` f16/bf16 GEMMs through cuBLAS. **3× speedup measured
+at M=32 f16** (parity with cuBLAS direct). M=1 stays on CUTLASS
+intentionally (cuBLAS RCR→col-major transa=T mapping slower at
+K=N≥2048). See [`crates/baracuda-kernels-bench/BENCHMARKS.md`](crates/baracuda-kernels-bench/BENCHMARKS.md)
+for before/after numbers.
 
-**Critical perf finding from Phase 29 BENCHMARKS.md**: baracuda's
-f16/bf16 GEMM is 2-4× slower than cuBLAS `gemmEx` at low-M decode
-shapes (M=1/M=32), narrowing to ~parity at M=128. The deferred
-Phase 27 multi-M MMVQ port is the surface that closes this. See
-[`crates/baracuda-kernels-bench/BENCHMARKS.md`](crates/baracuda-kernels-bench/BENCHMARKS.md).
+Known pre-existing failures excluded (CTC parallel-execution flake;
+mmvq_w_offset_alignment release-mode test design flaw).
 
 ---
 
