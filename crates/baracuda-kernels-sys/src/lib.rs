@@ -36338,3 +36338,32 @@ pub use conv_cudnn_facade::*;
 // identity-staging contract.
 mod cusolver_facade;
 pub use cusolver_facade::*;
+
+// Phase 23 — cuFFT FFT FFI facade. Pure-Rust `#[no_mangle]` wrappers
+// exposing the cuFFT-backed FFT family (`fft_1d` / `rfft_1d` /
+// `irfft_1d` / `fft_nd` / `rfft_nd` / `irfft_nd`, each × {f32, f64} or
+// {c32, c64}) as flat C symbols for non-Rust callers (Fuel). 24
+// symbols total. No feature gate — cuFFT ships with the CUDA toolkit.
+mod cufft_facade;
+pub use cufft_facade::*;
+
+// Phase 23 — cuRAND random-sampling FFI facade. Pure-Rust `#[no_mangle]`
+// wrappers exposing the cuRAND-backed pure sampler families
+// (`curand_uniform`, `curand_normal`, each × {f32, f64}) as flat C
+// symbols for non-Rust callers (Fuel). 8 symbols total. Bernoulli /
+// Dropout are composites (cuRAND uniform + bespoke kernel) and ship
+// directly under their existing bespoke FFI symbols.
+//
+// cuRAND itself ships with the CUDA toolkit (no separate download
+// like cuDNN), but the facade uses the bespoke
+// `baracuda_kernels_affine_inplace_{f32,f64}_run` kernels to remap
+// `Uniform(0, 1]` → `Uniform(low, high]`, so it inherits the same
+// `sm80 / sm89 / sm90a` gate that bespoke kernel ABI requires.
+#[cfg(any(feature = "sm80", feature = "sm89", feature = "sm90a"))]
+mod curand_facade;
+#[cfg(any(feature = "sm80", feature = "sm89", feature = "sm90a"))]
+pub use curand_facade::*;
+// Note: cuSPARSE has no Rust plans in `baracuda-kernels` today
+// (sparse ops are exposed only via `baracuda-cusparse`'s safe wrapper).
+// A cuSPARSE facade lands in a future phase once at least one
+// sparse-backed plan exists in `baracuda-kernels` to wrap.

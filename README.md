@@ -8,9 +8,9 @@
 A unified Rust ML-op facade over the NVIDIA CUDA ecosystem.
 
 ![License](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue)
-![Status](https://img.shields.io/badge/status-alpha.39-orange)
+![Status](https://img.shields.io/badge/status-alpha.40-orange)
 ![CUDA](https://img.shields.io/badge/CUDA-12.x-76b900)
-![Tests](https://img.shields.io/badge/regression-2142%2F0-success)
+![Tests](https://img.shields.io/badge/regression-2150%2F0-success)
 
 ## What baracuda is
 
@@ -40,7 +40,7 @@ talk to one library directly.
 
 ## Status
 
-**In active development — alpha.39.** Roughly **2142 GPU tests passing**
+**In active development — alpha.40.** Roughly **2150 GPU tests passing**
 on an RTX 4070 (sm_89), across **616 binary targets**.
 
 Phase coverage (see [`ARCHITECTURE.md`](ARCHITECTURE.md) for the phase
@@ -69,9 +69,10 @@ matrix):
 | 18 | Sub-byte / quantized completeness (alpha.35) — f16/bf16 activations for `GgufMmvqPlan` across all 11 block formats × contig + strided; 44 new FFI symbols | done |
 | 19 | Fuel retirement asks (alpha.36) — pool/conv FFI facade for cuDNN-backed plans + Upsample Nearest2d + NEW im2col/im2col1d/col2im1d bespoke; vendored Fuel Q8_1 for inspection; 140 new FFI symbols. Surfaced 1.0-freeze prereq for broader library-backed FFI facade audit | done |
 | 20 | MoE — Item 4 from Fuel retirement (alpha.37): batched MMVQ × N-experts (36 new FFI symbols across 11 GGUF block formats × 3 activation dtypes + 3 pure-FP); MoE absorb-and-expose proved to be a no-op (Fuel hadn't evolved their kernels since Phase 8.5 vendor; 5 baracuda-side symbols already match) + 2 direct-FFI smoke tests | done |
-| 21 | Bilinear interpolate expansion (alpha.39): `align_corners` + scale-factor overrides + f16/bf16 fanout (FW+BW). Breaking change to existing f32/f64 signatures. | done |
+| 21 | Bilinear interpolate expansion (alpha.40): `align_corners` + scale-factor overrides + f16/bf16 fanout (FW+BW). Breaking change to existing f32/f64 signatures. | done |
 | 22 | MMVQ ncols≥64 debug assertion + cuSOLVER FFI facade (alpha.39): 10 cuSOLVER-backed plan families (Cholesky, LU, QR+ormqr, SVD/SvdBatched/SvdaBatched, eigh real+complex, eig, lstsq, solve, inverse) wrapped behind ~50 flat C symbols in `baracuda-kernels-sys/src/cusolver_facade.rs`; closes the Phase 19 library-backed FFI facade gap for cuSOLVER. No feature gate (cuSOLVER ships with the CUDA toolkit). | done |
-| 23+ | Broader FFI facade audit continues (cuFFT/cuRAND/cuSPARSE/cuTENSOR/NPP/CV-CUDA/Cutlass), segment + embedding BW completion, linalg completion, Hopper / Blackwell, 1.0 freeze | pending (see [`ROADMAP.md`](ROADMAP.md)) |
+| 23 | cuFFT + cuRAND FFI facade (alpha.40): 6 cuFFT plan families (FFT 1d/Nd C2C, R2C, C2R) × c32/c64 + f32/f64 + 2 cuRAND families (Uniform, Normal) × f32/f64 = 32 flat C symbols in `baracuda-kernels-sys/src/{cufft,curand}_facade.rs`. cuSPARSE skipped — no baracuda-kernels plans wrap it today. | done |
+| 24+ | Broader FFI facade audit continues (cuTENSOR/NPP/CV-CUDA/Cutlass re-export), segment + embedding BW completion, linalg completion, Hopper / Blackwell, 1.0 freeze | pending (see [`ROADMAP.md`](ROADMAP.md)) |
 
 API stability is **not** promised before beta.0. Breaking changes ship in
 each alpha bump and are documented in the workspace `CHANGELOG.md`.
@@ -82,8 +83,8 @@ Add the kernel facade and the driver crate:
 
 ```toml
 [dependencies]
-baracuda-kernels = { version = "0.0.1-alpha.39", features = ["sm89", "cudnn"] }
-baracuda-driver  = "0.0.1-alpha.39"
+baracuda-kernels = { version = "0.0.1-alpha.40", features = ["sm89", "cudnn"] }
+baracuda-driver  = "0.0.1-alpha.40"
 ```
 
 A representative example — single-axis numerically stable softmax over a

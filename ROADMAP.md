@@ -7,8 +7,8 @@ effort within each category. Authoritative status per op lives in
 [`OP-MATRIX.md`](OP-MATRIX.md); historical phase summaries live in
 [`ARCHITECTURE.md`](ARCHITECTURE.md).
 
-The current tag is **v0.0.1-alpha.39** with **2142 GPU tests
-passing** on RTX 4070 (sm_89) across **616 binary targets**
+The current tag is **v0.0.1-alpha.40** with **2150 GPU tests
+passing** on RTX 4070 (sm_89) across **616+ binary targets**
 (`--include-ignored --no-fail-fast`). Two known pre-Phase-22 failures
 (CTC parallel flake; `mmvq_w_offset_alignment_misaligned_rejected_debug`
 release-mode test design flaw) excluded.
@@ -138,6 +138,46 @@ Items previously listed here but now shipped:
   silent-wrong failure mode). Returns `Error::InvalidProblem` when
   any type-0/1 format is paired with `n_cols < 64`. Release builds
   elide the assertion.
+
+## Phase 23 — cuFFT + cuRAND FFI facade (complete; shipped alpha.40)
+
+Second slice of the Phase 19-surfaced library-backed FFI facade audit.
+cuFFT and cuRAND both ship with the CUDA toolkit (no feature gate
+needed). cuSPARSE was scoped in but skipped — no baracuda-kernels
+plans wrap it today; sparse ops live only in the parallel
+`baracuda-cusparse` safe wrapper.
+
+- **cuFFT FFI facade** (24 symbols) — 6 plan families wrapped in
+  `crates/baracuda-kernels-sys/src/cufft_facade.rs`: `fft_1d`,
+  `rfft_1d`, `irfft_1d` × {f32 or c32, f64 or c64}, plus the ND
+  variants `fft_nd`, `rfft_nd`, `irfft_nd` (rank 1..=3 via host-
+  resident `dims` array). cuFFT manages its own internal scratch via
+  the `cufftHandle`, so `*_workspace_size` returns 0 and `*_run`
+  ignores `workspace` / `workspace_bytes` (kept in ABI for symmetry
+  with the rest of the facade).
+- **cuRAND FFI facade** (8 symbols) — 2 plan families in
+  `crates/baracuda-kernels-sys/src/curand_facade.rs`: `curand_uniform`
+  + `curand_normal` × {f32, f64}. Uniform supports the `(low, high]`
+  post-affine remap via the bespoke `affine_inplace` kernel — so the
+  facade is gated behind the same `sm80/sm89/sm90a` feature as the
+  bespoke side. Each FFI call creates + seeds a transient generator
+  (matches the Rust plan's contract).
+- **cuSPARSE** — skipped per Phase 22's "qr_batched deferred" precedent:
+  the brief listed it in scope but the grep returned zero plans. If
+  baracuda-kernels grows cuSPARSE-backed plans in the future, the
+  facade lands then.
+
+Patterns retained:
+
+- **Macro-fanout per family** mirroring `cusolver_facade.rs`. Each
+  family yields `*_run` + `*_workspace_size` siblings.
+- **HOST vs DEVICE residency documented per pointer** in the facade
+  module docs (the `dims` array for ND FFT is HOST; everything else
+  is DEVICE).
+- **No feature gate** for cufft_facade (cuFFT ships with the CUDA
+  toolkit). cuRAND facade IS feature-gated, but only because it
+  composes the bespoke `affine_inplace` kernel — the cuRAND symbols
+  themselves are toolkit-shipped.
 
 ## Phase 22 — MMVQ ncols≥64 assertion + cuSOLVER FFI facade (complete; shipped alpha.39)
 

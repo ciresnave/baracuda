@@ -1,6 +1,6 @@
 [package]
 name = "baracuda-kernels-sys"
-version = "0.0.1-alpha.39"
+version = "0.0.1-alpha.40"
 description = "Compiled bespoke .cu kernel template instantiations for the baracuda ML kernel facade. Hosts curated CUDA kernel sources (int8/FP8/int4/bin GEMM RRR, elementwise, reduce, norm, attention, …), builds them via baracuda-forge, exposes extern \"C\" entry points for the safe baracuda-kernels crate. No CUTLASS dependency — every kernel here is hand-rolled."
 edition.workspace = true
 rust-version.workspace = true
@@ -21,14 +21,17 @@ exclude = ["*.profraw", "target/"]
 # as forward-compatible fallback on Hopper if `sm_90a` isn't enabled.
 default = ["sm80"]
 
-# Build the sm_80 (Ampere / Ada-fallback) kernel set.
-sm80 = []
+# Build the sm_80 (Ampere / Ada-fallback) kernel set. Phase 24 forwards
+# to baracuda-cutlass-kernels-sys/sm80 so the cutlass GEMM trampolines
+# in `cutlass_reexport` resolve at link time.
+sm80 = ["baracuda-cutlass-kernels-sys/sm80"]
 
 # Build the sm_89 (Ada Lovelace) kernel set. Adds FP8 over sm_80.
 sm89 = []
 
-# Build the sm_90a (Hopper async) kernel set.
-sm90a = []
+# Build the sm_90a (Hopper async) kernel set. Phase 24 forwards to
+# baracuda-cutlass-kernels-sys/sm90a.
+sm90a = ["baracuda-cutlass-kernels-sys/sm90a"]
 
 # Link against cuDNN and expose the cuDNN FFI surface (Phase 7 conv /
 # pool / CTC-cuDNN plans). Off by default because cuDNN is a separate
@@ -38,6 +41,12 @@ sm90a = []
 cudnn = []
 
 [dependencies]
+# Phase 24 — cutlass GEMM FFI re-export. Pull in the CUTLASS template
+# instantiations so the unified `baracuda_kernels_gemm_*` namespace can
+# trampoline to them. Different `links` key (`baracuda_cutlass_kernels`
+# vs `baracuda_kernels`) so the two static archives co-exist without
+# Cargo's links-conflict guard tripping.
+baracuda-cutlass-kernels-sys = { workspace = true, default-features = false }
 
 [build-dependencies]
 baracuda-forge = { workspace = true }
