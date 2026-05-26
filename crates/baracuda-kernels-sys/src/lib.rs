@@ -34691,6 +34691,107 @@ unsafe extern "C" {
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
     ) -> i32;
 
+    // ===== Phase 33 — multi-M MMVQ via Q8_1 activation staging =================
+    //
+    // The multi-M MMVQ kernel reuses one weight load across `ncols_y ∈
+    // {1, 2, 4, 8}` activation vectors. The activations must first be
+    // staged into the Q8_1 block format (int8 quants + half scale + half
+    // sum, 36 bytes per 32-element block) by the `quantize_q8_1_*_run`
+    // family. The dot product is computed via `__dp4a` SIMD int8 MACs
+    // with an fp32 fixup at the block boundary.
+    //
+    // Scope: Q8_0 weights only in Phase 33 (the simplest dot — pure
+    // `__dp4a` × VDR=2 + scalar rescale). Remaining 9 block formats
+    // (Q4_0/Q4_1/Q5_0/Q5_1/Q2_K..Q6_K) land in a follow-up phase.
+
+    /// Q8_1 activation staging — f32 source.
+    ///
+    /// Converts `ny × kx` f32 activations into the Q8_1 block format.
+    /// Output buffer size: `ny × ceil(kx / 32) × 36 bytes` (use
+    /// `baracuda_kernels_quantize_q8_1_workspace_bytes` to compute).
+    /// `kx` rounded up to multiple of 32 internally; out-of-range
+    /// columns zero-padded.
+    ///
+    /// # Safety: device-resident src + dst; valid stream.
+    pub fn baracuda_kernels_quantize_q8_1_f32_run(
+        kx: i64, ny: i64,
+        src: *const c_void,
+        dst_q8_1: *mut c_void,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// Q8_1 activation staging — f16 source. # Safety: as f32 variant.
+    pub fn baracuda_kernels_quantize_q8_1_f16_run(
+        kx: i64, ny: i64,
+        src: *const c_void,
+        dst_q8_1: *mut c_void,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// Q8_1 activation staging — bf16 source. # Safety: as f32 variant.
+    pub fn baracuda_kernels_quantize_q8_1_bf16_run(
+        kx: i64, ny: i64,
+        src: *const c_void,
+        dst_q8_1: *mut c_void,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// Returns workspace bytes needed to stage `ny × kx` activations
+    /// into Q8_1. = `ny * ceil(kx / 32) * 36`. Returns 0 on invalid
+    /// (non-positive) arguments.
+    pub fn baracuda_kernels_quantize_q8_1_workspace_bytes(
+        kx: i64, ny: i64,
+    ) -> i64;
+
+    /// Multi-M MMVQ for Q8_0 weights, M=1 (decode regime). Computes
+    /// `dst[0, r] = Σ_c W[r, c] * y[0, c]` for r ∈ [0, nrows_x).
+    ///
+    /// # Safety: device-resident weight + Q8_1-staged activations + dst;
+    /// valid stream. `ncols_x` must be a multiple of 32.
+    pub fn baracuda_kernels_mmvq_multim_q8_0_m1_run(
+        ncols_x: i32, nrows_x: i32,
+        w_ptr: *const c_void,
+        w_start_byte_offset: i64,
+        activations_q8_1: *const c_void,
+        dst: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// Multi-M MMVQ for Q8_0 weights, M=2. # Safety: as M=1.
+    pub fn baracuda_kernels_mmvq_multim_q8_0_m2_run(
+        ncols_x: i32, nrows_x: i32,
+        w_ptr: *const c_void,
+        w_start_byte_offset: i64,
+        activations_q8_1: *const c_void,
+        dst: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// Multi-M MMVQ for Q8_0 weights, M=4. # Safety: as M=1.
+    pub fn baracuda_kernels_mmvq_multim_q8_0_m4_run(
+        ncols_x: i32, nrows_x: i32,
+        w_ptr: *const c_void,
+        w_start_byte_offset: i64,
+        activations_q8_1: *const c_void,
+        dst: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// Multi-M MMVQ for Q8_0 weights, M=8 (prefill regime, target 3-7×
+    /// vs the per-token M=1 dispatch). # Safety: as M=1.
+    pub fn baracuda_kernels_mmvq_multim_q8_0_m8_run(
+        ncols_x: i32, nrows_x: i32,
+        w_ptr: *const c_void,
+        w_start_byte_offset: i64,
+        activations_q8_1: *const c_void,
+        dst: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
     // ===== Phase 20.1 — batched MMVQ × N-experts ==============================
     //
     // 11 block formats × 3 activation dtypes (f32 / f16 / bf16) = 33 quant

@@ -451,6 +451,9 @@ pub use quantize::{
     GgufMmvqBatchedFormat, GgufMmvqBatchedPlan,
 };
 
+// Phase 33 — multi-M MMVQ via Q8_1 activation staging (prefill speedup).
+pub use quantize::{GgufMmvqMultiMArgs, GgufMmvqMultiMDescriptor, GgufMmvqMultiMPlan};
+
 // Milestone 8.5 — Mixture-of-Experts inference forward (Category V).
 // Vendored from attention.rs via fuel-cuda-kernels.
 pub mod moe;

@@ -798,6 +798,15 @@ fn collect_kernel_files() -> Vec<&'static str> {
             // batched template adds (token, expert, topk_weight)
             // routing semantics + atomic-vs-store dispatch.
             "gguf/mmvq_batched.cu",
+            // Phase 33 — multi-M MMVQ via Q8_1 activation staging. The
+            // staging kernel converts fp activations into the Q8_1 block
+            // format (int8 quants + half scale + half sum); the multi-M
+            // launcher reuses one weight load across `ncols_y ∈ {1,2,4,8}`
+            // activation vectors → up to 8× gmem bandwidth save at
+            // M=8 prefill. Q8_0 weights only in this phase; remaining
+            // block formats follow in a subsequent phase.
+            "gguf/quantize_q8_1.cu",
+            "gguf/mmvq_multim.cu",
             // Phase 8 Milestone 8.5 — Mixture-of-Experts forward
             // (Category V). Three fused per-token-dispatch + expert-
             // matmul + accumulate kernels vendored from Fuel / attention.rs.

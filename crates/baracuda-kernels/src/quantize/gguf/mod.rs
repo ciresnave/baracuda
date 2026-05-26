@@ -44,6 +44,7 @@ pub mod block_formats;
 pub mod dequantize;
 pub mod mmvq;
 pub mod mmvq_batched;
+pub mod mmvq_multim;
 
 pub use block_formats::{
     BlockQ2K, BlockQ3K, BlockQ4_0, BlockQ4_1, BlockQ4K, BlockQ5_0, BlockQ5_1, BlockQ5K, BlockQ6K,
@@ -55,3 +56,4 @@ pub use mmvq_batched::{
     GgufMmvqBatchedActivation, GgufMmvqBatchedArgs, GgufMmvqBatchedDescriptor,
     GgufMmvqBatchedFormat, GgufMmvqBatchedPlan,
 };
+pub use mmvq_multim::{GgufMmvqMultiMArgs, GgufMmvqMultiMDescriptor, GgufMmvqMultiMPlan};

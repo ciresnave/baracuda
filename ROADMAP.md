@@ -7,14 +7,16 @@ effort within each category. Authoritative status per op lives in
 [`OP-MATRIX.md`](OP-MATRIX.md); historical phase summaries live in
 [`ARCHITECTURE.md`](ARCHITECTURE.md).
 
-The current tag is **v0.0.1-alpha.47** with **2196+ GPU tests
-passing** on RTX 4070 (sm_89). Phase 32 alpha.47 completes the
-Phase 28b carry-forward — descriptor `#[non_exhaustive]` retrofit
-across 18 Conv/Pool/Interpolate descriptors, paired with `::new()`
-builders + chainable setters. **Breaking change** for downstream
-struct-literal callers; pre-1.0 hardening so future field additions
-don't keep breaking source compat. Internal call sites (~40)
-migrated.
+The current tag is **v0.0.1-alpha.48** with **2200+ GPU tests
+passing** on RTX 4070 (sm_89). Phase 33 alpha.48 closes Phase 27's
+deferred opportunity — multi-M MMVQ via Q8_1 activation staging.
+Q8_0 weight format only this phase (clean partial scope); bench on
+RTX 4070 shows **7.29-7.96× speedup at M=8** across Llama-2 7B
+layer shapes — at the top end of Phase 27's 3-7× target estimate.
+Multi-M decode (M=1) also gets a bonus 1.4-1.9× via `__dp4a` vs the
+fp dequant path. 8 new FFI symbols. 9 remaining GGUF block formats
+(Q4_0/Q4_1/Q5_0/Q5_1/Q2_K..Q6_K) are mechanical fanout for a
+follow-up (~2-3 days).
 
 Known pre-existing failures excluded (CTC + mmvq_w_offset_alignment
 + parallel-execution context-init flake).

@@ -137,6 +137,10 @@ pub use gguf::{
     GgufMmvqBatchedFormat, GgufMmvqBatchedPlan,
 };
 
+// --- Phase 33 export — multi-M MMVQ via Q8_1 activation staging (prefill
+//     speedup). Q8_0 weights only; 4 compile-time M sizes (1/2/4/8). ---
+pub use gguf::{GgufMmvqMultiMArgs, GgufMmvqMultiMDescriptor, GgufMmvqMultiMPlan};
+
 use baracuda_cutlass::{Error, Result};
 
 /// Shared status-code mapper (mirrors `indexing::gather::map_status` and
