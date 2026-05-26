@@ -583,6 +583,13 @@ fn clone_error(e: &Error) -> Error {
         Error::FeatureNotSupported { api, since } => {
             Error::FeatureNotSupported { api, since: *since }
         }
+        // `Error` is `#[non_exhaustive]` (Phase 28). Surface unknown
+        // variants as a generic loader-symbol failure so the broadcast
+        // path doesn't silently truncate the error.
+        _ => Error::Loader(baracuda_core::LoaderError::SymbolNotFound {
+            library: "nvml",
+            symbol: "(unrecognized Error variant; see first error)",
+        }),
     }
 }
 
@@ -612,6 +619,11 @@ fn clone_loader(l: &baracuda_core::LoaderError) -> baracuda_core::LoaderError {
         L::Libloading(_) => L::SymbolNotFound {
             library: "nvml",
             symbol: "(libloading error; see first error)",
+        },
+        // `LoaderError` is `#[non_exhaustive]` (Phase 28).
+        _ => L::SymbolNotFound {
+            library: "nvml",
+            symbol: "(unrecognized LoaderError variant; see first error)",
         },
     }
 }

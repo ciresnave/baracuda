@@ -11,7 +11,12 @@ use thiserror::Error;
 /// cannot be resolved at runtime — typically because CUDA is not installed,
 /// the installed driver is older than what baracuda was built against, or
 /// the user is on a platform NVIDIA doesn't support.
+///
+/// `#[non_exhaustive]` — new loader failure modes may land as CUDA
+/// adds entry points (`cuGetProcAddress` v2, the per-library minor-
+/// version checks). Match arms must include a `_ =>` catch-all.
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum LoaderError {
     /// None of the candidate library filenames resolved anywhere on the
     /// library search path.
@@ -78,7 +83,12 @@ impl LoaderError {
 /// A generic error enum for any safe wrapper crate over a single NVIDIA
 /// library. Safe crates may use this directly or compose their own richer
 /// `Error` enum out of its variants.
+///
+/// `#[non_exhaustive]` — new error variants may land as new failure modes
+/// are surfaced by NVIDIA libraries. Match arms must include a `_ =>`
+/// catch-all.
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum Error<S>
 where
     S: CudaStatus + Send + Sync + 'static,
@@ -116,7 +126,11 @@ where
 
 /// A library-erased error, useful at process boundaries where the caller
 /// doesn't want to parameterize over every NVIDIA library's status enum.
+///
+/// `#[non_exhaustive]` — new error categories may land as the workspace
+/// adds backends. Match arms must include a `_ =>` catch-all.
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum BaracudaError {
     /// A status code from any NVIDIA library.
     #[error("{library} returned {name} ({code}): {description}")]

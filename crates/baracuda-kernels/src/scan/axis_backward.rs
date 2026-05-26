@@ -477,6 +477,12 @@ impl<T: Element, const N: usize> ScanBackwardPlan<T, N> {
                 };
                 map_status(status)
             }
+            // Defensive arm — `ScanKind` is `#[non_exhaustive]`, so a
+            // newly-added variant surfaces here as an explicit
+            // `Unsupported` until the kernel dispatch is wired.
+            _ => Err(Error::Unsupported(
+                "baracuda-kernels::ScanBackwardPlan::run reached an unimplemented ScanKind variant",
+            )),
         }
     }
 }

@@ -67,9 +67,42 @@ expected dtype matrices:
   `KthvaluePlan`, `MsortPlan`, `SearchsortedPlan`, `BincountPlan`,
   `HistogramPlan`, `UniquePlan`, `UniqueConsecutivePlan`.
 
-The shared vocabulary (`Element`, `TensorRef`, `KernelSku`,
-`PlanPreference`, `Workspace`, every op-kind enum) is re-exported from
-`baracuda-kernels-types` so callers import one crate.
+The shared vocabulary (`KernelDtype`, `Element`, `TensorRef`,
+`KernelSku`, `PlanPreference`, `Workspace`, every op-kind enum) is
+re-exported from `baracuda-kernels-types` so callers import one crate.
+
+## `Element` vs `KernelDtype` — which to bound on
+
+[`KernelDtype`] is the **umbrella marker** for every kernel-usable
+dtype, including the sub-byte / FP8 / packed-bit newtypes (`S4`,
+`U4`, `S8`, `U8`, `Fp8E4M3`, `Fp8E5M2`, `Bin`) that have their own
+kernel families. The op-shaped sub-traits (`Element`, `IntElement`,
+`FpElement`, `BinElement`) all extend `KernelDtype`, so a function
+bounded by `<T: KernelDtype>` accepts any kernel-usable type.
+
+In practice plans bound on `Element`, `IntElement`, `FpElement`, or
+`BinElement` — whichever family the plan's kernel set fits —
+because they parameterize the plan shape. Reach for the umbrella
+`KernelDtype` bound only when the receiver needs to handle the
+**union** of every dtype (a generic dtype-size helper, a telemetry
+function, a wrapper crate downstream).
+
+See [`baracuda-kernels-types`](../baracuda-kernels-types/README.md)
+for the full trait map and the per-trait dtype list.
+
+## `#[non_exhaustive]` and forward-compat
+
+Phase 28 marked the op-family discriminant enums and several
+auxiliary tag enums `#[non_exhaustive]` in preparation for the 1.0
+freeze. Downstream `match` arms must include a `_ =>` catch-all —
+adding new op variants in future phases then no longer breaks the
+build. `ElementKind`, `LayoutSku`, `ArchSku`, `EpilogueKind`,
+`ActivationKind`, and `Workspace<'a>` are intentionally left
+exhaustive because they're hot-path-matched by the kernel
+dispatchers; new variants there are a deliberate breaking-change
+event. See the
+[`baracuda-kernels-types` README](../baracuda-kernels-types/README.md)
+for the full classification.
 
 ## Quick start
 

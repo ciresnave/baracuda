@@ -22,7 +22,12 @@ use crate::plan::PrecisionGuarantee;
 /// `category` field of [`KernelSku`] is the primary axis a selector /
 /// telemetry consumer dispatches on; the per-category `op` discriminant
 /// (a category-local `u16`) refines further.
+///
+/// `#[non_exhaustive]` — new categories may land in future phases as
+/// op families expand (sparse linear algebra, structured kernels, …).
+/// Match arms must include a `_ =>` catch-all.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
+#[non_exhaustive]
 pub enum OpCategory {
     /// Matrix multiplication / linear algebra (category A). Includes
     /// `matmul`, `bmm`, `addmm`, etc. — anything routed through a
@@ -109,7 +114,12 @@ pub enum OpCategory {
 ///
 /// Surfaced through [`KernelSku::backend`] for telemetry, autotuner
 /// cache keys, and selector debugging.
+///
+/// `#[non_exhaustive]` — new backends (TensorRT, custom JIT-emitted
+/// kernels via baracuda-nvrtc, …) may land in future phases. Match arms
+/// must include a `_ =>` catch-all.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
+#[non_exhaustive]
 pub enum BackendKind {
     /// Hand-rolled kernel in `baracuda-kernels-sys`.
     Bespoke,

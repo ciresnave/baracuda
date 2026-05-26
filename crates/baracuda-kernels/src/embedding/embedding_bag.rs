@@ -37,6 +37,12 @@ use crate::indexing::gather::map_status;
 use super::PADDING_DISABLED;
 
 /// Reduction mode for `embedding_bag`.
+///
+/// **Intentionally NOT `#[non_exhaustive]`** — Sum / Mean is the
+/// closed set for the EmbeddingBag op family today; Max mode lives on
+/// its own [`super::EmbeddingBagMaxPlan`] plan (separate FFI surface)
+/// rather than as a third variant here. New variants would be a
+/// deliberate breaking-change event.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 pub enum EmbeddingBagMode {
     /// `out[b, :] = Σ weight[indices[k], :]` for k in bag b.

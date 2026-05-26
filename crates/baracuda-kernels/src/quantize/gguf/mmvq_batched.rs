@@ -80,7 +80,11 @@ impl GgufMmvqBatchedActivation for bf16 {}
 /// Selects between quantized (GGUF block-packed) and pure-FP weight
 /// formats. Pure-FP variants use the same dtype for weights, activations,
 /// and output (matching the activation dtype `T`).
+///
+/// `#[non_exhaustive]` — additional weight formats (FP8-packed, mixed
+/// FP/INT, …) may land. Match arms must include a `_ =>` catch-all.
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
+#[non_exhaustive]
 pub enum GgufMmvqBatchedFormat {
     /// GGUF block-packed weights. Type-0/1 (32-elt blocks) or k-quant
     /// (256-elt super-blocks). One of the 11 GGUF block formats.

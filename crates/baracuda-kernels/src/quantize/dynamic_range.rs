@@ -51,6 +51,7 @@ use super::{map_status, validate_input_element, validate_output_element};
 /// [`Error::Unsupported`] and is reserved for a follow-up that wires
 /// the dual max + min reduction + offset compute kernel.
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
+#[non_exhaustive]
 pub enum DynamicRangeMode {
     /// `scale = max_abs / qmax`, `zero_point = 0`.
     Symmetric,
@@ -64,6 +65,7 @@ pub enum DynamicRangeMode {
 ///
 /// Only [`DynamicRangeScope::Token`] is wired in the 8.3 trailblazer.
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
+#[non_exhaustive]
 pub enum DynamicRangeScope {
     /// One `(scale, zp)` for the whole tensor. Reserved.
     Tensor,

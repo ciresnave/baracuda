@@ -358,6 +358,10 @@ unsafe fn dispatch_f32_contig(
             ncols, nrows, w_ptr, y_ptr, dst_ptr, ws, 0, stream_ptr),
         GgufBlockFormat::Q8K => baracuda_kernels_sys::baracuda_kernels_mmvq_q8_K_run(
             ncols, nrows, w_ptr, y_ptr, dst_ptr, ws, 0, stream_ptr),
+        // Defensive arm — `GgufBlockFormat` is `#[non_exhaustive]`.
+        // Status 3 maps to `Error::Unsupported` via the shared
+        // `map_status` translator in `quantize::mod`.
+        _ => 3,
     }
 }
 
@@ -397,6 +401,8 @@ unsafe fn dispatch_f32_strided(
             ncols, nrows, w_ptr, w_off, stride_y, y_ptr, dst_ptr, ws, 0, stream_ptr),
         GgufBlockFormat::Q8K => baracuda_kernels_sys::baracuda_kernels_mmvq_q8_K_actstrided_run(
             ncols, nrows, w_ptr, w_off, stride_y, y_ptr, dst_ptr, ws, 0, stream_ptr),
+        // Defensive arm — `GgufBlockFormat` is `#[non_exhaustive]`.
+        _ => 3,
     }
 }
 
@@ -435,6 +441,8 @@ unsafe fn dispatch_f16_contig(
             ncols, nrows, w_ptr, y_ptr, dst_ptr, ws, 0, stream_ptr),
         GgufBlockFormat::Q8K => baracuda_kernels_sys::baracuda_kernels_mmvq_q8_K_f16_run(
             ncols, nrows, w_ptr, y_ptr, dst_ptr, ws, 0, stream_ptr),
+        // Defensive arm — `GgufBlockFormat` is `#[non_exhaustive]`.
+        _ => 3,
     }
 }
 
@@ -474,6 +482,8 @@ unsafe fn dispatch_f16_strided(
             ncols, nrows, w_ptr, w_off, stride_y, y_ptr, dst_ptr, ws, 0, stream_ptr),
         GgufBlockFormat::Q8K => baracuda_kernels_sys::baracuda_kernels_mmvq_q8_K_actstrided_f16_run(
             ncols, nrows, w_ptr, w_off, stride_y, y_ptr, dst_ptr, ws, 0, stream_ptr),
+        // Defensive arm — `GgufBlockFormat` is `#[non_exhaustive]`.
+        _ => 3,
     }
 }
 
@@ -512,6 +522,8 @@ unsafe fn dispatch_bf16_contig(
             ncols, nrows, w_ptr, y_ptr, dst_ptr, ws, 0, stream_ptr),
         GgufBlockFormat::Q8K => baracuda_kernels_sys::baracuda_kernels_mmvq_q8_K_bf16_run(
             ncols, nrows, w_ptr, y_ptr, dst_ptr, ws, 0, stream_ptr),
+        // Defensive arm — `GgufBlockFormat` is `#[non_exhaustive]`.
+        _ => 3,
     }
 }
 
@@ -551,6 +563,8 @@ unsafe fn dispatch_bf16_strided(
             ncols, nrows, w_ptr, w_off, stride_y, y_ptr, dst_ptr, ws, 0, stream_ptr),
         GgufBlockFormat::Q8K => baracuda_kernels_sys::baracuda_kernels_mmvq_q8_K_actstrided_bf16_run(
             ncols, nrows, w_ptr, w_off, stride_y, y_ptr, dst_ptr, ws, 0, stream_ptr),
+        // Defensive arm — `GgufBlockFormat` is `#[non_exhaustive]`.
+        _ => 3,
     }
 }
 
@@ -584,6 +598,12 @@ fn required_alignment(format: GgufBlockFormat) -> i64 {
         | GgufBlockFormat::Q4K
         | GgufBlockFormat::Q5K
         | GgufBlockFormat::Q8K => 4,
+        // Defensive arm — `GgufBlockFormat` is `#[non_exhaustive]`. The
+        // most conservative (largest) alignment is used here so a
+        // newly-added format won't silently underestimate the
+        // requirement; the asserting caller will then fail loudly if
+        // the pointer isn't actually aligned.
+        _ => 4,
     }
 }
 

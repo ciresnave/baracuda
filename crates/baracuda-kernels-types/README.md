@@ -20,7 +20,8 @@ old names as re-exports for back-compat.
 
 ```text
 src/
-  element.rs    Element / IntElement / FpElement / BiasElement / BinElement traits
+  element.rs    KernelDtype (umbrella marker) + Element / IntElement / FpElement /
+                BinElement / BiasElement sibling traits
                 + ElementKind / MathPrecision / BiasElementKind tag enums
                 + scalar wrappers: S8, U8, S4, U4, Bin, F32Strict, Fp8E4M3, Fp8E5M2,
                                    Bool, Complex32, Complex64
@@ -41,6 +42,68 @@ src/
                 supporting tag enums: PadMode, FillMode, LossReduction,
                 CrossEntropyTargetKind, …)
 ```
+
+## `Element` vs `KernelDtype` — which to bound on
+
+[`KernelDtype`] is the **umbrella marker** every kernel-usable dtype
+implements — including the sub-byte / FP8 / packed-bit newtypes
+(`S4`, `U4`, `S8`, `U8`, `Fp8E4M3`, `Fp8E5M2`, `Bin`) that have their
+own kernel families. `Element`, `IntElement`, `FpElement`, and
+`BinElement` all use `KernelDtype` as a supertrait, so a function
+bounded by `<T: KernelDtype>` accepts any kernel-usable type.
+
+The op-shaped sub-traits are what plans actually parameterize on:
+
+| Bound | Accepts | When to use |
+| --- | --- | --- |
+| `<T: Element>` | `f16, bf16, f32, F32Strict, f64, i32, i64, Bool, Complex32, Complex64` | The elementwise / reduce / scan / norm / loss / shape-layout plans — they consume `BinaryPlan<T, N>` / `UnaryPlan<T, N>` shape with a `type Scalar` projection for α/β. |
+| `<T: IntElement>` | `S8, U8, S4, U4` | The int-GEMM plan family. |
+| `<T: FpElement>` | `Fp8E4M3, Fp8E5M2` | The FP8 GEMM plan family (sm_89+). |
+| `<T: BinElement>` | `Bin` | The 1-bit binary GEMM plan family (XOR + popcount). |
+| `<T: KernelDtype>` | union of the four above | Generic utility code that wants to accept *any* dtype — telemetry helpers, dtype-size queries, downstream framework wrappers. |
+
+`KernelDtype::KIND: ElementKind` is the single source of truth for the
+runtime dtype tag — pre-Phase-28 code that wrote
+`<T as Element>::KIND` should switch to plain `T::KIND` (works under
+any of the sub-trait bounds via supertrait inheritance) or
+`<T as KernelDtype>::KIND` for the fully-qualified form.
+
+## `#[non_exhaustive]` and forward-compat
+
+Phase 28 marked the op-family discriminant enums plus several tag
+enums `#[non_exhaustive]`. Downstream code that `match`es on them
+must include a `_ =>` catch-all — adding new variants then no longer
+breaks the build. The covered enums:
+
+- **Op-family**: `BinaryKind`, `UnaryKind`, `TernaryKind`,
+  `GatedActivationKind`, `PadMode`, `ShapeLayoutKind`, `ArgReduceKind`,
+  `ReduceKind`, `SoftmaxKind`, `ScanKind`, `BinaryCmpKind`,
+  `NormalizationKind`, `LossKind`, `RandomKind`, `LinalgKind`,
+  `FftKind`, `ConvKind`, `PoolKind`, `AttentionKind`, `IndexingKind`,
+  `SegmentKind`, `EmbeddingKind`, `QuantizeKind`, `GgufBlockFormat`,
+  `MoeKind`, `SortKind`, `ImageKind`.
+- **Auxiliary tags**: `OpCategory`, `BackendKind`, `IndexElementKind`,
+  `IndexOutputKind`.
+
+Intentionally LEFT exhaustive (deliberate breaking-change events on
+new variants):
+
+- `ElementKind` — every kernel dtype is enumerated; a new dtype is a
+  workspace-wide event that should surface as a build break across
+  every match.
+- `LayoutSku`, `ArchSku`, `EpilogueKind`, `ActivationKind`,
+  `BiasElementKind` — these are the keys cutlass GEMM and int-GEMM
+  dispatchers exhaustively match on to pick per-arch /
+  per-fused-epilogue / per-bias-dtype kernel SKUs; adding a variant
+  deserves to surface at every match site so each can wire or
+  reject.
+- `Workspace<'a>` — hot-path-matched by every plan's `run` method;
+  the `None` / `Borrowed` split has been stable through every alpha.
+- `EmbeddingBagMode`, `FillMode`, `LossReduction`,
+  `CrossEntropyTargetKind`, `BatchedOrmqrSide`, `BatchedOrmqrOp` —
+  closed mathematical / convention sets (Sum/Mean for the bag,
+  Lower/Upper for triangular fill, the LAPACK Left/Right and N/T/C
+  ops, the PyTorch reduction modes).
 
 ## Why this crate is split out
 

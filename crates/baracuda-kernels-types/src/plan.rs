@@ -11,6 +11,12 @@ use crate::element::{ElementKind, MathPrecision};
 /// Plans never own device memory in baracuda — pass scratch in at
 /// `run` time. Pass [`Workspace::None`] for plans whose
 /// workspace size is zero.
+///
+/// **Intentionally NOT `#[non_exhaustive]`** — the two-variant
+/// `None` / `Borrowed` split is hot-path-matched by every plan's
+/// `run` method, and the API has been stable through 27 alphas. If
+/// a third variant (pool-backed, per-stream-cached) ever lands it
+/// will be a deliberate breaking change with a major-version bump.
 #[derive(Debug)]
 pub enum Workspace<'a> {
     /// No workspace (only valid when the plan reports zero bytes needed).

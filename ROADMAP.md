@@ -7,13 +7,12 @@ effort within each category. Authoritative status per op lives in
 [`OP-MATRIX.md`](OP-MATRIX.md); historical phase summaries live in
 [`ARCHITECTURE.md`](ARCHITECTURE.md).
 
-The current tag is **v0.0.1-alpha.42** with **2172 GPU tests
-passing** on RTX 4070 (sm_89) across **628 binary targets**
-(`--include-ignored --no-fail-fast`). Combined Phase 25 + 26 release.
-Known pre-existing failures (CTC parallel-execution flake;
-`mmvq_w_offset_alignment_misaligned_rejected_debug` release-mode test
-design flaw) excluded. (`reduce_max_*` parallel-execution flake from
-a prior Phase 25 run did NOT fire this combined run — likely transient.)
+The current tag is **v0.0.1-alpha.43** with **2172+ GPU tests
+passing** on RTX 4070 (sm_89) across **628+ binary targets**
+(`--include-ignored --no-fail-fast`). Phase 28 alpha.43 is an
+API-hygiene-only release: new `KernelDtype` umbrella trait +
+`#[non_exhaustive]` markers across 28 op-family + tag + error enums.
+Known pre-existing failures excluded (CTC + mmvq_w_offset_alignment).
 
 ---
 
@@ -140,6 +139,36 @@ Items previously listed here but now shipped:
   silent-wrong failure mode). Returns `Error::InvalidProblem` when
   any type-0/1 format is paired with `n_cols < 64`. Release builds
   elide the assertion.
+
+## Phase 27 — Q8_1 MMVQ perf inspection (complete; doc-only, 2026-05-25)
+
+Research / inspection task. Compared Fuel's vendored Q8_1 staging
+kernels (`crates/baracuda-kernels-sys/vendor/fuel-q8_1/quantized.cu`,
+4537 LOC) against baracuda's existing MMVQ. Findings written to
+[`vendor/fuel-q8_1/PHASE_27_ANALYSIS.md`](crates/baracuda-kernels-sys/vendor/fuel-q8_1/PHASE_27_ANALYSIS.md).
+
+**Headline**: at the M=1 workload point that dominates today's
+inference decode step, both implementations are gmem-bound and
+saturate at the same rate. **No quick-win optimizations** were
+portable as constant tweaks.
+
+**The material opportunity** (Tier S1 in the report) is a Phase-sized
+refactor: port Fuel's `mul_mat_vec_q<ncols_y>` design + `quantize_q8_1`
+staging into baracuda. Targets the **prefill step (M=8) — ~3-7×
+speedup** via weight reuse across multiple activation vectors
+(Fuel's template parameterizes `ncols_y = 1..8` so a single weight
+load amortizes across up to 8 dot products). Not portable as a
+small tweak — needs a new MMVQ family (10 qtypes × 8 M-sizes = 80
+new launchers) + the Q8_1 staging FFI + host orchestration.
+
+**Recommendation**: schedule a dedicated phase (next non-numeric
+slot, "**Multi-M MMVQ via Q8_1 staging**"). Estimated 3-5 days.
+The vendored directory **stays** — the future phase re-reads it.
+
+Marginal opportunities (Tier A1-A2 in the report — multi-warp
+k-quant blocks, `__dp4a` for Q8_K) were not chosen because they
+require benchmarking infrastructure (Phase 29 territory) to gate
+whether they're net-positive.
 
 ## Phase 24 — Cutlass GEMM re-export FFI facade (complete; shipped alpha.41)
 

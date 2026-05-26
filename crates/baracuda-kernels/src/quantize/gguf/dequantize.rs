@@ -178,6 +178,12 @@ impl GgufDequantizePlan {
                 GgufBlockFormat::Q8K => baracuda_kernels_sys::baracuda_kernels_dequantize_q8_K_run(
                     numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
                 ),
+                // Defensive arm — `GgufBlockFormat` is `#[non_exhaustive]`.
+                _ => {
+                    return Err(Error::Unsupported(
+                        "baracuda-kernels::GgufDequantizePlan: unsupported block format",
+                    ));
+                }
             }
         };
         map_status(status)

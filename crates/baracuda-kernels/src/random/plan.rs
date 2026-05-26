@@ -146,6 +146,9 @@ impl<T: Element, const N: usize> RandomPlan<T, N> {
             // labeled `Bespoke` because the visible output is from the
             // hand-rolled kernel.
             RandomKind::Bernoulli => BackendKind::Bespoke,
+            // Defensive — `RandomKind` is `#[non_exhaustive]`. Treat
+            // unknown variants as bespoke kernels until they're wired.
+            _ => BackendKind::Bespoke,
         };
         let math_precision = match T::KIND {
             ElementKind::F64 => MathPrecision::F64,
@@ -330,6 +333,10 @@ impl<const N: usize> RandomPlan<f32, N> {
             RandomKind::Bernoulli => Err(Error::Unsupported(
                 "baracuda-kernels::RandomPlan<f32>: Bernoulli has Bool output — use RandomPlan<Bool>",
             )),
+            // Defensive arm — `RandomKind` is `#[non_exhaustive]`.
+            _ => Err(Error::Unsupported(
+                "baracuda-kernels::RandomPlan<f32>::run reached an unimplemented RandomKind variant",
+            )),
         }
     }
 }
@@ -375,6 +382,10 @@ impl<const N: usize> RandomPlan<f64, N> {
             }
             RandomKind::Bernoulli => Err(Error::Unsupported(
                 "baracuda-kernels::RandomPlan<f64>: Bernoulli has Bool output — use RandomPlan<Bool>",
+            )),
+            // Defensive arm — `RandomKind` is `#[non_exhaustive]`.
+            _ => Err(Error::Unsupported(
+                "baracuda-kernels::RandomPlan<f64>::run reached an unimplemented RandomKind variant",
             )),
         }
     }

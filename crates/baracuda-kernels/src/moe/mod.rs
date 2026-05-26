@@ -59,7 +59,12 @@ use baracuda_kernels_types::{
 use crate::quantize::map_status;
 
 /// Selector for the MoE variant.
+///
+/// `#[non_exhaustive]` — additional MoE backend variants (FP8 expert
+/// weights, BF16+WMMA on Hopper, multi-block routing) may land in
+/// future phases. Match arms must include a `_ =>` catch-all.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
+#[non_exhaustive]
 pub enum MoeVariant {
     /// Scalar dispatch over GGUF-packed expert weights, f32 activations.
     ScalarGguf,
@@ -464,6 +469,10 @@ fn fuel_moe_gguf_dtype(bf: GgufBlockFormat) -> Result<i32> {
         | GgufBlockFormat::Q5_1
         | GgufBlockFormat::Q8K => Err(Error::Unsupported(
             "MoePlan: GGUF MoE variants only support Q8_0 + k-quants (Q2_K..Q6_K)",
+        )),
+        // Defensive arm — `GgufBlockFormat` is `#[non_exhaustive]`.
+        _ => Err(Error::Unsupported(
+            "MoePlan: unsupported GGUF block format",
         )),
     }
 }

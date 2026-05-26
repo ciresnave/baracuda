@@ -5,7 +5,8 @@
 //! This crate has no behavior of its own — it ships pure-data types that
 //! are common to every member of the kernel facade ecosystem:
 //!
-//! - The [`Element`] / [`IntElement`] / [`FpElement`] / [`BiasElement`]
+//! - The [`KernelDtype`] umbrella marker trait + the [`Element`] /
+//!   [`IntElement`] / [`FpElement`] / [`BinElement`] / [`BiasElement`]
 //!   trait hierarchy plus the [`ScalarType`] alpha/beta projection.
 //! - Wrapper types ([`S8`], [`U8`], [`S4`], [`U4`], [`Bin`],
 //!   [`F32Strict`], [`Fp8E4M3`], [`Fp8E5M2`]) that drive kernel
@@ -16,6 +17,29 @@
 //!   [`VectorRef`]).
 //! - Plan-layer descriptors ([`PlanPreference`], [`PrecisionGuarantee`],
 //!   [`Workspace`]).
+//!
+//! # 1.0-freeze stability (Phase 28)
+//!
+//! Most op-family discriminant enums (`BinaryKind`, `UnaryKind`,
+//! `ReduceKind`, `ScanKind`, `SoftmaxKind`, `NormalizationKind`,
+//! `LossKind`, `LinalgKind`, `ConvKind`, `PoolKind`, `AttentionKind`,
+//! `IndexingKind`, `SegmentKind`, `EmbeddingKind`, `QuantizeKind`,
+//! `GgufBlockFormat`, `MoeKind`, `SortKind`, `ImageKind`, `FftKind`,
+//! `RandomKind`, `ShapeLayoutKind`, `BinaryCmpKind`, `TernaryKind`,
+//! `GatedActivationKind`, `ArgReduceKind`, `PadMode`) plus the category
+//! / backend tag enums (`OpCategory`, `BackendKind`) and the auxiliary
+//! index-dtype tag enums (`IndexElementKind`, `IndexOutputKind`) are
+//! marked `#[non_exhaustive]` as of Phase 28. Downstream `match` arms
+//! must include a `_ =>` catch-all to remain forward-compatible with
+//! new variants.
+//!
+//! The kernel-dispatch-keying enums `ElementKind`, `BiasElementKind`,
+//! `LayoutSku`, `ArchSku`, `EpilogueKind`, `ActivationKind`, and
+//! `Workspace<'a>` are **intentionally** left exhaustive — they're
+//! the keys per-arch / per-layout / per-epilogue / per-bias-dtype
+//! kernel dispatchers exhaustively match on, so adding a new variant
+//! is a deliberate workspace-wide event that ought to surface as a
+//! build break across every match site.
 //!
 //! The types here were previously defined in `baracuda-cutlass::types`;
 //! they were lifted out so that `baracuda-kernels` (the unified ML op
@@ -40,7 +64,8 @@ pub mod tensor;
 pub use element::{
     BiasElement, BiasElementKind, Bin, BinElement, Bool, Complex32, Complex64, Element,
     ElementKind, F32Strict, Fp8E4M3, Fp8E5M2, FpElement, IndexElement, IndexElementKind,
-    IndexOutputElement, IndexOutputKind, IntElement, MathPrecision, S4, S8, ScalarType, U4, U8,
+    IndexOutputElement, IndexOutputKind, IntElement, KernelDtype, MathPrecision, S4, S8,
+    ScalarType, U4, U8,
 };
 pub use layout::{ActivationKind, ArchSku, EpilogueKind, LayoutSku};
 pub use matrix::{MatrixMut, MatrixRef, VectorRef};

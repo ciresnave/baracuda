@@ -44,7 +44,12 @@ use super::map_status;
 
 /// Interpolation mode for [`InterpolatePlan`]. Only [`Self::Bilinear2d`]
 /// is wired today; the other variants return `Unsupported`.
+///
+/// `#[non_exhaustive]` — additional interpolation modes (cubic
+/// spline, lanczos, mitchell-netravali, …) may land in future
+/// vision-domain phases. Match arms must include a `_ =>` catch-all.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
+#[non_exhaustive]
 pub enum InterpolateMode {
     /// 2-D bilinear interpolation. Trailblazer.
     Bilinear2d,

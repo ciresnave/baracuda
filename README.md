@@ -8,7 +8,7 @@
 A unified Rust ML-op facade over the NVIDIA CUDA ecosystem.
 
 ![License](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue)
-![Status](https://img.shields.io/badge/status-alpha.42-orange)
+![Status](https://img.shields.io/badge/status-alpha.43-orange)
 ![CUDA](https://img.shields.io/badge/CUDA-12.x-76b900)
 ![Tests](https://img.shields.io/badge/regression-2172%2F0-success)
 
@@ -40,7 +40,7 @@ talk to one library directly.
 
 ## Status
 
-**In active development — alpha.42.** Roughly **2172 GPU tests passing**
+**In active development — alpha.43.** Roughly **2172 GPU tests passing**
 on an RTX 4070 (sm_89), across **616 binary targets**.
 
 Phase coverage (see [`ARCHITECTURE.md`](ARCHITECTURE.md) for the phase
@@ -74,7 +74,9 @@ matrix):
 | 23 | cuFFT + cuRAND FFI facade (alpha.40): 6 cuFFT plan families (FFT 1d/Nd C2C, R2C, C2R) × c32/c64 + f32/f64 + 2 cuRAND families (Uniform, Normal) × f32/f64 = 32 flat C symbols in `baracuda-kernels-sys/src/{cufft,curand}_facade.rs`. cuSPARSE skipped — no baracuda-kernels plans wrap it today. | done |
 | 24 | Cutlass GEMM re-export FFI facade (alpha.41): 210 trampolines (70 SKU families × {run, workspace_size, can_implement}) in `baracuda-kernels-sys/src/cutlass_reexport.rs` exposing the full Cutlass GEMM surface (fp16/bf16/tf32/f32_simt/f64/s8/u8 × {rcr, rrr} × {plain, bias, bias+relu/gelu/silu} + strided-batched fp16/bf16). cuTENSOR / NPP / CV-CUDA skipped — no baracuda-kernels plans wrap them. Completes the Phase 19 library-backed FFI facade 1.0-freeze prereq. | done |
 | 25-26 | Segment/EmbeddingBag BW completion + BatchedOrmqrWy complex (alpha.42): 9 new Rust plans + 24 new FFI symbols for Segment Max/Min/Prod BW (sorted + unsorted, f32/f64), Unsorted Segment Prod FW (`atomicCAS`-retry mul), EmbeddingBag Max FW+BW (f32/f64/f16/bf16 × i32/i64). Plus BatchedOrmqrWy complex (Complex32, Complex64) via the bespoke WY-block kernels + cuBLAS C/Z gemmStridedBatched (4 new bespoke FFI + 2 cuBLAS symbols). | done |
-| 27+ | Q8_1 perf inspection, API freeze, benchmark suite, Hopper / Blackwell, 1.0 freeze | pending (see [`ROADMAP.md`](ROADMAP.md)) |
+| 27 | Q8_1 perf inspection (alpha.42 doc-only): Multi-M MMVQ opportunity identified, kept doc-only — bigger ROI than reformatting Q8_1. | done |
+| 28 | API hygiene for 1.0 prep (alpha.43): new `KernelDtype` umbrella marker trait extending `Element`/`IntElement`/`FpElement`/`BinElement`; `#[non_exhaustive]` audit across the op-family `*Kind` enums + auxiliary tag enums + `Error` types. `ElementKind` / `LayoutSku` / `ArchSku` / `EpilogueKind` / `ActivationKind` / `Workspace` intentionally left exhaustive (hot-path-dispatched). | done |
+| 29+ | Benchmark suite, Hopper / Blackwell, 1.0 freeze | pending (see [`ROADMAP.md`](ROADMAP.md)) |
 
 API stability is **not** promised before beta.0. Breaking changes ship in
 each alpha bump and are documented in the workspace `CHANGELOG.md`.
@@ -85,8 +87,8 @@ Add the kernel facade and the driver crate:
 
 ```toml
 [dependencies]
-baracuda-kernels = { version = "0.0.1-alpha.42", features = ["sm89", "cudnn"] }
-baracuda-driver  = "0.0.1-alpha.42"
+baracuda-kernels = { version = "0.0.1-alpha.43", features = ["sm89", "cudnn"] }
+baracuda-driver  = "0.0.1-alpha.43"
 ```
 
 A representative example — single-axis numerically stable softmax over a
@@ -116,7 +118,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         kind: SoftmaxKind::Softmax,
         input_shape: [rows, cols],
         softmax_axis: 1,
-        element: <f32 as baracuda_kernels::Element>::KIND,
+        element: <f32 as baracuda_kernels::KernelDtype>::KIND,
     };
 
     // 4. Plan selection — picks a kernel SKU (bespoke softmax kernel here).

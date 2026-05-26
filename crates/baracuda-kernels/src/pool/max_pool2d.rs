@@ -31,7 +31,12 @@ use baracuda_kernels_types::{
 
 /// Pooling mode — picks between max-pool and the two flavors of
 /// average-pool that cuDNN exposes.
+///
+/// `#[non_exhaustive]` — additional pool modes (LP-pool with parameterized
+/// `p`, fractional pool, …) may land as cuDNN exposes more. Match arms
+/// must include a `_ =>` catch-all.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
+#[non_exhaustive]
 pub enum PoolMode {
     /// Max-pool: `y[..., i, j] = max over window`. PyTorch
     /// `nn.MaxPool2d`. Carried on a [`Pool2dDescriptor`] consumed by

@@ -1,14 +1,58 @@
 //! Element types and trait hierarchy shared across baracuda kernel
 //! wrappers.
 //!
-//! [`Element`] is the base sealed trait every dtype implements; today
-//! that's the floating-point family (`f16`, `bf16`, `f32`, [`F32Strict`],
-//! `f64`) via [`Element`] itself with a `type Scalar: ScalarType` projection
-//! (the alpha/beta scalar matching the kernel's accumulator), plus the
-//! integer family via the sibling [`IntElement`] trait and the 8-bit
-//! floating-point family via the sibling [`FpElement`] trait.
-//! [`BiasElement`] marks the bias broadcast element types accepted by
-//! integer GEMM epilogues.
+//! # Trait map
+//!
+//! [`KernelDtype`] is the **umbrella marker** every kernel-usable dtype
+//! implements. It captures the minimum a dtype needs to participate in
+//! any kernel: a fixed memory layout ([`DeviceRepr`]), `Copy + 'static`,
+//! and a runtime tag ([`ElementKind`]) for dispatch. Phase 28 added
+//! `KernelDtype` as a `1.0`-freeze stability prereq — code that wants to
+//! accept *any* dtype (sub-byte, FP8, packed-bit) without enumerating
+//! sibling traits now has a single bound to reach for.
+//!
+//! The op-shaped sub-traits all extend [`KernelDtype`]:
+//!
+//! - [`Element`] — the **plan-shaped** family that participates in the
+//!   `<T: Element>`-parameterized elementwise plans
+//!   (`UnaryPlan<T, N>`, `BinaryPlan<T, N>`, …). Today: `f16`, `bf16`,
+//!   `f32`, [`F32Strict`], `f64`, `i32`, `i64`, [`Bool`], [`Complex32`],
+//!   [`Complex64`]. Adds a `type Scalar: ScalarType` projection for the
+//!   kernel's α/β scalar type.
+//! - [`IntElement`] — sub-byte / byte-packed integer GEMM operand types
+//!   ([`S8`], [`U8`], [`S4`], [`U4`]). Distinct trait because the
+//!   int-GEMM kernels use an int32 accumulator with float α/β, a
+//!   programming model that doesn't share kernel shape with the
+//!   elementwise plans.
+//! - [`FpElement`] — 8-bit floating-point GEMM operands ([`Fp8E4M3`],
+//!   [`Fp8E5M2`]). sm_89+ only.
+//! - [`BinElement`] — 1-bit packed-byte binary GEMM operands ([`Bin`]).
+//!   Distinct programming model (`mma.sync ... .b1.b1.s32.xor.popc`).
+//!
+//! Three sibling traits cover the auxiliary slot types that don't fit
+//! [`KernelDtype`]'s `ElementKind` projection (they have their own kind
+//! enum):
+//!
+//! - [`BiasElement`] — bias broadcast element types accepted by integer
+//!   GEMM epilogues. Today: `f32` and `i32`.
+//! - [`IndexElement`] — index element types accepted by indexing /
+//!   embedding / segment kernel families. Today: `i32` (legacy) and
+//!   `i64` (PyTorch default).
+//! - [`IndexOutputElement`] — output index dtype produced by
+//!   arg-reduction kernels. Today: `u32`, `i32`, `i64`.
+//!
+//! # When to use which
+//!
+//! - Reach for [`Element`] when writing a plan parameterized over the
+//!   primitive-FP / int / bool / complex family that goes through the
+//!   shared `BinaryPlan<T, N>` / `UnaryPlan<T, N>` shape.
+//! - Reach for [`IntElement`] / [`FpElement`] / [`BinElement`] when the
+//!   plan is one of the sub-byte / packed GEMM families.
+//! - Reach for [`KernelDtype`] when you genuinely don't care which
+//!   family the dtype belongs to — e.g. a generic "dtype size in bytes"
+//!   helper, a telemetry function that just needs the [`ElementKind`]
+//!   tag, or a downstream wrapper that wants to accept the union of all
+//!   kernel-usable dtypes.
 //!
 //! `Element` was originally named `CutlassElement` in the
 //! `baracuda-cutlass` crate. The rename here unifies the vocabulary
@@ -19,6 +63,10 @@ use baracuda_types::DeviceRepr;
 use half::{bf16, f16};
 
 mod sealed {
+    pub trait Sealed {}
+}
+
+mod kerneldtype_sealed {
     pub trait Sealed {}
 }
 
@@ -48,6 +96,44 @@ mod index_sealed {
 
 mod index_output_sealed {
     pub trait Sealed {}
+}
+
+/// Umbrella marker trait for every dtype usable as a kernel input or
+/// output.
+///
+/// The bound captures the three minimum properties a kernel dtype
+/// needs: a fixed memory layout ([`DeviceRepr`]) so the host can ship
+/// bytes to the device verbatim, `Copy + 'static` so the type can
+/// flow through plan / args structs without an `&mut self`, and a
+/// runtime tag ([`ElementKind`]) for dispatch.
+///
+/// `KernelDtype` is **wider** than [`Element`]: it covers the
+/// sub-byte / FP8 / packed-bit newtypes (`S4`, `U4`, `S8`, `U8`,
+/// `Fp8E4M3`, `Fp8E5M2`, `Bin`) that have their own kernel families
+/// and don't fit the `<T: Element>` plan shape. Every [`Element`],
+/// [`IntElement`], [`FpElement`], and [`BinElement`] type also
+/// implements `KernelDtype` (the sibling traits all use it as a
+/// supertrait), so a function bounded by `<T: KernelDtype>` accepts
+/// any kernel-usable type.
+///
+/// Sealed because adding a new dtype requires a matching kernel
+/// instantiation in `baracuda-kernels-sys`.
+///
+/// # When to use
+///
+/// Prefer [`Element`] when you're parameterizing a plan that lives in
+/// the elementwise / reduce / scan / norm / loss families — those
+/// plan shapes are written against `<T: Element>` and use the
+/// `type Scalar` projection. Reach for `KernelDtype` only when you
+/// genuinely want the **union** of every kernel dtype (sub-byte +
+/// FP8 + packed-bit included) — e.g. a generic dtype-size helper,
+/// telemetry function, or downstream wrapper.
+pub trait KernelDtype:
+    DeviceRepr + kerneldtype_sealed::Sealed + Copy + 'static
+{
+    /// Runtime tag for this dtype. Stable across the workspace —
+    /// keyed by this same enum in [`crate::KernelSku::element`].
+    const KIND: ElementKind;
 }
 
 /// Sealed marker for the alpha/beta scalar type an [`Element`] uses.
@@ -138,10 +224,19 @@ impl ScalarType for f64 {
 /// Sibling traits [`IntElement`], [`FpElement`], [`BinElement`], and
 /// [`BiasElement`] cover GEMM-only / FP8 / packed-bit / bias-broadcast
 /// types respectively; those have their own kernel families and don't
-/// route through `<T: Element>`-parameterized elementwise plans.
-pub trait Element: DeviceRepr + sealed::Sealed + Copy + 'static {
-    /// Runtime tag for this element type.
-    const KIND: ElementKind;
+/// route through `<T: Element>`-parameterized elementwise plans. The
+/// umbrella [`KernelDtype`] supertrait covers the union of `Element`
+/// + `IntElement` + `FpElement` + `BinElement`.
+///
+/// # `KIND` lookup
+///
+/// `Element` does NOT redeclare `const KIND`; the const is inherited
+/// from the [`KernelDtype`] supertrait. This keeps `T::KIND` unambiguous
+/// at every call site under `<T: Element>` bounds. Pre-Phase-28 code
+/// using the fully-qualified form `<T as Element>::KIND` must update
+/// to `<T as KernelDtype>::KIND` (or just plain `T::KIND` which works
+/// regardless of which trait bound is in scope).
+pub trait Element: KernelDtype + sealed::Sealed {
     /// Scalar type used for the kernel's alpha / beta parameters (and
     /// the epilogue compute type). `f32` for f16/bf16/f32/[`F32Strict`]
     /// — the epilogue runs at f32 to match the F32 accumulator. `f64`
@@ -161,12 +256,10 @@ impl sealed::Sealed for i64 {}
 impl sealed::Sealed for Bool {}
 
 impl Element for f16 {
-    const KIND: ElementKind = ElementKind::F16;
     type Scalar = f32;
 }
 
 impl Element for bf16 {
-    const KIND: ElementKind = ElementKind::Bf16;
     type Scalar = f32;
 }
 
@@ -177,7 +270,6 @@ impl Element for bf16 {
 /// [`F32Strict`] instead when bit-stable, full-precision IEEE 754
 /// binary32 math is required.
 impl Element for f32 {
-    const KIND: ElementKind = ElementKind::F32;
     type Scalar = f32;
 }
 
@@ -185,7 +277,6 @@ impl Element for f32 {
 /// binary64 inputs, accumulator, and scalars. Analogous to cuBLAS's
 /// `CUBLAS_COMPUTE_64F`.
 impl Element for f64 {
-    const KIND: ElementKind = ElementKind::F64;
     type Scalar = f64;
 }
 
@@ -200,7 +291,6 @@ impl Element for f64 {
 /// The `Scalar` projection is `f32` (nominal — integer kernels don't
 /// use α/β-scaled epilogues today).
 impl Element for i32 {
-    const KIND: ElementKind = ElementKind::I32;
     type Scalar = f32;
 }
 
@@ -208,7 +298,6 @@ impl Element for i32 {
 /// impl above for 64-bit integer arithmetic (PyTorch's default integer
 /// tensor dtype). Same kernel families, twice the storage width.
 impl Element for i64 {
-    const KIND: ElementKind = ElementKind::I64;
     type Scalar = f32;
 }
 
@@ -219,7 +308,6 @@ impl Element for i64 {
 ///
 /// The `Scalar` projection is `f32` (nominal).
 impl Element for Bool {
-    const KIND: ElementKind = ElementKind::Bool;
     type Scalar = f32;
 }
 
@@ -231,7 +319,6 @@ impl sealed::Sealed for Complex64 {}
 /// `ifft`, `rfft` output / `irfft` input, etc.) for spectrum-domain
 /// tensors. The `Scalar` projection is `f32` (matches the real width).
 impl Element for Complex32 {
-    const KIND: ElementKind = ElementKind::Complex32;
     type Scalar = f32;
 }
 
@@ -239,7 +326,6 @@ impl Element for Complex32 {
 /// elementwise kernel input element. Sibling to [`Complex32`]; the
 /// `Scalar` projection is `f64`.
 impl Element for Complex64 {
-    const KIND: ElementKind = ElementKind::Complex64;
     type Scalar = f64;
 }
 
@@ -487,32 +573,21 @@ impl U4 {
 ///
 /// Sealed to prevent downstream `impl`s — adding a new int dtype
 /// requires shipping new kernel instantiations.
-pub trait IntElement: DeviceRepr + int_sealed::Sealed + Copy + 'static {
-    /// Runtime tag for this element type. Always one of the integer
-    /// variants of [`ElementKind`].
-    const KIND: ElementKind;
-}
+///
+/// `KIND` is inherited from the [`KernelDtype`] supertrait. Pre-Phase-28
+/// code using `<T as IntElement>::KIND` must update to plain `T::KIND`
+/// or `<T as KernelDtype>::KIND`.
+pub trait IntElement: KernelDtype + int_sealed::Sealed {}
 
 impl int_sealed::Sealed for S8 {}
 impl int_sealed::Sealed for U8 {}
 impl int_sealed::Sealed for S4 {}
 impl int_sealed::Sealed for U4 {}
 
-impl IntElement for S8 {
-    const KIND: ElementKind = ElementKind::S8;
-}
-
-impl IntElement for U8 {
-    const KIND: ElementKind = ElementKind::U8;
-}
-
-impl IntElement for S4 {
-    const KIND: ElementKind = ElementKind::S4;
-}
-
-impl IntElement for U4 {
-    const KIND: ElementKind = ElementKind::U4;
-}
+impl IntElement for S8 {}
+impl IntElement for U8 {}
+impl IntElement for S4 {}
+impl IntElement for U4 {}
 
 // ============================================================================
 // 8-bit floating-point element family — sibling to Element / IntElement
@@ -611,22 +686,17 @@ unsafe impl DeviceRepr for Fp8E5M2 {}
 ///
 /// Sealed because adding a new FP8 variant requires shipping new kernel
 /// instantiations in `baracuda-kernels-sys`.
-pub trait FpElement: DeviceRepr + fp_sealed::Sealed + Copy + 'static {
-    /// Runtime tag for this element type. Always one of the FP8 variants
-    /// of [`ElementKind`].
-    const KIND: ElementKind;
-}
+///
+/// `KIND` is inherited from the [`KernelDtype`] supertrait. Pre-Phase-28
+/// code using `<T as FpElement>::KIND` must update to plain `T::KIND`
+/// or `<T as KernelDtype>::KIND`.
+pub trait FpElement: KernelDtype + fp_sealed::Sealed {}
 
 impl fp_sealed::Sealed for Fp8E4M3 {}
 impl fp_sealed::Sealed for Fp8E5M2 {}
 
-impl FpElement for Fp8E4M3 {
-    const KIND: ElementKind = ElementKind::Fp8E4M3;
-}
-
-impl FpElement for Fp8E5M2 {
-    const KIND: ElementKind = ElementKind::Fp8E5M2;
-}
+impl FpElement for Fp8E4M3 {}
+impl FpElement for Fp8E5M2 {}
 
 // ============================================================================
 // Binary element family — sibling to Element / IntElement / FpElement
@@ -704,17 +774,15 @@ impl Bin {
 /// programming model (popcount-based, `D = popcount(xor(A, B))`, no
 /// α/β/bias/activation chain) and a non-matching output type (raw
 /// `i32` accumulator rather than re-quantized to the input type).
-pub trait BinElement: DeviceRepr + bin_sealed::Sealed + Copy + 'static {
-    /// Runtime tag for this element type. Always [`ElementKind::Bin`]
-    /// today (the bin family currently has a single member).
-    const KIND: ElementKind;
-}
+///
+/// `KIND` is inherited from the [`KernelDtype`] supertrait. Pre-Phase-28
+/// code using `<T as BinElement>::KIND` must update to plain `T::KIND`
+/// or `<T as KernelDtype>::KIND`.
+pub trait BinElement: KernelDtype + bin_sealed::Sealed {}
 
 impl bin_sealed::Sealed for Bin {}
 
-impl BinElement for Bin {
-    const KIND: ElementKind = ElementKind::Bin;
-}
+impl BinElement for Bin {}
 
 /// Bias element types accepted by the int-GEMM bias epilogue family.
 ///
@@ -742,6 +810,13 @@ impl BiasElement for i32 {
 }
 
 /// Runtime tag for a [`BiasElement`].
+///
+/// **Intentionally NOT `#[non_exhaustive]`** — the int-GEMM bias
+/// dispatchers exhaustively match `(T::KIND, BT::KIND)` to pick
+/// per-bias-dtype kernel SKUs. Adding a new bias dtype (e.g. `f16`
+/// for quantized-GEMM) should surface as a build break across every
+/// match site so each can wire or reject. New variants are a
+/// deliberate breaking-change event.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 pub enum BiasElementKind {
     /// IEEE 754 binary32 bias broadcast. The conservative default —
@@ -780,7 +855,12 @@ impl IndexElement for i64 {
 /// Runtime tag for an [`IndexElement`]. `i32` is the legacy default;
 /// `i64` was added in Phase 11.5 to match PyTorch's int64 index
 /// convention without an extra cast pass.
+///
+/// `#[non_exhaustive]` — additional index dtypes (`u32` follows the
+/// IndexOutputElement precedent) may land in future phases. Match
+/// arms must include a `_ =>` catch-all.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
+#[non_exhaustive]
 pub enum IndexElementKind {
     /// Signed 32-bit index dtype — legacy default.
     I32,
@@ -826,7 +906,12 @@ impl IndexOutputElement for i64 {
 /// (PyTorch convention) and the only variant prior to Phase 12.2;
 /// `u32` and `i32` were added so downstream frameworks that prefer
 /// narrower index dtypes (Fuel uses `u32`) can avoid a post-pass cast.
+///
+/// `#[non_exhaustive]` — additional output index dtypes (`u64` for
+/// frameworks that prefer unsigned indices end-to-end) may land in
+/// future phases. Match arms must include a `_ =>` catch-all.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
+#[non_exhaustive]
 pub enum IndexOutputKind {
     /// Unsigned 32-bit output index dtype.
     U32,
@@ -857,8 +942,52 @@ pub struct F32Strict(pub f32);
 unsafe impl DeviceRepr for F32Strict {}
 
 impl Element for F32Strict {
-    const KIND: ElementKind = ElementKind::F32Strict;
     type Scalar = f32;
+}
+
+// ============================================================================
+// KernelDtype umbrella impls — every concrete kernel dtype is sealed here.
+// ============================================================================
+//
+// One macro keeps the 17 impls visually flat. The Phase 28 refactor
+// removed `const KIND` from the per-family sibling traits (`Element`,
+// `IntElement`, `FpElement`, `BinElement`); `KIND` now lives only on
+// the [`KernelDtype`] supertrait, so `T::KIND` resolves uniquely
+// under any subtrait bound.
+
+macro_rules! impl_kerneldtype {
+    ($($t:ty => $k:ident,)*) => {
+        $(
+            impl kerneldtype_sealed::Sealed for $t {}
+            impl KernelDtype for $t {
+                const KIND: ElementKind = ElementKind::$k;
+            }
+        )*
+    };
+}
+
+impl_kerneldtype! {
+    // Element family (FP + int + bool + complex)
+    f16        => F16,
+    bf16       => Bf16,
+    f32        => F32,
+    F32Strict  => F32Strict,
+    f64        => F64,
+    i32        => I32,
+    i64        => I64,
+    Bool       => Bool,
+    Complex32  => Complex32,
+    Complex64  => Complex64,
+    // IntElement family (GEMM operand newtypes)
+    S8         => S8,
+    U8         => U8,
+    S4         => S4,
+    U4         => U4,
+    // FpElement family (FP8)
+    Fp8E4M3    => Fp8E4M3,
+    Fp8E5M2    => Fp8E5M2,
+    // BinElement family
+    Bin        => Bin,
 }
 
 /// Runtime tag for an [`Element`] or [`IntElement`].

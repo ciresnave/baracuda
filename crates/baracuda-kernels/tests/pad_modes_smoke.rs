@@ -82,6 +82,10 @@ fn map_coord(mode: PadMode, out_coord: i64, pad_low: i32, extent: i32) -> i64 {
                 ((c % e) + e) % e
             }
         }
+        // `PadMode` is `#[non_exhaustive]` (Phase 28). Any new variant
+        // needs a matching CPU reference branch — surface that as a
+        // test-time panic so the omission isn't silently masked.
+        _ => panic!("pad_modes_smoke: missing reference for new PadMode variant"),
     }
 }
 

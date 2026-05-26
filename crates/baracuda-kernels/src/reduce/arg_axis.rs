@@ -140,6 +140,10 @@ impl<T: Element, const N: usize, I: IndexOutputElement> ArgReducePlan<T, N, I> {
             IndexOutputKind::U32 => None,
             IndexOutputKind::I32 => Some(ElementKind::I32),
             IndexOutputKind::I64 => Some(ElementKind::I64),
+            // Defensive arm — `IndexOutputKind` is `#[non_exhaustive]`,
+            // so unrecognized variants surface as a `None` aux tag
+            // until a wired case is added.
+            _ => None,
         };
         let sku = KernelSku {
             category: OpCategory::Reduction,

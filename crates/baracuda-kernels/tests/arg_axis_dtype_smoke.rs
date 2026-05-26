@@ -112,6 +112,9 @@ fn download_as_i64<I: IndexOutputElement>(buf: &DeviceBuffer<I>, n: usize) -> Ve
             typed.copy_to_host(&mut got).expect("download i64");
             got
         }
+        // `IndexOutputKind` is `#[non_exhaustive]` (Phase 28); a new
+        // variant needs a matching download helper.
+        _ => panic!("arg_axis_dtype_smoke: unsupported IndexOutputKind variant"),
     }
 }
 

@@ -21,6 +21,7 @@
 /// that ship sub / mul / div / pow / comparisons / bitwise.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 #[repr(u16)]
+#[non_exhaustive]
 pub enum BinaryKind {
     /// `y = a + b` — elementwise addition. Trailblazer SKU for
     /// `baracuda-kernels` Phase 3.
@@ -115,6 +116,7 @@ pub enum BinaryKind {
 /// parameterized op ships, omitted for the trailblazer.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 #[repr(u16)]
+#[non_exhaustive]
 pub enum UnaryKind {
     // ---- Category B: elementwise unary (math) — trivial ----
     /// `y = -x` — elementwise negation. Trailblazer SKU.
@@ -311,6 +313,7 @@ pub enum UnaryKind {
 /// fanout sessions.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 #[repr(u16)]
+#[non_exhaustive]
 pub enum TernaryKind {
     /// `y = min(max(x, lo), hi)` — clamp `x` to `[lo, hi]`. Trailblazer.
     Clamp = 0,
@@ -342,6 +345,7 @@ pub enum TernaryKind {
 /// f16, bf16, f64}`. SwiGLU is the trailblazer (highest LLM relevance).
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 #[repr(u16)]
+#[non_exhaustive]
 pub enum GatedActivationKind {
     /// `y = a · sigmoid(b)` — PyTorch `torch.nn.functional.glu`.
     Glu = 0,
@@ -361,6 +365,7 @@ pub enum GatedActivationKind {
 /// branch but keeps the same plan shape.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 #[repr(u16)]
+#[non_exhaustive]
 pub enum PadMode {
     /// Pad with a constant value (`PadDescriptor::value`).
     Constant = 0,
@@ -381,6 +386,7 @@ pub enum PadMode {
 /// them populate `KernelSku::op` from a shared discriminant space.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 #[repr(u16)]
+#[non_exhaustive]
 pub enum ShapeLayoutKind {
     /// `F.pad(x, pad, mode='constant', value=v)` — Phase 3 trailblazer.
     Pad = 0,
@@ -436,6 +442,7 @@ pub enum ShapeLayoutKind {
 /// case.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 #[repr(u16)]
+#[non_exhaustive]
 pub enum ArgReduceKind {
     /// Index of the maximum along the reduced axis. Ties broken by
     /// first occurrence (smallest index wins) — PyTorch convention.
@@ -450,6 +457,7 @@ pub enum ArgReduceKind {
 /// 1 (keepdim convention). Other variants are reserved for fanout.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 #[repr(u16)]
+#[non_exhaustive]
 pub enum ReduceKind {
     /// Sum along the reduced axis. Phase 4 trailblazer.
     Sum = 0,
@@ -509,6 +517,7 @@ pub enum ReduceKind {
 /// reserved-but-deferred.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 #[repr(u16)]
+#[non_exhaustive]
 pub enum SoftmaxKind {
     /// `y[k] = exp(x[k] - max(x)) / Σ_j exp(x[j] - max(x))`
     /// — numerically stable softmax.
@@ -538,6 +547,7 @@ pub enum SoftmaxKind {
 /// reserved-but-deferred (numerics / generic-functor work).
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 #[repr(u16)]
+#[non_exhaustive]
 pub enum ScanKind {
     /// `y[i] = Σ_{j ≤ i} x[j]` — inclusive prefix sum.
     Cumsum = 0,
@@ -574,6 +584,7 @@ pub enum ScanKind {
 /// will never be wired into the same-dtype binary path.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 #[repr(u16)]
+#[non_exhaustive]
 pub enum BinaryCmpKind {
     /// `y = (a == b)` — elementwise equality. Trailblazer SKU.
     Eq = 0,
@@ -611,6 +622,7 @@ pub enum BinaryCmpKind {
 /// (rarely used today) are explicitly deferred.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 #[repr(u16)]
+#[non_exhaustive]
 pub enum NormalizationKind {
     /// `y = x / sqrt(mean(x², over norm_axes) + eps) * gamma`.
     /// Llama / Mistral / Gemma block-pre-norm. Trailblazer SKU.
@@ -647,6 +659,7 @@ pub enum NormalizationKind {
 /// discriminants for future fanout.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 #[repr(u16)]
+#[non_exhaustive]
 pub enum LossKind {
     /// `y = mean((pred - target)²)` (or sum / per-cell). PyTorch
     /// `torch.nn.functional.mse_loss`.
@@ -753,6 +766,7 @@ pub enum LossReduction {
 /// reserved discriminants for future milestones.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 #[repr(u16)]
+#[non_exhaustive]
 pub enum RandomKind {
     /// `y[i] ~ U(low, high)` — uniform on the half-open interval. Plan
     /// descriptor `param1 = low`, `param2 = high`.
@@ -786,6 +800,7 @@ pub enum RandomKind {
 /// future milestones.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 #[repr(u16)]
+#[non_exhaustive]
 pub enum LinalgKind {
     /// Cholesky factorization `A = L · L^T` (lower) or `A = U^T · U`
     /// (upper). Input must be symmetric positive-definite.
@@ -900,6 +915,7 @@ pub enum FillMode {
 /// plan layer multiplies by `1/N` after the inverse exec.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 #[repr(u16)]
+#[non_exhaustive]
 pub enum FftKind {
     /// `y = FFT(x)` — complex-to-complex forward transform (unnormalized).
     /// PyTorch `torch.fft.fft`. Both input and output are complex with
@@ -959,6 +975,7 @@ pub enum FftKind {
 /// milestones.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 #[repr(u16)]
+#[non_exhaustive]
 pub enum ConvKind {
     /// 2-D convolution forward pass. PyTorch
     /// `torch.nn.functional.conv2d`. Trailblazer for Phase 7.
@@ -1042,6 +1059,7 @@ pub enum ConvKind {
 /// fractional-max-pool are reserved discriminants for fanout milestones.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 #[repr(u16)]
+#[non_exhaustive]
 pub enum PoolKind {
     /// 2-D max-pool forward. PyTorch `torch.nn.functional.max_pool2d`.
     /// Trailblazer for Phase 7 Milestone 7.2.
@@ -1160,6 +1178,7 @@ pub enum PoolKind {
 /// for SKU-tagging uniformity, not for shared dispatch.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 #[repr(u16)]
+#[non_exhaustive]
 pub enum AttentionKind {
     /// Rotary position embedding (Llama / Mistral / Gemma / Qwen / Phi).
     /// Rotates pairs of consecutive features `(2i, 2i+1)` of a
@@ -1211,6 +1230,7 @@ pub enum AttentionKind {
 /// skips them — PyTorch-style negative wrap-around is deferred).
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 #[repr(u16)]
+#[non_exhaustive]
 pub enum IndexingKind {
     /// `gather(src, dim, index)` — `out[..., j, ...] = src[..., index[..., j, ...], ...]`
     /// along the specified gather dimension. PyTorch `torch.gather`.
@@ -1285,6 +1305,7 @@ pub enum IndexingKind {
 /// which are restricted to native-FP-atomic types.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 #[repr(u16)]
+#[non_exhaustive]
 pub enum SegmentKind {
     /// `out[s, d] = Σ_{n : seg[n] == s} input[n, d]` — sorted segment
     /// IDs (monotonically non-decreasing). TF / JAX `segment_sum`.
@@ -1367,6 +1388,7 @@ pub enum SegmentKind {
 /// f64` (atomicAdd).
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 #[repr(u16)]
+#[non_exhaustive]
 pub enum EmbeddingKind {
     /// `embedding(weight, indices, padding_idx)` —
     /// `out[i, :] = weight[indices[i], :]`. PyTorch
@@ -1426,6 +1448,7 @@ pub enum EmbeddingKind {
 /// for those.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 #[repr(u16)]
+#[non_exhaustive]
 pub enum QuantizeKind {
     /// `quantize_per_tensor(x, scale, zero_point)` —
     /// `q = clamp(round(x / scale) + zero_point, qmin, qmax)`.
@@ -1542,6 +1565,7 @@ pub enum QuantizeKind {
 /// `ggml.h`, ensuring binary compatibility with GGUF file headers.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 #[repr(u16)]
+#[non_exhaustive]
 pub enum GgufBlockFormat {
     /// 4-bit, 32-element block, single FP scale. `block_q4_0`.
     Q4_0 = 2,
@@ -1676,6 +1700,7 @@ impl GgufBlockFormat {
 /// attribution chain.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 #[repr(u16)]
+#[non_exhaustive]
 pub enum MoeKind {
     /// Scalar dispatch path operating on GGUF-quantized expert weights
     /// staged through a q8_1 intermediate (FP32 activations in, FP32
@@ -1735,6 +1760,7 @@ pub enum MoeKind {
 /// - searchsorted: `f32, f64, i32, i64`.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 #[repr(u16)]
+#[non_exhaustive]
 pub enum SortKind {
     /// `sort(x, dim, descending)` — returns sorted values + sorted
     /// indices. PyTorch `torch.sort`.
@@ -1820,6 +1846,7 @@ pub enum SortKind {
 /// (pure layout — dtype-agnostic).
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 #[repr(u16)]
+#[non_exhaustive]
 pub enum ImageKind {
     /// `interpolate(x, mode='bilinear', size=…)` — 2-D spatial
     /// resample with bilinear weights. Trailblazer wired today.

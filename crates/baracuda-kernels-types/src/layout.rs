@@ -7,6 +7,12 @@
 
 /// Layout SKU. Describes the row/column orientation of A, B, C, and D
 /// for matrix-multiply-shaped kernels.
+///
+/// **Intentionally NOT `#[non_exhaustive]`** — the GEMM layout space
+/// is essentially closed in practice (row-major / column-major
+/// permutations of A, B, C/D); the two wired variants cover the
+/// dispatch space `baracuda-cutlass` selects against. New variants
+/// would be a deliberate breaking change with a major-version bump.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 pub enum LayoutSku {
     /// `A` row-major `[M, K]`, `B` column-major `[K, N]`, `C/D` row-major `[M, N]`.
@@ -25,6 +31,14 @@ pub enum LayoutSku {
 }
 
 /// Compute capability bucket the selected kernel was compiled for.
+///
+/// **Intentionally NOT `#[non_exhaustive]`** — the cutlass GEMM
+/// dispatchers exhaustively match on this enum to pick per-arch
+/// kernel SKUs; adding a new arch (Blackwell `Sm100a` is tracked in
+/// the ROADMAP) deserves to surface as a build break across every
+/// match site so each can decide whether to JIT-forward or add a
+/// dedicated variant. New variants are a deliberate
+/// breaking-change event.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 pub enum ArchSku {
     /// Ampere (also runs on Ada and as forward-compatible fallback on Hopper).
@@ -45,6 +59,12 @@ pub enum ArchSku {
 /// `BiasSilu` therefore deliver the full `y = activation(W·x + b)`
 /// transformer-Linear pipeline in a single kernel pass — no extra memory
 /// traffic vs plain `Bias`.
+// EpilogueKind is intentionally NOT `#[non_exhaustive]` — the cutlass
+// GEMM dispatchers exhaustively match `(LayoutSku, EpilogueKind)` to
+// pick per-fused-epilogue kernel SKUs. Adding a new epilogue (e.g.
+// `BiasTanh`, `BiasSigmoid`) deserves to surface as a build break
+// across every match site so each branch can choose to wire it or
+// reject. New variants are a deliberate breaking-change event.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 pub enum EpilogueKind {
     /// `D = α · (A · B) + β · C` (no activation, no bias).
@@ -96,6 +116,11 @@ impl EpilogueKind {
 /// Activation functions implemented by the `Bias*Activation`
 /// [`EpilogueKind`] variants. Surfaced for telemetry and selector
 /// logic; the kernel selection itself is driven by the enum variant.
+///
+/// **Intentionally NOT `#[non_exhaustive]`** — paired with
+/// [`EpilogueKind`] which is also left exhaustive. Adding a new
+/// activation requires shipping a matching `Bias<Activation>` epilogue
+/// kernel, which is a deliberate breaking-change event.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 pub enum ActivationKind {
     /// `relu(x) = max(x, 0)`.

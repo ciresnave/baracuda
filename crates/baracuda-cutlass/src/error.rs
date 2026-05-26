@@ -6,7 +6,20 @@ use thiserror::Error;
 pub type Result<T> = core::result::Result<T, Error>;
 
 /// Errors raised by the safe CUTLASS wrapper.
+///
+/// Re-exported by [`baracuda-kernels`](../../baracuda-kernels) as
+/// `baracuda_kernels::Error` since the kernel facade returns the same
+/// error surface for every op family (the cuSOLVER / cuDNN / cuFFT
+/// facades all map their library-native status codes into one of these
+/// variants).
+///
+/// `#[non_exhaustive]` — error variants have grown every couple of
+/// phases as new failure modes surface (Phase 7 added cuDNN-status
+/// fallback paths; Phase 22 added the cuSOLVER facade plumbing). Match
+/// arms must include a `_ =>` catch-all so adding a new variant
+/// doesn't break downstream `match e { ... }` blocks.
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum Error {
     /// The requested SKU isn't available in this build.
     ///
