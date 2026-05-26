@@ -1363,25 +1363,30 @@ impl<T: Element, const N: usize> UnaryPlan<T, N> {
                     numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
                 )
             },
-            // ELU (α=1.0) × {f32, f16, bf16, f64}
+            // ELU × {f32, f16, bf16, f64} — α threads through the FFI as
+            // of Phase 31. The non-parameterized `UnaryPlan` here keeps
+            // the historical α=1.0 PyTorch default; callers wanting a
+            // different α call the FFI directly (or wait for the
+            // `UnaryParamPlan::Elu` fanout that lands with the next
+            // descriptor-parameter session).
             (UnaryKind::Elu, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_elu_f32_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel, x_ptr, y_ptr, 1.0f32, core::ptr::null_mut(), 0, stream_ptr,
                 )
             },
             (UnaryKind::Elu, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_elu_f16_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel, x_ptr, y_ptr, 1.0f32, core::ptr::null_mut(), 0, stream_ptr,
                 )
             },
             (UnaryKind::Elu, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_elu_bf16_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel, x_ptr, y_ptr, 1.0f32, core::ptr::null_mut(), 0, stream_ptr,
                 )
             },
             (UnaryKind::Elu, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_elu_f64_run(
-                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    numel, x_ptr, y_ptr, 1.0f32, core::ptr::null_mut(), 0, stream_ptr,
                 )
             },
             // Hardshrink (λ=0.5) × {f32, f16, bf16, f64}
@@ -2762,29 +2767,31 @@ impl<T: Element, const N: usize> UnaryPlan<T, N> {
                     x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
                 )
             },
-            // ELU (α=1.0) × {f32, f16, bf16, f64}
+            // ELU × {f32, f16, bf16, f64} — strided sibling; α default 1.0
+            // matches the contig path above (Phase 31 FFI threads α
+            // through every variant).
             (UnaryKind::Elu, ElementKind::F32) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_elu_f32_strided_run(
                     numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    x_ptr, y_ptr, 1.0f32, core::ptr::null_mut(), 0, stream_ptr,
                 )
             },
             (UnaryKind::Elu, ElementKind::F16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_elu_f16_strided_run(
                     numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    x_ptr, y_ptr, 1.0f32, core::ptr::null_mut(), 0, stream_ptr,
                 )
             },
             (UnaryKind::Elu, ElementKind::Bf16) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_elu_bf16_strided_run(
                     numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    x_ptr, y_ptr, 1.0f32, core::ptr::null_mut(), 0, stream_ptr,
                 )
             },
             (UnaryKind::Elu, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_elu_f64_strided_run(
                     numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
-                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                    x_ptr, y_ptr, 1.0f32, core::ptr::null_mut(), 0, stream_ptr,
                 )
             },
             // Hardshrink (λ=0.5) × {f32, f16, bf16, f64}

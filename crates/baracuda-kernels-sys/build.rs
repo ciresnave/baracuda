@@ -643,6 +643,16 @@ fn collect_kernel_files() -> Vec<&'static str> {
             // int at the kernel boundary, p1 unused).
             "elementwise/unary_powi_fp.cu",
             "elementwise/unary_powi_backward_fp.cu",
+            // Phase 31 — Fuel Phase 6c.2 storage.rs unblock: float-
+            // exponent power, Heaviside step, exact erf-based GELU
+            // alias, and the broadcast-reverse reductions used by
+            // autograd's ReduceSumTo / ReduceMaxTo. ELU was modified
+            // in place to thread `alpha` through (the `unary_elu_fp.cu`
+            // entry above gets the breaking change).
+            "elementwise/unary_powf_fp.cu",
+            "elementwise/unary_step_fp.cu",
+            "elementwise/unary_gelu_erf_fp.cu",
+            "elementwise/reduce_to_fp.cu",
             "elementwise/binary_lerp_fp.cu",
             "elementwise/binary_lerp_backward_fp.cu",
             // Phase 3 Category C′ — gated activations (FW + BW × 4

@@ -23640,14 +23640,23 @@ unsafe extern "C" {
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
     ) -> i32;
 
-    // ---- ELU (α=1.0) ----
+    // ---- ELU (α = runtime parameter) ----
+    //
+    // Phase 31 BREAKING CHANGE: the ELU FFI symbols gained an
+    // `alpha: f32` parameter (Fuel Phase 6c.2 storage.rs unblock). The
+    // old hardcoded-α=1.0 signature is gone — callers must thread α
+    // through explicitly. For PyTorch's `nn.ELU` default behaviour
+    // pass `alpha = 1.0`. f64 widens internally from the f32 ABI.
 
-    /// Unary elementwise `elu` (α=1.0), f32, contig.
+    /// Unary elementwise `elu(x; α) = x if x>0 else α·(exp(x)-1)`, f32, contig.
     ///
     /// # Safety
     /// Same device-pointer / stream contract as the unary-relu trailblazer.
+    /// `alpha` is the negative-branch scale; pass `1.0` for the
+    /// PyTorch default.
     pub fn baracuda_kernels_unary_elu_f32_run(
         numel: i64, x: *const c_void, y: *mut c_void,
+        alpha: f32,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
     ) -> i32;
     /// Pre-launch implementability check for `unary_elu_f32`.
@@ -23657,22 +23666,26 @@ unsafe extern "C" {
     pub fn baracuda_kernels_unary_elu_f32_can_implement(
         numel: i64, x: *const c_void, y: *const c_void,
     ) -> i32;
-    /// Unary elementwise `elu` (α=1.0), f32, strided.
+    /// Unary elementwise `elu(x; α)`, f32, strided.
     ///
     /// # Safety
-    /// Same contract as the unary-relu strided launcher.
+    /// Same contract as the unary-relu strided launcher. `alpha` carries
+    /// the negative-branch scale.
     pub fn baracuda_kernels_unary_elu_f32_strided_run(
         numel: i64, rank: i32, shape: *const i32, stride_x: *const i64, stride_y: *const i64,
         x: *const c_void, y: *mut c_void,
+        alpha: f32,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
     ) -> i32;
 
-    /// Unary elementwise `elu` (α=1.0), f16, contig.
+    /// Unary elementwise `elu(x; α)`, f16, contig.
     ///
     /// # Safety
-    /// `x` / `y` point to `__half` storage.
+    /// `x` / `y` point to `__half` storage. `alpha` is f32 and is
+    /// applied inside the f32 detour.
     pub fn baracuda_kernels_unary_elu_f16_run(
         numel: i64, x: *const c_void, y: *mut c_void,
+        alpha: f32,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
     ) -> i32;
     /// Pre-launch implementability check for `unary_elu_f16`.
@@ -23682,22 +23695,24 @@ unsafe extern "C" {
     pub fn baracuda_kernels_unary_elu_f16_can_implement(
         numel: i64, x: *const c_void, y: *const c_void,
     ) -> i32;
-    /// Unary elementwise `elu` (α=1.0), f16, strided.
+    /// Unary elementwise `elu(x; α)`, f16, strided.
     ///
     /// # Safety
     /// `x` / `y` point to `__half` storage.
     pub fn baracuda_kernels_unary_elu_f16_strided_run(
         numel: i64, rank: i32, shape: *const i32, stride_x: *const i64, stride_y: *const i64,
         x: *const c_void, y: *mut c_void,
+        alpha: f32,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
     ) -> i32;
 
-    /// Unary elementwise `elu` (α=1.0), bf16, contig.
+    /// Unary elementwise `elu(x; α)`, bf16, contig.
     ///
     /// # Safety
     /// `x` / `y` point to `__nv_bfloat16` storage.
     pub fn baracuda_kernels_unary_elu_bf16_run(
         numel: i64, x: *const c_void, y: *mut c_void,
+        alpha: f32,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
     ) -> i32;
     /// Pre-launch implementability check for `unary_elu_bf16`.
@@ -23707,22 +23722,27 @@ unsafe extern "C" {
     pub fn baracuda_kernels_unary_elu_bf16_can_implement(
         numel: i64, x: *const c_void, y: *const c_void,
     ) -> i32;
-    /// Unary elementwise `elu` (α=1.0), bf16, strided.
+    /// Unary elementwise `elu(x; α)`, bf16, strided.
     ///
     /// # Safety
     /// `x` / `y` point to `__nv_bfloat16` storage.
     pub fn baracuda_kernels_unary_elu_bf16_strided_run(
         numel: i64, rank: i32, shape: *const i32, stride_x: *const i64, stride_y: *const i64,
         x: *const c_void, y: *mut c_void,
+        alpha: f32,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
     ) -> i32;
 
-    /// Unary elementwise `elu` (α=1.0), f64, contig.
+    /// Unary elementwise `elu(x; α)`, f64, contig.
     ///
     /// # Safety
-    /// `x` / `y` point to `double` storage.
+    /// `x` / `y` point to `double` storage. `alpha` is f32 in the ABI
+    /// and widened to double inside the kernel — this is the safest
+    /// choice because most Fuel call sites pass `alpha` as `f32` and
+    /// PyTorch's `alpha` default (1.0) round-trips exactly.
     pub fn baracuda_kernels_unary_elu_f64_run(
         numel: i64, x: *const c_void, y: *mut c_void,
+        alpha: f32,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
     ) -> i32;
     /// Pre-launch implementability check for `unary_elu_f64`.
@@ -23732,14 +23752,366 @@ unsafe extern "C" {
     pub fn baracuda_kernels_unary_elu_f64_can_implement(
         numel: i64, x: *const c_void, y: *const c_void,
     ) -> i32;
-    /// Unary elementwise `elu` (α=1.0), f64, strided.
+    /// Unary elementwise `elu(x; α)`, f64, strided.
     ///
     /// # Safety
     /// `x` / `y` point to `double` storage.
     pub fn baracuda_kernels_unary_elu_f64_strided_run(
         numel: i64, rank: i32, shape: *const i32, stride_x: *const i64, stride_y: *const i64,
         x: *const c_void, y: *mut c_void,
+        alpha: f32,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    // ---- Phase 31 — PowF (float-exponent power) ----
+    //
+    // `y = pow(x, exponent)`. Distinct from `unary_powi_*` (integer
+    // exponent via power-by-squaring) and from `binary_pow_*` (per-
+    // element f32 exponent tensor). FFI shape: single `exponent: f32`
+    // parameter, NOT the unary-param `(p0, p1)` slot — Fuel ask.
+
+    /// Unary elementwise `pow(x, exponent)`, f32, contig.
+    ///
+    /// # Safety
+    /// Same device-pointer / stream contract as `unary_relu_*_run`.
+    /// `exponent` is broadcast over every element. f32 uses `__powf`
+    /// (≤4 ULP); fallback to bare `powf` if you need strict-ULP
+    /// guarantees.
+    pub fn baracuda_kernels_unary_powf_f32_run(
+        numel: i64, x: *const c_void, y: *mut c_void,
+        exponent: f32,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `unary_powf_f32`.
+    pub fn baracuda_kernels_unary_powf_f32_can_implement(
+        numel: i64, x: *const c_void, y: *const c_void,
+    ) -> i32;
+    /// `unary_powf`, f32, strided sibling.
+    pub fn baracuda_kernels_unary_powf_f32_strided_run(
+        numel: i64, rank: i32, shape: *const i32, stride_x: *const i64, stride_y: *const i64,
+        x: *const c_void, y: *mut c_void,
+        exponent: f32,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// `unary_powf`, f16, contig. f32 detour.
+    pub fn baracuda_kernels_unary_powf_f16_run(
+        numel: i64, x: *const c_void, y: *mut c_void,
+        exponent: f32,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_unary_powf_f16_can_implement(
+        numel: i64, x: *const c_void, y: *const c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_unary_powf_f16_strided_run(
+        numel: i64, rank: i32, shape: *const i32, stride_x: *const i64, stride_y: *const i64,
+        x: *const c_void, y: *mut c_void,
+        exponent: f32,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// `unary_powf`, bf16, contig.
+    pub fn baracuda_kernels_unary_powf_bf16_run(
+        numel: i64, x: *const c_void, y: *mut c_void,
+        exponent: f32,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_unary_powf_bf16_can_implement(
+        numel: i64, x: *const c_void, y: *const c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_unary_powf_bf16_strided_run(
+        numel: i64, rank: i32, shape: *const i32, stride_x: *const i64, stride_y: *const i64,
+        x: *const c_void, y: *mut c_void,
+        exponent: f32,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// `unary_powf`, f64, contig. `pow` (libdevice) is full-double
+    /// precision; the f32 exponent is widened once at kernel entry.
+    pub fn baracuda_kernels_unary_powf_f64_run(
+        numel: i64, x: *const c_void, y: *mut c_void,
+        exponent: f32,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_unary_powf_f64_can_implement(
+        numel: i64, x: *const c_void, y: *const c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_unary_powf_f64_strided_run(
+        numel: i64, rank: i32, shape: *const i32, stride_x: *const i64, stride_y: *const i64,
+        x: *const c_void, y: *mut c_void,
+        exponent: f32,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    // ---- Phase 31 — Step (Heaviside) ----
+    //
+    // `y = (x > 0) ? 1 : 0`. NaN → 0 (NaN > 0 is false). Bare unary
+    // ABI — same shape as `unary_relu_*_run`.
+
+    /// `unary_step`, f32, contig.
+    pub fn baracuda_kernels_unary_step_f32_run(
+        numel: i64, x: *const c_void, y: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_unary_step_f32_can_implement(
+        numel: i64, x: *const c_void, y: *const c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_unary_step_f32_strided_run(
+        numel: i64, rank: i32, shape: *const i32, stride_x: *const i64, stride_y: *const i64,
+        x: *const c_void, y: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// `unary_step`, f16, contig.
+    pub fn baracuda_kernels_unary_step_f16_run(
+        numel: i64, x: *const c_void, y: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_unary_step_f16_can_implement(
+        numel: i64, x: *const c_void, y: *const c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_unary_step_f16_strided_run(
+        numel: i64, rank: i32, shape: *const i32, stride_x: *const i64, stride_y: *const i64,
+        x: *const c_void, y: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// `unary_step`, bf16, contig.
+    pub fn baracuda_kernels_unary_step_bf16_run(
+        numel: i64, x: *const c_void, y: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_unary_step_bf16_can_implement(
+        numel: i64, x: *const c_void, y: *const c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_unary_step_bf16_strided_run(
+        numel: i64, rank: i32, shape: *const i32, stride_x: *const i64, stride_y: *const i64,
+        x: *const c_void, y: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// `unary_step`, f64, contig.
+    pub fn baracuda_kernels_unary_step_f64_run(
+        numel: i64, x: *const c_void, y: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_unary_step_f64_can_implement(
+        numel: i64, x: *const c_void, y: *const c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_unary_step_f64_strided_run(
+        numel: i64, rank: i32, shape: *const i32, stride_x: *const i64, stride_y: *const i64,
+        x: *const c_void, y: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    // ---- Phase 31 — GeluErf (exact erf-based GELU) ----
+    //
+    // `y = 0.5 * x * (1 + erf(x / sqrt(2)))`. Distinct symbol name
+    // for the exact erf-based GELU formula so Fuel's storage.rs can
+    // route precisely (vs the tanh-approximation `unary_gelu_tanh_*`).
+    //
+    // NOTE: `unary_gelu_*` ALSO implements the erf-based formula
+    // today — both symbols coexist with bit-identical math. The
+    // duplication is intentional (Fuel ask); a future consolidation
+    // may make `unary_gelu_*` an alias of `unary_gelu_erf_*`.
+
+    /// `unary_gelu_erf`, f32, contig. Bit-identical to `unary_gelu_f32`.
+    pub fn baracuda_kernels_unary_gelu_erf_f32_run(
+        numel: i64, x: *const c_void, y: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_unary_gelu_erf_f32_can_implement(
+        numel: i64, x: *const c_void, y: *const c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_unary_gelu_erf_f32_strided_run(
+        numel: i64, rank: i32, shape: *const i32, stride_x: *const i64, stride_y: *const i64,
+        x: *const c_void, y: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// `unary_gelu_erf`, f16, contig.
+    pub fn baracuda_kernels_unary_gelu_erf_f16_run(
+        numel: i64, x: *const c_void, y: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_unary_gelu_erf_f16_can_implement(
+        numel: i64, x: *const c_void, y: *const c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_unary_gelu_erf_f16_strided_run(
+        numel: i64, rank: i32, shape: *const i32, stride_x: *const i64, stride_y: *const i64,
+        x: *const c_void, y: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// `unary_gelu_erf`, bf16, contig.
+    pub fn baracuda_kernels_unary_gelu_erf_bf16_run(
+        numel: i64, x: *const c_void, y: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_unary_gelu_erf_bf16_can_implement(
+        numel: i64, x: *const c_void, y: *const c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_unary_gelu_erf_bf16_strided_run(
+        numel: i64, rank: i32, shape: *const i32, stride_x: *const i64, stride_y: *const i64,
+        x: *const c_void, y: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// `unary_gelu_erf`, f64, contig.
+    pub fn baracuda_kernels_unary_gelu_erf_f64_run(
+        numel: i64, x: *const c_void, y: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_unary_gelu_erf_f64_can_implement(
+        numel: i64, x: *const c_void, y: *const c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_unary_gelu_erf_f64_strided_run(
+        numel: i64, rank: i32, shape: *const i32, stride_x: *const i64, stride_y: *const i64,
+        x: *const c_void, y: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    // ---- Phase 31 — ReduceSumTo / ReduceMaxTo (broadcast-reverse) ----
+    //
+    // The autograd primitives that undo a forward `BroadcastTo`. For
+    // each output cell, sum (or max) every input cell that broadcasts
+    // TO it. One thread per output cell — no atomics needed; the
+    // broadcast pattern is computed from the shape arrays per thread.
+    //
+    // ABI:
+    //   * `src` / `dst` are device pointers in `T`.
+    //   * `input_shape` (host, length `rank_in`) — the source extents.
+    //   * `input_stride` (host, length `rank_in`, i64) — the source
+    //      strides; may be non-contiguous.
+    //   * `rank_in` ≤ 8 (MAX_RANK). Caller pads `output_shape` on the
+    //      LEFT with 1s to match `rank_in`.
+    //   * `output_shape` (host, length `rank_in`) — the target extents;
+    //      dst is laid out contiguously over this shape.
+    //
+    // Output pre-fill is NOT required (the per-cell kernel writes the
+    // identity directly if the broadcast set is empty).
+
+    /// `reduce_sum_to`, f32. Broadcast-reverse Σ. Phase 31.
+    pub fn baracuda_kernels_reduce_sum_to_f32_run(
+        src: *const c_void, dst: *mut c_void,
+        input_shape: *const i32, input_stride: *const i64,
+        rank_in: i32,
+        output_shape: *const i32,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_reduce_sum_to_f32_can_implement(
+        src: *const c_void, dst: *const c_void,
+        input_shape: *const i32, input_stride: *const i64,
+        rank_in: i32,
+        output_shape: *const i32,
+    ) -> i32;
+
+    /// `reduce_sum_to`, f64.
+    pub fn baracuda_kernels_reduce_sum_to_f64_run(
+        src: *const c_void, dst: *mut c_void,
+        input_shape: *const i32, input_stride: *const i64,
+        rank_in: i32,
+        output_shape: *const i32,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_reduce_sum_to_f64_can_implement(
+        src: *const c_void, dst: *const c_void,
+        input_shape: *const i32, input_stride: *const i64,
+        rank_in: i32,
+        output_shape: *const i32,
+    ) -> i32;
+
+    /// `reduce_sum_to`, f16. Accumulator widens to f32 per the rest
+    /// of the family's convention.
+    pub fn baracuda_kernels_reduce_sum_to_f16_run(
+        src: *const c_void, dst: *mut c_void,
+        input_shape: *const i32, input_stride: *const i64,
+        rank_in: i32,
+        output_shape: *const i32,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_reduce_sum_to_f16_can_implement(
+        src: *const c_void, dst: *const c_void,
+        input_shape: *const i32, input_stride: *const i64,
+        rank_in: i32,
+        output_shape: *const i32,
+    ) -> i32;
+
+    /// `reduce_sum_to`, bf16. Accumulator widens to f32.
+    pub fn baracuda_kernels_reduce_sum_to_bf16_run(
+        src: *const c_void, dst: *mut c_void,
+        input_shape: *const i32, input_stride: *const i64,
+        rank_in: i32,
+        output_shape: *const i32,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_reduce_sum_to_bf16_can_implement(
+        src: *const c_void, dst: *const c_void,
+        input_shape: *const i32, input_stride: *const i64,
+        rank_in: i32,
+        output_shape: *const i32,
+    ) -> i32;
+
+    /// `reduce_max_to`, f32. Identity is `-FLT_MAX` when the broadcast
+    /// set is empty.
+    pub fn baracuda_kernels_reduce_max_to_f32_run(
+        src: *const c_void, dst: *mut c_void,
+        input_shape: *const i32, input_stride: *const i64,
+        rank_in: i32,
+        output_shape: *const i32,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_reduce_max_to_f32_can_implement(
+        src: *const c_void, dst: *const c_void,
+        input_shape: *const i32, input_stride: *const i64,
+        rank_in: i32,
+        output_shape: *const i32,
+    ) -> i32;
+
+    /// `reduce_max_to`, f64. Identity is `-DBL_MAX`.
+    pub fn baracuda_kernels_reduce_max_to_f64_run(
+        src: *const c_void, dst: *mut c_void,
+        input_shape: *const i32, input_stride: *const i64,
+        rank_in: i32,
+        output_shape: *const i32,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_reduce_max_to_f64_can_implement(
+        src: *const c_void, dst: *const c_void,
+        input_shape: *const i32, input_stride: *const i64,
+        rank_in: i32,
+        output_shape: *const i32,
+    ) -> i32;
+
+    /// `reduce_max_to`, f16. Identity is `-FLT_MAX` in f32 accumulator
+    /// space, narrowed back to f16 on store.
+    pub fn baracuda_kernels_reduce_max_to_f16_run(
+        src: *const c_void, dst: *mut c_void,
+        input_shape: *const i32, input_stride: *const i64,
+        rank_in: i32,
+        output_shape: *const i32,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_reduce_max_to_f16_can_implement(
+        src: *const c_void, dst: *const c_void,
+        input_shape: *const i32, input_stride: *const i64,
+        rank_in: i32,
+        output_shape: *const i32,
+    ) -> i32;
+
+    /// `reduce_max_to`, bf16.
+    pub fn baracuda_kernels_reduce_max_to_bf16_run(
+        src: *const c_void, dst: *mut c_void,
+        input_shape: *const i32, input_stride: *const i64,
+        rank_in: i32,
+        output_shape: *const i32,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_reduce_max_to_bf16_can_implement(
+        src: *const c_void, dst: *const c_void,
+        input_shape: *const i32, input_stride: *const i64,
+        rank_in: i32,
+        output_shape: *const i32,
     ) -> i32;
 
     // ---- Hardshrink (λ=0.5) ----
@@ -32745,6 +33117,138 @@ unsafe extern "C" {
     pub fn baracuda_kernels_cast_i8_i8_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
     /// Implementability check for `cast_i8_i8`.
     pub fn baracuda_kernels_cast_i8_i8_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+
+    // ============================================================================
+    // Phase 31 — u32 + i16 cast matrix extensions (Fuel Phase 6c.2
+    // storage.rs unblock). Brings the regular-cast dtype matrix from
+    // 8×8 (f32/f64/f16/bf16/i32/i64/u8/i8) to 10×10 by adding u32 +
+    // i16 as both source and destination. 36 net new cells = 18 "to
+    // {u32, i16}" + 18 "from {u32, i16}" + 0 duplicate counting (the
+    // 2 u32↔i16 cross pairs land once in each block below).
+    //
+    // Each pair uses the same `(numel, x, y, ws, ws_b, stream) -> i32`
+    // ABI as the rest of the cast family. Truncation semantics match
+    // C++ `static_cast<TOut>(x)` — wraparound for narrowing integer
+    // casts, banker's-round-toward-zero for FP→integer.
+    // ============================================================================
+
+    // ----- f32/f64/f16/bf16/i32/i64/u8/i8 -> u32 -----------------------------
+    /// Cast `f32 -> u32`. Negative inputs are undefined per C++ rules
+    /// (typical NVCC behaviour: saturates toward 0). Phase 31.
+    pub fn baracuda_kernels_cast_f32_u32_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    pub fn baracuda_kernels_cast_f32_u32_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+    /// Cast `f64 -> u32`. Phase 31.
+    pub fn baracuda_kernels_cast_f64_u32_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    pub fn baracuda_kernels_cast_f64_u32_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+    /// Cast `f16 -> u32`. Phase 31.
+    pub fn baracuda_kernels_cast_f16_u32_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    pub fn baracuda_kernels_cast_f16_u32_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+    /// Cast `bf16 -> u32`. Phase 31.
+    pub fn baracuda_kernels_cast_bf16_u32_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    pub fn baracuda_kernels_cast_bf16_u32_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+    /// Cast `i32 -> u32`. Bitwise reinterpret for the common case
+    /// (`x >= 0`); two's-complement wraparound otherwise. Phase 31.
+    pub fn baracuda_kernels_cast_i32_u32_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    pub fn baracuda_kernels_cast_i32_u32_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+    /// Cast `i64 -> u32`. Truncates the top 32 bits. Phase 31.
+    pub fn baracuda_kernels_cast_i64_u32_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    pub fn baracuda_kernels_cast_i64_u32_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+    /// Cast `u8 -> u32`. Zero-extends. Phase 31.
+    pub fn baracuda_kernels_cast_u8_u32_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    pub fn baracuda_kernels_cast_u8_u32_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+    /// Cast `i8 -> u32`. Sign-extends then reinterprets. Phase 31.
+    pub fn baracuda_kernels_cast_i8_u32_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    pub fn baracuda_kernels_cast_i8_u32_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+
+    // ----- f32/f64/f16/bf16/i32/i64/u8/i8 -> i16 -----------------------------
+    /// Cast `f32 -> i16`. Phase 31.
+    pub fn baracuda_kernels_cast_f32_i16_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    pub fn baracuda_kernels_cast_f32_i16_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+    /// Cast `f64 -> i16`. Phase 31.
+    pub fn baracuda_kernels_cast_f64_i16_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    pub fn baracuda_kernels_cast_f64_i16_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+    /// Cast `f16 -> i16`. Phase 31.
+    pub fn baracuda_kernels_cast_f16_i16_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    pub fn baracuda_kernels_cast_f16_i16_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+    /// Cast `bf16 -> i16`. Phase 31.
+    pub fn baracuda_kernels_cast_bf16_i16_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    pub fn baracuda_kernels_cast_bf16_i16_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+    /// Cast `i32 -> i16`. Truncates to low 16 bits. Phase 31.
+    pub fn baracuda_kernels_cast_i32_i16_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    pub fn baracuda_kernels_cast_i32_i16_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+    /// Cast `i64 -> i16`. Truncates to low 16 bits. Phase 31.
+    pub fn baracuda_kernels_cast_i64_i16_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    pub fn baracuda_kernels_cast_i64_i16_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+    /// Cast `u8 -> i16`. Zero-extends. Phase 31.
+    pub fn baracuda_kernels_cast_u8_i16_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    pub fn baracuda_kernels_cast_u8_i16_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+    /// Cast `i8 -> i16`. Sign-extends. Phase 31.
+    pub fn baracuda_kernels_cast_i8_i16_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    pub fn baracuda_kernels_cast_i8_i16_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+
+    // ----- u32 -> * ----------------------------------------------------------
+    /// Cast `u32 -> f32`. Phase 31.
+    pub fn baracuda_kernels_cast_u32_f32_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    pub fn baracuda_kernels_cast_u32_f32_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+    /// Cast `u32 -> f64`. Phase 31.
+    pub fn baracuda_kernels_cast_u32_f64_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    pub fn baracuda_kernels_cast_u32_f64_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+    /// Cast `u32 -> f16`. Phase 31.
+    pub fn baracuda_kernels_cast_u32_f16_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    pub fn baracuda_kernels_cast_u32_f16_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+    /// Cast `u32 -> bf16`. Phase 31.
+    pub fn baracuda_kernels_cast_u32_bf16_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    pub fn baracuda_kernels_cast_u32_bf16_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+    /// Cast `u32 -> i32`. Bitwise reinterpret. Phase 31.
+    pub fn baracuda_kernels_cast_u32_i32_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    pub fn baracuda_kernels_cast_u32_i32_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+    /// Cast `u32 -> i64`. Zero-extends. Phase 31.
+    pub fn baracuda_kernels_cast_u32_i64_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    pub fn baracuda_kernels_cast_u32_i64_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+    /// Cast `u32 -> u8`. Truncates to low byte. Phase 31.
+    pub fn baracuda_kernels_cast_u32_u8_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    pub fn baracuda_kernels_cast_u32_u8_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+    /// Cast `u32 -> i8`. Truncates to low byte then reinterprets. Phase 31.
+    pub fn baracuda_kernels_cast_u32_i8_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    pub fn baracuda_kernels_cast_u32_i8_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+    /// Cast `u32 -> u32` (identity). Phase 31.
+    pub fn baracuda_kernels_cast_u32_u32_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    pub fn baracuda_kernels_cast_u32_u32_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+    /// Cast `u32 -> i16`. Truncates to low 16 bits then reinterprets. Phase 31.
+    pub fn baracuda_kernels_cast_u32_i16_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    pub fn baracuda_kernels_cast_u32_i16_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+
+    // ----- i16 -> * ----------------------------------------------------------
+    /// Cast `i16 -> f32`. Phase 31.
+    pub fn baracuda_kernels_cast_i16_f32_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    pub fn baracuda_kernels_cast_i16_f32_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+    /// Cast `i16 -> f64`. Phase 31.
+    pub fn baracuda_kernels_cast_i16_f64_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    pub fn baracuda_kernels_cast_i16_f64_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+    /// Cast `i16 -> f16`. Phase 31.
+    pub fn baracuda_kernels_cast_i16_f16_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    pub fn baracuda_kernels_cast_i16_f16_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+    /// Cast `i16 -> bf16`. Phase 31.
+    pub fn baracuda_kernels_cast_i16_bf16_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    pub fn baracuda_kernels_cast_i16_bf16_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+    /// Cast `i16 -> i32`. Sign-extends. Phase 31.
+    pub fn baracuda_kernels_cast_i16_i32_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    pub fn baracuda_kernels_cast_i16_i32_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+    /// Cast `i16 -> i64`. Sign-extends. Phase 31.
+    pub fn baracuda_kernels_cast_i16_i64_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    pub fn baracuda_kernels_cast_i16_i64_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+    /// Cast `i16 -> u8`. Truncates to low byte then reinterprets. Phase 31.
+    pub fn baracuda_kernels_cast_i16_u8_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    pub fn baracuda_kernels_cast_i16_u8_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+    /// Cast `i16 -> i8`. Truncates to low byte. Phase 31.
+    pub fn baracuda_kernels_cast_i16_i8_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    pub fn baracuda_kernels_cast_i16_i8_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+    /// Cast `i16 -> u32`. Sign-extends to i32 then reinterprets. Phase 31.
+    pub fn baracuda_kernels_cast_i16_u32_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    pub fn baracuda_kernels_cast_i16_u32_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
+    /// Cast `i16 -> i16` (identity). Phase 31.
+    pub fn baracuda_kernels_cast_i16_i16_run(numel: i64, x: *const c_void, y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    pub fn baracuda_kernels_cast_i16_i16_can_implement(numel: i64, x: *const c_void, y: *const c_void) -> i32;
 
     // ============================================================================
     // Phase 13.3 — sub-byte cast paths (Bool / Fp8 / S4 / U4).

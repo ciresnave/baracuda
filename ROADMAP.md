@@ -7,17 +7,16 @@ effort within each category. Authoritative status per op lives in
 [`OP-MATRIX.md`](OP-MATRIX.md); historical phase summaries live in
 [`ARCHITECTURE.md`](ARCHITECTURE.md).
 
-The current tag is **v0.0.1-alpha.45** with **2181+ GPU tests
-passing** on RTX 4070 (sm_89). Phase 30 alpha.45 closes the
-f16/bf16 GEMM decode-batch gap surfaced by Phase 29 by routing
-`2 ≤ M < 128` f16/bf16 GEMMs through cuBLAS. **3× speedup measured
-at M=32 f16** (parity with cuBLAS direct). M=1 stays on CUTLASS
-intentionally (cuBLAS RCR→col-major transa=T mapping slower at
-K=N≥2048). See [`crates/baracuda-kernels-bench/BENCHMARKS.md`](crates/baracuda-kernels-bench/BENCHMARKS.md)
-for before/after numbers.
+The current tag is **v0.0.1-alpha.46** with **2192+ GPU tests
+passing** on RTX 4070 (sm_89). Phase 31 alpha.46 closes the 5
+remaining gaps for Fuel's Phase 6c.2 storage.rs migration: ELU α
+parameter, `powf`, `step`, `gelu_erf`, cast `u32`/`i16`, and
+broadcast-reverse `reduce_sum_to`/`reduce_max_to`. **~76
+new/modified FFI symbols.** Unblocks Fuel's PTX retirement of the
+AFFINE/UNARY/BINARY/CAST/REDUCE/INDEXING/TERNARY/FILL/SORT modules.
 
-Known pre-existing failures excluded (CTC parallel-execution flake;
-mmvq_w_offset_alignment release-mode test design flaw).
+Known pre-existing failures excluded (CTC + mmvq_w_offset_alignment
++ parallel-execution context-init flake).
 
 ---
 

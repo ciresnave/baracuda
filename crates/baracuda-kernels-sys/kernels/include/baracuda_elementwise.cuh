@@ -4348,6 +4348,26 @@ __host__ inline int32_t launch_unary_pointwise_contig(
     return (err == cudaSuccess) ? 0 : 5;
 }
 
+// Stateful-functor overload — used by parameter-bearing unary ops that
+// stash runtime parameters (e.g. ELU α) inside the functor itself.
+template <typename T, typename F>
+__host__ inline int32_t launch_unary_pointwise_contig(
+    const T* x, T* y,
+    int64_t numel,
+    cudaStream_t stream,
+    F op)
+{
+    constexpr int kBlock = 256;
+    constexpr int64_t kMaxBlocks = 65535;
+    int64_t blocks_i64 = (numel + kBlock - 1) / kBlock;
+    int blocks = static_cast<int>(blocks_i64 > kMaxBlocks ? kMaxBlocks : blocks_i64);
+    if (blocks <= 0) blocks = 1;
+    unary_pointwise_contig_kernel<T, F><<<blocks, kBlock, 0, stream>>>(
+        x, y, numel, op);
+    cudaError_t err = cudaGetLastError();
+    return (err == cudaSuccess) ? 0 : 5;
+}
+
 template <typename T, typename F>
 __global__ void unary_pointwise_strided_kernel(
     const T* __restrict__ x,
@@ -4401,6 +4421,38 @@ __host__ inline int32_t launch_unary_pointwise_strided(
     if (blocks <= 0) blocks = 1;
     unary_pointwise_strided_kernel<T, F><<<blocks, kBlock, 0, stream>>>(
         x, y, numel, rank, shape, sx, sy, F{});
+    cudaError_t err = cudaGetLastError();
+    return (err == cudaSuccess) ? 0 : 5;
+}
+
+// Stateful-functor overload — used by parameter-bearing unary ops.
+template <typename T, typename F>
+__host__ inline int32_t launch_unary_pointwise_strided(
+    const T* x, T* y,
+    int64_t numel,
+    int32_t rank,
+    const int32_t* shape_host,
+    const int64_t* stride_x_host,
+    const int64_t* stride_y_host,
+    cudaStream_t stream,
+    F op)
+{
+    if (rank < 0 || rank > MAX_RANK) return 2;
+    DimsI32 shape = {};
+    DimsI64 sx    = {};
+    DimsI64 sy    = {};
+    for (int i = 0; i < rank; ++i) {
+        shape.v[i] = shape_host[i];
+        sx.v[i]    = stride_x_host[i];
+        sy.v[i]    = stride_y_host[i];
+    }
+    constexpr int kBlock = 256;
+    constexpr int64_t kMaxBlocks = 65535;
+    int64_t blocks_i64 = (numel + kBlock - 1) / kBlock;
+    int blocks = static_cast<int>(blocks_i64 > kMaxBlocks ? kMaxBlocks : blocks_i64);
+    if (blocks <= 0) blocks = 1;
+    unary_pointwise_strided_kernel<T, F><<<blocks, kBlock, 0, stream>>>(
+        x, y, numel, rank, shape, sx, sy, op);
     cudaError_t err = cudaGetLastError();
     return (err == cudaSuccess) ? 0 : 5;
 }
