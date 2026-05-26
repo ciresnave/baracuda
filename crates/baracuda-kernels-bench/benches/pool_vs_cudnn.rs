@@ -67,20 +67,18 @@ mod cudnn_impl {
                 Err(_) => continue,
             };
 
-            let desc = Pool2dDescriptor {
-                batch: shape.n,
-                channels: shape.c,
-                h_in: shape.h,
-                w_in: shape.w,
-                window_h: shape.k,
-                window_w: shape.k,
-                pad_h: shape.pad,
-                pad_w: shape.pad,
-                stride_h: shape.stride,
-                stride_w: shape.stride,
-                mode: PoolMode::Max,
-                element: kind,
-            };
+            let desc = Pool2dDescriptor::new(
+                shape.n,
+                shape.c,
+                shape.h,
+                shape.w,
+                shape.k,
+                shape.k,
+                PoolMode::Max,
+                kind,
+            )
+            .with_padding(shape.pad, shape.pad)
+            .with_stride(shape.stride, shape.stride);
             let plan = match MaxPool2dPlan::<T>::select(&stream, &desc, PlanPreference::default())
             {
                 Ok(p) => p,

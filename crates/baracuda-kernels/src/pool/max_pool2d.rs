@@ -64,7 +64,13 @@ pub enum PoolMode {
 /// cuDNN pooling exec path to drive. [`super::MaxPool2dPlan::select`]
 /// requires `mode == PoolMode::Max`; [`super::AvgPool2dPlan::select`]
 /// requires `mode == PoolMode::AvgIncludePad` or `AvgExcludePad`.
+///
+/// `#[non_exhaustive]` (Phase 32) — additional fields (e.g.
+/// `ceil_mode`, dilation, channels-last hint) may land in future
+/// phases. Use [`Self::new`] + the `with_*` setters from downstream
+/// code.
 #[derive(Copy, Clone, Debug)]
+#[non_exhaustive]
 pub struct Pool2dDescriptor {
     /// Batch size `N`.
     pub batch: i32,
@@ -91,6 +97,55 @@ pub struct Pool2dDescriptor {
     pub mode: PoolMode,
     /// Element dtype. Must be `F32`, `F64`, `F16`, or `Bf16`.
     pub element: ElementKind,
+}
+
+impl Pool2dDescriptor {
+    /// Build a descriptor with `pad` defaulted to `(0, 0)` and `stride`
+    /// defaulted to the window extent (PyTorch's default — stride
+    /// defaults to `kernel_size` for pooling). Chain with
+    /// [`Self::with_padding`] / [`Self::with_stride`] to override.
+    pub fn new(
+        batch: i32,
+        channels: i32,
+        h_in: i32,
+        w_in: i32,
+        window_h: i32,
+        window_w: i32,
+        mode: PoolMode,
+        element: ElementKind,
+    ) -> Self {
+        Self {
+            batch,
+            channels,
+            h_in,
+            w_in,
+            window_h,
+            window_w,
+            pad_h: 0,
+            pad_w: 0,
+            stride_h: window_h,
+            stride_w: window_w,
+            mode,
+            element,
+        }
+    }
+
+    /// Override `(pad_h, pad_w)`. Default `(0, 0)`.
+    #[inline]
+    pub fn with_padding(mut self, pad_h: i32, pad_w: i32) -> Self {
+        self.pad_h = pad_h;
+        self.pad_w = pad_w;
+        self
+    }
+
+    /// Override `(stride_h, stride_w)`. Default `(window_h, window_w)`
+    /// (PyTorch's pooling default).
+    #[inline]
+    pub fn with_stride(mut self, stride_h: i32, stride_w: i32) -> Self {
+        self.stride_h = stride_h;
+        self.stride_w = stride_w;
+        self
+    }
 }
 
 /// Args bundle for a 2-D pooling forward launch (shared between max and

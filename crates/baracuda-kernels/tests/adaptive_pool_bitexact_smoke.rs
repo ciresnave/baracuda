@@ -83,10 +83,9 @@ fn adaptive_avg_pool2d_5x5_to_3x3_f32_bitexact() {
 
     let dev_x = DeviceBuffer::from_slice(&ctx, &host_x).expect("up x");
     let mut dev_y: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, 9).expect("y");
-    let desc = AdaptivePool2dDescriptor {
-        batch: n, channels: c, h_in, w_in, h_out, w_out,
-        element: ElementKind::F32,
-    };
+    let desc = AdaptivePool2dDescriptor::new(
+        n, c, h_in, w_in, h_out, w_out, ElementKind::F32,
+    );
     let plan = AdaptiveAvgPool2dPlan::<f32>::select(&stream, &desc, PlanPreference::default())
         .expect("sel");
     let x_shape = [n, c, h_in, w_in];
@@ -148,10 +147,9 @@ fn adaptive_max_pool2d_5x5_to_3x3_f32_bitexact() {
 
     let dev_x = DeviceBuffer::from_slice(&ctx, &host_x).expect("up x");
     let mut dev_y: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, 9).expect("y");
-    let desc = AdaptivePool2dDescriptor {
-        batch: n, channels: c, h_in, w_in, h_out, w_out,
-        element: ElementKind::F32,
-    };
+    let desc = AdaptivePool2dDescriptor::new(
+        n, c, h_in, w_in, h_out, w_out, ElementKind::F32,
+    );
     let plan = AdaptiveMaxPool2dPlan::<f32>::select(&stream, &desc, PlanPreference::default())
         .expect("sel");
     let x_shape = [n, c, h_in, w_in];
@@ -218,12 +216,9 @@ fn adaptive_avg_pool3d_5x7x4_to_3x4x2_f32_bitexact() {
 
     let dev_x = DeviceBuffer::from_slice(&ctx, &host_x).expect("up x");
     let mut dev_y: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, out_numel).expect("y");
-    let desc = AdaptivePool3dDescriptor {
-        batch: n, channels: c,
-        d_in, h_in, w_in,
-        d_out, h_out, w_out,
-        element: ElementKind::F32,
-    };
+    let desc = AdaptivePool3dDescriptor::new(
+        n, c, d_in, h_in, w_in, d_out, h_out, w_out, ElementKind::F32,
+    );
     let plan = AdaptiveAvgPool3dPlan::<f32>::select(&stream, &desc, PlanPreference::default())
         .expect("sel");
     let x_shape = [n, c, d_in, h_in, w_in];
@@ -289,10 +284,9 @@ fn adaptive_avg_pool2d_5x5_to_3x3_f32_bw_bitexact() {
     // y is unused by AvgPool BW but the args require it for symmetry.
     let dev_y: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, out_numel).expect("y");
 
-    let desc = AdaptivePool2dDescriptor {
-        batch: n, channels: c, h_in, w_in, h_out, w_out,
-        element: ElementKind::F32,
-    };
+    let desc = AdaptivePool2dDescriptor::new(
+        n, c, h_in, w_in, h_out, w_out, ElementKind::F32,
+    );
     let plan = AdaptiveAvgPool2dPlan::<f32>::select(&stream, &desc, PlanPreference::default())
         .expect("sel");
     let x_shape = [n, c, h_in, w_in];
@@ -338,9 +332,8 @@ mod spot_dtypes {
         let exp = [1.5f64, 3.0, 4.5];
         let dev_x = DeviceBuffer::from_slice(&ctx, &host_x).expect("up");
         let mut dev_y: DeviceBuffer<f64> = DeviceBuffer::zeros(&ctx, 3).expect("y");
-        let desc = AdaptivePool1dDescriptor {
-            batch: 1, channels: 1, l_in: 5, l_out: 3, element: ElementKind::F64,
-        };
+        let desc =
+            AdaptivePool1dDescriptor::new(1, 1, 5, 3, ElementKind::F64);
         let plan = AdaptiveAvgPool1dPlan::<f64>::select(&stream, &desc, PlanPreference::default()).expect("sel");
         plan.run_fw(&stream, Workspace::None, AdaptivePool1dFwArgs {
             x: TensorRef { data: dev_x.as_slice(), shape: [1,1,5], stride: contiguous_stride([1,1,5]) },
@@ -364,9 +357,8 @@ mod spot_dtypes {
         let exp = [1.5f32, 3.0, 4.5];
         let dev_x = DeviceBuffer::from_slice(&ctx, &host_x).expect("up");
         let mut dev_y: DeviceBuffer<f16> = DeviceBuffer::zeros(&ctx, 3).expect("y");
-        let desc = AdaptivePool1dDescriptor {
-            batch: 1, channels: 1, l_in: 5, l_out: 3, element: ElementKind::F16,
-        };
+        let desc =
+            AdaptivePool1dDescriptor::new(1, 1, 5, 3, ElementKind::F16);
         let plan = AdaptiveAvgPool1dPlan::<f16>::select(&stream, &desc, PlanPreference::default()).expect("sel");
         plan.run_fw(&stream, Workspace::None, AdaptivePool1dFwArgs {
             x: TensorRef { data: dev_x.as_slice(), shape: [1,1,5], stride: contiguous_stride([1,1,5]) },
@@ -391,9 +383,8 @@ mod spot_dtypes {
         let exp = [1.5f32, 3.0, 4.5];
         let dev_x = DeviceBuffer::from_slice(&ctx, &host_x).expect("up");
         let mut dev_y: DeviceBuffer<bf16> = DeviceBuffer::zeros(&ctx, 3).expect("y");
-        let desc = AdaptivePool1dDescriptor {
-            batch: 1, channels: 1, l_in: 5, l_out: 3, element: ElementKind::Bf16,
-        };
+        let desc =
+            AdaptivePool1dDescriptor::new(1, 1, 5, 3, ElementKind::Bf16);
         let plan = AdaptiveAvgPool1dPlan::<bf16>::select(&stream, &desc, PlanPreference::default()).expect("sel");
         plan.run_fw(&stream, Workspace::None, AdaptivePool1dFwArgs {
             x: TensorRef { data: dev_x.as_slice(), shape: [1,1,5], stride: contiguous_stride([1,1,5]) },

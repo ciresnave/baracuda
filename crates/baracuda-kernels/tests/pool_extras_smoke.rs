@@ -30,9 +30,7 @@ fn adaptive_avg_pool1d_8_to_4_f32() {
     let exp_y: Vec<f32> = vec![1.5, 3.5, 5.5, 7.5];
     let dev_x = DeviceBuffer::from_slice(&ctx, &host_x).expect("up x");
     let mut dev_y: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, 4).expect("y");
-    let desc = AdaptivePool1dDescriptor {
-        batch: 1, channels: 1, l_in: 8, l_out: 4, element: ElementKind::F32,
-    };
+    let desc = AdaptivePool1dDescriptor::new(1, 1, 8, 4, ElementKind::F32);
     let plan = AdaptiveAvgPool1dPlan::<f32>::select(&stream, &desc, PlanPreference::default())
         .expect("sel");
     // `derived_kernel_stride` was deprecated in Phase 16.1 — the
@@ -67,10 +65,8 @@ fn adaptive_avg_pool3d_2x2x2_to_1x1x1_f32() {
     let exp_y: Vec<f32> = vec![4.5];
     let dev_x = DeviceBuffer::from_slice(&ctx, &host_x).expect("up x");
     let mut dev_y: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, 1).expect("y");
-    let desc = AdaptivePool3dDescriptor {
-        batch: 1, channels: 1, d_in: 2, h_in: 2, w_in: 2,
-        d_out: 1, h_out: 1, w_out: 1, element: ElementKind::F32,
-    };
+    let desc =
+        AdaptivePool3dDescriptor::new(1, 1, 2, 2, 2, 1, 1, 1, ElementKind::F32);
     let plan = AdaptiveAvgPool3dPlan::<f32>::select(&stream, &desc, PlanPreference::default())
         .expect("sel");
     plan.run_fw(&stream, Workspace::None, AdaptivePool3dFwArgs {
@@ -94,9 +90,7 @@ fn adaptive_max_pool1d_8_to_4_f32() {
     let exp_y: Vec<f32> = vec![2.0, 4.0, 6.0, 8.0];
     let dev_x = DeviceBuffer::from_slice(&ctx, &host_x).expect("up x");
     let mut dev_y: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, 4).expect("y");
-    let desc = AdaptivePool1dDescriptor {
-        batch: 1, channels: 1, l_in: 8, l_out: 4, element: ElementKind::F32,
-    };
+    let desc = AdaptivePool1dDescriptor::new(1, 1, 8, 4, ElementKind::F32);
     let plan = AdaptiveMaxPool1dPlan::<f32>::select(&stream, &desc, PlanPreference::default())
         .expect("sel");
     plan.run_fw(&stream, Workspace::None, AdaptivePool1dFwArgs {
@@ -121,10 +115,8 @@ fn adaptive_max_pool2d_4x4_to_2x2_f32() {
     let exp_y: Vec<f32> = vec![6.0, 8.0, 14.0, 16.0];
     let dev_x = DeviceBuffer::from_slice(&ctx, &host_x).expect("up x");
     let mut dev_y: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, 4).expect("y");
-    let desc = AdaptivePool2dDescriptor {
-        batch: 1, channels: 1, h_in: 4, w_in: 4, h_out: 2, w_out: 2,
-        element: ElementKind::F32,
-    };
+    let desc =
+        AdaptivePool2dDescriptor::new(1, 1, 4, 4, 2, 2, ElementKind::F32);
     let plan = AdaptiveMaxPool2dPlan::<f32>::select(&stream, &desc, PlanPreference::default())
         .expect("sel");
     plan.run_fw(&stream, Workspace::None, AdaptivePool2dFwArgs {
@@ -148,10 +140,8 @@ fn adaptive_max_pool3d_2x2x2_to_1x1x1_f32() {
     let exp_y: Vec<f32> = vec![8.0];
     let dev_x = DeviceBuffer::from_slice(&ctx, &host_x).expect("up x");
     let mut dev_y: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, 1).expect("y");
-    let desc = AdaptivePool3dDescriptor {
-        batch: 1, channels: 1, d_in: 2, h_in: 2, w_in: 2,
-        d_out: 1, h_out: 1, w_out: 1, element: ElementKind::F32,
-    };
+    let desc =
+        AdaptivePool3dDescriptor::new(1, 1, 2, 2, 2, 1, 1, 1, ElementKind::F32);
     let plan = AdaptiveMaxPool3dPlan::<f32>::select(&stream, &desc, PlanPreference::default())
         .expect("sel");
     plan.run_fw(&stream, Workspace::None, AdaptivePool3dFwArgs {
@@ -179,11 +169,9 @@ fn adaptive_max_pool3d_2x2x2_to_1x1x1_f32() {
 #[ignore]
 fn fractional_max_pool2d_select_accepts() {
     let (_ctx, stream) = setup();
-    let desc = FractionalMaxPool2dDescriptor {
-        batch: 1, channels: 1, h_in: 8, w_in: 8,
-        window_h: 2, window_w: 2, h_out: 4, w_out: 4, seed: 0,
-        element: ElementKind::F32,
-    };
+    let desc = FractionalMaxPool2dDescriptor::new(
+        1, 1, 8, 8, 2, 2, 4, 4, ElementKind::F32,
+    );
     let r = FractionalMaxPool2dPlan::<f32>::select(&stream, &desc, PlanPreference::default());
     assert!(r.is_ok(), "FractionalMaxPool2d should accept well-formed select");
 }
@@ -192,12 +180,9 @@ fn fractional_max_pool2d_select_accepts() {
 #[ignore]
 fn fractional_max_pool3d_select_accepts() {
     let (_ctx, stream) = setup();
-    let desc = FractionalMaxPool3dDescriptor {
-        batch: 1, channels: 1, d_in: 4, h_in: 8, w_in: 8,
-        window_d: 2, window_h: 2, window_w: 2,
-        d_out: 2, h_out: 4, w_out: 4, seed: 0,
-        element: ElementKind::F32,
-    };
+    let desc = FractionalMaxPool3dDescriptor::new(
+        1, 1, 4, 8, 8, 2, 2, 2, 2, 4, 4, ElementKind::F32,
+    );
     let r = FractionalMaxPool3dPlan::<f32>::select(&stream, &desc, PlanPreference::default());
     assert!(r.is_ok(), "FractionalMaxPool3d should accept well-formed select");
 }
@@ -211,10 +196,8 @@ fn fractional_max_pool3d_select_accepts() {
 #[ignore]
 fn lp_pool1d_select_accepts() {
     let (_ctx, stream) = setup();
-    let desc = LpPool1dDescriptor {
-        batch: 1, channels: 1, l_in: 8, window: 2, stride: 2,
-        p: 2.0, ceil_mode: false, element: ElementKind::F32,
-    };
+    let desc = LpPool1dDescriptor::new(1, 1, 8, 2, 2.0, ElementKind::F32)
+        .with_stride(2);
     let r = LpPool1dPlan::<f32>::select(&stream, &desc, PlanPreference::default());
     assert!(r.is_ok(), "LpPool1d should accept select for p=2");
 }
@@ -223,11 +206,9 @@ fn lp_pool1d_select_accepts() {
 #[ignore]
 fn lp_pool2d_select_accepts() {
     let (_ctx, stream) = setup();
-    let desc = LpPool2dDescriptor {
-        batch: 1, channels: 1, h_in: 8, w_in: 8,
-        window_h: 2, window_w: 2, stride_h: 2, stride_w: 2,
-        p: 2.0, ceil_mode: false, element: ElementKind::F32,
-    };
+    let desc =
+        LpPool2dDescriptor::new(1, 1, 8, 8, 2, 2, 2.0, ElementKind::F32)
+            .with_stride(2, 2);
     let r = LpPool2dPlan::<f32>::select(&stream, &desc, PlanPreference::default());
     assert!(r.is_ok(), "LpPool2d should accept select for p=2");
 }

@@ -37,12 +37,8 @@ fn max_pool1d_f32() {
     let dev_x = DeviceBuffer::from_slice(&ctx, &host_x).expect("up x");
     let mut dev_y: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, numel_y).expect("y");
 
-    let desc = Pool1dDescriptor {
-        batch: n, channels: c, l_in,
-        window: 2, pad: 0, stride: 2,
-        mode: PoolMode::Max,
-        element: ElementKind::F32,
-    };
+    let desc =
+        Pool1dDescriptor::new(n, c, l_in, 2, PoolMode::Max, ElementKind::F32);
     let plan = MaxPool1dPlan::<f32>::select(&stream, &desc, PlanPreference::default())
         .expect("sel");
     let x_shape = [n, c, l_in];

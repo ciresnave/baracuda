@@ -154,18 +154,11 @@ fn make_seq(n: usize, seed: u32, scale: f64) -> Vec<f64> {
 }
 
 fn desc_from(d: &Dims, elem: ElementKind) -> Conv1dDescriptor {
-    Conv1dDescriptor {
-        batch: d.n,
-        c_in: d.c_in,
-        l_in: d.l_in,
-        c_out: d.c_out,
-        l_filt: d.l_filt,
-        pad_l: d.pad_l,
-        stride_l: d.stride_l,
-        dilation_l: d.dilation_l,
-        groups: d.groups,
-        element: elem,
-    }
+    Conv1dDescriptor::new(d.n, d.c_in, d.l_in, d.c_out, d.l_filt, elem)
+        .with_padding(d.pad_l)
+        .with_stride(d.stride_l)
+        .with_dilation(d.dilation_l)
+        .with_groups(d.groups)
 }
 
 #[test]

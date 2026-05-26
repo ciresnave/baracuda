@@ -28,7 +28,12 @@ use super::adaptive_avg_pool1d::{
 };
 
 /// Descriptor for an adaptive 2-D pooling op over NCHW tensors.
+///
+/// `#[non_exhaustive]` (Phase 32) — see
+/// [`super::AdaptivePool1dDescriptor`] for the builder rationale. Use
+/// [`Self::new`] from downstream code.
 #[derive(Copy, Clone, Debug)]
+#[non_exhaustive]
 pub struct AdaptivePool2dDescriptor {
     /// Batch `N`.
     pub batch: i32,
@@ -44,6 +49,29 @@ pub struct AdaptivePool2dDescriptor {
     pub w_out: i32,
     /// Element dtype.
     pub element: ElementKind,
+}
+
+impl AdaptivePool2dDescriptor {
+    /// Build a descriptor. All fields are required.
+    pub fn new(
+        batch: i32,
+        channels: i32,
+        h_in: i32,
+        w_in: i32,
+        h_out: i32,
+        w_out: i32,
+        element: ElementKind,
+    ) -> Self {
+        Self {
+            batch,
+            channels,
+            h_in,
+            w_in,
+            h_out,
+            w_out,
+            element,
+        }
+    }
 }
 
 /// FW args.

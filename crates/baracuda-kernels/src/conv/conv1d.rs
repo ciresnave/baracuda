@@ -44,7 +44,12 @@ use baracuda_kernels_types::{
 /// c_in / groups, l_filt]`. The padding / stride / dilation extents
 /// follow PyTorch's `nn.Conv1d` semantics (kernel applied directly —
 /// **cross-correlation**, not mathematical convolution).
+///
+/// `#[non_exhaustive]` (Phase 32) — see [`Conv2dDescriptor`] for the
+/// builder rationale. Use [`Self::new`] + the `with_*` setters from
+/// downstream code.
 #[derive(Copy, Clone, Debug)]
+#[non_exhaustive]
 pub struct Conv1dDescriptor {
     /// Batch size `N`.
     pub batch: i32,
@@ -66,6 +71,63 @@ pub struct Conv1dDescriptor {
     pub groups: i32,
     /// Element dtype. Must be `F32`, `F64`, `F16`, or `Bf16`.
     pub element: ElementKind,
+}
+
+impl Conv1dDescriptor {
+    /// Build a descriptor with `pad / stride / dilation / groups`
+    /// defaulted to PyTorch's `nn.Conv1d` defaults (`0 / 1 / 1 / 1`).
+    /// Chain with [`Self::with_padding`] / [`Self::with_stride`] /
+    /// [`Self::with_dilation`] / [`Self::with_groups`] to override.
+    pub fn new(
+        batch: i32,
+        c_in: i32,
+        l_in: i32,
+        c_out: i32,
+        l_filt: i32,
+        element: ElementKind,
+    ) -> Self {
+        Self {
+            batch,
+            c_in,
+            l_in,
+            c_out,
+            l_filt,
+            pad_l: 0,
+            stride_l: 1,
+            dilation_l: 1,
+            groups: 1,
+            element,
+        }
+    }
+
+    /// Override the padding (zero-padding on each side of the length).
+    /// Default `0`.
+    #[inline]
+    pub fn with_padding(mut self, pad_l: i32) -> Self {
+        self.pad_l = pad_l;
+        self
+    }
+
+    /// Override the stride. Default `1`.
+    #[inline]
+    pub fn with_stride(mut self, stride_l: i32) -> Self {
+        self.stride_l = stride_l;
+        self
+    }
+
+    /// Override the dilation. Default `1`.
+    #[inline]
+    pub fn with_dilation(mut self, dilation_l: i32) -> Self {
+        self.dilation_l = dilation_l;
+        self
+    }
+
+    /// Override the group count. Default `1`.
+    #[inline]
+    pub fn with_groups(mut self, groups: i32) -> Self {
+        self.groups = groups;
+        self
+    }
 }
 
 /// Args bundle for a Conv1d forward launch.

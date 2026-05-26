@@ -58,7 +58,12 @@ use baracuda_kernels_types::{
 /// Output spatial extents follow PyTorch's `nn.ConvTranspose2d`:
 /// `H_out = (H_in - 1)·stride_h - 2·pad_h + dilation_h·(kH - 1) +
 /// output_padding_h + 1` (and analogous for `W_out`).
+///
+/// `#[non_exhaustive]` (Phase 32) — see [`super::Conv2dDescriptor`]
+/// for the builder rationale. Use [`Self::new`] + the `with_*` setters
+/// from downstream code.
 #[derive(Copy, Clone, Debug)]
+#[non_exhaustive]
 pub struct ConvTranspose2dDescriptor {
     /// Batch size `N`.
     pub batch: i32,
@@ -98,6 +103,82 @@ pub struct ConvTranspose2dDescriptor {
     pub groups: i32,
     /// Element dtype. Must be `F32`, `F64`, `F16`, or `Bf16`.
     pub element: ElementKind,
+}
+
+impl ConvTranspose2dDescriptor {
+    /// Build a descriptor with `pad / stride / dilation / output_pad /
+    /// groups` defaulted to PyTorch's `nn.ConvTranspose2d` defaults
+    /// (`0 / 1 / 1 / 0 / 1`). Chain with the `with_*` setters to
+    /// override.
+    pub fn new(
+        batch: i32,
+        c_in: i32,
+        h_in: i32,
+        w_in: i32,
+        c_out: i32,
+        h_filt: i32,
+        w_filt: i32,
+        element: ElementKind,
+    ) -> Self {
+        Self {
+            batch,
+            c_in,
+            h_in,
+            w_in,
+            c_out,
+            h_filt,
+            w_filt,
+            pad_h: 0,
+            pad_w: 0,
+            stride_h: 1,
+            stride_w: 1,
+            dilation_h: 1,
+            dilation_w: 1,
+            output_pad_h: 0,
+            output_pad_w: 0,
+            groups: 1,
+            element,
+        }
+    }
+
+    /// Override `(pad_h, pad_w)`. Default `(0, 0)`.
+    #[inline]
+    pub fn with_padding(mut self, pad_h: i32, pad_w: i32) -> Self {
+        self.pad_h = pad_h;
+        self.pad_w = pad_w;
+        self
+    }
+
+    /// Override `(stride_h, stride_w)`. Default `(1, 1)`.
+    #[inline]
+    pub fn with_stride(mut self, stride_h: i32, stride_w: i32) -> Self {
+        self.stride_h = stride_h;
+        self.stride_w = stride_w;
+        self
+    }
+
+    /// Override `(dilation_h, dilation_w)`. Default `(1, 1)`.
+    #[inline]
+    pub fn with_dilation(mut self, dilation_h: i32, dilation_w: i32) -> Self {
+        self.dilation_h = dilation_h;
+        self.dilation_w = dilation_w;
+        self
+    }
+
+    /// Override `(output_pad_h, output_pad_w)`. Default `(0, 0)`.
+    #[inline]
+    pub fn with_output_padding(mut self, output_pad_h: i32, output_pad_w: i32) -> Self {
+        self.output_pad_h = output_pad_h;
+        self.output_pad_w = output_pad_w;
+        self
+    }
+
+    /// Override the group count. Default `1`.
+    #[inline]
+    pub fn with_groups(mut self, groups: i32) -> Self {
+        self.groups = groups;
+        self
+    }
 }
 
 /// Args bundle for a ConvTranspose2d forward launch.

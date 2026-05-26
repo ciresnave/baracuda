@@ -105,6 +105,24 @@ new variants):
   Lower/Upper for triangular fill, the LAPACK Left/Right and N/T/C
   ops, the PyTorch reduction modes).
 
+### Phase 32 — descriptor builder retrofit
+
+Phase 32 propagated the same `#[non_exhaustive]` marker to the
+**descriptor structs** that have been amended in recent phases
+(`Conv{1,2,3}dDescriptor`, `ConvTranspose{1,2,3}dDescriptor`,
+`Pool{1,2,3}dDescriptor`, `AdaptivePool{1,2,3}dDescriptor`,
+`LpPool{1,2}dDescriptor`, `FractionalMaxPool{2,3}dDescriptor`,
+`InterpolateDescriptor`, `InterpolateBackwardDescriptor`). These
+structs live in `baracuda-kernels`, not in this crate — see the
+"Phase 32 builder migration" section in
+[`baracuda-kernels/README.md`](../baracuda-kernels) for the full
+list of new `::new(...)` constructors and `.with_*` setters.
+
+The marker means downstream callers MUST use the new builder
+(`Conv2dDescriptor::new(...).with_padding(...).with_stride(...)`)
+instead of a struct literal. Adding optional fields in future phases
+then no longer breaks downstream builds.
+
 ## Why this crate is split out
 
 A few load-bearing reasons:

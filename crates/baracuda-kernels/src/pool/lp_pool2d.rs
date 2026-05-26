@@ -29,7 +29,12 @@ use baracuda_kernels_types::{
 ///
 /// Input shape: `[batch, channels, h_in, w_in]`. Output shape:
 /// `[batch, channels, h_out, w_out]`.
+///
+/// `#[non_exhaustive]` (Phase 32) — Phase 16 already added `ceil_mode`;
+/// future fields (e.g. padding) may follow. Use [`Self::new`] + the
+/// `with_*` setters from downstream code.
 #[derive(Copy, Clone, Debug)]
+#[non_exhaustive]
 pub struct LpPool2dDescriptor {
     /// Batch `N`.
     pub batch: i32,
@@ -55,6 +60,52 @@ pub struct LpPool2dDescriptor {
     pub ceil_mode: bool,
     /// Element dtype.
     pub element: ElementKind,
+}
+
+impl LpPool2dDescriptor {
+    /// Build a descriptor with `stride` defaulted to `(window_h,
+    /// window_w)` (PyTorch pooling default) and `ceil_mode = false`.
+    /// Chain with [`Self::with_stride`] / [`Self::with_ceil_mode`] to
+    /// override.
+    pub fn new(
+        batch: i32,
+        channels: i32,
+        h_in: i32,
+        w_in: i32,
+        window_h: i32,
+        window_w: i32,
+        p: f32,
+        element: ElementKind,
+    ) -> Self {
+        Self {
+            batch,
+            channels,
+            h_in,
+            w_in,
+            window_h,
+            window_w,
+            stride_h: window_h,
+            stride_w: window_w,
+            p,
+            ceil_mode: false,
+            element,
+        }
+    }
+
+    /// Override `(stride_h, stride_w)`. Default `(window_h, window_w)`.
+    #[inline]
+    pub fn with_stride(mut self, stride_h: i32, stride_w: i32) -> Self {
+        self.stride_h = stride_h;
+        self.stride_w = stride_w;
+        self
+    }
+
+    /// Override `ceil_mode`. Default `false` (floor formula).
+    #[inline]
+    pub fn with_ceil_mode(mut self, ceil_mode: bool) -> Self {
+        self.ceil_mode = ceil_mode;
+        self
+    }
 }
 
 /// Args bundle for an `LpPool2d` forward launch.

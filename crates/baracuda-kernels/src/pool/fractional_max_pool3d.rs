@@ -31,7 +31,12 @@ use baracuda_kernels_types::{
 use super::fractional_max_pool2d::{build_sku, ffi_status};
 
 /// Descriptor for `FractionalMaxPool3d`.
+///
+/// `#[non_exhaustive]` (Phase 32) — see
+/// [`super::FractionalMaxPool2dDescriptor`] for the builder rationale.
+/// Use [`Self::new`] + the `with_seed` setter from downstream code.
 #[derive(Copy, Clone, Debug)]
+#[non_exhaustive]
 pub struct FractionalMaxPool3dDescriptor {
     /// Batch `N`.
     pub batch: i32,
@@ -59,6 +64,50 @@ pub struct FractionalMaxPool3dDescriptor {
     pub seed: u64,
     /// Element dtype.
     pub element: ElementKind,
+}
+
+impl FractionalMaxPool3dDescriptor {
+    /// Build a descriptor with `seed = 0`. Chain with
+    /// [`Self::with_seed`] to override.
+    #[allow(clippy::too_many_arguments)]
+    pub fn new(
+        batch: i32,
+        channels: i32,
+        d_in: i32,
+        h_in: i32,
+        w_in: i32,
+        window_d: i32,
+        window_h: i32,
+        window_w: i32,
+        d_out: i32,
+        h_out: i32,
+        w_out: i32,
+        element: ElementKind,
+    ) -> Self {
+        Self {
+            batch,
+            channels,
+            d_in,
+            h_in,
+            w_in,
+            window_d,
+            window_h,
+            window_w,
+            d_out,
+            h_out,
+            w_out,
+            seed: 0,
+            element,
+        }
+    }
+
+    /// Override the `seed`. Default `0`. Currently unused — caller
+    /// supplies `random_samples` directly via the FW args.
+    #[inline]
+    pub fn with_seed(mut self, seed: u64) -> Self {
+        self.seed = seed;
+        self
+    }
 }
 
 /// Args bundle for the 3-D forward launch.

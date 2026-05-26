@@ -242,23 +242,12 @@ fn run_fw_and_check<T, F, G>(
     let dev_w = DeviceBuffer::from_slice(ctx, &host_w).expect("up w");
     let mut dev_y: DeviceBuffer<T> = DeviceBuffer::zeros(ctx, y_numel).expect("alloc y");
 
-    let desc = Conv2dDescriptor {
-        batch: d.n,
-        c_in: d.c_in,
-        h_in: d.h_in,
-        w_in: d.w_in,
-        c_out: d.c_out,
-        h_filt: d.h_filt,
-        w_filt: d.w_filt,
-        pad_h: d.pad_h,
-        pad_w: d.pad_w,
-        stride_h: d.stride_h,
-        stride_w: d.stride_w,
-        dilation_h: d.dilation_h,
-        dilation_w: d.dilation_w,
-        groups: 1,
-        element: elem,
-    };
+    let desc = Conv2dDescriptor::new(
+        d.n, d.c_in, d.h_in, d.w_in, d.c_out, d.h_filt, d.w_filt, elem,
+    )
+    .with_padding(d.pad_h, d.pad_w)
+    .with_stride(d.stride_h, d.stride_w)
+    .with_dilation(d.dilation_h, d.dilation_w);
     let plan = Conv2dPlan::<T>::select(stream, &desc, PlanPreference::default())
         .expect("select Conv2dPlan");
     assert_eq!(plan.output_dims(), (h_out, w_out));
@@ -472,23 +461,19 @@ fn conv2d_f32_bw_data() {
     let dev_dy = DeviceBuffer::from_slice(&ctx, &host_dy_f32).expect("up dy");
     let mut dev_dx: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, dx_numel).expect("alloc dx");
 
-    let desc = Conv2dDescriptor {
-        batch: d.n,
-        c_in: d.c_in,
-        h_in: d.h_in,
-        w_in: d.w_in,
-        c_out: d.c_out,
-        h_filt: d.h_filt,
-        w_filt: d.w_filt,
-        pad_h: d.pad_h,
-        pad_w: d.pad_w,
-        stride_h: d.stride_h,
-        stride_w: d.stride_w,
-        dilation_h: d.dilation_h,
-        dilation_w: d.dilation_w,
-        groups: 1,
-        element: ElementKind::F32,
-    };
+    let desc = Conv2dDescriptor::new(
+        d.n,
+        d.c_in,
+        d.h_in,
+        d.w_in,
+        d.c_out,
+        d.h_filt,
+        d.w_filt,
+        ElementKind::F32,
+    )
+    .with_padding(d.pad_h, d.pad_w)
+    .with_stride(d.stride_h, d.stride_w)
+    .with_dilation(d.dilation_h, d.dilation_w);
     let plan = Conv2dPlan::<f32>::select(&stream, &desc, PlanPreference::default()).expect("sel");
     let ws_bytes = plan
         .query_bw_data_workspace_size(&stream)
@@ -563,23 +548,19 @@ fn conv2d_f32_bw_filter() {
     let dev_dy = DeviceBuffer::from_slice(&ctx, &host_dy_f32).expect("up dy");
     let mut dev_dw: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, dw_numel).expect("alloc dw");
 
-    let desc = Conv2dDescriptor {
-        batch: d.n,
-        c_in: d.c_in,
-        h_in: d.h_in,
-        w_in: d.w_in,
-        c_out: d.c_out,
-        h_filt: d.h_filt,
-        w_filt: d.w_filt,
-        pad_h: d.pad_h,
-        pad_w: d.pad_w,
-        stride_h: d.stride_h,
-        stride_w: d.stride_w,
-        dilation_h: d.dilation_h,
-        dilation_w: d.dilation_w,
-        groups: 1,
-        element: ElementKind::F32,
-    };
+    let desc = Conv2dDescriptor::new(
+        d.n,
+        d.c_in,
+        d.h_in,
+        d.w_in,
+        d.c_out,
+        d.h_filt,
+        d.w_filt,
+        ElementKind::F32,
+    )
+    .with_padding(d.pad_h, d.pad_w)
+    .with_stride(d.stride_h, d.stride_w)
+    .with_dilation(d.dilation_h, d.dilation_w);
     let plan = Conv2dPlan::<f32>::select(&stream, &desc, PlanPreference::default()).expect("sel");
     let ws_bytes = plan
         .query_bw_filter_workspace_size(&stream)

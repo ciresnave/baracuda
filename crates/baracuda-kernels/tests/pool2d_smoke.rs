@@ -255,14 +255,9 @@ fn max_pool2d_f32() {
     let dev_x = DeviceBuffer::from_slice(&ctx, &host_x).expect("up x");
     let mut dev_y: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, numel_y).expect("y");
 
-    let desc = Pool2dDescriptor {
-        batch: n, channels: c, h_in, w_in,
-        window_h: 2, window_w: 2,
-        pad_h: 0, pad_w: 0,
-        stride_h: 2, stride_w: 2,
-        mode: PoolMode::Max,
-        element: ElementKind::F32,
-    };
+    let desc = Pool2dDescriptor::new(
+        n, c, h_in, w_in, 2, 2, PoolMode::Max, ElementKind::F32,
+    );
     let plan = MaxPool2dPlan::<f32>::select(&stream, &desc, PlanPreference::default())
         .expect("sel");
     let y_shape = [n, c, h_out as i32, w_out as i32];
@@ -324,14 +319,9 @@ fn max_pool2d_f64() {
 
     let dev_x = DeviceBuffer::from_slice(&ctx, &host_x).expect("up x");
     let mut dev_y: DeviceBuffer<f64> = DeviceBuffer::zeros(&ctx, numel_y).expect("y");
-    let desc = Pool2dDescriptor {
-        batch: n, channels: c, h_in, w_in,
-        window_h: 2, window_w: 2,
-        pad_h: 0, pad_w: 0,
-        stride_h: 2, stride_w: 2,
-        mode: PoolMode::Max,
-        element: ElementKind::F64,
-    };
+    let desc = Pool2dDescriptor::new(
+        n, c, h_in, w_in, 2, 2, PoolMode::Max, ElementKind::F64,
+    );
     let plan = MaxPool2dPlan::<f64>::select(&stream, &desc, PlanPreference::default())
         .expect("sel");
     let y_shape = [n, c, h_out as i32, w_out as i32];
@@ -393,14 +383,9 @@ fn avg_pool2d_f32() {
 
     let dev_x = DeviceBuffer::from_slice(&ctx, &host_x).expect("up x");
     let mut dev_y: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, numel_y).expect("y");
-    let desc = Pool2dDescriptor {
-        batch: n, channels: c, h_in, w_in,
-        window_h: 2, window_w: 2,
-        pad_h: 0, pad_w: 0,
-        stride_h: 2, stride_w: 2,
-        mode: PoolMode::AvgExcludePad,
-        element: ElementKind::F32,
-    };
+    let desc = Pool2dDescriptor::new(
+        n, c, h_in, w_in, 2, 2, PoolMode::AvgExcludePad, ElementKind::F32,
+    );
     let plan = AvgPool2dPlan::<f32>::select(&stream, &desc, PlanPreference::default())
         .expect("sel");
     let y_shape = [n, c, h_out as i32, w_out as i32];
@@ -460,14 +445,9 @@ fn avg_pool2d_f64() {
 
     let dev_x = DeviceBuffer::from_slice(&ctx, &host_x).expect("up x");
     let mut dev_y: DeviceBuffer<f64> = DeviceBuffer::zeros(&ctx, numel_y).expect("y");
-    let desc = Pool2dDescriptor {
-        batch: n, channels: c, h_in, w_in,
-        window_h: 2, window_w: 2,
-        pad_h: 0, pad_w: 0,
-        stride_h: 2, stride_w: 2,
-        mode: PoolMode::AvgExcludePad,
-        element: ElementKind::F64,
-    };
+    let desc = Pool2dDescriptor::new(
+        n, c, h_in, w_in, 2, 2, PoolMode::AvgExcludePad, ElementKind::F64,
+    );
     let plan = AvgPool2dPlan::<f64>::select(&stream, &desc, PlanPreference::default())
         .expect("sel");
     let y_shape = [n, c, h_out as i32, w_out as i32];
@@ -538,11 +518,8 @@ fn pool2d_f16_smoke() {
     let x_shape = [n, c, h_in, w_in];
 
     // max-pool FW
-    let max_desc = Pool2dDescriptor {
-        batch: n, channels: c, h_in, w_in,
-        window_h: 2, window_w: 2, pad_h: 0, pad_w: 0, stride_h: 2, stride_w: 2,
-        mode: PoolMode::Max, element: ElementKind::F16,
-    };
+    let max_desc =
+        Pool2dDescriptor::new(n, c, h_in, w_in, 2, 2, PoolMode::Max, ElementKind::F16);
     let max_plan = MaxPool2dPlan::<f16>::select(&stream, &max_desc, PlanPreference::default())
         .expect("max sel");
     max_plan.run_fw(&stream, Workspace::None, Pool2dFwArgs {
@@ -551,11 +528,9 @@ fn pool2d_f16_smoke() {
     }).expect("max fw");
 
     // avg-pool FW
-    let avg_desc = Pool2dDescriptor {
-        batch: n, channels: c, h_in, w_in,
-        window_h: 2, window_w: 2, pad_h: 0, pad_w: 0, stride_h: 2, stride_w: 2,
-        mode: PoolMode::AvgExcludePad, element: ElementKind::F16,
-    };
+    let avg_desc = Pool2dDescriptor::new(
+        n, c, h_in, w_in, 2, 2, PoolMode::AvgExcludePad, ElementKind::F16,
+    );
     let avg_plan = AvgPool2dPlan::<f16>::select(&stream, &avg_desc, PlanPreference::default())
         .expect("avg sel");
     avg_plan.run_fw(&stream, Workspace::None, Pool2dFwArgs {
@@ -608,11 +583,8 @@ fn pool2d_bf16_smoke() {
     let y_shape = [n, c, h_out as i32, w_out as i32];
     let x_shape = [n, c, h_in, w_in];
 
-    let max_desc = Pool2dDescriptor {
-        batch: n, channels: c, h_in, w_in,
-        window_h: 2, window_w: 2, pad_h: 0, pad_w: 0, stride_h: 2, stride_w: 2,
-        mode: PoolMode::Max, element: ElementKind::Bf16,
-    };
+    let max_desc =
+        Pool2dDescriptor::new(n, c, h_in, w_in, 2, 2, PoolMode::Max, ElementKind::Bf16);
     let max_plan = MaxPool2dPlan::<bf16>::select(&stream, &max_desc, PlanPreference::default())
         .expect("max sel");
     max_plan.run_fw(&stream, Workspace::None, Pool2dFwArgs {
@@ -620,11 +592,9 @@ fn pool2d_bf16_smoke() {
         y: TensorMut { data: dev_y_max.as_slice_mut(), shape: y_shape, stride: contiguous_stride(y_shape) },
     }).expect("max fw");
 
-    let avg_desc = Pool2dDescriptor {
-        batch: n, channels: c, h_in, w_in,
-        window_h: 2, window_w: 2, pad_h: 0, pad_w: 0, stride_h: 2, stride_w: 2,
-        mode: PoolMode::AvgExcludePad, element: ElementKind::Bf16,
-    };
+    let avg_desc = Pool2dDescriptor::new(
+        n, c, h_in, w_in, 2, 2, PoolMode::AvgExcludePad, ElementKind::Bf16,
+    );
     let avg_plan = AvgPool2dPlan::<bf16>::select(&stream, &avg_desc, PlanPreference::default())
         .expect("avg sel");
     avg_plan.run_fw(&stream, Workspace::None, Pool2dFwArgs {
@@ -678,11 +648,10 @@ fn max_pool2d_with_padding_f32() {
 
     let dev_x = DeviceBuffer::from_slice(&ctx, &host_x).expect("up x");
     let mut dev_y: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, numel_y).expect("y");
-    let desc = Pool2dDescriptor {
-        batch: n, channels: c, h_in, w_in,
-        window_h: 3, window_w: 3, pad_h: 1, pad_w: 1, stride_h: 1, stride_w: 1,
-        mode: PoolMode::Max, element: ElementKind::F32,
-    };
+    let desc =
+        Pool2dDescriptor::new(n, c, h_in, w_in, 3, 3, PoolMode::Max, ElementKind::F32)
+            .with_padding(1, 1)
+            .with_stride(1, 1);
     let plan = MaxPool2dPlan::<f32>::select(&stream, &desc, PlanPreference::default())
         .expect("sel");
     let y_shape = [n, c, h_out as i32, w_out as i32];

@@ -8,9 +8,9 @@
 A unified Rust ML-op facade over the NVIDIA CUDA ecosystem.
 
 ![License](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue)
-![Status](https://img.shields.io/badge/status-alpha.46-orange)
+![Status](https://img.shields.io/badge/status-alpha.47-orange)
 ![CUDA](https://img.shields.io/badge/CUDA-12.x-76b900)
-![Tests](https://img.shields.io/badge/regression-2192%2F0-success)
+![Tests](https://img.shields.io/badge/regression-2196%2F0-success)
 
 ## What baracuda is
 
@@ -40,7 +40,7 @@ talk to one library directly.
 
 ## Status
 
-**In active development — alpha.46.** Roughly **2192 GPU tests passing**
+**In active development — alpha.47.** Roughly **2196 GPU tests passing**
 on an RTX 4070 (sm_89), across **616 binary targets**.
 
 Phase coverage (see [`ARCHITECTURE.md`](ARCHITECTURE.md) for the phase
@@ -79,7 +79,8 @@ matrix):
 | 29 | Cross-implementation benchmark suite (alpha.44): 10 new criterion+CUDA-event benches comparing baracuda against cuBLAS / cuDNN at LLM-typical shapes (GEMM f32/f16/bf16, MMVQ all qtypes, Softmax, LayerNorm, RMSNorm, Conv2d, MaxPool2d, Reductions, Elementwise, Flash SDPA+GQA). ~2,750 LOC of bench code + 13 bench binaries total. Critical finding: baracuda f16/bf16 GEMM is **2-4× slower than cuBLAS at M=1/M=32** (decode regime); validates the deferred Phase 27 multi-M MMVQ port. See [`BENCHMARKS.md`](crates/baracuda-kernels-bench/BENCHMARKS.md) for the methodology + sample run. | done |
 | 30 | f16/bf16 GEMM cuBLAS fast-path (alpha.45): adds `PlanPreference::prefer_backend: Option<BackendKind>` + thread-local cuBLAS-handle cache to `GemmPlan`. Heuristic: cuBLAS for f16/bf16 at `2 ≤ M < 128` (decode batch); CUTLASS otherwise. **3× speedup at M=32 f16** (55.6µs → 19.0µs, parity with cuBLAS direct). M=1 stays on CUTLASS (cuBLAS RCR→col-major transa=T mapping slower than CUTLASS sm_80 GEMV-tile at K=N≥2048). Capture-mode auto-fallback to CUTLASS (cuBLAS-classic not capture-safe). 9 new smoke tests. | done |
 | 31 | Fuel Phase 6c.2 storage.rs unblock (alpha.46): 5 gaps closed — ELU α parameter (breaking; 8 sigs modified), `powf` (8 new), `step` + `gelu_erf` (16 new), cast `u32`/`i16` (36 new × 2 directions), `reduce_sum_to`/`reduce_max_to` broadcast-reverse reductions (8 new). **~76 new/modified FFI symbols + 17 new smoke tests.** Unblocks Fuel's full PTX retirement (AFFINE/UNARY/BINARY/CAST/REDUCE/INDEXING/TERNARY/FILL/SORT modules). | done |
-| 32+ | Phase 27 multi-M MMVQ port (3-7× prefill speedup for quantized layers), descriptor `#[non_exhaustive]` + builder (Phase 28b), parallel-execution context-init flake retry, Hopper / Blackwell, 1.0 freeze | pending (see [`ROADMAP.md`](ROADMAP.md)) |
+| 32 | Descriptor `#[non_exhaustive]` + builder pattern (alpha.47): 18 descriptors retrofitted with `::new()` builders + chainable setters (`with_stride`/`with_padding`/`with_dilation`/etc.). Conv {1,2,3}d + ConvTranspose {1,2,3}d + Pool {1,2,3}d + AdaptivePool {1,2,3}d + LpPool {1,2}d + FractionalMaxPool {2,3}d + Interpolate + InterpolateBackward. **Breaking change for downstream struct-literal callers** — pre-1.0 hardening. Migration: `Conv2dDescriptor { ... }` → `Conv2dDescriptor::new(input_shape, filter_shape, element).with_stride(...)`. | done |
+| 33+ | Phase 27 multi-M MMVQ port (3-7× prefill speedup for quantized layers), parallel-execution context-init flake retry, Hopper / Blackwell, 1.0 freeze | pending (see [`ROADMAP.md`](ROADMAP.md)) |
 
 API stability is **not** promised before beta.0. Breaking changes ship in
 each alpha bump and are documented in the workspace `CHANGELOG.md`.
@@ -90,8 +91,8 @@ Add the kernel facade and the driver crate:
 
 ```toml
 [dependencies]
-baracuda-kernels = { version = "0.0.1-alpha.46", features = ["sm89", "cudnn"] }
-baracuda-driver  = "0.0.1-alpha.46"
+baracuda-kernels = { version = "0.0.1-alpha.47", features = ["sm89", "cudnn"] }
+baracuda-driver  = "0.0.1-alpha.47"
 ```
 
 A representative example — single-axis numerically stable softmax over a

@@ -30,7 +30,12 @@ use super::pool_nd::{
 /// `[batch, channels, d_out, h_out, w_out]` computed per-axis under the
 /// standard floor formula. Shared by [`super::MaxPool3dPlan`] and
 /// [`super::AvgPool3dPlan`].
+///
+/// `#[non_exhaustive]` (Phase 32) — see [`super::Pool2dDescriptor`]
+/// for the builder rationale. Use [`Self::new`] + the `with_*` setters
+/// from downstream code.
 #[derive(Copy, Clone, Debug)]
+#[non_exhaustive]
 pub struct Pool3dDescriptor {
     /// Batch size `N`.
     pub batch: i32,
@@ -64,6 +69,63 @@ pub struct Pool3dDescriptor {
     pub mode: PoolMode,
     /// Element dtype.
     pub element: ElementKind,
+}
+
+impl Pool3dDescriptor {
+    /// Build a descriptor with `pad` defaulted to `(0, 0, 0)` and
+    /// `stride` defaulted to the per-axis window extent (PyTorch's
+    /// default). Chain with [`Self::with_padding`] /
+    /// [`Self::with_stride`] to override.
+    pub fn new(
+        batch: i32,
+        channels: i32,
+        d_in: i32,
+        h_in: i32,
+        w_in: i32,
+        window_d: i32,
+        window_h: i32,
+        window_w: i32,
+        mode: PoolMode,
+        element: ElementKind,
+    ) -> Self {
+        Self {
+            batch,
+            channels,
+            d_in,
+            h_in,
+            w_in,
+            window_d,
+            window_h,
+            window_w,
+            pad_d: 0,
+            pad_h: 0,
+            pad_w: 0,
+            stride_d: window_d,
+            stride_h: window_h,
+            stride_w: window_w,
+            mode,
+            element,
+        }
+    }
+
+    /// Override `(pad_d, pad_h, pad_w)`. Default `(0, 0, 0)`.
+    #[inline]
+    pub fn with_padding(mut self, pad_d: i32, pad_h: i32, pad_w: i32) -> Self {
+        self.pad_d = pad_d;
+        self.pad_h = pad_h;
+        self.pad_w = pad_w;
+        self
+    }
+
+    /// Override `(stride_d, stride_h, stride_w)`. Default `(window_d,
+    /// window_h, window_w)` (PyTorch's pooling default).
+    #[inline]
+    pub fn with_stride(mut self, stride_d: i32, stride_h: i32, stride_w: i32) -> Self {
+        self.stride_d = stride_d;
+        self.stride_h = stride_h;
+        self.stride_w = stride_w;
+        self
+    }
 }
 
 /// Args bundle for a 3-D pooling forward launch.

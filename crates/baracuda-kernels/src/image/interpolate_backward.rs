@@ -20,7 +20,12 @@ use super::interpolate::InterpolateMode;
 use super::map_status;
 
 /// Descriptor for an `interpolate_backward` op.
+///
+/// `#[non_exhaustive]` (Phase 32) — see [`InterpolateDescriptor`] for
+/// the builder rationale. Use [`Self::new`] + the `with_*` setters
+/// from downstream code.
 #[derive(Copy, Clone, Debug)]
+#[non_exhaustive]
 pub struct InterpolateBackwardDescriptor {
     /// Batch.
     pub n: i32,
@@ -44,6 +49,62 @@ pub struct InterpolateBackwardDescriptor {
     pub scale_h: Option<f64>,
     /// Per-axis SCALE override for width. Must match the FW descriptor.
     pub scale_w: Option<f64>,
+}
+
+impl InterpolateBackwardDescriptor {
+    /// Build a descriptor with `align_corners = false` and `scale_h /
+    /// scale_w = None`. Chain with the `with_*` setters to override.
+    /// **Must mirror the FW descriptor's settings** — autograd cannot
+    /// recover the correct gradient otherwise.
+    #[allow(clippy::too_many_arguments)]
+    pub fn new(
+        n: i32,
+        c: i32,
+        ih: i32,
+        iw: i32,
+        oh: i32,
+        ow: i32,
+        mode: InterpolateMode,
+        element: ElementKind,
+    ) -> Self {
+        Self {
+            n,
+            c,
+            ih,
+            iw,
+            oh,
+            ow,
+            mode,
+            element,
+            align_corners: false,
+            scale_h: None,
+            scale_w: None,
+        }
+    }
+
+    /// Override `align_corners`. Default `false`. Must match the FW
+    /// descriptor.
+    #[inline]
+    pub fn with_align_corners(mut self, align_corners: bool) -> Self {
+        self.align_corners = align_corners;
+        self
+    }
+
+    /// Override the per-axis SCALE for height. Must match the FW
+    /// descriptor.
+    #[inline]
+    pub fn with_scale_h(mut self, scale_h: Option<f64>) -> Self {
+        self.scale_h = scale_h;
+        self
+    }
+
+    /// Override the per-axis SCALE for width. Must match the FW
+    /// descriptor.
+    #[inline]
+    pub fn with_scale_w(mut self, scale_w: Option<f64>) -> Self {
+        self.scale_w = scale_w;
+        self
+    }
 }
 
 /// Args bundle for an `interpolate_backward` launch.

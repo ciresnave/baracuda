@@ -77,23 +77,17 @@ mod cudnn_impl {
             };
 
             let pad = shape.k / 2;
-            let desc = Conv2dDescriptor {
-                batch: shape.n,
-                c_in: shape.c_in,
-                h_in: shape.hw,
-                w_in: shape.hw,
-                c_out: shape.c_out,
-                h_filt: shape.k,
-                w_filt: shape.k,
-                pad_h: pad,
-                pad_w: pad,
-                stride_h: 1,
-                stride_w: 1,
-                dilation_h: 1,
-                dilation_w: 1,
-                groups: 1,
-                element: kind,
-            };
+            let desc = Conv2dDescriptor::new(
+                shape.n,
+                shape.c_in,
+                shape.hw,
+                shape.hw,
+                shape.c_out,
+                shape.k,
+                shape.k,
+                kind,
+            )
+            .with_padding(pad, pad);
             let plan = match Conv2dPlan::<T>::select(&stream, &desc, PlanPreference::default()) {
                 Ok(p) => p,
                 Err(_) => continue,

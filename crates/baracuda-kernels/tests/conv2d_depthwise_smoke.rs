@@ -105,23 +105,11 @@ fn conv2d_depthwise_f32() {
     let dev_w = DeviceBuffer::from_slice(&ctx, &host_w_f32).expect("up w");
     let mut dev_y: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, y_n).expect("alloc y");
 
-    let desc = Conv2dDescriptor {
-        batch: n,
-        c_in: c,
-        h_in,
-        w_in,
-        c_out: c,
-        h_filt: kh,
-        w_filt: kw,
-        pad_h,
-        pad_w,
-        stride_h: 1,
-        stride_w: 1,
-        dilation_h: 1,
-        dilation_w: 1,
-        groups: c, // depthwise: one filter per input channel.
-        element: ElementKind::F32,
-    };
+    // depthwise: one filter per input channel → groups = c
+    let desc =
+        Conv2dDescriptor::new(n, c, h_in, w_in, c, kh, kw, ElementKind::F32)
+            .with_padding(pad_h, pad_w)
+            .with_groups(c);
     let plan =
         Conv2dPlan::<f32>::select(&stream, &desc, PlanPreference::default()).expect("select");
     assert_eq!(plan.output_dims(), (h_out, w_out));

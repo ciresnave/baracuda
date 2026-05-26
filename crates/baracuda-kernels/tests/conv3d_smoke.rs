@@ -119,28 +119,18 @@ fn conv3d_f32_fw() {
     let dev_w = DeviceBuffer::from_slice(&ctx, &host_w_f32).expect("up w");
     let mut dev_y: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, y_n).expect("alloc y");
 
-    let desc = Conv3dDescriptor {
-        batch: d.n,
-        c_in: d.c_in,
-        d_in: d.d_in,
-        h_in: d.h_in,
-        w_in: d.w_in,
-        c_out: d.c_out,
-        d_filt: d.d_filt,
-        h_filt: d.h_filt,
-        w_filt: d.w_filt,
-        pad_d: 0,
-        pad_h: 0,
-        pad_w: 0,
-        stride_d: 1,
-        stride_h: 1,
-        stride_w: 1,
-        dilation_d: 1,
-        dilation_h: 1,
-        dilation_w: 1,
-        groups: 1,
-        element: ElementKind::F32,
-    };
+    let desc = Conv3dDescriptor::new(
+        d.n,
+        d.c_in,
+        d.d_in,
+        d.h_in,
+        d.w_in,
+        d.c_out,
+        d.d_filt,
+        d.h_filt,
+        d.w_filt,
+        ElementKind::F32,
+    );
     let plan = Conv3dPlan::<f32>::select(&stream, &desc, PlanPreference::default()).expect("sel");
     assert_eq!(plan.output_dims(), (d_out, h_out, w_out));
 
@@ -212,28 +202,18 @@ fn conv3d_f32_bw_data_filter_runs() {
     let mut dev_dx: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, x_n).expect("alloc dx");
     let mut dev_dw: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, w_n).expect("alloc dw");
 
-    let desc = Conv3dDescriptor {
-        batch: d.n,
-        c_in: d.c_in,
-        d_in: d.d_in,
-        h_in: d.h_in,
-        w_in: d.w_in,
-        c_out: d.c_out,
-        d_filt: d.d_filt,
-        h_filt: d.h_filt,
-        w_filt: d.w_filt,
-        pad_d: 0,
-        pad_h: 0,
-        pad_w: 0,
-        stride_d: 1,
-        stride_h: 1,
-        stride_w: 1,
-        dilation_d: 1,
-        dilation_h: 1,
-        dilation_w: 1,
-        groups: 1,
-        element: ElementKind::F32,
-    };
+    let desc = Conv3dDescriptor::new(
+        d.n,
+        d.c_in,
+        d.d_in,
+        d.h_in,
+        d.w_in,
+        d.c_out,
+        d.d_filt,
+        d.h_filt,
+        d.w_filt,
+        ElementKind::F32,
+    );
     let plan = Conv3dPlan::<f32>::select(&stream, &desc, PlanPreference::default()).expect("sel");
 
     let ws_bd = plan.query_bw_data_workspace_size(&stream).expect("ws bd");

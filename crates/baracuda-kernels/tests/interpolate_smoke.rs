@@ -142,14 +142,9 @@ fn interpolate_bilinear_2d_f32_upsample_2x() {
     let dev_in = DeviceBuffer::from_slice(&ctx, &host_in).expect("up in");
     let mut dev_out: DeviceBuffer<f32> =
         DeviceBuffer::zeros(&ctx, (n * c * oh * ow) as usize).expect("alloc out");
-    let desc = InterpolateDescriptor {
-        n, c, ih, iw, oh, ow,
-        mode: InterpolateMode::Bilinear2d,
-        element: ElementKind::F32,
-        align_corners: false,
-        scale_h: None,
-        scale_w: None,
-    };
+    let desc = InterpolateDescriptor::new(
+        n, c, ih, iw, oh, ow, InterpolateMode::Bilinear2d, ElementKind::F32,
+    );
     let plan = InterpolatePlan::<f32>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = InterpolateArgs {
@@ -212,14 +207,9 @@ fn interpolate_bilinear_2d_f64_upsample_2x() {
     let dev_in = DeviceBuffer::from_slice(&ctx, &host_in).expect("up in");
     let mut dev_out: DeviceBuffer<f64> =
         DeviceBuffer::zeros(&ctx, (n * c * oh * ow) as usize).expect("alloc out");
-    let desc = InterpolateDescriptor {
-        n, c, ih, iw, oh, ow,
-        mode: InterpolateMode::Bilinear2d,
-        element: ElementKind::F64,
-        align_corners: false,
-        scale_h: None,
-        scale_w: None,
-    };
+    let desc = InterpolateDescriptor::new(
+        n, c, ih, iw, oh, ow, InterpolateMode::Bilinear2d, ElementKind::F64,
+    );
     let plan = InterpolatePlan::<f64>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = InterpolateArgs {
@@ -256,14 +246,9 @@ fn interpolate_bilinear_2d_backward_f32_smoke() {
     let dev_dout = DeviceBuffer::from_slice(&ctx, &host_dout).expect("up");
     let mut dev_din: DeviceBuffer<f32> =
         DeviceBuffer::zeros(&ctx, (n * c * ih * iw) as usize).expect("alloc");
-    let desc = InterpolateBackwardDescriptor {
-        n, c, ih, iw, oh, ow,
-        mode: InterpolateMode::Bilinear2d,
-        element: ElementKind::F32,
-        align_corners: false,
-        scale_h: None,
-        scale_w: None,
-    };
+    let desc = InterpolateBackwardDescriptor::new(
+        n, c, ih, iw, oh, ow, InterpolateMode::Bilinear2d, ElementKind::F32,
+    );
     let plan = InterpolateBackwardPlan::<f32>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let args = InterpolateBackwardArgs {
@@ -313,14 +298,12 @@ fn run_fw_f32_case(
     let dev_in = DeviceBuffer::from_slice(ctx, host_in).expect("up");
     let mut dev_out: DeviceBuffer<f32> =
         DeviceBuffer::zeros(ctx, (n * c * oh * ow) as usize).expect("alloc out");
-    let desc = InterpolateDescriptor {
-        n, c, ih, iw, oh, ow,
-        mode: InterpolateMode::Bilinear2d,
-        element: ElementKind::F32,
-        align_corners,
-        scale_h,
-        scale_w,
-    };
+    let desc = InterpolateDescriptor::new(
+        n, c, ih, iw, oh, ow, InterpolateMode::Bilinear2d, ElementKind::F32,
+    )
+    .with_align_corners(align_corners)
+    .with_scale_h(scale_h)
+    .with_scale_w(scale_w);
     let plan = InterpolatePlan::<f32>::select(stream, &desc, PlanPreference::default())
         .expect("select");
     let args = InterpolateArgs {
@@ -434,14 +417,9 @@ fn interpolate_bilinear_2d_f16_fw_matches_f32_ref() {
     let dev_in = DeviceBuffer::from_slice(&ctx, &host_in_f16).expect("up");
     let mut dev_out: DeviceBuffer<f16> =
         DeviceBuffer::zeros(&ctx, (n * c * oh * ow) as usize).expect("alloc out");
-    let desc = InterpolateDescriptor {
-        n, c, ih, iw, oh, ow,
-        mode: InterpolateMode::Bilinear2d,
-        element: ElementKind::F16,
-        align_corners: false,
-        scale_h: None,
-        scale_w: None,
-    };
+    let desc = InterpolateDescriptor::new(
+        n, c, ih, iw, oh, ow, InterpolateMode::Bilinear2d, ElementKind::F16,
+    );
     let plan = InterpolatePlan::<f16>::select(&stream, &desc, PlanPreference::default())
         .expect("select f16");
     let args = InterpolateArgs {
@@ -488,14 +466,10 @@ fn interpolate_bilinear_2d_bf16_fw_matches_f32_ref() {
     let dev_in = DeviceBuffer::from_slice(&ctx, &host_in_bf16).expect("up");
     let mut dev_out: DeviceBuffer<bf16> =
         DeviceBuffer::zeros(&ctx, (n * c * oh * ow) as usize).expect("alloc out");
-    let desc = InterpolateDescriptor {
-        n, c, ih, iw, oh, ow,
-        mode: InterpolateMode::Bilinear2d,
-        element: ElementKind::Bf16,
-        align_corners: true,
-        scale_h: None,
-        scale_w: None,
-    };
+    let desc = InterpolateDescriptor::new(
+        n, c, ih, iw, oh, ow, InterpolateMode::Bilinear2d, ElementKind::Bf16,
+    )
+    .with_align_corners(true);
     let plan = InterpolatePlan::<bf16>::select(&stream, &desc, PlanPreference::default())
         .expect("select bf16");
     let args = InterpolateArgs {
@@ -599,14 +573,12 @@ fn run_bw_f32_case(
     let dev_dout = DeviceBuffer::from_slice(ctx, host_dout).expect("up");
     let mut dev_din: DeviceBuffer<f32> =
         DeviceBuffer::zeros(ctx, (n * c * ih * iw) as usize).expect("alloc din");
-    let desc = InterpolateBackwardDescriptor {
-        n, c, ih, iw, oh, ow,
-        mode: InterpolateMode::Bilinear2d,
-        element: ElementKind::F32,
-        align_corners,
-        scale_h,
-        scale_w,
-    };
+    let desc = InterpolateBackwardDescriptor::new(
+        n, c, ih, iw, oh, ow, InterpolateMode::Bilinear2d, ElementKind::F32,
+    )
+    .with_align_corners(align_corners)
+    .with_scale_h(scale_h)
+    .with_scale_w(scale_w);
     let plan = InterpolateBackwardPlan::<f32>::select(stream, &desc, PlanPreference::default())
         .expect("select");
     let args = InterpolateBackwardArgs {

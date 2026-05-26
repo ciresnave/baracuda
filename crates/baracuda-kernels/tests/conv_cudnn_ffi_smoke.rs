@@ -67,23 +67,20 @@ impl Conv2dDims {
         )
     }
     fn to_descriptor(&self, elem: ElementKind) -> Conv2dDescriptor {
-        Conv2dDescriptor {
-            batch: self.n,
-            c_in: self.c_in,
-            h_in: self.h_in,
-            w_in: self.w_in,
-            c_out: self.c_out,
-            h_filt: self.h_filt,
-            w_filt: self.w_filt,
-            pad_h: self.pad_h,
-            pad_w: self.pad_w,
-            stride_h: self.stride_h,
-            stride_w: self.stride_w,
-            dilation_h: self.dilation_h,
-            dilation_w: self.dilation_w,
-            groups: self.groups,
-            element: elem,
-        }
+        Conv2dDescriptor::new(
+            self.n,
+            self.c_in,
+            self.h_in,
+            self.w_in,
+            self.c_out,
+            self.h_filt,
+            self.w_filt,
+            elem,
+        )
+        .with_padding(self.pad_h, self.pad_w)
+        .with_stride(self.stride_h, self.stride_w)
+        .with_dilation(self.dilation_h, self.dilation_w)
+        .with_groups(self.groups)
     }
 }
 
@@ -444,18 +441,11 @@ fn ffi_conv1d_f16_fw_matches_plan() {
     let dev_x = DeviceBuffer::from_slice(&ctx, &host_x).expect("up x");
     let dev_w = DeviceBuffer::from_slice(&ctx, &host_w).expect("up w");
     let mut dev_y: DeviceBuffer<f16> = DeviceBuffer::zeros(&ctx, y_numel).expect("alloc y");
-    let desc = Conv1dDescriptor {
-        batch: n,
-        c_in,
-        l_in,
-        c_out,
-        l_filt,
-        pad_l,
-        stride_l,
-        dilation_l,
-        groups,
-        element: ElementKind::F16,
-    };
+    let desc = Conv1dDescriptor::new(n, c_in, l_in, c_out, l_filt, ElementKind::F16)
+        .with_padding(pad_l)
+        .with_stride(stride_l)
+        .with_dilation(dilation_l)
+        .with_groups(groups);
     let plan =
         Conv1dPlan::<f16>::select(&stream, &desc, PlanPreference::default()).expect("sel");
     let ws_bytes = plan.query_fw_workspace_size(&stream).expect("ws");
@@ -568,25 +558,21 @@ fn ffi_conv_transpose_2d_f32_fw_matches_plan() {
     let dev_x = DeviceBuffer::from_slice(&ctx, &host_x).expect("up x");
     let dev_w = DeviceBuffer::from_slice(&ctx, &host_w).expect("up w");
     let mut dev_y: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, y_numel).expect("alloc y");
-    let desc = ConvTranspose2dDescriptor {
-        batch: n,
+    let desc = ConvTranspose2dDescriptor::new(
+        n,
         c_in,
         h_in,
         w_in,
         c_out,
         h_filt,
         w_filt,
-        pad_h,
-        pad_w,
-        stride_h,
-        stride_w,
-        dilation_h,
-        dilation_w,
-        output_pad_h,
-        output_pad_w,
-        groups,
-        element: ElementKind::F32,
-    };
+        ElementKind::F32,
+    )
+    .with_padding(pad_h, pad_w)
+    .with_stride(stride_h, stride_w)
+    .with_dilation(dilation_h, dilation_w)
+    .with_output_padding(output_pad_h, output_pad_w)
+    .with_groups(groups);
     let plan = ConvTranspose2dPlan::<f32>::select(&stream, &desc, PlanPreference::default())
         .expect("sel");
     let ws_bytes = plan.query_fw_workspace_size(&stream).expect("ws");

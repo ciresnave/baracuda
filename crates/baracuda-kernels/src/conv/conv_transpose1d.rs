@@ -38,7 +38,12 @@ use baracuda_kernels_types::{
 };
 
 /// Descriptor for a 1-D transposed convolution over NCL tensors.
+///
+/// `#[non_exhaustive]` (Phase 32) — see [`super::Conv2dDescriptor`]
+/// for the builder rationale. Use [`Self::new`] + the `with_*` setters
+/// from downstream code.
 #[derive(Copy, Clone, Debug)]
+#[non_exhaustive]
 pub struct ConvTranspose1dDescriptor {
     /// Batch size `N`.
     pub batch: i32,
@@ -62,6 +67,70 @@ pub struct ConvTranspose1dDescriptor {
     pub groups: i32,
     /// Element dtype. Must be `F32`, `F64`, `F16`, or `Bf16`.
     pub element: ElementKind,
+}
+
+impl ConvTranspose1dDescriptor {
+    /// Build a descriptor with `pad / stride / dilation / output_pad /
+    /// groups` defaulted to PyTorch's `nn.ConvTranspose1d` defaults
+    /// (`0 / 1 / 1 / 0 / 1`). Chain with the `with_*` setters to
+    /// override.
+    pub fn new(
+        batch: i32,
+        c_in: i32,
+        l_in: i32,
+        c_out: i32,
+        l_filt: i32,
+        element: ElementKind,
+    ) -> Self {
+        Self {
+            batch,
+            c_in,
+            l_in,
+            c_out,
+            l_filt,
+            pad_l: 0,
+            stride_l: 1,
+            dilation_l: 1,
+            output_pad_l: 0,
+            groups: 1,
+            element,
+        }
+    }
+
+    /// Override the padding. Default `0`.
+    #[inline]
+    pub fn with_padding(mut self, pad_l: i32) -> Self {
+        self.pad_l = pad_l;
+        self
+    }
+
+    /// Override the stride. Default `1`.
+    #[inline]
+    pub fn with_stride(mut self, stride_l: i32) -> Self {
+        self.stride_l = stride_l;
+        self
+    }
+
+    /// Override the dilation. Default `1`.
+    #[inline]
+    pub fn with_dilation(mut self, dilation_l: i32) -> Self {
+        self.dilation_l = dilation_l;
+        self
+    }
+
+    /// Override the output-side padding. Default `0`.
+    #[inline]
+    pub fn with_output_padding(mut self, output_pad_l: i32) -> Self {
+        self.output_pad_l = output_pad_l;
+        self
+    }
+
+    /// Override the group count. Default `1`.
+    #[inline]
+    pub fn with_groups(mut self, groups: i32) -> Self {
+        self.groups = groups;
+        self
+    }
 }
 
 /// Args bundle for a ConvTranspose1d forward launch.

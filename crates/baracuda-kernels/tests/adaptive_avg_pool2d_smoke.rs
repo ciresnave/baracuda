@@ -47,10 +47,9 @@ fn adaptive_avg_pool2d_4x4_to_2x2_f32() {
     let dev_x = DeviceBuffer::from_slice(&ctx, &host_x).expect("up x");
     let mut dev_y: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, 4).expect("y");
 
-    let desc = AdaptivePool2dDescriptor {
-        batch: n, channels: c, h_in, w_in, h_out, w_out,
-        element: ElementKind::F32,
-    };
+    let desc = AdaptivePool2dDescriptor::new(
+        n, c, h_in, w_in, h_out, w_out, ElementKind::F32,
+    );
     let plan = AdaptiveAvgPool2dPlan::<f32>::select(&stream, &desc, PlanPreference::default())
         .expect("sel");
 

@@ -84,20 +84,11 @@ fn max_pool_2d_f32_ffi_matches_plan() {
 
     // --- Plan run ---
     let mut dev_y_plan: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, numel_y).expect("y_plan");
-    let desc = Pool2dDescriptor {
-        batch: n,
-        channels: c,
-        h_in,
-        w_in,
-        window_h: kh,
-        window_w: kw,
-        pad_h: ph,
-        pad_w: pw,
-        stride_h: sh,
-        stride_w: sw,
-        mode: PoolMode::Max,
-        element: ElementKind::F32,
-    };
+    let desc = Pool2dDescriptor::new(
+        n, c, h_in, w_in, kh, kw, PoolMode::Max, ElementKind::F32,
+    )
+    .with_padding(ph, pw)
+    .with_stride(sh, sw);
     let plan = MaxPool2dPlan::<f32>::select(&stream, &desc, PlanPreference::default())
         .expect("plan select");
     let x_shape = [n, c, h_in, w_in];
@@ -258,20 +249,9 @@ fn avg_pool_2d_f32_one_mode(count_include_pad: bool) {
     } else {
         PoolMode::AvgExcludePad
     };
-    let desc = Pool2dDescriptor {
-        batch: n,
-        channels: c,
-        h_in,
-        w_in,
-        window_h: kh,
-        window_w: kw,
-        pad_h: ph,
-        pad_w: pw,
-        stride_h: sh,
-        stride_w: sw,
-        mode,
-        element: ElementKind::F32,
-    };
+    let desc = Pool2dDescriptor::new(n, c, h_in, w_in, kh, kw, mode, ElementKind::F32)
+        .with_padding(ph, pw)
+        .with_stride(sh, sw);
     let plan = AvgPool2dPlan::<f32>::select(&stream, &desc, PlanPreference::default())
         .expect("plan select");
     let x_shape = [n, c, h_in, w_in];
@@ -435,16 +415,9 @@ fn max_pool_1d_f16_fw_ffi_matches_plan() {
     dev_y_ffi.copy_to_host(&mut host_y_ffi).expect("dl ffi y");
 
     let mut dev_y_plan: DeviceBuffer<f16> = DeviceBuffer::zeros(&ctx, numel_y).expect("y_plan");
-    let desc = Pool1dDescriptor {
-        batch: n,
-        channels: c,
-        l_in,
-        window: kl,
-        pad: pl,
-        stride: sl,
-        mode: PoolMode::Max,
-        element: ElementKind::F16,
-    };
+    let desc = Pool1dDescriptor::new(n, c, l_in, kl, PoolMode::Max, ElementKind::F16)
+        .with_padding(pl)
+        .with_stride(sl);
     let plan = MaxPool1dPlan::<f16>::select(&stream, &desc, PlanPreference::default())
         .expect("plan select");
     let x_shape = [n, c, l_in];
@@ -537,24 +510,20 @@ fn avg_pool_3d_bf16_fw_ffi_matches_plan() {
     dev_y_ffi.copy_to_host(&mut host_y_ffi).expect("dl ffi y");
 
     let mut dev_y_plan: DeviceBuffer<bf16> = DeviceBuffer::zeros(&ctx, numel_y).expect("y_plan");
-    let desc = Pool3dDescriptor {
-        batch: n,
-        channels: c,
+    let desc = Pool3dDescriptor::new(
+        n,
+        c,
         d_in,
         h_in,
         w_in,
-        window_d: kd,
-        window_h: kh,
-        window_w: kw,
-        pad_d: pd,
-        pad_h: ph,
-        pad_w: pw,
-        stride_d: sd,
-        stride_h: sh,
-        stride_w: sw,
-        mode: PoolMode::AvgExcludePad,
-        element: ElementKind::Bf16,
-    };
+        kd,
+        kh,
+        kw,
+        PoolMode::AvgExcludePad,
+        ElementKind::Bf16,
+    )
+    .with_padding(pd, ph, pw)
+    .with_stride(sd, sh, sw);
     let plan = AvgPool3dPlan::<bf16>::select(&stream, &desc, PlanPreference::default())
         .expect("plan select");
     let x_shape = [n, c, d_in, h_in, w_in];

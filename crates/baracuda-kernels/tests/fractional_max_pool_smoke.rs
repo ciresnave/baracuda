@@ -200,13 +200,9 @@ fn fmp2d_f32_4x4_to_3x3() {
     let mut dev_indices: DeviceBuffer<i64> = DeviceBuffer::zeros(&ctx, numel_y).expect("indices");
     let dev_samples = DeviceBuffer::from_slice(&ctx, &host_samples).expect("up samples");
 
-    let desc = FractionalMaxPool2dDescriptor {
-        batch: n, channels: c, h_in, w_in,
-        window_h: kh, window_w: kw,
-        h_out, w_out,
-        seed: 0,
-        element: ElementKind::F32,
-    };
+    let desc = FractionalMaxPool2dDescriptor::new(
+        n, c, h_in, w_in, kh, kw, h_out, w_out, ElementKind::F32,
+    );
     let plan = FractionalMaxPool2dPlan::<f32>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let x_shape = [n, c, h_in, w_in];
@@ -261,13 +257,9 @@ fn fmp2d_f32_8x8_to_5x5_random_samples() {
     let mut dev_indices: DeviceBuffer<i64> = DeviceBuffer::zeros(&ctx, numel_y).expect("indices");
     let dev_samples = curand_uniform(&ctx, &stream, n, c, 2, 0xA1B2_C3D4_E5F6_7788);
 
-    let desc = FractionalMaxPool2dDescriptor {
-        batch: n, channels: c, h_in, w_in,
-        window_h: kh, window_w: kw,
-        h_out, w_out,
-        seed: 0,
-        element: ElementKind::F32,
-    };
+    let desc = FractionalMaxPool2dDescriptor::new(
+        n, c, h_in, w_in, kh, kw, h_out, w_out, ElementKind::F32,
+    );
     let plan = FractionalMaxPool2dPlan::<f32>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let x_shape = [n, c, h_in, w_in];
@@ -324,14 +316,9 @@ fn fmp3d_f32_4x4x4_to_3x3x3() {
     let mut dev_indices: DeviceBuffer<i64> = DeviceBuffer::zeros(&ctx, numel_y).expect("indices");
     let dev_samples = DeviceBuffer::from_slice(&ctx, &host_samples).expect("up samples");
 
-    let desc = FractionalMaxPool3dDescriptor {
-        batch: n, channels: c,
-        d_in, h_in, w_in,
-        window_d: kd, window_h: kh, window_w: kw,
-        d_out, h_out, w_out,
-        seed: 0,
-        element: ElementKind::F32,
-    };
+    let desc = FractionalMaxPool3dDescriptor::new(
+        n, c, d_in, h_in, w_in, kd, kh, kw, d_out, h_out, w_out, ElementKind::F32,
+    );
     let plan = FractionalMaxPool3dPlan::<f32>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let x_shape = [n, c, d_in, h_in, w_in];
@@ -383,13 +370,9 @@ fn fmp2d_bw_f32_4x4_to_3x3() {
     let mut dev_indices: DeviceBuffer<i64> = DeviceBuffer::zeros(&ctx, numel_y).expect("indices");
     let dev_samples = DeviceBuffer::from_slice(&ctx, &host_samples).expect("up samples");
 
-    let desc = FractionalMaxPool2dDescriptor {
-        batch: n, channels: c, h_in, w_in,
-        window_h: kh, window_w: kw,
-        h_out, w_out,
-        seed: 0,
-        element: ElementKind::F32,
-    };
+    let desc = FractionalMaxPool2dDescriptor::new(
+        n, c, h_in, w_in, kh, kw, h_out, w_out, ElementKind::F32,
+    );
     let plan = FractionalMaxPool2dPlan::<f32>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     let x_shape = [n, c, h_in, w_in];

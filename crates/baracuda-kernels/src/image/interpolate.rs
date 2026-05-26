@@ -66,7 +66,12 @@ pub enum InterpolateMode {
 }
 
 /// Descriptor for an `interpolate` op.
+///
+/// `#[non_exhaustive]` (Phase 32) — Phase 21 added `align_corners` /
+/// `scale_h` / `scale_w`; future modes may add more fields. Use
+/// [`Self::new`] + the `with_*` setters from downstream code.
 #[derive(Copy, Clone, Debug)]
+#[non_exhaustive]
 pub struct InterpolateDescriptor {
     /// Batch.
     pub n: i32,
@@ -98,6 +103,61 @@ pub struct InterpolateDescriptor {
     /// and the kernel uses `1.0 / s` per output coordinate. Matches
     /// PyTorch's `scale_factor` semantics.
     pub scale_w: Option<f64>,
+}
+
+impl InterpolateDescriptor {
+    /// Build a descriptor with `align_corners = false` (PyTorch
+    /// `F.interpolate` new-code default) and `scale_h / scale_w = None`
+    /// (derive scale from `(ih, oh)` / `(iw, ow)`). Chain with the
+    /// `with_*` setters to override.
+    #[allow(clippy::too_many_arguments)]
+    pub fn new(
+        n: i32,
+        c: i32,
+        ih: i32,
+        iw: i32,
+        oh: i32,
+        ow: i32,
+        mode: InterpolateMode,
+        element: ElementKind,
+    ) -> Self {
+        Self {
+            n,
+            c,
+            ih,
+            iw,
+            oh,
+            ow,
+            mode,
+            element,
+            align_corners: false,
+            scale_h: None,
+            scale_w: None,
+        }
+    }
+
+    /// Override `align_corners`. Default `false`.
+    #[inline]
+    pub fn with_align_corners(mut self, align_corners: bool) -> Self {
+        self.align_corners = align_corners;
+        self
+    }
+
+    /// Override the per-axis SCALE for height. Default `None` (derive
+    /// from `(ih, oh)`).
+    #[inline]
+    pub fn with_scale_h(mut self, scale_h: Option<f64>) -> Self {
+        self.scale_h = scale_h;
+        self
+    }
+
+    /// Override the per-axis SCALE for width. Default `None` (derive
+    /// from `(iw, ow)`).
+    #[inline]
+    pub fn with_scale_w(mut self, scale_w: Option<f64>) -> Self {
+        self.scale_w = scale_w;
+        self
+    }
 }
 
 /// Args bundle for an `interpolate` launch.

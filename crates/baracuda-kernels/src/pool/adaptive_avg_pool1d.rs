@@ -41,7 +41,12 @@ use baracuda_kernels_types::{
 /// Input `[N, C, L_in]` → output `[N, C, L_out]` for caller-supplied
 /// `L_out`. PyTorch's bit-exact window-bounds formula is applied
 /// internally — no caller-side kernel/stride knobs.
+///
+/// `#[non_exhaustive]` (Phase 32) — future-proofs against added
+/// fields (e.g. ceil_mode, padding hints). All present fields are
+/// required; [`Self::new`] is the constructor.
 #[derive(Copy, Clone, Debug)]
+#[non_exhaustive]
 pub struct AdaptivePool1dDescriptor {
     /// Batch `N`.
     pub batch: i32,
@@ -53,6 +58,26 @@ pub struct AdaptivePool1dDescriptor {
     pub l_out: i32,
     /// Element dtype.
     pub element: ElementKind,
+}
+
+impl AdaptivePool1dDescriptor {
+    /// Build a descriptor. All fields are required — adaptive pooling
+    /// has no optional knobs at present.
+    pub fn new(
+        batch: i32,
+        channels: i32,
+        l_in: i32,
+        l_out: i32,
+        element: ElementKind,
+    ) -> Self {
+        Self {
+            batch,
+            channels,
+            l_in,
+            l_out,
+            element,
+        }
+    }
 }
 
 /// FW args (shape `[N, C, L_in]` → `[N, C, L_out]`).

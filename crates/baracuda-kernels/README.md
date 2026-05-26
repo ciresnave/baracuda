@@ -165,6 +165,69 @@ not bundled with the stock CUDA toolkit installer. See the workspace
 [`README.md`](../../README.md) for the auto-discovery paths the build
 script probes.
 
+## Phase 32 builder migration — descriptor structs
+
+Phase 32 marked the descriptor structs whose field set has grown
+per-phase `#[non_exhaustive]` and added `pub fn new(...)` constructors
+plus chainable `with_*` setters. Downstream callers that previously
+constructed descriptors via struct literal must migrate to the
+builder — the struct literal no longer compiles outside this crate.
+
+| Descriptor | `::new` required args | Optional fields (defaults) |
+| --- | --- | --- |
+| `Conv1dDescriptor` | `batch, c_in, l_in, c_out, l_filt, element` | `pad_l=0`, `stride_l=1`, `dilation_l=1`, `groups=1` |
+| `Conv2dDescriptor` | `batch, c_in, h_in, w_in, c_out, h_filt, w_filt, element` | `pad=(0,0)`, `stride=(1,1)`, `dilation=(1,1)`, `groups=1` |
+| `Conv3dDescriptor` | `batch, c_in, d_in, h_in, w_in, c_out, d_filt, h_filt, w_filt, element` | `pad=(0,0,0)`, `stride=(1,1,1)`, `dilation=(1,1,1)`, `groups=1` |
+| `ConvTranspose1dDescriptor` | `batch, c_in, l_in, c_out, l_filt, element` | `pad=0`, `stride=1`, `dilation=1`, `output_pad=0`, `groups=1` |
+| `ConvTranspose2dDescriptor` | `batch, c_in, h_in, w_in, c_out, h_filt, w_filt, element` | `pad=(0,0)`, `stride=(1,1)`, `dilation=(1,1)`, `output_pad=(0,0)`, `groups=1` |
+| `ConvTranspose3dDescriptor` | `batch, c_in, d_in, h_in, w_in, c_out, d_filt, h_filt, w_filt, element` | `pad=(0,0,0)`, `stride=(1,1,1)`, `dilation=(1,1,1)`, `output_pad=(0,0,0)`, `groups=1` |
+| `Pool1dDescriptor` | `batch, channels, l_in, window, mode, element` | `pad=0`, `stride=window` (PyTorch default) |
+| `Pool2dDescriptor` | `batch, channels, h_in, w_in, window_h, window_w, mode, element` | `pad=(0,0)`, `stride=(window_h, window_w)` |
+| `Pool3dDescriptor` | `batch, channels, d_in, h_in, w_in, window_d, window_h, window_w, mode, element` | `pad=(0,0,0)`, `stride=(window_d, window_h, window_w)` |
+| `AdaptivePool1dDescriptor` | `batch, channels, l_in, l_out, element` | *(no optional fields)* |
+| `AdaptivePool2dDescriptor` | `batch, channels, h_in, w_in, h_out, w_out, element` | *(no optional fields)* |
+| `AdaptivePool3dDescriptor` | `batch, channels, d_in, h_in, w_in, d_out, h_out, w_out, element` | *(no optional fields)* |
+| `LpPool1dDescriptor` | `batch, channels, l_in, window, p, element` | `stride=window`, `ceil_mode=false` |
+| `LpPool2dDescriptor` | `batch, channels, h_in, w_in, window_h, window_w, p, element` | `stride=(window_h, window_w)`, `ceil_mode=false` |
+| `FractionalMaxPool2dDescriptor` | `batch, channels, h_in, w_in, window_h, window_w, h_out, w_out, element` | `seed=0` (currently unused — caller supplies samples) |
+| `FractionalMaxPool3dDescriptor` | `batch, channels, d_in, h_in, w_in, window_d, window_h, window_w, d_out, h_out, w_out, element` | `seed=0` |
+| `InterpolateDescriptor` | `n, c, ih, iw, oh, ow, mode, element` | `align_corners=false`, `scale_h=None`, `scale_w=None` |
+| `InterpolateBackwardDescriptor` | `n, c, ih, iw, oh, ow, mode, element` | `align_corners=false`, `scale_h=None`, `scale_w=None` |
+
+Setter naming convention:
+
+- `with_padding(...)`, `with_stride(...)`, `with_dilation(...)`,
+  `with_output_padding(...)`, `with_groups(...)` — Conv / ConvTranspose
+  family. Each takes the per-spatial-axis values as positional args
+  (e.g. `Conv2d::with_padding(pad_h, pad_w)`).
+- `with_stride(...)`, `with_padding(...)` — Pool family (Pool, LpPool).
+  Pool's `stride` defaults to the per-axis window extent (matching
+  PyTorch's pooling-default convention), so most call sites can leave
+  it implicit and just set `with_padding(...)` if needed.
+- `with_ceil_mode(bool)` — LpPool.
+- `with_seed(u64)` — FractionalMaxPool.
+- `with_align_corners(bool)` / `with_scale_h(Option<f64>)` /
+  `with_scale_w(Option<f64>)` — Interpolate / InterpolateBackward.
+
+Example — Phase 11 conv with explicit groups + padding:
+
+```rust
+use baracuda_kernels::{Conv2dDescriptor, ElementKind};
+
+let desc = Conv2dDescriptor::new(
+    /* batch */ 16, /* c_in */ 64, /* h_in */ 28, /* w_in */ 28,
+    /* c_out */ 128, /* h_filt */ 3, /* w_filt */ 3,
+    ElementKind::F32,
+)
+.with_padding(1, 1)
+.with_stride(1, 1)
+.with_groups(2);  // grouped conv
+```
+
+The adaptive-pool family (`AdaptivePool{1,2,3}dDescriptor`) has no
+optional fields and a single positional constructor — adaptive pooling
+takes only its in / out extents.
+
 ## Verifying the API surface compiles
 
 ```bash

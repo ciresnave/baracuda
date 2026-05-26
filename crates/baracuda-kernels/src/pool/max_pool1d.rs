@@ -35,7 +35,12 @@ use super::pool_nd::{
 /// Shared between [`super::MaxPool1dPlan`] and [`super::AvgPool1dPlan`];
 /// the [`Self::mode`] field selects max vs. one of the two average-pool
 /// flavors.
+///
+/// `#[non_exhaustive]` (Phase 32) — see [`super::Pool2dDescriptor`]
+/// for the builder rationale. Use [`Self::new`] + the `with_*` setters
+/// from downstream code.
 #[derive(Copy, Clone, Debug)]
+#[non_exhaustive]
 pub struct Pool1dDescriptor {
     /// Batch size `N`.
     pub batch: i32,
@@ -53,6 +58,46 @@ pub struct Pool1dDescriptor {
     pub mode: PoolMode,
     /// Element dtype. Must be `F32`, `F64`, `F16`, or `Bf16`.
     pub element: ElementKind,
+}
+
+impl Pool1dDescriptor {
+    /// Build a descriptor with `pad` defaulted to `0` and `stride`
+    /// defaulted to the window extent (PyTorch's default). Chain with
+    /// [`Self::with_padding`] / [`Self::with_stride`] to override.
+    pub fn new(
+        batch: i32,
+        channels: i32,
+        l_in: i32,
+        window: i32,
+        mode: PoolMode,
+        element: ElementKind,
+    ) -> Self {
+        Self {
+            batch,
+            channels,
+            l_in,
+            window,
+            pad: 0,
+            stride: window,
+            mode,
+            element,
+        }
+    }
+
+    /// Override the padding. Default `0`.
+    #[inline]
+    pub fn with_padding(mut self, pad: i32) -> Self {
+        self.pad = pad;
+        self
+    }
+
+    /// Override the stride. Default `window` (PyTorch's pooling
+    /// default).
+    #[inline]
+    pub fn with_stride(mut self, stride: i32) -> Self {
+        self.stride = stride;
+        self
+    }
 }
 
 /// Args bundle for a 1-D pooling forward launch.

@@ -89,7 +89,12 @@ use baracuda_kernels_types::{
 /// `h_out` / `w_out` are arbitrary positive integers — they need NOT
 /// divide `h_in` / `w_in`. The whole point of fractional pooling is the
 /// "non-divisor" output extent.
+///
+/// `#[non_exhaustive]` (Phase 32) — `seed` was added in Phase 16 and a
+/// future internal-RNG variant might add more fields. Use
+/// [`Self::new`] + the `with_seed` setter from downstream code.
 #[derive(Copy, Clone, Debug)]
+#[non_exhaustive]
 pub struct FractionalMaxPool2dDescriptor {
     /// Batch `N`.
     pub batch: i32,
@@ -117,6 +122,46 @@ pub struct FractionalMaxPool2dDescriptor {
     /// Element dtype. Must match `T::KIND` and be one of
     /// `{F32, F64, F16, Bf16}`.
     pub element: ElementKind,
+}
+
+impl FractionalMaxPool2dDescriptor {
+    /// Build a descriptor with `seed = 0` (unused in Phase 16+ — the
+    /// caller supplies samples; retained for ABI back-compat). Chain
+    /// with [`Self::with_seed`] to override.
+    #[allow(clippy::too_many_arguments)]
+    pub fn new(
+        batch: i32,
+        channels: i32,
+        h_in: i32,
+        w_in: i32,
+        window_h: i32,
+        window_w: i32,
+        h_out: i32,
+        w_out: i32,
+        element: ElementKind,
+    ) -> Self {
+        Self {
+            batch,
+            channels,
+            h_in,
+            w_in,
+            window_h,
+            window_w,
+            h_out,
+            w_out,
+            seed: 0,
+            element,
+        }
+    }
+
+    /// Override the `seed`. Default `0`. Currently unused — caller
+    /// supplies `random_samples` directly via the FW args. Retained for
+    /// ABI back-compat with a future internal-RNG variant.
+    #[inline]
+    pub fn with_seed(mut self, seed: u64) -> Self {
+        self.seed = seed;
+        self
+    }
 }
 
 /// Args bundle for the forward launch.

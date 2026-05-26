@@ -40,7 +40,12 @@ use baracuda_kernels_types::{
 /// Input shape: `[batch, c_in, d_in, h_in, w_in]`. Filter shape:
 /// `[c_out, c_in / groups, d_filt, h_filt, w_filt]`. Cross-correlation
 /// only (PyTorch parity).
+///
+/// `#[non_exhaustive]` (Phase 32) — see [`super::Conv2dDescriptor`] for
+/// the builder rationale. Use [`Self::new`] + the `with_*` setters
+/// from downstream code.
 #[derive(Copy, Clone, Debug)]
+#[non_exhaustive]
 pub struct Conv3dDescriptor {
     /// Batch size `N`.
     pub batch: i32,
@@ -82,6 +87,83 @@ pub struct Conv3dDescriptor {
     pub groups: i32,
     /// Element dtype. Must be `F32`, `F64`, `F16`, or `Bf16`.
     pub element: ElementKind,
+}
+
+impl Conv3dDescriptor {
+    /// Build a descriptor with `pad / stride / dilation / groups`
+    /// defaulted to PyTorch's `nn.Conv3d` defaults (`0 / 1 / 1 / 1`).
+    /// Chain with [`Self::with_padding`] / [`Self::with_stride`] /
+    /// [`Self::with_dilation`] / [`Self::with_groups`] to override.
+    pub fn new(
+        batch: i32,
+        c_in: i32,
+        d_in: i32,
+        h_in: i32,
+        w_in: i32,
+        c_out: i32,
+        d_filt: i32,
+        h_filt: i32,
+        w_filt: i32,
+        element: ElementKind,
+    ) -> Self {
+        Self {
+            batch,
+            c_in,
+            d_in,
+            h_in,
+            w_in,
+            c_out,
+            d_filt,
+            h_filt,
+            w_filt,
+            pad_d: 0,
+            pad_h: 0,
+            pad_w: 0,
+            stride_d: 1,
+            stride_h: 1,
+            stride_w: 1,
+            dilation_d: 1,
+            dilation_h: 1,
+            dilation_w: 1,
+            groups: 1,
+            element,
+        }
+    }
+
+    /// Override `(pad_d, pad_h, pad_w)`. Default `(0, 0, 0)`.
+    #[inline]
+    pub fn with_padding(mut self, pad_d: i32, pad_h: i32, pad_w: i32) -> Self {
+        self.pad_d = pad_d;
+        self.pad_h = pad_h;
+        self.pad_w = pad_w;
+        self
+    }
+
+    /// Override `(stride_d, stride_h, stride_w)`. Default `(1, 1, 1)`.
+    #[inline]
+    pub fn with_stride(mut self, stride_d: i32, stride_h: i32, stride_w: i32) -> Self {
+        self.stride_d = stride_d;
+        self.stride_h = stride_h;
+        self.stride_w = stride_w;
+        self
+    }
+
+    /// Override `(dilation_d, dilation_h, dilation_w)`. Default
+    /// `(1, 1, 1)`.
+    #[inline]
+    pub fn with_dilation(mut self, dilation_d: i32, dilation_h: i32, dilation_w: i32) -> Self {
+        self.dilation_d = dilation_d;
+        self.dilation_h = dilation_h;
+        self.dilation_w = dilation_w;
+        self
+    }
+
+    /// Override the group count. Default `1`.
+    #[inline]
+    pub fn with_groups(mut self, groups: i32) -> Self {
+        self.groups = groups;
+        self
+    }
 }
 
 /// Args bundle for a Conv3d forward launch.

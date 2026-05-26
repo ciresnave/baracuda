@@ -26,14 +26,9 @@ fn avg_pool3d_f32() {
 
     let dev_x = DeviceBuffer::from_slice(&ctx, &host_x).expect("up x");
     let mut dev_y: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, 1).expect("y");
-    let desc = Pool3dDescriptor {
-        batch: n, channels: c, d_in, h_in, w_in,
-        window_d: 2, window_h: 2, window_w: 2,
-        pad_d: 0, pad_h: 0, pad_w: 0,
-        stride_d: 2, stride_h: 2, stride_w: 2,
-        mode: PoolMode::AvgExcludePad,
-        element: ElementKind::F32,
-    };
+    let desc = Pool3dDescriptor::new(
+        n, c, d_in, h_in, w_in, 2, 2, 2, PoolMode::AvgExcludePad, ElementKind::F32,
+    );
     let plan = AvgPool3dPlan::<f32>::select(&stream, &desc, PlanPreference::default())
         .expect("sel");
     let x_shape = [n, c, d_in, h_in, w_in];

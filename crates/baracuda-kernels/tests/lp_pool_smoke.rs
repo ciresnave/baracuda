@@ -108,13 +108,8 @@ fn lp_pool_p2_l2_2x2_kernel_f32() {
     let dev_x = DeviceBuffer::from_slice(&ctx, &host_x).expect("up x");
     let mut dev_y: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, exp_y.len()).expect("y");
 
-    let desc = LpPool2dDescriptor {
-        batch: n, channels: c, h_in, w_in,
-        window_h: 2, window_w: 2,
-        stride_h: 2, stride_w: 2,
-        p: 2.0, ceil_mode: false,
-        element: ElementKind::F32,
-    };
+    let desc =
+        LpPool2dDescriptor::new(n, c, h_in, w_in, 2, 2, 2.0, ElementKind::F32);
     let plan =
         LpPool2dPlan::<f32>::select(&stream, &desc, PlanPreference::default()).expect("sel");
     let x_shape = [n, c, h_in, w_in];
@@ -149,13 +144,8 @@ fn lp_pool_p1_l1_2x2_kernel_f32() {
     let dev_x = DeviceBuffer::from_slice(&ctx, &host_x).expect("up x");
     let mut dev_y: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, exp_y.len()).expect("y");
 
-    let desc = LpPool2dDescriptor {
-        batch: n, channels: c, h_in, w_in,
-        window_h: 2, window_w: 2,
-        stride_h: 2, stride_w: 2,
-        p: 1.0, ceil_mode: false,
-        element: ElementKind::F32,
-    };
+    let desc =
+        LpPool2dDescriptor::new(n, c, h_in, w_in, 2, 2, 1.0, ElementKind::F32);
     let plan =
         LpPool2dPlan::<f32>::select(&stream, &desc, PlanPreference::default()).expect("sel");
     let x_shape = [n, c, h_in, w_in];
@@ -189,13 +179,8 @@ fn lp_pool_p3_2x2_kernel_f32() {
     let dev_x = DeviceBuffer::from_slice(&ctx, &host_x).expect("up x");
     let mut dev_y: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, exp_y.len()).expect("y");
 
-    let desc = LpPool2dDescriptor {
-        batch: n, channels: c, h_in, w_in,
-        window_h: 2, window_w: 2,
-        stride_h: 2, stride_w: 2,
-        p: p_val, ceil_mode: false,
-        element: ElementKind::F32,
-    };
+    let desc =
+        LpPool2dDescriptor::new(n, c, h_in, w_in, 2, 2, p_val, ElementKind::F32);
     let plan =
         LpPool2dPlan::<f32>::select(&stream, &desc, PlanPreference::default()).expect("sel");
     let x_shape = [n, c, h_in, w_in];
@@ -230,12 +215,7 @@ fn lp_pool_1d_p2_f32() {
     let dev_x = DeviceBuffer::from_slice(&ctx, &host_x).expect("up x");
     let mut dev_y: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, exp_y.len()).expect("y");
 
-    let desc = LpPool1dDescriptor {
-        batch: n, channels: c, l_in,
-        window: 2, stride: 2,
-        p: 2.0, ceil_mode: false,
-        element: ElementKind::F32,
-    };
+    let desc = LpPool1dDescriptor::new(n, c, l_in, 2, 2.0, ElementKind::F32);
     let plan =
         LpPool1dPlan::<f32>::select(&stream, &desc, PlanPreference::default()).expect("sel");
     let x_shape = [n, c, l_in];
@@ -304,13 +284,8 @@ fn lp_pool_bw_p2_2x2_f32() {
     let dev_dy = DeviceBuffer::from_slice(&ctx, &host_dy).expect("up dy");
     let mut dev_dx: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, numel_x).expect("dx");
 
-    let desc = LpPool2dDescriptor {
-        batch: n, channels: c, h_in, w_in,
-        window_h: 2, window_w: 2,
-        stride_h: 2, stride_w: 2,
-        p: p_val, ceil_mode: false,
-        element: ElementKind::F32,
-    };
+    let desc =
+        LpPool2dDescriptor::new(n, c, h_in, w_in, 2, 2, p_val, ElementKind::F32);
     let bw =
         LpPool2dBackwardPlan::<f32>::select(&stream, &desc, PlanPreference::default()).expect("bw sel");
     let x_shape = [n, c, h_in, w_in];
@@ -349,13 +324,8 @@ fn lp_pool_f16_p2_2x2() {
     let dev_x = DeviceBuffer::from_slice(&ctx, &host_x).expect("up x");
     let mut dev_y: DeviceBuffer<f16> = DeviceBuffer::zeros(&ctx, exp_y_f32.len()).expect("y");
 
-    let desc = LpPool2dDescriptor {
-        batch: n, channels: c, h_in, w_in,
-        window_h: 2, window_w: 2,
-        stride_h: 2, stride_w: 2,
-        p: 2.0, ceil_mode: false,
-        element: ElementKind::F16,
-    };
+    let desc =
+        LpPool2dDescriptor::new(n, c, h_in, w_in, 2, 2, 2.0, ElementKind::F16);
     let plan =
         LpPool2dPlan::<f16>::select(&stream, &desc, PlanPreference::default()).expect("sel");
     let x_shape = [n, c, h_in, w_in];

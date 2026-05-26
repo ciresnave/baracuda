@@ -38,7 +38,15 @@ use baracuda_kernels_types::{
 /// c_in, h_filt, w_filt]`. The padding / stride / dilation extents
 /// follow PyTorch's `nn.Conv2d` semantics (kernel applied directly —
 /// **cross-correlation**, not mathematical convolution).
+///
+/// `#[non_exhaustive]` (Phase 32) — additional optional fields (e.g.
+/// per-channel scales, bias modes, channels-last layout hint) may
+/// land in future phases. Downstream callers MUST use the
+/// [`Self::new`] constructor + chainable `with_*` setters rather than
+/// a struct literal so they continue to compile across field
+/// additions.
 #[derive(Copy, Clone, Debug)]
+#[non_exhaustive]
 pub struct Conv2dDescriptor {
     /// Batch size `N`.
     pub batch: i32,
@@ -75,6 +83,77 @@ pub struct Conv2dDescriptor {
     pub groups: i32,
     /// Element dtype. Must be `F32`, `F64`, `F16`, or `Bf16`.
     pub element: ElementKind,
+}
+
+impl Conv2dDescriptor {
+    /// Build a descriptor with all the shape-required fields set and
+    /// the optional `pad / stride / dilation / groups` fields defaulted
+    /// to PyTorch's `nn.Conv2d` defaults: `pad = 0`, `stride = 1`,
+    /// `dilation = 1`, `groups = 1`. Chain with [`Self::with_padding`]
+    /// / [`Self::with_stride`] / [`Self::with_dilation`] /
+    /// [`Self::with_groups`] to override.
+    pub fn new(
+        batch: i32,
+        c_in: i32,
+        h_in: i32,
+        w_in: i32,
+        c_out: i32,
+        h_filt: i32,
+        w_filt: i32,
+        element: ElementKind,
+    ) -> Self {
+        Self {
+            batch,
+            c_in,
+            h_in,
+            w_in,
+            c_out,
+            h_filt,
+            w_filt,
+            pad_h: 0,
+            pad_w: 0,
+            stride_h: 1,
+            stride_w: 1,
+            dilation_h: 1,
+            dilation_w: 1,
+            groups: 1,
+            element,
+        }
+    }
+
+    /// Override the padding (zero-padding rows/cols on each side of the
+    /// input). Default `[0, 0]`.
+    #[inline]
+    pub fn with_padding(mut self, pad_h: i32, pad_w: i32) -> Self {
+        self.pad_h = pad_h;
+        self.pad_w = pad_w;
+        self
+    }
+
+    /// Override the stride. Default `[1, 1]`.
+    #[inline]
+    pub fn with_stride(mut self, stride_h: i32, stride_w: i32) -> Self {
+        self.stride_h = stride_h;
+        self.stride_w = stride_w;
+        self
+    }
+
+    /// Override the dilation. Default `[1, 1]` (dense conv).
+    #[inline]
+    pub fn with_dilation(mut self, dilation_h: i32, dilation_w: i32) -> Self {
+        self.dilation_h = dilation_h;
+        self.dilation_w = dilation_w;
+        self
+    }
+
+    /// Override the group count. Default `1` (plain conv); set to
+    /// `c_in` for depthwise, or any divisor of both `c_in` and `c_out`
+    /// for grouped conv.
+    #[inline]
+    pub fn with_groups(mut self, groups: i32) -> Self {
+        self.groups = groups;
+        self
+    }
 }
 
 /// Args bundle for a Conv2d forward launch.

@@ -7,13 +7,14 @@ effort within each category. Authoritative status per op lives in
 [`OP-MATRIX.md`](OP-MATRIX.md); historical phase summaries live in
 [`ARCHITECTURE.md`](ARCHITECTURE.md).
 
-The current tag is **v0.0.1-alpha.46** with **2192+ GPU tests
-passing** on RTX 4070 (sm_89). Phase 31 alpha.46 closes the 5
-remaining gaps for Fuel's Phase 6c.2 storage.rs migration: ELU α
-parameter, `powf`, `step`, `gelu_erf`, cast `u32`/`i16`, and
-broadcast-reverse `reduce_sum_to`/`reduce_max_to`. **~76
-new/modified FFI symbols.** Unblocks Fuel's PTX retirement of the
-AFFINE/UNARY/BINARY/CAST/REDUCE/INDEXING/TERNARY/FILL/SORT modules.
+The current tag is **v0.0.1-alpha.47** with **2196+ GPU tests
+passing** on RTX 4070 (sm_89). Phase 32 alpha.47 completes the
+Phase 28b carry-forward — descriptor `#[non_exhaustive]` retrofit
+across 18 Conv/Pool/Interpolate descriptors, paired with `::new()`
+builders + chainable setters. **Breaking change** for downstream
+struct-literal callers; pre-1.0 hardening so future field additions
+don't keep breaking source compat. Internal call sites (~40)
+migrated.
 
 Known pre-existing failures excluded (CTC + mmvq_w_offset_alignment
 + parallel-execution context-init flake).
