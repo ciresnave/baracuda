@@ -259,3 +259,223 @@ pub fn flash_flops(b: i32, h: i32, q: i32, k: i32, d: i32) -> u64 {
 pub fn conv2d_flops(shape: Conv2dShape) -> u64 {
     2 * shape.macs()
 }
+
+// ---------------------------------------------------------------------
+// Phase 29 — cross-implementation CSV emission
+// ---------------------------------------------------------------------
+
+/// One row of a cross-implementation timing table.
+///
+/// Phase 29 benches use this to dump `(op, shape, dtype, baracuda_ns,
+/// reference_ns)` rows that `BENCHMARKS.md` reads back into the summary
+/// table. The CSV is written by the bench process at finish-time under
+/// `target/criterion/phase29/<bench>.csv`; criterion's HTML report is
+/// the primary output, the CSV is the structured-data companion for the
+/// summary table.
+#[derive(Clone, Debug)]
+pub struct PhaseTwentyNineRow {
+    /// Op family (e.g. `"gemm"`, `"softmax"`, `"conv2d"`).
+    pub op: &'static str,
+    /// Shape descriptor (free-form — `"M128_N4096_K4096"` for GEMM,
+    /// `"N1_C64_H56_W56_K64_F3"` for conv, etc.).
+    pub shape: String,
+    /// Element dtype label (`"f32"`, `"f16"`, `"bf16"`, `"q4_0"`, ...).
+    pub dtype: &'static str,
+    /// baracuda median wall time, nanoseconds.
+    pub baracuda_ns: f64,
+    /// Reference (cuBLAS / cuDNN / self) median wall time, nanoseconds.
+    /// `None` when the bench is self-only (e.g. MMVQ — no cuBLAS
+    /// equivalent for GGUF quant ops).
+    pub reference_ns: Option<f64>,
+    /// Reference label — `"cuBLAS"`, `"cuDNN"`, `""` (none).
+    pub reference: &'static str,
+}
+
+impl PhaseTwentyNineRow {
+    /// Delta = `reference_ns / baracuda_ns`. `< 1.0` ⇒ baracuda faster;
+    /// `> 1.0` ⇒ reference faster. `None` when no reference present.
+    pub fn delta(&self) -> Option<f64> {
+        let r = self.reference_ns?;
+        if self.baracuda_ns == 0.0 {
+            None
+        } else {
+            Some(r / self.baracuda_ns)
+        }
+    }
+}
+
+/// Median over `iters` invocations of `launch` under CUDA-event timing,
+/// returning nanoseconds. Used by the cross-impl benches to get a single
+/// representative timing for the summary CSV — criterion's full
+/// statistical analysis is still recorded in the HTML report.
+///
+/// Runs `samples` independent (start, end) event pairs each timing
+/// `inner` launches, then returns the median of the per-sample averages.
+/// Defaults: `samples = 11`, `inner = 50`. These are conservative — they
+/// add ~550 launches per shape on top of the criterion run, which
+/// is rounding error vs criterion's 100-sample sweep.
+pub fn measure_median_ns<F: FnMut()>(
+    ctx: &Context,
+    stream: &Stream,
+    samples: usize,
+    inner: u64,
+    mut launch: F,
+) -> f64 {
+    let mut measurements: Vec<f64> = Vec::with_capacity(samples);
+    for _ in 0..samples {
+        let dur = time_with_events(ctx, stream, inner, &mut launch);
+        let ns = dur.as_secs_f64() * 1e9 / inner as f64;
+        measurements.push(ns);
+    }
+    measurements.sort_by(|a, b| a.partial_cmp(b).unwrap_or(core::cmp::Ordering::Equal));
+    measurements[measurements.len() / 2]
+}
+
+/// Append a `PhaseTwentyNineRow` to `target/criterion/phase29/<bench>.csv`,
+/// creating the file (with header) if it doesn't exist.
+///
+/// CSV columns: `op,shape,dtype,baracuda_ns,reference_ns,reference,delta`.
+///
+/// Errors are swallowed (printed to stderr) — bench correctness mustn't
+/// depend on the CSV write succeeding. The criterion HTML report is the
+/// primary record; the CSV is a convenience for `BENCHMARKS.md` updates.
+pub fn append_csv_row(bench: &str, row: &PhaseTwentyNineRow) {
+    use std::io::Write;
+
+    let dir = std::path::PathBuf::from("target")
+        .join("criterion")
+        .join("phase29");
+    if let Err(e) = std::fs::create_dir_all(&dir) {
+        eprintln!("phase29 csv: mkdir {} failed: {e}", dir.display());
+        return;
+    }
+    let path = dir.join(format!("{bench}.csv"));
+    let exists = path.exists();
+    let mut f = match std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&path)
+    {
+        Ok(f) => f,
+        Err(e) => {
+            eprintln!("phase29 csv: open {} failed: {e}", path.display());
+            return;
+        }
+    };
+    if !exists {
+        let _ = writeln!(f, "op,shape,dtype,baracuda_ns,reference_ns,reference,delta");
+    }
+    let ref_ns = row
+        .reference_ns
+        .map(|x| format!("{x:.3}"))
+        .unwrap_or_else(|| "".into());
+    let delta = row
+        .delta()
+        .map(|x| format!("{x:.4}"))
+        .unwrap_or_else(|| "".into());
+    let _ = writeln!(
+        f,
+        "{op},{shape},{dtype},{ba:.3},{rf},{rl},{dl}",
+        op = row.op,
+        shape = row.shape,
+        dtype = row.dtype,
+        ba = row.baracuda_ns,
+        rf = ref_ns,
+        rl = row.reference,
+        dl = delta,
+    );
+}
+
+// ---------------------------------------------------------------------
+// Phase 29 — cross-implementation shape sweeps
+// ---------------------------------------------------------------------
+
+/// Small `(M, N, K)` sweep for the cross-impl GEMM bench. Smaller than
+/// the Phase-10 sweep so the cross-impl run stays under ~5 min per
+/// dtype. `M = 1` covers decode, `M = 32 / 128` covers prefill.
+pub const CROSS_GEMM_M_SWEEP: &[i32] = &[1, 32, 128];
+/// Square `K == N` values for the cross-impl GEMM bench. 7B (4096) is
+/// the most common hidden-size — keep it as the central pick.
+pub const CROSS_GEMM_KN_SWEEP: &[i32] = &[2048, 4096];
+
+/// Sequence lengths to sweep for the softmax / norm benches. Cover a
+/// short (512) and long (4096) row.
+pub const CROSS_SEQLEN_SWEEP: &[i32] = &[512, 2048, 4096];
+/// Hidden / feature dim to sweep for the softmax / norm benches.
+pub const CROSS_HIDDEN_SWEEP: &[i32] = &[1024, 4096];
+
+/// MMVQ sweep: `(nrows, ncols)`. Mirrors transformer decode-step matmul
+/// shapes: 4096×4096 (Q/K/V projection), 4096×11008 (Llama-2 7B FFN
+/// up_proj), 32000×4096 (Llama-2 7B LM head). 11008 is a multiple of
+/// 256, satisfying every k-quant block-size constraint.
+pub const CROSS_MMVQ_SHAPES: &[(i32, i32)] = &[
+    (4096, 4096),
+    (11008, 4096),
+    (32000, 4096),
+];
+
+/// Conv2d shape set — same as `CONV2D_SWEEP` (the Phase-10 sweep is
+/// already minimal at 3 picks).
+
+/// Pool2d shape set: NCHW (1, 64, 56, 56) is the ResNet stem after
+/// conv1; (1, 256, 14, 14) is a deep-stage feature map. Window 3×3,
+/// stride 2, pad 1.
+#[derive(Copy, Clone, Debug)]
+pub struct PoolShape {
+    /// Batch size.
+    pub n: i32,
+    /// Channels.
+    pub c: i32,
+    /// Input height.
+    pub h: i32,
+    /// Input width.
+    pub w: i32,
+    /// Pooling window (square).
+    pub k: i32,
+    /// Stride (square).
+    pub stride: i32,
+    /// Padding (square).
+    pub pad: i32,
+}
+
+/// Pool sweep (3 picks): stem, mid, deep.
+pub const POOL_SWEEP: &[PoolShape] = &[
+    PoolShape {
+        n: 1,
+        c: 64,
+        h: 56,
+        w: 56,
+        k: 3,
+        stride: 2,
+        pad: 1,
+    },
+    PoolShape {
+        n: 1,
+        c: 128,
+        h: 28,
+        w: 28,
+        k: 3,
+        stride: 2,
+        pad: 1,
+    },
+    PoolShape {
+        n: 1,
+        c: 256,
+        h: 14,
+        w: 14,
+        k: 3,
+        stride: 2,
+        pad: 1,
+    },
+];
+
+/// GGUF block formats to sweep in the MMVQ bench. All have an MMVQ
+/// kernel wired. Q4_0 / Q4_K / Q8_0 / Q6_K is a representative spread:
+/// the two most common 4-bit formats, the most common 8-bit format, and
+/// the 6-bit k-quant.
+pub const CROSS_MMVQ_FORMATS: &[baracuda_kernels::GgufBlockFormat] = &[
+    baracuda_kernels::GgufBlockFormat::Q4_0,
+    baracuda_kernels::GgufBlockFormat::Q4K,
+    baracuda_kernels::GgufBlockFormat::Q6K,
+    baracuda_kernels::GgufBlockFormat::Q8_0,
+];

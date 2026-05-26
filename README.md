@@ -8,7 +8,7 @@
 A unified Rust ML-op facade over the NVIDIA CUDA ecosystem.
 
 ![License](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue)
-![Status](https://img.shields.io/badge/status-alpha.43-orange)
+![Status](https://img.shields.io/badge/status-alpha.44-orange)
 ![CUDA](https://img.shields.io/badge/CUDA-12.x-76b900)
 ![Tests](https://img.shields.io/badge/regression-2172%2F0-success)
 
@@ -40,7 +40,7 @@ talk to one library directly.
 
 ## Status
 
-**In active development — alpha.43.** Roughly **2172 GPU tests passing**
+**In active development — alpha.44.** Roughly **2172 GPU tests passing**
 on an RTX 4070 (sm_89), across **616 binary targets**.
 
 Phase coverage (see [`ARCHITECTURE.md`](ARCHITECTURE.md) for the phase
@@ -76,7 +76,8 @@ matrix):
 | 25-26 | Segment/EmbeddingBag BW completion + BatchedOrmqrWy complex (alpha.42): 9 new Rust plans + 24 new FFI symbols for Segment Max/Min/Prod BW (sorted + unsorted, f32/f64), Unsorted Segment Prod FW (`atomicCAS`-retry mul), EmbeddingBag Max FW+BW (f32/f64/f16/bf16 × i32/i64). Plus BatchedOrmqrWy complex (Complex32, Complex64) via the bespoke WY-block kernels + cuBLAS C/Z gemmStridedBatched (4 new bespoke FFI + 2 cuBLAS symbols). | done |
 | 27 | Q8_1 perf inspection (alpha.42 doc-only): Multi-M MMVQ opportunity identified, kept doc-only — bigger ROI than reformatting Q8_1. | done |
 | 28 | API hygiene for 1.0 prep (alpha.43): new `KernelDtype` umbrella marker trait extending `Element`/`IntElement`/`FpElement`/`BinElement`; `#[non_exhaustive]` audit across the op-family `*Kind` enums + auxiliary tag enums + `Error` types. `ElementKind` / `LayoutSku` / `ArchSku` / `EpilogueKind` / `ActivationKind` / `Workspace` intentionally left exhaustive (hot-path-dispatched). | done |
-| 29+ | Benchmark suite, Hopper / Blackwell, 1.0 freeze | pending (see [`ROADMAP.md`](ROADMAP.md)) |
+| 29 | Cross-implementation benchmark suite (alpha.44): 10 new criterion+CUDA-event benches comparing baracuda against cuBLAS / cuDNN at LLM-typical shapes (GEMM f32/f16/bf16, MMVQ all qtypes, Softmax, LayerNorm, RMSNorm, Conv2d, MaxPool2d, Reductions, Elementwise, Flash SDPA+GQA). ~2,750 LOC of bench code + 13 bench binaries total. Critical finding: baracuda f16/bf16 GEMM is **2-4× slower than cuBLAS at M=1/M=32** (decode regime); validates the deferred Phase 27 multi-M MMVQ port. See [`BENCHMARKS.md`](crates/baracuda-kernels-bench/BENCHMARKS.md) for the methodology + sample run. | done |
+| 30+ | Multi-M MMVQ port (Phase 27 deferred), descriptor `#[non_exhaustive]` + builder (Phase 28b), Hopper / Blackwell, 1.0 freeze | pending (see [`ROADMAP.md`](ROADMAP.md)) |
 
 API stability is **not** promised before beta.0. Breaking changes ship in
 each alpha bump and are documented in the workspace `CHANGELOG.md`.
@@ -87,8 +88,8 @@ Add the kernel facade and the driver crate:
 
 ```toml
 [dependencies]
-baracuda-kernels = { version = "0.0.1-alpha.43", features = ["sm89", "cudnn"] }
-baracuda-driver  = "0.0.1-alpha.43"
+baracuda-kernels = { version = "0.0.1-alpha.44", features = ["sm89", "cudnn"] }
+baracuda-driver  = "0.0.1-alpha.44"
 ```
 
 A representative example — single-axis numerically stable softmax over a

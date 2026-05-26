@@ -1,6 +1,6 @@
 [package]
 name = "baracuda-cvcuda-sys"
-version = "0.0.1-alpha.43"
+version = "0.0.1-alpha.44"
 description = "Raw FFI bindings and dynamic loader for NVIDIA CV-CUDA (computer-vision operators)."
 edition.workspace = true
 rust-version.workspace = true
