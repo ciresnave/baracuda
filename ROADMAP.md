@@ -7,8 +7,11 @@ effort within each category. Authoritative status per op lives in
 [`OP-MATRIX.md`](OP-MATRIX.md); historical phase summaries live in
 [`ARCHITECTURE.md`](ARCHITECTURE.md).
 
-The current tag is **v0.0.1-alpha.38** with **1963 GPU tests
-passing** on RTX 4070 (sm_89) across **616 binary targets**.
+The current tag is **v0.0.1-alpha.39** with **2142 GPU tests
+passing** on RTX 4070 (sm_89) across **616 binary targets**
+(`--include-ignored --no-fail-fast`). Two known pre-Phase-22 failures
+(CTC parallel flake; `mmvq_w_offset_alignment_misaligned_rejected_debug`
+release-mode test design flaw) excluded.
 
 ---
 
@@ -75,6 +78,7 @@ no longer outstanding:
   derivation — bit-exact PyTorch match is a future item if needed.
 
 Carry-forward from Phase 16:
+
 - FractionalMaxPool exact PyTorch formula (current is approximation).
 - LpPool 3d (current scope was 1d/2d only).
 
@@ -124,18 +128,70 @@ Carry-forward from Phase 18:
 - **Mixed-dtype paths** (f16 activation → f32 dst, or vice versa) —
   not implemented; callers can post-cast if they need the alternative.
   Output dtype always matches activation dtype.
-- **Type-0/1 MMVQ `ncols ≥ 64` debug-build assertion** — surfaced
-  during Phase 20.1 test-fixture debugging. The type-0/1 MMVQ kernels
-  (Q4_0/Q4_1/Q5_0/Q5_1/Q8_0) have an implicit `ncols ≥ 2 *
-  GGML_CUDA_DMMV_X = 64` requirement (threads `tid=16..31` always
-  read columns `32..62`). Safe for single-matrix callers (OOB lands
-  in unallocated zero memory) but **unsafe for any contiguous-batched
-  caller** — the OOB reads land in the next token's activation row.
-  Add a debug-build `#[cfg(debug_assertions)]` assertion in
-  `GgufMmvqPlan::select()` rejecting `ncols < 64` for type-0/1
-  formats. Caught by Phase 20.1's batched-MMVQ test fixture
-  accidentally; would be silent-wrong for production callers
-  batching activations contiguously.
+Items previously listed here but now shipped:
+
+- ~~**Type-0/1 MMVQ `ncols ≥ 64` debug-build assertion**~~ — shipped
+  Phase 22 (alpha.39). The assertion now lives in
+  `GgufMmvqBatchedPlan::select()` (NOT `GgufMmvqPlan::select()` —
+  single-matrix callers are incidentally safe because OOB lands in
+  unallocated zero memory; only the contiguous-batched plan has the
+  silent-wrong failure mode). Returns `Error::InvalidProblem` when
+  any type-0/1 format is paired with `n_cols < 64`. Release builds
+  elide the assertion.
+
+## Phase 22 — MMVQ ncols≥64 assertion + cuSOLVER FFI facade (complete; shipped alpha.39)
+
+Closes the first slice of the Phase 19-surfaced "library-backed Rust
+plans need flat C-ABI FFI symbols" 1.0-freeze prereq.
+
+- **Type-0/1 MMVQ `ncols >= 64` debug-build assertion** ✓ in
+  `GgufMmvqBatchedPlan::select()`. Returns `Error::InvalidProblem`
+  for Q4_0/Q4_1/Q5_0/Q5_1/Q8_0 + `n_cols < 64` under
+  `#[cfg(debug_assertions)]`. Single-matrix `GgufMmvqPlan` left
+  unassertioned with an explanatory comment (the contiguous-batched
+  layout is what makes the OOB reads dangerous; single-matrix's OOB
+  region is unallocated zero memory and produces the correct answer).
+- **cuSOLVER FFI facade** ✓ — 10 cuSOLVER-backed plan families wrapped
+  as ~50 flat C symbols in
+  `crates/baracuda-kernels-sys/src/cusolver_facade.rs`. Covered:
+  Cholesky (non-batched + batched, f32/f64), LU `getrf` (f32/f64; no
+  batched in cuSOLVER-Dn), QR `geqrf` + `ormqr` for dense-Q
+  materialization (f32/f64), SVD `gesvd` (f32/f64), SVD-batched
+  Jacobi `gesvdjBatched` (f32/f64), SVDA-batched strided
+  `gesvdaStridedBatched` (f32/f64), eigh `syevd`+`heevd` (f32/f64
+  symmetric + Complex32/Complex64 Hermitian), eig 64-bit-index
+  `Xgeev` (single entry over `cudaDataType` tag covering all 4
+  dtypes), lstsq `_gels` iterative path (f32/f64), solve fused
+  `getrf`+`getrs` (f32/f64), inverse over caller-staged identity
+  (f32/f64). Macro-fanout pattern matching `pool_cudnn_facade.rs`;
+  RAII handle/params/jacobi-info guards. No feature gate (cuSOLVER
+  ships with the CUDA toolkit).
+- **cuSOLVER bufferSize / handle pairing gotcha** surfaced during
+  smoke-test development: cuSOLVER's `_bufferSize` results for some
+  ops (notably `Spotrf_bufferSize` and `SSgels_bufferSize`) drift
+  across separate transient handles. The agent's initial design
+  re-queried bufferSize inside `*_run` against a fresh handle and
+  compared to the caller's `workspace_bytes` (which came from a
+  transient-handle query in `*_workspace_size`) — this spuriously
+  tripped `WS_TOO_SMALL`. Fix: Cholesky / inverse / solve trust the
+  caller's `workspace_bytes` directly (cuSOLVER validates internally
+  and returns its own status if too small); lstsq re-queries on the
+  same handle that runs the op (cuSOLVER's `_gels` is sensitive to
+  bufferSize-vs-run handle pairing).
+- **cuSOLVER `niters` is a HOST scalar pointer** for `_gels` — not a
+  device buffer. The iterative-refinement loop runs on the host; the
+  status int is written from the host side. Passing a device pointer
+  triggers `STATUS_ACCESS_VIOLATION` on Windows. FFI docstring now
+  calls out this residency contract explicitly.
+
+Carry-forward (will be addressed in Phase 23+):
+
+- Remaining library-backed FFI facade coverage: cuFFT, cuRAND,
+  cuSPARSE, cuTENSOR, NPP, CV-CUDA, Cutlass re-export surface.
+- `mmvq_w_offset_alignment_misaligned_rejected_debug` is a stale
+  release-mode test design flaw — the alignment guard is
+  `#[cfg(debug_assertions)]` so the test always fails in `--release`.
+  Pre-existing; not Phase 22 work.
 
 ## Phase 19 — Fuel retirement asks: pool/conv FFI facade + im2col (complete; shipped alpha.36)
 

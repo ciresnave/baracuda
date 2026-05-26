@@ -238,6 +238,37 @@ impl<T: GgufMmvqBatchedActivation> GgufMmvqBatchedPlan<T> {
                     "GgufMmvqBatchedPlan: n_cols must be a multiple of the block size",
                 ));
             }
+            // Phase 22 — debug-build assertion against the type-0/1 MMVQ
+            // `n_cols >= 2 * GGML_CUDA_DMMV_X = 64` implicit minimum.
+            // Threads `tid=16..31` always read columns `32..62`; for
+            // `n_cols < 64` those reads are OOB. Single-matrix `GgufMmvqPlan`
+            // is incidentally safe because the OOB region is unallocated
+            // zero memory; **GgufMmvqBatchedPlan is NOT** because activations
+            // are contiguous-batched across tokens, so OOB reads land in
+            // the next token's activation row producing silent-wrong
+            // results. Caught by Phase 20.1's test fixture; k-quants use
+            // per-format bespoke iteration and aren't affected.
+            #[cfg(debug_assertions)]
+            {
+                use baracuda_kernels_types::GgufBlockFormat;
+                let is_type_0_1 = matches!(
+                    fmt,
+                    GgufBlockFormat::Q4_0
+                        | GgufBlockFormat::Q4_1
+                        | GgufBlockFormat::Q5_0
+                        | GgufBlockFormat::Q5_1
+                        | GgufBlockFormat::Q8_0,
+                );
+                if is_type_0_1 && desc.n_cols < 64 {
+                    return Err(Error::InvalidProblem(
+                        "GgufMmvqBatchedPlan: type-0/1 block formats require \
+                         n_cols >= 64 (2 * GGML_CUDA_DMMV_X); smaller n_cols \
+                         produces silent-wrong results because contiguous-batched \
+                         activations make threads' OOB reads hit adjacent tokens' \
+                         rows",
+                    ));
+                }
+            }
         }
         Ok(Self {
             desc: *desc,

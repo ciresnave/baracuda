@@ -36328,3 +36328,13 @@ mod conv_cudnn_facade;
 
 #[cfg(feature = "cudnn")]
 pub use conv_cudnn_facade::*;
+
+// Phase 22 — cuSOLVER linalg FFI facade. Pure-Rust `#[no_mangle]`
+// wrappers exposing the cuSOLVER-backed linalg plans (Cholesky / LU /
+// QR / SVD / Svd-Batched / Svda-Batched / Eigh / Eig / LstSq / Solve /
+// Inverse) as flat C symbols for non-Rust callers (Fuel). No feature
+// gate — cuSOLVER ships with the CUDA toolkit (not a separate
+// download like cuDNN). See module docs for the handle-lifecycle +
+// identity-staging contract.
+mod cusolver_facade;
+pub use cusolver_facade::*;

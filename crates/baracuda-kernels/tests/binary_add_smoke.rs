@@ -390,10 +390,12 @@ fn add_f64_3d() {
 fn select_rejects_non_f32_today() {
     // No GPU needed for this — just confirm select() rejects the
     // unsupported (kind, dtype) pairs as the trailblazer scope
-    // promises. After the {Sub,Mul,Div} op-fanout landed, Pow stands
-    // in as a still-reserved discriminant.
+    // promises. Pow was the original sentinel; after the Pow fanout
+    // landed, Lerp stands in as the documented reserved-but-deferred
+    // discriminant (it takes a scalar `weight: f32` alongside its
+    // two tensor inputs, which doesn't fit `BinaryArgs<a, b, y>`).
     let desc = BinaryDescriptor {
-        kind: BinaryKind::Pow,
+        kind: BinaryKind::Lerp,
         shape: [4],
         element: ElementKind::F32,
     };
@@ -404,6 +406,6 @@ fn select_rejects_non_f32_today() {
     let err = BinaryPlan::<f32, 1>::select(&stream, &desc, PlanPreference::default());
     assert!(
         err.is_err(),
-        "Pow is reserved but not implemented today; select must reject"
+        "Lerp is reserved-but-deferred today; select must reject"
     );
 }

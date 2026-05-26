@@ -154,6 +154,13 @@ impl<T: GgufMmvqActivation> GgufMmvqPlan<T> {
                 "GgufMmvqPlan: ncols must be a multiple of the block size",
             ));
         }
+        // Note: type-0/1 MMVQ has an implicit `ncols >= 64` minimum
+        // because threads `tid=16..31` always read columns `32..62`.
+        // For single-matrix callers (this plan) the OOB reads land in
+        // unallocated zero memory and produce the right answer.
+        // GgufMmvqBatchedPlan adds a debug-build assertion against this
+        // because contiguous-batched activations make the OOB reads
+        // hit adjacent tokens' rows — see Phase 22 / Phase 20.1.
         // Phase 15.1 — debug-build alignment guard for the W-offset.
         // GGUF block structs have natural alignment ≥ 2 (`half`) or
         // ≥ 4 (`half2` / `float`). A misaligned `w_start_byte_offset`
