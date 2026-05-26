@@ -16,10 +16,17 @@
 //! the reflector kernel still wins. Both plans share the same descriptor
 //! shape — callers pick by problem size.
 //!
-//! **Scope (trailblazer)** — mirrors [`super::ormqr_batched`]:
+//! **Scope** — mirrors [`super::ormqr_batched`]:
 //! - `side = Left` only.
-//! - `op ∈ {N, T}`.
-//! - `dtype ∈ {f32, f64}`.
+//! - `op ∈ {N, T, C}` — `T` is real-only, `C` is complex-only (the
+//!   conjugate-transpose adjoint of unitary `Q`).
+//! - `dtype ∈ {f32, f64, Complex32, Complex64}`. Complex variants
+//!   landed in Phase 26 and reuse the same WY-blocked kernel template
+//!   via the [`mul_T`] / [`conj_T`] element-arithmetic helpers in
+//!   `baracuda_batched_ormqr.cuh`. Complex GEMMs go through cuBLAS
+//!   `C/ZgemmStridedBatched`; the second GEMM uses `transa = OP_C`
+//!   (conjugate-transpose) when applying `Q^H`, mirroring the real
+//!   path's `OP_T`.
 //!
 //! **Algorithm — LAPACK DLARFT** (per-block T-build):
 //!
@@ -62,16 +69,21 @@ use core::marker::PhantomData;
 use baracuda_cutlass::{Error, Result};
 use baracuda_driver::Stream;
 use baracuda_kernels_sys::{
+    baracuda_kernels_batched_ormqr_wy_build_t_complex32_run,
+    baracuda_kernels_batched_ormqr_wy_build_t_complex64_run,
     baracuda_kernels_batched_ormqr_wy_build_t_f32_run,
     baracuda_kernels_batched_ormqr_wy_build_t_f64_run,
+    baracuda_kernels_batched_ormqr_wy_extract_v_complex32_run,
+    baracuda_kernels_batched_ormqr_wy_extract_v_complex64_run,
     baracuda_kernels_batched_ormqr_wy_extract_v_f32_run,
-    baracuda_kernels_batched_ormqr_wy_extract_v_f64_run, cublasCreate_v2, cublasDestroy_v2,
-    cublasDgemmStridedBatched, cublasHandle_t, cublasSetStream_v2, cublasSgemmStridedBatched,
+    baracuda_kernels_batched_ormqr_wy_extract_v_f64_run, cublasCgemmStridedBatched, cublasCreate_v2,
+    cublasDestroy_v2, cublasDgemmStridedBatched, cublasHandle_t, cublasSetStream_v2,
+    cublasSgemmStridedBatched, cublasZgemmStridedBatched, cuComplex, cuDoubleComplex, CUBLAS_OP_C,
     CUBLAS_OP_N, CUBLAS_OP_T,
 };
 use baracuda_kernels_types::{
-    ArchSku, BackendKind, Element, ElementKind, KernelSku, LinalgKind, MathPrecision, OpCategory,
-    PlanPreference, PrecisionGuarantee, TensorMut, Workspace,
+    ArchSku, BackendKind, Complex32, Complex64, Element, ElementKind, KernelSku, LinalgKind,
+    MathPrecision, OpCategory, PlanPreference, PrecisionGuarantee, TensorMut, Workspace,
 };
 
 use super::cholesky::unpack_workspace;
@@ -97,10 +109,12 @@ pub struct BatchedOrmqrWyDescriptor {
     /// Side of the multiplication. Trailblazer accepts only
     /// [`BatchedOrmqrSide::Left`].
     pub side: BatchedOrmqrSide,
-    /// Op tag — [`BatchedOrmqrOp::N`] (apply `Q`) or
-    /// [`BatchedOrmqrOp::T`] (apply `Q^T`).
+    /// Op tag — [`BatchedOrmqrOp::N`] (apply `Q`),
+    /// [`BatchedOrmqrOp::T`] (apply `Q^T`, real only), or
+    /// [`BatchedOrmqrOp::C`] (apply `Q^H`, complex only).
     pub op: BatchedOrmqrOp,
-    /// Element type. Must be `F32` or `F64`.
+    /// Element type. Must be `F32`, `F64`, `Complex32`, or
+    /// `Complex64`.
     pub element: ElementKind,
 }
 
@@ -139,10 +153,15 @@ pub struct BatchedOrmqrWyArgs<'a, T: Element> {
 /// matrices. Pair with [`super::BatchedQrPlan`] which produces the
 /// packed inputs.
 ///
-/// **Dtypes**: `f32`, `f64` only (the trailblazer scope; complex is a
-/// deferred follow-up).
+/// **Dtypes**: `f32`, `f64`, `Complex32`, `Complex64`. Complex variants
+/// landed in Phase 26 — they share the WY-blocked kernel template
+/// (with the inner dot-product `conj()` and the GEMM trans flag
+/// `OP_C`) and use cuBLAS's `C/ZgemmStridedBatched` for the per-block
+/// apply.
 ///
-/// **Constraints**: `side = Left` only; `op ∈ {N, T}`.
+/// **Constraints**: `side = Left` only; `op ∈ {N, T, C}` — `T` is
+/// real-only (LAPACK convention), `C` is complex-only (conjugate
+/// transpose of unitary `Q`).
 ///
 /// **Storage**: column-major end-to-end.
 ///
@@ -174,9 +193,12 @@ impl<T: Element> BatchedOrmqrWyPlan<T> {
                 "baracuda-kernels::BatchedOrmqrWyPlan: descriptor.element != T::KIND",
             ));
         }
-        if !matches!(T::KIND, ElementKind::F32 | ElementKind::F64) {
+        let is_real = matches!(T::KIND, ElementKind::F32 | ElementKind::F64);
+        let is_complex = matches!(T::KIND, ElementKind::Complex32 | ElementKind::Complex64);
+        if !(is_real || is_complex) {
             return Err(Error::Unsupported(
-                "baracuda-kernels::BatchedOrmqrWyPlan: WY kernel wired for f32 + f64 only",
+                "baracuda-kernels::BatchedOrmqrWyPlan: dtype must be one of \
+                 {f32, f64, Complex32, Complex64}",
             ));
         }
         if !matches!(desc.side, BatchedOrmqrSide::Left) {
@@ -184,11 +206,23 @@ impl<T: Element> BatchedOrmqrWyPlan<T> {
                 "baracuda-kernels::BatchedOrmqrWyPlan: side = Right is deferred",
             ));
         }
-        if matches!(desc.op, BatchedOrmqrOp::C) {
-            return Err(Error::Unsupported(
-                "baracuda-kernels::BatchedOrmqrWyPlan: op = C (conjugate transpose) is \
-                 deferred — trailblazer is real-dtype (f32/f64) only",
-            ));
+        // Op × dtype gating, identical to `BatchedOrmqrPlan` — T is real-
+        // only (LAPACK contract); C is the conjugate-transpose adjoint of
+        // unitary `Q` and is complex-only.
+        match (desc.op, is_complex) {
+            (BatchedOrmqrOp::T, true) => {
+                return Err(Error::Unsupported(
+                    "baracuda-kernels::BatchedOrmqrWyPlan: op = T (plain transpose) is \
+                     real-only; use op = C (conjugate transpose) for complex dtypes",
+                ));
+            }
+            (BatchedOrmqrOp::C, false) => {
+                return Err(Error::Unsupported(
+                    "baracuda-kernels::BatchedOrmqrWyPlan: op = C (conjugate transpose) is \
+                     complex-only; use op = T for real dtypes",
+                ));
+            }
+            _ => {}
         }
         if desc.m <= 0 || desc.n <= 0 || desc.k <= 0 {
             return Err(Error::InvalidProblem(
@@ -227,7 +261,7 @@ impl<T: Element> BatchedOrmqrWyPlan<T> {
         let ws_bytes = (t_elems + v_elems + w_elems + w2_elems) * elem;
 
         let math_precision = match T::KIND {
-            ElementKind::F64 => MathPrecision::F64,
+            ElementKind::F64 | ElementKind::Complex64 => MathPrecision::F64,
             _ => MathPrecision::F32,
         };
         let precision_guarantee = PrecisionGuarantee {
@@ -346,10 +380,50 @@ fn map_status(code: i32) -> Result<()> {
     }
 }
 
+// Three GEMM scalars per dtype — α=1 / β=0 / α=-1 / β=1 — packaged as
+// constants so the macro body stays dtype-agnostic. Real path uses
+// `0/1/-1` literals; complex path uses `cuComplex { x, y }`. cuBLAS
+// reads them through host pointers (default `cublasPointerMode_t`).
+const ALPHA_ONE_F32: f32 = 1.0;
+const BETA_ZERO_F32: f32 = 0.0;
+const ALPHA_NEG_ONE_F32: f32 = -1.0;
+const BETA_ONE_F32: f32 = 1.0;
+
+const ALPHA_ONE_F64: f64 = 1.0;
+const BETA_ZERO_F64: f64 = 0.0;
+const ALPHA_NEG_ONE_F64: f64 = -1.0;
+const BETA_ONE_F64: f64 = 1.0;
+
+const ALPHA_ONE_C32: cuComplex = cuComplex { x: 1.0, y: 0.0 };
+const BETA_ZERO_C32: cuComplex = cuComplex { x: 0.0, y: 0.0 };
+const ALPHA_NEG_ONE_C32: cuComplex = cuComplex { x: -1.0, y: 0.0 };
+const BETA_ONE_C32: cuComplex = cuComplex { x: 1.0, y: 0.0 };
+
+const ALPHA_ONE_C64: cuDoubleComplex = cuDoubleComplex { x: 1.0, y: 0.0 };
+const BETA_ZERO_C64: cuDoubleComplex = cuDoubleComplex { x: 0.0, y: 0.0 };
+const ALPHA_NEG_ONE_C64: cuDoubleComplex = cuDoubleComplex { x: -1.0, y: 0.0 };
+const BETA_ONE_C64: cuDoubleComplex = cuDoubleComplex { x: 1.0, y: 0.0 };
+
+// `$adjoint_trans` is the cuBLAS trans flag for the conjugate-transpose
+// side of `V` (first GEMM) and of `T` (second GEMM, only when applying
+// the adjoint). Real → `CUBLAS_OP_T`; complex → `CUBLAS_OP_C`. The
+// first GEMM always uses this flag (we always project via `V^{T/H}·C`);
+// the second GEMM only flips T when applying `Q^T` / `Q^H`.
 macro_rules! impl_batched_ormqr_wy_run {
-    ($T:ty, $build_t:ident, $extract_v:ident, $gemm_strided:ident) => {
+    (
+        $T:ty,
+        $CublasT:ty,
+        $build_t:ident,
+        $extract_v:ident,
+        $gemm_strided:ident,
+        $alpha_one:ident,
+        $beta_zero:ident,
+        $alpha_neg_one:ident,
+        $beta_one:ident,
+        $adjoint_trans:expr
+    ) => {
         impl BatchedOrmqrWyPlan<$T> {
-            /// Run the WY-blocked batched-`ormqr`.
+            /// Run the WY-blocked batched-`ormqr` / `unmqr`.
             pub fn run(
                 &self,
                 stream: &Stream,
@@ -401,7 +475,7 @@ macro_rules! impl_batched_ormqr_wy_run {
 
                 let a_ptr_v = args.a.data.as_raw().0 as *const c_void;
                 let tau_ptr_v = args.tau.data.as_raw().0 as *const c_void;
-                let c_ptr = args.c.data.as_raw().0 as *mut $T;
+                let c_ptr = args.c.data.as_raw().0 as *mut $CublasT;
                 let stream_ptr = stream.as_raw() as *mut c_void;
 
                 // ----- Step 1: build T for every block in one launch ---------
@@ -425,31 +499,23 @@ macro_rules! impl_batched_ormqr_wy_run {
                 // ----- Step 2: per-block apply ---------------------------------
                 // For op = N (apply Q = H_{K-1} · ... · H_0), iterate
                 // blocks from last to first (matching the per-reflector
-                // order). For op = T (apply Q^T = H_0 · ... · H_{K-1}),
-                // iterate blocks from first to last.
+                // order). For op = T / C (apply Q^T / Q^H), iterate
+                // blocks from first to last.
                 //
-                // Within each block, the math is the same — applying
-                // (I - V·T·V^T) on the left of C reduces to three GEMMs:
-                //   W  := V^T · C       (nb × N)
-                //   W2 := T · W         (nb × N)
-                //   C  := C - V · W2    (M × N)
+                // Within each block, the math reduces to three GEMMs:
+                //   W  := V^{T/H} · C       (nb × N)   — `adjoint_trans`
+                //   W2 := op(T) · W         (nb × N)
+                //   C  := C - V · W2        (M × N)
                 //
-                // For op = T we'd want (I - V·T^T·V^T) instead, but
-                // cuBLAS GEMM handles the implicit transpose via the
-                // `transa` arg at no perf cost — see the third GEMM
-                // below.
+                // op(T) is `T` for op=N (block reflector is exactly
+                // `I - V·T·V^{T/H}`), and `T^{T/H}` for op=T/C (applying
+                // the adjoint inverts the per-reflector order which
+                // shows up as a transpose / Hermitian-transpose on T).
                 let block_indices: Vec<i32> = match self.desc.op {
                     BatchedOrmqrOp::N => (0..num_blocks).rev().collect(),
-                    BatchedOrmqrOp::T => (0..num_blocks).collect(),
-                    BatchedOrmqrOp::C => {
-                        // Rejected at `select`; defensively return an
-                        // Unsupported error here as well so a misuse via
-                        // direct construction can't reach the GEMM dispatch.
-                        return Err(Error::Unsupported(
-                            "baracuda-kernels::BatchedOrmqrWyPlan: op = C is deferred",
-                        ));
-                    }
+                    BatchedOrmqrOp::T | BatchedOrmqrOp::C => (0..num_blocks).collect(),
                 };
+                let adjoint_trans: i32 = $adjoint_trans;
 
                 for blk in block_indices {
                     let block_start = blk * nb;
@@ -484,36 +550,32 @@ macro_rules! impl_batched_ormqr_wy_run {
                     // (slot stride = num_blocks * nb * nb).
                     let t_block_offset_elems = (blk as i64) * (nb as i64) * (nb as i64);
                     let t_block_ptr = unsafe {
-                        (t_ptr as *mut $T).offset(t_block_offset_elems as isize)
+                        (t_ptr as *mut $CublasT).offset(t_block_offset_elems as isize)
                     };
                     let t_slot_stride: i64 = (num_blocks as i64) * (nb as i64) * (nb as i64);
 
-                    let v_typed = v_ptr as *const $T;
+                    let v_typed = v_ptr as *const $CublasT;
                     let v_slot_stride: i64 = (m as i64) * (nb as i64);
-                    let w_typed = w_ptr as *mut $T;
+                    let w_typed = w_ptr as *mut $CublasT;
                     let w_slot_stride: i64 = (nb as i64) * (n as i64);
-                    let w2_typed = w2_ptr as *mut $T;
+                    let w2_typed = w2_ptr as *mut $CublasT;
                     let w2_slot_stride: i64 = (nb as i64) * (n as i64);
                     let c_slot_stride: i64 = (m as i64) * (n as i64);
 
-                    let one: $T = 1 as $T;
-                    let zero: $T = 0 as $T;
-                    let neg_one: $T = -(1 as $T);
-
-                    // --------- GEMM 1: W := V^T · C    (nb × N)
-                    //   op(A) = V^T  → transa = T,  A = V [M, nb],  lda = M
-                    //   op(B) = C    → transb = N,  B = C [M, N],   ldb = M
+                    // --------- GEMM 1: W := V^{T/H} · C    (nb × N)
+                    //   op(A) = V^{T/H} → transa = adjoint_trans, A = V [M, nb], lda = M
+                    //   op(B) = C       → transb = N,  B = C [M, N], ldb = M
                     //   C_out = W [nb, N],  ldc = nb
                     let status = unsafe {
                         $gemm_strided(
                             h,
-                            CUBLAS_OP_T,
+                            adjoint_trans,
                             CUBLAS_OP_N,
                             nb, n, m,
-                            &one as *const $T,
+                            &$alpha_one as *const $CublasT,
                             v_typed, m, v_slot_stride,
-                            c_ptr as *const $T, m, c_slot_stride,
-                            &zero as *const $T,
+                            c_ptr as *const $CublasT, m, c_slot_stride,
+                            &$beta_zero as *const $CublasT,
                             w_typed, nb, w_slot_stride,
                             b,
                         )
@@ -523,14 +585,13 @@ macro_rules! impl_batched_ormqr_wy_run {
                     }
 
                     // --------- GEMM 2: W2 := op(T) · W    (nb × N)
-                    //   For op = N (apply Q): we want H_0·...·H_{nb-1} =
-                    //     I - V·T·V^T  ⇒  use T as-is (transa = N).
-                    //   For op = T (apply Q^T): we want H_{nb-1}·...·H_0 =
-                    //     I - V·T^T·V^T  ⇒  use T transposed (transa = T).
+                    //   For op = N (apply Q): use T as-is (transa = N).
+                    //   For op = T/C (apply Q^T/Q^H): use T transposed
+                    //   (or Hermitian-transposed for complex) — transa
+                    //   = adjoint_trans.
                     let trans_t = match self.desc.op {
                         BatchedOrmqrOp::N => CUBLAS_OP_N,
-                        BatchedOrmqrOp::T => CUBLAS_OP_T,
-                        BatchedOrmqrOp::C => unreachable!("op = C rejected above"),
+                        BatchedOrmqrOp::T | BatchedOrmqrOp::C => adjoint_trans,
                     };
                     let status = unsafe {
                         $gemm_strided(
@@ -538,10 +599,10 @@ macro_rules! impl_batched_ormqr_wy_run {
                             trans_t,
                             CUBLAS_OP_N,
                             nb, n, nb,
-                            &one as *const $T,
-                            t_block_ptr as *const $T, nb, t_slot_stride,
-                            w_typed as *const $T, nb, w_slot_stride,
-                            &zero as *const $T,
+                            &$alpha_one as *const $CublasT,
+                            t_block_ptr as *const $CublasT, nb, t_slot_stride,
+                            w_typed as *const $CublasT, nb, w_slot_stride,
+                            &$beta_zero as *const $CublasT,
                             w2_typed, nb, w2_slot_stride,
                             b,
                         )
@@ -560,10 +621,10 @@ macro_rules! impl_batched_ormqr_wy_run {
                             CUBLAS_OP_N,
                             CUBLAS_OP_N,
                             m, n, nb,
-                            &neg_one as *const $T,
+                            &$alpha_neg_one as *const $CublasT,
                             v_typed, m, v_slot_stride,
-                            w2_typed as *const $T, nb, w2_slot_stride,
-                            &one as *const $T,
+                            w2_typed as *const $CublasT, nb, w2_slot_stride,
+                            &$beta_one as *const $CublasT,
                             c_ptr, m, c_slot_stride,
                             b,
                         )
@@ -581,15 +642,51 @@ macro_rules! impl_batched_ormqr_wy_run {
 
 impl_batched_ormqr_wy_run!(
     f32,
+    f32,
     baracuda_kernels_batched_ormqr_wy_build_t_f32_run,
     baracuda_kernels_batched_ormqr_wy_extract_v_f32_run,
-    cublasSgemmStridedBatched
+    cublasSgemmStridedBatched,
+    ALPHA_ONE_F32,
+    BETA_ZERO_F32,
+    ALPHA_NEG_ONE_F32,
+    BETA_ONE_F32,
+    CUBLAS_OP_T
 );
 impl_batched_ormqr_wy_run!(
     f64,
+    f64,
     baracuda_kernels_batched_ormqr_wy_build_t_f64_run,
     baracuda_kernels_batched_ormqr_wy_extract_v_f64_run,
-    cublasDgemmStridedBatched
+    cublasDgemmStridedBatched,
+    ALPHA_ONE_F64,
+    BETA_ZERO_F64,
+    ALPHA_NEG_ONE_F64,
+    BETA_ONE_F64,
+    CUBLAS_OP_T
+);
+impl_batched_ormqr_wy_run!(
+    Complex32,
+    cuComplex,
+    baracuda_kernels_batched_ormqr_wy_build_t_complex32_run,
+    baracuda_kernels_batched_ormqr_wy_extract_v_complex32_run,
+    cublasCgemmStridedBatched,
+    ALPHA_ONE_C32,
+    BETA_ZERO_C32,
+    ALPHA_NEG_ONE_C32,
+    BETA_ONE_C32,
+    CUBLAS_OP_C
+);
+impl_batched_ormqr_wy_run!(
+    Complex64,
+    cuDoubleComplex,
+    baracuda_kernels_batched_ormqr_wy_build_t_complex64_run,
+    baracuda_kernels_batched_ormqr_wy_extract_v_complex64_run,
+    cublasZgemmStridedBatched,
+    ALPHA_ONE_C64,
+    BETA_ZERO_C64,
+    ALPHA_NEG_ONE_C64,
+    BETA_ONE_C64,
+    CUBLAS_OP_C
 );
 
 impl<T: Element> Drop for BatchedOrmqrWyPlan<T> {

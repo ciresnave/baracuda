@@ -733,6 +733,11 @@ fn collect_kernel_files() -> Vec<&'static str> {
             "embedding/embedding_backward.cu",
             "embedding/embedding_bag.cu",
             "embedding/embedding_bag_backward.cu",
+            // Phase 25 — embedding_bag Max mode (FW + BW). FW writes
+            // value + per-(b, d) contributing-row index; BW scatters
+            // dout into dweight at those rows via atomicAdd.
+            "embedding/embedding_bag_max.cu",
+            "embedding/embedding_bag_max_backward.cu",
             // Phase 7 Milestone 7.6 — segment / scatter-reduce family
             // (Category S). Sorted + unsorted variants of sum / mean /
             // max / min / prod (FW); sum + mean BW (sorted and

@@ -1272,10 +1272,13 @@ pub enum IndexingKind {
 ///   ([`Self::UnsortedSegmentSumBackward`],
 ///   [`Self::UnsortedSegmentMeanBackward`]).
 ///
-/// Max / Min / Prod BW is deferred — argmax tracking (Max / Min) and
-/// numerically stable division-by-input (Prod) are out-of-scope for
-/// the trailblazer. Unsorted Prod is also deferred (no native FP
-/// atomicMul; would need a `atomicCAS` retry loop).
+/// Phase 25 closes the remaining BW gaps: Max / Min BW (sorted +
+/// unsorted) recompute the argmax in the BW kernel (preserves FW API
+/// source-compat — no paired-index tensor in the FW signature). Prod
+/// BW (sorted + unsorted) computes `d_output * prod / x` with direct
+/// division — caller must avoid zero-valued inputs in the segment or
+/// accept NaN/Inf in the gradient. Unsorted Prod FW uses an
+/// `atomicCAS` retry loop (no native FP `atomicMul`).
 ///
 /// Dtype coverage: `f32, f64` (atomic-supported FP types). f16 / bf16
 /// deferred — the kernels use `atomicAdd` / `atomicMax` / `atomicMin`
@@ -1295,14 +1298,10 @@ pub enum SegmentKind {
     /// `d_input[n, d] = d_output[seg[n], d] / count[seg[n]]`.
     SegmentMeanBackward = 3,
     /// `out[s, d] = max_{n : seg[n] == s} input[n, d]` — sorted.
-    /// FW-only; BW deferred (requires argmax tracking).
     SegmentMax = 4,
     /// `out[s, d] = min_{n : seg[n] == s} input[n, d]` — sorted.
-    /// FW-only; BW deferred (requires argmin tracking).
     SegmentMin = 5,
     /// `out[s, d] = prod_{n : seg[n] == s} input[n, d]` — sorted.
-    /// FW-only; BW deferred (requires numerically stable
-    /// division-by-input or saved-running-product).
     SegmentProd = 6,
     /// `out[s, d] = Σ_{n : seg[n] == s} input[n, d]` — unsorted
     /// (seg IDs in any order). TF `unsorted_segment_sum`.
@@ -1316,11 +1315,37 @@ pub enum SegmentKind {
     /// `d_input[n, d] = d_output[seg[n], d] / count[seg[n]]`.
     UnsortedSegmentMeanBackward = 10,
     /// `out[s, d] = max_{n : seg[n] == s} input[n, d]` — unsorted.
-    /// FW-only; BW deferred.
     UnsortedSegmentMax = 11,
     /// `out[s, d] = min_{n : seg[n] == s} input[n, d]` — unsorted.
-    /// FW-only; BW deferred.
     UnsortedSegmentMin = 12,
+    /// Phase 25. Gradient of [`Self::SegmentMax`]:
+    /// `d_input[k, d] = d_output[seg, d]` for the (lowest-index) `k`
+    /// where `input[k, d] == max`. Argmax recomputed in BW kernel
+    /// (re-scans the segment) so the FW signature stays unchanged.
+    SegmentMaxBackward = 13,
+    /// Phase 25. Gradient of [`Self::SegmentMin`] — mirror of
+    /// [`Self::SegmentMaxBackward`].
+    SegmentMinBackward = 14,
+    /// Phase 25. Gradient of [`Self::SegmentProd`]:
+    /// `d_input[k, d] = d_output[seg, d] * (prod[seg, d] / x[k, d])`.
+    /// Direct division — caller must avoid zero-valued inputs in the
+    /// segment or accept NaN / Inf in the gradient.
+    SegmentProdBackward = 15,
+    /// Phase 25. Gradient of [`Self::UnsortedSegmentMax`] — same
+    /// recompute-argmax pattern as the sorted variant but scans the
+    /// full input array per (seg, d) cell. Non-deterministic w.r.t.
+    /// tie-breaking when the FW was non-deterministic.
+    UnsortedSegmentMaxBackward = 16,
+    /// Phase 25. Gradient of [`Self::UnsortedSegmentMin`] — mirror of
+    /// [`Self::UnsortedSegmentMaxBackward`].
+    UnsortedSegmentMinBackward = 17,
+    /// Phase 25. `out[s, d] = prod_{n : seg[n] == s} input[n, d]` —
+    /// unsorted. Uses an `atomicCAS` retry loop because no native FP
+    /// `atomicMul` exists. Non-deterministic.
+    UnsortedSegmentProd = 18,
+    /// Phase 25. Gradient of [`Self::UnsortedSegmentProd`] — same
+    /// direct-division pattern as [`Self::SegmentProdBackward`].
+    UnsortedSegmentProdBackward = 19,
 }
 
 /// Embedding-family op discriminant — Category M from the comprehensive

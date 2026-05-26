@@ -362,6 +362,144 @@ __host__ inline int32_t launch_embedding_bag_backward(
     return (err == cudaSuccess) ? 0 : 5;
 }
 
+// =============================================================================
+// Phase 25 — embedding_bag Max mode.
+//
+// Per-feature argmax tracking. FW writes:
+//   out[b, d]       = max{ weight[indices[k], d] for k in bag b,
+//                          excluding padding / OOB }
+//   out_index[b, d] = the (lowest-row-index) `indices[k]` that
+//                     contributed the max value.
+// (Empty / all-padded bag emits out = 0, out_index = -1.)
+//
+// BW: `dweight[out_index[b, d], d] += dout[b, d]` (atomicAdd) — only
+// fires for cells where out_index >= 0.
+//
+// Tie-break choice: first occurrence (lowest k in the bag). PyTorch
+// chooses last; we document the divergence in the Rust plan.
+// =============================================================================
+
+template <typename T, typename IndexT>
+__global__ void embedding_bag_max_kernel(
+    const T*        __restrict__ weight,
+    const IndexT*   __restrict__ indices,
+    const int32_t*  __restrict__ offsets,
+    T*              __restrict__ out,
+    int32_t*        __restrict__ out_index,    // [num_bags, D]
+    int64_t out_numel,         // == B * D
+    int32_t total_indices,
+    int32_t num_embeddings,
+    int32_t embedding_dim,
+    int32_t num_bags,
+    int64_t padding_idx)
+{
+    using Acc = typename AccumOf<T>::type;
+    int64_t tid  = (int64_t)blockIdx.x * (int64_t)blockDim.x + (int64_t)threadIdx.x;
+    int64_t step = (int64_t)gridDim.x  * (int64_t)blockDim.x;
+    T zero;
+    {
+        unsigned char* p = reinterpret_cast<unsigned char*>(&zero);
+        for (size_t i = 0; i < sizeof(T); ++i) p[i] = 0;
+    }
+    for (int64_t i = tid; i < out_numel; i += step) {
+        int64_t b = i / (int64_t)embedding_dim;
+        int32_t d = (int32_t)(i - b * (int64_t)embedding_dim);
+        int32_t start = offsets[b];
+        int32_t end = (b + 1 < num_bags) ? offsets[b + 1] : total_indices;
+        Acc best = (Acc)0;
+        int32_t best_row = -1;
+        for (int32_t k = start; k < end; ++k) {
+            int64_t idx = (int64_t)indices[k];
+            if (idx == padding_idx || idx < 0 || idx >= (int64_t)num_embeddings) {
+                continue;
+            }
+            Acc v = to_accum<T>(weight[idx * (int64_t)embedding_dim + (int64_t)d]);
+            if (best_row < 0 || v > best) {
+                best = v;
+                best_row = (int32_t)idx;
+            }
+        }
+        if (best_row < 0) {
+            out[i] = zero;
+            out_index[i] = -1;
+        } else {
+            out[i] = from_accum<T, Acc>(best);
+            out_index[i] = best_row;
+        }
+    }
+}
+
+template <typename T, typename IndexT>
+__host__ inline int32_t launch_embedding_bag_max(
+    const T* weight, const IndexT* indices, const int32_t* offsets,
+    T* out, int32_t* out_index,
+    int32_t total_indices,
+    int32_t num_embeddings,
+    int32_t embedding_dim,
+    int32_t num_bags,
+    int64_t padding_idx,
+    cudaStream_t stream)
+{
+    if (total_indices < 0 || num_embeddings < 0 || embedding_dim < 0 || num_bags < 0) return 2;
+    int64_t out_numel = (int64_t)num_bags * (int64_t)embedding_dim;
+    if (out_numel == 0) return 0;
+    if (out == nullptr || out_index == nullptr) return 2;
+    constexpr int kBlock = 256;
+    constexpr int64_t kMaxBlocks = 65535;
+    int64_t blocks_i64 = (out_numel + kBlock - 1) / kBlock;
+    int blocks = static_cast<int>(blocks_i64 > kMaxBlocks ? kMaxBlocks : blocks_i64);
+    if (blocks <= 0) blocks = 1;
+    embedding_bag_max_kernel<T, IndexT><<<blocks, kBlock, 0, stream>>>(
+        weight, indices, offsets, out, out_index, out_numel,
+        total_indices, num_embeddings, embedding_dim, num_bags, padding_idx);
+    cudaError_t err = cudaGetLastError();
+    return (err == cudaSuccess) ? 0 : 5;
+}
+
+template <typename T>
+__global__ void embedding_bag_max_backward_kernel(
+    const T*        __restrict__ dout,           // [num_bags, D]
+    const int32_t*  __restrict__ out_index,      // [num_bags, D]
+    T*              __restrict__ dweight,        // [num_embeddings, D]
+    int64_t out_numel,         // == B * D
+    int32_t num_embeddings,
+    int32_t embedding_dim)
+{
+    int64_t tid  = (int64_t)blockIdx.x * (int64_t)blockDim.x + (int64_t)threadIdx.x;
+    int64_t step = (int64_t)gridDim.x  * (int64_t)blockDim.x;
+    for (int64_t i = tid; i < out_numel; i += step) {
+        int32_t row = out_index[i];
+        if (row < 0 || row >= num_embeddings) continue;
+        int64_t b = i / (int64_t)embedding_dim;
+        int32_t d = (int32_t)(i - b * (int64_t)embedding_dim);
+        int64_t off = (int64_t)row * (int64_t)embedding_dim + (int64_t)d;
+        baracuda::indexing::scatter_atomic_add<T>(&dweight[off], dout[i]);
+    }
+}
+
+template <typename T>
+__host__ inline int32_t launch_embedding_bag_max_backward(
+    const T* dout, const int32_t* out_index, T* dweight,
+    int32_t num_embeddings,
+    int32_t embedding_dim,
+    int32_t num_bags,
+    cudaStream_t stream)
+{
+    if (num_embeddings < 0 || embedding_dim < 0 || num_bags < 0) return 2;
+    int64_t out_numel = (int64_t)num_bags * (int64_t)embedding_dim;
+    if (out_numel == 0) return 0;
+    if (dout == nullptr || out_index == nullptr || dweight == nullptr) return 2;
+    constexpr int kBlock = 256;
+    constexpr int64_t kMaxBlocks = 65535;
+    int64_t blocks_i64 = (out_numel + kBlock - 1) / kBlock;
+    int blocks = static_cast<int>(blocks_i64 > kMaxBlocks ? kMaxBlocks : blocks_i64);
+    if (blocks <= 0) blocks = 1;
+    embedding_bag_max_backward_kernel<T><<<blocks, kBlock, 0, stream>>>(
+        dout, out_index, dweight, out_numel, num_embeddings, embedding_dim);
+    cudaError_t err = cudaGetLastError();
+    return (err == cudaSuccess) ? 0 : 5;
+}
+
 }} // namespace baracuda::embedding
 
 // =============================================================================
@@ -472,6 +610,71 @@ __host__ inline int32_t launch_embedding_bag_backward(
             static_cast<const int32_t*>(offsets),                                                  \
             static_cast<T*>(dweight),                                                              \
             total_indices, num_embeddings, embedding_dim, num_bags, mode, padding_idx, stream);   \
+    }
+
+// =============================================================================
+// Phase 25 INSTANTIATE macros — embedding_bag Max FW + BW.
+//
+// FW signature:
+//   (total_indices, num_embeddings, embedding_dim, num_bags,
+//    padding_idx, weight, indices, offsets, out, out_index,
+//    ws, ws_bytes, stream)
+//
+// BW signature:
+//   (num_embeddings, embedding_dim, num_bags,
+//    dout, out_index, dweight,
+//    ws, ws_bytes, stream)
+// =============================================================================
+
+#define BARACUDA_KERNELS_EMBEDDING_BAG_MAX_INSTANTIATE(NAME, T, INDEX_T)                          \
+    extern "C" int32_t baracuda_kernels_##NAME##_run(                                             \
+        int32_t total_indices,                                                                    \
+        int32_t num_embeddings,                                                                   \
+        int32_t embedding_dim,                                                                    \
+        int32_t num_bags,                                                                         \
+        int64_t padding_idx,                                                                      \
+        const void* weight,                                                                       \
+        const void* indices,                                                                      \
+        const void* offsets,                                                                      \
+        void* out,                                                                                \
+        void* out_index,                                                                          \
+        void* /*workspace*/, size_t /*workspace_bytes*/,                                          \
+        void* stream_ptr)                                                                         \
+    {                                                                                              \
+        if (num_bags < 0) return 2;                                                               \
+        if (num_bags == 0) return 0;                                                              \
+        if (weight == nullptr || indices == nullptr || offsets == nullptr ||                     \
+            out == nullptr || out_index == nullptr) return 2;                                    \
+        cudaStream_t stream = static_cast<cudaStream_t>(stream_ptr);                              \
+        return baracuda::embedding::launch_embedding_bag_max<T, INDEX_T>(                         \
+            static_cast<const T*>(weight),                                                        \
+            static_cast<const INDEX_T*>(indices),                                                 \
+            static_cast<const int32_t*>(offsets),                                                 \
+            static_cast<T*>(out),                                                                 \
+            static_cast<int32_t*>(out_index),                                                     \
+            total_indices, num_embeddings, embedding_dim, num_bags, padding_idx, stream);        \
+    }
+
+#define BARACUDA_KERNELS_EMBEDDING_BAG_MAX_BACKWARD_INSTANTIATE(NAME, T)                          \
+    extern "C" int32_t baracuda_kernels_##NAME##_run(                                             \
+        int32_t num_embeddings,                                                                   \
+        int32_t embedding_dim,                                                                    \
+        int32_t num_bags,                                                                         \
+        const void* dout,                                                                         \
+        const void* out_index,                                                                    \
+        void* dweight,                                                                            \
+        void* /*workspace*/, size_t /*workspace_bytes*/,                                          \
+        void* stream_ptr)                                                                         \
+    {                                                                                              \
+        if (num_bags < 0) return 2;                                                               \
+        if (num_bags == 0) return 0;                                                              \
+        if (dout == nullptr || out_index == nullptr || dweight == nullptr) return 2;             \
+        cudaStream_t stream = static_cast<cudaStream_t>(stream_ptr);                              \
+        return baracuda::embedding::launch_embedding_bag_max_backward<T>(                         \
+            static_cast<const T*>(dout),                                                          \
+            static_cast<const int32_t*>(out_index),                                               \
+            static_cast<T*>(dweight),                                                             \
+            num_embeddings, embedding_dim, num_bags, stream);                                     \
     }
 
 #endif // BARACUDA_EMBEDDING_CUH

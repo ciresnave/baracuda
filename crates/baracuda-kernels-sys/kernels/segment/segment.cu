@@ -92,3 +92,33 @@ BARACUDA_KERNELS_SEGMENT_MEAN_BACKWARD_INSTANTIATE(segment_mean_backward_i64idx_
 BARACUDA_KERNELS_SEGMENT_MEAN_BACKWARD_INSTANTIATE(segment_mean_backward_i64idx_f64, double, int64_t)
 BARACUDA_KERNELS_SEGMENT_MEAN_BACKWARD_INSTANTIATE(unsorted_segment_mean_backward_i64idx_f32, float,  int64_t)
 BARACUDA_KERNELS_SEGMENT_MEAN_BACKWARD_INSTANTIATE(unsorted_segment_mean_backward_i64idx_f64, double, int64_t)
+
+// ---------- Phase 25: Max / Min BW (sorted) — argmax recomputed in BW ----------
+BARACUDA_KERNELS_SEGMENT_ARG_BACKWARD_INSTANTIATE(
+    segment_max_backward_f32, float,  baracuda::segment::SEG_ARG_MAX, int32_t)
+BARACUDA_KERNELS_SEGMENT_ARG_BACKWARD_INSTANTIATE(
+    segment_max_backward_f64, double, baracuda::segment::SEG_ARG_MAX, int32_t)
+BARACUDA_KERNELS_SEGMENT_ARG_BACKWARD_INSTANTIATE(
+    segment_min_backward_f32, float,  baracuda::segment::SEG_ARG_MIN, int32_t)
+BARACUDA_KERNELS_SEGMENT_ARG_BACKWARD_INSTANTIATE(
+    segment_min_backward_f64, double, baracuda::segment::SEG_ARG_MIN, int32_t)
+
+// ---------- Phase 25: Max / Min BW (unsorted) ----------
+BARACUDA_KERNELS_UNSORTED_SEGMENT_ARG_BACKWARD_INSTANTIATE(
+    unsorted_segment_max_backward_f32, float,  baracuda::segment::SEG_ARG_MAX, int32_t)
+BARACUDA_KERNELS_UNSORTED_SEGMENT_ARG_BACKWARD_INSTANTIATE(
+    unsorted_segment_max_backward_f64, double, baracuda::segment::SEG_ARG_MAX, int32_t)
+BARACUDA_KERNELS_UNSORTED_SEGMENT_ARG_BACKWARD_INSTANTIATE(
+    unsorted_segment_min_backward_f32, float,  baracuda::segment::SEG_ARG_MIN, int32_t)
+BARACUDA_KERNELS_UNSORTED_SEGMENT_ARG_BACKWARD_INSTANTIATE(
+    unsorted_segment_min_backward_f64, double, baracuda::segment::SEG_ARG_MIN, int32_t)
+
+// ---------- Phase 25: Prod BW (sorted + unsorted share the same kernel) ----------
+BARACUDA_KERNELS_SEGMENT_PROD_BACKWARD_INSTANTIATE(segment_prod_backward_f32, float,  int32_t)
+BARACUDA_KERNELS_SEGMENT_PROD_BACKWARD_INSTANTIATE(segment_prod_backward_f64, double, int32_t)
+BARACUDA_KERNELS_SEGMENT_PROD_BACKWARD_INSTANTIATE(unsorted_segment_prod_backward_f32, float,  int32_t)
+BARACUDA_KERNELS_SEGMENT_PROD_BACKWARD_INSTANTIATE(unsorted_segment_prod_backward_f64, double, int32_t)
+
+// ---------- Phase 25: Unsorted Prod FW (atomicCAS retry loop) ----------
+BARACUDA_KERNELS_UNSORTED_SEGMENT_PROD_INSTANTIATE(unsorted_segment_prod_f32, float,  int32_t)
+BARACUDA_KERNELS_UNSORTED_SEGMENT_PROD_INSTANTIATE(unsorted_segment_prod_f64, double, int32_t)

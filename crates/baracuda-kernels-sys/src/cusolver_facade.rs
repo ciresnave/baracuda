@@ -36,8 +36,10 @@
 //!   Will land in a future cuBLAS facade pass.
 //! - `ormqr_batched` / `ormqr_batched_wy` / `qr_batched_materialize` —
 //!   bespoke kernels; FFI symbols already shipped under
-//!   `baracuda_kernels_batched_ormqr_*_run` etc.
-//! - `BatchedOrmqrWy` complex variants — Phase 26 follow-up.
+//!   `baracuda_kernels_batched_ormqr_*_run` etc. Phase 26 added the
+//!   `BatchedOrmqrWy` Complex32 / Complex64 variants using the same
+//!   FFI surface shape (`*_complex32_run` / `*_complex64_run`) plus
+//!   `cublas{C,Z}gemmStridedBatched` for the per-block apply.
 //!
 //! ## Handle lifecycle
 //!

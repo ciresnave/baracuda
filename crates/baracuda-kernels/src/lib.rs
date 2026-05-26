@@ -358,7 +358,9 @@ pub mod embedding;
 pub use embedding::{
     EmbeddingArgs, EmbeddingBackwardArgs, EmbeddingBackwardDescriptor, EmbeddingBackwardPlan,
     EmbeddingBagArgs, EmbeddingBagBackwardArgs, EmbeddingBagBackwardDescriptor,
-    EmbeddingBagBackwardPlan, EmbeddingBagDescriptor, EmbeddingBagMode, EmbeddingBagPlan,
+    EmbeddingBagBackwardPlan, EmbeddingBagDescriptor, EmbeddingBagMaxArgs,
+    EmbeddingBagMaxBackwardArgs, EmbeddingBagMaxBackwardDescriptor, EmbeddingBagMaxBackwardPlan,
+    EmbeddingBagMaxDescriptor, EmbeddingBagMaxPlan, EmbeddingBagMode, EmbeddingBagPlan,
     EmbeddingDescriptor, EmbeddingPlan,
 };
 
@@ -371,16 +373,23 @@ pub use embedding::{
 pub mod segment;
 
 pub use segment::{
-    SegmentMaxArgs, SegmentMaxDescriptor, SegmentMaxPlan, SegmentMeanArgs,
-    SegmentMeanBackwardArgs, SegmentMeanBackwardDescriptor, SegmentMeanBackwardPlan,
-    SegmentMeanDescriptor, SegmentMeanPlan, SegmentMinArgs, SegmentMinDescriptor, SegmentMinPlan,
-    SegmentProdArgs, SegmentProdDescriptor, SegmentProdPlan, SegmentSumArgs,
-    SegmentSumBackwardArgs, SegmentSumBackwardDescriptor, SegmentSumBackwardPlan,
-    SegmentSumDescriptor, SegmentSumPlan, UnsortedSegmentMaxArgs, UnsortedSegmentMaxDescriptor,
-    UnsortedSegmentMaxPlan, UnsortedSegmentMeanArgs, UnsortedSegmentMeanBackwardArgs,
-    UnsortedSegmentMeanBackwardDescriptor, UnsortedSegmentMeanBackwardPlan,
-    UnsortedSegmentMeanDescriptor, UnsortedSegmentMeanPlan, UnsortedSegmentMinArgs,
-    UnsortedSegmentMinDescriptor, UnsortedSegmentMinPlan, UnsortedSegmentSumArgs,
+    SegmentMaxArgs, SegmentMaxBackwardArgs, SegmentMaxBackwardDescriptor, SegmentMaxBackwardPlan,
+    SegmentMaxDescriptor, SegmentMaxPlan, SegmentMeanArgs, SegmentMeanBackwardArgs,
+    SegmentMeanBackwardDescriptor, SegmentMeanBackwardPlan, SegmentMeanDescriptor, SegmentMeanPlan,
+    SegmentMinArgs, SegmentMinBackwardArgs, SegmentMinBackwardDescriptor, SegmentMinBackwardPlan,
+    SegmentMinDescriptor, SegmentMinPlan, SegmentProdArgs, SegmentProdBackwardArgs,
+    SegmentProdBackwardDescriptor, SegmentProdBackwardPlan, SegmentProdDescriptor, SegmentProdPlan,
+    SegmentSumArgs, SegmentSumBackwardArgs, SegmentSumBackwardDescriptor, SegmentSumBackwardPlan,
+    SegmentSumDescriptor, SegmentSumPlan, UnsortedSegmentMaxArgs, UnsortedSegmentMaxBackwardArgs,
+    UnsortedSegmentMaxBackwardDescriptor, UnsortedSegmentMaxBackwardPlan,
+    UnsortedSegmentMaxDescriptor, UnsortedSegmentMaxPlan, UnsortedSegmentMeanArgs,
+    UnsortedSegmentMeanBackwardArgs, UnsortedSegmentMeanBackwardDescriptor,
+    UnsortedSegmentMeanBackwardPlan, UnsortedSegmentMeanDescriptor, UnsortedSegmentMeanPlan,
+    UnsortedSegmentMinArgs, UnsortedSegmentMinBackwardArgs, UnsortedSegmentMinBackwardDescriptor,
+    UnsortedSegmentMinBackwardPlan, UnsortedSegmentMinDescriptor, UnsortedSegmentMinPlan,
+    UnsortedSegmentProdArgs, UnsortedSegmentProdBackwardArgs,
+    UnsortedSegmentProdBackwardDescriptor, UnsortedSegmentProdBackwardPlan,
+    UnsortedSegmentProdDescriptor, UnsortedSegmentProdPlan, UnsortedSegmentSumArgs,
     UnsortedSegmentSumBackwardArgs, UnsortedSegmentSumBackwardDescriptor,
     UnsortedSegmentSumBackwardPlan, UnsortedSegmentSumDescriptor, UnsortedSegmentSumPlan,
 };

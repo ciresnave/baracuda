@@ -23,8 +23,14 @@
 //     W := T · W         (nb × N)
 //     C := C - V · W     (M × N)
 //
-// Scope (trailblazer): Side = Left, op ∈ {N, T}, dtype ∈ {f32, f64}.
-// Right + complex variants are reserved.
+// Scope (Phase 26): Side = Left, op ∈ {N, T, C}, dtype ∈ {f32, f64,
+// Complex32, Complex64}. `T` is real-only, `C` is complex-only. Right-
+// side is still deferred. Complex Householder uses the unitary identity
+// `H_i = I - τ_i · v_i · v_i^H`, so the WY block-reflector becomes
+// `H_0·...·H_{nb-1} = I - V·T·V^H` and the inner dot-products carry a
+// `conj()` on the left factor. For real T `conj_T<T>` is the identity,
+// so the macro-instantiated real-dtype kernels are bit-identical to the
+// pre-Phase-26 implementations.
 //
 // Status codes: 0 success, 2 invalid problem, 5 launch failure.
 
@@ -35,12 +41,21 @@
 #include <cstdint>
 #include <cuda_runtime.h>
 
+// Pulls in the `mul_T` / `add_T` / `sub_T` / `conj_T` / `zero_T` /
+// `one_T` element-arithmetic helpers (real-passthrough for f32/f64,
+// `cuComplex` intrinsics for Complex32/Complex64), the
+// `BARACUDA_ORMQR_OP_*` constants, and `<cuComplex.h>`. Reused so the
+// WY-blocked kernels stay aligned with the reflector-by-reflector
+// `BatchedOrmqrPlan` numerics.
+#include "baracuda_batched_ormqr.cuh"
+
 namespace baracuda { namespace linalg {
 
 // WY block size — number of reflectors fused per block-reflector. 32 is
 // the sweet spot for sm_80+ (one warp worth of reflectors per block;
 // keeps T at 32×32 which fits comfortably in shared memory for both
-// f32 and f64).
+// f32 and f64; complex variants split the 32×32 into two reals each so
+// still comfortably under the 48 KiB default shared-memory limit).
 constexpr int kWyNb = 32;
 
 // =============================================================================
@@ -104,50 +119,60 @@ __global__ void batched_ormqr_wy_build_t_kernel(
 
     // Zero the whole T_block so the partial-last-block case leaves a
     // well-defined (zero-padded) matrix.
+    const T t_zero = zero_T<T>();
     for (int idx = tid; idx < nb * nb; idx += block_size) {
-        Tb[idx] = (T)0;
+        Tb[idx] = t_zero;
     }
     __syncthreads();
 
     if (block_k == 0) return;
 
     // T[0, 0] = +tau_{block_start}. Per LAPACK DLARFT: for a single
-    // reflector, Q = I - V·T·V^T = I - τ_0·v_0·v_0^T = H_0 requires
+    // reflector, Q = I - V·T·V^H = I - τ_0·v_0·v_0^H = H_0 requires
     // T[0,0] = +τ_0 (NOT -τ_0). The off-diagonal entries get their
     // negative sign from the `-τ_k` scaling in Step 2 below.
+    //
+    // Complex note: tau is itself complex for the Complex32/Complex64
+    // path (cuBLAS spells the unitary Householder via complex τ); no
+    // conjugation is applied to the diagonal entries of T — only the
+    // dot-product side carries the `conj()`.
     if (tid == 0) {
-        Tb[0] = (T)((A)taub[block_start]);
+        Tb[0] = taub[block_start];
     }
     __syncthreads();
 
     for (int k = 1; k < block_k; ++k) {
-        // ----- Step 1: t[j] = Σ_{r=block_start+k}^{M-1} V[r, j] · V[r, k]
+        // ----- Step 1: t[j] = Σ_{r=block_start+k}^{M-1} conj(V[r, j]) · V[r, k]
         //               for j ∈ [0, k).
         // V[r, j] = A_packed[r, block_start + j] (the implicit-1 at the
         // diagonal v_j[block_start+j] contributes 0 here because for
         // j < k we always have block_start+k > block_start+j so r is
         // strictly below v_j's diagonal — only the explicit packed-A
         // entries matter).
+        // For real T, conj_T is the identity so this reduces to the
+        // standard real DLARFT dot product.
         const T* v_k_col = Ab + (int64_t)(block_start + k) * (int64_t)M;
         const int diag_k = block_start + k;
+        const A acc_zero = zero_T<A>();
+        const A acc_one = one_T<A>();
         for (int j = 0; j < k; ++j) {
             const T* v_j_col = Ab + (int64_t)(block_start + j) * (int64_t)M;
-            A partial = (A)0;
+            A partial = acc_zero;
             for (int r = diag_k + tid; r < M; r += block_size) {
                 A vj = (A)v_j_col[r];
                 // v_k[diag_k] is the implicit Householder 1; the packed-A
                 // location at (diag_k, diag_k) actually holds R[k,k]. For
                 // any other row, v_k[r] is the explicit strict-lower
                 // packed value.
-                A vk = (r == diag_k) ? (A)1 : (A)v_k_col[r];
-                partial += vj * vk;
+                A vk = (r == diag_k) ? acc_one : (A)v_k_col[r];
+                partial = add_T<A>(partial, mul_T<A>(conj_T<A>(vj), vk));
             }
             // tree reduction
             red_smem[tid] = partial;
             __syncthreads();
             for (int stride = block_size / 2; stride > 0; stride >>= 1) {
                 if (tid < stride) {
-                    red_smem[tid] = red_smem[tid] + red_smem[tid + stride];
+                    red_smem[tid] = add_T<A>(red_smem[tid], red_smem[tid + stride]);
                 }
                 __syncthreads();
             }
@@ -161,19 +186,23 @@ __global__ void batched_ormqr_wy_build_t_kernel(
         // T is column-major upper-triangular in storage; T[i, j] at
         // offset j*nb + i. Only entries with i ≤ j are valid; below the
         // diagonal is zero from the initial fill above.
-        A neg_tau_k = -(A)taub[block_start + k];
+        // Complex: `-tau_k` is the additive inverse (negate real + imag);
+        // the per-cell mul is the unconjugated complex product.
+        A tau_k = (A)taub[block_start + k];
+        A neg_tau_k = sub_T<A>(acc_zero, tau_k);
         for (int i = tid; i < k; i += block_size) {
-            A sum = (A)0;
+            A sum = acc_zero;
             // T[i, j] for j ∈ [i, k): upper-triangular, so j starts at i.
             for (int j = i; j < k; ++j) {
                 A t_ij = (A)Tb[(int64_t)j * (int64_t)nb + (int64_t)i];
-                sum += t_ij * (neg_tau_k * t_smem[j]);
+                A scaled = mul_T<A>(neg_tau_k, t_smem[j]);
+                sum = add_T<A>(sum, mul_T<A>(t_ij, scaled));
             }
             Tb[(int64_t)k * (int64_t)nb + (int64_t)i] = (T)sum;
         }
         // T[k, k] = +tau_{block_start+k}. See LAPACK DLARFT note above.
         if (tid == 0) {
-            Tb[(int64_t)k * (int64_t)nb + (int64_t)k] = (T)(-neg_tau_k);
+            Tb[(int64_t)k * (int64_t)nb + (int64_t)k] = (T)tau_k;
         }
         __syncthreads();
     }
@@ -211,10 +240,13 @@ __global__ void batched_ormqr_wy_extract_v_kernel(
     const T* Ab = A_packed + (int64_t)b * (int64_t)M * (int64_t)K;
     T*       Vb = V_out    + (int64_t)b * (int64_t)M * (int64_t)nb;
 
+    const T t_zero = zero_T<T>();
+    const T t_one = one_T<T>();
+
     if (j >= block_k) {
         // Zero-pad partial-last-block columns.
         for (int r = tid; r < M; r += block_size) {
-            Vb[(int64_t)j * (int64_t)M + (int64_t)r] = (T)0;
+            Vb[(int64_t)j * (int64_t)M + (int64_t)r] = t_zero;
         }
         return;
     }
@@ -223,9 +255,9 @@ __global__ void batched_ormqr_wy_extract_v_kernel(
     for (int r = tid; r < M; r += block_size) {
         T val;
         if (r < diag) {
-            val = (T)0;
+            val = t_zero;
         } else if (r == diag) {
-            val = (T)1;
+            val = t_one;
         } else {
             // r > diag — strict-lower of column (block_start+j) of A_packed.
             val = Ab[(int64_t)diag * (int64_t)M + (int64_t)r];

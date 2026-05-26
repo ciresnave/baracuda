@@ -14,11 +14,23 @@
 // rather than in this header — keeps the .cu free of cuBLAS headers
 // and keeps the dispatch in the Rust plan.
 //
-// Scope (trailblazer): Side = Left, op ∈ {N, T}, dtype ∈ {f32, f64}.
+// Scope (Phase 26): Side = Left, op ∈ {N, T, C}, dtype ∈ {f32, f64,
+// Complex32, Complex64}. `T` is real-only / `C` is complex-only — the
+// rust plan layer enforces the (dtype, op) gate. The same kernel
+// template handles both real and complex via the `mul_T`/`conj_T`
+// helpers from `baracuda_batched_ormqr.cuh`.
 
 #include "../include/baracuda_batched_ormqr_wy.cuh"
 
 BARACUDA_KERNELS_BATCHED_ORMQR_WY_BUILD_T_INSTANTIATE(batched_ormqr_wy_build_t_f32, float, float)
 BARACUDA_KERNELS_BATCHED_ORMQR_WY_BUILD_T_INSTANTIATE(batched_ormqr_wy_build_t_f64, double, double)
+BARACUDA_KERNELS_BATCHED_ORMQR_WY_BUILD_T_INSTANTIATE(
+    batched_ormqr_wy_build_t_complex32, cuFloatComplex, cuFloatComplex)
+BARACUDA_KERNELS_BATCHED_ORMQR_WY_BUILD_T_INSTANTIATE(
+    batched_ormqr_wy_build_t_complex64, cuDoubleComplex, cuDoubleComplex)
 BARACUDA_KERNELS_BATCHED_ORMQR_WY_EXTRACT_V_INSTANTIATE(batched_ormqr_wy_extract_v_f32, float)
 BARACUDA_KERNELS_BATCHED_ORMQR_WY_EXTRACT_V_INSTANTIATE(batched_ormqr_wy_extract_v_f64, double)
+BARACUDA_KERNELS_BATCHED_ORMQR_WY_EXTRACT_V_INSTANTIATE(
+    batched_ormqr_wy_extract_v_complex32, cuFloatComplex)
+BARACUDA_KERNELS_BATCHED_ORMQR_WY_EXTRACT_V_INSTANTIATE(
+    batched_ormqr_wy_extract_v_complex64, cuDoubleComplex)

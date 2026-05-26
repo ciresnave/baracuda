@@ -12,10 +12,14 @@
 //! - [`EmbeddingBackwardPlan`] BW: `dweight[indices[i], :] += dout[i, :]`
 //!   (atomicAdd), skipping the padding row.
 //! - [`EmbeddingBagPlan`] FW: per-bag reduction over the index range
-//!   `offsets[b]..offsets[b+1]`. Modes: `Sum` / `Mean`. Max-mode is
-//!   deferred (needs argmax tracking for BW).
+//!   `offsets[b]..offsets[b+1]`. Modes: `Sum` / `Mean`.
 //! - [`EmbeddingBagBackwardPlan`] BW: atomicAdd of `dout[b, :] / divisor`
 //!   into `dweight[indices[k], :]` for each k in the bag.
+//! - [`EmbeddingBagMaxPlan`] FW (Phase 25): per-bag max-reduction with
+//!   per-feature argmax tracking. Writes both the max value and the
+//!   contributing `indices[k]` (i32) into `out_index`.
+//! - [`EmbeddingBagMaxBackwardPlan`] BW (Phase 25): scatter-add `dout`
+//!   into `dweight[out_index[b, d], :]` via atomicAdd.
 //!
 //! Trailblazer dtype coverage:
 //! - FW (`Embedding`, `EmbeddingBag`): `f32, f64, f16, bf16` (pure
@@ -30,6 +34,8 @@ pub mod embedding;
 pub mod embedding_backward;
 pub mod embedding_bag;
 pub mod embedding_bag_backward;
+pub mod embedding_bag_max;
+pub mod embedding_bag_max_backward;
 
 pub use embedding::{EmbeddingArgs, EmbeddingDescriptor, EmbeddingPlan};
 pub use embedding_backward::{
@@ -40,6 +46,12 @@ pub use embedding_bag::{
 };
 pub use embedding_bag_backward::{
     EmbeddingBagBackwardArgs, EmbeddingBagBackwardDescriptor, EmbeddingBagBackwardPlan,
+};
+pub use embedding_bag_max::{
+    EmbeddingBagMaxArgs, EmbeddingBagMaxDescriptor, EmbeddingBagMaxPlan,
+};
+pub use embedding_bag_max_backward::{
+    EmbeddingBagMaxBackwardArgs, EmbeddingBagMaxBackwardDescriptor, EmbeddingBagMaxBackwardPlan,
 };
 
 /// Sentinel passed to the kernel when the caller does not supply a

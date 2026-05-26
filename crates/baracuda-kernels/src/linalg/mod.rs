@@ -37,14 +37,16 @@
 //!   `side ∈ {Left, Right}`.
 //! - [`BatchedOrmqrWyPlan`] — WY-blocked apply via cuBLAS strided-batched
 //!   GEMM (GEMM-rates; wins for `M, N > ~16`). `side = Left` only.
+//!   Real `op ∈ {N, T}`, complex `op ∈ {N, C}` — same gate as the
+//!   reflector-by-reflector plan.
 //!
 //! ## Dtype coverage
 //!
 //! Most plans support `f32` + `f64` only — cuSOLVER's dense API does
 //! **not** expose `f16` / `bf16` for these factorizations. Complex
 //! (`Complex32` / `Complex64`) is wired for [`EighPlan`], [`EigPlan`],
-//! [`BatchedQrPlan`], [`BatchedOrmqrPlan`]. See per-plan docs for the
-//! authoritative dtype list.
+//! [`BatchedQrPlan`], [`BatchedOrmqrPlan`], [`BatchedOrmqrWyPlan`].
+//! See per-plan docs for the authoritative dtype list.
 //!
 //! ## Row-major / column-major adapter
 //!

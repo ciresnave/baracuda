@@ -27468,6 +27468,66 @@ unsafe extern "C" {
         batch_count: i32,
     ) -> i32;
 
+    /// `cublasCgemmStridedBatched` — single-precision complex strided-
+    /// batched matrix-matrix multiply. `Complex32` (== `cuComplex` ==
+    /// `cuFloatComplex`) analogue of [`cublasSgemmStridedBatched`]. Used
+    /// by the WY-blocked batched-`unmqr` plan ([`crate`]'s
+    /// `BatchedOrmqrWyPlan<Complex32>`) — `transa = CUBLAS_OP_C` selects
+    /// `V^H` for the first GEMM and `T^H` for the second GEMM when
+    /// applying `Q^H`.
+    ///
+    /// # Safety
+    /// Same shape as [`cublasSgemmStridedBatched`] with `cuComplex`
+    /// storage; strides are in `cuComplex` element counts (8 bytes).
+    pub fn cublasCgemmStridedBatched(
+        handle: cublasHandle_t,
+        transa: i32,
+        transb: i32,
+        m: i32,
+        n: i32,
+        k: i32,
+        alpha: *const cuComplex,
+        a: *const cuComplex,
+        lda: i32,
+        stride_a: i64,
+        b: *const cuComplex,
+        ldb: i32,
+        stride_b: i64,
+        beta: *const cuComplex,
+        c: *mut cuComplex,
+        ldc: i32,
+        stride_c: i64,
+        batch_count: i32,
+    ) -> i32;
+
+    /// `cublasZgemmStridedBatched` — double-precision complex strided-
+    /// batched matrix-matrix multiply. `Complex64` analogue of
+    /// [`cublasCgemmStridedBatched`].
+    ///
+    /// # Safety
+    /// Same shape with `cuDoubleComplex` storage; strides are in
+    /// `cuDoubleComplex` element counts (16 bytes).
+    pub fn cublasZgemmStridedBatched(
+        handle: cublasHandle_t,
+        transa: i32,
+        transb: i32,
+        m: i32,
+        n: i32,
+        k: i32,
+        alpha: *const cuDoubleComplex,
+        a: *const cuDoubleComplex,
+        lda: i32,
+        stride_a: i64,
+        b: *const cuDoubleComplex,
+        ldb: i32,
+        stride_b: i64,
+        beta: *const cuDoubleComplex,
+        c: *mut cuDoubleComplex,
+        ldc: i32,
+        stride_c: i64,
+        batch_count: i32,
+    ) -> i32;
+
     // ----- Triangular solve: cublas{S,D}trsm (f32 / f64) -----------------
     //
     // `trsm` solves one of the matrix equations
@@ -28602,6 +28662,95 @@ unsafe extern "C" {
     /// # Safety
     /// Same as the `f32` variant with `f64` storage.
     pub fn baracuda_kernels_batched_ormqr_wy_extract_v_f64_run(
+        batch: i32,
+        m: i32,
+        k: i32,
+        nb: i32,
+        block_start: i32,
+        block_k: i32,
+        a_packed: *const c_void,
+        v_out: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    // ----- Phase 26: complex (Complex32 / Complex64) WY-block helpers ------
+    //
+    // The Householder reflectors emitted by `cublas{C,Z}geqrfBatched` are
+    // unitary not orthogonal, so the WY block reflector becomes
+    // `H_0·...·H_{nb-1} = I - V · T · V^H` (note `V^H` — the inner dot-
+    // products in the T-build kernel carry a `conj()` on the left factor;
+    // the V-extract kernel is pure copy and needs no math change).
+    //
+    // The kernel template is shared with f32 / f64 via the `mul_T` /
+    // `conj_T` element helpers in `baracuda_batched_ormqr.cuh`; the only
+    // dtype-specific surface is the FFI launcher symbol.
+
+    /// WY block T-build, `Complex32`. f32-complex analogue of the
+    /// `f32` variant. Storage is `cuFloatComplex` (== `Complex32`,
+    /// ABI-compatible).
+    ///
+    /// # Safety
+    /// Same as the `f32` variant with `Complex32` (interleaved
+    /// `(f32, f32)`) storage.
+    pub fn baracuda_kernels_batched_ormqr_wy_build_t_complex32_run(
+        batch: i32,
+        m: i32,
+        k: i32,
+        nb: i32,
+        num_blocks: i32,
+        a_packed: *const c_void,
+        tau: *const c_void,
+        t_out: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// WY block T-build, `Complex64`. f64-complex analogue.
+    ///
+    /// # Safety
+    /// Same as the `f32` variant with `Complex64` storage.
+    pub fn baracuda_kernels_batched_ormqr_wy_build_t_complex64_run(
+        batch: i32,
+        m: i32,
+        k: i32,
+        nb: i32,
+        num_blocks: i32,
+        a_packed: *const c_void,
+        tau: *const c_void,
+        t_out: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// WY V-extraction, `Complex32`. f32-complex analogue. Pure copy
+    /// kernel — sets the implicit-1 (as `(1, 0)`), zeroes above the
+    /// diagonal (as `(0, 0)`), copies the strict lower below.
+    ///
+    /// # Safety
+    /// Same as the `f32` variant with `Complex32` storage.
+    pub fn baracuda_kernels_batched_ormqr_wy_extract_v_complex32_run(
+        batch: i32,
+        m: i32,
+        k: i32,
+        nb: i32,
+        block_start: i32,
+        block_k: i32,
+        a_packed: *const c_void,
+        v_out: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// WY V-extraction, `Complex64`. f64-complex analogue.
+    ///
+    /// # Safety
+    /// Same as the `f32` variant with `Complex64` storage.
+    pub fn baracuda_kernels_batched_ormqr_wy_extract_v_complex64_run(
         batch: i32,
         m: i32,
         k: i32,
@@ -30663,6 +30812,130 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+
+    // ---------- Phase 25: embedding_bag Max mode (FW + BW) ----------
+    //
+    // FW writes value + per-(b, d) contributing row index `out_index`
+    // (i32). BW scatters dout into dweight at those rows via atomicAdd
+    // — value dtype is generic (T), index dtype is fixed at i32.
+    //
+    // Tie-break = first occurrence (lowest k in the bag). PyTorch
+    // chooses last; documented divergence.
+
+    /// `embedding_bag` Max-mode FW — f32 (i32 indices).
+    pub fn baracuda_kernels_embedding_bag_max_f32_run(
+        total_indices: i32,
+        num_embeddings: i32,
+        embedding_dim: i32,
+        num_bags: i32,
+        padding_idx: i64,
+        weight: *const c_void,
+        indices: *const c_void,
+        offsets: *const c_void,
+        out: *mut c_void,
+        out_index: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `embedding_bag_max` FW — f64.
+    pub fn baracuda_kernels_embedding_bag_max_f64_run(
+        total_indices: i32,
+        num_embeddings: i32,
+        embedding_dim: i32,
+        num_bags: i32,
+        padding_idx: i64,
+        weight: *const c_void,
+        indices: *const c_void,
+        offsets: *const c_void,
+        out: *mut c_void,
+        out_index: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `embedding_bag_max` FW — f16.
+    pub fn baracuda_kernels_embedding_bag_max_f16_run(
+        total_indices: i32, num_embeddings: i32, embedding_dim: i32,
+        num_bags: i32, padding_idx: i64,
+        weight: *const c_void, indices: *const c_void, offsets: *const c_void,
+        out: *mut c_void, out_index: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// `embedding_bag_max` FW — bf16.
+    pub fn baracuda_kernels_embedding_bag_max_bf16_run(
+        total_indices: i32, num_embeddings: i32, embedding_dim: i32,
+        num_bags: i32, padding_idx: i64,
+        weight: *const c_void, indices: *const c_void, offsets: *const c_void,
+        out: *mut c_void, out_index: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// `embedding_bag_max` FW — f32, i64 indices.
+    pub fn baracuda_kernels_embedding_bag_max_i64idx_f32_run(
+        total_indices: i32, num_embeddings: i32, embedding_dim: i32,
+        num_bags: i32, padding_idx: i64,
+        weight: *const c_void, indices: *const c_void, offsets: *const c_void,
+        out: *mut c_void, out_index: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// `embedding_bag_max` FW — f64, i64 indices.
+    pub fn baracuda_kernels_embedding_bag_max_i64idx_f64_run(
+        total_indices: i32, num_embeddings: i32, embedding_dim: i32,
+        num_bags: i32, padding_idx: i64,
+        weight: *const c_void, indices: *const c_void, offsets: *const c_void,
+        out: *mut c_void, out_index: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// `embedding_bag_max` FW — f16, i64 indices.
+    pub fn baracuda_kernels_embedding_bag_max_i64idx_f16_run(
+        total_indices: i32, num_embeddings: i32, embedding_dim: i32,
+        num_bags: i32, padding_idx: i64,
+        weight: *const c_void, indices: *const c_void, offsets: *const c_void,
+        out: *mut c_void, out_index: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// `embedding_bag_max` FW — bf16, i64 indices.
+    pub fn baracuda_kernels_embedding_bag_max_i64idx_bf16_run(
+        total_indices: i32, num_embeddings: i32, embedding_dim: i32,
+        num_bags: i32, padding_idx: i64,
+        weight: *const c_void, indices: *const c_void, offsets: *const c_void,
+        out: *mut c_void, out_index: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// `embedding_bag_max` BW — f32. Index dtype is fixed at i32
+    /// (set by the FW's `out_index` output).
+    pub fn baracuda_kernels_embedding_bag_max_backward_f32_run(
+        num_embeddings: i32,
+        embedding_dim: i32,
+        num_bags: i32,
+        dout: *const c_void,
+        out_index: *const c_void,
+        dweight: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `embedding_bag_max` BW — f64.
+    pub fn baracuda_kernels_embedding_bag_max_backward_f64_run(
+        num_embeddings: i32,
+        embedding_dim: i32,
+        num_bags: i32,
+        dout: *const c_void,
+        out_index: *const c_void,
+        dweight: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
 }
 
 // ============================================================================
@@ -31091,6 +31364,170 @@ unsafe extern "C" {
     pub fn baracuda_kernels_segment_mean_backward_i64idx_f64_run(n: i32, d: i32, num_segments: i32, d_output: *const c_void, segment_ids: *const c_void, d_input: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
     pub fn baracuda_kernels_unsorted_segment_mean_backward_i64idx_f32_run(n: i32, d: i32, num_segments: i32, d_output: *const c_void, segment_ids: *const c_void, d_input: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
     pub fn baracuda_kernels_unsorted_segment_mean_backward_i64idx_f64_run(n: i32, d: i32, num_segments: i32, d_output: *const c_void, segment_ids: *const c_void, d_input: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+
+    // ---------- Phase 25: Max / Min BW (sorted + unsorted) ----------
+    //
+    // Argmax / argmin recomputed in BW — preserves FW API (no paired-
+    // index tensor). Signature: extra `input` pointer for the rescan.
+    // Tie-break: first occurrence (lowest k). PyTorch chooses last.
+
+    /// `d_input[k, d] = d_output[seg, d]` iff k is the (first)
+    /// max-argument of the segment in column d, else 0. Sorted seg ids.
+    /// f32.
+    pub fn baracuda_kernels_segment_max_backward_f32_run(
+        n: i32, d: i32, num_segments: i32,
+        d_output: *const c_void,
+        input: *const c_void,
+        segment_ids: *const c_void,
+        d_input: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// `segment_max_backward` — f64.
+    pub fn baracuda_kernels_segment_max_backward_f64_run(
+        n: i32, d: i32, num_segments: i32,
+        d_output: *const c_void,
+        input: *const c_void,
+        segment_ids: *const c_void,
+        d_input: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// `segment_min_backward` — f32.
+    pub fn baracuda_kernels_segment_min_backward_f32_run(
+        n: i32, d: i32, num_segments: i32,
+        d_output: *const c_void,
+        input: *const c_void,
+        segment_ids: *const c_void,
+        d_input: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// `segment_min_backward` — f64.
+    pub fn baracuda_kernels_segment_min_backward_f64_run(
+        n: i32, d: i32, num_segments: i32,
+        d_output: *const c_void,
+        input: *const c_void,
+        segment_ids: *const c_void,
+        d_input: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// `unsorted_segment_max_backward` — f32.
+    pub fn baracuda_kernels_unsorted_segment_max_backward_f32_run(
+        n: i32, d: i32, num_segments: i32,
+        d_output: *const c_void,
+        input: *const c_void,
+        segment_ids: *const c_void,
+        d_input: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// `unsorted_segment_max_backward` — f64.
+    pub fn baracuda_kernels_unsorted_segment_max_backward_f64_run(
+        n: i32, d: i32, num_segments: i32,
+        d_output: *const c_void,
+        input: *const c_void,
+        segment_ids: *const c_void,
+        d_input: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// `unsorted_segment_min_backward` — f32.
+    pub fn baracuda_kernels_unsorted_segment_min_backward_f32_run(
+        n: i32, d: i32, num_segments: i32,
+        d_output: *const c_void,
+        input: *const c_void,
+        segment_ids: *const c_void,
+        d_input: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// `unsorted_segment_min_backward` — f64.
+    pub fn baracuda_kernels_unsorted_segment_min_backward_f64_run(
+        n: i32, d: i32, num_segments: i32,
+        d_output: *const c_void,
+        input: *const c_void,
+        segment_ids: *const c_void,
+        d_input: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    // ---------- Phase 25: Prod BW (sorted + unsorted share the kernel) ----------
+    //
+    // `d_input[k, d] = d_output[seg, d] * (output[seg, d] / input[k, d])`.
+    // Direct division — caller must avoid zero-valued inputs or accept
+    // NaN / Inf in the gradient. Extra inputs: `input` and `output`
+    // (the saved FW `prod`).
+
+    /// `segment_prod_backward` — f32.
+    pub fn baracuda_kernels_segment_prod_backward_f32_run(
+        n: i32, d: i32, num_segments: i32,
+        d_output: *const c_void,
+        input: *const c_void,
+        output: *const c_void,
+        segment_ids: *const c_void,
+        d_input: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// `segment_prod_backward` — f64.
+    pub fn baracuda_kernels_segment_prod_backward_f64_run(
+        n: i32, d: i32, num_segments: i32,
+        d_output: *const c_void,
+        input: *const c_void,
+        output: *const c_void,
+        segment_ids: *const c_void,
+        d_input: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// `unsorted_segment_prod_backward` — f32. Shares the kernel with
+    /// the sorted variant; distinct symbol for SKU tagging.
+    pub fn baracuda_kernels_unsorted_segment_prod_backward_f32_run(
+        n: i32, d: i32, num_segments: i32,
+        d_output: *const c_void,
+        input: *const c_void,
+        output: *const c_void,
+        segment_ids: *const c_void,
+        d_input: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// `unsorted_segment_prod_backward` — f64.
+    pub fn baracuda_kernels_unsorted_segment_prod_backward_f64_run(
+        n: i32, d: i32, num_segments: i32,
+        d_output: *const c_void,
+        input: *const c_void,
+        output: *const c_void,
+        segment_ids: *const c_void,
+        d_input: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    // ---------- Phase 25: Unsorted Prod FW (atomicCAS retry loop) ----------
+    //
+    // No native FP `atomicMul` — we do `atomicCAS` on the underlying
+    // 32 / 64-bit slot. Non-deterministic. Output pre-initialized to
+    // 1.0 by the launcher.
+
+    /// `unsorted_segment_prod` FW — f32.
+    pub fn baracuda_kernels_unsorted_segment_prod_f32_run(
+        n: i32, d: i32, num_segments: i32,
+        input: *const c_void,
+        segment_ids: *const c_void,
+        output: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// `unsorted_segment_prod` FW — f64.
+    pub fn baracuda_kernels_unsorted_segment_prod_f64_run(
+        n: i32, d: i32, num_segments: i32,
+        input: *const c_void,
+        segment_ids: *const c_void,
+        output: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
 }
 
 // ============================================================================

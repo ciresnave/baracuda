@@ -7,11 +7,13 @@ effort within each category. Authoritative status per op lives in
 [`OP-MATRIX.md`](OP-MATRIX.md); historical phase summaries live in
 [`ARCHITECTURE.md`](ARCHITECTURE.md).
 
-The current tag is **v0.0.1-alpha.41** with **2154 GPU tests
-passing** on RTX 4070 (sm_89) across **619+ binary targets**
-(`--include-ignored --no-fail-fast`). Two known pre-Phase-22 failures
-(CTC parallel flake; `mmvq_w_offset_alignment_misaligned_rejected_debug`
-release-mode test design flaw) excluded.
+The current tag is **v0.0.1-alpha.42** with **2172 GPU tests
+passing** on RTX 4070 (sm_89) across **628 binary targets**
+(`--include-ignored --no-fail-fast`). Combined Phase 25 + 26 release.
+Known pre-existing failures (CTC parallel-execution flake;
+`mmvq_w_offset_alignment_misaligned_rejected_debug` release-mode test
+design flaw) excluded. (`reduce_max_*` parallel-execution flake from
+a prior Phase 25 run did NOT fire this combined run — likely transient.)
 
 ---
 
@@ -367,20 +369,30 @@ Option 2 together.
 
 Once Phase 20 ships, Fuel's `fuel-cuda-kernels` crate retires.
 
-## Phase 21 — segment + embedding BW completion (deferred from previous Phase 19 slot)
+## Phase 25 — segment + embedding BW completion (DONE)
 
-- **Segment `Max` / `Min` BW** — needs argmax / argmin tracking in
-  the FW (output a paired index tensor alongside the value output;
-  BW gathers gradient into the recorded index).
-- **Segment `Prod` BW** — needs numerically stable `prod / x_n` for
-  the gradient (division-by-self for each contributing element).
-  Care needed for zero inputs.
-- **Unsorted Segment Max / Min BW** — same as sorted variants plus
-  the non-determinism caveat already documented in OP-MATRIX.
-- **Unsorted Segment `Prod`** — has no FW today either (no native
-  FP `atomicMul`; would need an `atomicCAS` retry loop).
-- **`EmbeddingBag Max` mode** — needs per-feature argmax tracking
-  (same pattern as Segment Max).
+Originally tracked under the Phase 21 slot. Shipped:
+
+- **Segment `Max` / `Min` BW** (sorted + unsorted) — argmax / argmin
+  **recomputed in the BW kernel** rather than saved from FW; preserves
+  FW API source-compat. Tie-break = first occurrence (PyTorch picks
+  last; documented divergence).
+- **Segment `Prod` BW** (sorted + unsorted) — direct
+  `d_input[k, d] = d_output[seg, d] * (output[seg, d] / input[k, d])`.
+  Caller must avoid zero-valued inputs or accept NaN / Inf in the
+  gradient.
+- **Unsorted Segment `Prod` FW** — atomicMul-via-CAS retry loop on the
+  underlying 32 / 64-bit slot. Non-deterministic.
+- **`EmbeddingBag` Max mode FW + BW** — FW writes value + per-(b, d)
+  contributing-row index (i32); BW scatters dout into dweight at those
+  rows via atomicAdd. Tie-break = first occurrence.
+
+Dtype coverage: `f32, f64` for all (BW uses atomicAdd / atomicCAS,
+restricted to native-FP-atomic types). EmbeddingBag Max FW also covers
+`f16, bf16` (f32 accumulator), index dtypes `i32 + i64`.
+
+New FFI symbols added: 16 segment (8 sorted BW + 8 unsorted BW
+plus 2 prod FW) and 10 embedding (8 max FW × dtype/idx plus 2 max BW).
 
 ## Phase 22 — linalg completion
 
