@@ -1,7 +1,7 @@
 [package]
 name = "baracuda-kernels-sys"
-version = "0.0.1-alpha.40"
-description = "Compiled bespoke .cu kernel template instantiations for the baracuda ML kernel facade. Hosts curated CUDA kernel sources (int8/FP8/int4/bin GEMM RRR, elementwise, reduce, norm, attention, …), builds them via baracuda-forge, exposes extern \"C\" entry points for the safe baracuda-kernels crate. No CUTLASS dependency — every kernel here is hand-rolled."
+version = "0.0.1-alpha.41"
+description = "Compiled bespoke .cu kernel template instantiations for the baracuda ML kernel facade plus C-ABI FFI facades for the library-backed plans (cuDNN conv/pool, cuSOLVER linalg, cuFFT/cuRAND, CUTLASS GEMM re-export). Hosts curated CUDA kernel sources (int8/FP8/int4/bin GEMM RRR, elementwise, reduce, norm, attention, …), builds them via baracuda-forge, exposes extern \"C\" entry points for the safe baracuda-kernels crate. CUTLASS template kernels live in the sibling baracuda-cutlass-kernels-sys crate and are re-exported here under the unified baracuda_kernels_gemm_* namespace."
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
@@ -46,7 +46,7 @@ cudnn = []
 # trampoline to them. Different `links` key (`baracuda_cutlass_kernels`
 # vs `baracuda_kernels`) so the two static archives co-exist without
 # Cargo's links-conflict guard tripping.
-baracuda-cutlass-kernels-sys = { workspace = true, default-features = false }
+baracuda-cutlass-kernels-sys = { workspace = true }
 
 [build-dependencies]
 baracuda-forge = { workspace = true }

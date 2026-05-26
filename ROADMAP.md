@@ -7,8 +7,8 @@ effort within each category. Authoritative status per op lives in
 [`OP-MATRIX.md`](OP-MATRIX.md); historical phase summaries live in
 [`ARCHITECTURE.md`](ARCHITECTURE.md).
 
-The current tag is **v0.0.1-alpha.40** with **2150 GPU tests
-passing** on RTX 4070 (sm_89) across **616+ binary targets**
+The current tag is **v0.0.1-alpha.41** with **2154 GPU tests
+passing** on RTX 4070 (sm_89) across **619+ binary targets**
 (`--include-ignored --no-fail-fast`). Two known pre-Phase-22 failures
 (CTC parallel flake; `mmvq_w_offset_alignment_misaligned_rejected_debug`
 release-mode test design flaw) excluded.
@@ -138,6 +138,58 @@ Items previously listed here but now shipped:
   silent-wrong failure mode). Returns `Error::InvalidProblem` when
   any type-0/1 format is paired with `n_cols < 64`. Release builds
   elide the assertion.
+
+## Phase 24 — Cutlass GEMM re-export FFI facade (complete; shipped alpha.41)
+
+Third and final slice of the Phase 19-surfaced library-backed FFI
+facade audit. **Completes the 1.0-freeze prereq**: every
+library-backed Rust plan now has a corresponding flat C-ABI
+`baracuda-kernels-sys` symbol. cuTENSOR / NPP / CV-CUDA were skipped
+per the Phase 23 cuSPARSE precedent — no `baracuda-kernels` plans
+wrap them today; their respective parallel safe wrappers
+(`baracuda-cutensor`, `baracuda-npp`, `baracuda-cvcuda`) remain the
+authoritative API for non-Rust callers needing those libraries.
+
+- **Cutlass GEMM re-export** (210 symbols) — full `cutlass_reexport.rs`
+  in `baracuda-kernels-sys/src/`. Exposes the entire
+  `baracuda-cutlass-kernels-sys` GEMM surface under the unified
+  `baracuda_kernels_gemm_*` namespace so non-Rust callers can drive
+  any Cutlass SKU through `baracuda-kernels-sys` directly, without
+  taking a separate `baracuda-cutlass-kernels-sys` link-line dep.
+  Coverage:
+  - 10 non-bias single GEMM (fp16/bf16/tf32/f32_simt/s8/u8 × {rcr, rrr})
+  - 2 non-bias DGEMM (f64 × {rcr, rrr})
+  - 32 bias-fused fp single GEMM ({Bias, BiasRelu, BiasGelu, BiasSilu}
+    × {f16, bf16, tf32, f32_simt} × {rcr, rrr})
+  - 16 bias-fused int8 GEMM ({Bias, BiasRelu, BiasGelu, BiasSilu} ×
+    {f32bias, i32bias} × {s8, u8} × rcr)
+  - 8 bias-fused DGEMM ({Bias, BiasRelu, BiasGelu, BiasSilu} × {rcr, rrr})
+  - 2 strided-batched GEMM ({f16, bf16} × rcr)
+  - 70 SKU families × 3 entries (`*_run`, `*_workspace_size`,
+    `*_can_implement`) = 210 trampolines.
+- **`baracuda-kernels-sys` Cargo.toml** gained a normal dep on
+  `baracuda-cutlass-kernels-sys` (and forwards `sm80` / `sm90a`
+  features through). Different `links` keys
+  (`baracuda_cutlass_kernels` vs `baracuda_kernels`) keep the two
+  static archives co-existing without Cargo's links-conflict guard
+  tripping.
+- **Trampoline contract**: pass `(workspace, workspace_bytes)`
+  verbatim to the underlying Cutlass symbol. No re-query, no
+  validation at the trampoline layer — Cutlass workspace estimates
+  are host-pure and don't drift across calls (so the cuSOLVER
+  re-query footgun doesn't apply here). All `_run` pointer args are
+  device-resident; `_workspace_size` and `_can_implement` are
+  host-pure.
+
+Skipped libraries with explicit deferral notes in `lib.rs`:
+
+- **cuTENSOR** — `baracuda-cutensor` exists; `baracuda-kernels`
+  has no plan wrapping it.
+- **NPP** — `baracuda-npp` exists; no `baracuda-kernels` plan.
+- **CV-CUDA** — `baracuda-cvcuda` exists; no `baracuda-kernels` plan.
+
+If `baracuda-kernels` grows plans for any of these in the future,
+the matching facade lands then.
 
 ## Phase 23 — cuFFT + cuRAND FFI facade (complete; shipped alpha.40)
 

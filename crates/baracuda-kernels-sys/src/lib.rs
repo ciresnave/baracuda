@@ -36367,3 +36367,27 @@ pub use curand_facade::*;
 // (sparse ops are exposed only via `baracuda-cusparse`'s safe wrapper).
 // A cuSPARSE facade lands in a future phase once at least one
 // sparse-backed plan exists in `baracuda-kernels` to wrap.
+
+// Phase 24 — CUTLASS GEMM re-export facade. Trampoline `#[no_mangle]`
+// wrappers forwarding each of the 162 `baracuda_cutlass_gemm_*` FFI
+// symbols (54 SKU families × `_run` / `_workspace_size` /
+// `_can_implement`) under the unified `baracuda_kernels_gemm_*` naming
+// convention. Covers every Cutlass GEMM SKU shipped by
+// `baracuda-cutlass-kernels-sys`: f16/bf16/tf32/f32_simt/f64 × {rcr,
+// rrr} × {Identity, Bias, BiasRelu, BiasGelu, BiasSilu} × {f32/i32 bias
+// broadcast for int8 / no bias variants} + batched f16/bf16 RCR. Gated
+// behind `sm80` / `sm90a` to match the upstream CUTLASS kernel-set
+// gates. See module docs for naming convention + status-code +
+// workspace contracts.
+//
+// Skip notes (Phase 24 — no plans, no facade per Phase 23 precedent):
+// - cuTENSOR: `baracuda-cutensor` exists, but no `baracuda-kernels`
+//   plan wraps it (einsum / permute land in a future phase).
+// - NPP: `baracuda-npp` exists, but no `baracuda-kernels` plan wraps
+//   it (image transforms are bespoke + cuDNN-pool today).
+// - CV-CUDA: `baracuda-cvcuda` exists, but no `baracuda-kernels` plan
+//   wraps it.
+#[cfg(any(feature = "sm80", feature = "sm90a"))]
+mod cutlass_reexport;
+#[cfg(any(feature = "sm80", feature = "sm90a"))]
+pub use cutlass_reexport::*;
