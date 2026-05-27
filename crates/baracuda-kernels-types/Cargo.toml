@@ -1,6 +1,6 @@
 [package]
 name = "baracuda-kernels-types"
-version = "0.0.1-alpha.49"
+version = "0.0.1-alpha.50"
 description = "Shared type vocabulary for the baracuda ML kernel facade: Element / IntElement / FpElement / BiasElement trait hierarchy, layout / epilogue / activation tags, MatrixRef / TensorRef views, PlanPreference, PrecisionGuarantee, and Workspace. Lifted from baracuda-cutlass so that baracuda-kernels and the per-library wrapper crates can share one vocabulary."
 edition.workspace = true
 rust-version.workspace = true

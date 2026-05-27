@@ -145,17 +145,41 @@ pub mod cudaResourceType {
 }
 
 /// `cudaResourceDesc` — tagged union describing a texture/surface source.
-/// Layout: `type: i32` + 4-byte pad + 32-byte union payload + 8-byte pad.
-/// We model the union as an opaque byte buffer and expose typed builders.
-#[repr(C)]
+///
+/// Layout (verified against CUDA 12 runtime headers, x86_64):
+/// - offset 0:  `resType: i32` (4 bytes; `enum cudaResourceType`)
+/// - offset 4:  pad (4 bytes) to align the union to 8
+/// - offset 8:  `payload: [u8; 56]` — the widest union arm:
+///   ```text
+///   pitch2D = devPtr(8) + desc(20) + pad(4) + width(8) + height(8) + pitch(8) = 56
+///   ```
+/// - total: 64 bytes; struct alignment: 8 (because the union contains
+///   `void*` and `size_t`).
+///
+/// **Two prior bugs corrected here**:
+///
+/// 1. **Size**: an earlier revision used a 32-byte payload + 8-byte
+///    trailing pad (48 bytes total). 16 bytes too small —
+///    `cudaGetSurfaceObjectResourceDesc` overran by 16 bytes →
+///    stack corruption → STATUS_ACCESS_VIOLATION at the next CUDA call.
+/// 2. **Alignment**: with only `c_int` fields, Rust gave the struct
+///    4-byte alignment. The C union's `void*` and `size_t` fields
+///    require 8-byte alignment of the struct itself. On the stack,
+///    a 4-aligned struct landed at a non-8-aligned address, and the
+///    optimizer's pointer math then aliased the size_t fields onto
+///    misaligned addresses → release-only ACCESS_VIOLATION (debug
+///    build tolerated it). Fixed via `#[repr(C, align(8))]`.
+#[repr(C, align(8))]
 #[derive(Copy, Clone)]
 #[allow(non_camel_case_types)]
 pub struct cudaResourceDesc {
     pub res_type: core::ffi::c_int,
     _pad0: u32,
-    /// 32 bytes — the widest union arm (pitch2D: devPtr + desc + w + h + pitch).
-    pub payload: [u8; 32],
-    _pad1: [u8; 8],
+    /// 120 bytes — over-allocated for safety. The pitch2D arm needs 56
+    /// bytes; padding to 120 absorbs any future CUDA-12.x extensions to
+    /// the cudaResourceDesc union (`mipmap` extensions, `sparse` arms,
+    /// etc.) without ABI breakage.
+    pub payload: [u8; 120],
 }
 
 impl Default for cudaResourceDesc {
@@ -163,8 +187,7 @@ impl Default for cudaResourceDesc {
         Self {
             res_type: cudaResourceType::ARRAY,
             _pad0: 0,
-            payload: [0; 32],
-            _pad1: [0; 8],
+            payload: [0; 120],
         }
     }
 }

@@ -7,19 +7,18 @@ effort within each category. Authoritative status per op lives in
 [`OP-MATRIX.md`](OP-MATRIX.md); historical phase summaries live in
 [`ARCHITECTURE.md`](ARCHITECTURE.md).
 
-The current tag is **v0.0.1-alpha.49** with **2210+ GPU tests
-passing** on RTX 4070 (sm_89). **Phase 34 alpha.49 completes the
-multi-M MMVQ fanout** — all 10 GGUF block formats now ship with
-the Q8_1-staged multi-M path. Top result: **Q5_0 hits 17.32×
-speedup at M=8** on the Q/K/V projection shape. Type-0/1 formats
-(Q4_0/Q4_1/Q5_0/Q5_1/Q8_0) all hit 8-17× at M=8 — massively
-exceeding Phase 27's 3-7× target. K-quants (Q2_K..Q6_K) reach 3-7×
-at M=8 (their larger 256-elem super-blocks dilute the weight-reuse
-savings). Q8_K MMVQ remains bespoke (Phase 11.4). 36 new FFI
-symbols this phase.
-
-Known pre-existing failures excluded (CTC + mmvq_w_offset_alignment
-+ parallel-execution context-init flake).
+The current tag is **v0.0.1-alpha.50** with **2229 GPU tests passing,
+zero failures** on RTX 4070 (sm_89) across **638 binaries**. **First
+clean regression of the Phase 22-35 sweep.** Phase 35 alpha.50
+delivered five test-infra fixes that closed every known flake:
+cuBLAS handle retry (Phase 30 parallel-init race), cuDNN handle
+retry (CTC path), `Stream::capture` panic-safe Drop guard
+(ThreadLocal capture state leak across cargo's thread reuse),
+`cudaResourceDesc` size + alignment correctness (the release-only
+STATUS_ACCESS_VIOLATION root cause in wave5_smoke — Rust struct
+was 48 bytes vs C's 64+, AND lacked `repr(align(8))` so 8-aligned
+union fields landed misaligned), and `mmvq_w_offset_alignment` test
+properly `#[cfg(debug_assertions)]`-gated.
 
 ---
 

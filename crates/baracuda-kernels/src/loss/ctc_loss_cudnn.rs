@@ -342,13 +342,27 @@ impl<T: Element> CtcLossCudnnPlan<T> {
         if !h.is_null() {
             return Ok(h);
         }
-        let mut handle: cudnnHandle_t = core::ptr::null_mut();
-        let status = unsafe { cudnnCreate(&mut handle as *mut _) };
-        if status != 0 {
-            return Err(Error::CutlassInternal(-status));
+        // Retry under transient cuDNN init failure. When many test
+        // processes start in parallel (cargo test --workspace launches
+        // dozens of binaries concurrently), `cudnnCreate` intermittently
+        // returns CUDNN_STATUS_NOT_INITIALIZED (1001) — the library
+        // races on first-process-touch driver init. Mirror Phase 30's
+        // cuBLAS retry: five linear-backoff retries (50ms, 100ms, ...,
+        // 250ms; worst-case ~750ms; one-time-per-plan cost).
+        let mut last_status = 0;
+        for attempt in 0..5 {
+            let mut handle: cudnnHandle_t = core::ptr::null_mut();
+            let status = unsafe { cudnnCreate(&mut handle as *mut _) };
+            if status == 0 {
+                self.handle.set(handle);
+                return Ok(handle);
+            }
+            last_status = status;
+            std::thread::sleep(std::time::Duration::from_millis(
+                50 * (attempt as u64 + 1),
+            ));
         }
-        self.handle.set(handle);
-        Ok(handle)
+        Err(Error::CutlassInternal(-last_status))
     }
 
     fn bind_stream(&self, h: cudnnHandle_t, stream: &Stream) -> Result<()> {

@@ -63,12 +63,42 @@ impl Stream {
 
     /// Convenience wrapper: run `f`, capturing its submissions to this
     /// stream, and return the resulting graph.
+    ///
+    /// **Panic safety**: if `f` panics, the stream's capture state is
+    /// cleaned up before the panic propagates. This matters for
+    /// `CaptureMode::ThreadLocal` — without the cleanup the calling
+    /// thread is left in capture mode, and ALL subsequent CUDA
+    /// allocations on that thread fail with `cudaErrorStreamCaptureImplicit`
+    /// (906). cargo's test harness reuses threads from a pool, so a
+    /// leaked capture from a panicking test poisons every following
+    /// test that lands on the same thread.
     pub fn capture<F>(&self, mode: CaptureMode, f: F) -> Result<Graph>
     where
         F: FnOnce(&Stream) -> Result<()>,
     {
+        /// RAII guard: ensures `end_capture` runs on the unwind path
+        /// even if `f` panics. We deliberately swallow any error from
+        /// the cleanup `end_capture` — by the time Drop fires we have
+        /// no return channel, and the alternative (double panic) is
+        /// worse than a silently-dropped status code.
+        struct CaptureGuard<'a> {
+            stream: &'a Stream,
+            armed: bool,
+        }
+        impl Drop for CaptureGuard<'_> {
+            fn drop(&mut self) {
+                if self.armed {
+                    let _ = self.stream.end_capture();
+                }
+            }
+        }
+
         self.begin_capture(mode)?;
+        let mut guard = CaptureGuard { stream: self, armed: true };
         let inner_result = f(self);
+        // Disarm the guard before our explicit end_capture so we don't
+        // double-end on the normal path.
+        guard.armed = false;
         let end_result = self.end_capture();
         match (inner_result, end_result) {
             (Ok(()), Ok(graph)) => Ok(graph),

@@ -624,6 +624,11 @@ fn mmvq_w_offset_alignment_aligned_ok() {
 /// Half-aligned (offset = 1) is invalid for every format — half / half2
 /// / float all require ≥ 2. Two-aligned (offset = 2) is invalid for the
 /// 4-byte-aligned formats (Q4_1 / Q5_1 / Q2_K / Q4_K / Q5_K / Q8_K).
+///
+/// **Debug-only**: the alignment guard inside `GgufMmvqPlan::select`
+/// is gated on `#[cfg(debug_assertions)]` so release builds elide
+/// the rejection. Tests inherit the same gate.
+#[cfg(debug_assertions)]
 #[test]
 #[ignore]
 fn mmvq_w_offset_alignment_misaligned_rejected_debug() {
