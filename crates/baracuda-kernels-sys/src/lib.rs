@@ -34792,6 +34792,239 @@ unsafe extern "C" {
         stream: *mut c_void,
     ) -> i32;
 
+    // ===== Phase 34 — multi-M MMVQ block-format fanout =========================
+    //
+    // 9 GGUF block formats × 4 M-sizes (1, 2, 4, 8) = 36 new FFI symbols.
+    // All share the same ABI as the Q8_0 family above; `ncols_x` must be a
+    // multiple of the block size (32 for Q4_0/Q4_1/Q5_0/Q5_1; 256 for the
+    // k-quants Q2_K/Q3_K/Q4_K/Q5_K/Q6_K).
+    //
+    // Q4_0
+    pub fn baracuda_kernels_mmvq_multim_q4_0_m1_run(
+        ncols_x: i32, nrows_x: i32,
+        w_ptr: *const c_void, w_start_byte_offset: i64,
+        activations_q8_1: *const c_void, dst: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_mmvq_multim_q4_0_m2_run(
+        ncols_x: i32, nrows_x: i32,
+        w_ptr: *const c_void, w_start_byte_offset: i64,
+        activations_q8_1: *const c_void, dst: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_mmvq_multim_q4_0_m4_run(
+        ncols_x: i32, nrows_x: i32,
+        w_ptr: *const c_void, w_start_byte_offset: i64,
+        activations_q8_1: *const c_void, dst: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_mmvq_multim_q4_0_m8_run(
+        ncols_x: i32, nrows_x: i32,
+        w_ptr: *const c_void, w_start_byte_offset: i64,
+        activations_q8_1: *const c_void, dst: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    // Q4_1
+    pub fn baracuda_kernels_mmvq_multim_q4_1_m1_run(
+        ncols_x: i32, nrows_x: i32,
+        w_ptr: *const c_void, w_start_byte_offset: i64,
+        activations_q8_1: *const c_void, dst: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_mmvq_multim_q4_1_m2_run(
+        ncols_x: i32, nrows_x: i32,
+        w_ptr: *const c_void, w_start_byte_offset: i64,
+        activations_q8_1: *const c_void, dst: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_mmvq_multim_q4_1_m4_run(
+        ncols_x: i32, nrows_x: i32,
+        w_ptr: *const c_void, w_start_byte_offset: i64,
+        activations_q8_1: *const c_void, dst: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_mmvq_multim_q4_1_m8_run(
+        ncols_x: i32, nrows_x: i32,
+        w_ptr: *const c_void, w_start_byte_offset: i64,
+        activations_q8_1: *const c_void, dst: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    // Q5_0
+    pub fn baracuda_kernels_mmvq_multim_q5_0_m1_run(
+        ncols_x: i32, nrows_x: i32,
+        w_ptr: *const c_void, w_start_byte_offset: i64,
+        activations_q8_1: *const c_void, dst: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_mmvq_multim_q5_0_m2_run(
+        ncols_x: i32, nrows_x: i32,
+        w_ptr: *const c_void, w_start_byte_offset: i64,
+        activations_q8_1: *const c_void, dst: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_mmvq_multim_q5_0_m4_run(
+        ncols_x: i32, nrows_x: i32,
+        w_ptr: *const c_void, w_start_byte_offset: i64,
+        activations_q8_1: *const c_void, dst: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_mmvq_multim_q5_0_m8_run(
+        ncols_x: i32, nrows_x: i32,
+        w_ptr: *const c_void, w_start_byte_offset: i64,
+        activations_q8_1: *const c_void, dst: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    // Q5_1
+    pub fn baracuda_kernels_mmvq_multim_q5_1_m1_run(
+        ncols_x: i32, nrows_x: i32,
+        w_ptr: *const c_void, w_start_byte_offset: i64,
+        activations_q8_1: *const c_void, dst: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_mmvq_multim_q5_1_m2_run(
+        ncols_x: i32, nrows_x: i32,
+        w_ptr: *const c_void, w_start_byte_offset: i64,
+        activations_q8_1: *const c_void, dst: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_mmvq_multim_q5_1_m4_run(
+        ncols_x: i32, nrows_x: i32,
+        w_ptr: *const c_void, w_start_byte_offset: i64,
+        activations_q8_1: *const c_void, dst: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_mmvq_multim_q5_1_m8_run(
+        ncols_x: i32, nrows_x: i32,
+        w_ptr: *const c_void, w_start_byte_offset: i64,
+        activations_q8_1: *const c_void, dst: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    // Q2_K
+    pub fn baracuda_kernels_mmvq_multim_q2_K_m1_run(
+        ncols_x: i32, nrows_x: i32,
+        w_ptr: *const c_void, w_start_byte_offset: i64,
+        activations_q8_1: *const c_void, dst: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_mmvq_multim_q2_K_m2_run(
+        ncols_x: i32, nrows_x: i32,
+        w_ptr: *const c_void, w_start_byte_offset: i64,
+        activations_q8_1: *const c_void, dst: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_mmvq_multim_q2_K_m4_run(
+        ncols_x: i32, nrows_x: i32,
+        w_ptr: *const c_void, w_start_byte_offset: i64,
+        activations_q8_1: *const c_void, dst: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_mmvq_multim_q2_K_m8_run(
+        ncols_x: i32, nrows_x: i32,
+        w_ptr: *const c_void, w_start_byte_offset: i64,
+        activations_q8_1: *const c_void, dst: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    // Q3_K
+    pub fn baracuda_kernels_mmvq_multim_q3_K_m1_run(
+        ncols_x: i32, nrows_x: i32,
+        w_ptr: *const c_void, w_start_byte_offset: i64,
+        activations_q8_1: *const c_void, dst: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_mmvq_multim_q3_K_m2_run(
+        ncols_x: i32, nrows_x: i32,
+        w_ptr: *const c_void, w_start_byte_offset: i64,
+        activations_q8_1: *const c_void, dst: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_mmvq_multim_q3_K_m4_run(
+        ncols_x: i32, nrows_x: i32,
+        w_ptr: *const c_void, w_start_byte_offset: i64,
+        activations_q8_1: *const c_void, dst: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_mmvq_multim_q3_K_m8_run(
+        ncols_x: i32, nrows_x: i32,
+        w_ptr: *const c_void, w_start_byte_offset: i64,
+        activations_q8_1: *const c_void, dst: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    // Q4_K
+    pub fn baracuda_kernels_mmvq_multim_q4_K_m1_run(
+        ncols_x: i32, nrows_x: i32,
+        w_ptr: *const c_void, w_start_byte_offset: i64,
+        activations_q8_1: *const c_void, dst: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_mmvq_multim_q4_K_m2_run(
+        ncols_x: i32, nrows_x: i32,
+        w_ptr: *const c_void, w_start_byte_offset: i64,
+        activations_q8_1: *const c_void, dst: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_mmvq_multim_q4_K_m4_run(
+        ncols_x: i32, nrows_x: i32,
+        w_ptr: *const c_void, w_start_byte_offset: i64,
+        activations_q8_1: *const c_void, dst: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_mmvq_multim_q4_K_m8_run(
+        ncols_x: i32, nrows_x: i32,
+        w_ptr: *const c_void, w_start_byte_offset: i64,
+        activations_q8_1: *const c_void, dst: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    // Q5_K
+    pub fn baracuda_kernels_mmvq_multim_q5_K_m1_run(
+        ncols_x: i32, nrows_x: i32,
+        w_ptr: *const c_void, w_start_byte_offset: i64,
+        activations_q8_1: *const c_void, dst: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_mmvq_multim_q5_K_m2_run(
+        ncols_x: i32, nrows_x: i32,
+        w_ptr: *const c_void, w_start_byte_offset: i64,
+        activations_q8_1: *const c_void, dst: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_mmvq_multim_q5_K_m4_run(
+        ncols_x: i32, nrows_x: i32,
+        w_ptr: *const c_void, w_start_byte_offset: i64,
+        activations_q8_1: *const c_void, dst: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_mmvq_multim_q5_K_m8_run(
+        ncols_x: i32, nrows_x: i32,
+        w_ptr: *const c_void, w_start_byte_offset: i64,
+        activations_q8_1: *const c_void, dst: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    // Q6_K
+    pub fn baracuda_kernels_mmvq_multim_q6_K_m1_run(
+        ncols_x: i32, nrows_x: i32,
+        w_ptr: *const c_void, w_start_byte_offset: i64,
+        activations_q8_1: *const c_void, dst: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_mmvq_multim_q6_K_m2_run(
+        ncols_x: i32, nrows_x: i32,
+        w_ptr: *const c_void, w_start_byte_offset: i64,
+        activations_q8_1: *const c_void, dst: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_mmvq_multim_q6_K_m4_run(
+        ncols_x: i32, nrows_x: i32,
+        w_ptr: *const c_void, w_start_byte_offset: i64,
+        activations_q8_1: *const c_void, dst: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_mmvq_multim_q6_K_m8_run(
+        ncols_x: i32, nrows_x: i32,
+        w_ptr: *const c_void, w_start_byte_offset: i64,
+        activations_q8_1: *const c_void, dst: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
     // ===== Phase 20.1 — batched MMVQ × N-experts ==============================
     //
     // 11 block formats × 3 activation dtypes (f32 / f16 / bf16) = 33 quant

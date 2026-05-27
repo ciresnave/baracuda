@@ -190,22 +190,36 @@ fn leak_str(s: &str) -> &'static str {
 }
 
 // =============================================================================
-// Phase 33 — multi-M MMVQ bench (Q8_0 only).
+// Phase 33 + 34 — multi-M MMVQ bench.
 //
-// Compares the new `GgufMmvqMultiMPlan` (Q8_1 staging + multi-M dot)
-// against the existing per-token loop over `GgufMmvqPlan`. The latter
-// re-reads the full weight tensor M times; the former reads it once
-// and amortizes across all M activation vectors.
+// Compares the `GgufMmvqMultiMPlan` (Q8_1 staging + multi-M dot)
+// against the per-token loop over `GgufMmvqPlan`. The latter re-reads
+// the full weight tensor M times; the former reads it once and
+// amortizes across all M activation vectors.
 //
 // M ∈ {1, 2, 4, 8}.
 // Shapes: CROSS_MMVQ_SHAPES (Llama-2 7B layer matmul shapes).
+// Phase 33: Q8_0 only.
+// Phase 34: extended to Q4_0/Q4_1/Q5_0/Q5_1/Q2_K/Q3_K/Q4_K/Q5_K/Q6_K.
 // =============================================================================
 
 const MULTIM_VALUES: &[i32] = &[1, 2, 4, 8];
 
-fn bench_mmvq_multim_q8_0(c: &mut Criterion) {
+const MULTIM_FORMATS: &[GgufBlockFormat] = &[
+    GgufBlockFormat::Q8_0,
+    GgufBlockFormat::Q4_0,
+    GgufBlockFormat::Q4_1,
+    GgufBlockFormat::Q5_0,
+    GgufBlockFormat::Q5_1,
+    GgufBlockFormat::Q2K,
+    GgufBlockFormat::Q3K,
+    GgufBlockFormat::Q4K,
+    GgufBlockFormat::Q5K,
+    GgufBlockFormat::Q6K,
+];
+
+fn bench_mmvq_multim_for(c: &mut Criterion, fmt: GgufBlockFormat) {
     let (ctx, stream) = setup_device();
-    let fmt = GgufBlockFormat::Q8_0;
     let fmt_lbl = block_label(fmt);
 
     let mut group = c.benchmark_group(format!("mmvq_multim/f32/{fmt_lbl}"));
@@ -391,7 +405,7 @@ fn bench_mmvq_multim_q8_0(c: &mut Criterion) {
             );
 
             eprintln!(
-                "mmvq_multim Q8_0 f32 {shape}: multim {multim_ns} ns  vs  per-token loop {baseline_ns} ns  → {:.2}× speedup",
+                "mmvq_multim {fmt_lbl} f32 {shape}: multim {multim_ns} ns  vs  per-token loop {baseline_ns} ns  → {:.2}× speedup",
                 baseline_ns as f64 / multim_ns as f64
             );
 
@@ -438,7 +452,10 @@ fn mmvq_benches(c: &mut Criterion) {
     bench_mmvq::<f32>(c, "f32", 1.0_f32);
     bench_mmvq::<f16>(c, "f16", f16::ONE);
     bench_mmvq::<bf16>(c, "bf16", bf16::ONE);
-    bench_mmvq_multim_q8_0(c);
+    // Phase 33 + 34: multi-M MMVQ sweep across all supported GGUF formats.
+    for &fmt in MULTIM_FORMATS {
+        bench_mmvq_multim_for(c, fmt);
+    }
 }
 
 criterion_group!(benches_grp, mmvq_benches);

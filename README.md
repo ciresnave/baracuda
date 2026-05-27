@@ -8,9 +8,9 @@
 A unified Rust ML-op facade over the NVIDIA CUDA ecosystem.
 
 ![License](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue)
-![Status](https://img.shields.io/badge/status-alpha.48-orange)
+![Status](https://img.shields.io/badge/status-alpha.49-orange)
 ![CUDA](https://img.shields.io/badge/CUDA-12.x-76b900)
-![Tests](https://img.shields.io/badge/regression-2200%2F0-success)
+![Tests](https://img.shields.io/badge/regression-2210%2F0-success)
 
 ## What baracuda is
 
@@ -40,7 +40,7 @@ talk to one library directly.
 
 ## Status
 
-**In active development — alpha.48.** Roughly **2200 GPU tests passing**
+**In active development — alpha.49.** Roughly **2210 GPU tests passing**
 on an RTX 4070 (sm_89), across **616 binary targets**.
 
 Phase coverage (see [`ARCHITECTURE.md`](ARCHITECTURE.md) for the phase
@@ -81,7 +81,8 @@ matrix):
 | 31 | Fuel Phase 6c.2 storage.rs unblock (alpha.46): 5 gaps closed — ELU α parameter (breaking; 8 sigs modified), `powf` (8 new), `step` + `gelu_erf` (16 new), cast `u32`/`i16` (36 new × 2 directions), `reduce_sum_to`/`reduce_max_to` broadcast-reverse reductions (8 new). **~76 new/modified FFI symbols + 17 new smoke tests.** Unblocks Fuel's full PTX retirement (AFFINE/UNARY/BINARY/CAST/REDUCE/INDEXING/TERNARY/FILL/SORT modules). | done |
 | 32 | Descriptor `#[non_exhaustive]` + builder pattern (alpha.47): 18 descriptors retrofitted with `::new()` builders + chainable setters (`with_stride`/`with_padding`/`with_dilation`/etc.). Conv {1,2,3}d + ConvTranspose {1,2,3}d + Pool {1,2,3}d + AdaptivePool {1,2,3}d + LpPool {1,2}d + FractionalMaxPool {2,3}d + Interpolate + InterpolateBackward. **Breaking change for downstream struct-literal callers** — pre-1.0 hardening. Migration: `Conv2dDescriptor { ... }` → `Conv2dDescriptor::new(input_shape, filter_shape, element).with_stride(...)`. | done |
 | 33 | Multi-M MMVQ via Q8_1 staging (alpha.48): closes Phase 27's deferred opportunity. NEW `GgufMmvqMultiMPlan` + `quantize_q8_1` staging kernel + 4 Q8_0 multi-M launchers (M ∈ {1, 2, 4, 8}). **Bench: 7.29-7.96× speedup at M=8** on Llama-2 7B layer shapes (4096²; 11008×4096; 32000×4096). Q8_0 only this phase (clean partial); 9 remaining block formats (Q4_0/Q4_1/Q5_0/Q5_1/Q2_K..Q6_K) are mechanical fanout for a follow-up. 8 new FFI symbols (3 staging + 4 multi-M + 1 workspace). | done |
-| 34+ | 9 remaining GGUF block formats for multi-M MMVQ (~2-3 days mechanical fanout), parallel-execution context-init flake retry, Hopper / Blackwell, 1.0 freeze | pending (see [`ROADMAP.md`](ROADMAP.md)) |
+| 34 | Multi-M MMVQ block format fanout (alpha.49): 9 remaining GGUF formats shipped — Q4_0, Q4_1, Q5_0, Q5_1, Q2_K, Q3_K, Q4_K, Q5_K, Q6_K. 36 new FFI symbols (9 fmts × 4 M-sizes). **Bench at N=K=4096 M=8**: Q5_0 **17.32×**, Q5_1 15.05×, Q4_0 12.78×, Q4_1 12.15×, Q8_0 8.79× — type-0/1 formats massively exceeded Phase 27's 3-7× target. K-quants (Q2_K..Q6_K) hit 3-7× at M=8 (larger 256-elem super-blocks dilute weight-reuse savings). Q8_K MMVQ correctly rejected at select() — bespoke per Phase 11.4. | done |
+| 35+ | Parallel-execution context-init flake retry, Hopper / Blackwell, 1.0 freeze | pending (see [`ROADMAP.md`](ROADMAP.md)) |
 
 API stability is **not** promised before beta.0. Breaking changes ship in
 each alpha bump and are documented in the workspace `CHANGELOG.md`.
@@ -92,8 +93,8 @@ Add the kernel facade and the driver crate:
 
 ```toml
 [dependencies]
-baracuda-kernels = { version = "0.0.1-alpha.48", features = ["sm89", "cudnn"] }
-baracuda-driver  = "0.0.1-alpha.48"
+baracuda-kernels = { version = "0.0.1-alpha.49", features = ["sm89", "cudnn"] }
+baracuda-driver  = "0.0.1-alpha.49"
 ```
 
 A representative example — single-axis numerically stable softmax over a

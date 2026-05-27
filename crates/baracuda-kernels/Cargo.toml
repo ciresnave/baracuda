@@ -1,6 +1,6 @@
 [package]
 name = "baracuda-kernels"
-version = "0.0.1-alpha.48"
+version = "0.0.1-alpha.49"
 description = "Unified ML op facade for the baracuda CUDA ecosystem. Exposes every primitive an ML framework would expect (union of PyTorch torch.* + nn.functional and JAX lax.* / numpy ops) through a single Plan-based Rust surface, internally dispatching to baracuda-cutlass, the baracuda-* NVIDIA-library wrappers, or bespoke baracuda-kernels-sys kernels."
 edition.workspace = true
 rust-version.workspace = true

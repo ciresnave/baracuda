@@ -7,16 +7,16 @@ effort within each category. Authoritative status per op lives in
 [`OP-MATRIX.md`](OP-MATRIX.md); historical phase summaries live in
 [`ARCHITECTURE.md`](ARCHITECTURE.md).
 
-The current tag is **v0.0.1-alpha.48** with **2200+ GPU tests
-passing** on RTX 4070 (sm_89). Phase 33 alpha.48 closes Phase 27's
-deferred opportunity — multi-M MMVQ via Q8_1 activation staging.
-Q8_0 weight format only this phase (clean partial scope); bench on
-RTX 4070 shows **7.29-7.96× speedup at M=8** across Llama-2 7B
-layer shapes — at the top end of Phase 27's 3-7× target estimate.
-Multi-M decode (M=1) also gets a bonus 1.4-1.9× via `__dp4a` vs the
-fp dequant path. 8 new FFI symbols. 9 remaining GGUF block formats
-(Q4_0/Q4_1/Q5_0/Q5_1/Q2_K..Q6_K) are mechanical fanout for a
-follow-up (~2-3 days).
+The current tag is **v0.0.1-alpha.49** with **2210+ GPU tests
+passing** on RTX 4070 (sm_89). **Phase 34 alpha.49 completes the
+multi-M MMVQ fanout** — all 10 GGUF block formats now ship with
+the Q8_1-staged multi-M path. Top result: **Q5_0 hits 17.32×
+speedup at M=8** on the Q/K/V projection shape. Type-0/1 formats
+(Q4_0/Q4_1/Q5_0/Q5_1/Q8_0) all hit 8-17× at M=8 — massively
+exceeding Phase 27's 3-7× target. K-quants (Q2_K..Q6_K) reach 3-7×
+at M=8 (their larger 256-elem super-blocks dilute the weight-reuse
+savings). Q8_K MMVQ remains bespoke (Phase 11.4). 36 new FFI
+symbols this phase.
 
 Known pre-existing failures excluded (CTC + mmvq_w_offset_alignment
 + parallel-execution context-init flake).
