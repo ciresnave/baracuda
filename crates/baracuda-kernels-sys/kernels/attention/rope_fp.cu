@@ -17,3 +17,13 @@ BARACUDA_KERNELS_ROPE_STRIDED_INSTANTIATE(rope_f32, float)
 BARACUDA_KERNELS_ROPE_STRIDED_INSTANTIATE(rope_f16, __half)
 BARACUDA_KERNELS_ROPE_STRIDED_INSTANTIATE(rope_bf16, __nv_bfloat16)
 BARACUDA_KERNELS_ROPE_STRIDED_INSTANTIATE(rope_f64, double)
+
+// Phase 36 (Fuel ask Gap 2) — RoPE apply variant with caller-supplied
+// precomputed cos/sin tables. Coexists with the existing θ-from-scratch
+// `rope_<dt>_run` family. Cos/sin are always f32 over the FFI (Fuel
+// convention: bake-time trig in f32, f16/bf16 detour through f32 in
+// the kernel).
+BARACUDA_KERNELS_ROPE_APPLY_INSTANTIATE(rope_apply_f32,  float)
+BARACUDA_KERNELS_ROPE_APPLY_INSTANTIATE(rope_apply_f16,  __half)
+BARACUDA_KERNELS_ROPE_APPLY_INSTANTIATE(rope_apply_bf16, __nv_bfloat16)
+BARACUDA_KERNELS_ROPE_APPLY_INSTANTIATE(rope_apply_f64,  double)

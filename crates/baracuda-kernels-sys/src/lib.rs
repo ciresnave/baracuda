@@ -25697,6 +25697,168 @@ unsafe extern "C" {
         stream: *mut c_void,
     ) -> i32;
 
+    // ---- Phase 36 (Fuel ask Gap 2) — RoPE apply with caller-supplied
+    // cos/sin tables ----
+    //
+    // Coexists with the existing `rope_<dt>_run` family (which derives
+    // θ internally from `pos · base^(-2i/D)`). The apply variant is the
+    // LLaMA-style extended-context API — YaRN, NTK, and dynamic-scaling
+    // schedules pre-bake the trig values; this kernel just consumes
+    // them.
+    //
+    // Flat layout — `x` / `y` are `[bh, td]` with `bh = batch * heads`
+    // and `td = seq * head_dim per (batch, head)`. `cos` / `sin` are
+    // always f32 over the FFI (regardless of operand dtype); f16/bf16
+    // detour through f32 internally, f64 promotes the f32 tables to
+    // double at load. `stride_b = 0` means the cos/sin table is shared
+    // across all `bh` rows; `stride_b = td/2` means one cos/sin table
+    // per `bh` row.
+
+    /// RoPE apply FW, f32. Cos/sin tables provided by caller.
+    pub fn baracuda_kernels_rope_apply_f32_run(
+        bh: i32,
+        td: i32,
+        d: i32,
+        stride_b: i32,
+        x: *const c_void,
+        cos_tab: *const c_void,
+        sin_tab: *const c_void,
+        y: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `rope_apply_f32`. Host-side only.
+    pub fn baracuda_kernels_rope_apply_f32_can_implement(
+        bh: i32, td: i32, d: i32, stride_b: i32,
+    ) -> i32;
+
+    /// RoPE apply FW, f16 (f32 trig table, f32 multiply detour).
+    pub fn baracuda_kernels_rope_apply_f16_run(
+        bh: i32,
+        td: i32,
+        d: i32,
+        stride_b: i32,
+        x: *const c_void,
+        cos_tab: *const c_void,
+        sin_tab: *const c_void,
+        y: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_rope_apply_f16_can_implement(
+        bh: i32, td: i32, d: i32, stride_b: i32,
+    ) -> i32;
+
+    /// RoPE apply FW, bf16 (f32 trig table, f32 multiply detour).
+    pub fn baracuda_kernels_rope_apply_bf16_run(
+        bh: i32,
+        td: i32,
+        d: i32,
+        stride_b: i32,
+        x: *const c_void,
+        cos_tab: *const c_void,
+        sin_tab: *const c_void,
+        y: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_rope_apply_bf16_can_implement(
+        bh: i32, td: i32, d: i32, stride_b: i32,
+    ) -> i32;
+
+    /// RoPE apply FW, f64 (f32 trig table promoted to double at load).
+    pub fn baracuda_kernels_rope_apply_f64_run(
+        bh: i32,
+        td: i32,
+        d: i32,
+        stride_b: i32,
+        x: *const c_void,
+        cos_tab: *const c_void,
+        sin_tab: *const c_void,
+        y: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_rope_apply_f64_can_implement(
+        bh: i32, td: i32, d: i32, stride_b: i32,
+    ) -> i32;
+
+    /// RoPE apply BW, f32. Same cos/sin tables as FW; orthogonal-rotation reverse.
+    pub fn baracuda_kernels_rope_apply_backward_f32_run(
+        bh: i32,
+        td: i32,
+        d: i32,
+        stride_b: i32,
+        dy: *const c_void,
+        cos_tab: *const c_void,
+        sin_tab: *const c_void,
+        dx: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_rope_apply_backward_f32_can_implement(
+        bh: i32, td: i32, d: i32, stride_b: i32,
+    ) -> i32;
+
+    /// RoPE apply BW, f16.
+    pub fn baracuda_kernels_rope_apply_backward_f16_run(
+        bh: i32,
+        td: i32,
+        d: i32,
+        stride_b: i32,
+        dy: *const c_void,
+        cos_tab: *const c_void,
+        sin_tab: *const c_void,
+        dx: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_rope_apply_backward_f16_can_implement(
+        bh: i32, td: i32, d: i32, stride_b: i32,
+    ) -> i32;
+
+    /// RoPE apply BW, bf16.
+    pub fn baracuda_kernels_rope_apply_backward_bf16_run(
+        bh: i32,
+        td: i32,
+        d: i32,
+        stride_b: i32,
+        dy: *const c_void,
+        cos_tab: *const c_void,
+        sin_tab: *const c_void,
+        dx: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_rope_apply_backward_bf16_can_implement(
+        bh: i32, td: i32, d: i32, stride_b: i32,
+    ) -> i32;
+
+    /// RoPE apply BW, f64.
+    pub fn baracuda_kernels_rope_apply_backward_f64_run(
+        bh: i32,
+        td: i32,
+        d: i32,
+        stride_b: i32,
+        dy: *const c_void,
+        cos_tab: *const c_void,
+        sin_tab: *const c_void,
+        dx: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_rope_apply_backward_f64_can_implement(
+        bh: i32, td: i32, d: i32, stride_b: i32,
+    ) -> i32;
+
     /// ALiBi FW, f32. `y[b, h, i, j] = scores[b, h, i, j] + slopes[h] · (j - i)`.
     pub fn baracuda_kernels_alibi_f32_run(
         batch: i32,
@@ -33527,6 +33689,210 @@ unsafe extern "C" {
     /// Implementability check for `fill_bf16`. Host-side only.
     pub fn baracuda_kernels_fill_bf16_can_implement(numel: i64, y: *const c_void) -> i32;
 
+    // ----- Phase 36 (Fuel ask Gap 4) — additional dtypes -----
+    //
+    // Contig fill for u32, i16, and FP8 E4M3 (raw u8 storage). Follow
+    // the same `T value` ABI as the existing contig fill family; FP8
+    // is transported as raw `u8` since the storage type is byte-
+    // identical to `uint8_t`.
+
+    /// Fill `y` with `value`, u32 dtype.
+    pub fn baracuda_kernels_fill_u32_run(
+        numel: i64,
+        y: *mut c_void,
+        value: u32,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_fill_u32_can_implement(numel: i64, y: *const c_void) -> i32;
+
+    /// Fill `y` with `value`, i16 dtype.
+    pub fn baracuda_kernels_fill_i16_run(
+        numel: i64,
+        y: *mut c_void,
+        value: i16,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_fill_i16_can_implement(numel: i64, y: *const c_void) -> i32;
+
+    /// Fill `y` with `value`, FP8 E4M3 dtype. `value` is the raw 8-bit
+    /// E4M3 encoding (storage is byte-identical to `u8`); callers
+    /// compute the encoding via the cast family or `__nv_cvt_float_to_fp8`.
+    pub fn baracuda_kernels_fill_fp8e4m3_run(
+        numel: i64,
+        y: *mut c_void,
+        value: u8,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_fill_fp8e4m3_can_implement(
+        numel: i64, y: *const c_void,
+    ) -> i32;
+
+    // ----- Phase 36 (Fuel ask Gap 4) — strided fill -----
+    //
+    // Strided variants for all 11 dtypes (existing 8 + 3 new). The
+    // logical output is `y[lin(coord)] = value` where `coord` iterates
+    // row-major over `shape[0..rank]` and `lin(coord) = Σ coord[axis]
+    // * stride_y[axis]`. `numel` must equal `Π shape[d]`. Rank up to
+    // `MAX_RANK = 8` (matches affine.cuh's `MAX_RANK`). `shape` and
+    // `stride_y` are HOST-side arrays (copied into a kernel param
+    // block).
+    //
+    // Strides are signed `i64` (negative-stride / broadcast-stride
+    // supported). f16 / bf16 transport `value` as a raw `u16` bit
+    // pattern; FP8 E4M3 transports raw `u8`; other dtypes pass `value`
+    // by their natural type.
+
+    pub fn baracuda_kernels_fill_f32_strided_run(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_y: *const i64,
+        value: f32,
+        y: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_fill_f32_strided_can_implement(numel: i64, rank: i32) -> i32;
+
+    pub fn baracuda_kernels_fill_f64_strided_run(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_y: *const i64,
+        value: f64,
+        y: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_fill_f64_strided_can_implement(numel: i64, rank: i32) -> i32;
+
+    pub fn baracuda_kernels_fill_i32_strided_run(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_y: *const i64,
+        value: i32,
+        y: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_fill_i32_strided_can_implement(numel: i64, rank: i32) -> i32;
+
+    pub fn baracuda_kernels_fill_i64_strided_run(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_y: *const i64,
+        value: i64,
+        y: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_fill_i64_strided_can_implement(numel: i64, rank: i32) -> i32;
+
+    pub fn baracuda_kernels_fill_u8_strided_run(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_y: *const i64,
+        value: u8,
+        y: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_fill_u8_strided_can_implement(numel: i64, rank: i32) -> i32;
+
+    pub fn baracuda_kernels_fill_i8_strided_run(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_y: *const i64,
+        value: i8,
+        y: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_fill_i8_strided_can_implement(numel: i64, rank: i32) -> i32;
+
+    pub fn baracuda_kernels_fill_u32_strided_run(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_y: *const i64,
+        value: u32,
+        y: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_fill_u32_strided_can_implement(numel: i64, rank: i32) -> i32;
+
+    pub fn baracuda_kernels_fill_i16_strided_run(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_y: *const i64,
+        value: i16,
+        y: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_fill_i16_strided_can_implement(numel: i64, rank: i32) -> i32;
+
+    pub fn baracuda_kernels_fill_fp8e4m3_strided_run(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_y: *const i64,
+        value: u8,
+        y: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_fill_fp8e4m3_strided_can_implement(numel: i64, rank: i32) -> i32;
+
+    /// Strided fill, f16. `value_bits` is the raw 16-bit pattern of an `f16` value.
+    pub fn baracuda_kernels_fill_f16_strided_run(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_y: *const i64,
+        value_bits: u16,
+        y: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_fill_f16_strided_can_implement(numel: i64, rank: i32) -> i32;
+
+    /// Strided fill, bf16. `value_bits` is the raw 16-bit pattern of a `bf16` value.
+    pub fn baracuda_kernels_fill_bf16_strided_run(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_y: *const i64,
+        value_bits: u16,
+        y: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_fill_bf16_strided_can_implement(numel: i64, rank: i32) -> i32;
+
     // ----- Affine ----------------------------------------------------------
     //
     // `y[i] = a * x[i] + b`. f16 / bf16 receive `a` / `b` as `f32` and
@@ -36154,6 +36520,115 @@ unsafe extern "C" {
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,
+    ) -> i32;
+
+    // ---------- Phase 36 (Fuel ask Gap 6a) — argsort dtype fanout ----------
+    //
+    // Block-bitonic argsort for the missing dtypes. Same `row_len ≤ 1024`
+    // cap as the original 4. FP8 E4M3 uses a wrapper struct on the C
+    // side that decodes to `float` for the comparator (the storage
+    // layer is still byte-identical to the raw `u8` buffer).
+    //
+    // The multi-block radix variant for `row_len > 1024` is reserved
+    // for a follow-up phase (Gap 6b in Fuel's brief) — it needs a
+    // substantially different kernel structure.
+
+    /// Block-bitonic argsort, u8.
+    pub fn baracuda_kernels_argsort_u8_run(
+        batch: i32,
+        row_len: i32,
+        descending: i32,
+        x: *const c_void,
+        y_idx: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_argsort_u8_can_implement(batch: i32, row_len: i32) -> i32;
+
+    /// Block-bitonic argsort, i8.
+    pub fn baracuda_kernels_argsort_i8_run(
+        batch: i32,
+        row_len: i32,
+        descending: i32,
+        x: *const c_void,
+        y_idx: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_argsort_i8_can_implement(batch: i32, row_len: i32) -> i32;
+
+    /// Block-bitonic argsort, u32.
+    pub fn baracuda_kernels_argsort_u32_run(
+        batch: i32,
+        row_len: i32,
+        descending: i32,
+        x: *const c_void,
+        y_idx: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_argsort_u32_can_implement(batch: i32, row_len: i32) -> i32;
+
+    /// Block-bitonic argsort, i16.
+    pub fn baracuda_kernels_argsort_i16_run(
+        batch: i32,
+        row_len: i32,
+        descending: i32,
+        x: *const c_void,
+        y_idx: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_argsort_i16_can_implement(batch: i32, row_len: i32) -> i32;
+
+    /// Block-bitonic argsort, bf16. Comparator uses native `__nv_bfloat16`
+    /// `operator<` (CUDA device-side intrinsics).
+    pub fn baracuda_kernels_argsort_bf16_run(
+        batch: i32,
+        row_len: i32,
+        descending: i32,
+        x: *const c_void,
+        y_idx: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_argsort_bf16_can_implement(batch: i32, row_len: i32) -> i32;
+
+    /// Block-bitonic argsort, f16. Comparator uses native `__half`
+    /// `operator<`.
+    pub fn baracuda_kernels_argsort_f16_run(
+        batch: i32,
+        row_len: i32,
+        descending: i32,
+        x: *const c_void,
+        y_idx: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_argsort_f16_can_implement(batch: i32, row_len: i32) -> i32;
+
+    /// Block-bitonic argsort, FP8 E4M3. Storage is byte-identical to
+    /// raw `u8`; the kernel wraps it in an `Fp8E4M3Sort` struct that
+    /// decodes to `float` in the comparator. Raw-byte buffer in, i32
+    /// index buffer out.
+    pub fn baracuda_kernels_argsort_fp8e4m3_run(
+        batch: i32,
+        row_len: i32,
+        descending: i32,
+        x: *const c_void,
+        y_idx: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_argsort_fp8e4m3_can_implement(
+        batch: i32, row_len: i32,
     ) -> i32;
 
     // ---------- msort FW (stable; values + indices) ----------

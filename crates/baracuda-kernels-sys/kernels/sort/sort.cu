@@ -22,6 +22,19 @@ BARACUDA_KERNELS_ARGSORT_INSTANTIATE(argsort_f64, double)
 BARACUDA_KERNELS_ARGSORT_INSTANTIATE(argsort_i32, int32_t)
 BARACUDA_KERNELS_ARGSORT_INSTANTIATE(argsort_i64, int64_t)
 
+// Phase 36 (Fuel ask Gap 6a) — argsort dtype fanout. Same `row_len <=
+// 1024` block-bitonic kernel, just new comparator-via-template-arg
+// monomorphizations. FP8 E4M3 goes through the `Fp8E4M3Sort` wrapper
+// (declared in baracuda_sort.cuh) which decodes raw bytes to `float`
+// for the comparator.
+BARACUDA_KERNELS_ARGSORT_INSTANTIATE(argsort_u8,       uint8_t)
+BARACUDA_KERNELS_ARGSORT_INSTANTIATE(argsort_i8,       int8_t)
+BARACUDA_KERNELS_ARGSORT_INSTANTIATE(argsort_u32,      uint32_t)
+BARACUDA_KERNELS_ARGSORT_INSTANTIATE(argsort_i16,      int16_t)
+BARACUDA_KERNELS_ARGSORT_INSTANTIATE(argsort_bf16,     __nv_bfloat16)
+BARACUDA_KERNELS_ARGSORT_INSTANTIATE(argsort_f16,      __half)
+BARACUDA_KERNELS_ARGSORT_INSTANTIATE(argsort_fp8e4m3,  baracuda::sort::Fp8E4M3Sort)
+
 // ---------- msort FW (stable; values + indices) ----------
 BARACUDA_KERNELS_MSORT_INSTANTIATE(msort_f32, float)
 BARACUDA_KERNELS_MSORT_INSTANTIATE(msort_f64, double)

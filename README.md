@@ -8,9 +8,9 @@
 A unified Rust ML-op facade over the NVIDIA CUDA ecosystem.
 
 ![License](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue)
-![Status](https://img.shields.io/badge/status-alpha.50-orange)
+![Status](https://img.shields.io/badge/status-alpha.51-orange)
 ![CUDA](https://img.shields.io/badge/CUDA-12.x-76b900)
-![Tests](https://img.shields.io/badge/regression-2229%2F0-success)
+![Tests](https://img.shields.io/badge/regression-2247%2F0-success)
 
 ## What baracuda is
 
@@ -40,7 +40,7 @@ talk to one library directly.
 
 ## Status
 
-**In active development — alpha.50.** **2229 GPU tests passing, zero failures**
+**In active development — alpha.51.** **2247 GPU tests passing**
 on an RTX 4070 (sm_89), across **616 binary targets**.
 
 Phase coverage (see [`ARCHITECTURE.md`](ARCHITECTURE.md) for the phase
@@ -83,7 +83,8 @@ matrix):
 | 33 | Multi-M MMVQ via Q8_1 staging (alpha.48): closes Phase 27's deferred opportunity. NEW `GgufMmvqMultiMPlan` + `quantize_q8_1` staging kernel + 4 Q8_0 multi-M launchers (M ∈ {1, 2, 4, 8}). **Bench: 7.29-7.96× speedup at M=8** on Llama-2 7B layer shapes (4096²; 11008×4096; 32000×4096). Q8_0 only this phase (clean partial); 9 remaining block formats (Q4_0/Q4_1/Q5_0/Q5_1/Q2_K..Q6_K) are mechanical fanout for a follow-up. 8 new FFI symbols (3 staging + 4 multi-M + 1 workspace). | done |
 | 34 | Multi-M MMVQ block format fanout (alpha.49): 9 remaining GGUF formats shipped — Q4_0, Q4_1, Q5_0, Q5_1, Q2_K, Q3_K, Q4_K, Q5_K, Q6_K. 36 new FFI symbols (9 fmts × 4 M-sizes). **Bench at N=K=4096 M=8**: Q5_0 **17.32×**, Q5_1 15.05×, Q4_0 12.78×, Q4_1 12.15×, Q8_0 8.79× — type-0/1 formats massively exceeded Phase 27's 3-7× target. K-quants (Q2_K..Q6_K) hit 3-7× at M=8 (larger 256-elem super-blocks dilute weight-reuse savings). Q8_K MMVQ correctly rejected at select() — bespoke per Phase 11.4. | done |
 | 35 | Test-infra hardening (alpha.50): **first zero-failure regression** in the entire Phase 22-35 sweep (2229/0 across 638 binaries). Five fixes: (a) `mmvq_w_offset_alignment_misaligned_rejected_debug` `#[cfg(debug_assertions)]` gate; (b) cuBLAS handle retry with 5× linear backoff (Phase 30 parallel-init race); (c) cuDNN handle retry on CTC path (1001 NOT_INITIALIZED race); (d) `Stream::capture` panic-safe Drop guard (ThreadLocal capture state leak under cargo's thread reuse → cudaErrorStreamCaptureImplicit on subsequent tests); (e) **`cudaResourceDesc` 48→128 byte expansion + `repr(align(8))`** (Rust struct under-allocated by 16+ bytes AND missing 8-byte alignment that the union's `void*`/`size_t` arms require — caused release-only STATUS_ACCESS_VIOLATION in wave5_smoke). | done |
-| 36+ | Hopper sm_90a / Blackwell sm_100 tuning, 1.0 freeze | pending (see [`ROADMAP.md`](ROADMAP.md)) |
+| 36 | Fuel 6c.4 unblock — Phase 1/3 (alpha.51): RoPE apply with precomputed cos/sin tables (FW+BW × 4 fp dtypes; 16 symbols) + Fill missing dtypes & strided variant (3 new contig + 11 strided; 28 symbols) + Argsort dtype fanout (u8/i8/u32/i16/bf16/f16/fp8e4m3; 14 symbols). 58 new FFI declarations total. | done |
+| 37+ | Fuel 6c.4 Phase 2/3: Reduce min_to/prod_to + integer-dtype reduce surface (~50 syms); Phase 3/3: Ternary where_cond fanout + Indexing scatter/index_add + dtype matrix + multi-block radix sort. Hopper / Blackwell. 1.0 freeze. | pending (see [`ROADMAP.md`](ROADMAP.md)) |
 
 API stability is **not** promised before beta.0. Breaking changes ship in
 each alpha bump and are documented in the workspace `CHANGELOG.md`.
@@ -94,8 +95,8 @@ Add the kernel facade and the driver crate:
 
 ```toml
 [dependencies]
-baracuda-kernels = { version = "0.0.1-alpha.50", features = ["sm89", "cudnn"] }
-baracuda-driver  = "0.0.1-alpha.50"
+baracuda-kernels = { version = "0.0.1-alpha.51", features = ["sm89", "cudnn"] }
+baracuda-driver  = "0.0.1-alpha.51"
 ```
 
 A representative example — single-axis numerically stable softmax over a

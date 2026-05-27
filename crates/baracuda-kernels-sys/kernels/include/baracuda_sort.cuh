@@ -56,8 +56,82 @@
 #include <cstddef>
 #include <cstdint>
 #include <cuda_runtime.h>
+#include <cuda_fp16.h>
+#include <cuda_bf16.h>
+#include <cuda_fp8.h>
 
 namespace baracuda { namespace sort {
+
+// Phase 36 (Fuel ask Gap 6a) — FP8 E4M3 wrapper for the bitonic
+// comparator. FP8 E4M3 storage is byte-identical to `uint8_t`, but a
+// raw byte-compare does NOT match numerical order (sign bit at the
+// top, varying exponent bias). The wrapper carries the raw storage
+// byte and decodes to `float` on every `operator<` / `operator>`
+// invocation — slightly more expensive than a primitive compare but
+// only matters at the comparator (the load + store paths still see a
+// flat `uint8_t` byte). Naming mirrors NVIDIA's other FP8 type
+// wrappers (`__nv_fp8_e4m3`).
+struct Fp8E4M3Sort {
+    uint8_t bits;
+    __device__ __host__ inline float as_float() const {
+#if defined(__CUDA_ARCH__)
+        // Decode via NVIDIA's f8→f16 intrinsic then promote to f32.
+        // `__nv_cvt_fp8_to_halfraw` returns `__half_raw`; wrap as
+        // `__half` for `__half2float` (matches the cast-subbyte
+        // family's pattern in `e4m3_to_f32`).
+        __half_raw raw = __nv_cvt_fp8_to_halfraw(
+            static_cast<__nv_fp8_storage_t>(bits), __NV_E4M3);
+        return __half2float(__half(raw));
+#else
+        // Host-side fallback — same path as the device version but the
+        // host CRT doesn't ship the intrinsic. Approximate by
+        // unpacking the E4M3 fields manually. The sort kernel never
+        // runs on the host (this is just for `__host__` compatibility
+        // of `__host__ __device__` paths); the conversion below is
+        // bit-accurate for finite values.
+        uint8_t b = bits;
+        uint32_t sign = (b >> 7) & 0x1;
+        uint32_t exp4 = (b >> 3) & 0xF;
+        uint32_t mant3 = b & 0x7;
+        if (exp4 == 0xF && mant3 == 0x7) {
+            // E4M3 NaN encoding (all 1s ex sign).
+            uint32_t nan_bits = 0x7FC00000u | (sign << 31);
+            float f;
+            memcpy(&f, &nan_bits, 4);
+            return f;
+        }
+        int32_t exp32;
+        uint32_t mant32;
+        if (exp4 == 0) {
+            if (mant3 == 0) {
+                return sign ? -0.0f : 0.0f;
+            }
+            // Subnormal — normalize.
+            int shift = 0;
+            while ((mant3 & 0x4) == 0) { mant3 <<= 1; shift++; }
+            mant3 &= 0x3;
+            exp32 = -6 - shift + 127;
+            mant32 = (uint32_t)mant3 << 21;
+        } else {
+            exp32 = (int32_t)exp4 - 7 + 127;
+            mant32 = (uint32_t)mant3 << 20;
+        }
+        uint32_t bits32 = (sign << 31) | ((uint32_t)exp32 << 23) | mant32;
+        float f;
+        memcpy(&f, &bits32, 4);
+        return f;
+#endif
+    }
+    __device__ __host__ inline bool operator<(const Fp8E4M3Sort& other) const {
+        return as_float() < other.as_float();
+    }
+    __device__ __host__ inline bool operator>(const Fp8E4M3Sort& other) const {
+        return as_float() > other.as_float();
+    }
+    __device__ __host__ inline bool operator==(const Fp8E4M3Sort& other) const {
+        return as_float() == other.as_float();
+    }
+};
 
 inline constexpr int MAX_ROW = 1024;
 
@@ -335,6 +409,14 @@ __host__ inline int32_t launch_sort_backward(
                 static_cast<const T*>(x), nullptr,                                                \
                 static_cast<int32_t*>(y_idx), batch, row_len, stream);                            \
         }                                                                                          \
+    }                                                                                              \
+    /* Phase 36 (Fuel ask Gap 6a): host-side `_can_implement` companion. */                       \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                   \
+        int32_t batch, int32_t row_len)                                                           \
+    {                                                                                              \
+        if (batch < 0 || row_len < 0) return 2;                                                   \
+        if (row_len > baracuda::sort::MAX_ROW) return 3;                                          \
+        return 0;                                                                                 \
     }
 
 #define BARACUDA_KERNELS_SORT_BACKWARD_INSTANTIATE(NAME, T)                                       \

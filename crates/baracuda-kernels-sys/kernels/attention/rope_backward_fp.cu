@@ -16,3 +16,10 @@ BARACUDA_KERNELS_ROPE_BACKWARD_STRIDED_INSTANTIATE(rope_backward_f32, float)
 BARACUDA_KERNELS_ROPE_BACKWARD_STRIDED_INSTANTIATE(rope_backward_f16, __half)
 BARACUDA_KERNELS_ROPE_BACKWARD_STRIDED_INSTANTIATE(rope_backward_bf16, __nv_bfloat16)
 BARACUDA_KERNELS_ROPE_BACKWARD_STRIDED_INSTANTIATE(rope_backward_f64, double)
+
+// Phase 36 (Fuel ask Gap 2) — RoPE apply BW siblings. Caller-supplied
+// cos/sin tables; orthogonal-rotation backward.
+BARACUDA_KERNELS_ROPE_APPLY_BACKWARD_INSTANTIATE(rope_apply_backward_f32,  float)
+BARACUDA_KERNELS_ROPE_APPLY_BACKWARD_INSTANTIATE(rope_apply_backward_f16,  __half)
+BARACUDA_KERNELS_ROPE_APPLY_BACKWARD_INSTANTIATE(rope_apply_backward_bf16, __nv_bfloat16)
+BARACUDA_KERNELS_ROPE_APPLY_BACKWARD_INSTANTIATE(rope_apply_backward_f64,  double)
