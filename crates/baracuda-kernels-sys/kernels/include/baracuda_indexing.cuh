@@ -328,6 +328,186 @@ __host__ inline int32_t launch_scatter_add(
 }
 
 // =============================================================================
+// scatter (pure assign) kernel — `out[..., index[..., j, ...], ...] = updates[..., j, ...]`
+// along `scatter_dim`. No accumulation. If multiple updates target the
+// same output cell, the **last writer wins** (race; caller documents).
+//
+// Phase 39 (Fuel 6c.4 Gap 5). Same shape contract as `scatter_add`
+// above; the only difference is the inner write op (plain store vs
+// `atomicAdd`). Out-of-bounds / negative indices skipped.
+// =============================================================================
+
+template <typename T, typename IndexT>
+__global__ void scatter_kernel(
+    const T* __restrict__ updates,
+    const IndexT* __restrict__ index,
+    T* __restrict__ out,
+    int64_t upd_numel,
+    int32_t rank,
+    int32_t scatter_dim,
+    int32_t out_dim_size,
+    DimsI32 upd_shape,
+    DimsI64 stride_upd,
+    DimsI64 stride_index,
+    DimsI64 stride_out)
+{
+    int64_t tid  = (int64_t)blockIdx.x * (int64_t)blockDim.x + (int64_t)threadIdx.x;
+    int64_t step = (int64_t)gridDim.x  * (int64_t)blockDim.x;
+    for (int64_t i = tid; i < upd_numel; i += step) {
+        int64_t linear = i;
+        int64_t coord[MAX_RANK] = {0};
+        for (int d = rank - 1; d >= 0; --d) {
+            int32_t s = upd_shape.v[d];
+            int64_t c = (s == 0) ? 0 : (linear % (int64_t)s);
+            if (s != 0) linear /= (int64_t)s;
+            coord[d] = c;
+        }
+        int64_t idx_off = 0;
+        int64_t upd_off = 0;
+        for (int d = 0; d < rank; ++d) {
+            idx_off += coord[d] * stride_index.v[d];
+            upd_off += coord[d] * stride_upd.v[d];
+        }
+        int64_t idx_val = (int64_t)index[idx_off];
+        if (idx_val < 0 || idx_val >= (int64_t)out_dim_size) {
+            continue;
+        }
+        int64_t out_off = 0;
+        for (int d = 0; d < rank; ++d) {
+            int64_t cc = (d == scatter_dim) ? idx_val : coord[d];
+            out_off += cc * stride_out.v[d];
+        }
+        // Pure assign — last writer wins on duplicate-target races.
+        out[out_off] = updates[upd_off];
+    }
+}
+
+template <typename T, typename IndexT>
+__host__ inline int32_t launch_scatter(
+    const T* updates, const IndexT* index, T* out,
+    int64_t upd_numel,
+    int32_t rank,
+    int32_t scatter_dim,
+    int32_t out_dim_size,
+    const int32_t* upd_shape_host,
+    const int64_t* stride_upd_host,
+    const int64_t* stride_index_host,
+    const int64_t* stride_out_host,
+    cudaStream_t stream)
+{
+    if (rank < 0 || rank > MAX_RANK) return 2;
+    if (scatter_dim < 0 || scatter_dim >= rank) return 2;
+    DimsI32 sh = {};
+    DimsI64 su = {}, si = {}, so = {};
+    for (int i = 0; i < rank; ++i) {
+        sh.v[i] = upd_shape_host[i];
+        su.v[i] = stride_upd_host[i];
+        si.v[i] = stride_index_host[i];
+        so.v[i] = stride_out_host[i];
+    }
+    constexpr int kBlock = 256;
+    constexpr int64_t kMaxBlocks = 65535;
+    int64_t blocks_i64 = (upd_numel + kBlock - 1) / kBlock;
+    int blocks = static_cast<int>(blocks_i64 > kMaxBlocks ? kMaxBlocks : blocks_i64);
+    if (blocks <= 0) blocks = 1;
+    scatter_kernel<T, IndexT><<<blocks, kBlock, 0, stream>>>(
+        updates, index, out, upd_numel, rank, scatter_dim, out_dim_size,
+        sh, su, si, so);
+    cudaError_t err = cudaGetLastError();
+    return (err == cudaSuccess) ? 0 : 5;
+}
+
+// =============================================================================
+// index_add kernel — `dst[idx[i], ...] += src[i, ...]` along `add_dim`.
+// `idx` is a 1-D tensor of length `src.shape[add_dim]`. Atomic-Σ
+// accumulation; duplicate indices summed correctly via `atomicAdd`
+// (or `atomicCAS`-via-`baracuda::atomic::add` for f16 / bf16).
+//
+// Phase 39 (Fuel 6c.4 Gap 5). Algorithmically identical to
+// `index_select_backward_kernel` (1-D idx, accumulate dout into dsrc
+// along select_dim) — we re-expose under the `index_add` name + add
+// f16 / bf16 dtype fanout that `index_select_backward` lacks.
+//
+// Args: `src` (the per-row values to add), `idx` (1-D), `dst`
+// (accumulated into; caller pre-zeroes or pre-populates). `src_numel`
+// is the total numel of `src`; `dst_dim_size` is the extent of `dst`
+// along `add_dim` for the in-bounds check.
+// =============================================================================
+
+template <typename T, typename IndexT>
+__global__ void index_add_kernel(
+    const T* __restrict__ src,
+    const IndexT* __restrict__ idx,
+    T* __restrict__ dst,
+    int64_t src_numel,
+    int32_t rank,
+    int32_t add_dim,
+    int32_t dst_dim_size,
+    DimsI32 src_shape,
+    DimsI64 stride_src,
+    DimsI64 stride_dst)
+{
+    int64_t tid  = (int64_t)blockIdx.x * (int64_t)blockDim.x + (int64_t)threadIdx.x;
+    int64_t step = (int64_t)gridDim.x  * (int64_t)blockDim.x;
+    for (int64_t i = tid; i < src_numel; i += step) {
+        int64_t linear = i;
+        int64_t coord[MAX_RANK] = {0};
+        for (int d = rank - 1; d >= 0; --d) {
+            int32_t s = src_shape.v[d];
+            int64_t c = (s == 0) ? 0 : (linear % (int64_t)s);
+            if (s != 0) linear /= (int64_t)s;
+            coord[d] = c;
+        }
+        // 1-D idx; look up using the add-axis coord.
+        int64_t idx_val = (int64_t)idx[coord[add_dim]];
+        if (idx_val < 0 || idx_val >= (int64_t)dst_dim_size) {
+            continue;
+        }
+        int64_t src_off = 0;
+        int64_t dst_off = 0;
+        for (int d = 0; d < rank; ++d) {
+            src_off += coord[d] * stride_src.v[d];
+            int64_t cc = (d == add_dim) ? idx_val : coord[d];
+            dst_off += cc * stride_dst.v[d];
+        }
+        scatter_atomic_add<T>(&dst[dst_off], src[src_off]);
+    }
+}
+
+template <typename T, typename IndexT>
+__host__ inline int32_t launch_index_add(
+    const T* src, const IndexT* idx, T* dst,
+    int64_t src_numel,
+    int32_t rank,
+    int32_t add_dim,
+    int32_t dst_dim_size,
+    const int32_t* src_shape_host,
+    const int64_t* stride_src_host,
+    const int64_t* stride_dst_host,
+    cudaStream_t stream)
+{
+    if (rank < 0 || rank > MAX_RANK) return 2;
+    if (add_dim < 0 || add_dim >= rank) return 2;
+    DimsI32 sh = {};
+    DimsI64 ss = {}, sd = {};
+    for (int i = 0; i < rank; ++i) {
+        sh.v[i] = src_shape_host[i];
+        ss.v[i] = stride_src_host[i];
+        sd.v[i] = stride_dst_host[i];
+    }
+    constexpr int kBlock = 256;
+    constexpr int64_t kMaxBlocks = 65535;
+    int64_t blocks_i64 = (src_numel + kBlock - 1) / kBlock;
+    int blocks = static_cast<int>(blocks_i64 > kMaxBlocks ? kMaxBlocks : blocks_i64);
+    if (blocks <= 0) blocks = 1;
+    index_add_kernel<T, IndexT><<<blocks, kBlock, 0, stream>>>(
+        src, idx, dst, src_numel, rank, add_dim, dst_dim_size,
+        sh, ss, sd);
+    cudaError_t err = cudaGetLastError();
+    return (err == cudaSuccess) ? 0 : 5;
+}
+
+// =============================================================================
 // index_select kernel — `out[..., j, ...] = src[..., idx[j], ...]`.
 // `idx` is a 1-D i32 tensor of length `out.shape[select_dim]`. Output
 // shape is `src.shape` with dim `select_dim` replaced by `idx.numel()`.
@@ -827,6 +1007,71 @@ __host__ inline int32_t launch_nonzero(
             static_cast<T*>(out),                                                                  \
             upd_numel, rank, scatter_dim, out_dim_size,                                           \
             upd_shape, stride_upd, stride_index, stride_out, stream);                             \
+    }
+
+// Phase 39 (Fuel 6c.4 Gap 5). Pure-assign scatter — last writer wins on
+// duplicate-target races. Same FFI shape as `BARACUDA_KERNELS_SCATTER_ADD_INSTANTIATE`.
+#define BARACUDA_KERNELS_SCATTER_INSTANTIATE(NAME, T, INDEX_T)                                    \
+    extern "C" int32_t baracuda_kernels_##NAME##_run(                                             \
+        int64_t upd_numel,                                                                         \
+        int32_t rank,                                                                              \
+        int32_t scatter_dim,                                                                       \
+        int32_t out_dim_size,                                                                      \
+        const int32_t* upd_shape,                                                                  \
+        const int64_t* stride_upd,                                                                 \
+        const int64_t* stride_index,                                                               \
+        const int64_t* stride_out,                                                                 \
+        const void* updates,                                                                       \
+        const void* index,                                                                         \
+        void* out,                                                                                 \
+        void* /*workspace*/, size_t /*workspace_bytes*/,                                           \
+        void* stream_ptr)                                                                          \
+    {                                                                                              \
+        if (upd_numel < 0) return 2;                                                              \
+        if (upd_numel == 0) return 0;                                                              \
+        if (updates == nullptr || index == nullptr || out == nullptr) return 2;                   \
+        if (upd_shape == nullptr || stride_upd == nullptr ||                                      \
+            stride_index == nullptr || stride_out == nullptr) return 2;                           \
+        cudaStream_t stream = static_cast<cudaStream_t>(stream_ptr);                              \
+        return baracuda::indexing::launch_scatter<T, INDEX_T>(                                    \
+            static_cast<const T*>(updates),                                                        \
+            static_cast<const INDEX_T*>(index),                                                    \
+            static_cast<T*>(out),                                                                  \
+            upd_numel, rank, scatter_dim, out_dim_size,                                           \
+            upd_shape, stride_upd, stride_index, stride_out, stream);                             \
+    }
+
+// Phase 39 (Fuel 6c.4 Gap 5). `index_add` — accumulating sibling of
+// `index_select`. 1-D idx tensor; atomicAdd-Σ into dst along `add_dim`.
+// Same FFI shape as `BARACUDA_KERNELS_INDEX_SELECT_BACKWARD_INSTANTIATE`
+// (the algorithm is identical) but exposed under a fresh `index_add_*`
+// name so Fuel + downstream callers get a non-autograd-flavored entry.
+#define BARACUDA_KERNELS_INDEX_ADD_INSTANTIATE(NAME, T, INDEX_T)                                  \
+    extern "C" int32_t baracuda_kernels_##NAME##_run(                                             \
+        int64_t src_numel,                                                                         \
+        int32_t rank,                                                                              \
+        int32_t add_dim,                                                                           \
+        int32_t dst_dim_size,                                                                      \
+        const int32_t* src_shape,                                                                  \
+        const int64_t* stride_src,                                                                 \
+        const int64_t* stride_dst,                                                                 \
+        const void* src,                                                                           \
+        const void* idx,                                                                           \
+        void* dst,                                                                                 \
+        void* /*workspace*/, size_t /*workspace_bytes*/,                                           \
+        void* stream_ptr)                                                                          \
+    {                                                                                              \
+        if (src_numel < 0) return 2;                                                              \
+        if (src_numel == 0) return 0;                                                              \
+        if (src == nullptr || idx == nullptr || dst == nullptr) return 2;                         \
+        if (src_shape == nullptr || stride_src == nullptr || stride_dst == nullptr) return 2;     \
+        cudaStream_t stream = static_cast<cudaStream_t>(stream_ptr);                              \
+        return baracuda::indexing::launch_index_add<T, INDEX_T>(                                  \
+            static_cast<const T*>(src),                                                            \
+            static_cast<const INDEX_T*>(idx),                                                      \
+            static_cast<T*>(dst),                                                                  \
+            src_numel, rank, add_dim, dst_dim_size,                                               \
+            src_shape, stride_src, stride_dst, stream);                                           \
     }
 
 #define BARACUDA_KERNELS_INDEX_SELECT_INSTANTIATE(NAME, T, INDEX_T)                               \

@@ -366,6 +366,11 @@ fn collect_kernel_files() -> Vec<&'static str> {
             "elementwise/ternary_addcdiv_fp.cu",
             "elementwise/where_fp.cu",
             "elementwise/where_backward_fp.cu",
+            // Phase 38 (Fuel 6c.4 Gap 3) — full cond × value dtype matrix
+            // for `where`. Adds U32 / I64 cond variants for the 4 fp value
+            // dtypes + full int-value coverage (U8 / I8 / U32 / I16 / I32 /
+            // I64) across all 3 cond dtypes + Fp8E4M3.
+            "elementwise/where_dtype_fanout.cu",
             // Phase 3 Category N — shape/layout trailblazers.
             "elementwise/pad_fp.cu",
             "elementwise/concat2_fp.cu",
@@ -743,6 +748,10 @@ fn collect_kernel_files() -> Vec<&'static str> {
             "indexing/masked_fill.cu",
             "indexing/one_hot.cu",
             "indexing/nonzero.cu",
+            // Phase 39 (Fuel 6c.4 Gap 5) — index_add (algorithmically the
+            // same as `index_select_backward`, exposed under a fresh
+            // non-autograd name + with f16 / bf16 dtype fanout).
+            "indexing/index_add.cu",
             // Phase 7 Milestone 7.5 — embedding family (Category M).
             // `embedding` FW (f32/f64/f16/bf16) + BW (f32/f64 via
             // atomicAdd) with optional `padding_idx`. `embedding_bag`

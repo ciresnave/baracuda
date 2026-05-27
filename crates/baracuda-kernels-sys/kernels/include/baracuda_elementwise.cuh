@@ -3930,9 +3930,16 @@ __host__ inline int32_t launch_ternary_backward_scaled(
 // template; we don't pretend to share a functor type when the math
 // fundamentally differs.
 
-template <typename T>
+// `Cond` defaults to `uint8_t` for source-compat with the original
+// u8-cond instantiations. Phase 38 (Fuel 6c.4 Gap 3) lifted `Cond` to a
+// template parameter so the same kernel template covers `u32` and `i64`
+// cond inputs without a runtime branch. The kernel body treats `cond`
+// values as bool (any non-zero → true) regardless of underlying type;
+// `static_cast<bool>(c)` is the PTX-portable spelling that compiles to
+// the natural `setp.ne` against zero for any integer width.
+template <typename T, typename Cond = uint8_t>
 __global__ void where_pointwise_contig_kernel(
-    const uint8_t* __restrict__ cond,
+    const Cond* __restrict__ cond,
     const T* __restrict__ a,
     const T* __restrict__ b,
     T* __restrict__ y,
@@ -3941,13 +3948,13 @@ __global__ void where_pointwise_contig_kernel(
     int64_t tid  = (int64_t)blockIdx.x * (int64_t)blockDim.x + (int64_t)threadIdx.x;
     int64_t step = (int64_t)gridDim.x  * (int64_t)blockDim.x;
     for (int64_t i = tid; i < numel; i += step) {
-        y[i] = cond[i] ? a[i] : b[i];
+        y[i] = (cond[i] != Cond(0)) ? a[i] : b[i];
     }
 }
 
-template <typename T>
+template <typename T, typename Cond = uint8_t>
 __host__ inline int32_t launch_where_pointwise_contig(
-    const uint8_t* cond, const T* a, const T* b, T* y,
+    const Cond* cond, const T* a, const T* b, T* y,
     int64_t numel,
     cudaStream_t stream)
 {
@@ -3956,14 +3963,14 @@ __host__ inline int32_t launch_where_pointwise_contig(
     int64_t blocks_i64 = (numel + kBlock - 1) / kBlock;
     int blocks = static_cast<int>(blocks_i64 > kMaxBlocks ? kMaxBlocks : blocks_i64);
     if (blocks <= 0) blocks = 1;
-    where_pointwise_contig_kernel<T><<<blocks, kBlock, 0, stream>>>(cond, a, b, y, numel);
+    where_pointwise_contig_kernel<T, Cond><<<blocks, kBlock, 0, stream>>>(cond, a, b, y, numel);
     cudaError_t err = cudaGetLastError();
     return (err == cudaSuccess) ? 0 : 5;
 }
 
-template <typename T>
+template <typename T, typename Cond = uint8_t>
 __global__ void where_pointwise_strided_kernel(
-    const uint8_t* __restrict__ cond,
+    const Cond* __restrict__ cond,
     const T* __restrict__ a,
     const T* __restrict__ b,
     T* __restrict__ y,
@@ -3989,13 +3996,13 @@ __global__ void where_pointwise_strided_kernel(
             off_b += coord * stride_b.v[d];
             off_y += coord * stride_y.v[d];
         }
-        y[off_y] = cond[off_c] ? a[off_a] : b[off_b];
+        y[off_y] = (cond[off_c] != Cond(0)) ? a[off_a] : b[off_b];
     }
 }
 
-template <typename T>
+template <typename T, typename Cond = uint8_t>
 __host__ inline int32_t launch_where_pointwise_strided(
-    const uint8_t* cond, const T* a, const T* b, T* y,
+    const Cond* cond, const T* a, const T* b, T* y,
     int64_t numel,
     int32_t rank,
     const int32_t* shape_host,
@@ -4020,7 +4027,7 @@ __host__ inline int32_t launch_where_pointwise_strided(
     int64_t blocks_i64 = (numel + kBlock - 1) / kBlock;
     int blocks = static_cast<int>(blocks_i64 > kMaxBlocks ? kMaxBlocks : blocks_i64);
     if (blocks <= 0) blocks = 1;
-    where_pointwise_strided_kernel<T><<<blocks, kBlock, 0, stream>>>(
+    where_pointwise_strided_kernel<T, Cond><<<blocks, kBlock, 0, stream>>>(
         cond, a, b, y, numel, rank, shape, sc, sa, sb, sy);
     cudaError_t err = cudaGetLastError();
     return (err == cudaSuccess) ? 0 : 5;
@@ -5848,11 +5855,13 @@ __host__ inline int32_t launch_gated_activation_backward_contig(
             numel, scale, stream);                                                              \
     }
 
-// Emit one where (heterogeneous-cond ternary) launcher pair.
+// Emit one where (heterogeneous-cond ternary) contig launcher pair with
+// explicit cond scalar type.
 //
-// NAME  : symbol body — e.g. `where_f32`.
-// T     : value scalar type (cond is always `uint8_t`).
-#define BARACUDA_KERNELS_WHERE_INSTANTIATE(NAME, T)                                               \
+// NAME    : symbol body — e.g. `where_u32cond_f32`.
+// T       : value scalar type.
+// COND_T  : cond scalar type — `uint8_t` / `uint32_t` / `int64_t`.
+#define BARACUDA_KERNELS_WHERE_COND_INSTANTIATE(NAME, T, COND_T)                                  \
     extern "C" int32_t baracuda_kernels_##NAME##_run(                                             \
         int64_t numel,                                                                             \
         const void* cond,                                                                          \
@@ -5864,10 +5873,10 @@ __host__ inline int32_t launch_gated_activation_backward_contig(
         if (numel == 0) return 0;                                                                 \
         if (cond == nullptr || a == nullptr || b == nullptr || y == nullptr) return 2;            \
         cudaStream_t stream = static_cast<cudaStream_t>(stream_ptr);                              \
-        return baracuda::elementwise::launch_where_pointwise_contig<T>(                           \
-            static_cast<const uint8_t*>(cond),                                                    \
+        return baracuda::elementwise::launch_where_pointwise_contig<T, COND_T>(                   \
+            static_cast<const COND_T*>(cond),                                                     \
             static_cast<const T*>(a),                                                             \
-            static_cast<const T*>(b),                                                              \
+            static_cast<const T*>(b),                                                             \
             static_cast<T*>(y),                                                                    \
             numel, stream);                                                                        \
     }                                                                                              \
@@ -5879,7 +5888,11 @@ __host__ inline int32_t launch_gated_activation_backward_contig(
         return 0;                                                                                  \
     }
 
-#define BARACUDA_KERNELS_WHERE_INSTANTIATE_STRIDED(NAME, T)                                       \
+// Source-compat wrapper for the original u8-cond instantiation.
+#define BARACUDA_KERNELS_WHERE_INSTANTIATE(NAME, T)                                               \
+    BARACUDA_KERNELS_WHERE_COND_INSTANTIATE(NAME, T, uint8_t)
+
+#define BARACUDA_KERNELS_WHERE_COND_INSTANTIATE_STRIDED(NAME, T, COND_T)                          \
     extern "C" int32_t baracuda_kernels_##NAME##_strided_run(                                     \
         int64_t numel,                                                                             \
         int32_t rank,                                                                              \
@@ -5899,13 +5912,17 @@ __host__ inline int32_t launch_gated_activation_backward_contig(
         if (shape == nullptr || stride_cond == nullptr || stride_a == nullptr ||                  \
             stride_b == nullptr || stride_y == nullptr) return 2;                                 \
         cudaStream_t stream = static_cast<cudaStream_t>(stream_ptr);                              \
-        return baracuda::elementwise::launch_where_pointwise_strided<T>(                          \
-            static_cast<const uint8_t*>(cond),                                                    \
+        return baracuda::elementwise::launch_where_pointwise_strided<T, COND_T>(                  \
+            static_cast<const COND_T*>(cond),                                                     \
             static_cast<const T*>(a),                                                             \
-            static_cast<const T*>(b),                                                              \
+            static_cast<const T*>(b),                                                             \
             static_cast<T*>(y),                                                                    \
             numel, rank, shape, stride_cond, stride_a, stride_b, stride_y, stream);               \
     }
+
+// Source-compat wrapper for the original u8-cond strided instantiation.
+#define BARACUDA_KERNELS_WHERE_INSTANTIATE_STRIDED(NAME, T)                                       \
+    BARACUDA_KERNELS_WHERE_COND_INSTANTIATE_STRIDED(NAME, T, uint8_t)
 
 // Emit one where-backward (heterogeneous-cond ternary BW) launcher.
 //

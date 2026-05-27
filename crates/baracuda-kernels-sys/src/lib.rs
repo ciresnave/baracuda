@@ -12286,6 +12286,659 @@ unsafe extern "C" {
 }
 
 // ============================================================================
+// Elementwise — where dtype matrix fanout (Phase 38 / Fuel 6c.4 Gap 3)
+// ============================================================================
+//
+// Extends the heterogeneous-dtype `where(cond, a, b)` ternary's cond
+// dimension to cover `u32` and `i64` (in addition to the original
+// `u8`) and the value dimension to cover the integer family
+// (`u8` / `i8` / `u32` / `i16` / `i32` / `i64`) and Fp8E4M3 (in
+// addition to the original `{f32, f16, bf16, f64}`).
+//
+// Naming convention: explicit `<cond>cond_<value>` prefix on every
+// symbol in this section, e.g. `where_u32cond_f32_run`. The original
+// `where_<value>_run` family above stays in place — those symbols
+// implicitly mean "u8 cond" and are preserved verbatim for source
+// compat. Each symbol pairs `<sym>_run` (kernel launch) with
+// `<sym>_can_implement` (pre-launch validation). Strided variants
+// use `<sym>_strided_run` and have no `_can_implement` companion
+// (matching the existing where family).
+//
+// Cond semantics across every variant: any non-zero value selects `a`,
+// zero selects `b`. The kernel uses `cond != Cond(0)`, which compiles
+// to the natural `setp.ne` PTX instruction for any integer width.
+//
+// Counts: 16 (U32/I64-cond × 4 fp values) + 36 (3 conds × 6 int values)
+// + 6 (3 conds × Fp8E4M3) = 58 new symbol pairs. Contig + strided
+// makes 116 total `extern "C"` declarations; contig adds another 58
+// `_can_implement` companions = 174 declarations in this section.
+
+// ----------------------------------------------------------------------------
+// (a) U32-cond × {f32, f16, bf16, f64} — contig + strided
+// ----------------------------------------------------------------------------
+
+#[cfg(any(feature = "sm80", feature = "sm89", feature = "sm90a"))]
+unsafe extern "C" {
+    /// `where(cond, a, b)`, u32 cond + f32 values, contig fast path.
+    ///
+    /// `y = (cond != 0) ? a : b` elementwise. `cond` is interpreted as
+    /// bool per PyTorch convention (0 → b, non-zero → a) regardless of
+    /// the underlying integer width.
+    ///
+    /// # Safety
+    /// All device pointers must remain valid for the duration of the
+    /// launch. `cond` must point to at least `numel` `u32`s; `a`, `b`,
+    /// `y` to at least `numel` `f32`s.
+    pub fn baracuda_kernels_where_u32cond_f32_run(
+        numel: i64,
+        cond: *const c_void,
+        a: *const c_void,
+        b: *const c_void,
+        y: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    /// Pre-launch check for `where_u32cond_f32`.
+    pub fn baracuda_kernels_where_u32cond_f32_can_implement(
+        numel: i64,
+        cond: *const c_void,
+        a: *const c_void,
+        b: *const c_void,
+        y: *const c_void,
+    ) -> i32;
+    /// `where(cond, a, b)`, u32 cond + f32 values, strided / broadcast
+    /// path. Each operand carries its own stride array.
+    pub fn baracuda_kernels_where_u32cond_f32_strided_run(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_cond: *const i64,
+        stride_a: *const i64,
+        stride_b: *const i64,
+        stride_y: *const i64,
+        cond: *const c_void,
+        a: *const c_void,
+        b: *const c_void,
+        y: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `where(cond, a, b)`, u32 cond + f64 values, contig fast path.
+    pub fn baracuda_kernels_where_u32cond_f64_run(
+        numel: i64, cond: *const c_void, a: *const c_void, b: *const c_void,
+        y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    /// Pre-launch check for `where_u32cond_f64`.
+    pub fn baracuda_kernels_where_u32cond_f64_can_implement(
+        numel: i64, cond: *const c_void, a: *const c_void, b: *const c_void,
+        y: *const c_void,
+    ) -> i32;
+    /// `where(cond, a, b)`, u32 cond + f64 values, strided / broadcast.
+    pub fn baracuda_kernels_where_u32cond_f64_strided_run(
+        numel: i64, rank: i32, shape: *const i32,
+        stride_cond: *const i64, stride_a: *const i64, stride_b: *const i64,
+        stride_y: *const i64,
+        cond: *const c_void, a: *const c_void, b: *const c_void, y: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// `where(cond, a, b)`, u32 cond + f16 values, contig fast path.
+    pub fn baracuda_kernels_where_u32cond_f16_run(
+        numel: i64, cond: *const c_void, a: *const c_void, b: *const c_void,
+        y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    /// Pre-launch check for `where_u32cond_f16`.
+    pub fn baracuda_kernels_where_u32cond_f16_can_implement(
+        numel: i64, cond: *const c_void, a: *const c_void, b: *const c_void,
+        y: *const c_void,
+    ) -> i32;
+    /// `where(cond, a, b)`, u32 cond + f16 values, strided / broadcast.
+    pub fn baracuda_kernels_where_u32cond_f16_strided_run(
+        numel: i64, rank: i32, shape: *const i32,
+        stride_cond: *const i64, stride_a: *const i64, stride_b: *const i64,
+        stride_y: *const i64,
+        cond: *const c_void, a: *const c_void, b: *const c_void, y: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// `where(cond, a, b)`, u32 cond + bf16 values, contig fast path.
+    pub fn baracuda_kernels_where_u32cond_bf16_run(
+        numel: i64, cond: *const c_void, a: *const c_void, b: *const c_void,
+        y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    /// Pre-launch check for `where_u32cond_bf16`.
+    pub fn baracuda_kernels_where_u32cond_bf16_can_implement(
+        numel: i64, cond: *const c_void, a: *const c_void, b: *const c_void,
+        y: *const c_void,
+    ) -> i32;
+    /// `where(cond, a, b)`, u32 cond + bf16 values, strided / broadcast.
+    pub fn baracuda_kernels_where_u32cond_bf16_strided_run(
+        numel: i64, rank: i32, shape: *const i32,
+        stride_cond: *const i64, stride_a: *const i64, stride_b: *const i64,
+        stride_y: *const i64,
+        cond: *const c_void, a: *const c_void, b: *const c_void, y: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+}
+
+// ----------------------------------------------------------------------------
+// (a-cont) I64-cond × {f32, f16, bf16, f64} — contig + strided
+// ----------------------------------------------------------------------------
+
+#[cfg(any(feature = "sm80", feature = "sm89", feature = "sm90a"))]
+unsafe extern "C" {
+    /// `where(cond, a, b)`, i64 cond + f32 values, contig fast path.
+    pub fn baracuda_kernels_where_i64cond_f32_run(
+        numel: i64, cond: *const c_void, a: *const c_void, b: *const c_void,
+        y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    /// Pre-launch check for `where_i64cond_f32`.
+    pub fn baracuda_kernels_where_i64cond_f32_can_implement(
+        numel: i64, cond: *const c_void, a: *const c_void, b: *const c_void,
+        y: *const c_void,
+    ) -> i32;
+    /// `where(cond, a, b)`, i64 cond + f32 values, strided / broadcast.
+    pub fn baracuda_kernels_where_i64cond_f32_strided_run(
+        numel: i64, rank: i32, shape: *const i32,
+        stride_cond: *const i64, stride_a: *const i64, stride_b: *const i64,
+        stride_y: *const i64,
+        cond: *const c_void, a: *const c_void, b: *const c_void, y: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// `where(cond, a, b)`, i64 cond + f64 values, contig fast path.
+    pub fn baracuda_kernels_where_i64cond_f64_run(
+        numel: i64, cond: *const c_void, a: *const c_void, b: *const c_void,
+        y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    /// Pre-launch check for `where_i64cond_f64`.
+    pub fn baracuda_kernels_where_i64cond_f64_can_implement(
+        numel: i64, cond: *const c_void, a: *const c_void, b: *const c_void,
+        y: *const c_void,
+    ) -> i32;
+    /// `where(cond, a, b)`, i64 cond + f64 values, strided / broadcast.
+    pub fn baracuda_kernels_where_i64cond_f64_strided_run(
+        numel: i64, rank: i32, shape: *const i32,
+        stride_cond: *const i64, stride_a: *const i64, stride_b: *const i64,
+        stride_y: *const i64,
+        cond: *const c_void, a: *const c_void, b: *const c_void, y: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// `where(cond, a, b)`, i64 cond + f16 values, contig fast path.
+    pub fn baracuda_kernels_where_i64cond_f16_run(
+        numel: i64, cond: *const c_void, a: *const c_void, b: *const c_void,
+        y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    /// Pre-launch check for `where_i64cond_f16`.
+    pub fn baracuda_kernels_where_i64cond_f16_can_implement(
+        numel: i64, cond: *const c_void, a: *const c_void, b: *const c_void,
+        y: *const c_void,
+    ) -> i32;
+    /// `where(cond, a, b)`, i64 cond + f16 values, strided / broadcast.
+    pub fn baracuda_kernels_where_i64cond_f16_strided_run(
+        numel: i64, rank: i32, shape: *const i32,
+        stride_cond: *const i64, stride_a: *const i64, stride_b: *const i64,
+        stride_y: *const i64,
+        cond: *const c_void, a: *const c_void, b: *const c_void, y: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// `where(cond, a, b)`, i64 cond + bf16 values, contig fast path.
+    pub fn baracuda_kernels_where_i64cond_bf16_run(
+        numel: i64, cond: *const c_void, a: *const c_void, b: *const c_void,
+        y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    /// Pre-launch check for `where_i64cond_bf16`.
+    pub fn baracuda_kernels_where_i64cond_bf16_can_implement(
+        numel: i64, cond: *const c_void, a: *const c_void, b: *const c_void,
+        y: *const c_void,
+    ) -> i32;
+    /// `where(cond, a, b)`, i64 cond + bf16 values, strided / broadcast.
+    pub fn baracuda_kernels_where_i64cond_bf16_strided_run(
+        numel: i64, rank: i32, shape: *const i32,
+        stride_cond: *const i64, stride_a: *const i64, stride_b: *const i64,
+        stride_y: *const i64,
+        cond: *const c_void, a: *const c_void, b: *const c_void, y: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+}
+
+// ----------------------------------------------------------------------------
+// (b) U8-cond × {u8, i8, u32, i16, i32, i64} — contig + strided
+// ----------------------------------------------------------------------------
+
+#[cfg(any(feature = "sm80", feature = "sm89", feature = "sm90a"))]
+unsafe extern "C" {
+    /// `where(cond, a, b)`, u8 cond + u8 values, contig fast path.
+    pub fn baracuda_kernels_where_u8cond_u8_run(
+        numel: i64, cond: *const c_void, a: *const c_void, b: *const c_void,
+        y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    /// Pre-launch check for `where_u8cond_u8`.
+    pub fn baracuda_kernels_where_u8cond_u8_can_implement(
+        numel: i64, cond: *const c_void, a: *const c_void, b: *const c_void,
+        y: *const c_void,
+    ) -> i32;
+    /// `where(cond, a, b)`, u8 cond + u8 values, strided / broadcast.
+    pub fn baracuda_kernels_where_u8cond_u8_strided_run(
+        numel: i64, rank: i32, shape: *const i32,
+        stride_cond: *const i64, stride_a: *const i64, stride_b: *const i64,
+        stride_y: *const i64,
+        cond: *const c_void, a: *const c_void, b: *const c_void, y: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// `where(cond, a, b)`, u8 cond + i8 values, contig fast path.
+    pub fn baracuda_kernels_where_u8cond_i8_run(
+        numel: i64, cond: *const c_void, a: *const c_void, b: *const c_void,
+        y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    /// Pre-launch check for `where_u8cond_i8`.
+    pub fn baracuda_kernels_where_u8cond_i8_can_implement(
+        numel: i64, cond: *const c_void, a: *const c_void, b: *const c_void,
+        y: *const c_void,
+    ) -> i32;
+    /// `where(cond, a, b)`, u8 cond + i8 values, strided / broadcast.
+    pub fn baracuda_kernels_where_u8cond_i8_strided_run(
+        numel: i64, rank: i32, shape: *const i32,
+        stride_cond: *const i64, stride_a: *const i64, stride_b: *const i64,
+        stride_y: *const i64,
+        cond: *const c_void, a: *const c_void, b: *const c_void, y: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// `where(cond, a, b)`, u8 cond + u32 values, contig fast path.
+    pub fn baracuda_kernels_where_u8cond_u32_run(
+        numel: i64, cond: *const c_void, a: *const c_void, b: *const c_void,
+        y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    /// Pre-launch check for `where_u8cond_u32`.
+    pub fn baracuda_kernels_where_u8cond_u32_can_implement(
+        numel: i64, cond: *const c_void, a: *const c_void, b: *const c_void,
+        y: *const c_void,
+    ) -> i32;
+    /// `where(cond, a, b)`, u8 cond + u32 values, strided / broadcast.
+    pub fn baracuda_kernels_where_u8cond_u32_strided_run(
+        numel: i64, rank: i32, shape: *const i32,
+        stride_cond: *const i64, stride_a: *const i64, stride_b: *const i64,
+        stride_y: *const i64,
+        cond: *const c_void, a: *const c_void, b: *const c_void, y: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// `where(cond, a, b)`, u8 cond + i16 values, contig fast path.
+    pub fn baracuda_kernels_where_u8cond_i16_run(
+        numel: i64, cond: *const c_void, a: *const c_void, b: *const c_void,
+        y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    /// Pre-launch check for `where_u8cond_i16`.
+    pub fn baracuda_kernels_where_u8cond_i16_can_implement(
+        numel: i64, cond: *const c_void, a: *const c_void, b: *const c_void,
+        y: *const c_void,
+    ) -> i32;
+    /// `where(cond, a, b)`, u8 cond + i16 values, strided / broadcast.
+    pub fn baracuda_kernels_where_u8cond_i16_strided_run(
+        numel: i64, rank: i32, shape: *const i32,
+        stride_cond: *const i64, stride_a: *const i64, stride_b: *const i64,
+        stride_y: *const i64,
+        cond: *const c_void, a: *const c_void, b: *const c_void, y: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// `where(cond, a, b)`, u8 cond + i32 values, contig fast path.
+    pub fn baracuda_kernels_where_u8cond_i32_run(
+        numel: i64, cond: *const c_void, a: *const c_void, b: *const c_void,
+        y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    /// Pre-launch check for `where_u8cond_i32`.
+    pub fn baracuda_kernels_where_u8cond_i32_can_implement(
+        numel: i64, cond: *const c_void, a: *const c_void, b: *const c_void,
+        y: *const c_void,
+    ) -> i32;
+    /// `where(cond, a, b)`, u8 cond + i32 values, strided / broadcast.
+    pub fn baracuda_kernels_where_u8cond_i32_strided_run(
+        numel: i64, rank: i32, shape: *const i32,
+        stride_cond: *const i64, stride_a: *const i64, stride_b: *const i64,
+        stride_y: *const i64,
+        cond: *const c_void, a: *const c_void, b: *const c_void, y: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// `where(cond, a, b)`, u8 cond + i64 values, contig fast path.
+    pub fn baracuda_kernels_where_u8cond_i64_run(
+        numel: i64, cond: *const c_void, a: *const c_void, b: *const c_void,
+        y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    /// Pre-launch check for `where_u8cond_i64`.
+    pub fn baracuda_kernels_where_u8cond_i64_can_implement(
+        numel: i64, cond: *const c_void, a: *const c_void, b: *const c_void,
+        y: *const c_void,
+    ) -> i32;
+    /// `where(cond, a, b)`, u8 cond + i64 values, strided / broadcast.
+    pub fn baracuda_kernels_where_u8cond_i64_strided_run(
+        numel: i64, rank: i32, shape: *const i32,
+        stride_cond: *const i64, stride_a: *const i64, stride_b: *const i64,
+        stride_y: *const i64,
+        cond: *const c_void, a: *const c_void, b: *const c_void, y: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+}
+
+// ----------------------------------------------------------------------------
+// (b-cont) U32-cond × {u8, i8, u32, i16, i32, i64} — contig + strided
+// ----------------------------------------------------------------------------
+
+#[cfg(any(feature = "sm80", feature = "sm89", feature = "sm90a"))]
+unsafe extern "C" {
+    /// `where(cond, a, b)`, u32 cond + u8 values, contig fast path.
+    pub fn baracuda_kernels_where_u32cond_u8_run(
+        numel: i64, cond: *const c_void, a: *const c_void, b: *const c_void,
+        y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_where_u32cond_u8_can_implement(
+        numel: i64, cond: *const c_void, a: *const c_void, b: *const c_void,
+        y: *const c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_where_u32cond_u8_strided_run(
+        numel: i64, rank: i32, shape: *const i32,
+        stride_cond: *const i64, stride_a: *const i64, stride_b: *const i64,
+        stride_y: *const i64,
+        cond: *const c_void, a: *const c_void, b: *const c_void, y: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// `where(cond, a, b)`, u32 cond + i8 values, contig fast path.
+    pub fn baracuda_kernels_where_u32cond_i8_run(
+        numel: i64, cond: *const c_void, a: *const c_void, b: *const c_void,
+        y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_where_u32cond_i8_can_implement(
+        numel: i64, cond: *const c_void, a: *const c_void, b: *const c_void,
+        y: *const c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_where_u32cond_i8_strided_run(
+        numel: i64, rank: i32, shape: *const i32,
+        stride_cond: *const i64, stride_a: *const i64, stride_b: *const i64,
+        stride_y: *const i64,
+        cond: *const c_void, a: *const c_void, b: *const c_void, y: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// `where(cond, a, b)`, u32 cond + u32 values, contig fast path.
+    pub fn baracuda_kernels_where_u32cond_u32_run(
+        numel: i64, cond: *const c_void, a: *const c_void, b: *const c_void,
+        y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_where_u32cond_u32_can_implement(
+        numel: i64, cond: *const c_void, a: *const c_void, b: *const c_void,
+        y: *const c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_where_u32cond_u32_strided_run(
+        numel: i64, rank: i32, shape: *const i32,
+        stride_cond: *const i64, stride_a: *const i64, stride_b: *const i64,
+        stride_y: *const i64,
+        cond: *const c_void, a: *const c_void, b: *const c_void, y: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// `where(cond, a, b)`, u32 cond + i16 values, contig fast path.
+    pub fn baracuda_kernels_where_u32cond_i16_run(
+        numel: i64, cond: *const c_void, a: *const c_void, b: *const c_void,
+        y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_where_u32cond_i16_can_implement(
+        numel: i64, cond: *const c_void, a: *const c_void, b: *const c_void,
+        y: *const c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_where_u32cond_i16_strided_run(
+        numel: i64, rank: i32, shape: *const i32,
+        stride_cond: *const i64, stride_a: *const i64, stride_b: *const i64,
+        stride_y: *const i64,
+        cond: *const c_void, a: *const c_void, b: *const c_void, y: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// `where(cond, a, b)`, u32 cond + i32 values, contig fast path.
+    pub fn baracuda_kernels_where_u32cond_i32_run(
+        numel: i64, cond: *const c_void, a: *const c_void, b: *const c_void,
+        y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_where_u32cond_i32_can_implement(
+        numel: i64, cond: *const c_void, a: *const c_void, b: *const c_void,
+        y: *const c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_where_u32cond_i32_strided_run(
+        numel: i64, rank: i32, shape: *const i32,
+        stride_cond: *const i64, stride_a: *const i64, stride_b: *const i64,
+        stride_y: *const i64,
+        cond: *const c_void, a: *const c_void, b: *const c_void, y: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// `where(cond, a, b)`, u32 cond + i64 values, contig fast path.
+    pub fn baracuda_kernels_where_u32cond_i64_run(
+        numel: i64, cond: *const c_void, a: *const c_void, b: *const c_void,
+        y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_where_u32cond_i64_can_implement(
+        numel: i64, cond: *const c_void, a: *const c_void, b: *const c_void,
+        y: *const c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_where_u32cond_i64_strided_run(
+        numel: i64, rank: i32, shape: *const i32,
+        stride_cond: *const i64, stride_a: *const i64, stride_b: *const i64,
+        stride_y: *const i64,
+        cond: *const c_void, a: *const c_void, b: *const c_void, y: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+}
+
+// ----------------------------------------------------------------------------
+// (b-cont) I64-cond × {u8, i8, u32, i16, i32, i64} — contig + strided
+// ----------------------------------------------------------------------------
+
+#[cfg(any(feature = "sm80", feature = "sm89", feature = "sm90a"))]
+unsafe extern "C" {
+    /// `where(cond, a, b)`, i64 cond + u8 values, contig fast path.
+    pub fn baracuda_kernels_where_i64cond_u8_run(
+        numel: i64, cond: *const c_void, a: *const c_void, b: *const c_void,
+        y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_where_i64cond_u8_can_implement(
+        numel: i64, cond: *const c_void, a: *const c_void, b: *const c_void,
+        y: *const c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_where_i64cond_u8_strided_run(
+        numel: i64, rank: i32, shape: *const i32,
+        stride_cond: *const i64, stride_a: *const i64, stride_b: *const i64,
+        stride_y: *const i64,
+        cond: *const c_void, a: *const c_void, b: *const c_void, y: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// `where(cond, a, b)`, i64 cond + i8 values, contig fast path.
+    pub fn baracuda_kernels_where_i64cond_i8_run(
+        numel: i64, cond: *const c_void, a: *const c_void, b: *const c_void,
+        y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_where_i64cond_i8_can_implement(
+        numel: i64, cond: *const c_void, a: *const c_void, b: *const c_void,
+        y: *const c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_where_i64cond_i8_strided_run(
+        numel: i64, rank: i32, shape: *const i32,
+        stride_cond: *const i64, stride_a: *const i64, stride_b: *const i64,
+        stride_y: *const i64,
+        cond: *const c_void, a: *const c_void, b: *const c_void, y: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// `where(cond, a, b)`, i64 cond + u32 values, contig fast path.
+    pub fn baracuda_kernels_where_i64cond_u32_run(
+        numel: i64, cond: *const c_void, a: *const c_void, b: *const c_void,
+        y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_where_i64cond_u32_can_implement(
+        numel: i64, cond: *const c_void, a: *const c_void, b: *const c_void,
+        y: *const c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_where_i64cond_u32_strided_run(
+        numel: i64, rank: i32, shape: *const i32,
+        stride_cond: *const i64, stride_a: *const i64, stride_b: *const i64,
+        stride_y: *const i64,
+        cond: *const c_void, a: *const c_void, b: *const c_void, y: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// `where(cond, a, b)`, i64 cond + i16 values, contig fast path.
+    pub fn baracuda_kernels_where_i64cond_i16_run(
+        numel: i64, cond: *const c_void, a: *const c_void, b: *const c_void,
+        y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_where_i64cond_i16_can_implement(
+        numel: i64, cond: *const c_void, a: *const c_void, b: *const c_void,
+        y: *const c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_where_i64cond_i16_strided_run(
+        numel: i64, rank: i32, shape: *const i32,
+        stride_cond: *const i64, stride_a: *const i64, stride_b: *const i64,
+        stride_y: *const i64,
+        cond: *const c_void, a: *const c_void, b: *const c_void, y: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// `where(cond, a, b)`, i64 cond + i32 values, contig fast path.
+    pub fn baracuda_kernels_where_i64cond_i32_run(
+        numel: i64, cond: *const c_void, a: *const c_void, b: *const c_void,
+        y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_where_i64cond_i32_can_implement(
+        numel: i64, cond: *const c_void, a: *const c_void, b: *const c_void,
+        y: *const c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_where_i64cond_i32_strided_run(
+        numel: i64, rank: i32, shape: *const i32,
+        stride_cond: *const i64, stride_a: *const i64, stride_b: *const i64,
+        stride_y: *const i64,
+        cond: *const c_void, a: *const c_void, b: *const c_void, y: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// `where(cond, a, b)`, i64 cond + i64 values, contig fast path.
+    pub fn baracuda_kernels_where_i64cond_i64_run(
+        numel: i64, cond: *const c_void, a: *const c_void, b: *const c_void,
+        y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_where_i64cond_i64_can_implement(
+        numel: i64, cond: *const c_void, a: *const c_void, b: *const c_void,
+        y: *const c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_where_i64cond_i64_strided_run(
+        numel: i64, rank: i32, shape: *const i32,
+        stride_cond: *const i64, stride_a: *const i64, stride_b: *const i64,
+        stride_y: *const i64,
+        cond: *const c_void, a: *const c_void, b: *const c_void, y: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+}
+
+// ----------------------------------------------------------------------------
+// (c) {U8, U32, I64}-cond × Fp8E4M3 — contig + strided
+// ----------------------------------------------------------------------------
+//
+// Fp8E4M3 is 1-byte storage; the kernel template instantiated on
+// `uint8_t` produces bit-exact output (pure element selection — no FP
+// semantics involved). Symbol name carries the `fp8e4m3` value-dtype
+// tag so the FFI surface explicitly distinguishes this from the
+// generic `u8`-value variants above.
+
+#[cfg(any(feature = "sm80", feature = "sm89", feature = "sm90a"))]
+unsafe extern "C" {
+    /// `where(cond, a, b)`, u8 cond + Fp8E4M3 values, contig fast path.
+    pub fn baracuda_kernels_where_u8cond_fp8e4m3_run(
+        numel: i64, cond: *const c_void, a: *const c_void, b: *const c_void,
+        y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_where_u8cond_fp8e4m3_can_implement(
+        numel: i64, cond: *const c_void, a: *const c_void, b: *const c_void,
+        y: *const c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_where_u8cond_fp8e4m3_strided_run(
+        numel: i64, rank: i32, shape: *const i32,
+        stride_cond: *const i64, stride_a: *const i64, stride_b: *const i64,
+        stride_y: *const i64,
+        cond: *const c_void, a: *const c_void, b: *const c_void, y: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// `where(cond, a, b)`, u32 cond + Fp8E4M3 values, contig fast path.
+    pub fn baracuda_kernels_where_u32cond_fp8e4m3_run(
+        numel: i64, cond: *const c_void, a: *const c_void, b: *const c_void,
+        y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_where_u32cond_fp8e4m3_can_implement(
+        numel: i64, cond: *const c_void, a: *const c_void, b: *const c_void,
+        y: *const c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_where_u32cond_fp8e4m3_strided_run(
+        numel: i64, rank: i32, shape: *const i32,
+        stride_cond: *const i64, stride_a: *const i64, stride_b: *const i64,
+        stride_y: *const i64,
+        cond: *const c_void, a: *const c_void, b: *const c_void, y: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// `where(cond, a, b)`, i64 cond + Fp8E4M3 values, contig fast path.
+    pub fn baracuda_kernels_where_i64cond_fp8e4m3_run(
+        numel: i64, cond: *const c_void, a: *const c_void, b: *const c_void,
+        y: *mut c_void, workspace: *mut c_void, workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_where_i64cond_fp8e4m3_can_implement(
+        numel: i64, cond: *const c_void, a: *const c_void, b: *const c_void,
+        y: *const c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_where_i64cond_fp8e4m3_strided_run(
+        numel: i64, rank: i32, shape: *const i32,
+        stride_cond: *const i64, stride_a: *const i64, stride_b: *const i64,
+        stride_y: *const i64,
+        cond: *const c_void, a: *const c_void, b: *const c_void, y: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+}
+
+// ============================================================================
 // Elementwise — where backward (heterogeneous-dtype ternary BW, u8 cond + T → T,T)
 // ============================================================================
 //
@@ -31503,6 +32156,350 @@ unsafe extern "C" {
         x: *const c_void,
         out_coords: *mut c_void,
         counter: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    // ---------- Phase 39 (Fuel 6c.4 Gap 5) — scatter (pure assign) + index_add ----------
+    //
+    // Two new ops broaden the indexing matrix:
+    //   * `scatter` — `out[..., index[..., j, ...], ...] = updates[..., j, ...]`
+    //     (NO accumulation; last writer wins on duplicate-target races).
+    //     Distinct from `scatter_add` above. 4 FP dtypes × {i32, i64 idx}.
+    //   * `index_add` — `dst[idx[i], ...] += src[i, ...]` along `add_dim`
+    //     (atomicAdd-Σ accumulation; algorithmically identical to
+    //     `index_select_backward` but exposed under a non-autograd-flavored
+    //     name + with f16 / bf16 dtype fanout).
+    //
+    // Out-of-bounds and negative index policy matches the rest of the
+    // Indexing family: skip the write (no PyTorch-style wrap).
+
+    // -- scatter (pure assign) FW --
+
+    /// `scatter` — `out[index] = updates`, f32, i32 idx. NO accumulation.
+    pub fn baracuda_kernels_scatter_f32_run(
+        upd_numel: i64,
+        rank: i32,
+        scatter_dim: i32,
+        out_dim_size: i32,
+        upd_shape: *const i32,
+        stride_upd: *const i64,
+        stride_index: *const i64,
+        stride_out: *const i64,
+        updates: *const c_void,
+        index: *const c_void,
+        out: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `scatter` — f64, i32 idx.
+    pub fn baracuda_kernels_scatter_f64_run(
+        upd_numel: i64,
+        rank: i32,
+        scatter_dim: i32,
+        out_dim_size: i32,
+        upd_shape: *const i32,
+        stride_upd: *const i64,
+        stride_index: *const i64,
+        stride_out: *const i64,
+        updates: *const c_void,
+        index: *const c_void,
+        out: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `scatter` — f16, i32 idx.
+    pub fn baracuda_kernels_scatter_f16_run(
+        upd_numel: i64,
+        rank: i32,
+        scatter_dim: i32,
+        out_dim_size: i32,
+        upd_shape: *const i32,
+        stride_upd: *const i64,
+        stride_index: *const i64,
+        stride_out: *const i64,
+        updates: *const c_void,
+        index: *const c_void,
+        out: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `scatter` — bf16, i32 idx.
+    pub fn baracuda_kernels_scatter_bf16_run(
+        upd_numel: i64,
+        rank: i32,
+        scatter_dim: i32,
+        out_dim_size: i32,
+        upd_shape: *const i32,
+        stride_upd: *const i64,
+        stride_index: *const i64,
+        stride_out: *const i64,
+        updates: *const c_void,
+        index: *const c_void,
+        out: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `scatter` — f32, i64 idx.
+    pub fn baracuda_kernels_scatter_i64idx_f32_run(
+        upd_numel: i64,
+        rank: i32,
+        scatter_dim: i32,
+        out_dim_size: i32,
+        upd_shape: *const i32,
+        stride_upd: *const i64,
+        stride_index: *const i64,
+        stride_out: *const i64,
+        updates: *const c_void,
+        index: *const c_void,
+        out: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `scatter` — f64, i64 idx.
+    pub fn baracuda_kernels_scatter_i64idx_f64_run(
+        upd_numel: i64,
+        rank: i32,
+        scatter_dim: i32,
+        out_dim_size: i32,
+        upd_shape: *const i32,
+        stride_upd: *const i64,
+        stride_index: *const i64,
+        stride_out: *const i64,
+        updates: *const c_void,
+        index: *const c_void,
+        out: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `scatter` — f16, i64 idx.
+    pub fn baracuda_kernels_scatter_i64idx_f16_run(
+        upd_numel: i64,
+        rank: i32,
+        scatter_dim: i32,
+        out_dim_size: i32,
+        upd_shape: *const i32,
+        stride_upd: *const i64,
+        stride_index: *const i64,
+        stride_out: *const i64,
+        updates: *const c_void,
+        index: *const c_void,
+        out: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `scatter` — bf16, i64 idx.
+    pub fn baracuda_kernels_scatter_i64idx_bf16_run(
+        upd_numel: i64,
+        rank: i32,
+        scatter_dim: i32,
+        out_dim_size: i32,
+        upd_shape: *const i32,
+        stride_upd: *const i64,
+        stride_index: *const i64,
+        stride_out: *const i64,
+        updates: *const c_void,
+        index: *const c_void,
+        out: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    // -- index_add FW --
+
+    /// `index_add` — `dst[idx[i], ...] += src[i, ...]`, f32, i32 idx.
+    pub fn baracuda_kernels_index_add_f32_run(
+        src_numel: i64,
+        rank: i32,
+        add_dim: i32,
+        dst_dim_size: i32,
+        src_shape: *const i32,
+        stride_src: *const i64,
+        stride_dst: *const i64,
+        src: *const c_void,
+        idx: *const c_void,
+        dst: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `index_add` — f64, i32 idx.
+    pub fn baracuda_kernels_index_add_f64_run(
+        src_numel: i64,
+        rank: i32,
+        add_dim: i32,
+        dst_dim_size: i32,
+        src_shape: *const i32,
+        stride_src: *const i64,
+        stride_dst: *const i64,
+        src: *const c_void,
+        idx: *const c_void,
+        dst: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `index_add` — f16, i32 idx. Uses `atomicCAS`-via-
+    /// `baracuda::atomic::add<__half>` (deterministic per-thread arithmetic
+    /// regardless of CUDA toolkit; non-deterministic accumulation order).
+    pub fn baracuda_kernels_index_add_f16_run(
+        src_numel: i64,
+        rank: i32,
+        add_dim: i32,
+        dst_dim_size: i32,
+        src_shape: *const i32,
+        stride_src: *const i64,
+        stride_dst: *const i64,
+        src: *const c_void,
+        idx: *const c_void,
+        dst: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `index_add` — bf16, i32 idx. `atomicCAS`-via-
+    /// `baracuda::atomic::add<__nv_bfloat16>` (same caveats as f16).
+    pub fn baracuda_kernels_index_add_bf16_run(
+        src_numel: i64,
+        rank: i32,
+        add_dim: i32,
+        dst_dim_size: i32,
+        src_shape: *const i32,
+        stride_src: *const i64,
+        stride_dst: *const i64,
+        src: *const c_void,
+        idx: *const c_void,
+        dst: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `index_add` — f32, i64 idx.
+    pub fn baracuda_kernels_index_add_i64idx_f32_run(
+        src_numel: i64,
+        rank: i32,
+        add_dim: i32,
+        dst_dim_size: i32,
+        src_shape: *const i32,
+        stride_src: *const i64,
+        stride_dst: *const i64,
+        src: *const c_void,
+        idx: *const c_void,
+        dst: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `index_add` — f64, i64 idx.
+    pub fn baracuda_kernels_index_add_i64idx_f64_run(
+        src_numel: i64,
+        rank: i32,
+        add_dim: i32,
+        dst_dim_size: i32,
+        src_shape: *const i32,
+        stride_src: *const i64,
+        stride_dst: *const i64,
+        src: *const c_void,
+        idx: *const c_void,
+        dst: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `index_add` — f16, i64 idx.
+    pub fn baracuda_kernels_index_add_i64idx_f16_run(
+        src_numel: i64,
+        rank: i32,
+        add_dim: i32,
+        dst_dim_size: i32,
+        src_shape: *const i32,
+        stride_src: *const i64,
+        stride_dst: *const i64,
+        src: *const c_void,
+        idx: *const c_void,
+        dst: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `index_add` — bf16, i64 idx.
+    pub fn baracuda_kernels_index_add_i64idx_bf16_run(
+        src_numel: i64,
+        rank: i32,
+        add_dim: i32,
+        dst_dim_size: i32,
+        src_shape: *const i32,
+        stride_src: *const i64,
+        stride_dst: *const i64,
+        src: *const c_void,
+        idx: *const c_void,
+        dst: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    // -- gather (u8 idx extras) --
+    //
+    // u8 idx is **not** in the Rust `IndexElement` sealed trait today;
+    // these symbols are FFI-only for callers like Fuel that ship their
+    // own index-dtype dispatch. Promotion to a full IndexElement impl
+    // is tracked as a follow-up.
+
+    /// `gather` FW — f32, u8 idx.
+    pub fn baracuda_kernels_gather_u8idx_f32_run(
+        out_numel: i64,
+        rank: i32,
+        gather_dim: i32,
+        src_dim_size: i32,
+        out_shape: *const i32,
+        stride_src: *const i64,
+        stride_index: *const i64,
+        stride_out: *const i64,
+        src: *const c_void,
+        index: *const c_void,
+        out: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// `gather` FW — f64, u8 idx.
+    pub fn baracuda_kernels_gather_u8idx_f64_run(
+        out_numel: i64,
+        rank: i32,
+        gather_dim: i32,
+        src_dim_size: i32,
+        out_shape: *const i32,
+        stride_src: *const i64,
+        stride_index: *const i64,
+        stride_out: *const i64,
+        src: *const c_void,
+        index: *const c_void,
+        out: *mut c_void,
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,

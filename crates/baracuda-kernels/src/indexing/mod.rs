@@ -27,16 +27,19 @@
 
 pub mod gather;
 pub mod gather_backward;
+pub mod index_add;
 pub mod index_select;
 pub mod index_select_backward;
 pub mod masked_fill;
 pub mod masked_fill_backward;
 pub mod nonzero;
 pub mod one_hot;
+pub mod scatter;
 pub mod scatter_add;
 
 pub use gather::{GatherArgs, GatherDescriptor, GatherPlan};
 pub use gather_backward::{GatherBackwardArgs, GatherBackwardDescriptor, GatherBackwardPlan};
+pub use index_add::{IndexAddArgs, IndexAddDescriptor, IndexAddPlan};
 pub use index_select::{IndexSelectArgs, IndexSelectDescriptor, IndexSelectPlan};
 pub use index_select_backward::{
     IndexSelectBackwardArgs, IndexSelectBackwardDescriptor, IndexSelectBackwardPlan,
@@ -47,4 +50,5 @@ pub use masked_fill_backward::{
 };
 pub use nonzero::{NonzeroArgs, NonzeroDescriptor, NonzeroPlan};
 pub use one_hot::{OneHotArgs, OneHotDescriptor, OneHotPlan};
+pub use scatter::{ScatterArgs, ScatterDescriptor, ScatterPlan};
 pub use scatter_add::{ScatterAddArgs, ScatterAddDescriptor, ScatterAddPlan};

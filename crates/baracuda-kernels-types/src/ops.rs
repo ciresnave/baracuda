@@ -1269,6 +1269,19 @@ pub enum IndexingKind {
     /// `torch.nonzero`. Output ordering is NOT row-major (atomic-counter
     /// races); callers that need sorted output sort afterward.
     Nonzero = 8,
+    /// `scatter(out, dim, index, updates)` —
+    /// `out[..., index[..., j, ...], ...] = updates[..., j, ...]`
+    /// (NO accumulation; last writer wins on duplicate-target races).
+    /// PyTorch `torch.scatter_` (the in-place pure-assign variant).
+    /// Distinct from [`Self::ScatterAdd`]. Phase 39 (Fuel 6c.4 Gap 5).
+    Scatter = 9,
+    /// `index_add(dst, dim, idx, src)` —
+    /// `dst[idx[i], ...] += src[i, ...]` along `add_dim` (atomicAdd-Σ).
+    /// PyTorch `torch.Tensor.index_add_`. Algorithmically identical to
+    /// [`Self::IndexSelectBackward`] but exposed under a non-autograd-
+    /// flavored name (and with broader dtype coverage). Phase 39
+    /// (Fuel 6c.4 Gap 5).
+    IndexAdd = 10,
 }
 
 /// Segment / scatter-reduce op discriminant — Category S from the

@@ -8,9 +8,9 @@
 A unified Rust ML-op facade over the NVIDIA CUDA ecosystem.
 
 ![License](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue)
-![Status](https://img.shields.io/badge/status-alpha.52-orange)
+![Status](https://img.shields.io/badge/status-alpha.53-orange)
 ![CUDA](https://img.shields.io/badge/CUDA-12.x-76b900)
-![Tests](https://img.shields.io/badge/regression-2272%2F0-success)
+![Tests](https://img.shields.io/badge/regression-2284%2F0-success)
 
 ## What baracuda is
 
@@ -40,7 +40,7 @@ talk to one library directly.
 
 ## Status
 
-**In active development — alpha.52.** **2272 GPU tests passing**
+**In active development — alpha.53.** **2284 GPU tests passing**
 on an RTX 4070 (sm_89), across **616 binary targets**.
 
 Phase coverage (see [`ARCHITECTURE.md`](ARCHITECTURE.md) for the phase
@@ -85,7 +85,8 @@ matrix):
 | 35 | Test-infra hardening (alpha.50): **first zero-failure regression** in the entire Phase 22-35 sweep (2229/0 across 638 binaries). Five fixes: (a) `mmvq_w_offset_alignment_misaligned_rejected_debug` `#[cfg(debug_assertions)]` gate; (b) cuBLAS handle retry with 5× linear backoff (Phase 30 parallel-init race); (c) cuDNN handle retry on CTC path (1001 NOT_INITIALIZED race); (d) `Stream::capture` panic-safe Drop guard (ThreadLocal capture state leak under cargo's thread reuse → cudaErrorStreamCaptureImplicit on subsequent tests); (e) **`cudaResourceDesc` 48→128 byte expansion + `repr(align(8))`** (Rust struct under-allocated by 16+ bytes AND missing 8-byte alignment that the union's `void*`/`size_t` arms require — caused release-only STATUS_ACCESS_VIOLATION in wave5_smoke). | done |
 | 36 | Fuel 6c.4 unblock — Phase 1/3 (alpha.51): RoPE apply with precomputed cos/sin tables (FW+BW × 4 fp dtypes; 16 symbols) + Fill missing dtypes & strided variant (3 new contig + 11 strided; 28 symbols) + Argsort dtype fanout (u8/i8/u32/i16/bf16/f16/fp8e4m3; 14 symbols). 58 new FFI declarations total. | done |
 | 37 | Fuel 6c.4 part 2/4 (alpha.52): Reduce family Gap 1 — `reduce_min_to`/`prod_to` broadcast-reverse for 4 fp dtypes (16 symbols) + integer-dtype single-axis sum/min/max/prod + argmin/argmax for U8/I8/U32/I16/I32/I64 (48 symbols, with U64/I64 widened accumulator + store-time narrow on Sum/Prod). 64 new FFI declarations total. Documented bit-exact wrap-on-overflow contract for u8/u32 sum/prod. | done |
-| 38+ | Fuel 6c.4 Phase 3-4/4: Ternary where_cond fanout (~52 syms); Indexing scatter/index_add + dtype matrix (~250 syms; may need partial); multi-block radix sort. Hopper / Blackwell. 1.0 freeze. | pending (see [`ROADMAP.md`](ROADMAP.md)) |
+| 38 | Fuel 6c.4 part 3/4 (alpha.53): Ternary `where_cond` dtype-matrix fanout — Cond lifted to template parameter; U8 (existing, untouched) + U32 + I64 cond × {f32/f64/f16/bf16, u8/i8/u32/i16/i32/i64, fp8e4m3} value × {contig, strided}. 87 new FFI declarations (58 `_run` + 29 `_can_implement`). Existing `where_<value>_run` family preserved bit-identically (default Cond=uint8_t). | done |
+| 39+ | Fuel 6c.4 Phase 4/4: Indexing scatter/index_add + dtype matrix (~250 syms; may need partial — Tier 1 first); multi-block radix sort. Hopper / Blackwell. 1.0 freeze. | pending (see [`ROADMAP.md`](ROADMAP.md)) |
 
 API stability is **not** promised before beta.0. Breaking changes ship in
 each alpha bump and are documented in the workspace `CHANGELOG.md`.
@@ -96,8 +97,8 @@ Add the kernel facade and the driver crate:
 
 ```toml
 [dependencies]
-baracuda-kernels = { version = "0.0.1-alpha.52", features = ["sm89", "cudnn"] }
-baracuda-driver  = "0.0.1-alpha.52"
+baracuda-kernels = { version = "0.0.1-alpha.53", features = ["sm89", "cudnn"] }
+baracuda-driver  = "0.0.1-alpha.53"
 ```
 
 A representative example — single-axis numerically stable softmax over a

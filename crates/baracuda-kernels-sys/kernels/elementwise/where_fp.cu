@@ -8,6 +8,13 @@
 // All 4 FP value dtypes wired: {f32, f16, bf16, f64} × {contig,
 // strided} = 8 launcher cells. The kernel template is fully generic
 // in `T` — each dtype is a single INSTANTIATE invocation.
+//
+// Phase 38 (Fuel 6c.4 Gap 3) extended the matrix to U32 / I64 cond
+// dtypes and all int + Fp8E4M3 value dtypes; those instantiations
+// live in `where_dtype_fanout.cu` and use the explicit
+// `where_<cond>cond_<value>_run` naming. The u8-cond fp symbols here
+// keep their no-prefix names (`where_f32_run`, etc.) for source
+// compat — they implicitly mean "u8 cond".
 
 #include "../include/baracuda_elementwise.cuh"
 

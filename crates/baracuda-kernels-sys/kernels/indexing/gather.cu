@@ -27,3 +27,13 @@ BARACUDA_KERNELS_GATHER_BACKWARD_INSTANTIATE(gather_backward_f64, double, int32_
 
 BARACUDA_KERNELS_GATHER_BACKWARD_INSTANTIATE(gather_backward_i64idx_f32, float,  int64_t)
 BARACUDA_KERNELS_GATHER_BACKWARD_INSTANTIATE(gather_backward_i64idx_f64, double, int64_t)
+
+// Phase 39 (Fuel 6c.4 Gap 5) — u8 idx fanout for gather FW.
+// The kernel templates compile fine against `uint8_t` (the kernel's
+// `(int64_t)index[off]` zero-extends), and the bounds check
+// `idx_val < 0 || idx_val >= src_dim_size` correctly accepts the
+// 0..=255 unsigned range. No IndexElement Rust trait extension yet
+// (sealed trait change deferred to a follow-up); these symbols are
+// callable directly by FFI consumers.
+BARACUDA_KERNELS_GATHER_INSTANTIATE(gather_u8idx_f32, float,  uint8_t)
+BARACUDA_KERNELS_GATHER_INSTANTIATE(gather_u8idx_f64, double, uint8_t)

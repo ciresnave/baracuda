@@ -339,12 +339,13 @@ pub mod indexing;
 
 pub use indexing::{
     GatherArgs, GatherBackwardArgs, GatherBackwardDescriptor, GatherBackwardPlan,
-    GatherDescriptor, GatherPlan, IndexSelectArgs, IndexSelectBackwardArgs,
-    IndexSelectBackwardDescriptor, IndexSelectBackwardPlan, IndexSelectDescriptor,
-    IndexSelectPlan, MaskedFillArgs, MaskedFillBackwardArgs, MaskedFillBackwardDescriptor,
-    MaskedFillBackwardPlan, MaskedFillDescriptor, MaskedFillPlan, NonzeroArgs,
-    NonzeroDescriptor, NonzeroPlan, OneHotArgs, OneHotDescriptor, OneHotPlan, ScatterAddArgs,
-    ScatterAddDescriptor, ScatterAddPlan,
+    GatherDescriptor, GatherPlan, IndexAddArgs, IndexAddDescriptor, IndexAddPlan, IndexSelectArgs,
+    IndexSelectBackwardArgs, IndexSelectBackwardDescriptor, IndexSelectBackwardPlan,
+    IndexSelectDescriptor, IndexSelectPlan, MaskedFillArgs, MaskedFillBackwardArgs,
+    MaskedFillBackwardDescriptor, MaskedFillBackwardPlan, MaskedFillDescriptor, MaskedFillPlan,
+    NonzeroArgs, NonzeroDescriptor, NonzeroPlan, OneHotArgs, OneHotDescriptor, OneHotPlan,
+    ScatterArgs, ScatterDescriptor, ScatterPlan, ScatterAddArgs, ScatterAddDescriptor,
+    ScatterAddPlan,
 };
 
 // Embedding family — Phase 7 Milestone 7.5 (Category M). Bespoke
