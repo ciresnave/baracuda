@@ -120,6 +120,66 @@ template <> struct AccMax<__nv_bfloat16> {
     static __device__ __forceinline__ AccT combine(AccT a, AccT b) { return (a > b) ? a : b; }
 };
 
+// ----------------------------------------------------------------------------
+// Phase 37 — `reduce_min_to` and `reduce_prod_to` policies. Mirror the
+// AccSum / AccMax pattern: half / bf16 widen to f32, narrow on store.
+// `AccMin::identity()` = `+FLT_MAX` (matches the per-axis `MinReduce`
+// fanout's `+INFINITY` semantics with the highest finite value as the
+// numerical identity for half-precision-widened accumulators).
+// `AccProd::identity()` = `1`.
+// ----------------------------------------------------------------------------
+
+template <typename T> struct AccMin {
+    using AccT = T;
+    static __device__ __forceinline__ AccT identity();
+    static __device__ __forceinline__ AccT load(const T* p) { return *p; }
+    static __device__ __forceinline__ void store(T* p, AccT v) { *p = v; }
+    static __device__ __forceinline__ AccT combine(AccT a, AccT b) { return (a < b) ? a : b; }
+};
+
+template <> __device__ __forceinline__ float  AccMin<float>::identity()  { return FLT_MAX; }
+template <> __device__ __forceinline__ double AccMin<double>::identity() { return DBL_MAX; }
+
+template <> struct AccMin<__half> {
+    using AccT = float;
+    static __device__ __forceinline__ AccT identity() { return FLT_MAX; }
+    static __device__ __forceinline__ AccT load(const __half* p) { return __half2float(*p); }
+    static __device__ __forceinline__ void store(__half* p, AccT v) { *p = __float2half(v); }
+    static __device__ __forceinline__ AccT combine(AccT a, AccT b) { return (a < b) ? a : b; }
+};
+
+template <> struct AccMin<__nv_bfloat16> {
+    using AccT = float;
+    static __device__ __forceinline__ AccT identity() { return FLT_MAX; }
+    static __device__ __forceinline__ AccT load(const __nv_bfloat16* p) { return __bfloat162float(*p); }
+    static __device__ __forceinline__ void store(__nv_bfloat16* p, AccT v) { *p = __float2bfloat16(v); }
+    static __device__ __forceinline__ AccT combine(AccT a, AccT b) { return (a < b) ? a : b; }
+};
+
+template <typename T> struct AccProd {
+    using AccT = T;
+    static __device__ __forceinline__ AccT identity() { return AccT(1); }
+    static __device__ __forceinline__ AccT load(const T* p) { return *p; }
+    static __device__ __forceinline__ void store(T* p, AccT v) { *p = v; }
+    static __device__ __forceinline__ AccT combine(AccT a, AccT b) { return a * b; }
+};
+
+template <> struct AccProd<__half> {
+    using AccT = float;
+    static __device__ __forceinline__ AccT identity() { return 1.0f; }
+    static __device__ __forceinline__ AccT load(const __half* p) { return __half2float(*p); }
+    static __device__ __forceinline__ void store(__half* p, AccT v) { *p = __float2half(v); }
+    static __device__ __forceinline__ AccT combine(AccT a, AccT b) { return a * b; }
+};
+
+template <> struct AccProd<__nv_bfloat16> {
+    using AccT = float;
+    static __device__ __forceinline__ AccT identity() { return 1.0f; }
+    static __device__ __forceinline__ AccT load(const __nv_bfloat16* p) { return __bfloat162float(*p); }
+    static __device__ __forceinline__ void store(__nv_bfloat16* p, AccT v) { *p = __float2bfloat16(v); }
+    static __device__ __forceinline__ AccT combine(AccT a, AccT b) { return a * b; }
+};
+
 struct DimsI32 { int32_t v[MAX_RANK]; };
 struct DimsI64 { int64_t v[MAX_RANK]; };
 
@@ -316,6 +376,63 @@ __host__ inline int32_t launch_reduce_to(
             input_shape, input_stride, rank_in, output_shape, stream);                                \
     }                                                                                                 \
     extern "C" int32_t baracuda_kernels_reduce_max_to_##SUFFIX##_can_implement(                      \
+        const void* /*src*/, const void* /*dst*/,                                                     \
+        const int32_t* /*input_shape*/, const int64_t* /*input_stride*/,                              \
+        int32_t rank_in,                                                                              \
+        const int32_t* /*output_shape*/)                                                              \
+    {                                                                                                 \
+        if (rank_in < 0 || rank_in > baracuda::reduce_to::MAX_RANK) return 2;                         \
+        return 0;                                                                                     \
+    }
+
+// Phase 37 Gap 1a — broadcast-reverse min and prod. Same dispatch
+// shape as reduce_sum_to / reduce_max_to; the policy supplies the
+// identity (+FLT_MAX for min, 1 for prod) and the combine op.
+#define BARACUDA_KERNELS_REDUCE_MIN_TO_INSTANTIATE(SUFFIX, T)                                         \
+    extern "C" int32_t baracuda_kernels_reduce_min_to_##SUFFIX##_run(                                \
+        const void* src, void* dst,                                                                   \
+        const int32_t* input_shape, const int64_t* input_stride,                                      \
+        int32_t rank_in,                                                                              \
+        const int32_t* output_shape,                                                                  \
+        void* /*workspace*/, size_t /*workspace_bytes*/,                                              \
+        void* stream_ptr)                                                                             \
+    {                                                                                                 \
+        if (rank_in < 0) return 2;                                                                   \
+        if (src == nullptr || dst == nullptr) return 2;                                              \
+        if (input_shape == nullptr || input_stride == nullptr || output_shape == nullptr) return 2;   \
+        cudaStream_t stream = static_cast<cudaStream_t>(stream_ptr);                                  \
+        return baracuda::reduce_to::launch_reduce_to<T, baracuda::reduce_to::AccMin<T>>(              \
+            static_cast<const T*>(src), static_cast<T*>(dst),                                         \
+            input_shape, input_stride, rank_in, output_shape, stream);                                \
+    }                                                                                                 \
+    extern "C" int32_t baracuda_kernels_reduce_min_to_##SUFFIX##_can_implement(                      \
+        const void* /*src*/, const void* /*dst*/,                                                     \
+        const int32_t* /*input_shape*/, const int64_t* /*input_stride*/,                              \
+        int32_t rank_in,                                                                              \
+        const int32_t* /*output_shape*/)                                                              \
+    {                                                                                                 \
+        if (rank_in < 0 || rank_in > baracuda::reduce_to::MAX_RANK) return 2;                         \
+        return 0;                                                                                     \
+    }
+
+#define BARACUDA_KERNELS_REDUCE_PROD_TO_INSTANTIATE(SUFFIX, T)                                        \
+    extern "C" int32_t baracuda_kernels_reduce_prod_to_##SUFFIX##_run(                               \
+        const void* src, void* dst,                                                                   \
+        const int32_t* input_shape, const int64_t* input_stride,                                      \
+        int32_t rank_in,                                                                              \
+        const int32_t* output_shape,                                                                  \
+        void* /*workspace*/, size_t /*workspace_bytes*/,                                              \
+        void* stream_ptr)                                                                             \
+    {                                                                                                 \
+        if (rank_in < 0) return 2;                                                                   \
+        if (src == nullptr || dst == nullptr) return 2;                                              \
+        if (input_shape == nullptr || input_stride == nullptr || output_shape == nullptr) return 2;   \
+        cudaStream_t stream = static_cast<cudaStream_t>(stream_ptr);                                  \
+        return baracuda::reduce_to::launch_reduce_to<T, baracuda::reduce_to::AccProd<T>>(             \
+            static_cast<const T*>(src), static_cast<T*>(dst),                                         \
+            input_shape, input_stride, rank_in, output_shape, stream);                                \
+    }                                                                                                 \
+    extern "C" int32_t baracuda_kernels_reduce_prod_to_##SUFFIX##_can_implement(                     \
         const void* /*src*/, const void* /*dst*/,                                                     \
         const int32_t* /*input_shape*/, const int64_t* /*input_stride*/,                              \
         int32_t rank_in,                                                                              \

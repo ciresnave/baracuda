@@ -7,18 +7,15 @@ effort within each category. Authoritative status per op lives in
 [`OP-MATRIX.md`](OP-MATRIX.md); historical phase summaries live in
 [`ARCHITECTURE.md`](ARCHITECTURE.md).
 
-The current tag is **v0.0.1-alpha.50** with **2229 GPU tests passing,
-zero failures** on RTX 4070 (sm_89) across **638 binaries**. **First
-clean regression of the Phase 22-35 sweep.** Phase 35 alpha.50
-delivered five test-infra fixes that closed every known flake:
-cuBLAS handle retry (Phase 30 parallel-init race), cuDNN handle
-retry (CTC path), `Stream::capture` panic-safe Drop guard
-(ThreadLocal capture state leak across cargo's thread reuse),
-`cudaResourceDesc` size + alignment correctness (the release-only
-STATUS_ACCESS_VIOLATION root cause in wave5_smoke — Rust struct
-was 48 bytes vs C's 64+, AND lacked `repr(align(8))` so 8-aligned
-union fields landed misaligned), and `mmvq_w_offset_alignment` test
-properly `#[cfg(debug_assertions)]`-gated.
+The current tag is **v0.0.1-alpha.51** with **2247 GPU tests passing,
+zero failures** on RTX 4070 (sm_89) across **641 binaries**. **Second
+consecutive clean regression** (Phase 35 was the first). Phase 36
+alpha.51 ships the first 3 of 6 gaps from Fuel's Phase 6c.4 batch
+ask: Gap 2 (RoPE apply with precomputed cos/sin tables — 16 FFI
+symbols), Gap 4 (Fill missing dtypes + strided variant — 28
+symbols), Gap 6a (Argsort dtype fanout u8/i8/u32/i16/bf16/f16/
+fp8e4m3 — 14 symbols). 58 new FFI declarations total. Gaps 1, 3,
+5, 6b are scheduled for Phase 37-40.
 
 ---
 

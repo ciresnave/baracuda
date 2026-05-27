@@ -5065,6 +5065,224 @@ unsafe extern "C" {
         stream: *mut c_void,
     ) -> i32;
 
+    // ====================================================================
+    // Phase 37 Gap 1b — Integer-dtype single-axis Reduce family.
+    //
+    // Coverage: Sum / Min / Max / Prod × {u8, i8, u32, i16, i32, i64}.
+    //
+    // **Sum and Prod accumulator widening contract**: the internal
+    // accumulator is `i64` (signed dtypes) or `u64` (unsigned), and the
+    // result is **narrowed (wraps on overflow) back to the input
+    // dtype at the store site**. This matches Fuel's CPU reference,
+    // which performs the reduction in the same dtype as input/output
+    // and accepts the wrap. The widening only affects the bit-level
+    // result when the unwrapped infinite-precision answer happens to
+    // straddle multiple 2^N boundaries during accumulation — without
+    // widening, the partial-sum wrapping order would diverge from the
+    // CPU's left-to-right modulo-2^N accumulation. With widening, the
+    // GPU and CPU agree on the bits modulo 2^N.
+    //
+    // Min and Max use same-dtype throughout (no overflow concern).
+
+    /// `sum(x, axis=k)` with u8 input/output (wider u64 accumulator,
+    /// wrap-on-overflow narrow on store).
+    pub fn baracuda_kernels_reduce_sum_u8_run(
+        output_numel: i64, rank: i32, output_shape: *const i32,
+        stride_x: *const i64, stride_y: *const i64,
+        reduce_axis: i32, reduce_extent: i32, reduce_stride_x: i64,
+        x: *const c_void, y: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// `sum(x, axis=k)` with i8 input/output (wider i64 accumulator).
+    pub fn baracuda_kernels_reduce_sum_i8_run(
+        output_numel: i64, rank: i32, output_shape: *const i32,
+        stride_x: *const i64, stride_y: *const i64,
+        reduce_axis: i32, reduce_extent: i32, reduce_stride_x: i64,
+        x: *const c_void, y: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// `sum(x, axis=k)` with u32 input/output (wider u64 accumulator).
+    pub fn baracuda_kernels_reduce_sum_u32_run(
+        output_numel: i64, rank: i32, output_shape: *const i32,
+        stride_x: *const i64, stride_y: *const i64,
+        reduce_axis: i32, reduce_extent: i32, reduce_stride_x: i64,
+        x: *const c_void, y: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// `sum(x, axis=k)` with i16 input/output (wider i64 accumulator).
+    pub fn baracuda_kernels_reduce_sum_i16_run(
+        output_numel: i64, rank: i32, output_shape: *const i32,
+        stride_x: *const i64, stride_y: *const i64,
+        reduce_axis: i32, reduce_extent: i32, reduce_stride_x: i64,
+        x: *const c_void, y: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// `sum(x, axis=k)` with i32 input/output (wider i64 accumulator).
+    pub fn baracuda_kernels_reduce_sum_i32_run(
+        output_numel: i64, rank: i32, output_shape: *const i32,
+        stride_x: *const i64, stride_y: *const i64,
+        reduce_axis: i32, reduce_extent: i32, reduce_stride_x: i64,
+        x: *const c_void, y: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// `sum(x, axis=k)` with i64 input/output. Accumulator and output
+    /// share dtype; modulo-2^64 wrap is the natural device behaviour.
+    pub fn baracuda_kernels_reduce_sum_i64_run(
+        output_numel: i64, rank: i32, output_shape: *const i32,
+        stride_x: *const i64, stride_y: *const i64,
+        reduce_axis: i32, reduce_extent: i32, reduce_stride_x: i64,
+        x: *const c_void, y: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// `min(x, axis=k)` with u8 input/output (same-dtype, init = `UINT8_MAX`).
+    pub fn baracuda_kernels_reduce_min_u8_run(
+        output_numel: i64, rank: i32, output_shape: *const i32,
+        stride_x: *const i64, stride_y: *const i64,
+        reduce_axis: i32, reduce_extent: i32, reduce_stride_x: i64,
+        x: *const c_void, y: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// `min(x, axis=k)` with i8 input/output (init = `INT8_MAX`).
+    pub fn baracuda_kernels_reduce_min_i8_run(
+        output_numel: i64, rank: i32, output_shape: *const i32,
+        stride_x: *const i64, stride_y: *const i64,
+        reduce_axis: i32, reduce_extent: i32, reduce_stride_x: i64,
+        x: *const c_void, y: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// `min(x, axis=k)` with u32 input/output (init = `UINT32_MAX`).
+    pub fn baracuda_kernels_reduce_min_u32_run(
+        output_numel: i64, rank: i32, output_shape: *const i32,
+        stride_x: *const i64, stride_y: *const i64,
+        reduce_axis: i32, reduce_extent: i32, reduce_stride_x: i64,
+        x: *const c_void, y: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// `min(x, axis=k)` with i16 input/output (init = `INT16_MAX`).
+    pub fn baracuda_kernels_reduce_min_i16_run(
+        output_numel: i64, rank: i32, output_shape: *const i32,
+        stride_x: *const i64, stride_y: *const i64,
+        reduce_axis: i32, reduce_extent: i32, reduce_stride_x: i64,
+        x: *const c_void, y: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// `min(x, axis=k)` with i32 input/output (init = `INT32_MAX`).
+    pub fn baracuda_kernels_reduce_min_i32_run(
+        output_numel: i64, rank: i32, output_shape: *const i32,
+        stride_x: *const i64, stride_y: *const i64,
+        reduce_axis: i32, reduce_extent: i32, reduce_stride_x: i64,
+        x: *const c_void, y: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// `min(x, axis=k)` with i64 input/output (init = `INT64_MAX`).
+    pub fn baracuda_kernels_reduce_min_i64_run(
+        output_numel: i64, rank: i32, output_shape: *const i32,
+        stride_x: *const i64, stride_y: *const i64,
+        reduce_axis: i32, reduce_extent: i32, reduce_stride_x: i64,
+        x: *const c_void, y: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// `max(x, axis=k)` with u8 input/output (init = `0`).
+    pub fn baracuda_kernels_reduce_max_u8_run(
+        output_numel: i64, rank: i32, output_shape: *const i32,
+        stride_x: *const i64, stride_y: *const i64,
+        reduce_axis: i32, reduce_extent: i32, reduce_stride_x: i64,
+        x: *const c_void, y: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// `max(x, axis=k)` with i8 input/output (init = `INT8_MIN`).
+    pub fn baracuda_kernels_reduce_max_i8_run(
+        output_numel: i64, rank: i32, output_shape: *const i32,
+        stride_x: *const i64, stride_y: *const i64,
+        reduce_axis: i32, reduce_extent: i32, reduce_stride_x: i64,
+        x: *const c_void, y: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// `max(x, axis=k)` with u32 input/output (init = `0`).
+    pub fn baracuda_kernels_reduce_max_u32_run(
+        output_numel: i64, rank: i32, output_shape: *const i32,
+        stride_x: *const i64, stride_y: *const i64,
+        reduce_axis: i32, reduce_extent: i32, reduce_stride_x: i64,
+        x: *const c_void, y: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// `max(x, axis=k)` with i16 input/output (init = `INT16_MIN`).
+    pub fn baracuda_kernels_reduce_max_i16_run(
+        output_numel: i64, rank: i32, output_shape: *const i32,
+        stride_x: *const i64, stride_y: *const i64,
+        reduce_axis: i32, reduce_extent: i32, reduce_stride_x: i64,
+        x: *const c_void, y: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// `max(x, axis=k)` with i32 input/output (init = `INT32_MIN`).
+    pub fn baracuda_kernels_reduce_max_i32_run(
+        output_numel: i64, rank: i32, output_shape: *const i32,
+        stride_x: *const i64, stride_y: *const i64,
+        reduce_axis: i32, reduce_extent: i32, reduce_stride_x: i64,
+        x: *const c_void, y: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// `max(x, axis=k)` with i64 input/output (init = `INT64_MIN`).
+    pub fn baracuda_kernels_reduce_max_i64_run(
+        output_numel: i64, rank: i32, output_shape: *const i32,
+        stride_x: *const i64, stride_y: *const i64,
+        reduce_axis: i32, reduce_extent: i32, reduce_stride_x: i64,
+        x: *const c_void, y: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    /// `prod(x, axis=k)` with u8 input/output (wider u64 accumulator,
+    /// wrap-on-overflow narrow on store).
+    pub fn baracuda_kernels_reduce_prod_u8_run(
+        output_numel: i64, rank: i32, output_shape: *const i32,
+        stride_x: *const i64, stride_y: *const i64,
+        reduce_axis: i32, reduce_extent: i32, reduce_stride_x: i64,
+        x: *const c_void, y: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// `prod(x, axis=k)` with i8 input/output (wider i64 accumulator).
+    pub fn baracuda_kernels_reduce_prod_i8_run(
+        output_numel: i64, rank: i32, output_shape: *const i32,
+        stride_x: *const i64, stride_y: *const i64,
+        reduce_axis: i32, reduce_extent: i32, reduce_stride_x: i64,
+        x: *const c_void, y: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// `prod(x, axis=k)` with u32 input/output (wider u64 accumulator).
+    pub fn baracuda_kernels_reduce_prod_u32_run(
+        output_numel: i64, rank: i32, output_shape: *const i32,
+        stride_x: *const i64, stride_y: *const i64,
+        reduce_axis: i32, reduce_extent: i32, reduce_stride_x: i64,
+        x: *const c_void, y: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// `prod(x, axis=k)` with i16 input/output (wider i64 accumulator).
+    pub fn baracuda_kernels_reduce_prod_i16_run(
+        output_numel: i64, rank: i32, output_shape: *const i32,
+        stride_x: *const i64, stride_y: *const i64,
+        reduce_axis: i32, reduce_extent: i32, reduce_stride_x: i64,
+        x: *const c_void, y: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// `prod(x, axis=k)` with i32 input/output (wider i64 accumulator).
+    pub fn baracuda_kernels_reduce_prod_i32_run(
+        output_numel: i64, rank: i32, output_shape: *const i32,
+        stride_x: *const i64, stride_y: *const i64,
+        reduce_axis: i32, reduce_extent: i32, reduce_stride_x: i64,
+        x: *const c_void, y: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// `prod(x, axis=k)` with i64 input/output. Modulo-2^64 wrap.
+    pub fn baracuda_kernels_reduce_prod_i64_run(
+        output_numel: i64, rank: i32, output_shape: *const i32,
+        stride_x: *const i64, stride_y: *const i64,
+        reduce_axis: i32, reduce_extent: i32, reduce_stride_x: i64,
+        x: *const c_void, y: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
     /// Norm2 reduction along one axis, f32. `y = sqrt(sum(x*x))` —
     /// shares the simple-reduce parameter shape.
     pub fn baracuda_kernels_reduce_norm2_f32_run(
@@ -10349,6 +10567,214 @@ unsafe extern "C" {
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,
+    ) -> i32;
+
+    // ====================================================================
+    // Phase 37 Gap 1b — integer-dtype argmin / argmax.
+    //
+    // Coverage: 6 input dtypes × 2 ops × 2 idx dtypes = 24 SKUs.
+    // Ties broken by FIRST occurrence (smallest index wins) — same as
+    // the FP family. Idx-dtype suffix is explicit on every symbol
+    // (`_i32` or `_i64`) — no implicit-i64-default carve-out for
+    // integer inputs.
+    // ====================================================================
+
+    // ---- i32 idx output ----
+
+    /// `argmax(x, axis=k)` u8 input, i32 idx output.
+    pub fn baracuda_kernels_arg_reduce_argmax_u8_i32_run(
+        output_numel: i64, rank: i32, output_shape: *const i32,
+        stride_x: *const i64, stride_y: *const i64,
+        reduce_axis: i32, reduce_extent: i32, reduce_stride_x: i64,
+        x: *const c_void, y: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// `argmin(x, axis=k)` u8 input, i32 idx output.
+    pub fn baracuda_kernels_arg_reduce_argmin_u8_i32_run(
+        output_numel: i64, rank: i32, output_shape: *const i32,
+        stride_x: *const i64, stride_y: *const i64,
+        reduce_axis: i32, reduce_extent: i32, reduce_stride_x: i64,
+        x: *const c_void, y: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// `argmax(x, axis=k)` i8 input, i32 idx output.
+    pub fn baracuda_kernels_arg_reduce_argmax_i8_i32_run(
+        output_numel: i64, rank: i32, output_shape: *const i32,
+        stride_x: *const i64, stride_y: *const i64,
+        reduce_axis: i32, reduce_extent: i32, reduce_stride_x: i64,
+        x: *const c_void, y: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// `argmin(x, axis=k)` i8 input, i32 idx output.
+    pub fn baracuda_kernels_arg_reduce_argmin_i8_i32_run(
+        output_numel: i64, rank: i32, output_shape: *const i32,
+        stride_x: *const i64, stride_y: *const i64,
+        reduce_axis: i32, reduce_extent: i32, reduce_stride_x: i64,
+        x: *const c_void, y: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// `argmax(x, axis=k)` u32 input, i32 idx output.
+    pub fn baracuda_kernels_arg_reduce_argmax_u32_i32_run(
+        output_numel: i64, rank: i32, output_shape: *const i32,
+        stride_x: *const i64, stride_y: *const i64,
+        reduce_axis: i32, reduce_extent: i32, reduce_stride_x: i64,
+        x: *const c_void, y: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// `argmin(x, axis=k)` u32 input, i32 idx output.
+    pub fn baracuda_kernels_arg_reduce_argmin_u32_i32_run(
+        output_numel: i64, rank: i32, output_shape: *const i32,
+        stride_x: *const i64, stride_y: *const i64,
+        reduce_axis: i32, reduce_extent: i32, reduce_stride_x: i64,
+        x: *const c_void, y: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// `argmax(x, axis=k)` i16 input, i32 idx output.
+    pub fn baracuda_kernels_arg_reduce_argmax_i16_i32_run(
+        output_numel: i64, rank: i32, output_shape: *const i32,
+        stride_x: *const i64, stride_y: *const i64,
+        reduce_axis: i32, reduce_extent: i32, reduce_stride_x: i64,
+        x: *const c_void, y: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// `argmin(x, axis=k)` i16 input, i32 idx output.
+    pub fn baracuda_kernels_arg_reduce_argmin_i16_i32_run(
+        output_numel: i64, rank: i32, output_shape: *const i32,
+        stride_x: *const i64, stride_y: *const i64,
+        reduce_axis: i32, reduce_extent: i32, reduce_stride_x: i64,
+        x: *const c_void, y: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// `argmax(x, axis=k)` i32 input, i32 idx output.
+    pub fn baracuda_kernels_arg_reduce_argmax_i32_i32_run(
+        output_numel: i64, rank: i32, output_shape: *const i32,
+        stride_x: *const i64, stride_y: *const i64,
+        reduce_axis: i32, reduce_extent: i32, reduce_stride_x: i64,
+        x: *const c_void, y: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// `argmin(x, axis=k)` i32 input, i32 idx output.
+    pub fn baracuda_kernels_arg_reduce_argmin_i32_i32_run(
+        output_numel: i64, rank: i32, output_shape: *const i32,
+        stride_x: *const i64, stride_y: *const i64,
+        reduce_axis: i32, reduce_extent: i32, reduce_stride_x: i64,
+        x: *const c_void, y: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// `argmax(x, axis=k)` i64 input, i32 idx output.
+    pub fn baracuda_kernels_arg_reduce_argmax_i64_i32_run(
+        output_numel: i64, rank: i32, output_shape: *const i32,
+        stride_x: *const i64, stride_y: *const i64,
+        reduce_axis: i32, reduce_extent: i32, reduce_stride_x: i64,
+        x: *const c_void, y: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// `argmin(x, axis=k)` i64 input, i32 idx output.
+    pub fn baracuda_kernels_arg_reduce_argmin_i64_i32_run(
+        output_numel: i64, rank: i32, output_shape: *const i32,
+        stride_x: *const i64, stride_y: *const i64,
+        reduce_axis: i32, reduce_extent: i32, reduce_stride_x: i64,
+        x: *const c_void, y: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    // ---- i64 idx output ----
+
+    /// `argmax(x, axis=k)` u8 input, i64 idx output.
+    pub fn baracuda_kernels_arg_reduce_argmax_u8_i64_run(
+        output_numel: i64, rank: i32, output_shape: *const i32,
+        stride_x: *const i64, stride_y: *const i64,
+        reduce_axis: i32, reduce_extent: i32, reduce_stride_x: i64,
+        x: *const c_void, y: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// `argmin(x, axis=k)` u8 input, i64 idx output.
+    pub fn baracuda_kernels_arg_reduce_argmin_u8_i64_run(
+        output_numel: i64, rank: i32, output_shape: *const i32,
+        stride_x: *const i64, stride_y: *const i64,
+        reduce_axis: i32, reduce_extent: i32, reduce_stride_x: i64,
+        x: *const c_void, y: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// `argmax(x, axis=k)` i8 input, i64 idx output.
+    pub fn baracuda_kernels_arg_reduce_argmax_i8_i64_run(
+        output_numel: i64, rank: i32, output_shape: *const i32,
+        stride_x: *const i64, stride_y: *const i64,
+        reduce_axis: i32, reduce_extent: i32, reduce_stride_x: i64,
+        x: *const c_void, y: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// `argmin(x, axis=k)` i8 input, i64 idx output.
+    pub fn baracuda_kernels_arg_reduce_argmin_i8_i64_run(
+        output_numel: i64, rank: i32, output_shape: *const i32,
+        stride_x: *const i64, stride_y: *const i64,
+        reduce_axis: i32, reduce_extent: i32, reduce_stride_x: i64,
+        x: *const c_void, y: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// `argmax(x, axis=k)` u32 input, i64 idx output.
+    pub fn baracuda_kernels_arg_reduce_argmax_u32_i64_run(
+        output_numel: i64, rank: i32, output_shape: *const i32,
+        stride_x: *const i64, stride_y: *const i64,
+        reduce_axis: i32, reduce_extent: i32, reduce_stride_x: i64,
+        x: *const c_void, y: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// `argmin(x, axis=k)` u32 input, i64 idx output.
+    pub fn baracuda_kernels_arg_reduce_argmin_u32_i64_run(
+        output_numel: i64, rank: i32, output_shape: *const i32,
+        stride_x: *const i64, stride_y: *const i64,
+        reduce_axis: i32, reduce_extent: i32, reduce_stride_x: i64,
+        x: *const c_void, y: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// `argmax(x, axis=k)` i16 input, i64 idx output.
+    pub fn baracuda_kernels_arg_reduce_argmax_i16_i64_run(
+        output_numel: i64, rank: i32, output_shape: *const i32,
+        stride_x: *const i64, stride_y: *const i64,
+        reduce_axis: i32, reduce_extent: i32, reduce_stride_x: i64,
+        x: *const c_void, y: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// `argmin(x, axis=k)` i16 input, i64 idx output.
+    pub fn baracuda_kernels_arg_reduce_argmin_i16_i64_run(
+        output_numel: i64, rank: i32, output_shape: *const i32,
+        stride_x: *const i64, stride_y: *const i64,
+        reduce_axis: i32, reduce_extent: i32, reduce_stride_x: i64,
+        x: *const c_void, y: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// `argmax(x, axis=k)` i32 input, i64 idx output.
+    pub fn baracuda_kernels_arg_reduce_argmax_i32_i64_run(
+        output_numel: i64, rank: i32, output_shape: *const i32,
+        stride_x: *const i64, stride_y: *const i64,
+        reduce_axis: i32, reduce_extent: i32, reduce_stride_x: i64,
+        x: *const c_void, y: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// `argmin(x, axis=k)` i32 input, i64 idx output.
+    pub fn baracuda_kernels_arg_reduce_argmin_i32_i64_run(
+        output_numel: i64, rank: i32, output_shape: *const i32,
+        stride_x: *const i64, stride_y: *const i64,
+        reduce_axis: i32, reduce_extent: i32, reduce_stride_x: i64,
+        x: *const c_void, y: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// `argmax(x, axis=k)` i64 input, i64 idx output.
+    pub fn baracuda_kernels_arg_reduce_argmax_i64_i64_run(
+        output_numel: i64, rank: i32, output_shape: *const i32,
+        stride_x: *const i64, stride_y: *const i64,
+        reduce_axis: i32, reduce_extent: i32, reduce_stride_x: i64,
+        x: *const c_void, y: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// `argmin(x, axis=k)` i64 input, i64 idx output.
+    pub fn baracuda_kernels_arg_reduce_argmin_i64_i64_run(
+        output_numel: i64, rank: i32, output_shape: *const i32,
+        stride_x: *const i64, stride_y: *const i64,
+        reduce_axis: i32, reduce_extent: i32, reduce_stride_x: i64,
+        x: *const c_void, y: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
     ) -> i32;
 }
 
@@ -24108,6 +24534,140 @@ unsafe extern "C" {
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
     ) -> i32;
     pub fn baracuda_kernels_reduce_max_to_bf16_can_implement(
+        src: *const c_void, dst: *const c_void,
+        input_shape: *const i32, input_stride: *const i64,
+        rank_in: i32,
+        output_shape: *const i32,
+    ) -> i32;
+
+    // ====================================================================
+    // Phase 37 Gap 1a — broadcast-reverse MIN and PROD.
+    //
+    // Same shape and contract as `reduce_sum_to` / `reduce_max_to`. The
+    // empty-broadcast identity is `+FLT_MAX` (Min) and `1` (Prod). Half-
+    // precision storage of the Min identity narrows to `+inf` on store
+    // (matches the per-axis `MinReduce`'s `+INFINITY` initial value).
+    // ====================================================================
+
+    /// `reduce_min_to`, f32. Identity is `+FLT_MAX` when the broadcast
+    /// set is empty.
+    pub fn baracuda_kernels_reduce_min_to_f32_run(
+        src: *const c_void, dst: *mut c_void,
+        input_shape: *const i32, input_stride: *const i64,
+        rank_in: i32,
+        output_shape: *const i32,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_reduce_min_to_f32_can_implement(
+        src: *const c_void, dst: *const c_void,
+        input_shape: *const i32, input_stride: *const i64,
+        rank_in: i32,
+        output_shape: *const i32,
+    ) -> i32;
+
+    /// `reduce_min_to`, f64. Identity is `+DBL_MAX`.
+    pub fn baracuda_kernels_reduce_min_to_f64_run(
+        src: *const c_void, dst: *mut c_void,
+        input_shape: *const i32, input_stride: *const i64,
+        rank_in: i32,
+        output_shape: *const i32,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_reduce_min_to_f64_can_implement(
+        src: *const c_void, dst: *const c_void,
+        input_shape: *const i32, input_stride: *const i64,
+        rank_in: i32,
+        output_shape: *const i32,
+    ) -> i32;
+
+    /// `reduce_min_to`, f16. Accumulator widens to f32; identity is
+    /// `+FLT_MAX` in f32 accumulator space, narrowing to `+inf` on
+    /// store.
+    pub fn baracuda_kernels_reduce_min_to_f16_run(
+        src: *const c_void, dst: *mut c_void,
+        input_shape: *const i32, input_stride: *const i64,
+        rank_in: i32,
+        output_shape: *const i32,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_reduce_min_to_f16_can_implement(
+        src: *const c_void, dst: *const c_void,
+        input_shape: *const i32, input_stride: *const i64,
+        rank_in: i32,
+        output_shape: *const i32,
+    ) -> i32;
+
+    /// `reduce_min_to`, bf16.
+    pub fn baracuda_kernels_reduce_min_to_bf16_run(
+        src: *const c_void, dst: *mut c_void,
+        input_shape: *const i32, input_stride: *const i64,
+        rank_in: i32,
+        output_shape: *const i32,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_reduce_min_to_bf16_can_implement(
+        src: *const c_void, dst: *const c_void,
+        input_shape: *const i32, input_stride: *const i64,
+        rank_in: i32,
+        output_shape: *const i32,
+    ) -> i32;
+
+    /// `reduce_prod_to`, f32. Identity is `1` (multiplicative). Half
+    /// dtypes accumulate in f32 then narrow on store.
+    pub fn baracuda_kernels_reduce_prod_to_f32_run(
+        src: *const c_void, dst: *mut c_void,
+        input_shape: *const i32, input_stride: *const i64,
+        rank_in: i32,
+        output_shape: *const i32,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_reduce_prod_to_f32_can_implement(
+        src: *const c_void, dst: *const c_void,
+        input_shape: *const i32, input_stride: *const i64,
+        rank_in: i32,
+        output_shape: *const i32,
+    ) -> i32;
+
+    /// `reduce_prod_to`, f64.
+    pub fn baracuda_kernels_reduce_prod_to_f64_run(
+        src: *const c_void, dst: *mut c_void,
+        input_shape: *const i32, input_stride: *const i64,
+        rank_in: i32,
+        output_shape: *const i32,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_reduce_prod_to_f64_can_implement(
+        src: *const c_void, dst: *const c_void,
+        input_shape: *const i32, input_stride: *const i64,
+        rank_in: i32,
+        output_shape: *const i32,
+    ) -> i32;
+
+    /// `reduce_prod_to`, f16. Cumulative product overflows fast in
+    /// half-precision; callers should keep values close to 1.
+    pub fn baracuda_kernels_reduce_prod_to_f16_run(
+        src: *const c_void, dst: *mut c_void,
+        input_shape: *const i32, input_stride: *const i64,
+        rank_in: i32,
+        output_shape: *const i32,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_reduce_prod_to_f16_can_implement(
+        src: *const c_void, dst: *const c_void,
+        input_shape: *const i32, input_stride: *const i64,
+        rank_in: i32,
+        output_shape: *const i32,
+    ) -> i32;
+
+    /// `reduce_prod_to`, bf16.
+    pub fn baracuda_kernels_reduce_prod_to_bf16_run(
+        src: *const c_void, dst: *mut c_void,
+        input_shape: *const i32, input_stride: *const i64,
+        rank_in: i32,
+        output_shape: *const i32,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_reduce_prod_to_bf16_can_implement(
         src: *const c_void, dst: *const c_void,
         input_shape: *const i32, input_stride: *const i64,
         rank_in: i32,

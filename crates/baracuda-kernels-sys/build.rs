@@ -653,6 +653,15 @@ fn collect_kernel_files() -> Vec<&'static str> {
             "elementwise/unary_step_fp.cu",
             "elementwise/unary_gelu_erf_fp.cu",
             "elementwise/reduce_to_fp.cu",
+            // Phase 37 Gap 1b — integer-dtype Reduce family (single-axis
+            // Sum / Min / Max / Prod, plus Argmin / Argmax i32/i64 idx).
+            // Sum / Prod widen the internal accumulator to i64 / u64 and
+            // narrow on store (wrap-on-overflow, matches Fuel's CPU ref).
+            "elementwise/reduce_sum_int.cu",
+            "elementwise/reduce_min_int.cu",
+            "elementwise/reduce_max_int.cu",
+            "elementwise/reduce_prod_int.cu",
+            "elementwise/arg_reduce_int.cu",
             "elementwise/binary_lerp_fp.cu",
             "elementwise/binary_lerp_backward_fp.cu",
             // Phase 3 Category C′ — gated activations (FW + BW × 4
