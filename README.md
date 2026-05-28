@@ -8,7 +8,7 @@
 A unified Rust ML-op facade over the NVIDIA CUDA ecosystem.
 
 ![License](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue)
-![Status](https://img.shields.io/badge/status-alpha.55-orange)
+![Status](https://img.shields.io/badge/status-alpha.56-orange)
 ![CUDA](https://img.shields.io/badge/CUDA-12.x-76b900)
 ![Tests](https://img.shields.io/badge/regression-2320%2F0-success)
 
@@ -40,8 +40,10 @@ talk to one library directly.
 
 ## Status
 
-**In active development — alpha.55.** **2320 GPU tests passing**
-on an RTX 4070 (sm_89), across **616 binary targets**.
+**In active development — alpha.56.** **2320 GPU tests passing**
+on an RTX 4070 (sm_89), across **616 binary targets**. Phase 42-44
+add three opt-in vendored backends (FA2, mHC.cu, ozIMMU); none are
+on the default build path.
 
 Phase coverage (see [`ARCHITECTURE.md`](ARCHITECTURE.md) for the phase
 matrix):
@@ -89,7 +91,10 @@ matrix):
 | 39 | Fuel 6c.4 part 4/4 (alpha.53, bundled with Phase 38): Indexing Tier 1 — NEW scatter (pure assign) + index_add for {f32/f64/f16/bf16} × {i32, i64idx} (16 syms) + gather u8idx extras for {f32, f64} (2 syms). 18 new FFI symbols total. Existing per-axis stride arrays meant no separate contig/strided split needed. f16/bf16 index_add uses the Phase 11.3 `atomic::add<T>` atomicCAS helper. Scatter documented + tested with disjoint-target indices (last-writer-wins on collisions, caller-aware non-determinism). | done |
 | 40 | Fuel 6c.4 final cleanup (alpha.54): multi-block radix argsort via CUB `DeviceSegmentedRadixSort` for `row_len > 1024` (4 dtypes × 3 entries = 12 syms; bitonic stays for ≤1024) + Indexing Tier 2 integer value-dtype matrix (gather/index_select/scatter for u8/i8/u16/i16/u32/i32/i64 × i32/i64idx = 38 syms; index_add for i32/u32/i64 only = 6 syms). 56 new C symbols total. New `atomic::add<int64_t>` specialization via `unsigned long long*` reinterpret. Tier 3 (fp8e4m3 + sub-32-bit ints for index_add) deferred — no concrete caller. | done |
 | 41 | Fuel 6c.5 final unblock (alpha.55): RoPE interleaved-pair (Gap 7) + RoPE THD-layout (Gap 8) variants. 28 new FFI symbols (FW+BW × 4 fp dtypes × 2 variants + `_can_implement` companions). **Closes the entire Fuel 6c.4/6c.5 batch ask** — Fuel can now drop the last `Id::Reduce` PTX module + retire `fuel-cuda-kernels` workspace member + drop the `cudaforge` build dep. Discovery: existing `rope_apply_*` was already using `(2k, 2k+1)` pairing (not `(i, i+d/2)` as the brief stated) → interleaved symbols are name-aliases on the same kernel; THD is genuinely new. | done |
-| 42+ | Tier 3 indexing fanout if needed; Hopper sm_90a / Blackwell sm_100; 1.0 freeze. | pending (see [`ROADMAP.md`](ROADMAP.md)) |
+| 42 | Flash Attention v2 vendor + `FlashSdpaPlan` backend (alpha.56): Tri Dao's FA2 v2.8.3 (BSD-3) vendored under `crates/baracuda-kernels-sys/vendor/flash-attention/` — Tier 1 (head_dim=128, fp16+bf16, sm_80, FW only) — wired as `BackendKind::FlashAttentionV2` on `FlashSdpaPlan` behind the `fa2` cargo feature. Heuristic routes long-context (seq_q×seq_k ≥ 1024×1024) shapes to FA2, bespoke otherwise; `PlanPreference::prefer_backend` overrides. PyTorch shim headers (at::PhiloxCudaState + C10_CUDA_CHECK) decouple the vendor from torch deps. Tier 2 (BW, varlen, paged, other head_dims) deferred. | done |
+| 43 | mHC.cu vendor + `HyperConnectionPlan` family (alpha.56): DeepSeek-AI's Manifold-Constrained Hyper-Connections residual-mixing op (arXiv:2512.24880) from AndreSlavescu/mHC.cu (MIT) vendored under `crates/baracuda-kernels-sys/vendor/mhc/` — Tier 1 (static-H, bf16 only) — exposed as `HyperConnectionPlan` behind the `mhc` cargo feature. Replaces bare `y = x + sublayer(x)` residual with a learned `n×n` Sinkhorn-Knopp doubly-stochastic mixing matrix. Tier 2 (BW, dynamic-H, fp16/f32) deferred. Requires cuBLAS-Lt (already linked). | done |
+| 44 | ozIMMU FP64-via-Int8-TC backend (alpha.56): enp1s0/ozIMMU (MIT) — Ootomo/Ozaki/Yokota's Ozaki-scheme DGEMM that synthesizes FP64 from S² int8 tensor-core matmuls — vendored under `crates/baracuda-ozimmu-sys/vendor/ozimmu/` with `cutf` submodule pinned alongside. NEW `baracuda-ozimmu-sys` + `baracuda-ozimmu` sibling crates. Wired into `GemmPlan` f64 path as opt-in `BackendKind::Ozaki { slices }` (default stays on CUTLASS/cuBLAS DGEMM — Ozaki is NOT bit-equivalent). Two patches: direct-link mode (no LD_PRELOAD), exclude `cublas.cu`/`culip.cu`. **Linux-only in alpha.56** — Windows requires verifying `cutf` headers don't use POSIX-specific calls. | done |
+| 45+ | Phase 45-51 mainstream-techniques roadmap (FlashInfer cherry-pick, SmoothQuant compose, YaRN/LongRoPE helper, Apex optimizers, Liger FLCE, Marlin/AWQ, Mamba2); Hopper sm_90a / Blackwell sm_100; 1.0 freeze. | pending (see [`ROADMAP.md`](ROADMAP.md)) |
 
 API stability is **not** promised before beta.0. Breaking changes ship in
 each alpha bump and are documented in the workspace `CHANGELOG.md`.
@@ -100,8 +105,8 @@ Add the kernel facade and the driver crate:
 
 ```toml
 [dependencies]
-baracuda-kernels = { version = "0.0.1-alpha.55", features = ["sm89", "cudnn"] }
-baracuda-driver  = "0.0.1-alpha.55"
+baracuda-kernels = { version = "0.0.1-alpha.56", features = ["sm89", "cudnn"] }
+baracuda-driver  = "0.0.1-alpha.56"
 ```
 
 A representative example — single-axis numerically stable softmax over a
@@ -367,6 +372,29 @@ quantization + MMVQ; `guoqingbao/attention.rs`'s fused MoE expert
 kernels). Each adapted source carries an `SPDX-FileCopyrightText:` +
 `SPDX-License-Identifier:` header; the consolidated provenance is in
 [`crates/baracuda-kernels-sys/LICENSE-thirdparty.md`](crates/baracuda-kernels-sys/LICENSE-thirdparty.md).
+
+[**FlashAttention v2**](https://github.com/Dao-AILab/flash-attention)
+(Tri Dao, BSD-3-Clause, pinned at `v2.8.3` /
+`060c9188beec3a8b62b33a3bfa6d5d2d44975fab`) is vendored at
+[`crates/baracuda-kernels-sys/vendor/flash-attention/`](crates/baracuda-kernels-sys/vendor/flash-attention/)
+with verbatim `LICENSE` + `AUTHORS` files and full vendor / scope notes
+in [`VENDOR.md`](crates/baracuda-kernels-sys/vendor/flash-attention/VENDOR.md).
+Gated behind the `fa2` cargo feature on `baracuda-kernels-sys` and
+`baracuda-kernels`; exposed through a backend-choice path on
+`FlashSdpaPlan` (Phase 42).
+
+[**mHC.cu**](https://github.com/AndreSlavescu/mHC.cu) (Andre Slavescu,
+MIT, pinned at `a426939c2dbc11c443db041bcff12b65d1b6482a`) — unofficial
+CUDA implementation of DeepSeek-AI's
+[*Manifold-Constrained Hyper-Connections*](https://arxiv.org/abs/2512.24880)
+paper — is vendored at
+[`crates/baracuda-kernels-sys/vendor/mhc/`](crates/baracuda-kernels-sys/vendor/mhc/)
+with the verbatim upstream `LICENSE`, an `AUTHORS` file, and full
+vendor / scope notes in
+[`VENDOR.md`](crates/baracuda-kernels-sys/vendor/mhc/VENDOR.md). Gated
+behind the `mhc` cargo feature on `baracuda-kernels-sys` and
+`baracuda-kernels`; exposed through the new `HyperConnectionPlan`
+(Phase 43, Tier 1: static-H FW, bf16 weights / f32 activations).
 
 The [`baracuda-forge`](crates/baracuda-forge) build-time kernel-compiler
 crate is a vendored fork of [`cudaforge`](https://github.com/guoqingbao/cudaforge)

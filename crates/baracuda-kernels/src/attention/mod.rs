@@ -71,6 +71,7 @@ pub mod flash_sdpa_backward;
 #[cfg(feature = "sm89")]
 pub mod flash_sdpa_sm89;
 pub mod kv_cache;
+pub mod hyper_connection;
 pub mod rope;
 pub mod rope_backward;
 pub mod sdpa;
@@ -84,6 +85,9 @@ pub use flash_sdpa_backward::{
 };
 #[cfg(feature = "sm89")]
 pub use flash_sdpa_sm89::{FlashSdpaSm89Args, FlashSdpaSm89Descriptor, FlashSdpaSm89Plan};
+pub use hyper_connection::{
+    HyperConnectionArgs, HyperConnectionDescriptor, HyperConnectionPlan,
+};
 pub use kv_cache::{KvCacheAppendArgs, KvCacheAppendDescriptor, KvCacheAppendPlan};
 pub use rope::{RopeArgs, RopeDescriptor, RopePlan};
 pub use rope_backward::{RopeBackwardArgs, RopeBackwardDescriptor, RopeBackwardPlan};

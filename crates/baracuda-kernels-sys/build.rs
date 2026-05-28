@@ -223,6 +223,104 @@ fn main() {
         .watch(collect_header_files())
         .out_dir(&out_dir);
 
+    // Phase 42 — Dao-AILab FlashAttention v2 (vendored under
+    // `vendor/flash-attention/`). Gated by the `fa2` cargo feature.
+    // Compiles the FA2 forward Tier-1 .cu instantiations (head_dim=128,
+    // f16+bf16, causal+non-causal) plus a baracuda C-ABI launcher.
+    //
+    // Required include paths:
+    //   1. CUTLASS (FA2 v2.8.3 uses cute::tensor + cutlass templates).
+    //   2. FA2 PyTorch-free shim (replaces ATen/c10 dependencies).
+    //   3. FA2 src dir (its internal cross-includes are relative).
+    //
+    // Compiler flags FA2 needs:
+    //   * `-std=c++17` — explicit standard. baracuda-forge auto-picks
+    //     c++20 for CUDA 12 toolkits; FA2's cute templates compile fine
+    //     under c++17/20 so we leave auto-select. Explicit override
+    //     here would conflict with the auto-detected setting.
+    //   * `--use_fast_math` — already default in baracuda-forge.
+    //   * `--expt-relaxed-constexpr` and `--expt-extended-lambda` —
+    //     FA2's lambda-based BOOL_SWITCH chain needs these.
+    //   * `-DNDEBUG` — disables CUTLASS's debug-only assertions that
+    //     emit `printf` calls inside hot kernels.
+    //   * `-DFLASH_NAMESPACE=baracuda_fa2` — avoids ODR collisions if
+    //     a downstream binary also links the real PyTorch FA2.
+    if cfg!(feature = "fa2") {
+        let cutlass_include = std::env::var("DEP_CUTLASS_INCLUDE").expect(
+            "DEP_CUTLASS_INCLUDE not set; `fa2` feature requires \
+             baracuda-cutlass-sys to expose CUTLASS headers. \
+             Make sure baracuda-cutlass-sys is in the dependency tree.",
+        );
+        builder = builder
+            // FA2's CUTLASS templates need their internal cute/ + cutlass/
+            // header tree on the include path.
+            .include_path(&cutlass_include)
+            // PyTorch-free shim: satisfies ATen/c10 #includes inside FA2
+            // headers. Must precede any real PyTorch install on -I order
+            // (forge appends paths in the order added).
+            .include_path("vendor/flash-attention/shim")
+            // FA2 source dir for the cross-includes between its own
+            // headers and .cu files (e.g. `#include "flash.h"`).
+            .include_path("vendor/flash-attention/src")
+            .arg("--expt-relaxed-constexpr")
+            .arg("--expt-extended-lambda")
+            .arg("-DNDEBUG")
+            .arg("-DFLASH_NAMESPACE=baracuda_fa2");
+
+        // FA2 Tier-1: 4 forward .cu files (head_dim=128, f16/bf16,
+        // causal/non-causal) + baracuda launcher.
+        for f in &[
+            "vendor/flash-attention/src/flash_fwd_hdim128_fp16_sm80.cu",
+            "vendor/flash-attention/src/flash_fwd_hdim128_fp16_causal_sm80.cu",
+            "vendor/flash-attention/src/flash_fwd_hdim128_bf16_sm80.cu",
+            "vendor/flash-attention/src/flash_fwd_hdim128_bf16_causal_sm80.cu",
+            "kernels/attention/fa2_launcher.cu",
+        ] {
+            if std::path::Path::new(f).exists() {
+                builder = builder.source_files([*f]);
+            }
+        }
+    }
+
+    // Phase 43 — AndreSlavescu/mHC.cu (vendored under `vendor/mhc/`).
+    // Gated by the `mhc` cargo feature. Compiles the baracuda C-ABI
+    // launcher for the static-H FW path; the vendored kernels
+    // themselves are header-only (`.cuh`) and template-instantiated
+    // into the launcher TU.
+    //
+    // Required include paths:
+    //   1. mHC's own include/ tree (mhc_types.h, utils.cuh, profiling.cuh).
+    //   2. mHC's src/ tree for cross-includes between the .cuh kernels.
+    //
+    // Compiler flags mHC needs:
+    //   * `--expt-relaxed-constexpr` — required by mHC's cooperative
+    //     groups + nv_bfloat16 mixed-use.
+    //   * `--expt-extended-lambda` — required by mHC's lambda usage in
+    //     warp-reduction wrappers.
+    //   * mHC's `fused_rmsnorm_matmul.cuh` includes `<cublasLt.h>` so
+    //     the cuBLAS-Lt header dir (part of CUDA toolkit standard
+    //     include) is already on -I via forge's default CUDA discovery.
+    //     The launcher does not exercise this path at runtime (static
+    //     H only) but the header still needs to compile.
+    if cfg!(feature = "mhc") {
+        builder = builder
+            .include_path("vendor/mhc/include")
+            .include_path("vendor/mhc/src")
+            .arg("--expt-relaxed-constexpr")
+            .arg("--expt-extended-lambda");
+
+        // Phase 43 — mHC vendor: one launcher TU. The .cuh kernel
+        // sources are template-instantiated through the launcher's
+        // includes — they are not separately compiled.
+        for f in &[
+            "kernels/attention/mhc_launcher.cu",
+        ] {
+            if std::path::Path::new(f).exists() {
+                builder = builder.source_files([*f]);
+            }
+        }
+    }
+
     if cfg!(feature = "sm90a") {
         builder = builder.compute_cap(90).arg("-DBARACUDA_KERNELS_HAS_SM90A");
     } else if cfg!(feature = "sm89") {

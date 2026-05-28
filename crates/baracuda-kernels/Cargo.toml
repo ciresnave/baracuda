@@ -1,6 +1,6 @@
 [package]
 name = "baracuda-kernels"
-version = "0.0.1-alpha.55"
+version = "0.0.1-alpha.56"
 description = "Unified ML op facade for the baracuda CUDA ecosystem. Exposes every primitive an ML framework would expect (union of PyTorch torch.* + nn.functional and JAX lax.* / numpy ops) through a single Plan-based Rust surface, internally dispatching to baracuda-cutlass, the baracuda-* NVIDIA-library wrappers, or bespoke baracuda-kernels-sys kernels."
 edition.workspace = true
 rust-version.workspace = true
@@ -25,6 +25,32 @@ sm90a = ["baracuda-kernels-sys/sm90a", "baracuda-cutlass/sm90a"]
 # the stock CUDA toolkit. Pulls in Conv2d, Pool2d, and the CtcLoss
 # cuDNN-sibling plans.
 cudnn = ["baracuda-kernels-sys/cudnn"]
+
+# Phase 42 — vendored Dao-AILab FlashAttention v2 (BSD-3-Clause). Adds
+# a backend choice to `FlashSdpaPlan` that picks FA2 for long-context
+# shapes (`seq_q * seq_k >= 1M`) at head_dim=128 in f16/bf16; the
+# bespoke path stays the default for small / decode shapes. Off by
+# default because FA2's CUTLASS-heavy templates add significant build
+# time. Forwards to `baracuda-kernels-sys/fa2`.
+fa2 = ["baracuda-kernels-sys/fa2"]
+
+# Phase 43 — vendored AndreSlavescu/mHC.cu (MIT). Exposes the
+# `HyperConnectionPlan` op family (manifold-constrained
+# hyper-connections, drop-in replacement for transformer residual
+# connections). Forwards to `baracuda-kernels-sys/mhc`. Off by default;
+# adds ~30s of nvcc compile time and pulls in cuBLAS-Lt at link time
+# (which is already a baracuda dependency through the cuSOLVER
+# requirement chain, so no new transitive link surface).
+mhc = ["baracuda-kernels-sys/mhc"]
+
+# Phase 44 — vendored ozIMMU (MIT). Adds the `BackendKind::Ozaki { slices }`
+# dispatch arm to FP64 GEMM, synthesizing a DGEMM from `S²` int8 tensor-
+# core matmuls (Ozaki scheme). Forwards to the `ozimmu` feature on
+# `baracuda-cutlass` (where `GemmPlan` lives). Opt-in because the accuracy
+# contract differs from native DGEMM (comparable at `S>=8` on well-
+# conditioned inputs; NOT bit-exact) and the vendored library adds ~30s
+# of nvcc compile time. Default FP64 path stays on CUTLASS / cuBLAS.
+ozimmu = ["baracuda-cutlass/ozimmu"]
 
 [dependencies]
 baracuda-kernels-types = { workspace = true }

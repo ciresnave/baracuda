@@ -36,6 +36,33 @@
 //! masked attention). Optional upper-triangular causal mask.
 //!
 //! Wired today: `{f32, f16, bf16, f64}`.
+//!
+//! ## Backend choice (Phase 42)
+//!
+//! `FlashSdpaPlan` can route a launch through one of two backends:
+//!
+//! - **Bespoke** (default) — the baracuda-shipped sm_80 / sm_89 Flash
+//!   kernel. Source-of-truth for correctness; integrated with the
+//!   `FlashSdpaBackwardPlan` BW path and the strided-FFI sibling for
+//!   GQA broadcast.
+//! - **FlashAttentionV2** (Phase 42, requires `fa2` cargo feature) —
+//!   vendored Dao-AILab Flash Attention v2.8.3. Long-context-tuned
+//!   kernels with CUTLASS template specialization; wins at
+//!   prefill-class shapes (`seq_q * seq_k ≥ ~1M`). Constraints:
+//!   `head_dim == 128`, dtype ∈ {f16, bf16}, dense (no GQA, no
+//!   varlen). LSE is **f32** regardless of element dtype (FA2 always
+//!   accumulates softmax in f32).
+//!
+//! The default heuristic ([`should_use_fa2`]) picks FA2 for
+//! `head_dim == 128 ∧ dtype ∈ {f16, bf16} ∧ seq_q * seq_k ≥ 1M ∧
+//! num_heads == num_heads_k`, else bespoke. Override via
+//! [`PlanPreference::prefer_backend`] (set to
+//! [`BackendKind::FlashAttentionV2`] or [`BackendKind::Bespoke`]).
+//!
+//! Capture-mode auto-fallback: when the stream is in graph capture
+//! mode, FA2 falls back to bespoke (FA2's launch-time
+//! `cudaFuncSetAttribute` for opt-in dynamic shared memory isn't
+//! capture-safe).
 
 use core::ffi::c_void;
 use core::marker::PhantomData;
@@ -51,6 +78,55 @@ use super::map_status;
 
 /// Maximum supported head dimension for the Flash trailblazer.
 pub const FLASH_SDPA_MAX_D: i32 = 128;
+
+/// Internal backend tag for `FlashSdpaPlan`. Phase 42 added the FA2
+/// variant; bespoke remains the default for all shapes the heuristic
+/// doesn't explicitly route through FA2.
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+enum BackendChoice {
+    Bespoke,
+    #[cfg(feature = "fa2")]
+    FlashAttentionV2,
+}
+
+impl BackendChoice {
+    fn as_public(self) -> BackendKind {
+        match self {
+            BackendChoice::Bespoke => BackendKind::Bespoke,
+            #[cfg(feature = "fa2")]
+            BackendChoice::FlashAttentionV2 => BackendKind::FlashAttentionV2,
+        }
+    }
+}
+
+/// FA2 routing heuristic. Returns `true` when the shape + dtype falls
+/// in the long-context regime where FA2's CUTLASS-tuned tile sizing
+/// beats the bespoke kernel.
+///
+/// Today's rule (validated on RTX 4070 in Phase 42's bench A/B):
+///
+/// - **head_dim != 128 → false.** Tier 1 only ships head_dim=128.
+/// - **dtype not in {f16, bf16} → false.** FA2 has no f32/f64 SKU.
+/// - **num_heads != num_heads_k → false.** Tier 1 doesn't plumb GQA.
+/// - **seq_q × seq_k < 1024 × 1024 → false.** Short-context regime;
+///   bespoke's lower launch overhead wins.
+/// - Otherwise **true** (FA2).
+///
+/// Override via [`PlanPreference::prefer_backend`].
+#[cfg(feature = "fa2")]
+fn should_use_fa2(desc: &FlashSdpaDescriptor, num_heads_k: i32) -> bool {
+    if desc.d_k != 128 || desc.d_v != 128 {
+        return false;
+    }
+    if !matches!(desc.element, ElementKind::F16 | ElementKind::Bf16) {
+        return false;
+    }
+    if num_heads_k != desc.num_heads {
+        return false;  // GQA broadcast not supported on FA2 Tier 1
+    }
+    let work = (desc.query_len as i64) * (desc.key_len as i64);
+    work >= 1024 * 1024
+}
 
 /// Descriptor for a Flash Attention forward op.
 ///
@@ -125,6 +201,7 @@ pub struct FlashSdpaArgs<'a, T: Element> {
 pub struct FlashSdpaPlan<T: Element> {
     desc: FlashSdpaDescriptor,
     sku: KernelSku,
+    backend: BackendChoice,
     _marker: PhantomData<T>,
 }
 
@@ -133,7 +210,7 @@ impl<T: Element> FlashSdpaPlan<T> {
     pub fn select(
         _stream: &Stream,
         desc: &FlashSdpaDescriptor,
-        _pref: PlanPreference,
+        pref: PlanPreference,
     ) -> Result<Self> {
         if desc.element != T::KIND {
             return Err(Error::Unsupported(
@@ -176,6 +253,15 @@ impl<T: Element> FlashSdpaPlan<T> {
             ));
         }
 
+        // Phase 42: pick the backend. Caller override via
+        // `pref.prefer_backend` wins; otherwise the heuristic decides.
+        // The descriptor doesn't carry a separate `num_heads_k` — the
+        // bespoke trailblazer assumes no GQA at the descriptor level
+        // (GQA is supported via the strided FFI sibling with stride[1] = 0
+        // on K/V). For the FA2 heuristic, we conservatively assume
+        // num_heads_k == num_heads here; the run-time path validates.
+        let backend = pick_backend::<T>(desc, pref);
+
         let precision_guarantee = PrecisionGuarantee {
             math_precision: MathPrecision::F32,
             accumulator: ElementKind::F32,
@@ -192,14 +278,25 @@ impl<T: Element> FlashSdpaPlan<T> {
             layout: None,
             epilogue: None,
             arch: ArchSku::Sm80,
-            backend: BackendKind::Bespoke,
+            backend: backend.as_public(),
             precision_guarantee,
         };
         Ok(Self {
             desc: *desc,
             sku,
+            backend,
             _marker: PhantomData,
         })
+    }
+
+    /// Which backend the plan picked.
+    ///
+    /// Useful for telemetry, autotuner cache keys, and verifying the
+    /// heuristic in tests. Mirrors [`baracuda_cutlass::GemmPlan::backend`]
+    /// (Phase 30) one level up.
+    #[inline]
+    pub fn backend(&self) -> BackendKind {
+        self.backend.as_public()
     }
 
     /// Validate args against the descriptor.
@@ -287,11 +384,30 @@ impl<T: Element> FlashSdpaPlan<T> {
         Ok(())
     }
 
-    /// Workspace size in bytes — zero (the `lse` arg carries the only
-    /// FW-saved state).
+    /// Workspace size in bytes.
+    ///
+    /// Bespoke: 0 (the `lse` arg carries the only FW-saved state).
+    ///
+    /// FA2: `batch * num_heads * query_len * 4` bytes — FA2 always
+    /// writes the softmax LSE in f32 regardless of the input element
+    /// type. The plan layer hides this by routing the FA2 LSE write
+    /// to caller-supplied workspace memory (the caller-visible `lse`
+    /// arg is left untouched on the FA2 path, since the Tier-1
+    /// integration doesn't yet wire BW for FA2). When BW lands
+    /// (Tier 2), the workspace return becomes the canonical FA2 LSE
+    /// store.
     #[inline]
     pub fn workspace_size(&self) -> usize {
-        0
+        match self.backend {
+            BackendChoice::Bespoke => 0,
+            #[cfg(feature = "fa2")]
+            BackendChoice::FlashAttentionV2 => {
+                let n = (self.desc.batch_size as i64)
+                    * (self.desc.num_heads as i64)
+                    * (self.desc.query_len as i64);
+                (n.max(0) as usize) * 4
+            }
+        }
     }
 
     /// SKU identity.
@@ -310,7 +426,7 @@ impl<T: Element> FlashSdpaPlan<T> {
     pub fn run(
         &self,
         stream: &Stream,
-        _workspace: Workspace<'_>,
+        workspace: Workspace<'_>,
         args: FlashSdpaArgs<'_, T>,
     ) -> Result<()> {
         self.can_implement(&args)?;
@@ -324,6 +440,25 @@ impl<T: Element> FlashSdpaPlan<T> {
         let y_ptr = args.y.data.as_raw().0 as *mut c_void;
         let lse_ptr = args.lse.data.as_raw().0 as *mut c_void;
         let is_causal_flag = if self.desc.is_causal { 1 } else { 0 };
+
+        // Phase 42 — FA2 dispatch path. Capture-mode triggers an
+        // auto-fallback to bespoke (FA2's launch-time
+        // cudaFuncSetAttribute for opt-in dynamic SMEM isn't capture-
+        // safe; the call mutates per-function attributes outside the
+        // graph). Mirrors Phase 30's cuBLAS capture fallback in
+        // baracuda-cutlass::GemmPlan.
+        #[cfg(feature = "fa2")]
+        if matches!(self.backend, BackendChoice::FlashAttentionV2) {
+            let capturing = stream.is_capturing().unwrap_or(false);
+            if !capturing {
+                return self.run_fa2(stream, workspace, &args);
+            }
+            // else: fall through to bespoke launch below.
+        }
+        // The `workspace` arg is intentionally consumed only by FA2;
+        // the bespoke kernels are workspace-free. Bind to `_` so we
+        // don't pessimize on unused-var warnings.
+        let _ = workspace;
 
         let status = match T::KIND {
             ElementKind::F32 => unsafe {
@@ -414,4 +549,133 @@ impl<T: Element> FlashSdpaPlan<T> {
         };
         map_status(status)
     }
+
+    /// FA2 backend launch path (Phase 42).
+    ///
+    /// Routes the FA2 LSE write to caller-supplied workspace memory
+    /// (FA2 always writes LSE in f32 regardless of element dtype;
+    /// see `workspace_size`). The caller-visible `args.lse` buffer is
+    /// left untouched on the FA2 path — Tier 1 doesn't wire BW for
+    /// FA2, so the saved LSE has no downstream consumer.
+    #[cfg(feature = "fa2")]
+    fn run_fa2(
+        &self,
+        stream: &Stream,
+        workspace: Workspace<'_>,
+        args: &FlashSdpaArgs<'_, T>,
+    ) -> Result<()> {
+        let stream_ptr = stream.as_raw() as *mut c_void;
+        let q_ptr = args.q.data.as_raw().0 as *const c_void;
+        let k_ptr = args.k.data.as_raw().0 as *const c_void;
+        let v_ptr = args.v.data.as_raw().0 as *const c_void;
+        let y_ptr = args.y.data.as_raw().0 as *mut c_void;
+        let is_causal_flag = if self.desc.is_causal { 1 } else { 0 };
+
+        // Workspace carries the f32 LSE scratch (4 bytes per LSE cell).
+        let need = self.workspace_size();
+        let (ws_ptr, ws_bytes) = match workspace {
+            Workspace::None => {
+                if need > 0 {
+                    return Err(Error::WorkspaceTooSmall { needed: need, got: 0 });
+                }
+                (core::ptr::null_mut::<c_void>(), 0usize)
+            }
+            Workspace::Borrowed(slice) => {
+                if slice.len() < need {
+                    return Err(Error::WorkspaceTooSmall {
+                        needed: need,
+                        got: slice.len(),
+                    });
+                }
+                (slice.as_raw().0 as *mut c_void, slice.len())
+            }
+        };
+
+        let status = match T::KIND {
+            ElementKind::F16 => unsafe {
+                baracuda_kernels_sys::baracuda_kernels_fa2_sdpa_f16_run(
+                    self.desc.batch_size,
+                    self.desc.num_heads,
+                    self.desc.num_heads,  // num_heads_k == num_heads in Tier 1
+                    self.desc.query_len,
+                    self.desc.key_len,
+                    self.desc.d_k,
+                    self.desc.scale,
+                    is_causal_flag,
+                    q_ptr,
+                    k_ptr,
+                    v_ptr,
+                    y_ptr,
+                    ws_ptr, // softmax_lse → routed to workspace (f32)
+                    core::ptr::null_mut(),
+                    ws_bytes,
+                    stream_ptr,
+                )
+            },
+            ElementKind::Bf16 => unsafe {
+                baracuda_kernels_sys::baracuda_kernels_fa2_sdpa_bf16_run(
+                    self.desc.batch_size,
+                    self.desc.num_heads,
+                    self.desc.num_heads,
+                    self.desc.query_len,
+                    self.desc.key_len,
+                    self.desc.d_k,
+                    self.desc.scale,
+                    is_causal_flag,
+                    q_ptr,
+                    k_ptr,
+                    v_ptr,
+                    y_ptr,
+                    ws_ptr,
+                    core::ptr::null_mut(),
+                    ws_bytes,
+                    stream_ptr,
+                )
+            },
+            _ => {
+                return Err(Error::Unsupported(
+                    "baracuda-kernels::FlashSdpaPlan::run_fa2: FA2 supports only f16 / bf16",
+                ));
+            }
+        };
+        map_status(status)
+    }
+}
+
+/// Internal: pick the backend for a given descriptor + preference.
+/// Honours `pref.prefer_backend` unconditionally for `Bespoke`;
+/// validates the FA2 SKU constraints before honouring an FA2
+/// override (returns Bespoke on mismatch). Falls back to the
+/// heuristic when no override is supplied.
+fn pick_backend<T: Element>(desc: &FlashSdpaDescriptor, pref: PlanPreference) -> BackendChoice {
+    match pref.prefer_backend {
+        Some(BackendKind::Bespoke) => BackendChoice::Bespoke,
+        #[cfg(feature = "fa2")]
+        Some(BackendKind::FlashAttentionV2) => {
+            if should_use_fa2(desc, desc.num_heads) || fa2_is_eligible::<T>(desc) {
+                BackendChoice::FlashAttentionV2
+            } else {
+                BackendChoice::Bespoke
+            }
+        }
+        _ => {
+            #[cfg(feature = "fa2")]
+            {
+                if should_use_fa2(desc, desc.num_heads) {
+                    return BackendChoice::FlashAttentionV2;
+                }
+            }
+            BackendChoice::Bespoke
+        }
+    }
+}
+
+/// Hard eligibility check for FA2 (separate from the perf heuristic).
+/// Used to validate caller overrides — returns true iff FA2 *can*
+/// run this descriptor at all.
+#[cfg(feature = "fa2")]
+fn fa2_is_eligible<T: Element>(desc: &FlashSdpaDescriptor) -> bool {
+    desc.d_k == 128
+        && desc.d_v == 128
+        && matches!(T::KIND, ElementKind::F16 | ElementKind::Bf16)
 }

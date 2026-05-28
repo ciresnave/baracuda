@@ -1,0 +1,10 @@
+# Upstream CUDA-L2 git checkout — pinned to commit
+# dbe017722194bb33bafadfbcbb4a65ab6df95dc3 (2026-03-30, "Release H100
+# HGEMM (16 bit) kernels"). MIT license. ~3.7K files; do not commit
+# the upstream tree itself. The stripped wrappers we actually build
+# against live under `cuda-l2-probes/` and ARE checked in.
+#
+# Re-clone via:
+#   cd crates/baracuda-kernels-bench/external
+#   git clone --depth 1 https://github.com/deepreinforce-ai/CUDA-L2.git cuda-l2
+cuda-l2/

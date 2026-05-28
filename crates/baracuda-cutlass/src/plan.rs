@@ -2159,6 +2159,12 @@ enum BackendChoice {
     /// `baracuda-cublas` wrapper. Used as the Phase-30 fast path for
     /// f16/bf16 low-M decode shapes on sm_89 hardware.
     Cublas,
+    /// Phase 44: vendored ozIMMU (Ozaki-scheme FP64 GEMM that
+    /// synthesizes a DGEMM from `S²` int8 tensor-core matmuls). Only
+    /// valid for f64 / RCR / RRR / Identity epilogue. The `slices`
+    /// discriminant follows the public `BackendKind::Ozaki { slices }`
+    /// convention: 0 = auto, 3..=18 = fixed slice count.
+    Ozaki { slices: u8 },
 }
 
 impl BackendChoice {
@@ -2166,6 +2172,7 @@ impl BackendChoice {
         match self {
             BackendChoice::Cutlass { .. } => BackendKind::Cutlass,
             BackendChoice::Cublas => BackendKind::Cublas,
+            BackendChoice::Ozaki { slices } => BackendKind::Ozaki { slices },
         }
     }
 }
@@ -2225,6 +2232,57 @@ fn should_use_cublas_for_fp(
         // (the `Element` bound rejects non-FP types), but the match
         // arm needs to be exhaustive.
         _ => false,
+    }
+}
+
+/// Phase 44 — validate a `BackendKind::Ozaki { slices }` request
+/// against this descriptor.
+///
+/// ozIMMU only supports FP64 GEMM with the Identity epilogue (no
+/// fused bias / activation chain) and the `RCR` / `RRR` layouts that
+/// baracuda's `GemmPlan` already exposes. The slice count must be
+/// `0` (= auto) or `3..=18` (= fixed). Anything else returns
+/// `Error::Unsupported` so callers see the rejection at plan-select
+/// time rather than as a deep status code at launch.
+///
+/// When the `ozimmu` cargo feature is off, every request is rejected
+/// with a message pointing at the gate.
+#[allow(unused_variables)]
+fn validate_ozaki_request(
+    desc: &GemmDescriptor,
+    element: ElementKind,
+    slices: u8,
+) -> Result<()> {
+    #[cfg(not(feature = "ozimmu"))]
+    {
+        return Err(Error::Unsupported(
+            "PlanPreference::prefer_backend = Some(Ozaki {..}) requires the \
+             `ozimmu` cargo feature on baracuda-cutlass (off by default — \
+             enable on baracuda-kernels too if going through the kernels facade)",
+        ));
+    }
+    #[cfg(feature = "ozimmu")]
+    {
+        if element != ElementKind::F64 {
+            return Err(Error::Unsupported(
+                "BackendKind::Ozaki is FP64-only (Ozaki-scheme synthesizes \
+                 DGEMM from int8; f16/bf16/f32/F32Strict have no Ozaki path)",
+            ));
+        }
+        if desc.epilogue != EpilogueKind::Identity {
+            return Err(Error::Unsupported(
+                "BackendKind::Ozaki only supports the Identity epilogue \
+                 (no fused bias / activation chain on the Ozaki path)",
+            ));
+        }
+        // Layout is already constrained to Rcr / Rrr by the descriptor;
+        // both are supported by `mtk::ozimmu::gemm`.
+        if slices != 0 && !(3..=18).contains(&slices) {
+            return Err(Error::Unsupported(
+                "BackendKind::Ozaki slice count must be 0 (auto) or 3..=18",
+            ));
+        }
+        Ok(())
     }
 }
 
@@ -2304,7 +2362,33 @@ impl<T: CutlassElement> GemmPlan<T> {
         // Phase 30: pick the backend (CUTLASS vs cuBLAS) before the
         // arch. Caller may force a backend via `pref.prefer_backend`;
         // otherwise the f16/bf16-low-M heuristic chooses.
+        // Phase 44: `BackendKind::Ozaki { slices }` joins the dispatch
+        // surface for FP64-only / Identity-only / RCR-or-RRR shapes
+        // (gated behind the `ozimmu` feature on this crate).
         let element = T::KIND;
+
+        // Phase 44 ozIMMU dispatch — handled before the cuBLAS gate so
+        // its preconditions (f64 / Identity / RCR|RRR / feature gate)
+        // are validated up front.
+        if let Some(BackendKind::Ozaki { slices }) = pref.prefer_backend {
+            validate_ozaki_request(desc, element, slices)?;
+            let arch_for_sku = pick_arch(stream, desc, pref)?;
+            let backend = BackendChoice::Ozaki { slices };
+            let sku = GemmSku {
+                arch: arch_for_sku,
+                layout: desc.layout,
+                epilogue: desc.epilogue,
+                element,
+                bias_element: None,
+            };
+            return Ok(Self {
+                desc: *desc,
+                sku,
+                backend,
+                _element: PhantomData,
+            });
+        }
+
         let use_cublas = match pref.prefer_backend {
             Some(BackendKind::Cublas) => {
                 // Force-Cublas: validate that cuBLAS actually supports
@@ -2326,6 +2410,10 @@ impl<T: CutlassElement> GemmPlan<T> {
                 true
             }
             Some(BackendKind::Cutlass) => false,
+            Some(BackendKind::Ozaki { .. }) => {
+                // Unreachable — handled by the early return above.
+                false
+            }
             Some(_) => {
                 // Other backend hints aren't meaningful for GEMM; treat
                 // as "let the heuristic decide".
@@ -2645,6 +2733,28 @@ impl<T: CutlassElement> GemmPlan<T> {
             // back to cuBLAS.
         }
 
+        // Phase 44: ozIMMU dispatch. Same capture-safety story as the
+        // cuBLAS path — ozIMMU calls into cuBLAS internally to drive
+        // the int8 tensor-core matmuls + accumulate stage, so it
+        // inherits cuBLAS's "not capture-safe" property. Fall back to
+        // the CUTLASS DGEMM path under capture; the SKU stays Ozaki
+        // for telemetry consistency.
+        #[cfg(feature = "ozimmu")]
+        if let BackendChoice::Ozaki { slices } = self.backend {
+            let capturing = stream.is_capturing().unwrap_or(false);
+            if !capturing {
+                return self.run_ozaki(stream, args, beta_eff, slices);
+            }
+        }
+        #[cfg(not(feature = "ozimmu"))]
+        if matches!(self.backend, BackendChoice::Ozaki { .. }) {
+            // Should be unreachable — `select` rejects Ozaki when the
+            // feature is off. Belt-and-suspenders.
+            return Err(Error::Unsupported(
+                "BackendChoice::Ozaki selected without `ozimmu` cargo feature",
+            ));
+        }
+
         let bias_family = self.sku.epilogue.requires_bias();
         let status = match (self.sku.arch, bias_family) {
             // Fork on T::Scalar::IS_F64 to pick the matching FFI dispatcher.
@@ -2955,6 +3065,211 @@ impl<T: CutlassElement> GemmPlan<T> {
             )
             .map_err(|_| Error::CutlassInternal(-1))
         }
+    }
+
+    /// Phase-44 ozIMMU dispatch launch.
+    ///
+    /// Caller already validated host-side shape / strides via
+    /// [`Self::can_implement`], confirmed the chosen backend is
+    /// [`BackendChoice::Ozaki`], and verified the stream is not in
+    /// graph-capture mode (Ozaki is not capture-safe — ozIMMU runs
+    /// cuBLAS internally on the int8 accumulate stage). This method
+    /// translates baracuda's row-major operands into ozIMMU's
+    /// cuBLAS-compatible column-major convention (same trick as the
+    /// cuBLAS f64 path) and dispatches to `mtk::ozimmu::gemm`.
+    ///
+    /// Restrictions for the Phase 44 alpha:
+    /// - `args.c` must be `None` (caller passes a C operand only when
+    ///   they want `D = alpha*AB + beta*C` with `D != C`; ozIMMU's
+    ///   GEMM uses C as the output operand, same as cublasDgemm, so
+    ///   we'd need an extra copy to materialize into D — defer).
+    /// - Element must be F64 — guarded at `select` already; this
+    ///   method takes the safe-typed `T` so the compiler can't see
+    ///   that, but the `Scalar::IS_F64` check below makes it
+    ///   defense-in-depth.
+    #[cfg(feature = "ozimmu")]
+    fn run_ozaki(
+        &self,
+        stream: &Stream,
+        args: GemmArgs<'_, T>,
+        beta_eff: T::Scalar,
+        slices: u8,
+    ) -> Result<()> {
+        use baracuda_ozimmu::{Op as OzakiOp, OzakiSlices};
+
+        if !<T::Scalar as ScalarType>::IS_F64 {
+            return Err(Error::Unsupported(
+                "BackendChoice::Ozaki reached on non-f64 element \
+                 (select() guard should have rejected this)",
+            ));
+        }
+        if args.c.is_some() {
+            return Err(Error::Unsupported(
+                "ozIMMU GemmPlan path requires c = None \
+                 (the Ozaki path writes its output in-place into the C \
+                 operand of the underlying cuBLAS GEMM — explicit-C with \
+                 D ≠ C requires an extra copy step that the Phase 44 \
+                 alpha does not yet wire; force Cutlass backend if needed)",
+            ));
+        }
+
+        let slice_choice = match slices {
+            0 => OzakiSlices::Auto,
+            3 => OzakiSlices::S3,
+            4 => OzakiSlices::S4,
+            5 => OzakiSlices::S5,
+            6 => OzakiSlices::S6,
+            7 => OzakiSlices::S7,
+            8 => OzakiSlices::S8,
+            9 => OzakiSlices::S9,
+            10 => OzakiSlices::S10,
+            11 => OzakiSlices::S11,
+            12 => OzakiSlices::S12,
+            13 => OzakiSlices::S13,
+            14 => OzakiSlices::S14,
+            15 => OzakiSlices::S15,
+            16 => OzakiSlices::S16,
+            17 => OzakiSlices::S17,
+            18 => OzakiSlices::S18,
+            _ => {
+                return Err(Error::Unsupported(
+                    "ozIMMU slice count out of range (validated at select; \
+                     this is unreachable)",
+                ));
+            }
+        };
+
+        let handle = ozimmu_backend::handle_for(stream)?;
+
+        // Row-major → ozIMMU (cuBLAS-compatible col-major) mapping.
+        // Same algebra as the cuBLAS f64 path: compute `D^T` in
+        // col-major terms, swap the operand order, set transa = T for
+        // RCR (because B in col-major IS B^T-transposed-from-row-major)
+        // or transa = N for RRR (because B in col-major IS B from row
+        // major).
+        //
+        // Pass B as the first operand, A as the second.
+        let (transa, transb) = match self.desc.layout {
+            LayoutSku::Rcr => (OzakiOp::T, OzakiOp::N),
+            LayoutSku::Rrr => (OzakiOp::N, OzakiOp::N),
+        };
+        let m = self.desc.m as usize;
+        let n = self.desc.n as usize;
+        let k = self.desc.k as usize;
+        let lda = args.b.ld as usize; // first operand (B) ld
+        let ldb = args.a.ld as usize; // second operand (A) ld
+        let ldc = args.d.ld as usize;
+
+        let a_ptr = args.a.data.as_raw().0 as *const f64;
+        let b_ptr = args.b.data.as_raw().0 as *const f64;
+        let d_ptr = args.d.data.as_raw().0 as *mut f64;
+        let alpha = args.alpha.to_f64();
+        let beta = beta_eff.to_f64();
+
+        // SAFETY: the descriptor / args were validated by
+        // can_implement(); pointers are live DeviceBuffer<f64> views.
+        unsafe {
+            handle.dgemm(
+                transa, transb,
+                // ozIMMU sees us computing D^T col-major: shape (n, m).
+                n, m, k,
+                alpha,
+                b_ptr, lda,
+                a_ptr, ldb,
+                beta,
+                d_ptr, ldc,
+                slice_choice,
+            )
+            .map_err(|e| {
+                use baracuda_ozimmu::Error as OzErr;
+                match e {
+                    OzErr::DgemmFailed(s) => Error::CutlassInternal(s),
+                    _ => Error::Unsupported(
+                        "ozIMMU dgemm rejected the request (see logs)",
+                    ),
+                }
+            })
+        }
+    }
+}
+
+// ============================================================================
+// Phase 44 ozIMMU backend — handle cache + dispatch helpers
+// ============================================================================
+//
+// Mirror of the Phase-30 `cublas_backend` module: thread-local cache of
+// ozIMMU handles keyed by raw context pointer. ozIMMU handles are
+// expensive to construct (they spin up a cuBLAS handle internally + do
+// some env-var probing); cache + re-bind keeps the steady-state launch
+// cost down to one `set_cuda_stream` call. Returns an `Arc`-cloned
+// safe wrapper so the cache can hold the canonical handle while the
+// caller drives a launch without holding the thread-local borrow.
+
+#[cfg(feature = "ozimmu")]
+mod ozimmu_backend {
+    use core::cell::RefCell;
+    use std::rc::Rc;
+
+    use baracuda_driver::Stream;
+    use baracuda_ozimmu::Handle as OzimmuHandle;
+
+    thread_local! {
+        static HANDLE_CACHE: RefCell<Vec<(usize, Rc<OzimmuHandle>)>> =
+            const { RefCell::new(Vec::new()) };
+    }
+
+    /// Fetch (or lazily create) an ozIMMU handle bound to `stream`'s
+    /// context, with the handle's stream binding set to `stream`.
+    pub(super) fn handle_for(stream: &Stream) -> crate::Result<Rc<OzimmuHandle>> {
+        let ctx_key = stream.context().as_raw() as usize;
+        let handle = HANDLE_CACHE.with(|cache| -> crate::Result<Rc<OzimmuHandle>> {
+            let mut cache = cache.borrow_mut();
+            if let Some((_, h)) = cache.iter().find(|(k, _)| *k == ctx_key) {
+                return Ok(h.clone());
+            }
+            // Make sure the stream's context is current — ozIMMU's
+            // create() calls into cuBLAS create() which needs the
+            // current context to bind correctly.
+            stream
+                .context()
+                .set_current()
+                .map_err(crate::Error::Driver)?;
+            // Retry with linear backoff under transient init failures
+            // (mirrors the cuBLAS Phase-35 retry pattern; ozIMMU
+            // wraps cuBLAS so it inherits the same parallel-init
+            // race window).
+            let mut last_status: Option<i32> = None;
+            let mut handle: Option<OzimmuHandle> = None;
+            for attempt in 0..5 {
+                match OzimmuHandle::new() {
+                    Ok(h) => { handle = Some(h); break }
+                    Err(e) => {
+                        if let baracuda_ozimmu::Error::CreateFailed(s) = e {
+                            last_status = Some(s);
+                        }
+                        std::thread::sleep(std::time::Duration::from_millis(
+                            50 * (attempt as u64 + 1),
+                        ));
+                    }
+                }
+            }
+            let h = match handle {
+                Some(h) => h,
+                None => {
+                    let _ = last_status;
+                    return Err(crate::Error::Unsupported(
+                        "ozIMMU handle creation failed after 5 retries \
+                         (library missing, device unavailable, or persistent \
+                         init contention)",
+                    ));
+                }
+            };
+            let rc = Rc::new(h);
+            cache.push((ctx_key, rc.clone()));
+            Ok(rc)
+        })?;
+        handle.set_stream(stream);
+        Ok(handle)
     }
 }
 

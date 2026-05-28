@@ -203,3 +203,82 @@ Tier A k-quant micro-opts will measure improvements against.
 - Closing perf gaps. Phase 29's job is **measurement**, not
   optimization. The numbers from these benches are the inputs into
   the Phase 27 / k-quant Tier A perf workstreams that follow.
+
+## Phase 44 — CUDA-L2 vendor validation (SKIP)
+
+[`deepreinforce-ai/CUDA-L2`](https://github.com/deepreinforce-ai/CUDA-L2)
+ships RL+LLM-tuned HGEMM kernels (MIT, commit `dbe017722194bb33bafadfbcbb4a65ab6df95dc3`,
+upstream pinned at `external/cuda-l2/`). The Phase 44 question: should
+we vendor them as a third `GemmPlan` backend alongside `Bespoke`
+(CUTLASS sm_80) and `Cublas` (Phase 30 gemmEx fast-path)?
+
+**Decision: SKIP.** Reproducible probes under `external/cuda-l2-probes/`
+and the `gemm_vs_cuda_l2` bench file establish the numbers.
+
+### Measured on RTX 4070 (sm_89), CUDA 13.0, 2026-05-28
+
+| Shape (M×K=N, f16/fp32-acc) | baracuda Bespoke (us) | cuBLAS gemmEx (us) | CUDA-L2 (us) | CUDA-L2 vs cuBLAS |
+| --- | ---: | ---: | ---: | --- |
+| M=1, N=K=4096 | ~107.9 | ~34.6 (or ~65 via GemmPlan-cuBLAS) | **N/A — no kernel** | — |
+| M=8, N=K=4096 | — | — | **N/A — no kernel** | — |
+| M=32, N=K=4096 | ~108.3 | ~64.5 (~89.9 via GemmPlan-cuBLAS) | **N/A — no kernel** | — |
+| M=128, N=K=4096 | ~146.5 | ~177.4 | 175.2 | **+1.2% (parity)** |
+| M=2048, N=K=4096 | — | 2621.5 | 2452.7 | **+6.4%** |
+
+### Why SKIP
+
+1. **CUDA-L2 ships zero kernels for M ∈ {1, 8, 32}**. That's the decode
+   regime where Phase 30's cuBLAS fast-path won 3× over CUTLASS. CUDA-L2's
+   minimum-M is 64 in the 3090 set; their upstream FAQ recommends
+   "pad to the nearest larger shape and zero-fill" — which at M=1 means
+   64× the work. Not viable.
+
+2. **At the shapes CUDA-L2 covers, wins are marginal on sm_89**. Their
+   advertised +24.2% over cuBLAS is on RTX 3090 (sm_86). On the Ada
+   RTX 4070 (sm_89) the same kernels deliver +1.2% at M=128 and +6.4%
+   at M=2048 — the sm_89 tensor-core path in cuBLAS already saturates
+   much of their tuning headroom. Their FAQ explicitly states "kernels
+   trained on A100 should only be used on A100 if you are targeting
+   speedup."
+
+3. **Integration cost is high**. Per-shape, per-dtype `build.rs`
+   compilation (each of CUDA-L2's 736 kernels is a distinct
+   instantiation of a different BM/BN/BK/Stage tuning), per-shape FFI
+   symbol declarations, and a new dispatch heuristic in `GemmPlan` to
+   pick CUDA-L2 over cuBLAS/CUTLASS at the right shapes. The Phase 30
+   cuBLAS integration was a single handle wrap + one heuristic; CUDA-L2
+   would be ≥10× that work.
+
+4. **The win regime is the prefill bulk-matmul tail, not the latency-
+   sensitive decode**. Production LLM serving (the actual baracuda
+   target) spends its tokens on decode, where we already win by routing
+   to cuBLAS. The +6% at M=2048 is a real measurement, but +6% on the
+   non-bottleneck regime doesn't pay for the integration cost.
+
+### What we kept
+
+- `external/cuda-l2/` — full upstream checkout (preserved for reference;
+  per-shape kernels can be inspected if a future opportunity at larger
+  M emerges).
+- `external/cuda-l2-probes/` — stripped wrapper .cu files (M=128 and
+  M=2048), standalone probe .cu files, and a README documenting the
+  build and measurement methodology.
+- `benches/gemm_vs_cuda_l2.rs` + `build.rs` — the bench harness can
+  be re-armed via `--features cuda_l2,sm89` if a future CUDA-L2 release
+  ships kernels for the decode regime (M < 64), or if Hopper/Blackwell
+  kernels land and we want to re-evaluate.
+
+### How to reproduce
+
+```powershell
+# Documentation-only mode (default). No nvcc needed for the bench;
+# emits the reference probe numbers + cuBLAS / baracuda live timings.
+cargo bench -p baracuda-kernels-bench --bench gemm_vs_cuda_l2 -- --quick
+
+# Live measurement mode. build.rs compiles wrapper_m{128,2048}.cu
+# (CUTLASS CuTe templates, ~30s nvcc per shape). Requires the
+# baracuda-cutlass-sys CUTLASS cache (auto-populated by any prior
+# bench / build).
+cargo bench -p baracuda-kernels-bench --bench gemm_vs_cuda_l2 \
+  --features cuda_l2,sm89 -- --quick
+```

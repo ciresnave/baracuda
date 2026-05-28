@@ -163,3 +163,48 @@ original kernel body is the load-bearing prior art.
     (Q2_K..Q6_K). Q4_0 / Q4_1 / Q5_0 / Q5_1 would require adding
     four `vec_dot_q*_q8_1` entries Fuel itself doesn't wire for the
     MoE path.
+
+
+### Dao-AILab/flash-attention v2 (Phase 42)
+
+- **Upstream**: <https://github.com/Dao-AILab/flash-attention>
+- **Tag**: `v2.8.3`
+- **Commit**: `060c9188beec3a8b62b33a3bfa6d5d2d44975fab`
+- **License**: BSD 3-Clause (see
+  [`vendor/flash-attention/LICENSE`](vendor/flash-attention/LICENSE)).
+- **Vendored**: 2026-05-28 (Phase 42).
+- **Scope**: 16 internal headers (`flash.h`, `flash_fwd_kernel.h`,
+  `flash_fwd_launch_template.h`, `kernel_traits.h`, `mask.h`,
+  `softmax.h`, `dropout.h`, `alibi.h`, `rotary.h`, `block_info.h`,
+  `static_switch.h`, `utils.h`, `philox.cuh`, `philox_unpack.cuh`,
+  `hardware_info.h`, `namespace_config.h`) + 4 forward-pass `.cu`
+  template instantiations (head_dim=128, f16+bf16, causal+non-causal,
+  sm_80 path).
+- **Adaptation**:
+  - Original per-file copyright headers preserved verbatim. No FA2
+    `.cu` / `.h` source is modified.
+  - Layered with three **PyTorch-free shim headers** under
+    `vendor/flash-attention/shim/` (own SPDX MIT-OR-Apache-2.0
+    licensed): `ATen/cuda/CUDAGeneratorImpl.h`,
+    `ATen/cuda/detail/UnpackRaw.cuh`, `c10/cuda/CUDAException.h`.
+    These satisfy FA2's PyTorch-extension transitive includes
+    without dragging in libtorch.
+  - baracuda-side launcher
+    `kernels/attention/fa2_launcher.cu` (own SPDX) bridges the FA2
+    template instantiations to baracuda's `extern "C"` FFI surface
+    (`baracuda_kernels_fa2_sdpa_<dt>_run` /
+    `baracuda_kernels_fa2_sdpa_<dt>_can_implement`).
+  - `FLASH_NAMESPACE` is redefined to `baracuda_fa2` via a build-time
+    `-D` so the FA2 symbols never collide with a separately-linked
+    PyTorch FA2.
+  - Removed from upstream: Python bindings, PyTorch C++ extension
+    glue (`flash_api.cpp`), Hopper / sm_90 sources, ROCm
+    Composable-Kernel path, the vendored CUTLASS submodule (baracuda
+    already carries CUTLASS through `baracuda-cutlass-sys`), the
+    backward `.cu` files (Tier-2 deferral), the split-KV forward
+    `.cu` files, and forward `.cu` files for head_dim ∉ {128}
+    (Tier-3 deferral). Full kept-vs-removed manifest in
+    [`vendor/flash-attention/VENDOR.md`](vendor/flash-attention/VENDOR.md).
+- **Gated behind**: the `fa2` cargo feature on `baracuda-kernels-sys`
+  and `baracuda-kernels` — off by default because the FA2 CUTLASS-heavy
+  templates add ~9 min to the nvcc build on a 16-thread machine.

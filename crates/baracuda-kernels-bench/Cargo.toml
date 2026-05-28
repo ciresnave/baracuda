@@ -1,6 +1,6 @@
 [package]
 name = "baracuda-kernels-bench"
-version = "0.0.1-alpha.55"
+version = "0.0.1-alpha.56"
 description = "Benchmark harness for baracuda-kernels — CUDA-event-timed throughput sweeps across GEMM, Flash Attention, and Conv2d at LLM-typical / ResNet-typical shapes. Phase 10 Milestone 10.1 of the baracuda CUDA stack."
 edition.workspace = true
 rust-version.workspace = true
@@ -25,6 +25,28 @@ sm90a = ["baracuda-kernels/sm90a"]
 # binary still builds, but no work runs.
 cudnn = ["baracuda-kernels/cudnn"]
 
+# Phase 42 — FA2 backend on `FlashSdpaPlan`. Gates the `sdpa_vs_fa2`
+# bench. Off by default; flip on alongside `sm80` to compile the FA2
+# kernel set + run the A/B sweep against baracuda's bespoke Flash.
+fa2 = ["baracuda-kernels/fa2"]
+
+# Phase 43 — `HyperConnectionPlan` (vendored mHC.cu). Gates the
+# `hyper_connection` bench. Off by default; flip on alongside `sm80`
+# to compile the mHC kernel set + run the speedup-claim validation
+# against a naive baracuda residual baseline.
+mhc = ["baracuda-kernels/mhc"]
+
+# Phase 44 — CUDA-L2 (deepreinforce-ai/CUDA-L2) HGEMM kernel probes.
+# Compiles two of CUDA-L2's 3090-tuned shape variants (M=128 and
+# M=2048 at N=K=4096, f16/fp32-acc) via `build.rs` and exposes them
+# to the `gemm_vs_cuda_l2` bench for head-to-head timing vs cuBLAS
+# and baracuda's CUTLASS path. Off by default; requires CUTLASS
+# headers (already a workspace dep via baracuda-cutlass-sys). The
+# bench file falls back to documentation-only mode when this feature
+# is off (records the reference numbers from the standalone probe
+# runs under `external/cuda-l2-probes/`).
+cuda_l2 = []
+
 [dependencies]
 baracuda-kernels = { workspace = true }
 baracuda-kernels-types = { workspace = true }
@@ -35,6 +57,17 @@ baracuda-cublas-sys = { workspace = true }
 baracuda-cudnn = { workspace = true, features = ["half-crate"] }
 baracuda-types = { workspace = true, features = ["half-crate", "f8-crate"] }
 half = { workspace = true }
+
+[build-dependencies]
+# Phase 44 — only used when the `cuda_l2` feature is enabled to
+# compile the CUDA-L2 wrapper .cu files via the same nvcc-discovery
+# path as baracuda-kernels-sys. Cheap to depend on unconditionally
+# (build script is a no-op without the feature).
+baracuda-forge = { workspace = true }
+# Phase 44 — `baracuda-cutlass-sys` exposes `DEP_CUTLASS_INCLUDE` to
+# downstream build scripts. We need it (the CUDA-L2 wrappers
+# `#include <cute/tensor.hpp>`).
+baracuda-cutlass-sys = { workspace = true }
 
 [dev-dependencies]
 criterion = { workspace = true }
@@ -103,6 +136,30 @@ harness = false
 
 [[bench]]
 name = "sdpa_gqa"
+harness = false
+
+# Phase 42 — FA2 vs bespoke Flash A/B (requires `fa2` feature).
+[[bench]]
+name = "sdpa_vs_fa2"
+harness = false
+
+# Phase 43 — HyperConnectionPlan vs naive residual baseline. Requires
+# the `mhc` feature to do anything useful (the bench file builds a
+# no-op `main` without it).
+[[bench]]
+name = "hyper_connection"
+harness = false
+
+# Phase 44 — CUDA-L2 vs cuBLAS / baracuda HGEMM head-to-head. The
+# bench compiles + runs in two modes:
+#   • Without `cuda_l2` feature: documents pre-measured reference
+#     numbers from the standalone probes under
+#     `external/cuda-l2-probes/`. Builds clean, runs cuBLAS +
+#     baracuda paths, skips the CUDA-L2 timing arm.
+#   • With `cuda_l2` feature: build.rs compiles the wrapper .cu
+#     files and the bench includes a live CUDA-L2 timing arm.
+[[bench]]
+name = "gemm_vs_cuda_l2"
 harness = false
 
 [package.metadata.docs.rs]

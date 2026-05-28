@@ -1,0 +1,14 @@
+Andre Slavescu — original author of the mHC.cu reference implementation
+  (unofficial CUDA implementation of DeepSeek-AI's manifold-constrained
+  hyper-connections paper).
+
+The paper:
+
+  mHC: Manifold-Constrained Hyper-Connections
+  Zhenda Xie, Yixuan Wei, Huanqi Cao, Chenggang Zhao, Chengqi Deng,
+  Jiashi Li, Damai Dai, Huazuo Gao, Jiang Chang, Liang Zhao, Shangyan
+  Zhou, Zhean Xu, Zhengyan Zhang, Wangding Zeng, Shengding Hu, Yuqing
+  Wang, Jingyang Yuan, Lean Wang, Wenfeng Liang
+  arXiv:2512.24880 — DeepSeek-AI
+
+  https://arxiv.org/abs/2512.24880

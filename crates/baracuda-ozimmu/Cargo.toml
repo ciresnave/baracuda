@@ -1,0 +1,32 @@
+[package]
+name = "baracuda-ozimmu"
+version = "0.0.1-alpha.56"
+description = "Safe Rust wrapper for a vendored copy of Hiroyuki Ootomo's ozIMMU — Ozaki-scheme FP64 GEMM that synthesizes a DGEMM from S^2 int8 tensor-core matmuls. Provides an RAII handle + drop-in `dgemm` shim suitable for the `BackendKind::Ozaki` path of `baracuda-kernels`'s `GemmPlan`. Opt-in (NOT bit-equivalent to native DGEMM); the default FP64 path stays on CUTLASS / cuBLAS."
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords = ["cuda", "ozimmu", "dgemm", "ozaki", "fp64"]
+categories = ["api-bindings", "science"]
+exclude = ["*.profraw", "target/"]
+
+[features]
+# Default-on: building this safe wrapper at all implies "I want the
+# Ozaki path to work," so we pull the vendored-source build feature
+# on baracuda-ozimmu-sys automatically. Callers who want the type
+# definitions without the heavy nvcc build (e.g. for a docs-only or
+# stub workspace check) can disable default-features.
+default = ["build-vendor"]
+
+# Forward the vendored-source build to baracuda-ozimmu-sys.
+build-vendor = ["baracuda-ozimmu-sys/build-vendor"]
+
+[dependencies]
+baracuda-ozimmu-sys = { workspace = true }
+baracuda-driver = { workspace = true }
+thiserror = { workspace = true }
+
+[package.metadata.docs.rs]
+no-default-features = true

@@ -28315,6 +28315,187 @@ unsafe extern "C" {
 }
 
 // ============================================================================
+// Phase 42 — Dao-AILab FlashAttention v2 (vendored v2.8.3, BSD-3-Clause)
+// ============================================================================
+//
+// Backend-choice fast path that pairs with baracuda's bespoke `FlashSdpaPlan`
+// for long-context regimes where FA2's tiling wins. Tier-1 scope:
+//   * Forward only (BW deferred to Tier 2).
+//   * head_dim = 128 only (Tier 3 adds 32/64/96/192/256).
+//   * f16 + bf16.
+//   * Dense layout — NO varlen (`cu_seqlens_q/k`), NO GQA
+//     (`num_heads != num_heads_k` rejected with status 3), NO dropout,
+//     NO ALiBi, NO rotary, NO paged KV cache.
+//
+// Tensor layout (contiguous row-major, identical to bespoke `FlashSdpaPlan`):
+//   * Q : `[batch, num_heads,   seq_q, head_dim]`
+//   * K : `[batch, num_heads_k, seq_k, head_dim]`
+//   * V : `[batch, num_heads_k, seq_k, head_dim]`
+//   * out:`[batch, num_heads,   seq_q, head_dim]`
+//
+// **`softmax_lse` is always f32** regardless of the element dtype —
+// this differs from the bespoke `FlashSdpaPlan` (where lse matches T).
+// FA2 internally accumulates softmax in f32 and writes the LSE tensor in
+// f32 to preserve range across long sequences. The plan layer adapts.
+//
+// Symbols are gated behind the `fa2` cargo feature — compiling FA2's
+// CUTLASS-heavy templates adds significant nvcc build time. Off by
+// default; enable when you want the dispatch heuristic to be able to
+// pick FA2.
+
+#[cfg(feature = "fa2")]
+unsafe extern "C" {
+    /// FA2 forward, f16 (f32 LSE).
+    pub fn baracuda_kernels_fa2_sdpa_f16_run(
+        batch: i32,
+        num_heads: i32,
+        num_heads_k: i32,
+        seq_q: i32,
+        seq_k: i32,
+        head_dim: i32,
+        softmax_scale: f32,
+        is_causal: i32,
+        q: *const c_void,
+        k: *const c_void,
+        v: *const c_void,
+        out: *mut c_void,
+        softmax_lse: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// FA2 forward, bf16 (f32 LSE).
+    pub fn baracuda_kernels_fa2_sdpa_bf16_run(
+        batch: i32,
+        num_heads: i32,
+        num_heads_k: i32,
+        seq_q: i32,
+        seq_k: i32,
+        head_dim: i32,
+        softmax_scale: f32,
+        is_causal: i32,
+        q: *const c_void,
+        k: *const c_void,
+        v: *const c_void,
+        out: *mut c_void,
+        softmax_lse: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// FA2 can-implement check, f16. Returns 0 / 2 / 3 in the same
+    /// convention as the corresponding `_run` symbol; the safe-plan
+    /// layer calls this from `FlashSdpaPlan::can_implement` to validate
+    /// arguments before a launch.
+    pub fn baracuda_kernels_fa2_sdpa_f16_can_implement(
+        batch: i32,
+        num_heads: i32,
+        num_heads_k: i32,
+        seq_q: i32,
+        seq_k: i32,
+        head_dim: i32,
+        is_causal: i32,
+    ) -> i32;
+
+    /// FA2 can-implement check, bf16.
+    pub fn baracuda_kernels_fa2_sdpa_bf16_can_implement(
+        batch: i32,
+        num_heads: i32,
+        num_heads_k: i32,
+        seq_q: i32,
+        seq_k: i32,
+        head_dim: i32,
+        is_causal: i32,
+    ) -> i32;
+}
+
+// ============================================================================
+// Phase 43 — AndreSlavescu/mHC.cu HyperConnection family (vendored, MIT)
+// ============================================================================
+//
+// Manifold-Constrained Hyper-Connections — a learned residual-stream
+// mixing op from DeepSeek-AI's mHC paper, with the unofficial CUDA
+// implementation by Andre Slavescu vendored under `vendor/mhc/`.
+//
+// Tier-1 scope:
+//   * Static-H forward only (dynamic-H FW + BW deferred).
+//   * bf16 weights / f32 activations only (upstream's `floatX` is
+//     hardcoded to nv_bfloat16; f16 / f32 paths require additional
+//     convert kernels and are deferred).
+//   * (B, n, C) tuple constrained at `create` time — handle is
+//     dimensioned-once, reused across calls. n <= 32.
+//
+// Memory contract:
+//   * Stateful `MHCLayer*` opaque handle returned by `create`; pass
+//     to `run` and `destroy`. The handle owns ~B*n*C*sizeof(float)
+//     bytes of GPU scratch — caller pays alloc cost once.
+//   * Caller-supplied `stream` is patched in per call (the upstream
+//     `MHCLayer::stream` field is restored after the launch returns).
+//   * `workspace` argument unused at present — internal scratch lives
+//     in the handle. Reserved for future revisions that might surface
+//     the dynamic-H projection workspace through this API.
+//
+// Layout contract:
+//   * x_expanded:     [B, n, C] f32, row-major contiguous.
+//   * rmsnorm_weight: [C] bf16.
+//   * H_pre:          [n] f32 (pre-sigmoid logits).
+//   * H_post:         [n] f32 (pre-sigmoid logits; output gets a 2x
+//                     scale baked in by the kernel).
+//   * H_res:          [n, n] f32 (pre-Sinkhorn-Knopp mixing matrix).
+//   * out:            [B, n, C] f32, row-major contiguous.
+//
+// Symbols gated behind the `mhc` cargo feature.
+
+#[cfg(feature = "mhc")]
+unsafe extern "C" {
+    /// Create an mHC static-H layer handle. Allocates internal GPU
+    /// scratch. Returns nullptr on failure (invalid args or
+    /// allocation failure).
+    ///
+    /// `sinkhorn_iters` — typically 20. `eps` — typically 1e-5.
+    /// `n` must be in `1..=32`.
+    pub fn baracuda_kernels_mhc_layer_static_bf16_create(
+        b: i32,
+        c: i32,
+        n: i32,
+        sinkhorn_iters: i32,
+        eps: f32,
+    ) -> *mut c_void;
+
+    /// Destroy an mHC layer handle returned from `create`. Safe to
+    /// pass nullptr.
+    pub fn baracuda_kernels_mhc_layer_static_bf16_destroy(handle: *mut c_void);
+
+    /// Forward static-H launch. See module-level docstring for the
+    /// layout / shape contract.
+    pub fn baracuda_kernels_mhc_layer_static_bf16_run(
+        handle: *mut c_void,
+        x_expanded: *const c_void,
+        rmsnorm_weight: *const c_void,
+        h_pre: *const c_void,
+        h_post: *const c_void,
+        h_res: *const c_void,
+        out: *mut c_void,
+        b: i32,
+        c: i32,
+        n: i32,
+        workspace: *mut c_void,
+        workspace_bytes: u64,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// Pure-host validation. Returns 0 for supported, 2 for
+    /// invalid_arg, 3 for unsupported.
+    pub fn baracuda_kernels_mhc_layer_static_bf16_can_implement(
+        b: i32,
+        c: i32,
+        n: i32,
+    ) -> i32;
+}
+
+// ============================================================================
 // cuSOLVER — Milestone 6.3 dense linalg
 // ============================================================================
 //

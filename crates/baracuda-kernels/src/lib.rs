@@ -240,10 +240,11 @@ pub mod attention;
 pub use attention::{
     AlibiArgs, AlibiBackwardArgs, AlibiBackwardDescriptor, AlibiBackwardPlan, AlibiDescriptor,
     AlibiPlan, FlashSdpaArgs, FlashSdpaBackwardArgs, FlashSdpaBackwardDescriptor,
-    FlashSdpaBackwardPlan, FlashSdpaDescriptor, FlashSdpaPlan, KvCacheAppendArgs,
-    KvCacheAppendDescriptor, KvCacheAppendPlan, RopeArgs, RopeBackwardArgs, RopeBackwardDescriptor,
-    RopeBackwardPlan, RopeDescriptor, RopePlan, SdpaArgs, SdpaBackwardArgs, SdpaBackwardDescriptor,
-    SdpaBackwardPlan, SdpaDescriptor, SdpaPlan, FLASH_SDPA_MAX_D, ROPE_DEFAULT_BASE,
+    FlashSdpaBackwardPlan, FlashSdpaDescriptor, FlashSdpaPlan, HyperConnectionArgs,
+    HyperConnectionDescriptor, HyperConnectionPlan, KvCacheAppendArgs, KvCacheAppendDescriptor,
+    KvCacheAppendPlan, RopeArgs, RopeBackwardArgs, RopeBackwardDescriptor, RopeBackwardPlan,
+    RopeDescriptor, RopePlan, SdpaArgs, SdpaBackwardArgs, SdpaBackwardDescriptor, SdpaBackwardPlan,
+    SdpaDescriptor, SdpaPlan, FLASH_SDPA_MAX_D, ROPE_DEFAULT_BASE,
 };
 
 // Phase 10 Milestone 10.3 — sm_89 (Ada Lovelace) Flash Attention FW

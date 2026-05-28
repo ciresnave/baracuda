@@ -7,15 +7,34 @@ effort within each category. Authoritative status per op lives in
 [`OP-MATRIX.md`](OP-MATRIX.md); historical phase summaries live in
 [`ARCHITECTURE.md`](ARCHITECTURE.md).
 
-The current tag is **v0.0.1-alpha.51** with **2247 GPU tests passing,
-zero failures** on RTX 4070 (sm_89) across **641 binaries**. **Second
-consecutive clean regression** (Phase 35 was the first). Phase 36
-alpha.51 ships the first 3 of 6 gaps from Fuel's Phase 6c.4 batch
-ask: Gap 2 (RoPE apply with precomputed cos/sin tables — 16 FFI
-symbols), Gap 4 (Fill missing dtypes + strided variant — 28
-symbols), Gap 6a (Argsort dtype fanout u8/i8/u32/i16/bf16/f16/
-fp8e4m3 — 14 symbols). 58 new FFI declarations total. Gaps 1, 3,
-5, 6b are scheduled for Phase 37-40.
+The current tag is **v0.0.1-alpha.56** with **2320+ GPU tests
+passing, zero failures** on RTX 4070 (sm_89). Phase 42-44 add three
+opt-in vendored backends behind cargo features (none on the default
+build path):
+
+- **Phase 42**: Tri Dao's Flash Attention v2 (BSD-3) Tier-1 vendor —
+  head_dim=128, fp16+bf16, sm_80, FW only — exposed as
+  `BackendKind::FlashAttentionV2` on `FlashSdpaPlan` under the `fa2`
+  feature. Heuristic routes long-context (seq_q×seq_k ≥ 1M) shapes
+  to FA2; `PlanPreference::prefer_backend` overrides.
+- **Phase 43**: DeepSeek-AI's mHC.cu (MIT) Tier-1 vendor — static-H,
+  bf16 only — exposed as `HyperConnectionPlan` under the `mhc`
+  feature. Replaces the bare residual `y = x + sublayer(x)` with a
+  learned `n×n` Sinkhorn-Knopp doubly-stochastic mixing matrix.
+- **Phase 44**: ozIMMU (MIT) Ozaki-scheme DGEMM vendor — synthesizes
+  FP64 GEMM from S² int8 tensor-core matmuls — wired as opt-in
+  `BackendKind::Ozaki { slices }` on `GemmPlan`'s f64 path. NEW
+  sibling crates `baracuda-ozimmu-sys` + `baracuda-ozimmu`.
+  **Linux-only in alpha.56** — Windows port deferred. Default f64
+  GEMM stays on CUTLASS/cuBLAS DGEMM (bit-exact); Ozaki is opt-in
+  for callers accepting the "comparable to DGEMM at S≥8" precision
+  contract.
+
+Next: the Phase 45-51 mainstream-techniques roadmap (FlashInfer
+cherry-pick, SmoothQuant compose, YaRN/LongRoPE helper, Apex
+optimizers, Liger FLCE, Marlin/AWQ, Mamba2) synthesized from the
+recon round documented in
+`~/.claude/projects/.../memory/MEMORY.md`.
 
 ---
 

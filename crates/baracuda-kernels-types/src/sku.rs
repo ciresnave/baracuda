@@ -143,6 +143,27 @@ pub enum BackendKind {
     Npp,
     /// `baracuda-cvcuda` wrapper of CV-CUDA.
     Cvcuda,
+    /// Vendored Dao-AILab FlashAttention v2 (BSD-3-Clause). Phase 42
+    /// added this as a backend choice on `FlashSdpaPlan` for the long-
+    /// context regime where FA2's tiling wins over the bespoke kernel.
+    FlashAttentionV2,
+    /// Vendored ozIMMU (MIT). Phase 44 backend choice on FP64 `GemmPlan`
+    /// that splits each operand into `slices` int8 slices and runs
+    /// `slices²` tensor-core matmuls (the Ozaki scheme) to synthesize
+    /// a DGEMM on hardware that has no FP64 tensor cores (RTX 4070,
+    /// L4, etc.). **Opt-in** — NOT bit-equivalent to native DGEMM;
+    /// `slices = 8` is the upstream-recommended sweet spot for
+    /// well-conditioned inputs.
+    ///
+    /// Slice-count discriminant: `0` selects ozIMMU's `fp64_int8_auto`
+    /// mode (runtime selection based on the inputs' mantissa-loss
+    /// histogram); `3..=18` selects the corresponding `fp64_int8_N`
+    /// fixed slice count. Values outside that range are rejected at
+    /// plan-select time.
+    Ozaki {
+        /// Slice count `S` (0 = auto, 3..=18 = fixed).
+        slices: u8,
+    },
 }
 
 /// Generalized kernel SKU — covers every op category.

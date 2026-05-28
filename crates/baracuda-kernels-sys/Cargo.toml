@@ -1,6 +1,6 @@
 [package]
 name = "baracuda-kernels-sys"
-version = "0.0.1-alpha.55"
+version = "0.0.1-alpha.56"
 description = "Compiled bespoke .cu kernel template instantiations for the baracuda ML kernel facade plus C-ABI FFI facades for the library-backed plans (cuDNN conv/pool, cuSOLVER linalg, cuFFT/cuRAND, CUTLASS GEMM re-export). Hosts curated CUDA kernel sources (int8/FP8/int4/bin GEMM RRR, elementwise, reduce, norm, attention, …), builds them via baracuda-forge, exposes extern \"C\" entry points for the safe baracuda-kernels crate. CUTLASS template kernels live in the sibling baracuda-cutlass-kernels-sys crate and are re-exported here under the unified baracuda_kernels_gemm_* namespace."
 edition.workspace = true
 rust-version.workspace = true
@@ -40,6 +40,26 @@ sm90a = ["baracuda-cutlass-kernels-sys/sm90a"]
 # `cudnn.lib` / `libcudnn.so`.
 cudnn = []
 
+# Phase 42 — Vendored Dao-AILab FlashAttention v2 (v2.8.3, BSD-3-Clause).
+# Compiles the FA2 forward kernels for head_dim=128 + f16/bf16 (causal +
+# non-causal) and exposes them through the `baracuda_kernels_fa2_sdpa_*`
+# FFI surface. Off by default — FA2's CUTLASS-heavy templates add
+# significant nvcc compile time (~5–15 min per .cu file on first build).
+# Enable when you want the `FlashSdpaPlan` dispatch heuristic to be able
+# to pick FA2 for long-context shapes (`seq_q * seq_k >= 1M`).
+# Implies `sm80` (FA2 v2.8.3 requires Ampere or newer).
+fa2 = ["sm80"]
+
+# Phase 43 — Vendored AndreSlavescu/mHC.cu (MIT). Compiles the
+# Manifold-Constrained Hyper-Connections layer (static-H FW Tier-1) and
+# exposes it through `baracuda_kernels_mhc_layer_*` FFI symbols.
+# Off by default — mHC pulls in cuBLAS-Lt (for the dynamic-H path's
+# fused RMS+matmul) and adds ~30s of nvcc compile time. Enable when
+# building HyperConnectionPlan into a transformer training stack.
+# Implies `sm80` (Sinkhorn-Knopp + fused stream ops use cooperative
+# groups; mHC.cu upstream tests target Ampere or newer).
+mhc = ["sm80"]
+
 [dependencies]
 # Phase 24 — cutlass GEMM FFI re-export. Pull in the CUTLASS template
 # instantiations so the unified `baracuda_kernels_gemm_*` namespace can
@@ -47,6 +67,11 @@ cudnn = []
 # vs `baracuda_kernels`) so the two static archives co-exist without
 # Cargo's links-conflict guard tripping.
 baracuda-cutlass-kernels-sys = { workspace = true }
+# Phase 42 — direct dep on baracuda-cutlass-sys so this crate's build.rs
+# receives `DEP_CUTLASS_INCLUDE` (the resolved CUTLASS headers dir). Only
+# read when the `fa2` feature is on; otherwise this dep is a passive
+# version-pin and a no-op at compile time.
+baracuda-cutlass-sys = { workspace = true }
 
 [build-dependencies]
 baracuda-forge = { workspace = true }

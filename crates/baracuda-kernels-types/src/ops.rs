@@ -1207,6 +1207,16 @@ pub enum AttentionKind {
     KvCache = 4,
     /// Paged attention (vLLM-style) — reserved.
     PagedAttention = 5,
+    /// Manifold-Constrained Hyper-Connections (DeepSeek-AI 2025, mHC).
+    /// Drop-in replacement for the bare `y = x + sublayer(x)` residual
+    /// connection in transformer blocks. Mixes `n` parallel residual
+    /// streams through a small Sinkhorn-Knopp-normalized matrix `M`
+    /// that lives on the manifold of doubly-stochastic matrices.
+    /// Wired in Phase 43 — bf16 weights / f32 activations, static-H
+    /// FW only (dynamic-H + BW deferred). Backed by the vendored
+    /// `mHC.cu` (Andre Slavescu, MIT) under
+    /// `crates/baracuda-kernels-sys/vendor/mhc/`.
+    HyperConnection = 6,
 }
 
 /// Indexing / scatter / gather op discriminant — Category L from the

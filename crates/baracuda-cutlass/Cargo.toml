@@ -1,6 +1,6 @@
 [package]
 name = "baracuda-cutlass"
-version = "0.0.1-alpha.55"
+version = "0.0.1-alpha.56"
 description = "Safe Rust wrapper for compiled CUTLASS kernels: plan-based GEMM and grouped GEMM with caller-supplied workspace, typed device-buffer arguments, and capture-safe launch."
 edition.workspace = true
 rust-version.workspace = true
@@ -25,6 +25,14 @@ sm90a = ["baracuda-cutlass-kernels-sys/sm90a"]
 # CUDA 11.4-compatible CUTLASS path. Mutually exclusive with `sm90a`.
 cutlass-2-11 = ["baracuda-cutlass-kernels-sys/cutlass-2-11"]
 
+# Phase 44 — vendored ozIMMU (MIT). Adds a `BackendKind::Ozaki` dispatch
+# arm to the FP64 `GemmPlan` path that synthesizes a DGEMM from `S²` int8
+# tensor-core matmuls (the Ozaki scheme). Off by default because the
+# accuracy contract differs from native DGEMM (comparable to DGEMM at
+# `S>=8` on well-conditioned inputs; NOT bit-exact) and because vendoring
+# adds ~30s of nvcc compile time. Forwards to `baracuda-ozimmu`.
+ozimmu = ["dep:baracuda-ozimmu"]
+
 [dependencies]
 baracuda-cutlass-kernels-sys = { workspace = true }
 baracuda-kernels-types = { workspace = true }
@@ -32,6 +40,7 @@ baracuda-driver = { workspace = true }
 baracuda-cublas = { workspace = true }
 baracuda-cublas-sys = { workspace = true }
 baracuda-types = { workspace = true, features = ["half-crate"] }
+baracuda-ozimmu = { workspace = true, optional = true }
 half = { workspace = true }
 thiserror = { workspace = true }
 
