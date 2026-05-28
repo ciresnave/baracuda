@@ -10,7 +10,7 @@ A unified Rust ML-op facade over the NVIDIA CUDA ecosystem.
 ![License](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue)
 ![Status](https://img.shields.io/badge/status-alpha.54-orange)
 ![CUDA](https://img.shields.io/badge/CUDA-12.x-76b900)
-![Tests](https://img.shields.io/badge/regression-2306%2F0-success)
+![Tests](https://img.shields.io/badge/regression-2311%2F0-success)
 
 ## What baracuda is
 
@@ -40,7 +40,7 @@ talk to one library directly.
 
 ## Status
 
-**In active development — alpha.54.** **2306 GPU tests passing**
+**In active development — alpha.54.** **2311 GPU tests passing, zero failures**
 on an RTX 4070 (sm_89), across **616 binary targets**.
 
 Phase coverage (see [`ARCHITECTURE.md`](ARCHITECTURE.md) for the phase
