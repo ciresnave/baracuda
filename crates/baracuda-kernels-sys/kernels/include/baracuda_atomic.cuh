@@ -143,6 +143,20 @@ __device__ __forceinline__ void add<__nv_bfloat16>(__nv_bfloat16* addr, __nv_bfl
     } while (assumed != old);
 }
 
+// =============================================================================
+// `int64_t` — CUDA only provides `atomicAdd(unsigned long long*, ull)`.
+// We reinterpret the destination pointer and add as `ull`; the
+// two's-complement wraparound semantics match for signed/unsigned long
+// long inside `atomicAdd`. Used by Phase 40 (Fuel 6c.4 Gap 6b spillover)
+// for `index_add` on integer value-dtypes.
+// =============================================================================
+
+template <>
+__device__ __forceinline__ void add<int64_t>(int64_t* addr, int64_t val) {
+    atomicAdd(reinterpret_cast<unsigned long long*>(addr),
+              static_cast<unsigned long long>(val));
+}
+
 }} // namespace baracuda::atomic
 
 #endif // BARACUDA_ATOMIC_CUH

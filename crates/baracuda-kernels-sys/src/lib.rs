@@ -32505,6 +32505,325 @@ unsafe extern "C" {
         stream: *mut c_void,
     ) -> i32;
 
+    // ---------- Phase 40 (Fuel 6c.4 Gap 6b spillover) ----------
+    // Integer value-dtype fanout for indexing ops. Read-only ops
+    // (`gather`, `index_select`) and pure-assign `scatter` cover the
+    // full {u8, i8, u16, i16, u32, i32, i64} matrix. `index_add` is
+    // gated to value dtypes with native CUDA `atomicAdd` (i32, u32,
+    // i64-via-ull-reinterpret).
+    //
+    // The FFI signatures match the existing fp-dtype counterparts —
+    // see `BARACUDA_KERNELS_*_INSTANTIATE` macros in
+    // `kernels/include/baracuda_indexing.cuh`. The integer specs are
+    // currently FFI-only (not surfaced via the Rust `IndexElement` /
+    // `Element` trait dispatch); promotion to plan-layer dtype
+    // matching is tracked as a follow-up.
+
+    // -- gather FW (integer value-dtype) --
+
+    pub fn baracuda_kernels_gather_u8_run(
+        out_numel: i64, rank: i32, gather_dim: i32, src_dim_size: i32,
+        out_shape: *const i32, stride_src: *const i64,
+        stride_index: *const i64, stride_out: *const i64,
+        src: *const c_void, index: *const c_void, out: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_gather_i8_run(
+        out_numel: i64, rank: i32, gather_dim: i32, src_dim_size: i32,
+        out_shape: *const i32, stride_src: *const i64,
+        stride_index: *const i64, stride_out: *const i64,
+        src: *const c_void, index: *const c_void, out: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_gather_u16_run(
+        out_numel: i64, rank: i32, gather_dim: i32, src_dim_size: i32,
+        out_shape: *const i32, stride_src: *const i64,
+        stride_index: *const i64, stride_out: *const i64,
+        src: *const c_void, index: *const c_void, out: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_gather_i16_run(
+        out_numel: i64, rank: i32, gather_dim: i32, src_dim_size: i32,
+        out_shape: *const i32, stride_src: *const i64,
+        stride_index: *const i64, stride_out: *const i64,
+        src: *const c_void, index: *const c_void, out: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_gather_u32_run(
+        out_numel: i64, rank: i32, gather_dim: i32, src_dim_size: i32,
+        out_shape: *const i32, stride_src: *const i64,
+        stride_index: *const i64, stride_out: *const i64,
+        src: *const c_void, index: *const c_void, out: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_gather_i64_run(
+        out_numel: i64, rank: i32, gather_dim: i32, src_dim_size: i32,
+        out_shape: *const i32, stride_src: *const i64,
+        stride_index: *const i64, stride_out: *const i64,
+        src: *const c_void, index: *const c_void, out: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    pub fn baracuda_kernels_gather_i64idx_u8_run(
+        out_numel: i64, rank: i32, gather_dim: i32, src_dim_size: i32,
+        out_shape: *const i32, stride_src: *const i64,
+        stride_index: *const i64, stride_out: *const i64,
+        src: *const c_void, index: *const c_void, out: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_gather_i64idx_i8_run(
+        out_numel: i64, rank: i32, gather_dim: i32, src_dim_size: i32,
+        out_shape: *const i32, stride_src: *const i64,
+        stride_index: *const i64, stride_out: *const i64,
+        src: *const c_void, index: *const c_void, out: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_gather_i64idx_u16_run(
+        out_numel: i64, rank: i32, gather_dim: i32, src_dim_size: i32,
+        out_shape: *const i32, stride_src: *const i64,
+        stride_index: *const i64, stride_out: *const i64,
+        src: *const c_void, index: *const c_void, out: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_gather_i64idx_i16_run(
+        out_numel: i64, rank: i32, gather_dim: i32, src_dim_size: i32,
+        out_shape: *const i32, stride_src: *const i64,
+        stride_index: *const i64, stride_out: *const i64,
+        src: *const c_void, index: *const c_void, out: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_gather_i64idx_u32_run(
+        out_numel: i64, rank: i32, gather_dim: i32, src_dim_size: i32,
+        out_shape: *const i32, stride_src: *const i64,
+        stride_index: *const i64, stride_out: *const i64,
+        src: *const c_void, index: *const c_void, out: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_gather_i64idx_i64_run(
+        out_numel: i64, rank: i32, gather_dim: i32, src_dim_size: i32,
+        out_shape: *const i32, stride_src: *const i64,
+        stride_index: *const i64, stride_out: *const i64,
+        src: *const c_void, index: *const c_void, out: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    // -- index_select FW (integer value-dtype) --
+
+    pub fn baracuda_kernels_index_select_u8_run(
+        out_numel: i64, rank: i32, select_dim: i32, src_dim_size: i32,
+        out_shape: *const i32, stride_src: *const i64, stride_out: *const i64,
+        src: *const c_void, idx: *const c_void, out: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_index_select_i8_run(
+        out_numel: i64, rank: i32, select_dim: i32, src_dim_size: i32,
+        out_shape: *const i32, stride_src: *const i64, stride_out: *const i64,
+        src: *const c_void, idx: *const c_void, out: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_index_select_u16_run(
+        out_numel: i64, rank: i32, select_dim: i32, src_dim_size: i32,
+        out_shape: *const i32, stride_src: *const i64, stride_out: *const i64,
+        src: *const c_void, idx: *const c_void, out: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_index_select_i16_run(
+        out_numel: i64, rank: i32, select_dim: i32, src_dim_size: i32,
+        out_shape: *const i32, stride_src: *const i64, stride_out: *const i64,
+        src: *const c_void, idx: *const c_void, out: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_index_select_u32_run(
+        out_numel: i64, rank: i32, select_dim: i32, src_dim_size: i32,
+        out_shape: *const i32, stride_src: *const i64, stride_out: *const i64,
+        src: *const c_void, idx: *const c_void, out: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_index_select_i64_run(
+        out_numel: i64, rank: i32, select_dim: i32, src_dim_size: i32,
+        out_shape: *const i32, stride_src: *const i64, stride_out: *const i64,
+        src: *const c_void, idx: *const c_void, out: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    pub fn baracuda_kernels_index_select_i64idx_u8_run(
+        out_numel: i64, rank: i32, select_dim: i32, src_dim_size: i32,
+        out_shape: *const i32, stride_src: *const i64, stride_out: *const i64,
+        src: *const c_void, idx: *const c_void, out: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_index_select_i64idx_i8_run(
+        out_numel: i64, rank: i32, select_dim: i32, src_dim_size: i32,
+        out_shape: *const i32, stride_src: *const i64, stride_out: *const i64,
+        src: *const c_void, idx: *const c_void, out: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_index_select_i64idx_u16_run(
+        out_numel: i64, rank: i32, select_dim: i32, src_dim_size: i32,
+        out_shape: *const i32, stride_src: *const i64, stride_out: *const i64,
+        src: *const c_void, idx: *const c_void, out: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_index_select_i64idx_i16_run(
+        out_numel: i64, rank: i32, select_dim: i32, src_dim_size: i32,
+        out_shape: *const i32, stride_src: *const i64, stride_out: *const i64,
+        src: *const c_void, idx: *const c_void, out: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_index_select_i64idx_u32_run(
+        out_numel: i64, rank: i32, select_dim: i32, src_dim_size: i32,
+        out_shape: *const i32, stride_src: *const i64, stride_out: *const i64,
+        src: *const c_void, idx: *const c_void, out: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_index_select_i64idx_i64_run(
+        out_numel: i64, rank: i32, select_dim: i32, src_dim_size: i32,
+        out_shape: *const i32, stride_src: *const i64, stride_out: *const i64,
+        src: *const c_void, idx: *const c_void, out: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    // -- scatter (pure-assign; integer value-dtype) --
+
+    pub fn baracuda_kernels_scatter_u8_run(
+        upd_numel: i64, rank: i32, scatter_dim: i32, out_dim_size: i32,
+        upd_shape: *const i32, stride_upd: *const i64,
+        stride_index: *const i64, stride_out: *const i64,
+        updates: *const c_void, index: *const c_void, out: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_scatter_i8_run(
+        upd_numel: i64, rank: i32, scatter_dim: i32, out_dim_size: i32,
+        upd_shape: *const i32, stride_upd: *const i64,
+        stride_index: *const i64, stride_out: *const i64,
+        updates: *const c_void, index: *const c_void, out: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_scatter_u16_run(
+        upd_numel: i64, rank: i32, scatter_dim: i32, out_dim_size: i32,
+        upd_shape: *const i32, stride_upd: *const i64,
+        stride_index: *const i64, stride_out: *const i64,
+        updates: *const c_void, index: *const c_void, out: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_scatter_i16_run(
+        upd_numel: i64, rank: i32, scatter_dim: i32, out_dim_size: i32,
+        upd_shape: *const i32, stride_upd: *const i64,
+        stride_index: *const i64, stride_out: *const i64,
+        updates: *const c_void, index: *const c_void, out: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_scatter_u32_run(
+        upd_numel: i64, rank: i32, scatter_dim: i32, out_dim_size: i32,
+        upd_shape: *const i32, stride_upd: *const i64,
+        stride_index: *const i64, stride_out: *const i64,
+        updates: *const c_void, index: *const c_void, out: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_scatter_i32_run(
+        upd_numel: i64, rank: i32, scatter_dim: i32, out_dim_size: i32,
+        upd_shape: *const i32, stride_upd: *const i64,
+        stride_index: *const i64, stride_out: *const i64,
+        updates: *const c_void, index: *const c_void, out: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_scatter_i64_run(
+        upd_numel: i64, rank: i32, scatter_dim: i32, out_dim_size: i32,
+        upd_shape: *const i32, stride_upd: *const i64,
+        stride_index: *const i64, stride_out: *const i64,
+        updates: *const c_void, index: *const c_void, out: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    pub fn baracuda_kernels_scatter_i64idx_u8_run(
+        upd_numel: i64, rank: i32, scatter_dim: i32, out_dim_size: i32,
+        upd_shape: *const i32, stride_upd: *const i64,
+        stride_index: *const i64, stride_out: *const i64,
+        updates: *const c_void, index: *const c_void, out: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_scatter_i64idx_i8_run(
+        upd_numel: i64, rank: i32, scatter_dim: i32, out_dim_size: i32,
+        upd_shape: *const i32, stride_upd: *const i64,
+        stride_index: *const i64, stride_out: *const i64,
+        updates: *const c_void, index: *const c_void, out: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_scatter_i64idx_u16_run(
+        upd_numel: i64, rank: i32, scatter_dim: i32, out_dim_size: i32,
+        upd_shape: *const i32, stride_upd: *const i64,
+        stride_index: *const i64, stride_out: *const i64,
+        updates: *const c_void, index: *const c_void, out: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_scatter_i64idx_i16_run(
+        upd_numel: i64, rank: i32, scatter_dim: i32, out_dim_size: i32,
+        upd_shape: *const i32, stride_upd: *const i64,
+        stride_index: *const i64, stride_out: *const i64,
+        updates: *const c_void, index: *const c_void, out: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_scatter_i64idx_u32_run(
+        upd_numel: i64, rank: i32, scatter_dim: i32, out_dim_size: i32,
+        upd_shape: *const i32, stride_upd: *const i64,
+        stride_index: *const i64, stride_out: *const i64,
+        updates: *const c_void, index: *const c_void, out: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_scatter_i64idx_i32_run(
+        upd_numel: i64, rank: i32, scatter_dim: i32, out_dim_size: i32,
+        upd_shape: *const i32, stride_upd: *const i64,
+        stride_index: *const i64, stride_out: *const i64,
+        updates: *const c_void, index: *const c_void, out: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_scatter_i64idx_i64_run(
+        upd_numel: i64, rank: i32, scatter_dim: i32, out_dim_size: i32,
+        upd_shape: *const i32, stride_upd: *const i64,
+        stride_index: *const i64, stride_out: *const i64,
+        updates: *const c_void, index: *const c_void, out: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
+    // -- index_add (atomicAdd-Σ; native-atomic-only ints) --
+
+    pub fn baracuda_kernels_index_add_i32_run(
+        src_numel: i64, rank: i32, add_dim: i32, dst_dim_size: i32,
+        src_shape: *const i32, stride_src: *const i64, stride_dst: *const i64,
+        src: *const c_void, idx: *const c_void, dst: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_index_add_u32_run(
+        src_numel: i64, rank: i32, add_dim: i32, dst_dim_size: i32,
+        src_shape: *const i32, stride_src: *const i64, stride_dst: *const i64,
+        src: *const c_void, idx: *const c_void, dst: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_index_add_i64_run(
+        src_numel: i64, rank: i32, add_dim: i32, dst_dim_size: i32,
+        src_shape: *const i32, stride_src: *const i64, stride_dst: *const i64,
+        src: *const c_void, idx: *const c_void, dst: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_index_add_i64idx_i32_run(
+        src_numel: i64, rank: i32, add_dim: i32, dst_dim_size: i32,
+        src_shape: *const i32, stride_src: *const i64, stride_dst: *const i64,
+        src: *const c_void, idx: *const c_void, dst: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_index_add_i64idx_u32_run(
+        src_numel: i64, rank: i32, add_dim: i32, dst_dim_size: i32,
+        src_shape: *const i32, stride_src: *const i64, stride_dst: *const i64,
+        src: *const c_void, idx: *const c_void, dst: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_index_add_i64idx_i64_run(
+        src_numel: i64, rank: i32, add_dim: i32, dst_dim_size: i32,
+        src_shape: *const i32, stride_src: *const i64, stride_dst: *const i64,
+        src: *const c_void, idx: *const c_void, dst: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+
     // ---------- embedding (Phase 7 Milestone 7.5) ----------
     //
     // `out[n, :] = weight[indices[n], :]` with `padding_idx` zeroing
@@ -38187,6 +38506,84 @@ unsafe extern "C" {
     pub fn baracuda_kernels_argsort_fp8e4m3_can_implement(
         batch: i32, row_len: i32,
     ) -> i32;
+
+    // ---------- Phase 40 (Fuel ask Gap 6b) — multi-block radix argsort ----------
+    //
+    // For `row_len > 1024` (block-bitonic cap). Uses CUB's
+    // `DeviceSegmentedRadixSort::SortPairs[Descending]` under the hood.
+    // Caller supplies a workspace blob; size is queried via the
+    // `_workspace_size` companion.
+    //
+    // Dtype coverage: f32, f64, i32, i64 (the common LLM top-k logit
+    // dtypes). bf16 / f16 / fp8 deferred — CUB radix-sort needs a
+    // `cub::Traits` specialization for non-native arithmetic types and
+    // those would require either a custom `decomposer` (CUB 2.5+) or a
+    // per-row cast-to-f32 pre-pass.
+    //
+    // Calling contract:
+    //   * `row_len <= 1024` returns status 3 (unsupported) — caller
+    //     should dispatch to the block-bitonic `argsort_<dt>_run`.
+    //   * Workspace shortfall returns status 4 — caller must size the
+    //     blob using `_workspace_size`.
+    //   * The workspace blob is consumed in full (CUB temp + scratch
+    //     keys/indices + per-row offsets). Layout is internal; treat
+    //     the blob as opaque.
+
+    /// Multi-block radix argsort, f32, for `row_len > 1024`.
+    pub fn baracuda_kernels_argsort_f32_big_run(
+        batch: i32,
+        row_len: i32,
+        descending: i32,
+        x: *const c_void,
+        y_idx: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_argsort_f32_big_can_implement(batch: i32, row_len: i32) -> i32;
+    pub fn baracuda_kernels_argsort_f32_big_workspace_size(batch: i32, row_len: i32) -> usize;
+
+    /// Multi-block radix argsort, f64.
+    pub fn baracuda_kernels_argsort_f64_big_run(
+        batch: i32,
+        row_len: i32,
+        descending: i32,
+        x: *const c_void,
+        y_idx: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_argsort_f64_big_can_implement(batch: i32, row_len: i32) -> i32;
+    pub fn baracuda_kernels_argsort_f64_big_workspace_size(batch: i32, row_len: i32) -> usize;
+
+    /// Multi-block radix argsort, i32.
+    pub fn baracuda_kernels_argsort_i32_big_run(
+        batch: i32,
+        row_len: i32,
+        descending: i32,
+        x: *const c_void,
+        y_idx: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_argsort_i32_big_can_implement(batch: i32, row_len: i32) -> i32;
+    pub fn baracuda_kernels_argsort_i32_big_workspace_size(batch: i32, row_len: i32) -> usize;
+
+    /// Multi-block radix argsort, i64.
+    pub fn baracuda_kernels_argsort_i64_big_run(
+        batch: i32,
+        row_len: i32,
+        descending: i32,
+        x: *const c_void,
+        y_idx: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_argsort_i64_big_can_implement(batch: i32, row_len: i32) -> i32;
+    pub fn baracuda_kernels_argsort_i64_big_workspace_size(batch: i32, row_len: i32) -> usize;
 
     // ---------- msort FW (stable; values + indices) ----------
 

@@ -5,6 +5,16 @@
 //!
 //! Trailblazer dtype coverage: `f32, f64, i32, i64`.
 //! Non-differentiable (set-valued indices) — no BW.
+//!
+//! # Multi-block radix (Phase 40 — Fuel ask Gap 6b)
+//!
+//! `row_len ≤ 1024` is served by the block-bitonic kernel (no workspace
+//! required). For `row_len > 1024` the plan transparently dispatches to
+//! a CUB-segmented-radix-sort kernel which DOES require a workspace blob
+//! (queried via [`ArgsortPlan::workspace_size`]). Callers that only ever
+//! pass `row_len ≤ 1024` will see a `workspace_size()` of `0` and may
+//! continue to pass [`Workspace::None`]. The dispatch happens internally
+//! at `run()` time; the kernel SKU reflects whichever path was selected.
 
 use core::ffi::c_void;
 use core::marker::PhantomData;
@@ -17,14 +27,16 @@ use baracuda_kernels_types::{
 };
 
 use super::map_status;
-use super::sort::{build_sku, validate_sort_desc};
+use super::sort::build_sku;
 
 /// Descriptor for an `argsort` op.
 #[derive(Copy, Clone, Debug)]
 pub struct ArgsortDescriptor {
     /// Number of independent rows.
     pub batch: i32,
-    /// Length of each row. Trailblazer cap: `≤ 1024`.
+    /// Length of each row. `≤ 1024` uses the block-bitonic kernel;
+    /// `> 1024` uses the multi-block CUB radix kernel (workspace
+    /// required — call [`ArgsortPlan::workspace_size`]).
     pub row_len: i32,
     /// `true` = sort largest-first.
     pub descending: bool,
@@ -71,13 +83,26 @@ impl<T: Element> ArgsortPlan<T> {
         desc: &ArgsortDescriptor,
         _pref: PlanPreference,
     ) -> Result<Self> {
-        validate_sort_desc(
-            desc.batch,
-            desc.row_len,
+        // Local validator (broader than `validate_sort_desc`): allows
+        // `row_len > 1024` because the multi-block radix path covers it.
+        if desc.element != T::KIND {
+            return Err(Error::Unsupported(
+                "baracuda-kernels::ArgsortPlan: descriptor element != type parameter T",
+            ));
+        }
+        if desc.batch < 0 || desc.row_len < 0 {
+            return Err(Error::InvalidProblem(
+                "baracuda-kernels::ArgsortPlan: batch / row_len must be non-negative",
+            ));
+        }
+        if !matches!(
             desc.element,
-            T::KIND,
-            "ArgsortPlan",
-        )?;
+            ElementKind::F32 | ElementKind::F64 | ElementKind::I32 | ElementKind::I64
+        ) {
+            return Err(Error::Unsupported(
+                "baracuda-kernels::ArgsortPlan: today only f32 / f64 / i32 / i64 wired",
+            ));
+        }
         let sku = build_sku::<T>(SortKind::Argsort);
         Ok(Self {
             desc: *desc,
@@ -103,9 +128,44 @@ impl<T: Element> ArgsortPlan<T> {
     }
 
     /// Workspace size in bytes.
+    ///
+    /// `0` when `row_len ≤ 1024` (block-bitonic, in-SMEM). Non-zero
+    /// when `row_len > 1024` (multi-block radix path needs scratch for
+    /// CUB's `DeviceSegmentedRadixSort` plus keys/indices/offset
+    /// buffers). The exact bytes depend on `(batch, row_len, T)`.
     #[inline]
     pub fn workspace_size(&self) -> usize {
-        0
+        if self.desc.row_len <= 1024 {
+            return 0;
+        }
+        let batch = self.desc.batch;
+        let row_len = self.desc.row_len;
+        if batch == 0 || row_len == 0 {
+            return 0;
+        }
+        match T::KIND {
+            ElementKind::F32 => unsafe {
+                baracuda_kernels_sys::baracuda_kernels_argsort_f32_big_workspace_size(
+                    batch, row_len,
+                )
+            },
+            ElementKind::F64 => unsafe {
+                baracuda_kernels_sys::baracuda_kernels_argsort_f64_big_workspace_size(
+                    batch, row_len,
+                )
+            },
+            ElementKind::I32 => unsafe {
+                baracuda_kernels_sys::baracuda_kernels_argsort_i32_big_workspace_size(
+                    batch, row_len,
+                )
+            },
+            ElementKind::I64 => unsafe {
+                baracuda_kernels_sys::baracuda_kernels_argsort_i64_big_workspace_size(
+                    batch, row_len,
+                )
+            },
+            _ => 0,
+        }
     }
 
     /// Identity of the kernel this plan picked.
@@ -124,7 +184,7 @@ impl<T: Element> ArgsortPlan<T> {
     pub fn run(
         &self,
         stream: &Stream,
-        _workspace: Workspace<'_>,
+        workspace: Workspace<'_>,
         args: ArgsortArgs<'_, T>,
     ) -> Result<()> {
         self.can_implement(&args)?;
@@ -136,8 +196,36 @@ impl<T: Element> ArgsortPlan<T> {
         let stream_ptr = stream.as_raw() as *mut c_void;
         let desc_flag = if self.desc.descending { 1 } else { 0 };
 
-        let status = match T::KIND {
-            ElementKind::F32 => unsafe {
+        // Phase 40 dispatch: `row_len > 1024` → multi-block radix path
+        // (requires non-empty workspace); otherwise block-bitonic
+        // (workspace ignored).
+        let use_big = self.desc.row_len > 1024;
+        let (ws_ptr, ws_bytes) = if use_big {
+            let needed = self.workspace_size();
+            match workspace {
+                Workspace::None => {
+                    if needed == 0 {
+                        (core::ptr::null_mut::<c_void>(), 0usize)
+                    } else {
+                        return Err(Error::WorkspaceTooSmall { needed, got: 0 });
+                    }
+                }
+                Workspace::Borrowed(slice) => {
+                    let got = slice.len();
+                    if got < needed {
+                        return Err(Error::WorkspaceTooSmall { needed, got });
+                    }
+                    (slice.as_raw().0 as *mut c_void, got)
+                }
+            }
+        } else {
+            // Bitonic path ignores workspace; pass null/0 for safety.
+            let _ = workspace;
+            (core::ptr::null_mut::<c_void>(), 0usize)
+        };
+
+        let status = match (T::KIND, use_big) {
+            (ElementKind::F32, false) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_argsort_f32_run(
                     self.desc.batch,
                     self.desc.row_len,
@@ -149,7 +237,7 @@ impl<T: Element> ArgsortPlan<T> {
                     stream_ptr,
                 )
             },
-            ElementKind::F64 => unsafe {
+            (ElementKind::F64, false) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_argsort_f64_run(
                     self.desc.batch,
                     self.desc.row_len,
@@ -161,7 +249,7 @@ impl<T: Element> ArgsortPlan<T> {
                     stream_ptr,
                 )
             },
-            ElementKind::I32 => unsafe {
+            (ElementKind::I32, false) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_argsort_i32_run(
                     self.desc.batch,
                     self.desc.row_len,
@@ -173,7 +261,7 @@ impl<T: Element> ArgsortPlan<T> {
                     stream_ptr,
                 )
             },
-            ElementKind::I64 => unsafe {
+            (ElementKind::I64, false) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_argsort_i64_run(
                     self.desc.batch,
                     self.desc.row_len,
@@ -182,6 +270,54 @@ impl<T: Element> ArgsortPlan<T> {
                     idx_ptr,
                     core::ptr::null_mut(),
                     0,
+                    stream_ptr,
+                )
+            },
+            (ElementKind::F32, true) => unsafe {
+                baracuda_kernels_sys::baracuda_kernels_argsort_f32_big_run(
+                    self.desc.batch,
+                    self.desc.row_len,
+                    desc_flag,
+                    in_ptr,
+                    idx_ptr,
+                    ws_ptr,
+                    ws_bytes,
+                    stream_ptr,
+                )
+            },
+            (ElementKind::F64, true) => unsafe {
+                baracuda_kernels_sys::baracuda_kernels_argsort_f64_big_run(
+                    self.desc.batch,
+                    self.desc.row_len,
+                    desc_flag,
+                    in_ptr,
+                    idx_ptr,
+                    ws_ptr,
+                    ws_bytes,
+                    stream_ptr,
+                )
+            },
+            (ElementKind::I32, true) => unsafe {
+                baracuda_kernels_sys::baracuda_kernels_argsort_i32_big_run(
+                    self.desc.batch,
+                    self.desc.row_len,
+                    desc_flag,
+                    in_ptr,
+                    idx_ptr,
+                    ws_ptr,
+                    ws_bytes,
+                    stream_ptr,
+                )
+            },
+            (ElementKind::I64, true) => unsafe {
+                baracuda_kernels_sys::baracuda_kernels_argsort_i64_big_run(
+                    self.desc.batch,
+                    self.desc.row_len,
+                    desc_flag,
+                    in_ptr,
+                    idx_ptr,
+                    ws_ptr,
+                    ws_bytes,
                     stream_ptr,
                 )
             },

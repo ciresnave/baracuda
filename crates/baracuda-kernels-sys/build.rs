@@ -884,6 +884,13 @@ fn collect_kernel_files() -> Vec<&'static str> {
             "sort/unique.cu",
             "sort/histogram.cu",
             "sort/searchsorted.cu",
+            // Phase 40 (Fuel ask Gap 6b) — multi-block radix argsort
+            // for `row_len > 1024`. Uses CUB's
+            // `DeviceSegmentedRadixSort::SortPairs[Descending]`. Caller
+            // supplies a workspace blob (query exact bytes via
+            // `baracuda_kernels_argsort_<dt>_big_workspace_size`).
+            // Dtype coverage: f32, f64, i32, i64.
+            "sort/argsort_big.cu",
             // Phase 13.1 — WriteSlice (Category N / ShapeLayoutKind::
             // WriteSlice). Byte-width-dispatched memcpy kernel (one
             // symbol per sizeof(T) ∈ {1, 2, 4, 8, 16}) plus a

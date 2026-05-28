@@ -25,3 +25,23 @@ BARACUDA_KERNELS_SCATTER_INSTANTIATE(scatter_i64idx_f32,  float,          int64_
 BARACUDA_KERNELS_SCATTER_INSTANTIATE(scatter_i64idx_f64,  double,         int64_t)
 BARACUDA_KERNELS_SCATTER_INSTANTIATE(scatter_i64idx_f16,  __half,         int64_t)
 BARACUDA_KERNELS_SCATTER_INSTANTIATE(scatter_i64idx_bf16, __nv_bfloat16,  int64_t)
+
+// Phase 40 (Fuel 6c.4 Gap 6b spillover) — integer value-dtype fanout
+// for pure-assign `scatter` (last-writer-wins; no atomics needed).
+// Coverage: value ∈ {u8, i8, u16, i16, u32, i32, i64} × idx ∈ {i32, i64}
+// = 14 symbols.
+BARACUDA_KERNELS_SCATTER_INSTANTIATE(scatter_u8,  uint8_t,  int32_t)
+BARACUDA_KERNELS_SCATTER_INSTANTIATE(scatter_i8,  int8_t,   int32_t)
+BARACUDA_KERNELS_SCATTER_INSTANTIATE(scatter_u16, uint16_t, int32_t)
+BARACUDA_KERNELS_SCATTER_INSTANTIATE(scatter_i16, int16_t,  int32_t)
+BARACUDA_KERNELS_SCATTER_INSTANTIATE(scatter_u32, uint32_t, int32_t)
+BARACUDA_KERNELS_SCATTER_INSTANTIATE(scatter_i32, int32_t,  int32_t)
+BARACUDA_KERNELS_SCATTER_INSTANTIATE(scatter_i64, int64_t,  int32_t)
+
+BARACUDA_KERNELS_SCATTER_INSTANTIATE(scatter_i64idx_u8,  uint8_t,  int64_t)
+BARACUDA_KERNELS_SCATTER_INSTANTIATE(scatter_i64idx_i8,  int8_t,   int64_t)
+BARACUDA_KERNELS_SCATTER_INSTANTIATE(scatter_i64idx_u16, uint16_t, int64_t)
+BARACUDA_KERNELS_SCATTER_INSTANTIATE(scatter_i64idx_i16, int16_t,  int64_t)
+BARACUDA_KERNELS_SCATTER_INSTANTIATE(scatter_i64idx_u32, uint32_t, int64_t)
+BARACUDA_KERNELS_SCATTER_INSTANTIATE(scatter_i64idx_i32, int32_t,  int64_t)
+BARACUDA_KERNELS_SCATTER_INSTANTIATE(scatter_i64idx_i64, int64_t,  int64_t)
