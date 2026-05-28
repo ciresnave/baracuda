@@ -8,9 +8,9 @@
 A unified Rust ML-op facade over the NVIDIA CUDA ecosystem.
 
 ![License](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue)
-![Status](https://img.shields.io/badge/status-alpha.54-orange)
+![Status](https://img.shields.io/badge/status-alpha.55-orange)
 ![CUDA](https://img.shields.io/badge/CUDA-12.x-76b900)
-![Tests](https://img.shields.io/badge/regression-2311%2F0-success)
+![Tests](https://img.shields.io/badge/regression-2320%2F0-success)
 
 ## What baracuda is
 
@@ -40,7 +40,7 @@ talk to one library directly.
 
 ## Status
 
-**In active development — alpha.54.** **2311 GPU tests passing, zero failures**
+**In active development — alpha.55.** **2320 GPU tests passing**
 on an RTX 4070 (sm_89), across **616 binary targets**.
 
 Phase coverage (see [`ARCHITECTURE.md`](ARCHITECTURE.md) for the phase
@@ -88,7 +88,8 @@ matrix):
 | 38 | Fuel 6c.4 part 3/4 (alpha.53): Ternary `where_cond` dtype-matrix fanout — Cond lifted to template parameter; U8 (existing, untouched) + U32 + I64 cond × {f32/f64/f16/bf16, u8/i8/u32/i16/i32/i64, fp8e4m3} value × {contig, strided}. 87 new FFI declarations (58 `_run` + 29 `_can_implement`). Existing `where_<value>_run` family preserved bit-identically (default Cond=uint8_t). | done |
 | 39 | Fuel 6c.4 part 4/4 (alpha.53, bundled with Phase 38): Indexing Tier 1 — NEW scatter (pure assign) + index_add for {f32/f64/f16/bf16} × {i32, i64idx} (16 syms) + gather u8idx extras for {f32, f64} (2 syms). 18 new FFI symbols total. Existing per-axis stride arrays meant no separate contig/strided split needed. f16/bf16 index_add uses the Phase 11.3 `atomic::add<T>` atomicCAS helper. Scatter documented + tested with disjoint-target indices (last-writer-wins on collisions, caller-aware non-determinism). | done |
 | 40 | Fuel 6c.4 final cleanup (alpha.54): multi-block radix argsort via CUB `DeviceSegmentedRadixSort` for `row_len > 1024` (4 dtypes × 3 entries = 12 syms; bitonic stays for ≤1024) + Indexing Tier 2 integer value-dtype matrix (gather/index_select/scatter for u8/i8/u16/i16/u32/i32/i64 × i32/i64idx = 38 syms; index_add for i32/u32/i64 only = 6 syms). 56 new C symbols total. New `atomic::add<int64_t>` specialization via `unsigned long long*` reinterpret. Tier 3 (fp8e4m3 + sub-32-bit ints for index_add) deferred — no concrete caller. | done |
-| 41+ | Tier 3 indexing fanout if needed; Hopper sm_90a / Blackwell sm_100; 1.0 freeze. | pending (see [`ROADMAP.md`](ROADMAP.md)) |
+| 41 | Fuel 6c.5 final unblock (alpha.55): RoPE interleaved-pair (Gap 7) + RoPE THD-layout (Gap 8) variants. 28 new FFI symbols (FW+BW × 4 fp dtypes × 2 variants + `_can_implement` companions). **Closes the entire Fuel 6c.4/6c.5 batch ask** — Fuel can now drop the last `Id::Reduce` PTX module + retire `fuel-cuda-kernels` workspace member + drop the `cudaforge` build dep. Discovery: existing `rope_apply_*` was already using `(2k, 2k+1)` pairing (not `(i, i+d/2)` as the brief stated) → interleaved symbols are name-aliases on the same kernel; THD is genuinely new. | done |
+| 42+ | Tier 3 indexing fanout if needed; Hopper sm_90a / Blackwell sm_100; 1.0 freeze. | pending (see [`ROADMAP.md`](ROADMAP.md)) |
 
 API stability is **not** promised before beta.0. Breaking changes ship in
 each alpha bump and are documented in the workspace `CHANGELOG.md`.
@@ -99,8 +100,8 @@ Add the kernel facade and the driver crate:
 
 ```toml
 [dependencies]
-baracuda-kernels = { version = "0.0.1-alpha.54", features = ["sm89", "cudnn"] }
-baracuda-driver  = "0.0.1-alpha.54"
+baracuda-kernels = { version = "0.0.1-alpha.55", features = ["sm89", "cudnn"] }
+baracuda-driver  = "0.0.1-alpha.55"
 ```
 
 A representative example — single-axis numerically stable softmax over a

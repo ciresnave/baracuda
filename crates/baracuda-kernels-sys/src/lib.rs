@@ -27072,6 +27072,317 @@ unsafe extern "C" {
         bh: i32, td: i32, d: i32, stride_b: i32,
     ) -> i32;
 
+    // ----------------------------------------------------------------
+    // Phase 41 (Fuel Phase 6c.4 Gap 7) — RoPE apply INTERLEAVED variant.
+    // ----------------------------------------------------------------
+    //
+    // Same FFI shape and semantics as the Phase 36 `rope_apply_<dt>`
+    // family — caller-supplied f32 cos/sin tables, `[bh, td]` flat
+    // operand layout. The interleaved name pins the pair convention
+    // `(2k, 2k+1)` with cos/sin indexed by `pair = dim_idx >> 1`
+    // (the same pairing already implemented by `rope_apply_<dt>_run`).
+    // Exposed as a separate symbol so callers using the `RotaryEmbI`
+    // API can drop the PTX module and link directly against baracuda.
+
+    /// RoPE apply interleaved FW, f32.
+    pub fn baracuda_kernels_rope_apply_interleaved_f32_run(
+        bh: i32,
+        td: i32,
+        d: i32,
+        stride_b: i32,
+        x: *const c_void,
+        cos_tab: *const c_void,
+        sin_tab: *const c_void,
+        y: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_rope_apply_interleaved_f32_can_implement(
+        bh: i32, td: i32, d: i32, stride_b: i32,
+    ) -> i32;
+
+    /// RoPE apply interleaved FW, f16.
+    pub fn baracuda_kernels_rope_apply_interleaved_f16_run(
+        bh: i32,
+        td: i32,
+        d: i32,
+        stride_b: i32,
+        x: *const c_void,
+        cos_tab: *const c_void,
+        sin_tab: *const c_void,
+        y: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_rope_apply_interleaved_f16_can_implement(
+        bh: i32, td: i32, d: i32, stride_b: i32,
+    ) -> i32;
+
+    /// RoPE apply interleaved FW, bf16.
+    pub fn baracuda_kernels_rope_apply_interleaved_bf16_run(
+        bh: i32,
+        td: i32,
+        d: i32,
+        stride_b: i32,
+        x: *const c_void,
+        cos_tab: *const c_void,
+        sin_tab: *const c_void,
+        y: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_rope_apply_interleaved_bf16_can_implement(
+        bh: i32, td: i32, d: i32, stride_b: i32,
+    ) -> i32;
+
+    /// RoPE apply interleaved FW, f64.
+    pub fn baracuda_kernels_rope_apply_interleaved_f64_run(
+        bh: i32,
+        td: i32,
+        d: i32,
+        stride_b: i32,
+        x: *const c_void,
+        cos_tab: *const c_void,
+        sin_tab: *const c_void,
+        y: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_rope_apply_interleaved_f64_can_implement(
+        bh: i32, td: i32, d: i32, stride_b: i32,
+    ) -> i32;
+
+    /// RoPE apply interleaved BW, f32.
+    pub fn baracuda_kernels_rope_apply_interleaved_backward_f32_run(
+        bh: i32,
+        td: i32,
+        d: i32,
+        stride_b: i32,
+        dy: *const c_void,
+        cos_tab: *const c_void,
+        sin_tab: *const c_void,
+        dx: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_rope_apply_interleaved_backward_f32_can_implement(
+        bh: i32, td: i32, d: i32, stride_b: i32,
+    ) -> i32;
+
+    /// RoPE apply interleaved BW, f16.
+    pub fn baracuda_kernels_rope_apply_interleaved_backward_f16_run(
+        bh: i32,
+        td: i32,
+        d: i32,
+        stride_b: i32,
+        dy: *const c_void,
+        cos_tab: *const c_void,
+        sin_tab: *const c_void,
+        dx: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_rope_apply_interleaved_backward_f16_can_implement(
+        bh: i32, td: i32, d: i32, stride_b: i32,
+    ) -> i32;
+
+    /// RoPE apply interleaved BW, bf16.
+    pub fn baracuda_kernels_rope_apply_interleaved_backward_bf16_run(
+        bh: i32,
+        td: i32,
+        d: i32,
+        stride_b: i32,
+        dy: *const c_void,
+        cos_tab: *const c_void,
+        sin_tab: *const c_void,
+        dx: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_rope_apply_interleaved_backward_bf16_can_implement(
+        bh: i32, td: i32, d: i32, stride_b: i32,
+    ) -> i32;
+
+    /// RoPE apply interleaved BW, f64.
+    pub fn baracuda_kernels_rope_apply_interleaved_backward_f64_run(
+        bh: i32,
+        td: i32,
+        d: i32,
+        stride_b: i32,
+        dy: *const c_void,
+        cos_tab: *const c_void,
+        sin_tab: *const c_void,
+        dx: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_rope_apply_interleaved_backward_f64_can_implement(
+        bh: i32, td: i32, d: i32, stride_b: i32,
+    ) -> i32;
+
+    // ----------------------------------------------------------------
+    // Phase 41 (Fuel Phase 6c.4 Gap 8) — RoPE apply THD-layout variant.
+    // ----------------------------------------------------------------
+    //
+    // Operand layout `[T, H, D]` (T packs batch * seq) instead of the
+    // canonical `[B, H, T, D]`. Per-cell addressing
+    // `x[t * (H * D) + h * D + dim]`. cos/sin tables remain f32 over
+    // the FFI; layout is `cs[t * stride_b + pair]` with `stride_b ==
+    // D/2` per-t tables or `stride_b == 0` for a single shared `[D/2]`
+    // table. Pair convention `(2k, 2k+1)` matches the canonical apply.
+
+    /// RoPE apply THD FW, f32.
+    pub fn baracuda_kernels_rope_apply_thd_f32_run(
+        t_outer: i32,
+        h_heads: i32,
+        d: i32,
+        stride_b: i32,
+        x: *const c_void,
+        cos_tab: *const c_void,
+        sin_tab: *const c_void,
+        y: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_rope_apply_thd_f32_can_implement(
+        t_outer: i32, h_heads: i32, d: i32, stride_b: i32,
+    ) -> i32;
+
+    /// RoPE apply THD FW, f16.
+    pub fn baracuda_kernels_rope_apply_thd_f16_run(
+        t_outer: i32,
+        h_heads: i32,
+        d: i32,
+        stride_b: i32,
+        x: *const c_void,
+        cos_tab: *const c_void,
+        sin_tab: *const c_void,
+        y: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_rope_apply_thd_f16_can_implement(
+        t_outer: i32, h_heads: i32, d: i32, stride_b: i32,
+    ) -> i32;
+
+    /// RoPE apply THD FW, bf16.
+    pub fn baracuda_kernels_rope_apply_thd_bf16_run(
+        t_outer: i32,
+        h_heads: i32,
+        d: i32,
+        stride_b: i32,
+        x: *const c_void,
+        cos_tab: *const c_void,
+        sin_tab: *const c_void,
+        y: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_rope_apply_thd_bf16_can_implement(
+        t_outer: i32, h_heads: i32, d: i32, stride_b: i32,
+    ) -> i32;
+
+    /// RoPE apply THD FW, f64.
+    pub fn baracuda_kernels_rope_apply_thd_f64_run(
+        t_outer: i32,
+        h_heads: i32,
+        d: i32,
+        stride_b: i32,
+        x: *const c_void,
+        cos_tab: *const c_void,
+        sin_tab: *const c_void,
+        y: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_rope_apply_thd_f64_can_implement(
+        t_outer: i32, h_heads: i32, d: i32, stride_b: i32,
+    ) -> i32;
+
+    /// RoPE apply THD BW, f32.
+    pub fn baracuda_kernels_rope_apply_thd_backward_f32_run(
+        t_outer: i32,
+        h_heads: i32,
+        d: i32,
+        stride_b: i32,
+        dy: *const c_void,
+        cos_tab: *const c_void,
+        sin_tab: *const c_void,
+        dx: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_rope_apply_thd_backward_f32_can_implement(
+        t_outer: i32, h_heads: i32, d: i32, stride_b: i32,
+    ) -> i32;
+
+    /// RoPE apply THD BW, f16.
+    pub fn baracuda_kernels_rope_apply_thd_backward_f16_run(
+        t_outer: i32,
+        h_heads: i32,
+        d: i32,
+        stride_b: i32,
+        dy: *const c_void,
+        cos_tab: *const c_void,
+        sin_tab: *const c_void,
+        dx: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_rope_apply_thd_backward_f16_can_implement(
+        t_outer: i32, h_heads: i32, d: i32, stride_b: i32,
+    ) -> i32;
+
+    /// RoPE apply THD BW, bf16.
+    pub fn baracuda_kernels_rope_apply_thd_backward_bf16_run(
+        t_outer: i32,
+        h_heads: i32,
+        d: i32,
+        stride_b: i32,
+        dy: *const c_void,
+        cos_tab: *const c_void,
+        sin_tab: *const c_void,
+        dx: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_rope_apply_thd_backward_bf16_can_implement(
+        t_outer: i32, h_heads: i32, d: i32, stride_b: i32,
+    ) -> i32;
+
+    /// RoPE apply THD BW, f64.
+    pub fn baracuda_kernels_rope_apply_thd_backward_f64_run(
+        t_outer: i32,
+        h_heads: i32,
+        d: i32,
+        stride_b: i32,
+        dy: *const c_void,
+        cos_tab: *const c_void,
+        sin_tab: *const c_void,
+        dx: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_rope_apply_thd_backward_f64_can_implement(
+        t_outer: i32, h_heads: i32, d: i32, stride_b: i32,
+    ) -> i32;
+
     /// ALiBi FW, f32. `y[b, h, i, j] = scores[b, h, i, j] + slopes[h] · (j - i)`.
     pub fn baracuda_kernels_alibi_f32_run(
         batch: i32,

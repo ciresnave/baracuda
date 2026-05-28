@@ -1248,6 +1248,241 @@ __host__ inline int32_t launch_rope_apply_backward_fp(
     return (err == cudaSuccess) ? 0 : 5;
 }
 
+// =============================================================================
+// RoPE apply THD-layout variant — Phase 41 (Fuel Phase 6c.4 Gap 8).
+// =============================================================================
+//
+// Operand layout is `[T, H, D]` instead of the canonical `[B, H, T, D]`.
+// `T` is the packed (batch * seq) outer dim; `H` is heads; `D` is head_dim.
+// Per-cell addressing: `x[t * (H * D) + h * D + dim]`.
+//
+// cos/sin tables: `cs[t * stride_b + pair]` (per-t tables when
+// `stride_b == D/2`; single shared `[D/2]` table when `stride_b == 0`).
+// Tables remain f32 over the FFI regardless of operand dtype — same
+// convention as the canonical apply variant.
+//
+// Pair convention matches the existing `rope_apply_fp_kernel` —
+// adjacent `(2k, 2k+1)` pairs of the last dim, with cos/sin indexed
+// by `pair = dim_idx >> 1`.
+
+template <typename T>
+__global__ void rope_apply_thd_fp_kernel(
+    const T* __restrict__ x,
+    const float* __restrict__ cos_tab,
+    const float* __restrict__ sin_tab,
+    T* __restrict__ y,
+    int32_t t_outer,
+    int32_t h_heads,
+    int32_t d,
+    int32_t stride_b)
+{
+    int64_t total = (int64_t)t_outer * (int64_t)h_heads * (int64_t)d;
+    int64_t tid  = (int64_t)blockIdx.x * (int64_t)blockDim.x + (int64_t)threadIdx.x;
+    int64_t step = (int64_t)gridDim.x  * (int64_t)blockDim.x;
+    for (int64_t lin = tid; lin < total; lin += step) {
+        // Unravel row-major [T, H, D]
+        int32_t dim_idx = (int32_t)(lin % (int64_t)d);
+        int64_t rest    = lin / (int64_t)d;
+        // (h unused individually — only t drives cs lookup)
+        rest /= (int64_t)h_heads;
+        int32_t t_idx   = (int32_t)rest;
+        int32_t pair    = dim_idx >> 1;
+        int32_t d_even  = pair << 1;
+        bool is_high    = (dim_idx & 1) != 0;
+        int64_t cs_off  = (int64_t)t_idx * (int64_t)stride_b
+                        + (int64_t)pair;
+        float c = cos_tab[cs_off];
+        float si = sin_tab[cs_off];
+        int64_t base_off = lin - (int64_t)dim_idx;
+        int64_t off_e = base_off + (int64_t)d_even;
+        int64_t off_o = off_e + 1;
+        float x_e = load_as_f32<T>(x[off_e]);
+        float x_o = load_as_f32<T>(x[off_o]);
+        float out;
+        if (!is_high) {
+            out = x_e * c - x_o * si;
+        } else {
+            out = x_o * c + x_e * si;
+        }
+        y[lin] = store_from_f32<T>(out);
+    }
+}
+
+template <>
+__global__ void rope_apply_thd_fp_kernel<double>(
+    const double* __restrict__ x,
+    const float* __restrict__ cos_tab,
+    const float* __restrict__ sin_tab,
+    double* __restrict__ y,
+    int32_t t_outer,
+    int32_t h_heads,
+    int32_t d,
+    int32_t stride_b)
+{
+    int64_t total = (int64_t)t_outer * (int64_t)h_heads * (int64_t)d;
+    int64_t tid  = (int64_t)blockIdx.x * (int64_t)blockDim.x + (int64_t)threadIdx.x;
+    int64_t step = (int64_t)gridDim.x  * (int64_t)blockDim.x;
+    for (int64_t lin = tid; lin < total; lin += step) {
+        int32_t dim_idx = (int32_t)(lin % (int64_t)d);
+        int64_t rest    = lin / (int64_t)d;
+        rest /= (int64_t)h_heads;
+        int32_t t_idx   = (int32_t)rest;
+        int32_t pair    = dim_idx >> 1;
+        int32_t d_even  = pair << 1;
+        bool is_high    = (dim_idx & 1) != 0;
+        int64_t cs_off  = (int64_t)t_idx * (int64_t)stride_b
+                        + (int64_t)pair;
+        double c  = (double)cos_tab[cs_off];
+        double si = (double)sin_tab[cs_off];
+        int64_t base_off = lin - (int64_t)dim_idx;
+        int64_t off_e = base_off + (int64_t)d_even;
+        int64_t off_o = off_e + 1;
+        double x_e = x[off_e];
+        double x_o = x[off_o];
+        double out;
+        if (!is_high) {
+            out = x_e * c - x_o * si;
+        } else {
+            out = x_o * c + x_e * si;
+        }
+        y[lin] = out;
+    }
+}
+
+template <typename T>
+__host__ inline int32_t launch_rope_apply_thd_fp(
+    const T* x,
+    const float* cos_tab,
+    const float* sin_tab,
+    T* y,
+    int32_t t_outer, int32_t h_heads, int32_t d, int32_t stride_b,
+    cudaStream_t stream)
+{
+    if (t_outer < 0 || h_heads < 0 || d < 0 || stride_b < 0) return 2;
+    if (d == 0) return 2;
+    if (d % 2 != 0) return 2;
+    int64_t total = (int64_t)t_outer * (int64_t)h_heads * (int64_t)d;
+    if (total == 0) return 0;
+    constexpr int kBlock = 256;
+    constexpr int64_t kMaxBlocks = 65535;
+    int64_t blocks_i64 = (total + kBlock - 1) / kBlock;
+    int blocks = static_cast<int>(blocks_i64 > kMaxBlocks ? kMaxBlocks : blocks_i64);
+    if (blocks <= 0) blocks = 1;
+    rope_apply_thd_fp_kernel<T><<<blocks, kBlock, 0, stream>>>(
+        x, cos_tab, sin_tab, y, t_outer, h_heads, d, stride_b);
+    cudaError_t err = cudaGetLastError();
+    return (err == cudaSuccess) ? 0 : 5;
+}
+
+// RoPE apply BW THD — orthogonal rotation reverse, swap trig signs.
+
+template <typename T>
+__global__ void rope_apply_thd_backward_fp_kernel(
+    const T* __restrict__ dy,
+    const float* __restrict__ cos_tab,
+    const float* __restrict__ sin_tab,
+    T* __restrict__ dx,
+    int32_t t_outer,
+    int32_t h_heads,
+    int32_t d,
+    int32_t stride_b)
+{
+    int64_t total = (int64_t)t_outer * (int64_t)h_heads * (int64_t)d;
+    int64_t tid  = (int64_t)blockIdx.x * (int64_t)blockDim.x + (int64_t)threadIdx.x;
+    int64_t step = (int64_t)gridDim.x  * (int64_t)blockDim.x;
+    for (int64_t lin = tid; lin < total; lin += step) {
+        int32_t dim_idx = (int32_t)(lin % (int64_t)d);
+        int64_t rest    = lin / (int64_t)d;
+        rest /= (int64_t)h_heads;
+        int32_t t_idx   = (int32_t)rest;
+        int32_t pair    = dim_idx >> 1;
+        int32_t d_even  = pair << 1;
+        bool is_high    = (dim_idx & 1) != 0;
+        int64_t cs_off  = (int64_t)t_idx * (int64_t)stride_b
+                        + (int64_t)pair;
+        float c = cos_tab[cs_off];
+        float si = sin_tab[cs_off];
+        int64_t base_off = lin - (int64_t)dim_idx;
+        int64_t off_e = base_off + (int64_t)d_even;
+        int64_t off_o = off_e + 1;
+        float dy_e = load_as_f32<T>(dy[off_e]);
+        float dy_o = load_as_f32<T>(dy[off_o]);
+        float out;
+        if (!is_high) {
+            out = dy_e * c + dy_o * si;
+        } else {
+            out = dy_o * c - dy_e * si;
+        }
+        dx[lin] = store_from_f32<T>(out);
+    }
+}
+
+template <>
+__global__ void rope_apply_thd_backward_fp_kernel<double>(
+    const double* __restrict__ dy,
+    const float* __restrict__ cos_tab,
+    const float* __restrict__ sin_tab,
+    double* __restrict__ dx,
+    int32_t t_outer,
+    int32_t h_heads,
+    int32_t d,
+    int32_t stride_b)
+{
+    int64_t total = (int64_t)t_outer * (int64_t)h_heads * (int64_t)d;
+    int64_t tid  = (int64_t)blockIdx.x * (int64_t)blockDim.x + (int64_t)threadIdx.x;
+    int64_t step = (int64_t)gridDim.x  * (int64_t)blockDim.x;
+    for (int64_t lin = tid; lin < total; lin += step) {
+        int32_t dim_idx = (int32_t)(lin % (int64_t)d);
+        int64_t rest    = lin / (int64_t)d;
+        rest /= (int64_t)h_heads;
+        int32_t t_idx   = (int32_t)rest;
+        int32_t pair    = dim_idx >> 1;
+        int32_t d_even  = pair << 1;
+        bool is_high    = (dim_idx & 1) != 0;
+        int64_t cs_off  = (int64_t)t_idx * (int64_t)stride_b
+                        + (int64_t)pair;
+        double c  = (double)cos_tab[cs_off];
+        double si = (double)sin_tab[cs_off];
+        int64_t base_off = lin - (int64_t)dim_idx;
+        int64_t off_e = base_off + (int64_t)d_even;
+        int64_t off_o = off_e + 1;
+        double dy_e = dy[off_e];
+        double dy_o = dy[off_o];
+        double out;
+        if (!is_high) {
+            out = dy_e * c + dy_o * si;
+        } else {
+            out = dy_o * c - dy_e * si;
+        }
+        dx[lin] = out;
+    }
+}
+
+template <typename T>
+__host__ inline int32_t launch_rope_apply_thd_backward_fp(
+    const T* dy,
+    const float* cos_tab,
+    const float* sin_tab,
+    T* dx,
+    int32_t t_outer, int32_t h_heads, int32_t d, int32_t stride_b,
+    cudaStream_t stream)
+{
+    if (t_outer < 0 || h_heads < 0 || d < 0 || stride_b < 0) return 2;
+    if (d == 0) return 2;
+    if (d % 2 != 0) return 2;
+    int64_t total = (int64_t)t_outer * (int64_t)h_heads * (int64_t)d;
+    if (total == 0) return 0;
+    constexpr int kBlock = 256;
+    constexpr int64_t kMaxBlocks = 65535;
+    int64_t blocks_i64 = (total + kBlock - 1) / kBlock;
+    int blocks = static_cast<int>(blocks_i64 > kMaxBlocks ? kMaxBlocks : blocks_i64);
+    if (blocks <= 0) blocks = 1;
+    rope_apply_thd_backward_fp_kernel<T><<<blocks, kBlock, 0, stream>>>(
+        dy, cos_tab, sin_tab, dx, t_outer, h_heads, d, stride_b);
+    cudaError_t err = cudaGetLastError();
+    return (err == cudaSuccess) ? 0 : 5;
+}
+
 } } // namespace baracuda::attention
 
 // =============================================================================
@@ -1476,6 +1711,171 @@ __host__ inline int32_t launch_rope_apply_backward_fp(
         if (d == 0) return 2;                                                                   \
         if (d % 2 != 0) return 2;                                                               \
         if (td % d != 0) return 2;                                                              \
+        return 0;                                                                               \
+    }
+
+// RoPE apply INTERLEAVED INSTANTIATE — Phase 41 (Fuel Phase 6c.4 Gap 7).
+// Pair convention is `(2k, 2k+1)` with cos/sin lookup index `pair = dim_idx
+// >> 1`. The existing `rope_apply_fp_kernel` already implements exactly this
+// pairing — the interleaved symbols are thin re-exports of
+// `launch_rope_apply_fp<T>` / `launch_rope_apply_backward_fp<T>`, exposed
+// under the Fuel-expected name so callers using the `RotaryEmbI` /
+// `RotaryEmbThd` API can drop the `Id::Reduce` PTX module and the
+// `fuel-cuda-kernels` workspace member.
+#define BARACUDA_KERNELS_ROPE_APPLY_INTERLEAVED_INSTANTIATE(NAME, T)                            \
+    extern "C" int32_t baracuda_kernels_##NAME##_run(                                           \
+        int32_t bh,                                                                             \
+        int32_t td,                                                                             \
+        int32_t d,                                                                              \
+        int32_t stride_b,                                                                       \
+        const void* x,                                                                          \
+        const void* cos_tab,                                                                    \
+        const void* sin_tab,                                                                    \
+        void* y,                                                                                \
+        void* /*workspace*/, size_t /*workspace_bytes*/,                                        \
+        void* stream_ptr)                                                                       \
+    {                                                                                            \
+        if (bh < 0 || td < 0 || d < 0 || stride_b < 0) return 2;                                \
+        if (d == 0) return 2;                                                                   \
+        if (d % 2 != 0) return 2;                                                               \
+        if (td % d != 0) return 2;                                                              \
+        int64_t total = (int64_t)bh * (int64_t)td;                                              \
+        if (total == 0) return 0;                                                               \
+        if (x == nullptr || y == nullptr) return 2;                                             \
+        if (cos_tab == nullptr || sin_tab == nullptr) return 2;                                 \
+        cudaStream_t stream = static_cast<cudaStream_t>(stream_ptr);                            \
+        return baracuda::attention::launch_rope_apply_fp<T>(                                    \
+            static_cast<const T*>(x),                                                           \
+            static_cast<const float*>(cos_tab),                                                 \
+            static_cast<const float*>(sin_tab),                                                 \
+            static_cast<T*>(y),                                                                 \
+            bh, td, d, stride_b, stream);                                                       \
+    }                                                                                            \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                 \
+        int32_t bh, int32_t td, int32_t d, int32_t stride_b)                                    \
+    {                                                                                            \
+        if (bh < 0 || td < 0 || d < 0 || stride_b < 0) return 2;                                \
+        if (d == 0) return 2;                                                                   \
+        if (d % 2 != 0) return 2;                                                               \
+        if (td % d != 0) return 2;                                                              \
+        return 0;                                                                               \
+    }
+
+#define BARACUDA_KERNELS_ROPE_APPLY_INTERLEAVED_BACKWARD_INSTANTIATE(NAME, T)                   \
+    extern "C" int32_t baracuda_kernels_##NAME##_run(                                           \
+        int32_t bh,                                                                             \
+        int32_t td,                                                                             \
+        int32_t d,                                                                              \
+        int32_t stride_b,                                                                       \
+        const void* dy,                                                                         \
+        const void* cos_tab,                                                                    \
+        const void* sin_tab,                                                                    \
+        void* dx,                                                                               \
+        void* /*workspace*/, size_t /*workspace_bytes*/,                                        \
+        void* stream_ptr)                                                                       \
+    {                                                                                            \
+        if (bh < 0 || td < 0 || d < 0 || stride_b < 0) return 2;                                \
+        if (d == 0) return 2;                                                                   \
+        if (d % 2 != 0) return 2;                                                               \
+        if (td % d != 0) return 2;                                                              \
+        int64_t total = (int64_t)bh * (int64_t)td;                                              \
+        if (total == 0) return 0;                                                               \
+        if (dy == nullptr || dx == nullptr) return 2;                                           \
+        if (cos_tab == nullptr || sin_tab == nullptr) return 2;                                 \
+        cudaStream_t stream = static_cast<cudaStream_t>(stream_ptr);                            \
+        return baracuda::attention::launch_rope_apply_backward_fp<T>(                           \
+            static_cast<const T*>(dy),                                                          \
+            static_cast<const float*>(cos_tab),                                                 \
+            static_cast<const float*>(sin_tab),                                                 \
+            static_cast<T*>(dx),                                                                \
+            bh, td, d, stride_b, stream);                                                       \
+    }                                                                                            \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                 \
+        int32_t bh, int32_t td, int32_t d, int32_t stride_b)                                    \
+    {                                                                                            \
+        if (bh < 0 || td < 0 || d < 0 || stride_b < 0) return 2;                                \
+        if (d == 0) return 2;                                                                   \
+        if (d % 2 != 0) return 2;                                                               \
+        if (td % d != 0) return 2;                                                              \
+        return 0;                                                                               \
+    }
+
+// RoPE apply THD-layout INSTANTIATE — Phase 41 (Fuel Phase 6c.4 Gap 8).
+// Operand layout `[T, H, D]` (packed batch * seq into T) instead of the
+// canonical `[B, H, T, D]`. cos/sin layout `cs[t * stride_b + pair]` with
+// `stride_b == D/2` per-t tables or `stride_b == 0` shared. Tables remain
+// f32 over the FFI regardless of operand dtype.
+#define BARACUDA_KERNELS_ROPE_APPLY_THD_INSTANTIATE(NAME, T)                                    \
+    extern "C" int32_t baracuda_kernels_##NAME##_run(                                           \
+        int32_t t_outer,                                                                        \
+        int32_t h_heads,                                                                        \
+        int32_t d,                                                                              \
+        int32_t stride_b,                                                                       \
+        const void* x,                                                                          \
+        const void* cos_tab,                                                                    \
+        const void* sin_tab,                                                                    \
+        void* y,                                                                                \
+        void* /*workspace*/, size_t /*workspace_bytes*/,                                        \
+        void* stream_ptr)                                                                       \
+    {                                                                                            \
+        if (t_outer < 0 || h_heads < 0 || d < 0 || stride_b < 0) return 2;                      \
+        if (d == 0) return 2;                                                                   \
+        if (d % 2 != 0) return 2;                                                               \
+        int64_t total = (int64_t)t_outer * (int64_t)h_heads * (int64_t)d;                       \
+        if (total == 0) return 0;                                                               \
+        if (x == nullptr || y == nullptr) return 2;                                             \
+        if (cos_tab == nullptr || sin_tab == nullptr) return 2;                                 \
+        cudaStream_t stream = static_cast<cudaStream_t>(stream_ptr);                            \
+        return baracuda::attention::launch_rope_apply_thd_fp<T>(                                \
+            static_cast<const T*>(x),                                                           \
+            static_cast<const float*>(cos_tab),                                                 \
+            static_cast<const float*>(sin_tab),                                                 \
+            static_cast<T*>(y),                                                                 \
+            t_outer, h_heads, d, stride_b, stream);                                             \
+    }                                                                                            \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                 \
+        int32_t t_outer, int32_t h_heads, int32_t d, int32_t stride_b)                          \
+    {                                                                                            \
+        if (t_outer < 0 || h_heads < 0 || d < 0 || stride_b < 0) return 2;                      \
+        if (d == 0) return 2;                                                                   \
+        if (d % 2 != 0) return 2;                                                               \
+        return 0;                                                                               \
+    }
+
+#define BARACUDA_KERNELS_ROPE_APPLY_THD_BACKWARD_INSTANTIATE(NAME, T)                           \
+    extern "C" int32_t baracuda_kernels_##NAME##_run(                                           \
+        int32_t t_outer,                                                                        \
+        int32_t h_heads,                                                                        \
+        int32_t d,                                                                              \
+        int32_t stride_b,                                                                       \
+        const void* dy,                                                                         \
+        const void* cos_tab,                                                                    \
+        const void* sin_tab,                                                                    \
+        void* dx,                                                                               \
+        void* /*workspace*/, size_t /*workspace_bytes*/,                                        \
+        void* stream_ptr)                                                                       \
+    {                                                                                            \
+        if (t_outer < 0 || h_heads < 0 || d < 0 || stride_b < 0) return 2;                      \
+        if (d == 0) return 2;                                                                   \
+        if (d % 2 != 0) return 2;                                                               \
+        int64_t total = (int64_t)t_outer * (int64_t)h_heads * (int64_t)d;                       \
+        if (total == 0) return 0;                                                               \
+        if (dy == nullptr || dx == nullptr) return 2;                                           \
+        if (cos_tab == nullptr || sin_tab == nullptr) return 2;                                 \
+        cudaStream_t stream = static_cast<cudaStream_t>(stream_ptr);                            \
+        return baracuda::attention::launch_rope_apply_thd_backward_fp<T>(                       \
+            static_cast<const T*>(dy),                                                          \
+            static_cast<const float*>(cos_tab),                                                 \
+            static_cast<const float*>(sin_tab),                                                 \
+            static_cast<T*>(dx),                                                                \
+            t_outer, h_heads, d, stride_b, stream);                                             \
+    }                                                                                            \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                 \
+        int32_t t_outer, int32_t h_heads, int32_t d, int32_t stride_b)                          \
+    {                                                                                            \
+        if (t_outer < 0 || h_heads < 0 || d < 0 || stride_b < 0) return 2;                      \
+        if (d == 0) return 2;                                                                   \
+        if (d % 2 != 0) return 2;                                                               \
         return 0;                                                                               \
     }
 
