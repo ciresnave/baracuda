@@ -1,0 +1,48 @@
+[package]
+name = "baracuda-transformer-engine-sys"
+version = "0.0.1-alpha.57"
+description = "Build + raw FFI bindings to baracuda's port of NVIDIA TransformerEngine's FP8 cast/transpose + delayed-scaling recipe primitives. Cast/recipe subset only — `normalization` / `fused_rope` / `fused_attn` / `fused_softmax` / `activation` / `gemm` deliberately skipped (overlap existing baracuda Phase 3/5/14/17/30/31/36/41/42). NO cuDNN dep (recipe + cast paths don't need it; `fused_attn` would, and we skip it); NO pybind11 (the safe wrapper lives in `baracuda-transformer-engine` and exposes a raw C ABI defined in `csrc/baracuda_te_shim.cu`). Apache-2.0 per upstream — see `ATTRIBUTION.md`."
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords = ["cuda", "fp8", "transformer-engine", "delayed-scaling", "ffi"]
+categories = ["external-ffi-bindings", "science"]
+links = "baracuda_transformer_engine"
+build = "build.rs"
+exclude = ["*.profraw", "target/"]
+
+[features]
+default = []
+
+# Build the vendored TransformerEngine cast + recipe sources via nvcc.
+# Off-by-default — the FFI extern blocks always compile, but link will
+# only resolve when a downstream crate (typically `baracuda-kernels`'s
+# `tensor_engine` feature) opts in. Matches the gating pattern used
+# by `baracuda-ozimmu-sys`'s `build-vendor`, `baracuda-optim`'s arch
+# features, etc.
+build-vendor = []
+
+# Architecture flags forwarded to nvcc. sm89 is the RTX 4070 test
+# target; sm90a is Hopper (where the FP8 tensor-core math throughput
+# wins actually materialize); sm80 is the Ampere fallback (FP8
+# storage works via the cast intrinsics emulated through fp16 — slow
+# but correct). Pick exactly one; the safe wrapper crate's `default`
+# feature pulls in `sm89` to match the rest of the baracuda CI matrix.
+sm80 = []
+sm89 = []
+sm90a = []
+
+[dependencies]
+# The shim TU references cudaStream_t, cudaMalloc, cudaMemsetAsync.
+baracuda-cuda-sys = { workspace = true }
+
+[build-dependencies]
+baracuda-build = { workspace = true }
+baracuda-forge = { workspace = true }
+
+# docs.rs has no nvcc — build.rs short-circuits on DOCS_RS=1.
+[package.metadata.docs.rs]
+no-default-features = true

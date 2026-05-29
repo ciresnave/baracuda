@@ -1,0 +1,44 @@
+[package]
+name = "baracuda-transformer-engine"
+version = "0.0.1-alpha.57"
+description = "Safe Rust wrapper for baracuda's port of NVIDIA TransformerEngine's FP8 cast/transpose + delayed-scaling recipe primitives. Provides `Fp8Recipe` (delayed-scaling state with amax history), `Fp8CastPlan` for {f32, f16, bf16} → FP8 with running amax, `Fp8DequantPlan` for FP8 → {f32, f16, bf16}. Cast/recipe subset only — `normalization` / `fused_rope` / `fused_attn` / `fused_softmax` / `activation` / `gemm` skipped (overlap existing baracuda phases). NO cuDNN dep, NO pybind11. On Ada (sm_89) the FP8 wins are bandwidth-saving only (KV cache, weights); FP8 tensor-core math throughput equals BF16. Forward-compatible with Hopper / Blackwell where the compute wins also materialize."
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords = ["cuda", "fp8", "transformer-engine", "delayed-scaling", "ml"]
+categories = ["api-bindings", "science"]
+exclude = ["*.profraw", "target/"]
+
+[features]
+# Default-empty — matches the Phase 49 `baracuda-optim` pattern. Callers
+# enable an arch feature explicitly (or rely on `baracuda-kernels`'s
+# `tensor_engine` feature, which forwards `sm80`). Decoupling default
+# from arch keeps `cargo check --workspace --no-default-features` cheap
+# and platform-agnostic.
+default = []
+
+# Forward the vendored-source build to the -sys crate. Auto-enabled by
+# any arch feature (the cast / recipe shim is dead weight without an
+# arch to compile against).
+build-vendor = ["baracuda-transformer-engine-sys/build-vendor"]
+
+# Arch fanout — matches baracuda-kernels-sys conventions. Each arch
+# feature implies build-vendor so callers don't need to remember to
+# enable both. Pick exactly one; the build.rs picks sm90a > sm89 > sm80
+# when multiple are on.
+sm80 = ["build-vendor", "baracuda-transformer-engine-sys/sm80"]
+sm89 = ["build-vendor", "baracuda-transformer-engine-sys/sm89"]
+sm90a = ["build-vendor", "baracuda-transformer-engine-sys/sm90a"]
+
+[dependencies]
+baracuda-transformer-engine-sys = { workspace = true }
+baracuda-driver = { workspace = true }
+baracuda-types = { workspace = true, features = ["half-crate"] }
+half = { workspace = true }
+thiserror = { workspace = true }
+
+[package.metadata.docs.rs]
+no-default-features = true

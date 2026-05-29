@@ -84,6 +84,19 @@ baracuda-ozimmu = { version = "0.0.1-alpha.57", path = "crates/baracuda-ozimmu" 
 # behind the `optim` feature on baracuda-kernels so inference-only
 # consumers (e.g. Fuel) don't pay the FFI surface cost.
 baracuda-optim = { version = "0.0.1-alpha.57", path = "crates/baracuda-optim" }
+# Phase 55 — NVIDIA TransformerEngine FP8 cast/transpose + delayed-
+# scaling recipe primitives (Apache-2.0). NEW sibling crate pair
+# `baracuda-transformer-engine-sys` + `baracuda-transformer-engine`.
+# Cast/recipe subset only (out: normalization, fused_rope, fused_attn,
+# fused_softmax, activation, gemm — all overlap existing baracuda
+# phases). Gated behind the `tensor_engine` cargo feature on
+# baracuda-kernels (default OFF). Sm_89 reality: FP8 storage paths
+# work; FP8 tensor-core MMA on Ada has BF16-equivalent throughput, so
+# the wins on this hardware are bandwidth-saving (KV cache, weights)
+# not compute. Recipe machinery is forward-compatible with Hopper /
+# Blackwell, where the compute wins also materialize.
+baracuda-transformer-engine-sys = { version = "0.0.1-alpha.57", path = "crates/baracuda-transformer-engine-sys" }
+baracuda-transformer-engine = { version = "0.0.1-alpha.57", path = "crates/baracuda-transformer-engine" }
 
 # External crates used across the workspace
 libloading = "0.8"

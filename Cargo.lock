@@ -404,6 +404,7 @@ dependencies = [
  "baracuda-kernels-sys",
  "baracuda-kernels-types",
  "baracuda-optim",
+ "baracuda-transformer-engine",
  "baracuda-types",
  "float8",
  "half",
@@ -662,6 +663,26 @@ dependencies = [
  "baracuda-cuda-sys",
  "baracuda-types",
  "libloading",
+]
+
+[[package]]
+name = "baracuda-transformer-engine"
+version = "0.0.1-alpha.57"
+dependencies = [
+ "baracuda-driver",
+ "baracuda-transformer-engine-sys",
+ "baracuda-types",
+ "half",
+ "thiserror",
+]
+
+[[package]]
+name = "baracuda-transformer-engine-sys"
+version = "0.0.1-alpha.57"
+dependencies = [
+ "baracuda-build",
+ "baracuda-cuda-sys",
+ "baracuda-forge",
 ]
 
 [[package]]

@@ -7,11 +7,18 @@ effort within each category. Authoritative status per op lives in
 [`OP-MATRIX.md`](OP-MATRIX.md); historical phase summaries live in
 [`ARCHITECTURE.md`](ARCHITECTURE.md).
 
-The current tag is **v0.0.1-alpha.57** with **2326+ GPU tests
+The current tag is **v0.0.1-alpha.57** with **2336+ GPU tests
 passing, zero failures** on RTX 4070 (sm_89). Phase 42-44 add three
 opt-in backends behind cargo features (none on the default build
-path), and Phase 49 adds the `baracuda-optim` sibling crate (Apex
-multi-tensor Adam / LAMB / SGD) under the `optim` cargo feature:
+path), Phase 49 adds the `baracuda-optim` sibling crate (Apex
+multi-tensor Adam / LAMB / SGD) under the `optim` cargo feature,
+and Phase 55 adds the `baracuda-transformer-engine` sibling crate
+(NVIDIA TransformerEngine FP8 cast + delayed-scaling recipe,
+Apache-2.0) under the `tensor_engine` cargo feature — sm_89 caveat:
+the FP8 wins on Ada are bandwidth-saving only (KV cache, weights);
+tensor-core FP8 MMA throughput equals BF16, so the recipe is
+forward-compatible with Hopper / Blackwell where the MMA win also
+materializes:
 
 - **Phase 42**: Tri Dao's Flash Attention v2 (BSD-3) Tier-1 vendor —
   head_dim=128, fp16+bf16, sm_80, FW only — exposed as
@@ -177,6 +184,129 @@ Phase 50 (Mamba-2 SSD + causal-conv1d) shipped 2026-05-28.
 Phase 50b (Mamba-1 selective_scan) shipped 2026-05-28 — completes
 state-space LLM coverage; powers Mamba-7B, Falcon-Mamba,
 Codestral-Mamba.
+
+**Phase 55 (alpha.57, no version bump)** ships **TransformerEngine
+FP8 cast + delayed-scaling recipe** — clean-room hand-port of the
+NVIDIA TransformerEngine (Apache-2.0) cast/recipe subset, gated
+behind the `tensor_engine` cargo feature.
+
+The differentiated value of TE is the **per-tensor delayed-scaling
+recipe with amax history** for stable FP8 training. That's the
+load-bearing piece — `scale = max_representable / max_amax_in_history`
+over a sliding-window ring, with the amax fed in by a fused
+cast+amax kernel.
+
+NEW sibling crate pair:
+- `baracuda-transformer-engine-sys` — raw FFI to the C-ABI shim
+  (`csrc/baracuda_te_shim.cu`, ~530 LOC). Apache-2.0 vendor +
+  attribution at `ATTRIBUTION.md`.
+- `baracuda-transformer-engine` — safe wrapper. `Fp8Recipe` RAII
+  handle (amax_history ring + scale + scale_inv scalars), generic
+  `Fp8CastPlan<TIn>` for f32/f16/bf16 → FP8 with running amax,
+  `Fp8DequantPlan<TOut>` for the reverse.
+
+Both formats supported: E4M3 (max=448) for fwd/weights, E5M2
+(max=57344) for grads. `Fp8Recipe::update_after_pass(&stream)`
+reduces the amax history, computes the new scale, advances the
+write pointer.
+
+**No cuDNN dep**: the cast/recipe paths don't need it — only
+`fused_attn` does, and we skip that (baracuda Phase 17/42 covers
+it). **No pybind11**: raw C ABI.
+
+**Sm_89 reality check (RTX 4070)**: Ada has FP8 storage + cast
+intrinsics, but tensor-core FP8 MMA throughput equals BF16. So on
+this hardware the FP8 wins are bandwidth-saving only (KV cache,
+weight storage, activation memory). The recipe machinery is
+forward-compatible with Hopper (sm_90a) / Blackwell (sm_100) where
+the MMA throughput win also materializes.
+
+Out of scope (each one overlaps an existing baracuda phase or
+needs deps we want to avoid):
+- `normalization` (Phase 5 RMSNorm / LayerNorm)
+- `fused_rope` (Phase 14/36/41)
+- `fused_attn` (Phase 17/42; the cuDNN 9.3+ dep)
+- `fused_softmax` (Phase 5)
+- `activation` (Phase 3/31)
+- `gemm` (Phase 1+24+30)
+- `comm_gemm_overlap` / `nvshmem_api` (Hopper-only)
+- `fused_router` (Phase 8 + 20 MoE)
+- `hadamard_transform`, `newton_schulz`, `swizzle`, `permutation`
+- `multi_tensor` (Phase 49 Apex)
+- `dropout` (caller can compose)
+- All Python bindings (`pytorch/`, `jax/`)
+
+10 GPU smoke tests, all green on RTX 4070. The cast plan is fused
+(one kernel for cast + amax reduction); the recipe update + init
+each take one launch.
+
+**Phase 54 (alpha.57, no version bump)** ships **xFormers cherry-pick:
+BlockSparseAttention + 2:4 structured sparsity GEMM** — clean-room
+hand-port of the facebookresearch/xformers (BSD-3-Clause) algorithmic
+reference for the two sparsity families that don't overlap with any
+existing baracuda surface.
+
+Goal A — `SdpaBlockSparsePlan` (gated behind the
+`xformers_blocksparse` cargo feature). Block-sparse SDPA FW where the
+attention mask is a per-block boolean pattern
+`[B, H, num_blocks_q * num_blocks_k]` (uint8). Only the active
+(q_block, k_block) pairs participate in the QK^T matmul +
+online-softmax accumulation — masked blocks are skipped entirely
+(no K/V load, no compute). Real wall-clock speedup on long-context
+attention with known sparse patterns (sliding-window with sinks,
+BigBird-style local+global, dilated attention).
+
+- 8 new FFI symbols (4 fp dtypes × `_run` + `_can_implement`) under
+  `baracuda_kernels_sdpa_{f32,f16,bf16,f64}_block_sparse_*`. NEW
+  header `baracuda_sdpa_block_sparse.cuh` reuses the Phase 6.6
+  online-softmax tile pipeline (one block per `(b, h, qb)`; iterates
+  only the active k-blocks).
+- Differentiated from Phase 51's arbitrary-additive-mask path: the
+  arbmask kernel still iterates every k-block and just adds an f32
+  bias to S = Q·K^T before softmax (O(QK) compute). Block-sparse
+  actually *skips* masked blocks.
+- Tier-1 constraints: `block_size ∈ [1, 64]`, `d_k == d_v ≤ 128`,
+  FW only, optional causal mask composes with the pattern.
+
+Goal B — `GemmSparse24Plan` (gated behind the `xformers_sparse24`
+cargo feature). 2:4 structured-sparsity GEMM accepting pre-compressed
+`[M, K/2]` weights + `[M, K/8]` uint16 metadata. The 2:4 pattern is
+the hardware-supported sparsity scheme on Ampere+ sparse tensor cores.
+
+- 11 new FFI symbols × 3 dtypes (`{f32, f16, bf16}`):
+  `baracuda_kernels_gemm_<dt>_sparse24_inflate`,
+  `..._sparse24_gemm_run`, `..._sparse24_gemm_can_implement`,
+  `..._sparse24_gemm_workspace_bytes`.
+- **Tier-1 implementation strategy**: `inflate-then-dense-matmul`.
+  An inflation kernel reconstructs the dense `[M, K]` weight in
+  caller-supplied workspace, then a reference dense GEMM runs.
+  Correctness first; the sparse-tensor-core hardware speedup
+  (`mma.sp.sync.aligned` / cuSPARSELt) is deferred to Tier 2.
+- Tier-1 is *NOT* faster than dense cuBLAS — the API + compression
+  format are the Phase 54 deliverable. Tier-2 backend with
+  cuSPARSELt or hand-rolled `mma.sp.sync` lands separately.
+- New `AttentionKind::BlockSparseAttention = 9` variant
+  (`#[non_exhaustive]` so source-compat).
+
+What we deliberately did NOT vendor from xFormers (algorithmic
+reference only — no upstream source files were copied):
+- xFormers' "memory-efficient attention" — overlaps with baracuda's
+  Phase 6.2 SDPA + Phase 6.6 FlashSdpa + Phase 42 FA2.
+- xFormers' fused biases / RoPE / norm — overlaps with baracuda's
+  Phase 14 / 36 / 41.
+- xFormers' Triton kernel paths — no Triton toolchain in baracuda
+  (consistent with Phase 47 Liger FLCE which also hand-ported from
+  Triton-reference to C++/CUDA).
+
+Tier-2 deferred: BW pass (training-time sparse-attention gradients),
+GQA broadcast on BlockSparse, paged-KV + BlockSparse, sparse-tensor-
+core perf backend for 2:4 GEMM (cuSPARSELt or `mma.sp.sync` inline-
+PTX).
+
+Attribution + LICENSE + AUTHORS at
+`crates/baracuda-kernels-sys/vendor/xformers/` (clean-room port — no
+upstream source files are vendored verbatim; the directory carries
+license attribution only).
 
 ---
 

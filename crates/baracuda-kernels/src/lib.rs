@@ -65,7 +65,8 @@ pub mod gemm;
 
 pub use gemm::{
     BinGemmArgs, BinGemmDescriptor, BinGemmPlan, Fp8GemmArgs, Fp8GemmDescriptor, Fp8GemmPlan,
-    Int4GemmArgs, Int4GemmDescriptor, Int4GemmPlan, IntGemmArgs, IntGemmDescriptor, IntGemmPlan,
+    GemmSparse24Args, GemmSparse24Descriptor, GemmSparse24Plan, Int4GemmArgs, Int4GemmDescriptor,
+    Int4GemmPlan, IntGemmArgs, IntGemmDescriptor, IntGemmPlan,
 };
 
 // Elementwise op family — Phase 3 trailblazer surface. See module docs
@@ -247,7 +248,9 @@ pub use attention::{
     HyperConnectionDescriptor, HyperConnectionPlan, KvCacheAppendArgs, KvCacheAppendDescriptor,
     KvCacheAppendPlan, RopeArgs, RopeBackwardArgs, RopeBackwardDescriptor, RopeBackwardPlan,
     RopeDescriptor, RopePlan, SdpaArgs, SdpaBackwardArgs, SdpaBackwardDescriptor, SdpaBackwardPlan,
+    SdpaBlockSparseArgs, SdpaBlockSparseDescriptor, SdpaBlockSparsePlan,
     SdpaDescriptor, SdpaPlan, FLASH_SDPA_MAX_D, ROPE_DEFAULT_BASE,
+    SDPA_BLOCK_SPARSE_MAX_BLOCK, SDPA_BLOCK_SPARSE_MAX_D,
 };
 
 // Phase 45 — long-context RoPE scaling helpers (pure-Rust host-side
@@ -469,6 +472,16 @@ pub use quantize::{
 // Phase 33 — multi-M MMVQ via Q8_1 activation staging (prefill speedup).
 pub use quantize::{GgufMmvqMultiMArgs, GgufMmvqMultiMDescriptor, GgufMmvqMultiMPlan};
 
+// Phase 53 — bitsandbytes NF4 (NormalFloat 4-bit) dequant + GEMV
+// (QLoRA inference path). Plan types are always re-exported; the FFI
+// dispatch inside `run()` is gated behind the `bnb_nf4` cargo feature
+// (matches the Phase 46 FlashInfer pattern — public API stable, link
+// surface opt-in). See `quantize/nf4.rs` for the full docs.
+pub use quantize::{
+    Nf4Activation, Nf4DequantizeArgs, Nf4DequantizePlan, Nf4Descriptor, Nf4MmvqArgs,
+    Nf4MmvqMultiMArgs, Nf4MmvqMultiMDescriptor, Nf4MmvqMultiMPlan, Nf4MmvqPlan, NF4_CODEBOOK,
+};
+
 // Milestone 8.5 — Mixture-of-Experts inference forward (Category V).
 // Vendored from attention.rs via fuel-cuda-kernels.
 pub mod moe;
@@ -557,6 +570,26 @@ pub mod optim {
         AdamConfig, AdamMode, AdamParamDtype, AdamStepPlan, Error as OptimError, LambConfig,
         LambStepPlan, MultiTensorApplyContext, Result as OptimResult, SgdConfig, SgdParamDtype,
         SgdStepPlan, TensorList,
+    };
+}
+
+// Phase 55 — TransformerEngine FP8 cast/transpose + delayed-scaling
+// recipe primitives. Vendored from NVIDIA TransformerEngine (Apache-2.0)
+// and exposed under the `tensor_engine` cargo feature. Cast / recipe
+// subset only — `normalization` / `fused_attn` / `fused_rope` /
+// `activation` / `gemm` overlap existing baracuda phases and are
+// deliberately NOT brought in. Sm_89 caveat (RTX 4070): the FP8 wins
+// are bandwidth-saving only on Ada — tensor-core FP8 MMA throughput
+// equals BF16. Forward-compatible with Hopper / Blackwell where the
+// MMA throughput win also materializes.
+#[cfg(feature = "tensor_engine")]
+pub mod transformer_engine {
+    //! Re-export of [`baracuda_transformer_engine`]'s FP8 cast / recipe
+    //! plans into the unified kernel facade. Gated behind the
+    //! `tensor_engine` cargo feature.
+    pub use baracuda_transformer_engine::{
+        Error as TransformerEngineError, Fp8CastPlan, Fp8DequantPlan, Fp8Format, Fp8Recipe,
+        Fp8WideDtype, Result as TransformerEngineResult,
     };
 }
 

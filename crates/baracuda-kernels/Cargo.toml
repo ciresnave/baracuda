@@ -75,6 +75,20 @@ ozimmu = ["baracuda-cutlass/ozimmu"]
 # default (sm80).
 optim = ["dep:baracuda-optim", "baracuda-optim/sm80"]
 
+# Phase 55 — NVIDIA TransformerEngine FP8 cast/transpose + delayed-scaling
+# recipe primitives (Apache-2.0). When ON, pulls in the sibling
+# `baracuda-transformer-engine` crate as an optional dep and re-exports
+# its `Fp8Recipe` / `Fp8CastPlan` / `Fp8DequantPlan` / `Fp8Format` /
+# `Fp8WideDtype` into the kernel facade under the `transformer_engine`
+# module. Off by default — the recipe machinery is opt-in (training stacks
+# want it; inference-only consumers without delayed-scaling do not). Cast
+# / recipe subset only; `normalization` / `fused_attn` / `fused_rope` /
+# `activation` / `gemm` overlap existing baracuda phases and are NOT
+# brought in. Sm_89 caveat: FP8 wins are bandwidth-saving only on Ada;
+# tensor-core FP8 MMA throughput == BF16. Forward-compatible with Hopper
+# / Blackwell.
+tensor_engine = ["dep:baracuda-transformer-engine", "baracuda-transformer-engine/sm80"]
+
 # Phase 50 — Mamba-2 SSD chunk-scan + Dao-AILab causal-conv1d. Opens the
 # state-space LLM class (Mamba-2 8B, Codestral-Mamba, Falcon-Mamba,
 # Zamba2 — Mamba-1 selective_scan deferred to Phase 50b). Adds
@@ -85,6 +99,39 @@ optim = ["dep:baracuda-optim", "baracuda-optim/sm80"]
 # `baracuda-kernels-sys/mamba`.
 mamba = ["baracuda-kernels-sys/mamba"]
 
+# Phase 54 — xFormers (BSD-3-Clause) BlockSparseAttention algorithmic
+# reference, clean-room hand-port. Exposes the `SdpaBlockSparsePlan`
+# family — block-sparse SDPA FW where the attention mask is a per-block
+# boolean pattern; only the active (q_block, k_block) pairs participate
+# in the QK^T matmul + softmax accumulation. Different from Phase 51's
+# arbitrary additive-mask path (which still computes every (Q, K) cell
+# and adds bias) — block-sparse actually SKIPS computation on masked
+# blocks → real wall-clock speedup on long-context attention with known
+# sparse patterns. Off by default; independent from `xformers_sparse24`.
+# Forwards to `baracuda-kernels-sys/xformers_blocksparse`.
+xformers_blocksparse = ["baracuda-kernels-sys/xformers_blocksparse"]
+
+# Phase 54 — xFormers (BSD-3-Clause) 2:4 Structured Sparsity GEMM
+# algorithmic reference, clean-room hand-port. Exposes the
+# `GemmSparse24Plan` family — accepts a pre-compressed `[M, K/2]` weight
+# tensor + `[M, K/8]` u16 metadata describing the 2-of-4 non-zero
+# positions. Trailblazer uses an inflate-then-dense matmul path
+# (correctness first); sparse-tensor-core perf via `mma.sp.sync` /
+# cuSPARSELt deferred to Tier 2. Off by default; independent from
+# `xformers_blocksparse`. Forwards to
+# `baracuda-kernels-sys/xformers_sparse24`.
+xformers_sparse24 = ["baracuda-kernels-sys/xformers_sparse24"]
+
+# Phase 53 — bitsandbytes NF4 (NormalFloat 4-bit) dequant + GEMV.
+# Opens QLoRA-trained Llama / Mistral / Qwen inference on the dominant
+# 4-bit format on the Hugging Face Hub. Adds `Nf4DequantizePlan<T>` +
+# `Nf4MmvqPlan<T>` + `Nf4MmvqMultiMPlan<T>` (each for f16/bf16
+# activations). Different from GGUF Q4_0 (symmetric int4 * scale,
+# Phase 8) and AWQ int4 (asymmetric int4 + zero-points): NF4 uses a
+# 16-entry non-uniform quantile codebook. Forwards to
+# `baracuda-kernels-sys/bnb_nf4`. Off by default.
+bnb_nf4 = ["baracuda-kernels-sys/bnb_nf4"]
+
 [dependencies]
 baracuda-kernels-types = { workspace = true }
 baracuda-kernels-sys = { workspace = true }
@@ -92,6 +139,7 @@ baracuda-cutlass = { workspace = true }
 baracuda-driver = { workspace = true }
 baracuda-types = { workspace = true, features = ["half-crate", "f8-crate"] }
 baracuda-optim = { workspace = true, optional = true }
+baracuda-transformer-engine = { workspace = true, optional = true }
 half = { workspace = true }
 thiserror = { workspace = true }
 
