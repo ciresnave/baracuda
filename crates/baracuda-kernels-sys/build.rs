@@ -380,6 +380,32 @@ fn main() {
         }
     }
 
+    // Phase 50 — state-spaces/mamba SSD chunk-scan (Apache-2.0) +
+    // Dao-AILab causal-conv1d (BSD-3-Clause). Two bespoke kernel
+    // families (kernels hand-written from the algorithmic reference;
+    // see `vendor/{mamba,causal-conv1d}/VENDOR.md`). Opens the
+    // state-space LLM class (Mamba-2 8B, Codestral-Mamba, Falcon-Mamba,
+    // Zamba2). Phase 50b adds the Mamba-1 selective_scan sibling
+    // (Mamba-7B class). All gated behind the same `mamba` cargo
+    // feature.
+    if cfg!(feature = "mamba") {
+        for f in &[
+            // Phase 50 — causal-conv1d (Mamba's depthwise conv primitive).
+            "kernels/conv/causal_conv1d_fp.cu",
+            "kernels/conv/causal_conv1d_backward_fp.cu",
+            // Phase 50 — Mamba-2 SSD chunk-scan.
+            "kernels/ssd/ssd_chunk_scan_fp.cu",
+            "kernels/ssd/ssd_chunk_scan_backward_fp.cu",
+            // Phase 50b — Mamba-1 selective_scan.
+            "kernels/ssd/selective_scan_fp.cu",
+            "kernels/ssd/selective_scan_backward_fp.cu",
+        ] {
+            if std::path::Path::new(f).exists() {
+                builder = builder.source_files([*f]);
+            }
+        }
+    }
+
     // Phase 54 — xFormers cherry-pick (BSD-3-Clause). Two independent
     // bespoke kernel families ported clean-room from the xFormers
     // algorithmic reference (no source vendored verbatim; see

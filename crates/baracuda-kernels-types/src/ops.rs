@@ -1233,6 +1233,24 @@ pub enum AttentionKind {
     /// `mHC.cu` (Andre Slavescu, MIT) under
     /// `crates/baracuda-kernels-sys/vendor/mhc/`.
     HyperConnection = 6,
+    /// Mamba-2 State-Space Duality (SSD) chunk-scan (Phase 50). Bespoke
+    /// kernel powering the Mamba-2 family (Mamba-2 8B, Codestral-Mamba,
+    /// Falcon-Mamba, Zamba2). Operates on rank-4 `[B, L, H, D]` input
+    /// + rank-4 `[B, L, H, N]` `B` / `C` modulation tensors + per-head
+    /// scalar SSM eigenvalue `A: [H]`, producing rank-4 `[B, L, H, D]`
+    /// output. State residency is `H * D * N` floats in SMEM (trailblazer
+    /// caps `D, N ≤ 256` for FW, `≤ 64` for BW). Behind the `mamba`
+    /// cargo feature.
+    SsdChunkScan = 7,
+    /// Mamba-1 selective_scan (Phase 50b). Bespoke kernel powering the
+    /// Mamba-1 family (Mamba-7B, Falcon-Mamba, Codestral-Mamba). Operates
+    /// on rank-3 `[B, L, D]` input + rank-3 `[B, L, N]` `B` / `C`
+    /// modulation tensors + per-channel `[D, N]` state matrix `A`, with
+    /// optional `D[d]` skip-connection, SiLU-gated tail `z`, delta-bias,
+    /// and softplus-`delta` mapping. State residency is `N` floats in
+    /// SMEM per `(b, d)` block (trailblazer caps `N ≤ 256`). Behind the
+    /// `mamba` cargo feature.
+    SelectiveScan = 8,
     /// Block-sparse SDPA (Phase 54, xFormers algorithmic-reference
     /// hand-port). Attention mask is a per-block boolean pattern
     /// `[B, H, num_blocks_q * num_blocks_k]`; only the active

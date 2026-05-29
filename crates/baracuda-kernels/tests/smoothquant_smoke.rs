@@ -28,7 +28,7 @@
 
 use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
 use baracuda_kernels::{
-    ElementKind, PlanPreference, SmoothQuantLinearArgs, SmoothQuantLinearDescriptor,
+    PlanPreference, SmoothQuantLinearArgs, SmoothQuantLinearDescriptor,
     SmoothQuantLinearPlan, TensorMut, TensorRef, Workspace, S8,
 };
 
@@ -208,13 +208,11 @@ fn smoothquant_linear_f32_basic() {
     let mut dev_act_scratch: DeviceBuffer<f32> =
         DeviceBuffer::zeros(&ctx, m as usize).expect("alloc act_scale_scratch");
 
-    let desc = SmoothQuantLinearDescriptor {
-        m, n, k,
-        act_scale,
-        activation_element: ElementKind::S8,
-        weight_element: ElementKind::S8,
-        output_element: ElementKind::F32,
-    };
+    // Phase 32 hygiene: `#[non_exhaustive]` blocks struct-literal
+    // construction; route through the `::new()` builder. Defaults match
+    // (activation_element = S8, weight_element = S8, output_element =
+    // TIn::KIND = F32).
+    let desc = SmoothQuantLinearDescriptor::new::<f32>(m, n, k, act_scale);
     let plan = SmoothQuantLinearPlan::<f32, S8>::select(&stream, &desc, PlanPreference::default())
         .expect("select SmoothQuantLinearPlan");
 
@@ -289,13 +287,9 @@ fn smoothquant_select_rejects_unsupported_dtypes() {
     let ctx = Context::new(&device).expect("context");
     let stream = Stream::new(&ctx).expect("stream");
 
-    // f16 TIn currently unsupported (matches QuantizedLinearPlan).
-    let desc_f16 = SmoothQuantLinearDescriptor {
-        m: 2, n: 3, k: 8, act_scale: 0.5,
-        activation_element: ElementKind::S8,
-        weight_element: ElementKind::S8,
-        output_element: ElementKind::F16,
-    };
+    // f16 TIn currently unsupported (matches QuantizedLinearPlan). The
+    // `::new::<f16>()` ctor sets `output_element = f16::KIND = F16`.
+    let desc_f16 = SmoothQuantLinearDescriptor::new::<f16>(2, 3, 8, 0.5);
     let r = SmoothQuantLinearPlan::<f16, S8>::select(&stream, &desc_f16, PlanPreference::default());
     assert!(r.is_err(), "f16 should be rejected");
     drop(ctx);
@@ -309,12 +303,7 @@ fn smoothquant_select_rejects_negative_dims() {
     let ctx = Context::new(&device).expect("context");
     let stream = Stream::new(&ctx).expect("stream");
 
-    let desc = SmoothQuantLinearDescriptor {
-        m: -1, n: 3, k: 8, act_scale: 0.5,
-        activation_element: ElementKind::S8,
-        weight_element: ElementKind::S8,
-        output_element: ElementKind::F32,
-    };
+    let desc = SmoothQuantLinearDescriptor::new::<f32>(-1, 3, 8, 0.5);
     let r = SmoothQuantLinearPlan::<f32, S8>::select(&stream, &desc, PlanPreference::default());
     assert!(r.is_err(), "negative M should be rejected");
     drop(ctx);
@@ -328,12 +317,7 @@ fn smoothquant_select_rejects_non_finite_scale() {
     let ctx = Context::new(&device).expect("context");
     let stream = Stream::new(&ctx).expect("stream");
 
-    let desc = SmoothQuantLinearDescriptor {
-        m: 2, n: 3, k: 8, act_scale: f32::INFINITY,
-        activation_element: ElementKind::S8,
-        weight_element: ElementKind::S8,
-        output_element: ElementKind::F32,
-    };
+    let desc = SmoothQuantLinearDescriptor::new::<f32>(2, 3, 8, f32::INFINITY);
     let r = SmoothQuantLinearPlan::<f32, S8>::select(&stream, &desc, PlanPreference::default());
     assert!(r.is_err(), "non-finite act_scale should be rejected");
     drop(ctx);

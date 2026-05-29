@@ -147,6 +147,20 @@ pub mod paged_kv_append;
 // surface exists even without the feature.
 pub mod sdpa_block_sparse;
 
+// Phase 50 — Mamba-2 State-Space Duality (SSD) chunk-scan. Bespoke
+// kernel under `kernels/ssd/ssd_chunk_scan_*.cu`; gated behind the
+// `mamba` cargo feature because it pulls in the corresponding FFI
+// symbols compiled from `baracuda-kernels-sys`. Listed under
+// `attention` because of the SSD-as-attention duality (Dao & Gu 2024).
+#[cfg(feature = "mamba")]
+pub mod ssd_chunk_scan;
+
+// Phase 50b — Mamba-1 selective_scan. Sibling to SSD; powers the
+// Mamba-1 family (Mamba-7B / Falcon-Mamba / Codestral-Mamba). Gated
+// behind the same `mamba` cargo feature as SSD.
+#[cfg(feature = "mamba")]
+pub mod selective_scan;
+
 pub use batch_paged_decode::{
     BatchPagedDecodeArgs, BatchPagedDecodeDescriptor, BatchPagedDecodePlan,
     PagedKvCacheDescriptor,
@@ -162,4 +176,18 @@ pub use paged_kv_append::{
 pub use sdpa_block_sparse::{
     SdpaBlockSparseArgs, SdpaBlockSparseDescriptor, SdpaBlockSparsePlan,
     SDPA_BLOCK_SPARSE_MAX_BLOCK, SDPA_BLOCK_SPARSE_MAX_D,
+};
+
+// Phase 50 — Mamba-2 SSD chunk-scan re-exports.
+#[cfg(feature = "mamba")]
+pub use ssd_chunk_scan::{
+    SsdChunkScanArgs, SsdChunkScanBackwardArgs, SsdChunkScanBackwardDescriptor,
+    SsdChunkScanBackwardPlan, SsdChunkScanDescriptor, SsdChunkScanPlan,
+};
+
+// Phase 50b — Mamba-1 selective_scan re-exports.
+#[cfg(feature = "mamba")]
+pub use selective_scan::{
+    SelectiveScanArgs, SelectiveScanBackwardArgs, SelectiveScanBackwardDescriptor,
+    SelectiveScanBackwardPlan, SelectiveScanDescriptor, SelectiveScanPlan,
 };

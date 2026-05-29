@@ -41355,3 +41355,292 @@ unsafe extern "C" {
         n: i32, m: i32, k: i32,
     ) -> u64;
 }
+
+// =============================================================================
+// Phase 50 — Dao-AILab causal-conv1d (BSD-3-Clause) + state-spaces/mamba SSD
+// chunk-scan (Apache-2.0). Phase 50b — Mamba-1 selective_scan sibling. All
+// gated behind the `mamba` cargo feature.
+// =============================================================================
+//
+// Causal-conv1d: depthwise causal cross-correlation primitive used between
+// the Mamba input projection and the SSM block. Trailblazer constraints:
+//   - widths W ∈ {2, 3, 4}
+//   - activation: SiLU or identity (use_silu = 1 / 0)
+//   - dtypes: f32 / f16 / bf16 / f64
+//   - layout: NCL contiguous
+//   - FW deterministic / bit-stable; BW dw/db atomic-accumulated.
+//
+// SSD chunk-scan: Mamba-2 selective SSM via the State-Space Duality
+// reformulation. Per-(b, h) sequential recurrence with state in SMEM.
+// Trailblazer constraints: dtypes f32 / f16 / bf16; head_dim/state_dim
+// ≤ 256 for FW, ≤ 64 for BW. BW workspace = `B * H * L * D * N` f32
+// recorded states (query via `_workspace_bytes`).
+//
+// Selective_scan: Mamba-1 selective SSM. Per-(b, d) sequential recurrence
+// with per-(d, n) state matrix in SMEM. Trailblazer constraints: dtypes
+// f32 / f16 / bf16; `dstate` (N) ≤ 256. BW workspace =
+// `B * D * L * N * sizeof(T)` (query via `_workspace_bytes`).
+//
+// Status codes match baracuda convention: 0 ok, 2 invalid_problem,
+// 3 unsupported, 4 workspace_too_small, 5 launch_failure.
+
+#[cfg(feature = "mamba")]
+unsafe extern "C" {
+    // -----------------------------------------------------------------
+    // causal-conv1d FW (Phase 50)
+    // -----------------------------------------------------------------
+    pub fn baracuda_kernels_causal_conv1d_f32_run(
+        batch: i32, channels: i32, seqlen: i32, width: i32,
+        use_silu: i32,
+        x: *const c_void, weight: *const c_void, bias: *const c_void,
+        y: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_causal_conv1d_f16_run(
+        batch: i32, channels: i32, seqlen: i32, width: i32,
+        use_silu: i32,
+        x: *const c_void, weight: *const c_void, bias: *const c_void,
+        y: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_causal_conv1d_bf16_run(
+        batch: i32, channels: i32, seqlen: i32, width: i32,
+        use_silu: i32,
+        x: *const c_void, weight: *const c_void, bias: *const c_void,
+        y: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_causal_conv1d_f64_run(
+        batch: i32, channels: i32, seqlen: i32, width: i32,
+        use_silu: i32,
+        x: *const c_void, weight: *const c_void, bias: *const c_void,
+        y: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    pub fn baracuda_kernels_causal_conv1d_f32_can_implement(
+        batch: i32, channels: i32, seqlen: i32, width: i32,
+    ) -> i32;
+    pub fn baracuda_kernels_causal_conv1d_f16_can_implement(
+        batch: i32, channels: i32, seqlen: i32, width: i32,
+    ) -> i32;
+    pub fn baracuda_kernels_causal_conv1d_bf16_can_implement(
+        batch: i32, channels: i32, seqlen: i32, width: i32,
+    ) -> i32;
+    pub fn baracuda_kernels_causal_conv1d_f64_can_implement(
+        batch: i32, channels: i32, seqlen: i32, width: i32,
+    ) -> i32;
+
+    // -----------------------------------------------------------------
+    // causal-conv1d BW (Phase 50)
+    // -----------------------------------------------------------------
+    pub fn baracuda_kernels_causal_conv1d_f32_backward_run(
+        batch: i32, channels: i32, seqlen: i32, width: i32,
+        use_silu: i32,
+        x: *const c_void, weight: *const c_void, bias: *const c_void, dy: *const c_void,
+        dx: *mut c_void, dw: *mut c_void, db: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_causal_conv1d_f16_backward_run(
+        batch: i32, channels: i32, seqlen: i32, width: i32,
+        use_silu: i32,
+        x: *const c_void, weight: *const c_void, bias: *const c_void, dy: *const c_void,
+        dx: *mut c_void, dw: *mut c_void, db: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_causal_conv1d_bf16_backward_run(
+        batch: i32, channels: i32, seqlen: i32, width: i32,
+        use_silu: i32,
+        x: *const c_void, weight: *const c_void, bias: *const c_void, dy: *const c_void,
+        dx: *mut c_void, dw: *mut c_void, db: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_causal_conv1d_f64_backward_run(
+        batch: i32, channels: i32, seqlen: i32, width: i32,
+        use_silu: i32,
+        x: *const c_void, weight: *const c_void, bias: *const c_void, dy: *const c_void,
+        dx: *mut c_void, dw: *mut c_void, db: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    // -----------------------------------------------------------------
+    // SSD chunk-scan FW (Phase 50)
+    // -----------------------------------------------------------------
+    pub fn baracuda_kernels_ssd_chunk_scan_f32_run(
+        batch: i32, seqlen: i32, heads: i32,
+        head_dim: i32, state_dim: i32, chunk_size: i32,
+        x: *const c_void, dt: *const c_void, a: *const c_void,
+        b: *const c_void, c: *const c_void,
+        y: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_ssd_chunk_scan_f16_run(
+        batch: i32, seqlen: i32, heads: i32,
+        head_dim: i32, state_dim: i32, chunk_size: i32,
+        x: *const c_void, dt: *const c_void, a: *const c_void,
+        b: *const c_void, c: *const c_void,
+        y: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_ssd_chunk_scan_bf16_run(
+        batch: i32, seqlen: i32, heads: i32,
+        head_dim: i32, state_dim: i32, chunk_size: i32,
+        x: *const c_void, dt: *const c_void, a: *const c_void,
+        b: *const c_void, c: *const c_void,
+        y: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    pub fn baracuda_kernels_ssd_chunk_scan_f32_can_implement(
+        batch: i32, seqlen: i32, heads: i32,
+        head_dim: i32, state_dim: i32, chunk_size: i32,
+    ) -> i32;
+    pub fn baracuda_kernels_ssd_chunk_scan_f16_can_implement(
+        batch: i32, seqlen: i32, heads: i32,
+        head_dim: i32, state_dim: i32, chunk_size: i32,
+    ) -> i32;
+    pub fn baracuda_kernels_ssd_chunk_scan_bf16_can_implement(
+        batch: i32, seqlen: i32, heads: i32,
+        head_dim: i32, state_dim: i32, chunk_size: i32,
+    ) -> i32;
+
+    // -----------------------------------------------------------------
+    // SSD chunk-scan BW (Phase 50)
+    // -----------------------------------------------------------------
+    pub fn baracuda_kernels_ssd_chunk_scan_workspace_bytes(
+        batch: i32, seqlen: i32, heads: i32,
+        head_dim: i32, state_dim: i32,
+        chunk_size: i32, dtype_id: i32,
+    ) -> usize;
+
+    pub fn baracuda_kernels_ssd_chunk_scan_f32_backward_run(
+        batch: i32, seqlen: i32, heads: i32,
+        head_dim: i32, state_dim: i32, chunk_size: i32,
+        x: *const c_void, dt: *const c_void, a: *const c_void,
+        b: *const c_void, c: *const c_void, dy: *const c_void,
+        dx: *mut c_void, d_b: *mut c_void, d_c: *mut c_void,
+        d_dt: *mut c_void, d_a: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_ssd_chunk_scan_f16_backward_run(
+        batch: i32, seqlen: i32, heads: i32,
+        head_dim: i32, state_dim: i32, chunk_size: i32,
+        x: *const c_void, dt: *const c_void, a: *const c_void,
+        b: *const c_void, c: *const c_void, dy: *const c_void,
+        dx: *mut c_void, d_b: *mut c_void, d_c: *mut c_void,
+        d_dt: *mut c_void, d_a: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_ssd_chunk_scan_bf16_backward_run(
+        batch: i32, seqlen: i32, heads: i32,
+        head_dim: i32, state_dim: i32, chunk_size: i32,
+        x: *const c_void, dt: *const c_void, a: *const c_void,
+        b: *const c_void, c: *const c_void, dy: *const c_void,
+        dx: *mut c_void, d_b: *mut c_void, d_c: *mut c_void,
+        d_dt: *mut c_void, d_a: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    // -----------------------------------------------------------------
+    // selective_scan FW (Phase 50b)
+    // -----------------------------------------------------------------
+    pub fn baracuda_kernels_selective_scan_f32_run(
+        batch: i32, seqlen: i32, dim: i32, dstate: i32,
+        delta_softplus: i32,
+        u: *const c_void, delta: *const c_void, a: *const c_void,
+        b: *const c_void, c: *const c_void,
+        d_skip: *const c_void, z: *const c_void, delta_bias: *const c_void,
+        y: *mut c_void, last_state: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_selective_scan_f16_run(
+        batch: i32, seqlen: i32, dim: i32, dstate: i32,
+        delta_softplus: i32,
+        u: *const c_void, delta: *const c_void, a: *const c_void,
+        b: *const c_void, c: *const c_void,
+        d_skip: *const c_void, z: *const c_void, delta_bias: *const c_void,
+        y: *mut c_void, last_state: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_selective_scan_bf16_run(
+        batch: i32, seqlen: i32, dim: i32, dstate: i32,
+        delta_softplus: i32,
+        u: *const c_void, delta: *const c_void, a: *const c_void,
+        b: *const c_void, c: *const c_void,
+        d_skip: *const c_void, z: *const c_void, delta_bias: *const c_void,
+        y: *mut c_void, last_state: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    pub fn baracuda_kernels_selective_scan_f32_can_implement(
+        batch: i32, seqlen: i32, dim: i32, dstate: i32,
+    ) -> i32;
+    pub fn baracuda_kernels_selective_scan_f16_can_implement(
+        batch: i32, seqlen: i32, dim: i32, dstate: i32,
+    ) -> i32;
+    pub fn baracuda_kernels_selective_scan_bf16_can_implement(
+        batch: i32, seqlen: i32, dim: i32, dstate: i32,
+    ) -> i32;
+
+    // -----------------------------------------------------------------
+    // selective_scan BW (Phase 50b)
+    // -----------------------------------------------------------------
+    pub fn baracuda_kernels_selective_scan_workspace_bytes(
+        batch: i32, seqlen: i32, dim: i32, dstate: i32,
+        dtype_id: i32,
+    ) -> usize;
+
+    pub fn baracuda_kernels_selective_scan_f32_backward_run(
+        batch: i32, seqlen: i32, dim: i32, dstate: i32,
+        delta_softplus: i32,
+        u: *const c_void, delta: *const c_void, a: *const c_void,
+        b: *const c_void, c: *const c_void,
+        d_skip: *const c_void, z: *const c_void, delta_bias: *const c_void,
+        dy: *const c_void,
+        du: *mut c_void, d_b: *mut c_void, d_c: *mut c_void, d_delta: *mut c_void,
+        d_a: *mut c_void, d_d: *mut c_void, dz: *mut c_void, d_delta_bias: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_selective_scan_f16_backward_run(
+        batch: i32, seqlen: i32, dim: i32, dstate: i32,
+        delta_softplus: i32,
+        u: *const c_void, delta: *const c_void, a: *const c_void,
+        b: *const c_void, c: *const c_void,
+        d_skip: *const c_void, z: *const c_void, delta_bias: *const c_void,
+        dy: *const c_void,
+        du: *mut c_void, d_b: *mut c_void, d_c: *mut c_void, d_delta: *mut c_void,
+        d_a: *mut c_void, d_d: *mut c_void, dz: *mut c_void, d_delta_bias: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_selective_scan_bf16_backward_run(
+        batch: i32, seqlen: i32, dim: i32, dstate: i32,
+        delta_softplus: i32,
+        u: *const c_void, delta: *const c_void, a: *const c_void,
+        b: *const c_void, c: *const c_void,
+        d_skip: *const c_void, z: *const c_void, delta_bias: *const c_void,
+        dy: *const c_void,
+        du: *mut c_void, d_b: *mut c_void, d_c: *mut c_void, d_delta: *mut c_void,
+        d_a: *mut c_void, d_d: *mut c_void, dz: *mut c_void, d_delta_bias: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+}
