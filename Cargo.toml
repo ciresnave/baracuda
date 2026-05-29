@@ -84,6 +84,15 @@ baracuda-ozimmu = { version = "0.0.1-alpha.57", path = "crates/baracuda-ozimmu" 
 # behind the `optim` feature on baracuda-kernels so inference-only
 # consumers (e.g. Fuel) don't pay the FFI surface cost.
 baracuda-optim = { version = "0.0.1-alpha.57", path = "crates/baracuda-optim" }
+# Phase 57 — Megatron-LM tensor-parallel primitives (Column / Row Parallel
+# Linear). Pure-composition crate — local GEMM via baracuda-cublas +
+# cross-rank collectives via baracuda-nccl. No new CUDA kernels.
+# Deliberate scope expansion (distributed-training-framework-adjacent).
+# Optional dep behind the `megatron_tp` feature on baracuda-kernels so
+# non-distributed consumers don't pay the dep surface cost.
+# Algorithmic reference: Shoeybi et al. arXiv:1909.08053 (NVIDIA
+# Megatron-LM, Apache-2.0).
+baracuda-megatron = { version = "0.0.1-alpha.57", path = "crates/baracuda-megatron" }
 # Phase 55 — NVIDIA TransformerEngine FP8 cast/transpose + delayed-
 # scaling recipe primitives (Apache-2.0). NEW sibling crate pair
 # `baracuda-transformer-engine-sys` + `baracuda-transformer-engine`.

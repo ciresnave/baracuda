@@ -494,6 +494,84 @@ is `~1e-2` relative error class. The kernel matches
 *dequantize-then-matmul* tightly; the lossy step is upstream of the
 GPU.
 
+## Phase 57 — Megatron-LM TP primitives (complete; alpha.57, 2026-05-28)
+
+**Foundational tensor-parallel (TP) primitives — pure composition over
+the Phase 52 NCCL substrate + the Phase 30 cuBLAS GEMM path. NO new
+CUDA kernels.** Modern Megatron-LM is framework glue: it wraps
+TransformerEngine / Apex for kernels, and its "primitives" are
+PyTorch-level wrappers around NCCL collectives. baracuda already has
+both the substrate and the kernel building blocks, so Phase 57 is
+pure-orchestration Rust.
+
+NEW sibling crate **`baracuda-megatron`** — gated behind the
+`megatron_tp` cargo feature on `baracuda-kernels` so non-distributed
+consumers (e.g. Fuel) don't pay the dep surface cost. Follows the
+Phase 49 / Phase 55 sibling-crate pattern.
+
+- **`ColumnParallelLinearPlan<T>`** — splits W along the OUTPUT
+  dimension. Each rank holds `W_local: [out_features/N, in_features]`.
+  FW: local `Y_local = X @ W_local^T` + cross-rank `all_gather` into
+  `[N * B * out/N]` (NCCL rank-major concatenation; matches
+  Megatron's `_gather_along_last_dim` contract). BW: local
+  `dX_partial = dY_local @ W_local` + cross-rank `all_reduce(Sum)`
+  for `dX`, plus local `dW_local = dY_local^T @ X` (`dW` stays
+  sharded — each rank updates its own slice via the optimizer).
+- **`RowParallelLinearPlan<T>`** — splits W along the INPUT dimension.
+  Each rank holds `W_local: [out_features, in_features/N]` and
+  consumes a pre-sharded `X_local: [B, in_features/N]`. FW: local
+  `Y_partial = X_local @ W_local^T` + cross-rank `all_reduce(Sum)`
+  → `Y: [B, out_features]` (replicated). BW: local `dX_local =
+  dY @ W_local` (**no collective** — `dY` is already replicated by
+  the upstream Column-parallel's FW all-gather), plus local
+  `dW_local = dY^T @ X_local`. The Column→Row pairing is the design
+  point of Megatron — only one collective per layer-pair.
+- **`TensorParallelContext`** — borrow-type holding `&Communicator` +
+  `in_features` / `out_features` + cached `rank` / `world_size`.
+  Divisibility (`out_features % world_size == 0` for Column,
+  `in_features % world_size == 0` for Row) is checked at plan
+  construction.
+- **Dtypes**: f32 always (via `cublasSgemm`); f16 + bf16 (via
+  `cublasGemmEx` with `Compute32F` accumulator + `R_16F` / `R_16BF`
+  tags) behind the crate-level `half-crate` cargo feature, which the
+  kernel-facade `megatron_tp` feature pulls in.
+- **Bias**: API accepts an optional bias arg and **rejects with a
+  Tier-2 marker error** if set — Phase 57 is pure composition;
+  Tier 2 will compose a `baracuda-kernels` `Affine` step internally.
+  Callers can perform bias-add themselves between calls. **For
+  RowParallel the bias must be added AFTER the all_reduce** so it
+  isn't summed N times (the docstring calls this out).
+- **Row-major-via-cuBLAS-column-major trick**: implemented on the
+  per-dtype `MegatronGemmScalar::row_major_gemm_{nt,nn,tn}` helpers
+  (operand swap + Op flip; same convention as the Phase 30
+  GemmPlan→cuBLAS bridge).
+- **Single-rank degenerate case**: when `world_size == 1`, the
+  `all_gather` / `all_reduce` collectives short-circuit to stream-
+  ordered D2D copies and the plan is bit-equivalent to a plain
+  `Linear` layer. The two `*_smoke.rs` test files validate this on
+  single-GPU dev hardware (smokes are `#[ignore]`-gated pending
+  NCCL bring-up).
+- **`tests/multi_rank_scaffold.rs`** — `#[ignore]`-gated 2-GPU
+  scaffold for future multi-GPU CI validation. Exits cleanly on
+  single-GPU dev boxes via `Device::count()` check.
+
+Out of scope for Phase 57 (deferred):
+
+- Async overlap (Hopper TMA + `comm_gemm_overlap`) — sm_89 hardware
+  blocked.
+- Sequence parallelism — Phase 56's domain (Ring Attention).
+- Pipeline parallelism — orchestration-heavy; future phase.
+- VocabParallelEmbedding — Megatron-specific; future polish.
+- Distributed gradient accumulation — Phase 58 (DistributedAdam ZeRO-1).
+- Expert parallelism (MoE) — separate distributed phase.
+
+Algorithmic reference: Shoeybi, Patwary, Puri, LeGresley, Casper,
+Catanzaro, "Megatron-LM: Training Multi-Billion Parameter Language
+Models Using Model Parallelism", arXiv:1909.08053 (2019). Upstream
+[NVIDIA Megatron-LM](https://github.com/NVIDIA/Megatron-LM) is
+Apache-2.0; **no source vendored** — kernel primitives are reused
+from the rest of the baracuda stack and composed in Rust.
+
 ## Phase 52 — NCCL foundation (complete; alpha.57, 2026-05-28)
 
 NCCL foundation (no callers yet) — the distributed-roadmap
