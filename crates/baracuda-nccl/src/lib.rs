@@ -741,19 +741,29 @@ impl Communicator {
         root: i32,
         stream: &Stream,
     ) -> Result<()> {
+        // In-place broadcast: NCCL is documented to accept `send == recv`
+        // on every rank. We extract the device pointer from the single
+        // `&mut DeviceBuffer<T>` and pass it as both the const and the
+        // mut pointer to `ncclBroadcast` directly — this avoids the
+        // `&mut → &` reborrow that earlier versions of this method used
+        // (which trips `#[deny(invalid_reference_casting)]` and is UB
+        // under Stacked Borrows even though the FFI call respects the
+        // memcpy-style contract).
         let count = buf.len();
-        // SAFETY: NCCL's in-place broadcast is documented as legal —
-        // it just copies `recv ← send` when `send == recv`. We split
-        // the &mut reborrow into a const + mut alias via raw pointers
-        // here, then immediately re-form the safe references for the
-        // FFI call inside `broadcast()`.
-        //
-        // The borrow-checker can't see that NCCL only reads `send`
-        // before writing `recv` on the root rank, and vice versa on
-        // non-roots — but the contract is identical to a memcpy.
-        let send_ptr = buf as *const DeviceBuffer<T>;
-        let send_ref: &DeviceBuffer<T> = unsafe { &*send_ptr };
-        broadcast(send_ref, buf, count, root, self, stream)
+        let n = nccl()?;
+        let cu = n.nccl_broadcast()?;
+        let ptr = buf.as_raw().0 as *mut core::ffi::c_void;
+        check(unsafe {
+            cu(
+                ptr as *const core::ffi::c_void,
+                ptr,
+                count,
+                T::raw(),
+                root,
+                self.handle,
+                stream.as_raw() as _,
+            )
+        })
     }
 
     /// Open a group of collectives that should be submitted atomically.

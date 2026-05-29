@@ -208,6 +208,15 @@ Patches applied to vendored headers (record every divergence here):
    nvcc; `__shared__` is CUDA-portable. Line is inside the MLA
    kernel which baracuda's launcher doesn't call, but the template
    still gets instantiated transitively.
+7. `attention/decode.cuh` lines 669, 752, 763, 1130 — `std::max(...)`
+   calls wrapped in `static_cast<size_t>(...)` on both arguments so the
+   common type deduction succeeds under Windows MSVC nvcc. The upstream
+   expressions mix `unsigned long` (= 32-bit on MSVC) with `size_t`
+   (= 64-bit on Win64) from `sizeof()` operands; gcc / clang silently
+   widen, MSVC rejects with "no instance of overloaded function
+   std::max matches the argument list". Unblocks Phase 46 paged decode
+   launcher compile on Windows. Verified at consolidation pass
+   2026-05-28.
 
 ## Future scope
 

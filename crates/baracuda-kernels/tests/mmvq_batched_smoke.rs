@@ -626,15 +626,22 @@ fn run_q8_0_with_optional_topk_weights(
 ) -> (Vec<f32>, Vec<f32>) {
     let n_experts: i32 = 1;
     let n_rows: i32 = 1;
-    let n_cols: i32 = 32;
+    // Phase 22 guard: type-0/1 GGUF formats require `n_cols >= 64` to
+    // avoid silent-wrong results from contiguous-batched activation OOB
+    // reads. Bumped from 32 to 64 in the consolidation pass.
+    let n_cols: i32 = 64;
     let n_tokens: i32 = 2;
     let m_total: i32 = 2;
     let top_k: i32 = 1;
 
     let d = 0.5;
-    let qs: [i8; 32] = std::array::from_fn(|i| (i as i32 - 16) as i8);
-    let packed = pack_q8_0_row(d, &qs);
-    let host_w: Vec<U8> = packed.into_iter().map(U8).collect();
+    // Two Q8_0 blocks of 32 i8 values cover the 64-column row.
+    let qs_part_a: [i8; 32] = std::array::from_fn(|i| (i as i32 - 16) as i8);
+    let qs_part_b: [i8; 32] = std::array::from_fn(|i| (i as i32 - 16) as i8);
+    let mut packed_a = pack_q8_0_row(d, &qs_part_a);
+    let packed_b = pack_q8_0_row(d, &qs_part_b);
+    packed_a.extend(packed_b);
+    let host_w: Vec<U8> = packed_a.into_iter().map(U8).collect();
 
     let host_y: Vec<f32> = (0..(n_tokens as usize * n_cols as usize))
         .map(|i| (i as f32) * 0.02 - 0.3)
@@ -645,11 +652,15 @@ fn run_q8_0_with_optional_topk_weights(
     let topk_w_vec: Vec<f32> = vec![multiplier; m_total as usize];
 
     // Reference
+    // Concatenate the two 32-element qs blocks to cover all 64 columns.
+    let mut qs_full: Vec<i8> = Vec::with_capacity(n_cols as usize);
+    qs_full.extend_from_slice(&qs_part_a);
+    qs_full.extend_from_slice(&qs_part_b);
     let mut expected = vec![0.0f32; n_tokens as usize];
     for t in 0..n_tokens as usize {
         let mut acc = 0.0f32;
         for c in 0..n_cols as usize {
-            acc += d * (qs[c] as f32) * host_y[t * n_cols as usize + c];
+            acc += d * (qs_full[c] as f32) * host_y[t * n_cols as usize + c];
         }
         let w = if use_topk_weights { multiplier } else { 1.0 };
         expected[t] = w * acc;

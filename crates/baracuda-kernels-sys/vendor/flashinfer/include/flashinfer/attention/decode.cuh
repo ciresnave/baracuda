@@ -666,7 +666,12 @@ cudaError_t SingleDecodeWithKVCacheDispatched(Params params, typename Params::DT
   const uint32_t num_kv_heads = params.num_kv_heads;
   const uint32_t seq_len = params.kv_len;
 
-  constexpr uint32_t vec_size = std::max(16UL / sizeof(DTypeKV), HEAD_DIM / 32UL);
+  // baracuda patch (Phase 46 consolidation): see matching patch at the
+  // BatchDecode function below — `std::max` needs same-type arguments on
+  // Windows MSVC where `size_t != unsigned long`.
+  constexpr uint32_t vec_size = static_cast<uint32_t>(
+      std::max(static_cast<size_t>(16UL / sizeof(DTypeKV)),
+               static_cast<size_t>(HEAD_DIM / 32UL)));
   constexpr uint32_t bdx = HEAD_DIM / vec_size;
   auto compute_capacity = GetCudaComputeCapability();
   static_assert(bdx <= 32U);
@@ -749,7 +754,15 @@ cudaError_t BatchDecodeWithPagedKVCacheDispatched(Params params, typename Params
   const uint32_t num_kv_heads = params.paged_kv.num_heads;
   const uint32_t padded_batch_size = params.padded_batch_size;
 
-  constexpr uint32_t vec_size = std::max(16UL / sizeof(DTypeKV), HEAD_DIM / 32UL);
+  // baracuda patch (Phase 46 consolidation): on Windows MSVC, `sizeof()`
+  // returns `size_t` (unsigned long long, 64-bit) while `16UL` / `32UL`
+  // are `unsigned long` (32-bit). The mixed-type `std::max` arguments
+  // fail to deduce a common type. Cast both arguments to `size_t` so the
+  // expression is well-typed on all platforms; the result still narrows
+  // cleanly to `uint32_t` (all template inputs are <= 256).
+  constexpr uint32_t vec_size = static_cast<uint32_t>(
+      std::max(static_cast<size_t>(16UL / sizeof(DTypeKV)),
+               static_cast<size_t>(HEAD_DIM / 32UL)));
   auto compute_capacity = GetCudaComputeCapability();
   constexpr uint32_t bdx = HEAD_DIM / vec_size;
   static_assert(bdx <= 32);
@@ -759,10 +772,16 @@ cudaError_t BatchDecodeWithPagedKVCacheDispatched(Params params, typename Params
     constexpr uint32_t bdz = num_threads / (bdx * bdy);
     constexpr uint32_t tile_size_per_bdx = GROUP_SIZE == 1 ? (sizeof(DTypeKV) == 1 ? 2U : 4U) : 1U;
     DISPATCH_COMPUTE_CAP_DECODE_NUM_STAGES_SMEM(compute_capacity, NUM_STAGES_SMEM, {
+      // baracuda patch (Phase 46 consolidation): cast both args to
+      // `size_t` to side-step Windows MSVC type-mismatch in `std::max`
+      // (DTypeKV* pointer-size = 8B on Win64 vs `float` = 4B = both
+      // multiplied by `unsigned int` results — narrows to differing
+      // types under MSVC's promotion rules).
       const uint32_t smem_size =
           2 * NUM_STAGES_SMEM * tile_size_per_bdx * bdy * bdz * HEAD_DIM * sizeof(DTypeKV) +
-          std::max(tile_size_per_bdx * num_threads * sizeof(DTypeKV*),
-                   2 * bdy * bdz * sizeof(float));
+          static_cast<uint32_t>(std::max(
+              static_cast<size_t>(tile_size_per_bdx * num_threads * sizeof(DTypeKV*)),
+              static_cast<size_t>(2 * bdy * bdz * sizeof(float))));
       auto kernel =
           BatchDecodeWithPagedKVCacheKernel<POS_ENCODING_MODE, NUM_STAGES_SMEM, tile_size_per_bdx,
                                             vec_size, bdx, bdy, bdz, AttentionVariant, Params>;
@@ -1108,7 +1127,10 @@ cudaError_t BatchDecodeWithPagedKVCacheDispatchedMLA(Params params, typename Par
   const uint32_t num_qo_heads = params.num_qo_heads;
   const uint32_t padded_batch_size = params.padded_batch_size;
 
-  constexpr uint32_t vec_size_ckv = std::max(16UL / sizeof(DTypeKV), HEAD_DIM_CKV / 32UL);
+  // baracuda patch (Phase 46 consolidation): MSVC `std::max` type-match.
+  constexpr uint32_t vec_size_ckv = static_cast<uint32_t>(
+      std::max(static_cast<size_t>(16UL / sizeof(DTypeKV)),
+               static_cast<size_t>(HEAD_DIM_CKV / 32UL)));
   constexpr uint32_t bdx = HEAD_DIM_CKV / vec_size_ckv;
   constexpr uint32_t vec_size_kpe = HEAD_DIM_KPE / bdx;
 

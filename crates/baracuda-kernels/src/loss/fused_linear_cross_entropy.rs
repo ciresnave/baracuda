@@ -490,19 +490,24 @@ impl<T: Element> FusedLinearCrossEntropyPlan<T> {
             // product `D = A · B^T` where A is row-major [n, H] and B is
             // row-major [V, H] (so we need B^T which is [H, V]).
             //
-            // The standard "compute the transposed problem" trick:
-            // a row-major matrix M[r, c] is the same memory as
-            // col-major M^T[c, r]. So:
-            //   - A (row-major [n, H]) = col-major A^T [H, n], lda = H.
-            //   - B (row-major [V, H]) = col-major B^T [H, V], ldb = H.
-            //   - D (row-major [n, V]) = col-major D^T [V, n], ldd = V.
-            // We want D^T = (A · B^T)^T = B · A^T. In col-major terms:
-            //   D[V, n] = op(B)[V, H] · op(A^T)[H, n]
-            //     = (B col-major no-trans, m=V, k=H) · (A col-major trans, k=H, n=n).
-            // So:
-            //   m = V, n = n_rows, k = H, transa=N, transb=T,
-            //   A_cublas = weight (lda = H), B_cublas = input_chunk (ldb = H),
-            //   C_cublas = logits_chunk (ldc = V).
+            // Row→col view: `row[r, c]` storage == `col[c, r]` storage.
+            //   A (row [n, H]) → A_col [H, n], lda = H.
+            //   B (row [V, H]) → B_col [H, V], ldb = H.
+            //   D (row [n, V]) → D_col [V, n], ldc = V.
+            // We want D_col[V, n] = B_col^T [V, H] · A_col [H, n].
+            //
+            // In cuBLAS terms `C = α op(A_cublas) · op(B_cublas) + β C`:
+            //   A_cublas = weight (storage B_col [H, V]) with transa=OP_T
+            //     → op(A_cublas)[V, H].
+            //   B_cublas = input (storage A_col [H, n]) with transb=OP_N
+            //     → op(B_cublas)[H, n].
+            //   m = V, n = n_rows, k = H, lda = H, ldb = H, ldc = V.
+            //
+            // (Consolidation-pass note: this used to read OP_N / OP_T
+            // for transa / transb — the comment block above was correct
+            // about the math but the cuBLAS arg names had been swapped,
+            // which fired `CUBLAS_STATUS_INVALID_VALUE` whenever V > H
+            // because lda < m. Fixed by Consolidation Agent C.)
             let input_chunk_ptr = unsafe {
                 (input_ptr_base as *const u8)
                     .offset(start as isize * input_row_stride_elems * elem_t)
@@ -514,8 +519,8 @@ impl<T: Element> FusedLinearCrossEntropyPlan<T> {
             let beta_zero_f64 = 0.0f64;
             self.gemm_ex(
                 handle,
-                CUBLAS_OP_N,
                 CUBLAS_OP_T,
+                CUBLAS_OP_N,
                 v,
                 n_rows,
                 h,
@@ -525,10 +530,10 @@ impl<T: Element> FusedLinearCrossEntropyPlan<T> {
                     &alpha_f32 as *const f32 as *const c_void
                 },
                 weight_ptr,
-                v,           // m
-                h as i32,    // lda
+                v,           // m marker (informational)
+                h as i32,    // lda (storage leading-dim of weight col-view [H, V])
                 input_chunk_ptr,
-                h as i32,    // ldb
+                h as i32,    // ldb (storage leading-dim of input col-view [H, n])
                 if T::KIND == ElementKind::F64 {
                     &beta_zero_f64 as *const f64 as *const c_void
                 } else {
@@ -584,25 +589,21 @@ impl<T: Element> FusedLinearCrossEntropyPlan<T> {
 
             // ---- 3. grad_input[chunk] = grad_logits_chunk @ weight ----
             //
-            // grad_logits_chunk: row-major [n_rows, V], lda = V.
-            // weight:            row-major [V, H], lda = H.
-            // grad_input_chunk:  row-major [n_rows, H], ldc = H.
+            // Row→col view:
+            //   grad_logits_chunk (row [n, V]) → col [V, n], ld = V.
+            //   weight            (row [V, H]) → col [H, V], ld = H.
+            //   grad_input_chunk  (row [n, H]) → col [H, n], ld = H.
             //
-            // Same row-major-to-col-major trick:
-            //   A_row [n, V] = A^T col [V, n], lda = V.
-            //   B_row [V, H] = B^T col [H, V], ldb = H.
-            //   D_row [n, H] = D^T col [H, n], ldd = H.
-            // D^T = (grad_logits · weight)^T = weight^T · grad_logits^T
-            //   In col-major terms: D[H, n] = weight^T_col [H, V] · grad_logits^T_col [V, n]
-            //   weight is row-major [V, H], so weight^T is col-major [H, V]
-            //   *with the SAME storage as the row-major view* (transpose
-            //   of row-major [V, H] = col-major [H, V]).
-            //   Wait — actually weight (row-major [V, H]) = col-major [H, V].
-            //   So weight_in_col_major has shape [H, V] and ld = H. That is
-            //   exactly the "B^T col" view above. So we pass weight with
-            //   transa=N, m=H, k=V, lda=H. Then grad_logits row-major
-            //   [n, V] = col-major [V, n], so we pass it with transb=N,
-            //   k=V, n=n, ldb=V. Output: m=H, n=n_rows.
+            // grad_input_col[H, n] = weight_col[H, V] · grad_logits_col[V, n]
+            // → transa = OP_N (weight_col is already [H, V]),
+            //   transb = OP_N (grad_logits_col is already [V, n]),
+            //   m = H, n = n_rows, k = V,
+            //   lda = H, ldb = V, ldc = H.
+            //
+            // (Consolidation-pass note: previous code already had the
+            // correct transa/transb for this call but the comment block
+            // was confused — clarified above so the next reviewer can
+            // skip the derivation.)
             if let Some(_) = args.grad_input.as_ref() {
                 let grad_input_chunk_ptr = unsafe {
                     (grad_input_ptr_base as *mut u8)
@@ -622,10 +623,10 @@ impl<T: Element> FusedLinearCrossEntropyPlan<T> {
                         &alpha_f32 as *const f32 as *const c_void
                     },
                     weight_ptr,
-                    h,           // m
-                    h as i32,    // lda
+                    h,           // m marker
+                    h as i32,    // lda (storage of weight col-view [H, V])
                     logits_ptr,
-                    v as i32,    // ldb
+                    v as i32,    // ldb (storage of grad_logits col-view [V, n])
                     if T::KIND == ElementKind::F64 {
                         &beta_zero_f64 as *const f64 as *const c_void
                     } else {

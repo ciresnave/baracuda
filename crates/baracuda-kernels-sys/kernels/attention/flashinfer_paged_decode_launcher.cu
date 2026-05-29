@@ -58,11 +58,64 @@
 #include <cuda_fp16.h>
 #include <cuda_bf16.h>
 
+// --- MSVC nvcc per-thread-default-stream workaround --------------------
+// FlashInfer's `decode.cuh` calls `cudaLaunchKernel((void*)kernel, ...)`.
+// Under `-default-stream per-thread` (Windows nvcc), CUDA's headers
+// `#define cudaLaunchKernel __CUDART_API_PTSZ(cudaLaunchKernel)`, which
+// under MSVC interacts badly with the template overload at the FlashInfer
+// call site (the template's name itself gets rewritten, then the
+// non-template static-inline wrapper at `cuda_runtime_api.h:13929` and
+// the templated one at `cuda_runtime.h:208` collide on overload
+// resolution). We side-step the rewrite by introducing a TU-local
+// explicit-signature wrapper and `#define`-aliasing `cudaLaunchKernel`
+// to it BEFORE the FlashInfer header is parsed. This keeps the per-
+// thread-default-stream behavior intact for our other calls while
+// making the FlashInfer call site unambiguous.
+namespace baracuda_paged_decode_msvc_shim {
+    static inline cudaError_t launch_kernel_explicit(
+        const void*  func,
+        ::dim3       grid,
+        ::dim3       block,
+        void**       args,
+        std::size_t  smem,
+        cudaStream_t stream)
+    {
+        // Bypass the macro by calling the qualified `_ptsz` variant
+        // directly when present (per-thread default stream); fall back
+        // to the legacy `cudaLaunchKernel` otherwise. Both have the
+        // same C signature, so this is ABI-safe.
+        #ifdef __CUDART_API_PER_THREAD_DEFAULT_STREAM
+        return ::cudaLaunchKernel_ptsz(func, grid, block, args, smem, stream);
+        #else
+        // Note: the macro is locally redefined just below, so we have
+        // to undef-then-re-call through the underlying entry point.
+        return ::cudaLaunchKernel(func, grid, block, args, smem, stream);
+        #endif
+    }
+}
+
+// Force FlashInfer's `cudaLaunchKernel((void*)kernel, ...)` to bind to
+// our explicit-signature wrapper. The `void*` -> `const void*` is
+// implicit; the rest of the args match exactly. This MUST come before
+// the FlashInfer headers are included.
+#undef cudaLaunchKernel
+#define cudaLaunchKernel(func, grid, block, args, smem, stream) \
+    ::baracuda_paged_decode_msvc_shim::launch_kernel_explicit( \
+        (const void*)(func), (grid), (block), (args), (smem), (stream))
+
 #include "../../vendor/flashinfer/include/flashinfer/attention/decode.cuh"
 #include "../../vendor/flashinfer/include/flashinfer/attention/default_decode_params.cuh"
 #include "../../vendor/flashinfer/include/flashinfer/attention/variants.cuh"
 #include "../../vendor/flashinfer/include/flashinfer/layout.cuh"
 #include "../../vendor/flashinfer/include/flashinfer/page.cuh"
+
+// Restore the macro for any code below (we re-use our own init kernel
+// launch via `<<<>>>` syntax, so we don't actually need it, but restoring
+// keeps the file resilient to future additions).
+#undef cudaLaunchKernel
+#ifdef __CUDART_API_PER_THREAD_DEFAULT_STREAM
+#define cudaLaunchKernel __CUDART_API_PTSZ(cudaLaunchKernel)
+#endif
 
 namespace {
 constexpr int STATUS_OK          = 0;

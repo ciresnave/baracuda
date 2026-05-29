@@ -333,19 +333,16 @@ fn main() {
             .arg("--expt-relaxed-constexpr")
             .arg("--expt-extended-lambda")
             .arg("-DNDEBUG");
-        // NOTE Phase 46 in progress: `flashinfer_paged_decode_launcher.cu`
-        // hits an MSVC nvcc compatibility issue at the kernel-launch
-        // call ("cannot deduce auto type" / "no instance of
-        // cudaLaunchKernel_ptsz matches" — caused by Windows-default
-        // per-thread-default-stream API interaction with FlashInfer's
-        // `cudaLaunchKernel((void*)kernel, …)` cast). Skipped here so
-        // the rest of the launchers (sampling + cascade + paged_kv_
-        // append) can ship as a Phase 46 Checkpoint A. The paged
-        // decode launcher will land in a Phase 46 follow-up once the
-        // launch call is rewritten to satisfy the MSVC-side template
-        // deduction.
+        // Phase 46: all four FlashInfer launchers participate. The paged
+        // decode launcher previously hit an MSVC nvcc deduction issue at
+        // FlashInfer's `cudaLaunchKernel((void*)kernel, …)` site under
+        // the Windows per-thread-default-stream rewrite (`*_ptsz`). The
+        // post-alpha.57 consolidation rebuild interposes a local wrapper
+        // (`cudaLaunchKernel`-as-macro that pins to the explicit-signature
+        // overload) in the launcher TU's preamble, so it compiles cleanly
+        // under MSVC nvcc 12.x without touching the vendored header.
         for f in &[
-            // "kernels/attention/flashinfer_paged_decode_launcher.cu",
+            "kernels/attention/flashinfer_paged_decode_launcher.cu",
             "kernels/attention/flashinfer_paged_kv_append_launcher.cu",
             "kernels/attention/flashinfer_cascade_launcher.cu",
             "kernels/sampling/flashinfer_sampling_launcher.cu",
@@ -536,6 +533,18 @@ fn main() {
     // `cusolver64_*.dll` / `cublas64_*.dll` from `CUDA_PATH\bin`.
     println!("cargo:rustc-link-lib=dylib=cusolver");
     println!("cargo:rustc-link-lib=dylib=cublas");
+
+    // Phase 43 — mHC vendor: `fused_rmsnorm_matmul.cuh` uses cuBLAS-Lt
+    // (`cublasLtMatmulPreference*`, `cublasLtMatmulAlgoGetHeuristic`).
+    // Even though the static-H launcher doesn't exercise that code path
+    // at runtime, the symbols are referenced by the launcher TU and
+    // must resolve at link time. Only emit the link request when the
+    // `mhc` feature is on so non-mHC builds don't depend on cuBLAS-Lt
+    // (which is part of the cuBLAS package on CUDA 11.x+).
+    #[cfg(feature = "mhc")]
+    {
+        println!("cargo:rustc-link-lib=dylib=cublasLt");
+    }
 
     // cuFFT — Milestone 6.4 FFT family (FFT / IFFT / RFFT / IRFFT plus
     // bespoke fftshift / ifftshift). On Linux resolves to `libcufft.so`;
