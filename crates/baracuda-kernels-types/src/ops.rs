@@ -1261,6 +1261,19 @@ pub enum AttentionKind {
     /// FW only in Tier 1; backed by bespoke `mma`-free tile kernel
     /// behind the `xformers_blocksparse` cargo feature.
     BlockSparseAttention = 9,
+    /// Ring Attention (Phase 56). Sequence-parallel attention where
+    /// the Q tensor is sliced across `world_size` ranks and the K/V
+    /// chunks rotate around a NCCL ring; each rank folds the resident
+    /// K/V chunk into a persistent (o_acc, m_acc, l_acc) accumulator
+    /// via online-softmax reconstruction (Flash Attention math), and
+    /// after `world_size` rotations every rank has computed
+    /// `Q[my_slice] @ K^T @ V` for the full global sequence — but
+    /// with O(N/P) memory where N = total seq len, P = ring size.
+    /// Algorithm: Liu, Yan, Abbeel 2023 (arXiv:2310.01889; reference
+    /// at https://github.com/lhao499/RingAttention, Apache-2.0).
+    /// Tier 1 ships FW only, f16/bf16, head_dim=128. Behind the
+    /// `ring_attention` cargo feature; pulls in `baracuda-nccl`.
+    RingAttention = 10,
 }
 
 /// Indexing / scatter / gather op discriminant — Category L from the

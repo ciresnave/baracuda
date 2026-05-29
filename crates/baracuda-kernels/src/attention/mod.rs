@@ -161,6 +161,15 @@ pub mod ssd_chunk_scan;
 #[cfg(feature = "mamba")]
 pub mod selective_scan;
 
+// Phase 56 — Ring Attention (sequence-parallel attention). Pure Rust
+// orchestrator over the per-step kernel in `baracuda-kernels-sys` and
+// the NCCL `Communicator::send` / `recv` rotation. Module compiles
+// unconditionally for API discoverability; the `run()` method that
+// actually invokes the kernel + NCCL collective is gated on the
+// `ring_attention` cargo feature. See the module-level docs for the
+// algorithm narrative + Tier-1 scope (head_dim=128, f16+bf16, FW only).
+pub mod ring_attention;
+
 pub use batch_paged_decode::{
     BatchPagedDecodeArgs, BatchPagedDecodeDescriptor, BatchPagedDecodePlan,
     PagedKvCacheDescriptor,
@@ -190,4 +199,9 @@ pub use ssd_chunk_scan::{
 pub use selective_scan::{
     SelectiveScanArgs, SelectiveScanBackwardArgs, SelectiveScanBackwardDescriptor,
     SelectiveScanBackwardPlan, SelectiveScanDescriptor, SelectiveScanPlan,
+};
+
+// Phase 56 — Ring Attention re-exports.
+pub use ring_attention::{
+    RingAttentionArgs, RingAttentionDescriptor, RingAttentionPlan, RING_ATTENTION_HEAD_DIM,
 };

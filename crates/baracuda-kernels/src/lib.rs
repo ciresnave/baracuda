@@ -69,6 +69,15 @@ pub use gemm::{
     Int4GemmPlan, IntGemmArgs, IntGemmDescriptor, IntGemmPlan,
 };
 
+// Phase 48 — Marlin + AWQ 4-bit GEMM + GPTQ→Marlin repack utility.
+// Plan types always exported; FFI calls inside `run()` are
+// `marlin` / `awq` feature-gated.
+pub use gemm::{
+    gptq_to_marlin_repack, AwqActivation, GptqWeights, Int4AwqGemmArgs, Int4AwqGemmDescriptor,
+    Int4AwqGemmPlan, Int4MarlinGemmArgs, Int4MarlinGemmDescriptor, Int4MarlinGemmPlan,
+    MarlinActivation, MarlinWeights, MARLIN_PERM_LEN, MARLIN_SCALE_PERM_LEN,
+};
+
 // Elementwise op family — Phase 3 trailblazer surface. See module docs
 // for the per-category Plan layout.
 pub mod elementwise;
@@ -557,6 +566,14 @@ pub use attention::{
     SelectiveScanBackwardPlan, SelectiveScanDescriptor, SelectiveScanPlan,
 };
 
+// Phase 56 — Ring Attention re-exports. Plan types are always
+// exposed (struct definitions compile without the feature); the
+// `run()` method that actually invokes NCCL + the kernel is gated
+// behind the `ring_attention` cargo feature.
+pub use attention::{
+    RingAttentionArgs, RingAttentionDescriptor, RingAttentionPlan, RING_ATTENTION_HEAD_DIM,
+};
+
 // Phase 49 — Apex multi-tensor optimizer subset (Adam / LAMB / SGD).
 // Vendored from NVIDIA Apex (BSD-3-Clause) and exposed under the
 // `optim` cargo feature. Deliberate scope expansion (training-
@@ -590,6 +607,22 @@ pub mod transformer_engine {
     pub use baracuda_transformer_engine::{
         Error as TransformerEngineError, Fp8CastPlan, Fp8DequantPlan, Fp8Format, Fp8Recipe,
         Fp8WideDtype, Result as TransformerEngineResult,
+    };
+}
+
+// Phase 57 — Megatron-LM tensor-parallel primitives. Pure-composition
+// crate over baracuda-cublas + baracuda-nccl (no new CUDA kernels) and
+// exposed under the `megatron_tp` cargo feature. Algorithmic reference
+// is Shoeybi et al. arXiv:1909.08053 (NVIDIA Megatron-LM, Apache-2.0);
+// no source is vendored.
+#[cfg(feature = "megatron_tp")]
+pub mod megatron {
+    //! Re-export of [`baracuda_megatron`]'s tensor-parallel Linear
+    //! plans into the unified kernel facade. Gated behind the
+    //! `megatron_tp` cargo feature.
+    pub use baracuda_megatron::{
+        ColumnParallelLinearPlan, Error as MegatronError, MegatronGemmScalar,
+        Result as MegatronResult, RowParallelLinearPlan, TensorParallelContext,
     };
 }
 

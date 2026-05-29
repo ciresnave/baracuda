@@ -94,6 +94,31 @@ mamba = ["sm80"]
 # matches the rest of the kernel surface).
 bnb_nf4 = ["sm80"]
 
+# Phase 48 — Vendored IST-DASLab/marlin W4A16 GEMM kernel (Apache-2.0
+# with §3 patent grant). Targets sm_80 / sm_86 / sm_89 (Ampere + Ada);
+# sm_90 (Hopper) requires a WGMMA rewrite (Marlin v2 territory) and is
+# rejected at the Rust plan layer. Compiles the bespoke
+# `baracuda_kernels_int4_marlin_gemm_*` FFI surface. Marlin is
+# **symmetric int4** with per-group scales (no zero-points); GPTQ /
+# AWQ asymmetric int4 weights must be repacked via baracuda-kernels's
+# `gptq_to_marlin_repack` utility (Phase 48 Goal C). Off by default —
+# adds ~30-45s of nvcc compile time. Implies `sm80` (the kernel's
+# `mma.sync.m16n8k16` + `cp.async.cg.shared.global` are Ampere+).
+marlin = ["sm80"]
+
+# Phase 48 — Vendored mit-han-lab/llm-awq W4A16 GEMM kernel (MIT — no
+# patent grant; distinct from Marlin's Apache-2.0). Natively supports
+# the **most-deployed 4-bit format on the Hugging Face Hub**
+# (Llama / Mistral / Qwen prebuilts published as `*-AWQ`). AWQ is
+# **asymmetric int4** with explicit per-group zero-points; can be
+# loaded directly from HF checkpoints without repack. Compiles the
+# bespoke `baracuda_kernels_int4_awq_gemm_*` FFI surface. fp16-only
+# (the upstream `dequantize_s4_to_fp16x2` magic-number trick is
+# fp16-specific; bf16 deferred). Off by default — adds ~10-15s of
+# nvcc compile time. Implies `sm80` (Ampere+ `ldmatrix.sync` +
+# `mma.sync.m16n8k16`).
+awq = ["sm80"]
+
 # Phase 54 — Clean-room hand-port of facebookresearch/xFormers
 # (BSD-3-Clause) BlockSparseAttention algorithmic reference. Block-
 # sparse SDPA FW where the attention mask is a per-block boolean
@@ -116,6 +141,18 @@ xformers_blocksparse = ["sm80"]
 # trailblazer's inflate path is arch-agnostic but we keep the gate
 # uniform with `xformers_blocksparse`).
 xformers_sparse24 = ["sm80"]
+
+# Phase 56 — Ring Attention (sequence-parallel attention; Liu, Yan,
+# Abbeel 2023 — arXiv:2310.01889; algorithmic reference at
+# https://github.com/lhao499/RingAttention Apache-2.0). Compiles the
+# clean-room `baracuda_kernels_ring_attention_{f16,bf16}_step_run` /
+# `_finalize_run` FFI surface + dtype-independent init helper +
+# workspace_bytes query. The Rust plan in `baracuda-kernels` owns the
+# NCCL-based K/V chunk rotation; this crate ships only the per-step
+# kernel + the persistent-accumulator helpers. Off by default. Implies
+# `sm80` (uses Phase 6.6 online-softmax tile pipeline + `__half2float`
+# / `__bfloat162float` intrinsics that are Ampere-baseline).
+ring_attention = ["sm80"]
 
 [dependencies]
 # Phase 24 — cutlass GEMM FFI re-export. Pull in the CUTLASS template

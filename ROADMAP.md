@@ -7,7 +7,7 @@ effort within each category. Authoritative status per op lives in
 [`OP-MATRIX.md`](OP-MATRIX.md); historical phase summaries live in
 [`ARCHITECTURE.md`](ARCHITECTURE.md).
 
-The current tag is **v0.0.1-alpha.57** with **2336+ GPU tests
+The current tag is **v0.0.1-alpha.57** with **2339+ GPU tests
 passing, zero failures** on RTX 4070 (sm_89). Phase 42-44 add three
 opt-in backends behind cargo features (none on the default build
 path), Phase 49 adds the `baracuda-optim` sibling crate (Apex
@@ -493,6 +493,89 @@ NF4 quantization itself is lossy — end-to-end vs original fp32 weight
 is `~1e-2` relative error class. The kernel matches
 *dequantize-then-matmul* tightly; the lossy step is upstream of the
 GPU.
+
+## Phase 56 — Ring Attention (complete; alpha.57, 2026-05-28)
+
+**First Phase 52 NCCL consumer — sequence-parallel attention that
+unlocks million-token context length across N GPUs with O(N/P)
+memory.** Hand-port of Liu/Yan/Abbeel 2023 (arXiv:2310.01889;
+algorithmic reference at <https://github.com/lhao499/RingAttention>,
+Apache-2.0 with §3 patent grant — JAX, not vendored — clean-room
+CUDA implementation). Tier 1 ships FW only, f16/bf16, head_dim=128.
+
+- **`RingAttentionPlan<T>`** + **`RingAttentionDescriptor`** +
+  **`RingAttentionArgs<T>`** under
+  `crates/baracuda-kernels/src/attention/ring_attention.rs`. Behind
+  the `ring_attention` cargo feature; pulls in `baracuda-nccl` +
+  `baracuda-nccl-sys` as optional deps.
+- **Bespoke kernel** at
+  `crates/baracuda-kernels-sys/kernels/attention/ring_attention_kernel.cu`
+  (~480 LOC kernel header + ~390 LOC Rust plan). Tile geometry
+  inherits Phase 6.6 FlashAttention (`Br = Bc = 64`, 128 threads/block,
+  one block per `(b, h, q_block)`). Online-softmax fold of the
+  resident K/V chunk into persistent `(o_acc, m_acc, l_acc)` f32
+  accumulator state across rotation steps.
+- **Three kernel families** per dtype: per-step kernel (folds one
+  K/V chunk's contribution), finalize kernel (divides `o_acc / l_acc`
+  → emits `y` in operand dtype + optional `lse`), and a dtype-
+  independent init helper (`o_acc = 0`, `m_acc = -INF`, `l_acc = 0`).
+- **Ring rotation**: the plan calls
+  `Communicator::group_start` → `send` (to `next_peer`) → `recv`
+  (from `prev_peer`) → `group_end` for the bidirectional K/V chunk
+  rotation between step kernels. K and V are concatenated in scratch
+  (kv_scratch_a / kv_scratch_b ping-pong) so the transfer is a single
+  send/recv pair per rotation.
+- **Causal masking on global indices**: each step kernel takes
+  `q_global_base` and `k_global_base` as launch parameters; the
+  kernel applies `q_idx_abs > k_idx_abs → mask` consistently
+  regardless of which rotation step is active. Whole-block early-
+  exit preserved for chunks whose global K range is entirely past
+  every owned Q's index.
+- **12 new FFI symbols** (`workspace_bytes` + dtype-independent
+  `init_run` + 5 per-dtype × 2 dtypes: `step_run` /
+  `step_can_implement` / `finalize_run` / `finalize_can_implement`).
+- **Caller-staging contract for K/V**: the caller MUST pre-stage this
+  rank's initial K chunk + V chunk into `kv_scratch_a` (K first then
+  V, concatenated) before calling `run()`. The plan does NO D2D
+  copies on the K/V data — only NCCL `send`/`recv` ping-pong between
+  the two scratch buffers across rotation steps. `accumulator_scratch`
+  sizing is queried via `RingAttentionPlan::accumulator_scratch_bytes`
+  (Σ `o_acc + m_acc + l_acc` in f32).
+- **Single-rank degenerate case** (`world_size == 1`): the rotation
+  loop is a no-op — the plan runs the step kernel once with
+  `q_global_base = 0`, `k_global_base = 0` and then finalizes. The
+  result is mathematically equivalent to `FlashSdpaPlan` (different
+  float order so not bit-identical, but within streaming-softmax
+  tolerance). **This is the validation path on single-GPU hardware** —
+  the smoke test compares the single-rank Ring Attention output
+  against `FlashSdpaPlan` as ground truth (max abs diff `<5e-3` for
+  f16, `<2e-2` for bf16 on the synthetic Q/K/V fixtures, both within
+  the chosen tolerances).
+- **Validation**: 4 smoke tests in
+  `crates/baracuda-kernels/tests/ring_attention_smoke.rs`:
+  (1) `ring_attention_f16_single_rank_matches_flash_sdpa` — passes;
+  (2) `ring_attention_bf16_single_rank_matches_flash_sdpa` — passes;
+  (3) `ring_attention_f16_single_rank_causal` — passes (validates
+  the `q_global_base`/`k_global_base` masking path with both bases
+  at 0 in single-rank); (4) `ring_attention_multi_rank_scaffold`
+  (`#[ignore = "requires 2+ GPUs and a multi-process NCCL bringup"]`).
+  All 3 active tests pass on RTX 4070 in 2.07s.
+- **Complementary to Phase 57**: Ring Attention shards the **sequence**
+  dim across ranks; Phase 57's Megatron TP shards the **head** dim.
+  They compose naturally — a future phase wires this up.
+
+**Tier 2 deferred**: BW pass (the FW saves `lse` already, so BW is
+mechanical follow-up); f32 / f64 dtypes (need bigger SMEM allocations
++ separate tile geometry); head_dim ≠ 128 (need parameterized tile
+specializations); GQA broadcast; arbitrary additive mask (composes
+naturally with the Phase 51 arbmask kernel — a few extra FFI symbols);
+Striped Attention (Brandon et al. 2023 — workload-balanced variant
+specifically for causal attention; would close the load-imbalance
+windows for causal Ring Attention).
+
+**Hardware-blocked**: multi-rank correctness validation requires
+2+ GPUs (or a multi-process NCCL bringup harness). Single-rank
+degenerate case validates the kernel math + API surface end-to-end.
 
 ## Phase 57 — Megatron-LM TP primitives (complete; alpha.57, 2026-05-28)
 

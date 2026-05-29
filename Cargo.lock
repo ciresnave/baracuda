@@ -403,6 +403,9 @@ dependencies = [
  "baracuda-driver",
  "baracuda-kernels-sys",
  "baracuda-kernels-types",
+ "baracuda-megatron",
+ "baracuda-nccl",
+ "baracuda-nccl-sys",
  "baracuda-optim",
  "baracuda-transformer-engine",
  "baracuda-types",
@@ -448,6 +451,18 @@ dependencies = [
  "baracuda-types",
  "float8",
  "half",
+]
+
+[[package]]
+name = "baracuda-megatron"
+version = "0.0.1-alpha.57"
+dependencies = [
+ "baracuda-cublas",
+ "baracuda-driver",
+ "baracuda-nccl",
+ "baracuda-types",
+ "half",
+ "thiserror",
 ]
 
 [[package]]
@@ -607,6 +622,7 @@ version = "0.0.1-alpha.57"
 dependencies = [
  "baracuda-driver",
  "baracuda-forge",
+ "baracuda-nccl",
  "baracuda-types",
  "half",
  "thiserror",

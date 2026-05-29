@@ -380,6 +380,61 @@ fn main() {
         }
     }
 
+    // Phase 48 — IST-DASLab/marlin (vendored under `vendor/marlin/`,
+    // Apache-2.0 with §3 patent grant). Gated by the `marlin` cargo
+    // feature. Compiles both the upstream Marlin .cu (which exposes
+    // the C++ `marlin_cuda(...)` host entry point) and the baracuda
+    // C-ABI launcher that wraps it under
+    // `baracuda_kernels_int4_marlin_gemm_*`.
+    //
+    // Marlin has zero external dependencies (no CUTLASS, no cuBLAS) so
+    // no extra include paths needed. The kernel uses Ampere+
+    // `mma.sync.m16n8k16` and `cp.async.cg.shared.global`, so we DO
+    // NOT compile it under sm_90a-only builds — Marlin's `mma` and
+    // `cp.async` syntax target sm_80 / sm_86 / sm_89 specifically;
+    // sm_90 requires a WGMMA rewrite (Marlin v2 territory, deferred).
+    if cfg!(feature = "marlin") {
+        // Marlin's kernel uses constexpr `ceildiv` from inside
+        // __global__ / __device__ functions; nvcc needs the
+        // experimental relaxed-constexpr flag to accept this.
+        // Upstream Marlin builds with the same flag.
+        builder = builder.arg("--expt-relaxed-constexpr");
+        for f in &[
+            "vendor/marlin/src/marlin_cuda_kernel.cu",
+            "kernels/quantize/marlin_launcher.cu",
+        ] {
+            if std::path::Path::new(f).exists() {
+                builder = builder.source_files([*f]);
+            }
+        }
+    }
+
+    // Phase 48 — mit-han-lab/llm-awq (vendored under `vendor/awq/`,
+    // MIT — no patent grant; distinct from Marlin's Apache-2.0). Gated
+    // by the `awq` cargo feature. The upstream
+    // `vendor/awq/src/gemm_cuda_gen.cu` has been patched to strip the
+    // PyTorch host wrapper; only the `__global__ template kernel +
+    // device helpers remain. The launcher inline-includes the patched
+    // .cu (so the .cu is NOT listed as a standalone source) and
+    // exposes `baracuda_kernels_int4_awq_gemm_*` + a workspace-size
+    // query + a stub dequant entrypoint.
+    //
+    // AWQ's dequantize.cuh is header-only and is included transitively
+    // through the GEMM .cu (not used by the launcher directly).
+    //
+    // No external dependencies (CUTLASS / cuBLAS / cuDNN); uses only
+    // `ldmatrix.sync` + `mma.sync.m16n8k16` (Ampere+).
+    if cfg!(feature = "awq") {
+        builder = builder.include_path("vendor/awq/src");
+        for f in &[
+            "kernels/quantize/awq_launcher.cu",
+        ] {
+            if std::path::Path::new(f).exists() {
+                builder = builder.source_files([*f]);
+            }
+        }
+    }
+
     // Phase 50 — state-spaces/mamba SSD chunk-scan (Apache-2.0) +
     // Dao-AILab causal-conv1d (BSD-3-Clause). Two bespoke kernel
     // families (kernels hand-written from the algorithmic reference;
@@ -426,6 +481,23 @@ fn main() {
     }
     if cfg!(feature = "xformers_sparse24") {
         for f in &["kernels/gemm/gemm_sparse24_fp.cu"] {
+            if std::path::Path::new(f).exists() {
+                builder = builder.source_files([*f]);
+            }
+        }
+    }
+
+    // Phase 56 — Ring Attention (sequence-parallel attention). Bespoke
+    // kernel hand-ported from the algorithmic reference (Liu, Yan,
+    // Abbeel 2023 — arXiv:2310.01889; upstream JAX reference at
+    // https://github.com/lhao499/RingAttention under Apache-2.0). No
+    // source vendored — clean-room CUDA implementation. The Rust plan
+    // sits behind the `ring_attention` cargo feature on
+    // `baracuda-kernels` and pulls in `baracuda-nccl` for the
+    // inter-rank K/V chunk rotation. Single .cu instantiates f16 + bf16
+    // step + finalize launchers plus a dtype-independent init helper.
+    if cfg!(feature = "ring_attention") {
+        for f in &["kernels/attention/ring_attention_kernel.cu"] {
             if std::path::Path::new(f).exists() {
                 builder = builder.source_files([*f]);
             }

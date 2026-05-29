@@ -41644,3 +41644,274 @@ unsafe extern "C" {
         stream: *mut c_void,
     ) -> i32;
 }
+
+// ============================================================
+// Phase 48 (Consolidation B) — Marlin + AWQ 4-bit GEMM
+// ============================================================
+//
+// Two vendored 4-bit GEMM kernels with complementary scope:
+//
+//   * Marlin (IST-DASLab, Apache-2.0 + §3 patent grant) — **symmetric**
+//     int4 W4A16 GEMM. Reports ~3.87x speedup over FP16 GEMM at
+//     batch sizes 1-32 on Ampere / Ada GPUs. Targets sm_80 / sm_86 /
+//     sm_89; NOT sm_90 (Hopper). Goal A of Phase 48.
+//   * AWQ (mit-han-lab, MIT — no patent grant) — **asymmetric** int4
+//     W4A16 GEMM with explicit per-group zero-points. Loads
+//     directly from HF `*-AWQ` checkpoints without repack. Goal B
+//     of Phase 48.
+//
+// The asymmetric→symmetric bridge (loading GPTQ-format weights into
+// Marlin) is a host-side repack utility in
+// `baracuda-kernels::gemm::gptq_to_marlin` (Goal C of Phase 48). It
+// is a pure-Rust algorithmic routine and does not surface here.
+//
+// Vendored sources at `vendor/marlin/` and `vendor/awq/`. Each ships
+// a `VENDOR.md` documenting the upstream commit pin, license terms,
+// and the scope of the vendored slice. Gated behind the `marlin` and
+// `awq` cargo features respectively (both default OFF).
+//
+// Status codes (matches the rest of the surface):
+//   0 = success
+//   2 = invalid problem (bad alignment, group size, ...)
+//   3 = unsupported configuration (e.g. AWQ dequant stub)
+//   4 = workspace too small (AWQ only)
+//   5 = launch failure
+
+#[cfg(feature = "marlin")]
+unsafe extern "C" {
+    /// Marlin W4A16 GEMM — symmetric int4 weights, fp16 activation +
+    /// output. M can be any non-negative value; the kernel internally
+    /// tiles into M-block groups (16 rows / block, ≤ 4 blocks per
+    /// kernel launch, ≤ `max_par` parallel kernel launches per outer
+    /// iteration).
+    ///
+    /// `B` is `[K/16, N*16/8]` `int32` pre-shuffled int4 weight tile.
+    /// `scales` is `[K/groupsize, N]` `__half` per-group scales (or
+    /// `[1, N]` for `groupsize == -1`), pre-permuted by the packer.
+    /// `workspace` must be a zero-initialised `int32` buffer with
+    /// `>= (N / 128) * max_par` entries.
+    /// `groupsize ∈ {-1, 128}`; `max_par` is the parallel-tile upper
+    /// bound (typical 16, matching upstream).
+    pub fn baracuda_kernels_int4_marlin_gemm_f16_run(
+        M: i32, N: i32, K: i32,
+        a: *const c_void,
+        b: *const c_void,
+        c: *mut c_void,
+        scales: *const c_void,
+        workspace: *mut c_void,
+        groupsize: i32,
+        max_par: i32,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// Marlin GEMM shape/alignment validator (no kernel launch).
+    /// Returns 0 if the (M, N, K, groupsize) tuple is in the
+    /// supported range; 2 otherwise.
+    pub fn baracuda_kernels_int4_marlin_gemm_f16_can_implement(
+        M: i32, N: i32, K: i32,
+        groupsize: i32,
+    ) -> i32;
+}
+
+#[cfg(feature = "awq")]
+unsafe extern "C" {
+    /// AWQ W4A16 GEMM — asymmetric int4 with explicit per-group
+    /// zero-points, fp16 activation + output, f32 accumulator.
+    ///
+    /// `in_feats` is `[M, IC]` row-major `__half`.
+    /// `kernel_weights` is `[OC, IC/8]` `int32` packed int4 (OC-major,
+    /// IC-minor; transpose of the naive `[K, N]`).
+    /// `scaling_factors` is `[IC/group_size, OC]` `__half`.
+    /// `zeros` is `[IC/group_size, OC/8]` `int32` packed int4
+    /// zero-points.
+    /// `out` is `[M, OC]` row-major `__half` output.
+    /// `workspace` is `[split_k_iters, padded_M, OC]` `__half` staging
+    /// for the split-k partial sums (`padded_M = ceil(M, 128) * 128`).
+    /// Size in bytes via
+    /// [`baracuda_kernels_int4_awq_gemm_f16_workspace_bytes`].
+    /// `group_size ∈ {64, 128}`. `split_k_iters` is caller-chosen;
+    /// typical 8.
+    pub fn baracuda_kernels_int4_awq_gemm_f16_run(
+        M: i32, IC: i32, OC: i32,
+        group_size: i32, split_k_iters: i32,
+        in_feats: *const c_void,
+        kernel_weights: *const c_void,
+        scaling_factors: *const c_void,
+        zeros: *const c_void,
+        out: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// AWQ GEMM workspace-size query. Returns the staging-buffer
+    /// requirement in bytes for `(M, OC, split_k_iters)`. Returns 0
+    /// for any non-positive input.
+    pub fn baracuda_kernels_int4_awq_gemm_f16_workspace_bytes(
+        M: i32, OC: i32, split_k_iters: i32,
+    ) -> usize;
+
+    /// AWQ GEMM shape/alignment validator (no kernel launch).
+    pub fn baracuda_kernels_int4_awq_gemm_f16_can_implement(
+        M: i32, IC: i32, OC: i32,
+        group_size: i32, split_k_iters: i32,
+    ) -> i32;
+
+    /// AWQ dequant stub. AWQ does not ship a standalone dequant
+    /// kernel upstream (the dequant lives inside the GEMM as a
+    /// per-tile staging step). This entry point always returns 3
+    /// (unsupported); kept for FFI-surface symmetry with the other
+    /// 4-bit families. Future expansion may add a real dequant
+    /// (synthesised from the GEMM with identity activations).
+    pub fn baracuda_kernels_int4_awq_dequantize_f16_run(
+        N: i32, K: i32, group_size: i32,
+        kernel_weights: *const c_void,
+        scaling_factors: *const c_void,
+        zeros: *const c_void,
+        out: *mut c_void,
+        stream: *mut c_void,
+    ) -> i32;
+}
+
+// ============================================================
+// Phase 56 — Ring Attention (sequence-parallel attention)
+// ============================================================
+//
+// Clean-room CUDA port of the Liu/Yan/Abbeel 2023 Ring Attention
+// algorithm (arXiv:2310.01889; JAX reference at
+// https://github.com/lhao499/RingAttention, Apache-2.0). The Rust plan
+// in `baracuda-kernels::attention::ring_attention` orchestrates the
+// NCCL-based K/V chunk rotation across ranks; the kernels below
+// implement the per-step partial attention (online-softmax fold of the
+// resident K/V chunk into the persistent (o_acc, m_acc, l_acc) state)
+// plus a finalize kernel that emits the final `y` from the accumulated
+// state after all rotation steps complete.
+//
+// Tier 1 dtype set: f16, bf16. f32 / f64 deferred (Tier 2). Tier 1
+// fixes `head_dim = 128` (the launchers reject anything else).
+//
+// Status codes match the existing family: 0 success / 1 misaligned /
+// 2 invalid problem / 3 unsupported / 4 workspace too small /
+// 5 internal launch failure (+1000 for raw cudaError_t propagation).
+
+#[cfg(feature = "ring_attention")]
+unsafe extern "C" {
+    /// Workspace bytes for the Ring Attention persistent accumulator
+    /// state — `(o_acc + m_acc + l_acc)` in f32.
+    ///
+    /// `o_acc`: `f32[batch, heads, q_local, d]`
+    /// `m_acc`: `f32[batch, heads, q_local]`
+    /// `l_acc`: `f32[batch, heads, q_local]`
+    pub fn baracuda_kernels_ring_attention_workspace_bytes(
+        batch: i32, heads: i32, q_local: i32, d: i32,
+    ) -> usize;
+
+    /// Dtype-independent init helper. Sets `o_acc = 0`, `m_acc = -INF`,
+    /// `l_acc = 0`. Must be called before the first step kernel.
+    pub fn baracuda_kernels_ring_attention_init_run(
+        o_acc: *mut c_void,
+        m_acc: *mut c_void,
+        l_acc: *mut c_void,
+        o_len: i64,
+        ml_len: i64,
+        stream: *mut c_void,
+    ) -> i32;
+
+    // ---------- f16 ----------
+
+    /// Ring Attention step (f16). Folds the resident K/V chunk's
+    /// contribution into the persistent state via online-softmax.
+    /// Call once per rotation step.
+    pub fn baracuda_kernels_ring_attention_f16_step_run(
+        batch: i32,
+        heads: i32,
+        q_local: i32,
+        k_chunk: i32,
+        d: i32,
+        q_global_base: i32,
+        k_global_base: i32,
+        scale: f32,
+        is_causal: i32,
+        q: *const c_void,
+        k_local: *const c_void,
+        v_local: *const c_void,
+        o_acc: *mut c_void,
+        m_acc: *mut c_void,
+        l_acc: *mut c_void,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// Pre-launch implementability check for the f16 step kernel.
+    pub fn baracuda_kernels_ring_attention_f16_step_can_implement(
+        batch: i32, heads: i32, q_local: i32, k_chunk: i32, d: i32,
+    ) -> i32;
+
+    /// Ring Attention finalize (f16). Divides the persistent
+    /// `o_acc` by `l_acc` and writes the final `y` in operand dtype.
+    /// Optionally emits `lse = m + log(l)` (pass `lse = null` to skip).
+    /// Call once, after the last step kernel.
+    pub fn baracuda_kernels_ring_attention_f16_finalize_run(
+        batch: i32,
+        heads: i32,
+        q_local: i32,
+        d: i32,
+        o_acc: *const c_void,
+        m_acc: *const c_void,
+        l_acc: *const c_void,
+        y: *mut c_void,
+        lse: *mut c_void,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// Pre-launch implementability check for the f16 finalize kernel.
+    pub fn baracuda_kernels_ring_attention_f16_finalize_can_implement(
+        batch: i32, heads: i32, q_local: i32, d: i32,
+    ) -> i32;
+
+    // ---------- bf16 ----------
+
+    /// Ring Attention step (bf16). See `..._f16_step_run` for the
+    /// algorithm. f32 accumulators throughout.
+    pub fn baracuda_kernels_ring_attention_bf16_step_run(
+        batch: i32,
+        heads: i32,
+        q_local: i32,
+        k_chunk: i32,
+        d: i32,
+        q_global_base: i32,
+        k_global_base: i32,
+        scale: f32,
+        is_causal: i32,
+        q: *const c_void,
+        k_local: *const c_void,
+        v_local: *const c_void,
+        o_acc: *mut c_void,
+        m_acc: *mut c_void,
+        l_acc: *mut c_void,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// Pre-launch implementability check for the bf16 step kernel.
+    pub fn baracuda_kernels_ring_attention_bf16_step_can_implement(
+        batch: i32, heads: i32, q_local: i32, k_chunk: i32, d: i32,
+    ) -> i32;
+
+    /// Ring Attention finalize (bf16). See `..._f16_finalize_run`.
+    pub fn baracuda_kernels_ring_attention_bf16_finalize_run(
+        batch: i32,
+        heads: i32,
+        q_local: i32,
+        d: i32,
+        o_acc: *const c_void,
+        m_acc: *const c_void,
+        l_acc: *const c_void,
+        y: *mut c_void,
+        lse: *mut c_void,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// Pre-launch implementability check for the bf16 finalize kernel.
+    pub fn baracuda_kernels_ring_attention_bf16_finalize_can_implement(
+        batch: i32, heads: i32, q_local: i32, d: i32,
+    ) -> i32;
+}

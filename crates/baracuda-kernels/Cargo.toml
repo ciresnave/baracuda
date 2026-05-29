@@ -132,6 +132,48 @@ xformers_sparse24 = ["baracuda-kernels-sys/xformers_sparse24"]
 # `baracuda-kernels-sys/bnb_nf4`. Off by default.
 bnb_nf4 = ["baracuda-kernels-sys/bnb_nf4"]
 
+# Phase 48 — IST-DASLab/marlin W4A16 GEMM (Apache-2.0 + §3 patent
+# grant). Adds `Int4MarlinGemmPlan<f16>` (symmetric int4, group size
+# 128 or per-channel, sm_80/86/89). Includes the host-side
+# `gptq_to_marlin_repack` utility for converting GPTQ-format
+# asymmetric int4 weights into Marlin's symmetric layout. Forwards to
+# `baracuda-kernels-sys/marlin`. Off by default.
+marlin = ["baracuda-kernels-sys/marlin"]
+
+# Phase 48 — mit-han-lab/llm-awq W4A16 GEMM (MIT — no patent grant;
+# distinct from Marlin). Adds `Int4AwqGemmPlan<f16>` (asymmetric int4
+# with explicit per-group zero-points, group size 64/128). The most-
+# deployed 4-bit format on the Hugging Face Hub (`*-AWQ` checkpoints)
+# loads directly without repack. Forwards to
+# `baracuda-kernels-sys/awq`. Off by default.
+awq = ["baracuda-kernels-sys/awq"]
+
+# Phase 56 — Ring Attention (sequence-parallel attention; Liu, Yan,
+# Abbeel 2023, arXiv:2310.01889 — clean-room hand-port of the JAX
+# reference at https://github.com/lhao499/RingAttention, Apache-2.0).
+# Adds `RingAttentionPlan<T>` (f16/bf16 only in Tier 1, head_dim=128,
+# FW only). Pulls in `baracuda-nccl` as the inter-rank K/V chunk
+# rotation substrate. Pairs naturally with `baracuda-kernels`'s
+# existing `FlashSdpaPlan` (the world_size=1 degenerate case reduces
+# to standard Flash Attention math). Off by default — sequence-parallel
+# is only useful on multi-GPU; single-GPU consumers should use
+# `FlashSdpaPlan` directly. Forwards to
+# `baracuda-kernels-sys/ring_attention`.
+ring_attention = ["baracuda-kernels-sys/ring_attention", "dep:baracuda-nccl", "dep:baracuda-nccl-sys"]
+
+# Phase 57 — Megatron-LM tensor-parallel primitives. Pure-composition
+# crate over baracuda-cublas + baracuda-nccl (no new CUDA kernels). When
+# ON, pulls in the sibling `baracuda-megatron` crate as an optional dep
+# and re-exports its `ColumnParallelLinearPlan` /
+# `RowParallelLinearPlan` / `TensorParallelContext` into the kernel
+# facade under the `megatron` module. Off by default so non-distributed
+# consumers (e.g. Fuel) don't pay the dep surface cost. Pulls in
+# `baracuda-megatron/half-crate` to enable f16/bf16 dtypes alongside the
+# always-on f32 path. Algorithmic reference: Shoeybi et al.
+# arXiv:1909.08053 (NVIDIA Megatron-LM, Apache-2.0). No source vendored
+# — the kernel primitives are reused from the rest of the baracuda stack.
+megatron_tp = ["dep:baracuda-megatron", "baracuda-megatron/half-crate"]
+
 [dependencies]
 baracuda-kernels-types = { workspace = true }
 baracuda-kernels-sys = { workspace = true }
@@ -140,6 +182,19 @@ baracuda-driver = { workspace = true }
 baracuda-types = { workspace = true, features = ["half-crate", "f8-crate"] }
 baracuda-optim = { workspace = true, optional = true }
 baracuda-transformer-engine = { workspace = true, optional = true }
+# Phase 56 — Ring Attention. Optional; only pulled in under the
+# `ring_attention` cargo feature. Provides the NCCL `Communicator` /
+# `send` / `recv` / `group_start` / `group_end` API used to rotate
+# K/V chunks around the ring.
+baracuda-nccl = { workspace = true, optional = true }
+# Phase 56 — direct dep on baracuda-nccl-sys so the Ring Attention
+# plan can call `ncclSend` / `ncclRecv` over device-slice pointers
+# without going through `&DeviceBuffer<T>` (we have
+# `DeviceSliceMut<T>` views into the caller-supplied scratch).
+baracuda-nccl-sys = { workspace = true, optional = true }
+# Phase 57 — Megatron-LM TP primitives. Optional; only pulled in under
+# the `megatron_tp` cargo feature.
+baracuda-megatron = { workspace = true, optional = true }
 half = { workspace = true }
 thiserror = { workspace = true }
 
