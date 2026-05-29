@@ -24,9 +24,19 @@ sm80 = []
 sm89 = []
 sm90a = []
 
+# Phase 58: enables `DistributedAdamStepPlan` (ZeRO-1-style sharded
+# optimizer state on top of NCCL collectives). Pulls in `baracuda-nccl`
+# (and transitively the dynamic-loaded `baracuda-nccl-sys` — no
+# link-time NCCL dep; first nccl() call returns
+# `LoaderError::LibraryNotFound` on hosts without libnccl).
+# Default OFF — inference-only and single-GPU training consumers
+# don't pay the dep cost.
+distributed_optim = ["dep:baracuda-nccl"]
+
 [dependencies]
 baracuda-driver = { workspace = true }
 baracuda-types = { workspace = true, features = ["half-crate"] }
+baracuda-nccl = { workspace = true, optional = true, features = ["half-crate"] }
 half = { workspace = true }
 thiserror = { workspace = true }
 

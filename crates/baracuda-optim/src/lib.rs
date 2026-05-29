@@ -61,6 +61,16 @@ use baracuda_driver::{DeviceBuffer, Stream};
 use baracuda_types::DeviceRepr;
 use thiserror::Error;
 
+// Phase 58 — ZeRO-1-style sharded distributed optimizer plans.
+// Behind `distributed_optim` cargo feature (default OFF; pulls
+// `baracuda-nccl` as an optional dep). Single-rank degenerate case
+// reduces to AdamStepPlan bit-exactly.
+#[cfg(feature = "distributed_optim")]
+pub mod distributed;
+
+#[cfg(feature = "distributed_optim")]
+pub use distributed::{DistributedAdamStepPlan, shard_range};
+
 // ============================================================================
 // Error / Result
 // ============================================================================
@@ -86,6 +96,12 @@ pub enum Error {
     /// The vendored C shim returned a non-zero status code.
     #[error("optim launch failed (status {0})")]
     LaunchFailed(i32),
+    /// A NCCL collective invoked by the distributed optimizer plans
+    /// failed. The wrapped string carries the upstream NCCL error
+    /// message verbatim (sourced from `baracuda_nccl::Error::Display`).
+    /// Only emitted by the `distributed_optim`-feature plans.
+    #[error("distributed optim NCCL failure: {0}")]
+    NcclFailed(String),
 }
 
 /// `Result` alias used throughout the crate.

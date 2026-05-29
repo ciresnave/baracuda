@@ -547,6 +547,89 @@ Out of scope for Phase 52 (deferred to Phase 53+):
   with how every other `baracuda-*-sys` crate behaves on hosts
   without the underlying library.
 
+## Phase 58 — DistributedAdam (ZeRO-1 sharded optimizer state, complete; alpha.57, 2026-05-28)
+
+**Builds on Phase 49 (Adam) + Phase 52 (NCCL).** First consumer plan
+on `baracuda-optim` for the distributed-roadmap (Phase 52 was the
+substrate; Phase 58 ships the first concrete plan). Pure-Rust
+composition — **NO new CUDA kernel**, **NO new `baracuda-kernels-sys`
+FFI**. Behind the new `distributed_optim` cargo feature on
+`baracuda-optim` (default OFF; pulls `baracuda-nccl` as optional dep).
+
+- **`DistributedAdamStepPlan<T>`** — wraps an inner Phase 49
+  [`AdamStepPlan<T>`] + a borrowed `&baracuda_nccl::Communicator`.
+  Dtypes: f32 / f16 / bf16 (matching Phase 49). AdamW + classic mode
+  (inherited via the wrapped config). Mixed-precision variant
+  (`step_with_f32_state`) for half-param + f32-moment training.
+- **ZeRO-1 protocol** (per step):
+  1. `all_reduce(grads, Sum, in-place)` across all ranks.
+  2. Local Adam step on this rank's `1/world_size` shard of every
+     (param, grad, exp_avg, exp_avg_sq) tuple — uses the inner Phase 49
+     plan unchanged.
+  3. `all_gather(updated_params, in-place)` reassembles the full
+     updated tensor on every rank.
+- **Single-rank degenerate case**: when `world_size == 1` both
+  collectives are skipped and the call reduces to
+  `AdamStepPlan::step` bit-exactly — gives the smoke test a path
+  that runs on the single-RTX-4070 dev box.
+- **API signature shape**: both `param_buffers` and `grad_buffers`
+  are `&mut [&mut DeviceBuffer<T>]` (the in-place collective targets,
+  needing exclusive ownership for NCCL); moment buffers stay on the
+  existing `TensorList<T>` shape (not touched by collectives, only
+  by the inner Adam launch). The inner TensorLists for params + grads
+  are built internally from the &mut slices.
+- **NEW `shard_range(n, rank, world_size) -> (offset, len)`** helper
+  matching PyTorch's `torch.chunk(t, world_size)` semantics (first
+  `n % world_size` ranks get one extra element). Public API; pure-
+  Rust unit tests run unconditionally.
+- **Constraint**: each tensor's element count must be a multiple of
+  `world_size` (ring all_gather symmetry). The per-tensor broadcast
+  fallback for ragged shards is future work; in practice model
+  weight tensors are almost always dim-aligned for tensor-core
+  bucketing.
+- **No version bump** — landed on the in-progress alpha.57 cycle
+  alongside Phase 49, 50, 52, 53, 54, 55, 57. Consolidation phase
+  will bump.
+
+Smoke tests (3 files):
+
+- `distributed_adam_smoke.rs` — single-rank GPU smokes (`#[ignore]`-
+  gated, "requires an NVIDIA GPU + working NCCL loader") +
+  unconditional `shard_range_public_api_matches_pytorch_chunk` pure-
+  Rust test. The `distributed_adam_single_rank_matches_plain_adam`
+  case asserts bit-exact equality with `AdamStepPlan::step` for the
+  degenerate `world_size == 1` path.
+- `distributed_adam_multi_rank_scaffold.rs` — `#[ignore]`-gated
+  2-GPU scaffold (`Device::count() < 2` skips with a message). Wires
+  the full multi-rank call shape so a future contributor on
+  multi-GPU hardware can uncomment the result assertions and
+  validate.
+- `distributed::tests` (in `src/distributed.rs`) — 4 pure-Rust unit
+  tests covering `shard_range` edge cases (even split, uneven split
+  per torch.chunk, single rank, empty shard at `rank >= n`). All 4
+  green on this run.
+
+Out of scope (Phase 58 → future):
+
+- **ZeRO-2** (gradient sharding) — needs a `reduce_scatter` in step 1
+  plus custom gradient accumulators; deeper FW/BW integration. Future
+  phase.
+- **ZeRO-3** (parameter sharding during FW/BW) — needs major plumbing
+  in the autograd graph; not on a near-term roadmap.
+- **DistributedLamb / DistributedSGD** — same composition pattern;
+  add when concrete demand surfaces.
+- **CPU-offload optimizer state** — separate concern.
+- **8-bit distributed optimizer state** — combines with the
+  bitsandbytes 8-bit Adam path; future phase.
+- **Async gradient overlap** — Hopper-specific (TMA + `comm_gemm_overlap`
+  territory); hardware-blocked on the current single-RTX-4070 dev
+  environment.
+- **Per-tensor broadcast fallback for ragged shards** (tensors where
+  `n % world_size != 0`) — Tier 2 follow-up.
+- **Multi-rank correctness validation** — needs 2+ GPUs or a
+  process-spawning harness. Scaffold is in place
+  (`distributed_adam_multi_rank_scaffold.rs`); validation deferred.
+
 ## Phase 49 — Apex optimizer subset (complete; alpha.57, 2026-05-28)
 
 **Deliberate scope expansion — training-framework-adjacent.**
