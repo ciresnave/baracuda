@@ -7,10 +7,10 @@ effort within each category. Authoritative status per op lives in
 [`OP-MATRIX.md`](OP-MATRIX.md); historical phase summaries live in
 [`ARCHITECTURE.md`](ARCHITECTURE.md).
 
-The current tag is **v0.0.1-alpha.56** with **2320+ GPU tests
+The current tag is **v0.0.1-alpha.57** with **2320+ GPU tests
 passing, zero failures** on RTX 4070 (sm_89). Phase 42-44 add three
-opt-in vendored backends behind cargo features (none on the default
-build path):
+opt-in backends behind cargo features (none on the default build
+path):
 
 - **Phase 42**: Tri Dao's Flash Attention v2 (BSD-3) Tier-1 vendor —
   head_dim=128, fp16+bf16, sm_80, FW only — exposed as
@@ -21,22 +21,149 @@ build path):
   bf16 only — exposed as `HyperConnectionPlan` under the `mhc`
   feature. Replaces the bare residual `y = x + sublayer(x)` with a
   learned `n×n` Sinkhorn-Knopp doubly-stochastic mixing matrix.
-- **Phase 44**: ozIMMU (MIT) Ozaki-scheme DGEMM vendor — synthesizes
-  FP64 GEMM from S² int8 tensor-core matmuls — wired as opt-in
+- **Phase 44 + 44b**: ozIMMU Ozaki-scheme DGEMM — synthesizes FP64
+  GEMM from S² int8 tensor-core matmuls — wired as opt-in
   `BackendKind::Ozaki { slices }` on `GemmPlan`'s f64 path. NEW
   sibling crates `baracuda-ozimmu-sys` + `baracuda-ozimmu`.
-  **Linux-only in alpha.56** — Windows port deferred. Default f64
-  GEMM stays on CUTLASS/cuBLAS DGEMM (bit-exact); Ozaki is opt-in
-  for callers accepting the "comparable to DGEMM at S≥8" precision
-  contract.
+  Phase 44 (alpha.56) vendored enp1s0/ozIMMU + cutf submodule
+  (Linux-only); Phase 44b (alpha.57) clean-forked the whole stack —
+  cutf submodule eliminated (~360 LOC of useful utilities folded into
+  baracuda; ~2,200 LOC of duplicates deleted), portable `Uint128`
+  unblocks Windows, LD_PRELOAD path removed. Default f64 GEMM stays
+  on CUTLASS/cuBLAS DGEMM (bit-exact); Ozaki is opt-in for callers
+  accepting the "comparable to DGEMM at S≥8" precision contract.
+  Algorithm and reference implementation from Ootomo/Ozaki/Yokota —
+  see `crates/baracuda-ozimmu-sys/ATTRIBUTION.md`.
 
-Next: the Phase 45-51 mainstream-techniques roadmap (FlashInfer
-cherry-pick, SmoothQuant compose, YaRN/LongRoPE helper, Apex
-optimizers, Liger FLCE, Marlin/AWQ, Mamba2) synthesized from the
-recon round documented in
-`~/.claude/projects/.../memory/MEMORY.md`.
+**Phase 45 (alpha.56, no version bump yet)** ships two pure-Rust
+zero-new-CUDA composition wins over existing kernels:
+
+- **`SmoothQuantLinearPlan<TIn, TWQ>`** composes the existing Phase 8.3
+  `quantized_linear_w8a8` kernel + `fill_<dt>` broadcast for the
+  per-tensor activation scale. Caller arrives with pre-smoothed-and-
+  quantized int8 activations + int8 weights from the offline
+  SmoothQuant Python flow (mit-han-lab/smoothquant, MIT, Xiao et al.
+  ICML 2023 — algorithmic; not in scope). ~360 LOC Rust; dtype matrix
+  matches `QuantizedLinearPlan` exactly (TIn ∈ {f32, f64}; TWQ = S8).
+- **`RopeScaledTableBuilder` + `RopeScaling` enum** (Linear / YaRN /
+  LongRoPE) — host-side cos/sin table builder feeding the existing
+  Phase 36 `rope_apply_<dt>_run` kernel. YaRN (jquesnelle/yarn MIT,
+  arXiv:2309.00071) implements §3.2 NTK-by-parts frequency
+  interpolation + §3.3 attention-temperature absorption into cos/sin.
+  LongRoPE (microsoft/LongRoPE MIT, arXiv:2402.13753) multiplies
+  inv-freq by caller-supplied per-dim factors (evolutionary search
+  is offline + out of scope). ~470 LOC Rust + 6 host-side unit tests +
+  3 GPU integration smoke tests. Existing Phase 36 `RopeApply*` types
+  source-compat preserved.
+
+**Phase 47 (alpha.56, no version bump)** ships **Fused Linear Cross-
+Entropy** — a single-kernel port of LinkedIn's Liger-Kernel FLCE
+(BSD-2-Clause, clean-room CUDA reimplementation; no Liger source
+vendored). The plan fuses the lm_head GEMM (`logits = input @
+weight^T`) with the cross-entropy reduction into a single chunked
+outer loop, **never materializing the `[BT, V]` logits tensor**. At
+BT=16K, V=128K (Llama-3-class), this saves **5–10 GiB of activation
+memory**. The chunk_size heuristic mirrors Liger's:
+`chunk_size = next_pow2(ceildiv(BT, ceildiv(V, H)))` capped at 2048.
+
+- NEW `FusedLinearCrossEntropyPlan<T>` + `FusedLinearCrossEntropyBackwardPlan<T>`
+  for f32 / f16 / bf16 / f64; NEW `LossKind::FusedLinearCrossEntropy`
+  variant.
+- 16 new bespoke FFI symbols: per-row fused softmax+CE+gradient ×
+  per-row-cast (None mode) × scalar-finalize (Mean/Sum) × in-place-
+  scale (BW), each across 4 dtypes; plus 1 count-non-ignore helper.
+- NEW `cublasGemmEx` FFI binding for f16/bf16 GEMM with f32 accumulator
+  (existing `cublas{S,D}gemmStridedBatched` covers the f32/f64 cases).
+- BW design: `grad_input` and `grad_weight` are produced during the FW
+  pass (loss-reduction scale already folded in). The BW call multiplies
+  them by `dy_scalar` (a host f32). Fast-path: `dy=1.0` (the typical
+  "CE is the last layer" case) emits zero kernels.
+
+Tier 2 deferred: `label_smoothing`, `lse_square_scale`, `softcap`,
+`ce_weight` (per-class), `return_z_loss`. All are scalar / per-class
+parameters Liger threads through the same kernel; adding them is
+mechanical fanout.
+
+**Phase 51 (alpha.57, no version bump)** ships **arbitrary-mask FW
+SDPA** as an optional path on `FlashSdpaPlan` — closing the FA2 Tier-1
+gap and unlocking speculative decoding (EAGLE / Medusa / lookahead),
+MoE expert masking, prefix-LM, and sliding-window-with-sinks. NEW
+optional `mask: TensorRef<f32, 4>` field on `FlashSdpaArgs`; when
+`Some(...)`, routes to a bespoke arbmask SDPA kernel that adds an f32
+`[B, H, Q, K]` additive bias to `S = Q·K^T·scale` before softmax.
+
+- 8 new FFI symbols (4 fp dtypes × `_run` + `_can_implement`) under
+  `baracuda_kernels_sdpa_{f32,f16,bf16,f64}_arbmask_run`. New header
+  `baracuda_attn_arbmask.cuh` reuses the Phase 6.6 online-softmax tile
+  pipeline; 1 new `.cu` instantiation file.
+- Mask is **always f32** (decoupled from QKV precision; keeps the
+  FFI surface from combinatorial blowup). Use `-INFINITY` cells for
+  exact suppression; finite values are arbitrary additive biases.
+- Composes correctly with `is_causal`: kernel applies causal first,
+  then adds mask (`-INF + finite == -INF`, so causal cells stay
+  suppressed regardless of mask).
+- Phase 42 FA2 vendor untouched — FA2 v2.8.3's `Mask` template has
+  no hooks for per-cell additive biases; bolting one in would require
+  modifying the vendored kernel template (vendor-drift cost > benefit
+  at the small-Q decode shapes where arbmask is most useful).
+- Runnable example at
+  `crates/baracuda-kernels/examples/speculative_decode_compose.rs`;
+  design rationale at
+  [`docs/guides/spec-decode.md`](docs/guides/spec-decode.md).
+- BW deferred (Tier 2 — same deferral cadence as FA2).
+
+Tier 2 deferred: BW pass (training-time arbmask gradients), GQA
+broadcast on arbmask (would require host-side mask broadcast or stride
+plumbing through the FFI), paged-KV + arbmask (lands with the
+FlashInfer cherry-pick).
+
+Next: the Phase 46+48 mainstream-techniques roadmap (FlashInfer
+cherry-pick, Apex optimizers, Marlin/AWQ) synthesized from the recon
+round documented in `~/.claude/projects/.../memory/MEMORY.md`.
+Phase 50 (Mamba-2 SSD + causal-conv1d) shipped 2026-05-28.
 
 ---
+
+## Phase 50 — Mamba-2 SSD + causal-conv1d (complete; shipped alpha.57)
+
+Opens the state-space LLM class — Mamba-2 8B, Codestral-Mamba,
+Falcon-Mamba, Zamba2. Mamba-1 `selective_scan` deferred to
+Phase 50b pending a v1-specific consumer (Mamba-7B).
+
+- **causal-conv1d** (Tri Dao, BSD-3-Clause) hand-port at
+  `crates/baracuda-kernels-sys/kernels/conv/causal_conv1d_*.cu`.
+  Depthwise per-channel causal cross-correlation; widths 2/3/4;
+  optional SiLU; f32/f16/bf16/f64. `CausalConv1dPlan` +
+  `CausalConv1dBackwardPlan` exposed at the top of the
+  `baracuda-kernels` facade (not under `conv/`, which is
+  cudnn-gated). BW is FW-recompute style — dx deterministic, dw/db
+  via atomicAdd.
+- **Mamba-2 SSD chunk-scan** (Tri Dao + Albert Gu, Apache-2.0) hand-
+  port at `crates/baracuda-kernels-sys/kernels/ssd/ssd_chunk_scan_*.cu`.
+  Shape contract `(B, L, H, D, N)`; f32/f16/bf16 (no upstream f64).
+  `SsdChunkScanPlan` + `SsdChunkScanBackwardPlan` under
+  `attention/` (SSD-as-attention duality). FW caps state at
+  D, N ≤ 256; BW tighter at 64 (SMEM budget). BW is two-pass —
+  record states pass 1 + reverse-time gradient pass 2.
+- **Vendor metadata**: `crates/baracuda-kernels-sys/vendor/causal-conv1d/`
+  + `.../vendor/mamba/` with LICENSE + AUTHORS + VENDOR.md.
+- **Smoke tests** (5 new): `causal_conv1d_smoke`, `causal_conv1d_bw_smoke`,
+  `ssd_chunk_scan_smoke`, `ssd_chunk_scan_bw_smoke`, `mamba2_block_smoke`.
+- **30 new FFI symbols** total.
+- **New `AttentionKind::SsdChunkScan` variant** added to
+  `baracuda-kernels-types` (`#[non_exhaustive]` so source-compat).
+
+Trailblazer-only scope; deferred:
+- **Mamba-1 selective_scan** — Phase 50b if a v1-specific consumer asks.
+- **Variable-length sequences** (`cu_seqlens` style).
+- **Paged SSM state** (analog of paged-attention).
+- **Mamba-2 chunk-aware perf kernel**: the FFI accepts `chunk_size`
+  but the trailblazer kernel runs the sequential per-(b, h)
+  recurrence. The chunk-scan decomposition is a perf optimization
+  that produces bit-identical outputs; a future phase will route
+  through baracuda's GEMM stack for intra/inter chunk matmul.
+- **Hybrid Mamba + Attention architectures (Jamba, Zamba)** —
+  caller-side orchestration over baracuda primitives.
 
 ## How this file gets updated
 

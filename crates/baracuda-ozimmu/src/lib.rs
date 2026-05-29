@@ -1,6 +1,6 @@
 //! # baracuda-ozimmu
 //!
-//! Safe Rust wrapper for a vendored copy of
+//! Safe Rust wrapper for baracuda's clean-fork of
 //! [ozIMMU](https://github.com/enp1s0/ozIMMU) — Hiroyuki Ootomo's
 //! Ozaki-scheme FP64 GEMM library. Provides an RAII [`Handle`] type
 //! and a drop-in [`Handle::dgemm`] entry that lets baracuda's
@@ -49,11 +49,12 @@
 //!
 //! ozIMMU is the work of Hiroyuki Ootomo, Katsuhisa Ozaki & Rio Yokota
 //! ("DGEMM on Integer Matrix Multiplication Unit", *IJHPCA* 2024;
-//! [arXiv:2306.11975](https://arxiv.org/abs/2306.11975)). The source
-//! is MIT-licensed and vendored verbatim under
-//! `crates/baracuda-ozimmu-sys/vendor/ozimmu/`; see that crate's
-//! `vendor/ozimmu/VENDOR.md` for the pinned commit, the patches we
-//! applied, and integration notes.
+//! [arXiv:2306.11975](https://arxiv.org/abs/2306.11975)). The original
+//! reference implementation is MIT-licensed; baracuda Phase 44b
+//! internalized the sources under `crates/baracuda-ozimmu-sys/cuda/`
+//! — see that crate's `ATTRIBUTION.md` for the full provenance
+//! story, the algorithm references, and the unmodified MIT license
+//! text.
 
 #![deny(missing_docs)]
 

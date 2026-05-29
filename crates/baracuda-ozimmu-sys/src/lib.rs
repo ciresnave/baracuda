@@ -1,7 +1,7 @@
 //! # baracuda-ozimmu-sys
 //!
-//! Raw FFI bindings + static-link wiring for a vendored copy of
-//! [ozIMMU](https://github.com/enp1s0/ozIMMU), Hiroyuki Ootomo's
+//! Raw FFI bindings + static-link wiring for baracuda's clean-fork of
+//! [ozIMMU](https://github.com/enp1s0/ozIMMU) — Hiroyuki Ootomo's
 //! Ozaki-scheme FP64 GEMM library. ozIMMU synthesizes a DGEMM from
 //! `S²` int8 tensor-core matmuls — on consumer Ada (sm_89), where
 //! there are no FP64 tensor cores, this is ~10–20× faster than native
@@ -16,9 +16,8 @@
 //!
 //! ## What this crate exposes
 //!
-//! A small flat C ABI defined by the baracuda integration shim
-//! (`csrc/ozimmu_baracuda_shim.cu`). Direct bindgen on the upstream
-//! C++ header was avoided because the public API uses
+//! A small flat C ABI defined by `cuda/baracuda_shim.cu`. Direct
+//! bindgen on the C++ header was avoided because the public API uses
 //! `std::vector<std::tuple<...>>` for one of the
 //! `reallocate_working_memory` overloads — bindgen-friendly only at
 //! the cost of dragging the whole `std::` namespace into the
@@ -26,8 +25,17 @@
 //! safe layer needs (`create` / `destroy` / `set_stream` /
 //! `reallocate_bytes` / `dgemm`).
 //!
-//! Provenance + license + patches: see
-//! `vendor/ozimmu/VENDOR.md` in the source tree.
+//! ## Provenance
+//!
+//! Phase 44 (alpha.56) vendored ozIMMU upstream under
+//! `vendor/ozimmu/` + a `cutf` git submodule. Phase 44b (alpha.57)
+//! retired both: the algorithm is in the literature (Ootomo / Ozaki /
+//! Yokota, "DGEMM on Integer Matrix Multiplication Unit", IJHPCA
+//! 2024, [arXiv:2306.11975](https://arxiv.org/abs/2306.11975)), the
+//! original MIT-licensed reference implementation is preserved under
+//! `ATTRIBUTION.md`, and the sources now live under `cuda/` as
+//! first-class baracuda code. See `ATTRIBUTION.md` at the crate
+//! root for the full story.
 
 #![no_std]
 #![deny(missing_docs)]

@@ -8,7 +8,7 @@
 A unified Rust ML-op facade over the NVIDIA CUDA ecosystem.
 
 ![License](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue)
-![Status](https://img.shields.io/badge/status-alpha.56-orange)
+![Status](https://img.shields.io/badge/status-alpha.57-orange)
 ![CUDA](https://img.shields.io/badge/CUDA-12.x-76b900)
 ![Tests](https://img.shields.io/badge/regression-2320%2F0-success)
 
@@ -40,10 +40,11 @@ talk to one library directly.
 
 ## Status
 
-**In active development — alpha.56.** **2320 GPU tests passing**
+**In active development — alpha.57.** **2320 GPU tests passing**
 on an RTX 4070 (sm_89), across **616 binary targets**. Phase 42-44
-add three opt-in vendored backends (FA2, mHC.cu, ozIMMU); none are
-on the default build path.
+add three opt-in backends (FA2, mHC.cu, ozIMMU); none are on the
+default build path. Phase 44b internalized the ozIMMU sources
+(clean-fork; cutf submodule retired; Linux + Windows both build).
 
 Phase coverage (see [`ARCHITECTURE.md`](ARCHITECTURE.md) for the phase
 matrix):
@@ -93,8 +94,13 @@ matrix):
 | 41 | Fuel 6c.5 final unblock (alpha.55): RoPE interleaved-pair (Gap 7) + RoPE THD-layout (Gap 8) variants. 28 new FFI symbols (FW+BW × 4 fp dtypes × 2 variants + `_can_implement` companions). **Closes the entire Fuel 6c.4/6c.5 batch ask** — Fuel can now drop the last `Id::Reduce` PTX module + retire `fuel-cuda-kernels` workspace member + drop the `cudaforge` build dep. Discovery: existing `rope_apply_*` was already using `(2k, 2k+1)` pairing (not `(i, i+d/2)` as the brief stated) → interleaved symbols are name-aliases on the same kernel; THD is genuinely new. | done |
 | 42 | Flash Attention v2 vendor + `FlashSdpaPlan` backend (alpha.56): Tri Dao's FA2 v2.8.3 (BSD-3) vendored under `crates/baracuda-kernels-sys/vendor/flash-attention/` — Tier 1 (head_dim=128, fp16+bf16, sm_80, FW only) — wired as `BackendKind::FlashAttentionV2` on `FlashSdpaPlan` behind the `fa2` cargo feature. Heuristic routes long-context (seq_q×seq_k ≥ 1024×1024) shapes to FA2, bespoke otherwise; `PlanPreference::prefer_backend` overrides. PyTorch shim headers (at::PhiloxCudaState + C10_CUDA_CHECK) decouple the vendor from torch deps. Tier 2 (BW, varlen, paged, other head_dims) deferred. | done |
 | 43 | mHC.cu vendor + `HyperConnectionPlan` family (alpha.56): DeepSeek-AI's Manifold-Constrained Hyper-Connections residual-mixing op (arXiv:2512.24880) from AndreSlavescu/mHC.cu (MIT) vendored under `crates/baracuda-kernels-sys/vendor/mhc/` — Tier 1 (static-H, bf16 only) — exposed as `HyperConnectionPlan` behind the `mhc` cargo feature. Replaces bare `y = x + sublayer(x)` residual with a learned `n×n` Sinkhorn-Knopp doubly-stochastic mixing matrix. Tier 2 (BW, dynamic-H, fp16/f32) deferred. Requires cuBLAS-Lt (already linked). | done |
-| 44 | ozIMMU FP64-via-Int8-TC backend (alpha.56): enp1s0/ozIMMU (MIT) — Ootomo/Ozaki/Yokota's Ozaki-scheme DGEMM that synthesizes FP64 from S² int8 tensor-core matmuls — vendored under `crates/baracuda-ozimmu-sys/vendor/ozimmu/` with `cutf` submodule pinned alongside. NEW `baracuda-ozimmu-sys` + `baracuda-ozimmu` sibling crates. Wired into `GemmPlan` f64 path as opt-in `BackendKind::Ozaki { slices }` (default stays on CUTLASS/cuBLAS DGEMM — Ozaki is NOT bit-equivalent). Two patches: direct-link mode (no LD_PRELOAD), exclude `cublas.cu`/`culip.cu`. **Linux-only in alpha.56** — Windows requires verifying `cutf` headers don't use POSIX-specific calls. | done |
-| 45+ | Phase 45-51 mainstream-techniques roadmap (FlashInfer cherry-pick, SmoothQuant compose, YaRN/LongRoPE helper, Apex optimizers, Liger FLCE, Marlin/AWQ, Mamba2); Hopper sm_90a / Blackwell sm_100; 1.0 freeze. | pending (see [`ROADMAP.md`](ROADMAP.md)) |
+| 44 | ozIMMU FP64-via-Int8-TC backend (alpha.56): enp1s0/ozIMMU (MIT) — Ootomo/Ozaki/Yokota's Ozaki-scheme DGEMM that synthesizes FP64 from S² int8 tensor-core matmuls — vendored under `crates/baracuda-ozimmu-sys/vendor/ozimmu/` with `cutf` submodule pinned alongside. NEW `baracuda-ozimmu-sys` + `baracuda-ozimmu` sibling crates. Wired into `GemmPlan` f64 path as opt-in `BackendKind::Ozaki { slices }` (default stays on CUTLASS/cuBLAS DGEMM — Ozaki is NOT bit-equivalent). Two patches: direct-link mode (no LD_PRELOAD), exclude `cublas.cu`/`culip.cu`. | done |
+| 44b | ozIMMU clean-fork + cutf elimination + Windows port (alpha.57): full internalize of ozIMMU sources (no longer vendored — we own them at `crates/baracuda-ozimmu-sys/cuda/`). `cutf` submodule eliminated entirely (upstream went offline); ~360 LOC of useful FP / cp_async utilities preserved as native `baracuda_fp_bits.cuh` + `baracuda_cp_async.cuh`; ~2,200 LOC of cutf duplicates deleted. Portable `baracuda::Uint128` replaces `__uint128_t` for Windows compile (typedef alias on Linux — bit-for-bit preservation). LD_PRELOAD path removed entirely. Linux + Windows both build clean. | done |
+| 47 | Fused Linear Cross-Entropy (alpha.56, single-kernel port from LinkedIn's Liger-Kernel BSD-2): NEW `FusedLinearCrossEntropyPlan` family that fuses lm_head GEMM + CE loss in a chunked outer loop, never materializing the `[BT, V]` logits tensor. At BT=16K, V=128K, bf16 (Llama-3-class) saves **5-10 GiB of activation memory**. Bespoke per-chunk fused softmax+CE+gradient kernel (FP32 accumulator across 4 fp dtypes — f16/bf16/f32/f64); GEMMs dispatched via `cublasGemmEx`. Backward produces `grad_input`+`grad_weight` during the FW pass (chunked loop); BW call just scales by `dy_scalar` (no-op when `dy=1.0`, the typical "CE is the last layer" case). 16 new bespoke FFI symbols (per_row + per_row_cast + scalar_finalize + inplace_scale, each × 4 dtypes) + 1 count-non-ignore helper + `cublasGemmEx` binding. NEW `LossKind::FusedLinearCrossEntropy` variant. **Algorithm credit**: LinkedIn Liger-Kernel (BSD-2-Clause, clean-room CUDA reimplementation — no source vendored). | done |
+| 45 | SmoothQuant compose + YaRN/LongRoPE Rust helper (alpha.56, no version bump — consolidation phase will bump): **two zero-new-CUDA pure-Rust additions**. (a) `SmoothQuantLinearPlan<TIn, TWQ>` (in `crates/baracuda-kernels/src/quantize/smoothquant.rs`) composes the existing Phase 8.3 `quantized_linear_w8a8` kernel + `fill_<dt>` broadcast for the per-tensor activation scale. Caller supplies pre-smoothed-and-quantized int8 activations + int8 weights (smoothing itself is offline Python per the SmoothQuant paper — mit-han-lab/smoothquant MIT, Xiao et al. ICML 2023; not in scope). (b) `RopeScaledTableBuilder` + `RopeScaling` enum (Linear / YaRN / LongRoPE, in `crates/baracuda-kernels/src/attention/rope_scaling.rs`) — host-side cos/sin table builder feeding the Phase 36 `rope_apply_<dt>_run` kernel. YaRN (jquesnelle/yarn MIT, Peng et al. arXiv:2309.00071) implements §3.2 NTK-by-parts frequency interpolation + §3.3 attention-temperature absorption into cos/sin. LongRoPE (microsoft/LongRoPE MIT, Ding et al. arXiv:2402.13753) multiplies inv-freq by caller-supplied per-dim factors (evolutionary search itself is offline + out of scope). Existing Phase 36 `RopeApply*` types source-compat preserved. | done |
+| 51 | Arbitrary-mask `FlashSdpaPlan` + spec-decode composition doc (alpha.57, no version bump — consolidation phase will bump): NEW optional `mask: TensorRef<f32, 4>` field on `FlashSdpaArgs` routing to a bespoke arbmask SDPA kernel that adds an f32 `[B, H, Q, K]` additive bias to `S = Q·K^T·scale` before softmax. Unlocks spec-decode tree masks (EAGLE / Medusa / lookahead), MoE expert masking, prefix-LM, sliding-window with attention sinks — all entirely from caller-side composition. 4 dtypes (f32/f16/bf16/f64) × `_run` + `_can_implement` = 8 new FFI symbols. `is_causal` composes with the mask correctly (`-INF + finite == -INF`). New header `baracuda_attn_arbmask.cuh` reuses Phase 6.6's online-softmax tile pipeline; 1 new .cu instantiation file. FA2 vendor untouched (FA2 v2.8.3's `Mask` template has no arbitrary-mask hook). Runnable example at `crates/baracuda-kernels/examples/speculative_decode_compose.rs`; design doc at [`docs/guides/spec-decode.md`](docs/guides/spec-decode.md). FW only; BW deferred. | done |
+| 50 | Mamba-2 SSD chunk-scan + Dao-AILab causal-conv1d (alpha.57, gated behind `mamba` cargo feature): **opens the state-space LLM class (Mamba-2 8B, Codestral-Mamba, Falcon-Mamba, Zamba2 — Mamba-1 selective_scan deferred to Phase 50b).** NEW `SsdChunkScanPlan` + `SsdChunkScanBackwardPlan` (lives under `attention` because of the SSD-as-attention duality) and `CausalConv1dPlan` + `CausalConv1dBackwardPlan` (top-level module — bespoke kernels, no cuDNN dep). Vendor attribution + LICENSE at `crates/baracuda-kernels-sys/vendor/causal-conv1d/` (Tri Dao, BSD-3) and `crates/baracuda-kernels-sys/vendor/mamba/` (state-spaces/mamba, Apache-2.0). Hand-port of the upstream Triton SSD reference + causal-conv1d primitive. **Dtypes**: causal-conv1d f32/f16/bf16/f64 × widths 2/3/4 × {SiLU, identity}; SSD f32/f16/bf16 (no f64 upstream). FW caps state at D,N ≤ 256; BW tighter at 64 (SMEM budget). 30 new FFI symbols (8 causal-conv1d FW + 8 BW + 6 SSD FW + 6 SSD BW + 2 can_implement extras). 5 new smoke tests (causal_conv1d_smoke/bw + ssd_chunk_scan_smoke/bw + mamba2_block_smoke). | done |
+| 46+ | Phase 46-51 mainstream-techniques roadmap (FlashInfer cherry-pick, Apex optimizers, Marlin/AWQ); Hopper sm_90a / Blackwell sm_100; 1.0 freeze. | pending (see [`ROADMAP.md`](ROADMAP.md)) |
 
 API stability is **not** promised before beta.0. Breaking changes ship in
 each alpha bump and are documented in the workspace `CHANGELOG.md`.
@@ -105,8 +111,8 @@ Add the kernel facade and the driver crate:
 
 ```toml
 [dependencies]
-baracuda-kernels = { version = "0.0.1-alpha.56", features = ["sm89", "cudnn"] }
-baracuda-driver  = "0.0.1-alpha.56"
+baracuda-kernels = { version = "0.0.1-alpha.57", features = ["sm89", "cudnn"] }
+baracuda-driver  = "0.0.1-alpha.57"
 ```
 
 A representative example — single-axis numerically stable softmax over a

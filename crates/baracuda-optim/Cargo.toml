@@ -1,0 +1,37 @@
+[package]
+name = "baracuda-optim"
+version = "0.0.1-alpha.57"
+description = "Optimizer kernels (Adam / LAMB / SGD) for the baracuda CUDA stack, built on the multi_tensor_apply idiom vendored from NVIDIA Apex (BSD-3-Clause). One launch over thousands of parameter tensors — critical for the optimizer step on large-model training stacks. NEW in Phase 49; deliberate scope expansion (training-framework-adjacent). Off-by-default in baracuda-kernels via the `optim` cargo feature so inference-only consumers don't pay the FFI surface cost."
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords = ["cuda", "optimizer", "adam", "lamb", "sgd"]
+categories = ["api-bindings", "science"]
+links = "baracuda_optim"
+build = "build.rs"
+exclude = ["*.profraw", "target/"]
+
+[features]
+default = []
+
+# Architecture feature parity with baracuda-kernels-sys. Activates the
+# corresponding nvcc -arch / -gencode line. sm80 covers the Ampere /
+# Ada fallback baseline. sm89 / sm90a target Ada / Hopper specifically.
+sm80 = []
+sm89 = []
+sm90a = []
+
+[dependencies]
+baracuda-driver = { workspace = true }
+baracuda-types = { workspace = true, features = ["half-crate"] }
+half = { workspace = true }
+thiserror = { workspace = true }
+
+[build-dependencies]
+baracuda-forge = { workspace = true }
+
+[package.metadata.docs.rs]
+no-default-features = true

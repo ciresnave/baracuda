@@ -1,6 +1,6 @@
 [package]
 name = "baracuda-kernels-sys"
-version = "0.0.1-alpha.56"
+version = "0.0.1-alpha.57"
 description = "Compiled bespoke .cu kernel template instantiations for the baracuda ML kernel facade plus C-ABI FFI facades for the library-backed plans (cuDNN conv/pool, cuSOLVER linalg, cuFFT/cuRAND, CUTLASS GEMM re-export). Hosts curated CUDA kernel sources (int8/FP8/int4/bin GEMM RRR, elementwise, reduce, norm, attention, …), builds them via baracuda-forge, exposes extern \"C\" entry points for the safe baracuda-kernels crate. CUTLASS template kernels live in the sibling baracuda-cutlass-kernels-sys crate and are re-exported here under the unified baracuda_kernels_gemm_* namespace."
 edition.workspace = true
 rust-version.workspace = true
@@ -59,6 +59,27 @@ fa2 = ["sm80"]
 # Implies `sm80` (Sinkhorn-Knopp + fused stream ops use cooperative
 # groups; mHC.cu upstream tests target Ampere or newer).
 mhc = ["sm80"]
+
+# Phase 46 — Vendored FlashInfer (Apache-2.0). Compiles four launcher
+# TUs covering: (1) batched paged-KV decode + paged-KV append,
+# (2) sort-free top-K/top-P/min-P sampling, (3) cascade attention
+# LSE merge. Surfaces 3 new plan families in baracuda-kernels:
+# `BatchPagedDecodePlan`, `TopKTopPSamplingPlan`, `CascadeAttentionPlan`
+# (each behind the same gate on baracuda-kernels). Off by default —
+# FlashInfer's CUTLASS-free templates still add ~3-5 min of nvcc compile
+# time per launcher on first build. Implies `sm80` (FlashInfer's
+# `cp.async` + `mma.sync` paths target Ampere or newer).
+flashinfer = ["sm80"]
+
+# Phase 50 — Vendored state-spaces/mamba SSD chunk-scan (Apache-2.0)
+# and Dao-AILab causal-conv1d (BSD-3-Clause). Opens the state-space LLM
+# class (Mamba-2 8B, Codestral-Mamba, Falcon-Mamba, Zamba2). Compiles
+# the bespoke `baracuda_kernels_causal_conv1d_*` and
+# `baracuda_kernels_ssd_chunk_scan_*` FFI surfaces. Mamba-1
+# `selective_scan` is OUT OF SCOPE for Phase 50 (deferred to Phase 50b
+# pending a v1-specific consumer). Off by default — adds ~30s of nvcc
+# compile time. Implies `sm80` (atomicAdd for f16/bf16 requires it).
+mamba = ["sm80"]
 
 [dependencies]
 # Phase 24 — cutlass GEMM FFI re-export. Pull in the CUTLASS template

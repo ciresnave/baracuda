@@ -1,6 +1,6 @@
 [package]
 name = "baracuda-kernels"
-version = "0.0.1-alpha.56"
+version = "0.0.1-alpha.57"
 description = "Unified ML op facade for the baracuda CUDA ecosystem. Exposes every primitive an ML framework would expect (union of PyTorch torch.* + nn.functional and JAX lax.* / numpy ops) through a single Plan-based Rust surface, internally dispatching to baracuda-cutlass, the baracuda-* NVIDIA-library wrappers, or bespoke baracuda-kernels-sys kernels."
 edition.workspace = true
 rust-version.workspace = true
@@ -43,6 +43,18 @@ fa2 = ["baracuda-kernels-sys/fa2"]
 # requirement chain, so no new transitive link surface).
 mhc = ["baracuda-kernels-sys/mhc"]
 
+# Phase 46 — vendored FlashInfer (Apache-2.0). Exposes three new plan
+# families: `BatchPagedDecodePlan` (batched paged-KV decode for vLLM-
+# style serving), `TopKTopPSamplingPlan` (sort-free combined top-K /
+# top-P / min-P sampling for the decode hot path), and
+# `CascadeAttentionPlan` (LSE-merge for prefix-cache sharing across
+# requests). Forwards to `baracuda-kernels-sys/flashinfer`. Off by
+# default — FlashInfer's template-heavy headers add ~3-5 min of nvcc
+# compile time per launcher on first build. Existing
+# `FlashSdpaPlan` / `SdpaPlan` / `WriteSlicePlan` / `KvCacheAppendPlan`
+# (contiguous KV) stay as-is; the new plans sit alongside.
+flashinfer = ["baracuda-kernels-sys/flashinfer"]
+
 # Phase 44 — vendored ozIMMU (MIT). Adds the `BackendKind::Ozaki { slices }`
 # dispatch arm to FP64 GEMM, synthesizing a DGEMM from `S²` int8 tensor-
 # core matmuls (Ozaki scheme). Forwards to the `ozimmu` feature on
@@ -52,12 +64,34 @@ mhc = ["baracuda-kernels-sys/mhc"]
 # of nvcc compile time. Default FP64 path stays on CUTLASS / cuBLAS.
 ozimmu = ["baracuda-cutlass/ozimmu"]
 
+# Phase 49 — vendored NVIDIA Apex multi-tensor optimizer kernels (BSD-3-Clause).
+# Deliberate scope expansion: training-framework-adjacent. When ON, pulls in
+# the sibling `baracuda-optim` crate as an optional dep and re-exports its
+# `AdamStepPlan`, `LambStepPlan`, `SgdStepPlan`, and `TensorList` types into
+# the kernel facade under the `optim` module. Off by default so inference-
+# only consumers (e.g. Fuel) don't pay the FFI surface cost — the optim
+# vendored sources only build / link when the feature is enabled.
+# Implies the arch feature on `baracuda-optim` to match the kernel-side
+# default (sm80).
+optim = ["dep:baracuda-optim", "baracuda-optim/sm80"]
+
+# Phase 50 — Mamba-2 SSD chunk-scan + Dao-AILab causal-conv1d. Opens the
+# state-space LLM class (Mamba-2 8B, Codestral-Mamba, Falcon-Mamba,
+# Zamba2 — Mamba-1 selective_scan deferred to Phase 50b). Adds
+# `SsdChunkScanPlan` + `SsdChunkScanBackwardPlan` (lives under
+# `attention` because of the SSD-as-attention duality) and
+# `CausalConv1dPlan` + `CausalConv1dBackwardPlan` (top-level module —
+# bespoke kernels with no cuDNN dependency). Forwards to
+# `baracuda-kernels-sys/mamba`.
+mamba = ["baracuda-kernels-sys/mamba"]
+
 [dependencies]
 baracuda-kernels-types = { workspace = true }
 baracuda-kernels-sys = { workspace = true }
 baracuda-cutlass = { workspace = true }
 baracuda-driver = { workspace = true }
 baracuda-types = { workspace = true, features = ["half-crate", "f8-crate"] }
+baracuda-optim = { workspace = true, optional = true }
 half = { workspace = true }
 thiserror = { workspace = true }
 

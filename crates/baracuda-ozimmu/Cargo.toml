@@ -1,7 +1,7 @@
 [package]
 name = "baracuda-ozimmu"
-version = "0.0.1-alpha.56"
-description = "Safe Rust wrapper for a vendored copy of Hiroyuki Ootomo's ozIMMU — Ozaki-scheme FP64 GEMM that synthesizes a DGEMM from S^2 int8 tensor-core matmuls. Provides an RAII handle + drop-in `dgemm` shim suitable for the `BackendKind::Ozaki` path of `baracuda-kernels`'s `GemmPlan`. Opt-in (NOT bit-equivalent to native DGEMM); the default FP64 path stays on CUTLASS / cuBLAS."
+version = "0.0.1-alpha.57"
+description = "Safe Rust wrapper for baracuda's clean-fork of Hiroyuki Ootomo's ozIMMU — Ozaki-scheme FP64 GEMM that synthesizes a DGEMM from S^2 int8 tensor-core matmuls. Provides an RAII handle + drop-in `dgemm` shim suitable for the `BackendKind::Ozaki` path of `baracuda-kernels`'s `GemmPlan`. Opt-in (NOT bit-equivalent to native DGEMM); the default FP64 path stays on CUTLASS / cuBLAS."
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
@@ -27,6 +27,11 @@ build-vendor = ["baracuda-ozimmu-sys/build-vendor"]
 baracuda-ozimmu-sys = { workspace = true }
 baracuda-driver = { workspace = true }
 thiserror = { workspace = true }
+
+# Tests cross-check Ozaki output against cuBLAS DGEMM as the
+# accuracy reference; no runtime dep on baracuda-cublas.
+[dev-dependencies]
+baracuda-cublas = { workspace = true }
 
 [package.metadata.docs.rs]
 no-default-features = true

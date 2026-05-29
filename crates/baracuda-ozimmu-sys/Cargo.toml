@@ -1,7 +1,7 @@
 [package]
 name = "baracuda-ozimmu-sys"
-version = "0.0.1-alpha.56"
-description = "Build + raw FFI bindings to a vendored copy of Hiroyuki Ootomo's ozIMMU (the Ozaki-scheme FP64 GEMM library that synthesizes a DGEMM from S^2 int8 tensor-core matmuls). Linked statically into the baracuda CUDA stack; consumed by the safe wrapper crate `baracuda-ozimmu`. ozIMMU upstream MIT-licensed; vendored under `vendor/ozimmu/` (see `vendor/ozimmu/VENDOR.md` for provenance + patches)."
+version = "0.0.1-alpha.57"
+description = "Build + raw FFI bindings to baracuda's clean-fork of Hiroyuki Ootomo's ozIMMU — the Ozaki-scheme FP64 GEMM library that synthesizes a DGEMM from S² int8 tensor-core matmuls. Phase 44b internalized the upstream sources under `cuda/` (no more `vendor/` subdir; cutf submodule eliminated). Linked statically into the baracuda CUDA stack; consumed by the safe wrapper crate `baracuda-ozimmu`. MIT-licensed (original ozIMMU MIT — see `ATTRIBUTION.md`)."
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
@@ -15,29 +15,27 @@ build = "build.rs"
 exclude = [
     "*.profraw",
     "target/",
-    # Vendor docs / images that aren't needed at build time.
-    "vendor/ozimmu/README.md",
-    "vendor/ozimmu/test/",
 ]
 
 [features]
 default = []
 
-# Build the vendored ozIMMU source via nvcc. When OFF (the default), this
-# crate is a no-op stub — the FFI extern blocks compile but link will only
-# resolve if a downstream crate actually exercises them, which they won't
-# unless they themselves opt into the `ozimmu` feature chain. Decoupled
-# from `default` to keep `cargo check --workspace --no-default-features`
-# cheap and platform-agnostic. Auto-enabled by `baracuda-ozimmu`'s
-# `default` feature, which baracuda-cutlass's `ozimmu` feature ultimately
+# Build the baracuda-owned ozIMMU source via nvcc. When OFF (the
+# default), this crate is a no-op stub — the FFI extern blocks
+# compile but link will only resolve if a downstream crate actually
+# exercises them, which they won't unless they themselves opt into
+# the `ozimmu` feature chain. Decoupled from `default` to keep
+# `cargo check --workspace --no-default-features` cheap and
+# platform-agnostic. Auto-enabled by `baracuda-ozimmu`'s `default`
+# feature, which baracuda-cutlass's `ozimmu` feature ultimately
 # pulls in.
 build-vendor = []
 
 [dependencies]
 # baracuda-cuda-sys provides the cudaStream_t / cublasHandle_t opaque
-# pointer typedefs that the FFI signatures need. baracuda-cublas-sys is
-# pulled in for the cublasCreate_v2 / cublasGemmEx symbols that the
-# vendored static archive references at link time.
+# pointer typedefs that the FFI signatures need. baracuda-cublas-sys
+# is pulled in for the cublasCreate_v2 / cublasGemmEx symbols that
+# the static archive references at link time.
 baracuda-cuda-sys = { workspace = true }
 baracuda-cublas-sys = { workspace = true }
 
