@@ -1,0 +1,15 @@
+Elias Frantar (elias.frantar@ist.ac.at) — original author of the Marlin
+  W4A16 GEMM kernel (IST-DASLab, Institute of Science and Technology
+  Austria).
+
+The paper:
+
+  MARLIN: Mixed-Precision Auto-Regressive Parallel Inference of
+  Large Language Models
+  Elias Frantar, Roberto L. Castro, Jiale Chen, Torsten Hoefler,
+  Dan Alistarh
+  arXiv:2408.11743
+
+  https://arxiv.org/abs/2408.11743
+
+Upstream repository: https://github.com/IST-DASLab/marlin

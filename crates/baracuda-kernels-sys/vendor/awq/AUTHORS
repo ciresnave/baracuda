@@ -1,0 +1,21 @@
+MIT HAN Lab — original authors of the AWQ W4A16 GEMM kernel.
+
+Primary authors of the AWQ paper + reference implementation:
+
+  Ji Lin, Jiaming Tang, Haotian Tang, Shang Yang, Xingyu Dang, Song Han.
+
+The paper:
+
+  AWQ: Activation-aware Weight Quantization for On-Device LLM
+  Compression and Acceleration
+  Ji Lin, Jiaming Tang, Haotian Tang, Shang Yang, Wei-Ming Chen,
+  Wei-Chen Wang, Guangxuan Xiao, Xingyu Dang, Chuang Gan, Song Han
+  MLSys 2024, arXiv:2306.00978
+
+  https://arxiv.org/abs/2306.00978
+
+Note: AWQ's dequantize kernel is itself derived from NVIDIA's
+FasterTransformer (`cutlass_extensions/interleaved_numeric_conversion.h`)
+per the per-file header comment in `src/dequantize.cuh`.
+
+Upstream repository: https://github.com/mit-han-lab/llm-awq
