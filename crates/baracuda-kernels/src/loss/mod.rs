@@ -59,6 +59,7 @@ pub mod bce_with_logits;
 pub mod cosine_embedding;
 pub mod cross_entropy;
 pub mod ctc;
+pub mod fused_linear_cross_entropy;
 #[cfg(feature = "cudnn")]
 pub mod ctc_loss_cudnn;
 pub mod gaussian_nll;
@@ -87,6 +88,11 @@ pub use bce_with_logits::{
 pub use cross_entropy::{
     CrossEntropyLossArgs, CrossEntropyLossBackwardArgs, CrossEntropyLossBackwardDescriptor,
     CrossEntropyLossBackwardPlan, CrossEntropyLossDescriptor, CrossEntropyLossPlan,
+};
+pub use fused_linear_cross_entropy::{
+    FusedLinearCrossEntropyArgs, FusedLinearCrossEntropyBackwardArgs,
+    FusedLinearCrossEntropyBackwardDescriptor, FusedLinearCrossEntropyBackwardPlan,
+    FusedLinearCrossEntropyDescriptor, FusedLinearCrossEntropyPlan, FLCE_DEFAULT_IGNORE_INDEX,
 };
 pub use gaussian_nll::{
     GaussianNllLossArgs, GaussianNllLossBackwardArgs, GaussianNllLossBackwardDescriptor,

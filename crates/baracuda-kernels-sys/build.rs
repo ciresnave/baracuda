@@ -595,6 +595,13 @@ fn collect_kernel_files() -> Vec<&'static str> {
             "loss/loss_nll_backward_fp.cu",
             "loss/loss_cross_entropy_fp.cu",
             "loss/loss_cross_entropy_backward_fp.cu",
+            // Phase 47 — Fused Linear Cross-Entropy (Liger-Kernel
+            // algorithm port). Per-chunk fused logits→grad_logits step
+            // + scalar / per-row finalize + in-place scale (for BW chain
+            // rule). The GEMMs are dispatched from the Rust side via
+            // cuBLAS — only the per-chunk fused softmax+CE+gradient
+            // kernel is bespoke work shipped here.
+            "loss/flce_fp.cu",
             // Milestone 5.2 — Tier-1 losses.
             "loss/loss_l1_fp.cu",
             "loss/loss_l1_backward_fp.cu",

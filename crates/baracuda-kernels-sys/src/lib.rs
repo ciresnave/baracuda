@@ -7221,6 +7221,107 @@ unsafe extern "C" {
 }
 
 // ============================================================================
+// Phase 47 — Fused Linear Cross-Entropy (Liger-Kernel algorithm port).
+//
+// Math/algorithm credit: LinkedIn Liger-Kernel BSD-2-Clause (clean-room CUDA
+// re-implementation; no Liger source vendored). 17 new symbols total:
+// 4 per-row × 4 dtypes + 4 cast × 4 dtypes + 4 scalar-finalize × 4 dtypes
+// + 4 inplace-scale × 4 dtypes + 1 count-non-ignore = 17.
+// ============================================================================
+
+#[cfg(any(feature = "sm80", feature = "sm89", feature = "sm90a"))]
+unsafe extern "C" {
+    /// FLCE per-row fused step, f32. Mutates `logits` in place to
+    /// `grad_logits = (softmax - one_hot) · scale_per_row`; writes
+    /// per-row `-log_softmax[target]` into `loss_1d` (f32 accumulator).
+    pub fn baracuda_kernels_loss_flce_per_row_f32_run(
+        n_rows: i32, v: i32, row_stride: i64, target_ignore: i64,
+        scale_per_row: f32,
+        logits: *mut c_void, target: *const c_void, loss_1d: *mut c_void,
+        stream: *mut c_void,
+    ) -> i32;
+    /// FLCE per-row fused step, f16.
+    pub fn baracuda_kernels_loss_flce_per_row_f16_run(
+        n_rows: i32, v: i32, row_stride: i64, target_ignore: i64,
+        scale_per_row: f32,
+        logits: *mut c_void, target: *const c_void, loss_1d: *mut c_void,
+        stream: *mut c_void,
+    ) -> i32;
+    /// FLCE per-row fused step, bf16.
+    pub fn baracuda_kernels_loss_flce_per_row_bf16_run(
+        n_rows: i32, v: i32, row_stride: i64, target_ignore: i64,
+        scale_per_row: f32,
+        logits: *mut c_void, target: *const c_void, loss_1d: *mut c_void,
+        stream: *mut c_void,
+    ) -> i32;
+    /// FLCE per-row fused step, f64.
+    pub fn baracuda_kernels_loss_flce_per_row_f64_run(
+        n_rows: i32, v: i32, row_stride: i64, target_ignore: i64,
+        scale_per_row: f32,
+        logits: *mut c_void, target: *const c_void, loss_1d: *mut c_void,
+        stream: *mut c_void,
+    ) -> i32;
+    /// FLCE per-row cast (None mode finalizer), f32 → f32.
+    pub fn baracuda_kernels_loss_flce_per_row_cast_f32_run(
+        n_rows: i64, loss_1d: *const c_void, out: *mut c_void, stream: *mut c_void,
+    ) -> i32;
+    /// FLCE per-row cast, f32 → f16.
+    pub fn baracuda_kernels_loss_flce_per_row_cast_f16_run(
+        n_rows: i64, loss_1d: *const c_void, out: *mut c_void, stream: *mut c_void,
+    ) -> i32;
+    /// FLCE per-row cast, f32 → bf16.
+    pub fn baracuda_kernels_loss_flce_per_row_cast_bf16_run(
+        n_rows: i64, loss_1d: *const c_void, out: *mut c_void, stream: *mut c_void,
+    ) -> i32;
+    /// FLCE per-row cast, f32 → f64.
+    pub fn baracuda_kernels_loss_flce_per_row_cast_f64_run(
+        n_rows: i64, loss_1d: *const c_void, out: *mut c_void, stream: *mut c_void,
+    ) -> i32;
+    /// FLCE scalar finalize (Mean/Sum), f32 → f32.
+    pub fn baracuda_kernels_loss_flce_scalar_finalize_f32_run(
+        n_rows: i64, denom_inv: f32,
+        loss_1d: *const c_void, out: *mut c_void, stream: *mut c_void,
+    ) -> i32;
+    /// FLCE scalar finalize, f32 → f16.
+    pub fn baracuda_kernels_loss_flce_scalar_finalize_f16_run(
+        n_rows: i64, denom_inv: f32,
+        loss_1d: *const c_void, out: *mut c_void, stream: *mut c_void,
+    ) -> i32;
+    /// FLCE scalar finalize, f32 → bf16.
+    pub fn baracuda_kernels_loss_flce_scalar_finalize_bf16_run(
+        n_rows: i64, denom_inv: f32,
+        loss_1d: *const c_void, out: *mut c_void, stream: *mut c_void,
+    ) -> i32;
+    /// FLCE scalar finalize, f32 → f64.
+    pub fn baracuda_kernels_loss_flce_scalar_finalize_f64_run(
+        n_rows: i64, denom_inv: f32,
+        loss_1d: *const c_void, out: *mut c_void, stream: *mut c_void,
+    ) -> i32;
+    /// FLCE in-place scale, f32. Multiplies `buf` in place by `scalar`.
+    pub fn baracuda_kernels_loss_flce_inplace_scale_f32_run(
+        numel: i64, scalar: f32, buf: *mut c_void, stream: *mut c_void,
+    ) -> i32;
+    /// FLCE in-place scale, f16.
+    pub fn baracuda_kernels_loss_flce_inplace_scale_f16_run(
+        numel: i64, scalar: f32, buf: *mut c_void, stream: *mut c_void,
+    ) -> i32;
+    /// FLCE in-place scale, bf16.
+    pub fn baracuda_kernels_loss_flce_inplace_scale_bf16_run(
+        numel: i64, scalar: f32, buf: *mut c_void, stream: *mut c_void,
+    ) -> i32;
+    /// FLCE in-place scale, f64.
+    pub fn baracuda_kernels_loss_flce_inplace_scale_f64_run(
+        numel: i64, scalar: f32, buf: *mut c_void, stream: *mut c_void,
+    ) -> i32;
+    /// FLCE count-non-ignore. Single-block tree reduction; writes the
+    /// `target[i] != ignore_index` count into `count_out[0]` (i64).
+    pub fn baracuda_kernels_loss_flce_count_non_ignore_run(
+        bt: i32, ignore_index: i64,
+        target: *const c_void, count_out: *mut c_void, stream: *mut c_void,
+    ) -> i32;
+}
+
+// ============================================================================
 // Milestone 5.2 — Tier-1 losses (L1 / SmoothL1 / Huber / BCEWithLogits /
 // PoissonNLL / GaussianNLL / soft-target CrossEntropy). All follow the same
 // per-cell-kernel + tree-reduction-finalizer pattern as the original loss
@@ -28633,6 +28734,162 @@ unsafe extern "C" {
 }
 
 // ============================================================================
+// Phase 46 — FlashInfer cherry-pick (Apache-2.0)
+// ============================================================================
+//
+// Three families: paged-KV decode + append, sort-free top-K/top-P/min-P
+// sampling, cascade attention LSE merge. All gated behind the
+// `flashinfer` cargo feature. See per-launcher .cu files for the
+// per-symbol caller contract.
+
+#[cfg(feature = "flashinfer")]
+unsafe extern "C" {
+    // Paged KV-cache append (decode-time, 1 token per request).
+    pub fn baracuda_kernels_flashinfer_paged_kv_append_decode_f16_run(
+        batch_size: i32, page_size: i32, num_heads: i32, head_dim: i32,
+        k_data: *mut c_void, v_data: *mut c_void,
+        indices: *mut c_void, indptr: *mut c_void, last_page_len: *mut c_void,
+        key: *const c_void, value: *const c_void, stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_flashinfer_paged_kv_append_decode_bf16_run(
+        batch_size: i32, page_size: i32, num_heads: i32, head_dim: i32,
+        k_data: *mut c_void, v_data: *mut c_void,
+        indices: *mut c_void, indptr: *mut c_void, last_page_len: *mut c_void,
+        key: *const c_void, value: *const c_void, stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_flashinfer_paged_kv_append_decode_f32_run(
+        batch_size: i32, page_size: i32, num_heads: i32, head_dim: i32,
+        k_data: *mut c_void, v_data: *mut c_void,
+        indices: *mut c_void, indptr: *mut c_void, last_page_len: *mut c_void,
+        key: *const c_void, value: *const c_void, stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_flashinfer_paged_kv_append_decode_can_implement(
+        batch_size: i32, page_size: i32, num_heads: i32, head_dim: i32,
+    ) -> i32;
+
+    // Batched paged-KV decode.
+    pub fn baracuda_kernels_flashinfer_paged_decode_workspace_size(batch_size: i32) -> usize;
+    pub fn baracuda_kernels_flashinfer_paged_decode_f16_run(
+        batch_size: i32, page_size: i32, head_dim: i32,
+        num_qo_heads: i32, num_kv_heads: i32, sm_scale: f32,
+        k_data: *mut c_void, v_data: *mut c_void,
+        indices: *mut c_void, indptr: *mut c_void, last_page_len: *mut c_void,
+        q: *const c_void, o: *mut c_void, lse: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_flashinfer_paged_decode_bf16_run(
+        batch_size: i32, page_size: i32, head_dim: i32,
+        num_qo_heads: i32, num_kv_heads: i32, sm_scale: f32,
+        k_data: *mut c_void, v_data: *mut c_void,
+        indices: *mut c_void, indptr: *mut c_void, last_page_len: *mut c_void,
+        q: *const c_void, o: *mut c_void, lse: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_flashinfer_paged_decode_f32_run(
+        batch_size: i32, page_size: i32, head_dim: i32,
+        num_qo_heads: i32, num_kv_heads: i32, sm_scale: f32,
+        k_data: *mut c_void, v_data: *mut c_void,
+        indices: *mut c_void, indptr: *mut c_void, last_page_len: *mut c_void,
+        q: *const c_void, o: *mut c_void, lse: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_flashinfer_paged_decode_can_implement(
+        batch_size: i32, page_size: i32, head_dim: i32,
+        num_qo_heads: i32, num_kv_heads: i32,
+    ) -> i32;
+
+    // Cascade: in-place pairwise LSE merge.
+    pub fn baracuda_kernels_flashinfer_merge_state_in_place_f16_run(
+        seq_len: i32, num_heads: i32, head_dim: i32,
+        v: *mut c_void, s: *mut c_void,
+        v_other: *const c_void, s_other: *const c_void,
+        stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_flashinfer_merge_state_in_place_bf16_run(
+        seq_len: i32, num_heads: i32, head_dim: i32,
+        v: *mut c_void, s: *mut c_void,
+        v_other: *const c_void, s_other: *const c_void,
+        stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_flashinfer_merge_state_in_place_f32_run(
+        seq_len: i32, num_heads: i32, head_dim: i32,
+        v: *mut c_void, s: *mut c_void,
+        v_other: *const c_void, s_other: *const c_void,
+        stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_flashinfer_merge_state_in_place_can_implement(
+        seq_len: i32, num_heads: i32, head_dim: i32,
+    ) -> i32;
+
+    // Cascade: many-way merge.
+    pub fn baracuda_kernels_flashinfer_merge_states_f16_run(
+        num_index_sets: i32, seq_len: i32, num_heads: i32, head_dim: i32,
+        v: *const c_void, s: *const c_void,
+        v_merged: *mut c_void, s_merged: *mut c_void,
+        stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_flashinfer_merge_states_bf16_run(
+        num_index_sets: i32, seq_len: i32, num_heads: i32, head_dim: i32,
+        v: *const c_void, s: *const c_void,
+        v_merged: *mut c_void, s_merged: *mut c_void,
+        stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_flashinfer_merge_states_f32_run(
+        num_index_sets: i32, seq_len: i32, num_heads: i32, head_dim: i32,
+        v: *const c_void, s: *const c_void,
+        v_merged: *mut c_void, s_merged: *mut c_void,
+        stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_flashinfer_merge_states_can_implement(
+        num_index_sets: i32, seq_len: i32, num_heads: i32, head_dim: i32,
+    ) -> i32;
+
+    // Sort-free sampling: top-K only.
+    pub fn baracuda_kernels_flashinfer_top_k_sampling_f32_run(
+        batch: i32, vocab: i32, top_k_val: i32,
+        deterministic: i32, seed_val: u64, offset_val: u64,
+        probs: *const c_void, output: *mut c_void, valid: *mut c_void,
+        stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_flashinfer_top_k_sampling_f32_can_implement(
+        batch: i32, vocab: i32, top_k_val: i32,
+    ) -> i32;
+
+    // Sort-free sampling: top-P only.
+    pub fn baracuda_kernels_flashinfer_top_p_sampling_f32_run(
+        batch: i32, vocab: i32, top_p_val: f32,
+        deterministic: i32, seed_val: u64, offset_val: u64,
+        probs: *const c_void, output: *mut c_void, valid: *mut c_void,
+        stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_flashinfer_top_p_sampling_f32_can_implement(
+        batch: i32, vocab: i32, top_p_val: f32,
+    ) -> i32;
+
+    // Sort-free sampling: min-P only.
+    pub fn baracuda_kernels_flashinfer_min_p_sampling_f32_run(
+        batch: i32, vocab: i32, min_p_val: f32,
+        deterministic: i32, seed_val: u64, offset_val: u64,
+        probs: *const c_void, output: *mut c_void, valid: *mut c_void,
+        stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_flashinfer_min_p_sampling_f32_can_implement(
+        batch: i32, vocab: i32, min_p_val: f32,
+    ) -> i32;
+
+    // Sort-free sampling: combined top-K + top-P.
+    pub fn baracuda_kernels_flashinfer_top_k_top_p_sampling_f32_run(
+        batch: i32, vocab: i32, top_k_val: i32, top_p_val: f32,
+        deterministic: i32, seed_val: u64, offset_val: u64,
+        probs: *const c_void, output: *mut c_void, valid: *mut c_void,
+        stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_flashinfer_top_k_top_p_sampling_f32_can_implement(
+        batch: i32, vocab: i32, top_k_val: i32, top_p_val: f32,
+    ) -> i32;
+}
+
+// ============================================================================
 // cuSOLVER — Milestone 6.3 dense linalg
 // ============================================================================
 //
@@ -28695,6 +28952,23 @@ pub const CUBLAS_OP_T: i32 = 1;
 /// `CUBLAS_OP_C` — conjugate transpose (only meaningful for complex
 /// dtypes). Used by `cusolverDn{C,Z}unmqr` to apply `Q^H`.
 pub const CUBLAS_OP_C: i32 = 2;
+
+// --- cudaDataType / cublasComputeType_t tags (Phase 47) -----------------
+// NOTE: CUDA_R_{16,32,64}F are already defined further down in the cuSOLVER
+// section (same numeric values from <library_types.h>); they're commented
+// out here to avoid the duplicate-definition error. Only CUDA_R_16BF +
+// the CUBLAS_COMPUTE_* tags are unique to this Phase 47 block.
+// pub const CUDA_R_16F: i32 = 2;
+// pub const CUDA_R_32F: i32 = 0;
+// pub const CUDA_R_64F: i32 = 1;
+/// `CUDA_R_16BF` — bfloat16 (real). Storage tag for `__nv_bfloat16`.
+pub const CUDA_R_16BF: i32 = 14;
+/// `CUBLAS_COMPUTE_32F` — fp32 accumulator.
+pub const CUBLAS_COMPUTE_32F: i32 = 68;
+/// `CUBLAS_COMPUTE_64F` — fp64 accumulator.
+pub const CUBLAS_COMPUTE_64F: i32 = 70;
+/// `CUBLAS_GEMM_DEFAULT` — let cuBLAS pick the algorithm.
+pub const CUBLAS_GEMM_DEFAULT: i32 = -1;
 
 /// `CUBLAS_SIDE_LEFT` — `Q` is applied from the left in `ormqr`
 /// (`C := Q · C` or `C := Q^T · C`).
@@ -29902,6 +30176,34 @@ unsafe extern "C" {
         ldc: i32,
         stride_c: i64,
         batch_count: i32,
+    ) -> i32;
+
+    // ----- cublasGemmEx (Phase 47) --------------------------------------
+    //
+    // Mixed-precision GEMM with explicit `cudaDataType` tags + a separate
+    // `cublasComputeType_t` accumulator. Needed by the Phase 47 FLCE
+    // path for f16/bf16 GEMM with fp32 accumulator + arbitrary
+    // transa/transb. `GemmPlan` doesn't expose col-major-A layout that
+    // the grad_weight accumulating GEMM requires, so we drop straight
+    // to cuBLAS here.
+
+    /// `cublasGemmEx` — mixed-precision GEMM with explicit dtype tags.
+    ///
+    /// # Safety
+    /// `handle` is a live cuBLAS handle bound to the desired stream.
+    /// `alpha`/`beta` are host pointers; their type must match
+    /// `compute_type`. `a`/`b`/`c` are device pointers; their element
+    /// type must match the respective `cudaDataType` tags.
+    pub fn cublasGemmEx(
+        handle: cublasHandle_t,
+        transa: i32, transb: i32,
+        m: i32, n: i32, k: i32,
+        alpha: *const c_void,
+        a: *const c_void, a_type: i32, lda: i32,
+        b: *const c_void, b_type: i32, ldb: i32,
+        beta: *const c_void,
+        c: *mut c_void, c_type: i32, ldc: i32,
+        compute_type: i32, algo: i32,
     ) -> i32;
 
     // ----- Triangular solve: cublas{S,D}trsm (f32 / f64) -----------------

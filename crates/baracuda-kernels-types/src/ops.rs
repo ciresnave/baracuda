@@ -726,6 +726,17 @@ pub enum LossKind {
     /// PyTorch `torch.nn.functional.multilabel_soft_margin_loss`.
     /// Input `[N, C]`, target `[N, C]` `T`.
     MultilabelSoftMargin = 18,
+    /// Fused Linear Cross-Entropy. `loss = CE(input @ weight^T, target)`
+    /// **without** materializing the `[BT, V]` logits tensor — the
+    /// projection GEMM and the cross-entropy reduction run together
+    /// in a chunked outer loop. Backward produces `grad_input` and
+    /// `grad_weight` directly during the forward pass; backward call
+    /// just multiplies them by the upstream `dy` scalar. Algorithm:
+    /// LinkedIn Liger-Kernel
+    /// (`liger_kernel/ops/fused_linear_cross_entropy.py`).
+    /// Saves ~5-10 GiB at `vocab=128K, BT=16K` (Llama-3-class) by
+    /// streaming logits in `chunk_size`-row tiles.
+    FusedLinearCrossEntropy = 19,
 }
 
 /// CrossEntropy target-tensor kind. Selects between PyTorch's two
@@ -777,6 +788,11 @@ pub enum RandomKind {
     /// `y[i] = 1 if uniform < p else 0`, Bool output. Plan descriptor
     /// `param1 = p`. `param2` ignored.
     Bernoulli = 2,
+    /// `y[b] = sample one cell from row probs[b, :]` using inverse-CDF
+    /// sampling. Phase 46 wires the FlashInfer sort-free Top-K /
+    /// Top-P / Min-P / combined Top-K + Top-P samplers under this
+    /// discriminant via the `TopKTopPSamplingPlan` in baracuda-kernels.
+    Multinomial = 3,
 }
 
 /// Linear-algebra (dense) op discriminant — covers the cuSOLVER family
