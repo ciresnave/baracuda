@@ -28650,6 +28650,145 @@ unsafe extern "C" {
 }
 
 // ============================================================================
+// Phase 59a — FA2 FW expansion: head_dim fanout + GQA + ALiBi + sliding
+//              window + softcap
+// ============================================================================
+//
+// Phase 42 (Tier-1) shipped head_dim=128 only, no GQA, no ALiBi, no
+// sliding window, no softcap. Phase 59a closes Fuel's "still needs
+// upstream FA2" gap on the **forward** side:
+//
+//   * **head_dim fanout** — extends the existing `..._run` /
+//     `..._can_implement` symbols to accept any of FA2 v2.8.3's
+//     supported head_dims: {32, 64, 96, 128, 192, 256}. The launcher
+//     dispatches via a runtime switch on the `head_dim` param. Upstream
+//     FA2 v2.8.3 does NOT ship head_dims 160, 224, or 512 — those are
+//     permanently Tier-3-deferred (no upstream sources to vendor).
+//     **No new FFI symbols** — the original v1 `..._run` signature was
+//     already parameterized on head_dim.
+//   * **GQA** — the original v1 signature already exposed `num_heads_k`
+//     as a distinct parameter; Phase 42's launcher rejected
+//     `num_heads_k != num_heads` outright. Phase 59a's launcher accepts
+//     any `num_heads_k` where `num_heads % num_heads_k == 0` (FA2's
+//     `h_h_k_ratio` mechanism handles the broadcast in-kernel).
+//     **No new FFI symbols** — backwards-compatible loosening.
+//   * **ALiBi + sliding window + softcap** — these need NEW input
+//     params. Exposed as `..._run_v2` companion symbols (one per dtype)
+//     that take the full Phase 59a feature set:
+//
+//       - `alibi_slopes_ptr` — `f32*` device pointer or null. Shape is
+//         either `[num_heads]` (per-head broadcast across batches) or
+//         `[batch, num_heads]` (per-batch-per-head). `alibi_batch_stride`
+//         selects: 0 for the `[num_heads]` layout, `num_heads` for the
+//         `[batch, num_heads]` layout. FA2's kernel reads the ALiBi
+//         slope for the active (b, h) and applies an arithmetic bias
+//         to the score tile before softmax.
+//       - `window_size_left` / `window_size_right` — i32 sliding window
+//         bounds. `-1` disables on that side (matches FA2's convention).
+//         Setting `is_causal=1` forces `window_size_right=0` regardless
+//         of caller input (causal == "no right context").
+//       - `softcap` — f32 tanh-cap value. `0.0` disables (matches FA2's
+//         convention). When > 0, applied as `scores = softcap * tanh(scores / softcap)`
+//         before softmax (used by Gemma-2 et al.).
+//
+//     The v1 symbols are kept untouched for callers that don't need the
+//     new params — they internally route through the same launcher with
+//     ALiBi/sliding/softcap set to their disabled defaults.
+
+#[cfg(feature = "fa2")]
+unsafe extern "C" {
+    /// FA2 forward, f16 — Phase 59a extended signature.
+    ///
+    /// Adds ALiBi / sliding window / softcap on top of the Phase 42
+    /// `..._run` symbol. Pass `alibi_slopes_ptr=null`, `window_size_left=-1`,
+    /// `window_size_right=-1`, `softcap=0.0` to behave identically to v1.
+    ///
+    /// `head_dim` must be in {32, 64, 96, 128, 192, 256}. GQA requires
+    /// `num_heads % num_heads_k == 0`. `alibi_batch_stride` is 0 for
+    /// the `[num_heads]` ALiBi layout, `num_heads` for `[batch, num_heads]`.
+    pub fn baracuda_kernels_fa2_sdpa_f16_run_v2(
+        batch: i32,
+        num_heads: i32,
+        num_heads_k: i32,
+        seq_q: i32,
+        seq_k: i32,
+        head_dim: i32,
+        softmax_scale: f32,
+        is_causal: i32,
+        // Phase 59a additions
+        alibi_slopes_ptr: *const c_void,
+        alibi_batch_stride: i32,
+        window_size_left: i32,
+        window_size_right: i32,
+        softcap: f32,
+        // Original args follow
+        q: *const c_void,
+        k: *const c_void,
+        v: *const c_void,
+        out: *mut c_void,
+        softmax_lse: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// FA2 forward, bf16 — Phase 59a extended signature. See
+    /// `..._f16_run_v2`.
+    pub fn baracuda_kernels_fa2_sdpa_bf16_run_v2(
+        batch: i32,
+        num_heads: i32,
+        num_heads_k: i32,
+        seq_q: i32,
+        seq_k: i32,
+        head_dim: i32,
+        softmax_scale: f32,
+        is_causal: i32,
+        alibi_slopes_ptr: *const c_void,
+        alibi_batch_stride: i32,
+        window_size_left: i32,
+        window_size_right: i32,
+        softcap: f32,
+        q: *const c_void,
+        k: *const c_void,
+        v: *const c_void,
+        out: *mut c_void,
+        softmax_lse: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// FA2 v2 can-implement check, f16. Validates the Phase 59a-extended
+    /// head_dim set + GQA divisibility + ALiBi/sliding/softcap interactions.
+    pub fn baracuda_kernels_fa2_sdpa_f16_can_implement_v2(
+        batch: i32,
+        num_heads: i32,
+        num_heads_k: i32,
+        seq_q: i32,
+        seq_k: i32,
+        head_dim: i32,
+        is_causal: i32,
+        window_size_left: i32,
+        window_size_right: i32,
+        softcap: f32,
+    ) -> i32;
+
+    /// FA2 v2 can-implement check, bf16. See `..._f16_can_implement_v2`.
+    pub fn baracuda_kernels_fa2_sdpa_bf16_can_implement_v2(
+        batch: i32,
+        num_heads: i32,
+        num_heads_k: i32,
+        seq_q: i32,
+        seq_k: i32,
+        head_dim: i32,
+        is_causal: i32,
+        window_size_left: i32,
+        window_size_right: i32,
+        softcap: f32,
+    ) -> i32;
+}
+
+// ============================================================================
 // Phase 43 — AndreSlavescu/mHC.cu HyperConnection family (vendored, MIT)
 // ============================================================================
 //

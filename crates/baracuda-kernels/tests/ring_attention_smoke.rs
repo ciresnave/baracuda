@@ -85,17 +85,17 @@ fn ring_attention_f16_single_rank_matches_flash_sdpa() {
         DeviceBuffer::zeros(&ctx, (B * H * Q_LOCAL * HEAD_DIM) as usize).expect("alloc y_ref");
     let mut dlse_ref: DeviceBuffer<f16> =
         DeviceBuffer::zeros(&ctx, (B * H * Q_LOCAL) as usize).expect("alloc lse_ref");
-    let flash_desc = FlashSdpaDescriptor {
-        batch_size: B,
-        num_heads: H,
-        query_len: Q_LOCAL,
-        key_len: K_CHUNK,
-        d_k: HEAD_DIM,
-        d_v: HEAD_DIM,
+    let flash_desc = FlashSdpaDescriptor::new(
+        B,
+        H,
+        Q_LOCAL,
+        K_CHUNK,
+        HEAD_DIM,
+        HEAD_DIM,
         scale,
-        is_causal: false,
-        element: ElementKind::F16,
-    };
+        false,
+        ElementKind::F16,
+    );
     let flash_plan = FlashSdpaPlan::<f16>::select(
         &stream,
         &flash_desc,
@@ -133,6 +133,7 @@ fn ring_attention_f16_single_rank_matches_flash_sdpa() {
                     stride: contiguous_stride(sl),
                 },
                 mask: None,
+                            alibi_slopes: None,
             },
         )
         .expect("flash run");
@@ -265,17 +266,17 @@ fn ring_attention_bf16_single_rank_matches_flash_sdpa() {
         DeviceBuffer::zeros(&ctx, (B * H * Q_LOCAL * HEAD_DIM) as usize).expect("alloc y_ref");
     let mut dlse_ref: DeviceBuffer<bf16> =
         DeviceBuffer::zeros(&ctx, (B * H * Q_LOCAL) as usize).expect("alloc lse_ref");
-    let flash_desc = FlashSdpaDescriptor {
-        batch_size: B,
-        num_heads: H,
-        query_len: Q_LOCAL,
-        key_len: K_CHUNK,
-        d_k: HEAD_DIM,
-        d_v: HEAD_DIM,
+    let flash_desc = FlashSdpaDescriptor::new(
+        B,
+        H,
+        Q_LOCAL,
+        K_CHUNK,
+        HEAD_DIM,
+        HEAD_DIM,
         scale,
-        is_causal: false,
-        element: ElementKind::Bf16,
-    };
+        false,
+        ElementKind::Bf16,
+    );
     let flash_plan = FlashSdpaPlan::<bf16>::select(
         &stream,
         &flash_desc,
@@ -313,6 +314,7 @@ fn ring_attention_bf16_single_rank_matches_flash_sdpa() {
                     stride: contiguous_stride(sl),
                 },
                 mask: None,
+                            alibi_slopes: None,
             },
         )
         .expect("flash run");
@@ -433,17 +435,17 @@ fn ring_attention_f16_single_rank_causal() {
         DeviceBuffer::zeros(&ctx, (B * H * Q_LOCAL * HEAD_DIM) as usize).expect("alloc y_ref");
     let mut dlse_ref: DeviceBuffer<f16> =
         DeviceBuffer::zeros(&ctx, (B * H * Q_LOCAL) as usize).expect("alloc lse_ref");
-    let flash_desc = FlashSdpaDescriptor {
-        batch_size: B,
-        num_heads: H,
-        query_len: Q_LOCAL,
-        key_len: K_CHUNK,
-        d_k: HEAD_DIM,
-        d_v: HEAD_DIM,
+    let flash_desc = FlashSdpaDescriptor::new(
+        B,
+        H,
+        Q_LOCAL,
+        K_CHUNK,
+        HEAD_DIM,
+        HEAD_DIM,
         scale,
-        is_causal: true,
-        element: ElementKind::F16,
-    };
+        true,
+        ElementKind::F16,
+    );
     let flash_plan = FlashSdpaPlan::<f16>::select(
         &stream,
         &flash_desc,
@@ -481,6 +483,7 @@ fn ring_attention_f16_single_rank_causal() {
                     stride: contiguous_stride(sl),
                 },
                 mask: None,
+                            alibi_slopes: None,
             },
         )
         .expect("flash run");

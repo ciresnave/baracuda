@@ -97,17 +97,17 @@ mod fa2_bench {
         let sl_shape = [b, h, sq];
         let scale = 1.0_f32 / (d as f32).sqrt();
 
-        let desc = FlashSdpaDescriptor {
-            batch_size: b,
-            num_heads: h,
-            query_len: sq,
-            key_len: sk,
-            d_k: d,
-            d_v: d,
+        let desc = FlashSdpaDescriptor::new(
+            b,
+            h,
+            sq,
+            sk,
+            d,
+            d,
             scale,
-            is_causal: false,
-            element: T::KIND,
-        };
+            false,
+            T::KIND,
+        );
 
         // Bespoke backend.
         let pref_b = PlanPreference {
@@ -157,6 +157,8 @@ mod fa2_bench {
                 v: TensorRef { data: dv.as_slice(), shape: sv_shape, stride: st_v },
                 y: TensorMut { data: dy.as_slice_mut(), shape: sy_shape, stride: st_y },
                 lse: TensorMut { data: dlse.as_slice_mut(), shape: sl_shape, stride: st_l },
+                            mask: None,
+                            alibi_slopes: None,
             };
             plan_b.run(&stream, Workspace::None, args).expect("bespoke warm");
         });
@@ -169,6 +171,8 @@ mod fa2_bench {
                     v: TensorRef { data: dv.as_slice(), shape: sv_shape, stride: st_v },
                     y: TensorMut { data: dy.as_slice_mut(), shape: sy_shape, stride: st_y },
                     lse: TensorMut { data: dlse.as_slice_mut(), shape: sl_shape, stride: st_l },
+                                    mask: None,
+                                    alibi_slopes: None,
                 };
                 plan_f
                     .run(&stream, Workspace::Borrowed(ws_buf.as_slice_mut()), args)
@@ -184,6 +188,8 @@ mod fa2_bench {
                 v: TensorRef { data: dv.as_slice(), shape: sv_shape, stride: st_v },
                 y: TensorMut { data: dy.as_slice_mut(), shape: sy_shape, stride: st_y },
                 lse: TensorMut { data: dlse.as_slice_mut(), shape: sl_shape, stride: st_l },
+                            mask: None,
+                            alibi_slopes: None,
             };
             plan_b.run(&stream, Workspace::None, args).expect("bespoke");
         });
@@ -196,6 +202,8 @@ mod fa2_bench {
                     v: TensorRef { data: dv.as_slice(), shape: sv_shape, stride: st_v },
                     y: TensorMut { data: dy.as_slice_mut(), shape: sy_shape, stride: st_y },
                     lse: TensorMut { data: dlse.as_slice_mut(), shape: sl_shape, stride: st_l },
+                                    mask: None,
+                                    alibi_slopes: None,
                 };
                 plan_f
                     .run(&stream, Workspace::Borrowed(ws_buf.as_slice_mut()), args)

@@ -99,17 +99,17 @@ fn flash_sdpa_sm89_strided_f16_contig_fast_path() {
         DeviceBuffer::zeros(&ctx, (B * H * Q * DV) as usize).expect("alloc y_ref");
     let mut dlse_ref: DeviceBuffer<f16> =
         DeviceBuffer::zeros(&ctx, (B * H * Q) as usize).expect("alloc lse_ref");
-    let ref_desc = FlashSdpaDescriptor {
-        batch_size: B,
-        num_heads: H,
-        query_len: Q,
-        key_len: K,
-        d_k: DK,
-        d_v: DV,
+    let ref_desc = FlashSdpaDescriptor::new(
+        B,
+        H,
+        Q,
+        K,
+        DK,
+        DV,
         scale,
-        is_causal: false,
-        element: ElementKind::F16,
-    };
+        false,
+        ElementKind::F16,
+    );
     let ref_plan = FlashSdpaPlan::<f16>::select(&stream, &ref_desc, PlanPreference::default())
         .expect("ref sel");
     ref_plan
@@ -131,6 +131,7 @@ fn flash_sdpa_sm89_strided_f16_contig_fast_path() {
                     stride: contiguous_stride(sl),
                 },
                 mask: None,
+                            alibi_slopes: None,
             },
         )
         .expect("ref run");
@@ -257,17 +258,17 @@ fn flash_sdpa_sm89_strided_f16_transposed_q() {
         DeviceBuffer::zeros(&ctx, (B * H * Q * DV) as usize).expect("alloc y_ref");
     let mut dlse_ref: DeviceBuffer<f16> =
         DeviceBuffer::zeros(&ctx, (B * H * Q) as usize).expect("alloc lse_ref");
-    let ref_desc = FlashSdpaDescriptor {
-        batch_size: B,
-        num_heads: H,
-        query_len: Q,
-        key_len: K,
-        d_k: DK,
-        d_v: DV,
+    let ref_desc = FlashSdpaDescriptor::new(
+        B,
+        H,
+        Q,
+        K,
+        DK,
+        DV,
         scale,
-        is_causal: false,
-        element: ElementKind::F16,
-    };
+        false,
+        ElementKind::F16,
+    );
     let ref_plan = FlashSdpaPlan::<f16>::select(&stream, &ref_desc, PlanPreference::default())
         .expect("ref sel");
     ref_plan
@@ -293,6 +294,7 @@ fn flash_sdpa_sm89_strided_f16_transposed_q() {
                     stride: contiguous_stride(sl),
                 },
                 mask: None,
+                            alibi_slopes: None,
             },
         )
         .expect("ref run");
@@ -427,17 +429,17 @@ fn flash_sdpa_sm89_strided_f16_gqa_broadcast() {
         DeviceBuffer::zeros(&ctx, (B * H * Q * DV) as usize).expect("alloc y_ref");
     let mut dlse_ref: DeviceBuffer<f16> =
         DeviceBuffer::zeros(&ctx, (B * H * Q) as usize).expect("alloc lse_ref");
-    let ref_desc = FlashSdpaDescriptor {
-        batch_size: B,
-        num_heads: H,
-        query_len: Q,
-        key_len: K,
-        d_k: DK,
-        d_v: DV,
+    let ref_desc = FlashSdpaDescriptor::new(
+        B,
+        H,
+        Q,
+        K,
+        DK,
+        DV,
         scale,
-        is_causal: false,
-        element: ElementKind::F16,
-    };
+        false,
+        ElementKind::F16,
+    );
     let ref_plan = FlashSdpaPlan::<f16>::select(&stream, &ref_desc, PlanPreference::default())
         .expect("ref sel");
     ref_plan
@@ -471,6 +473,7 @@ fn flash_sdpa_sm89_strided_f16_gqa_broadcast() {
                     stride: contiguous_stride(sl),
                 },
                 mask: None,
+                            alibi_slopes: None,
             },
         )
         .expect("ref run");
@@ -614,17 +617,17 @@ fn flash_sdpa_sm89_strided_bf16_transposed_q_causal() {
         DeviceBuffer::zeros(&ctx, (B * H * Q * DV) as usize).expect("alloc y_ref");
     let mut dlse_ref: DeviceBuffer<bf16> =
         DeviceBuffer::zeros(&ctx, (B * H * Q) as usize).expect("alloc lse_ref");
-    let ref_desc = FlashSdpaDescriptor {
-        batch_size: B,
-        num_heads: H,
-        query_len: Q,
-        key_len: K,
-        d_k: DK,
-        d_v: DV,
+    let ref_desc = FlashSdpaDescriptor::new(
+        B,
+        H,
+        Q,
+        K,
+        DK,
+        DV,
         scale,
-        is_causal: true,
-        element: ElementKind::Bf16,
-    };
+        true,
+        ElementKind::Bf16,
+    );
     let ref_plan = FlashSdpaPlan::<bf16>::select(&stream, &ref_desc, PlanPreference::default())
         .expect("ref sel");
     ref_plan
@@ -650,6 +653,7 @@ fn flash_sdpa_sm89_strided_bf16_transposed_q_causal() {
                     stride: contiguous_stride(sl),
                 },
                 mask: None,
+                            alibi_slopes: None,
             },
         )
         .expect("ref run");

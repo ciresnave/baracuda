@@ -149,17 +149,17 @@ fn run_f32(is_causal: bool) {
     let mut dlse: DeviceBuffer<f32> =
         DeviceBuffer::zeros(&ctx, (B * H * Q) as usize).expect("alloc lse");
 
-    let desc = FlashSdpaDescriptor {
-        batch_size: B,
-        num_heads: H,
-        query_len: Q,
-        key_len: K,
-        d_k: DK,
-        d_v: DV,
+    let desc = FlashSdpaDescriptor::new(
+        B,
+        H,
+        Q,
+        K,
+        DK,
+        DV,
         scale,
         is_causal,
-        element: ElementKind::F32,
-    };
+        ElementKind::F32,
+    );
     let plan =
         FlashSdpaPlan::<f32>::select(&stream, &desc, PlanPreference::default()).expect("flash sel");
     plan.run(
@@ -192,6 +192,7 @@ fn run_f32(is_causal: bool) {
                 stride: contiguous_stride(sl),
             },
                 mask: None,
+                    alibi_slopes: None,
         },
     )
     .expect("flash run");
@@ -313,17 +314,17 @@ fn flash_sdpa_f64_basic() {
     let mut dlse: DeviceBuffer<f64> =
         DeviceBuffer::zeros(&ctx, (B * H * Q) as usize).expect("alloc lse");
 
-    let desc = FlashSdpaDescriptor {
-        batch_size: B,
-        num_heads: H,
-        query_len: Q,
-        key_len: K,
-        d_k: DK,
-        d_v: DV,
+    let desc = FlashSdpaDescriptor::new(
+        B,
+        H,
+        Q,
+        K,
+        DK,
+        DV,
         scale,
-        is_causal: false,
-        element: ElementKind::F64,
-    };
+        false,
+        ElementKind::F64,
+    );
     let plan =
         FlashSdpaPlan::<f64>::select(&stream, &desc, PlanPreference::default()).expect("sel");
     plan.run(
@@ -356,6 +357,7 @@ fn flash_sdpa_f64_basic() {
                 stride: contiguous_stride(sl),
             },
                 mask: None,
+                    alibi_slopes: None,
         },
     )
     .expect("run");
@@ -461,17 +463,17 @@ fn flash_sdpa_f16_basic() {
     let mut dlse: DeviceBuffer<f16> =
         DeviceBuffer::zeros(&ctx, (B * H * Q) as usize).expect("alloc lse");
 
-    let desc = FlashSdpaDescriptor {
-        batch_size: B,
-        num_heads: H,
-        query_len: Q,
-        key_len: K,
-        d_k: DK,
-        d_v: DV,
+    let desc = FlashSdpaDescriptor::new(
+        B,
+        H,
+        Q,
+        K,
+        DK,
+        DV,
         scale,
-        is_causal: false,
-        element: ElementKind::F16,
-    };
+        false,
+        ElementKind::F16,
+    );
     let plan =
         FlashSdpaPlan::<f16>::select(&stream, &desc, PlanPreference::default()).expect("sel");
     plan.run(
@@ -504,6 +506,7 @@ fn flash_sdpa_f16_basic() {
                 stride: contiguous_stride(sl),
             },
                 mask: None,
+                    alibi_slopes: None,
         },
     )
     .expect("run");
@@ -616,17 +619,17 @@ fn flash_sdpa_bf16_basic() {
     let mut dlse: DeviceBuffer<bf16> =
         DeviceBuffer::zeros(&ctx, (B * H * Q) as usize).expect("alloc lse");
 
-    let desc = FlashSdpaDescriptor {
-        batch_size: B,
-        num_heads: H,
-        query_len: Q,
-        key_len: K,
-        d_k: DK,
-        d_v: DV,
+    let desc = FlashSdpaDescriptor::new(
+        B,
+        H,
+        Q,
+        K,
+        DK,
+        DV,
         scale,
-        is_causal: false,
-        element: ElementKind::Bf16,
-    };
+        false,
+        ElementKind::Bf16,
+    );
     let plan =
         FlashSdpaPlan::<bf16>::select(&stream, &desc, PlanPreference::default()).expect("sel");
     plan.run(
@@ -659,6 +662,7 @@ fn flash_sdpa_bf16_basic() {
                 stride: contiguous_stride(sl),
             },
                 mask: None,
+                    alibi_slopes: None,
         },
     )
     .expect("run");

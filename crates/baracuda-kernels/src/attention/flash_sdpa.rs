@@ -54,9 +54,17 @@
 //!   accumulates softmax in f32).
 //!
 //! The default heuristic ([`should_use_fa2`]) picks FA2 for
-//! `head_dim == 128 ∧ dtype ∈ {f16, bf16} ∧ seq_q * seq_k ≥ 1M ∧
-//! num_heads == num_heads_k`, else bespoke. Override via
-//! [`PlanPreference::prefer_backend`] (set to
+//! long-context f16/bf16 attention. Phase 59a lifted the original
+//! Tier-1 head_dim=128 / no-GQA / no-extras restrictions:
+//!
+//! - **head_dim** ∈ {32, 64, 96, 128, 192, 256} (FA2 v2.8.3 ships
+//!   exactly these; 160/224/512 are NOT upstream-supported).
+//! - **GQA** supported when `num_heads % num_heads_k == 0` (FA2's
+//!   `h_h_k_ratio` broadcasts K/V heads in-kernel).
+//! - **ALiBi**, **sliding window**, **softcap** all plumbed through
+//!   the v2 launcher.
+//!
+//! Override via [`PlanPreference::prefer_backend`] (set to
 //! [`BackendKind::FlashAttentionV2`] or [`BackendKind::Bespoke`]).
 //!
 //! Capture-mode auto-fallback: when the stream is in graph capture
@@ -99,15 +107,29 @@ impl BackendChoice {
     }
 }
 
+/// Upstream FA2 v2.8.3 supports exactly these forward head_dims.
+/// Used by both the heuristic and the eligibility check. 160, 224,
+/// and 512 are NOT supported — no upstream sources to vendor.
+#[cfg(feature = "fa2")]
+const FA2_SUPPORTED_HEAD_DIMS: &[i32] = &[32, 64, 96, 128, 192, 256];
+
+#[cfg(feature = "fa2")]
+#[inline]
+fn fa2_supports_head_dim(d: i32) -> bool {
+    FA2_SUPPORTED_HEAD_DIMS.iter().any(|&v| v == d)
+}
+
 /// FA2 routing heuristic. Returns `true` when the shape + dtype falls
 /// in the long-context regime where FA2's CUTLASS-tuned tile sizing
 /// beats the bespoke kernel.
 ///
-/// Today's rule (validated on RTX 4070 in Phase 42's bench A/B):
+/// Phase 59a rules (expanded from Phase 42's Tier-1 gates):
 ///
-/// - **head_dim != 128 → false.** Tier 1 only ships head_dim=128.
+/// - **head_dim not in FA2 set → false.** FA2 v2.8.3 supports
+///   {32, 64, 96, 128, 192, 256}; head_dims 160/224/512 stay on bespoke.
 /// - **dtype not in {f16, bf16} → false.** FA2 has no f32/f64 SKU.
-/// - **num_heads != num_heads_k → false.** Tier 1 doesn't plumb GQA.
+/// - **GQA divisibility broken → false.** FA2 requires
+///   `num_heads % num_heads_k == 0`.
 /// - **seq_q × seq_k < 1024 × 1024 → false.** Short-context regime;
 ///   bespoke's lower launch overhead wins.
 /// - Otherwise **true** (FA2).
@@ -115,14 +137,14 @@ impl BackendChoice {
 /// Override via [`PlanPreference::prefer_backend`].
 #[cfg(feature = "fa2")]
 fn should_use_fa2(desc: &FlashSdpaDescriptor, num_heads_k: i32) -> bool {
-    if desc.d_k != 128 || desc.d_v != 128 {
+    if !fa2_supports_head_dim(desc.d_k) || desc.d_k != desc.d_v {
         return false;
     }
     if !matches!(desc.element, ElementKind::F16 | ElementKind::Bf16) {
         return false;
     }
-    if num_heads_k != desc.num_heads {
-        return false;  // GQA broadcast not supported on FA2 Tier 1
+    if num_heads_k <= 0 || num_heads_k > desc.num_heads || desc.num_heads % num_heads_k != 0 {
+        return false; // GQA divisibility broken
     }
     let work = (desc.query_len as i64) * (desc.key_len as i64);
     work >= 1024 * 1024
@@ -131,10 +153,31 @@ fn should_use_fa2(desc: &FlashSdpaDescriptor, num_heads_k: i32) -> bool {
 /// Descriptor for a Flash Attention forward op.
 ///
 /// Trailblazer enforces `d_k == d_v` (single head-dim cap shared across
-/// Q/K and V) and `d_k ≤ 128`. Use [`crate::SdpaPlan`] for the relaxed
-/// case where `d_k != d_v`, or for problems that need an explicit
-/// additive mask.
+/// Q/K and V) and `d_k ≤ 128` on the bespoke path; the FA2 path lifts
+/// the cap to any `d_k ∈ {32, 64, 96, 128, 192, 256}`. Use
+/// [`crate::SdpaPlan`] for the relaxed case where `d_k != d_v`, or for
+/// problems that need an explicit additive mask.
+///
+/// `#[non_exhaustive]` (Phase 59a) — additional optional fields (e.g.
+/// per-batch ALiBi, more FA2 plumbing) may land in future phases.
+/// Downstream callers MUST use the [`Self::new`] constructor + chainable
+/// `with_*` setters rather than a struct literal so they continue to
+/// compile across field additions. Follows the convention established
+/// by Phase 32 (`Conv2dDescriptor`, `Pool2dDescriptor`, ...).
+///
+/// Phase 59a additions:
+///
+/// - [`window_size_left`](Self::window_size_left) / [`window_size_right`](Self::window_size_right)
+///   — sliding-window attention bounds (FA2 only). `None` = unbounded
+///   on that side. When `is_causal=true`, `window_size_right` is forced
+///   to `Some(0)` in-kernel regardless of the descriptor value; the
+///   combination of `is_causal=true ∧ window_size_left=Some(N)` is
+///   "causal with last-N-token sliding window" (popular in Mistral).
+/// - [`softcap`](Self::softcap) — tanh-style score capping value
+///   (Gemma-2). `0.0` disables; positive values apply
+///   `scores = softcap * tanh(scores / softcap)` before softmax.
 #[derive(Copy, Clone, Debug)]
+#[non_exhaustive]
 pub struct FlashSdpaDescriptor {
     /// Batch size (`B`).
     pub batch_size: i32,
@@ -154,15 +197,92 @@ pub struct FlashSdpaDescriptor {
     pub is_causal: bool,
     /// Element type — must match the plan's type parameter.
     pub element: ElementKind,
+    /// Phase 59a — sliding-window left bound. `None` = unbounded
+    /// (default). Only honoured on the FA2 backend; bespoke kernel
+    /// returns `Error::Unsupported` if this is set.
+    pub window_size_left: Option<i32>,
+    /// Phase 59a — sliding-window right bound. `None` = unbounded
+    /// (default). When `is_causal=true`, FA2 internally forces this to
+    /// `Some(0)` regardless of caller input. Only honoured on the FA2
+    /// backend.
+    pub window_size_right: Option<i32>,
+    /// Phase 59a — softcap value (Gemma-2 style score capping).
+    /// `0.0` (default) disables. Only honoured on the FA2 backend.
+    pub softcap: f32,
+}
+
+impl FlashSdpaDescriptor {
+    /// Build a `FlashSdpaDescriptor` with the required fields and
+    /// Phase 59a additions defaulting to disabled. Use the chainable
+    /// `with_*` setters to enable sliding window / softcap.
+    ///
+    /// Defaults: `window_size_left=None`, `window_size_right=None`,
+    /// `softcap=0.0` (all FA2 v1-compatible).
+    #[allow(clippy::too_many_arguments)]
+    #[inline]
+    pub fn new(
+        batch_size: i32,
+        num_heads: i32,
+        query_len: i32,
+        key_len: i32,
+        d_k: i32,
+        d_v: i32,
+        scale: f32,
+        is_causal: bool,
+        element: ElementKind,
+    ) -> Self {
+        Self {
+            batch_size,
+            num_heads,
+            query_len,
+            key_len,
+            d_k,
+            d_v,
+            scale,
+            is_causal,
+            element,
+            window_size_left: None,
+            window_size_right: None,
+            softcap: 0.0,
+        }
+    }
+
+    /// Builder: set the sliding-window left bound. `None` = unbounded.
+    #[inline]
+    pub fn with_window_size_left(mut self, n: Option<i32>) -> Self {
+        self.window_size_left = n;
+        self
+    }
+
+    /// Builder: set the sliding-window right bound. `None` = unbounded.
+    #[inline]
+    pub fn with_window_size_right(mut self, n: Option<i32>) -> Self {
+        self.window_size_right = n;
+        self
+    }
+
+    /// Builder: set the softcap value. `0.0` = disabled.
+    #[inline]
+    pub fn with_softcap(mut self, cap: f32) -> Self {
+        self.softcap = cap;
+        self
+    }
 }
 
 /// Args bundle for a Flash Attention forward launch.
+///
+/// Q has `H` heads; K and V have `H_k` heads with `H % H_k == 0`
+/// (multi-query / grouped-query attention). Phase 42's bespoke path
+/// requires `H == H_k`; the strided-FFI sibling routes GQA via
+/// stride[1] = 0. Phase 59a's FA2 path supports GQA natively via FA2's
+/// `h_h_k_ratio` mechanism — pass distinct H_k in `k`/`v` shapes.
 pub struct FlashSdpaArgs<'a, T: Element> {
     /// Query tensor — shape `[B, H, Q, D_k]`, contiguous.
     pub q: TensorRef<'a, T, 4>,
-    /// Key tensor — shape `[B, H, K, D_k]`, contiguous.
+    /// Key tensor — shape `[B, H_k, K, D_k]`, contiguous. `H_k == H`
+    /// for non-GQA; `H_k < H` (with `H % H_k == 0`) for GQA.
     pub k: TensorRef<'a, T, 4>,
-    /// Value tensor — shape `[B, H, K, D_v]`, contiguous.
+    /// Value tensor — shape `[B, H_k, K, D_v]`, contiguous.
     pub v: TensorRef<'a, T, 4>,
     /// Output tensor — shape `[B, H, Q, D_v]`, contiguous.
     pub y: TensorMut<'a, T, 4>,
@@ -182,8 +302,8 @@ pub struct FlashSdpaArgs<'a, T: Element> {
     ///
     /// When `Some(...)`, the plan routes through the arbitrary-mask
     /// SDPA kernel (Phase 51) regardless of the FA2 heuristic — FA2
-    /// Tier-1 (Phase 42) does not plumb arbitrary masks. When `None`
-    /// (default), the original Phase 42 routing applies (FA2 for
+    /// does not plumb arbitrary masks. When `None` (default), the
+    /// original Phase 42 routing applies (FA2 for
     /// long-context f16/bf16 head_dim=128, bespoke otherwise).
     ///
     /// Tier-1 constraints (Phase 51):
@@ -194,6 +314,18 @@ pub struct FlashSdpaArgs<'a, T: Element> {
     /// - FW only (BW deferred to Phase 51 Tier 2 — same deferral as
     ///   the FA2 vendor).
     pub mask: Option<TensorRef<'a, f32, 4>>,
+    /// Phase 59a — optional ALiBi slopes — shape `[B, H]`, always f32.
+    /// Applied by FA2 as `scores[b, h, q, k] += slope[b, h] * (k - q)`
+    /// before softmax. Routes through the FA2 backend only; setting
+    /// this when the heuristic / preference picks bespoke causes
+    /// `Error::Unsupported`.
+    ///
+    /// For the FA2 "per-head broadcast over batch" layout
+    /// (`alibi_slopes` shape `[H]`), pass shape `[1, H]` with
+    /// `stride[0] = 0` (broadcast). For the "per-batch-per-head"
+    /// layout (shape `[B, H]`), pass contiguous `[B, H]`. The plan
+    /// detects which layout via `stride[0]`.
+    pub alibi_slopes: Option<TensorRef<'a, f32, 2>>,
 }
 
 /// Flash Attention forward plan (Tri Dao 2022).
@@ -259,12 +391,7 @@ impl<T: Element> FlashSdpaPlan<T> {
         }
         if desc.d_k != desc.d_v {
             return Err(Error::Unsupported(
-                "baracuda-kernels::FlashSdpaPlan: trailblazer requires d_k == d_v",
-            ));
-        }
-        if desc.d_k > FLASH_SDPA_MAX_D {
-            return Err(Error::Unsupported(
-                "baracuda-kernels::FlashSdpaPlan: d_k must be ≤ 128 in the trailblazer",
+                "baracuda-kernels::FlashSdpaPlan: requires d_k == d_v",
             ));
         }
         let dtype_in_scope = matches!(
@@ -277,14 +404,48 @@ impl<T: Element> FlashSdpaPlan<T> {
             ));
         }
 
-        // Phase 42: pick the backend. Caller override via
+        // Phase 42 / 59a: pick the backend. Caller override via
         // `pref.prefer_backend` wins; otherwise the heuristic decides.
-        // The descriptor doesn't carry a separate `num_heads_k` — the
-        // bespoke trailblazer assumes no GQA at the descriptor level
-        // (GQA is supported via the strided FFI sibling with stride[1] = 0
-        // on K/V). For the FA2 heuristic, we conservatively assume
-        // num_heads_k == num_heads here; the run-time path validates.
+        // The descriptor doesn't carry a separate `num_heads_k` — GQA
+        // is inferred from `args.k.shape[1]` at `can_implement` /
+        // `run` time. For the FA2 heuristic, we conservatively assume
+        // num_heads_k == num_heads (worst case for the heuristic; the
+        // runtime path will route through bespoke if K's shape forces it).
         let backend = pick_backend::<T>(desc, pref);
+
+        // Bespoke path still has the d_k ≤ 128 cap. Reject upfront
+        // when bespoke is the picked backend AND d_k > 128. FA2 paths
+        // can take 192 / 256.
+        if matches!(backend, BackendChoice::Bespoke) && desc.d_k > FLASH_SDPA_MAX_D {
+            return Err(Error::Unsupported(
+                "baracuda-kernels::FlashSdpaPlan: bespoke kernel requires d_k ≤ 128 \
+                 (enable `fa2` feature and use a long-context shape for d_k > 128)",
+            ));
+        }
+        // Bespoke path doesn't honour sliding-window / softcap / ALiBi
+        // — reject upfront so the caller gets a clear error rather than
+        // silently-ignored params.
+        #[cfg(feature = "fa2")]
+        let is_fa2 = matches!(backend, BackendChoice::FlashAttentionV2);
+        #[cfg(not(feature = "fa2"))]
+        let is_fa2 = false;
+        if !is_fa2 {
+            if desc.window_size_left.is_some() || desc.window_size_right.is_some() {
+                return Err(Error::Unsupported(
+                    "baracuda-kernels::FlashSdpaPlan: sliding window requires the FA2 backend",
+                ));
+            }
+            if desc.softcap != 0.0 {
+                return Err(Error::Unsupported(
+                    "baracuda-kernels::FlashSdpaPlan: softcap requires the FA2 backend",
+                ));
+            }
+        }
+        if desc.softcap < 0.0 || !desc.softcap.is_finite() {
+            return Err(Error::InvalidProblem(
+                "baracuda-kernels::FlashSdpaPlan: softcap must be finite and non-negative",
+            ));
+        }
 
         let precision_guarantee = PrecisionGuarantee {
             math_precision: MathPrecision::F32,
@@ -325,6 +486,31 @@ impl<T: Element> FlashSdpaPlan<T> {
 
     /// Validate args against the descriptor.
     pub fn can_implement(&self, args: &FlashSdpaArgs<'_, T>) -> Result<()> {
+        // Q always has H heads; K/V have H_k heads (derived from args.k.shape[1]).
+        let num_heads_k = args.k.shape[1];
+        if num_heads_k <= 0
+            || num_heads_k > self.desc.num_heads
+            || self.desc.num_heads % num_heads_k != 0
+        {
+            return Err(Error::InvalidProblem(
+                "baracuda-kernels::FlashSdpaPlan: K shape[1] (num_heads_k) must divide num_heads",
+            ));
+        }
+        // Bespoke backend (non-FA2) requires no GQA (H_k == H). The
+        // strided-FFI sibling supports GQA via stride[1] = 0 broadcast
+        // — that's not exposed through this dense plan.
+        let is_gqa = num_heads_k != self.desc.num_heads;
+        #[cfg(feature = "fa2")]
+        let backend_is_fa2 = matches!(self.backend, BackendChoice::FlashAttentionV2);
+        #[cfg(not(feature = "fa2"))]
+        let backend_is_fa2 = false;
+        if is_gqa && !backend_is_fa2 {
+            return Err(Error::Unsupported(
+                "baracuda-kernels::FlashSdpaPlan: GQA (H_k != H) on the bespoke backend requires \
+                 the strided-FFI sibling; pick FA2 via PlanPreference for dense GQA",
+            ));
+        }
+
         let shape_q = [
             self.desc.batch_size,
             self.desc.num_heads,
@@ -333,13 +519,13 @@ impl<T: Element> FlashSdpaPlan<T> {
         ];
         let shape_k = [
             self.desc.batch_size,
-            self.desc.num_heads,
+            num_heads_k,
             self.desc.key_len,
             self.desc.d_k,
         ];
         let shape_v = [
             self.desc.batch_size,
-            self.desc.num_heads,
+            num_heads_k,
             self.desc.key_len,
             self.desc.d_v,
         ];
@@ -410,6 +596,27 @@ impl<T: Element> FlashSdpaPlan<T> {
             let m_n = mask.numel();
             if (mask.data.len() as i64) < m_n {
                 return Err(Error::BufferTooSmall { needed: m_n as usize, got: 0 });
+            }
+        }
+        // Phase 59a — validate optional ALiBi slopes.
+        if let Some(slopes) = args.alibi_slopes.as_ref() {
+            if !backend_is_fa2 {
+                return Err(Error::Unsupported(
+                    "baracuda-kernels::FlashSdpaPlan: ALiBi requires the FA2 backend",
+                ));
+            }
+            if slopes.shape[1] != self.desc.num_heads {
+                return Err(Error::InvalidProblem(
+                    "baracuda-kernels::FlashSdpaPlan: alibi_slopes shape[1] must equal num_heads",
+                ));
+            }
+            // shape[0] must be either 1 (broadcast-batch) or batch_size
+            // (per-batch). The plan picks the layout via stride[0] in run().
+            if slopes.shape[0] != 1 && slopes.shape[0] != self.desc.batch_size {
+                return Err(Error::InvalidProblem(
+                    "baracuda-kernels::FlashSdpaPlan: alibi_slopes shape[0] must be 1 \
+                     (per-head broadcast) or batch_size (per-batch-per-head)",
+                ));
             }
         }
         let q_n = args.q.numel();
@@ -611,13 +818,19 @@ impl<T: Element> FlashSdpaPlan<T> {
         map_status(status)
     }
 
-    /// FA2 backend launch path (Phase 42).
+    /// FA2 backend launch path (Phase 42 + Phase 59a).
     ///
     /// Routes the FA2 LSE write to caller-supplied workspace memory
     /// (FA2 always writes LSE in f32 regardless of element dtype;
     /// see `workspace_size`). The caller-visible `args.lse` buffer is
     /// left untouched on the FA2 path — Tier 1 doesn't wire BW for
     /// FA2, so the saved LSE has no downstream consumer.
+    ///
+    /// Phase 59a: plumbs GQA (`num_heads_k` from `args.k.shape[1]`),
+    /// ALiBi slopes (per-head broadcast or per-batch-per-head),
+    /// sliding window (`desc.window_size_{left,right}`), and softcap
+    /// (`desc.softcap`). Routes through the `_v2` FFI entry point that
+    /// accepts the full feature set.
     #[cfg(feature = "fa2")]
     fn run_fa2(
         &self,
@@ -631,6 +844,32 @@ impl<T: Element> FlashSdpaPlan<T> {
         let v_ptr = args.v.data.as_raw().0 as *const c_void;
         let y_ptr = args.y.data.as_raw().0 as *mut c_void;
         let is_causal_flag = if self.desc.is_causal { 1 } else { 0 };
+
+        // num_heads_k from the K tensor (GQA); guaranteed by
+        // can_implement that this divides num_heads.
+        let num_heads_k = args.k.shape[1];
+
+        // ALiBi: detect per-head vs per-batch-per-head layout from shape[0].
+        //   shape[0] = 1                          → per-head broadcast
+        //                                           (alibi_batch_stride = 0)
+        //   shape[0] = batch_size                 → per-batch-per-head
+        //                                           (alibi_batch_stride = num_heads)
+        let (alibi_ptr, alibi_batch_stride) = match args.alibi_slopes.as_ref() {
+            None => (core::ptr::null::<c_void>(), 0i32),
+            Some(slopes) => {
+                let ptr = slopes.data.as_raw().0 as *const c_void;
+                let batch_stride = if slopes.shape[0] == 1 {
+                    0_i32  // broadcast over batch
+                } else {
+                    self.desc.num_heads  // per-batch stride is num_heads elements
+                };
+                (ptr, batch_stride)
+            }
+        };
+
+        let window_left = self.desc.window_size_left.unwrap_or(-1);
+        let window_right = self.desc.window_size_right.unwrap_or(-1);
+        let softcap = self.desc.softcap;
 
         // Workspace carries the f32 LSE scratch (4 bytes per LSE cell).
         let need = self.workspace_size();
@@ -654,15 +893,20 @@ impl<T: Element> FlashSdpaPlan<T> {
 
         let status = match T::KIND {
             ElementKind::F16 => unsafe {
-                baracuda_kernels_sys::baracuda_kernels_fa2_sdpa_f16_run(
+                baracuda_kernels_sys::baracuda_kernels_fa2_sdpa_f16_run_v2(
                     self.desc.batch_size,
                     self.desc.num_heads,
-                    self.desc.num_heads,  // num_heads_k == num_heads in Tier 1
+                    num_heads_k,
                     self.desc.query_len,
                     self.desc.key_len,
                     self.desc.d_k,
                     self.desc.scale,
                     is_causal_flag,
+                    alibi_ptr,
+                    alibi_batch_stride,
+                    window_left,
+                    window_right,
+                    softcap,
                     q_ptr,
                     k_ptr,
                     v_ptr,
@@ -674,15 +918,20 @@ impl<T: Element> FlashSdpaPlan<T> {
                 )
             },
             ElementKind::Bf16 => unsafe {
-                baracuda_kernels_sys::baracuda_kernels_fa2_sdpa_bf16_run(
+                baracuda_kernels_sys::baracuda_kernels_fa2_sdpa_bf16_run_v2(
                     self.desc.batch_size,
                     self.desc.num_heads,
-                    self.desc.num_heads,
+                    num_heads_k,
                     self.desc.query_len,
                     self.desc.key_len,
                     self.desc.d_k,
                     self.desc.scale,
                     is_causal_flag,
+                    alibi_ptr,
+                    alibi_batch_stride,
+                    window_left,
+                    window_right,
+                    softcap,
                     q_ptr,
                     k_ptr,
                     v_ptr,
@@ -797,7 +1046,10 @@ impl<T: Element> FlashSdpaPlan<T> {
 /// validates the FA2 SKU constraints before honouring an FA2
 /// override (returns Bespoke on mismatch). Falls back to the
 /// heuristic when no override is supplied.
-fn pick_backend<T: Element>(desc: &FlashSdpaDescriptor, pref: PlanPreference) -> BackendChoice {
+fn pick_backend<T: Element>(
+    #[cfg_attr(not(feature = "fa2"), allow(unused_variables))] desc: &FlashSdpaDescriptor,
+    pref: PlanPreference,
+) -> BackendChoice {
     match pref.prefer_backend {
         Some(BackendKind::Bespoke) => BackendChoice::Bespoke,
         #[cfg(feature = "fa2")]
@@ -823,9 +1075,12 @@ fn pick_backend<T: Element>(desc: &FlashSdpaDescriptor, pref: PlanPreference) ->
 /// Hard eligibility check for FA2 (separate from the perf heuristic).
 /// Used to validate caller overrides — returns true iff FA2 *can*
 /// run this descriptor at all.
+///
+/// Phase 59a: FA2 supports head_dim ∈ {32, 64, 96, 128, 192, 256}
+/// (upstream v2.8.3 set; 160/224/512 are NOT supported).
 #[cfg(feature = "fa2")]
 fn fa2_is_eligible<T: Element>(desc: &FlashSdpaDescriptor) -> bool {
-    desc.d_k == 128
-        && desc.d_v == 128
+    fa2_supports_head_dim(desc.d_k)
+        && desc.d_k == desc.d_v
         && matches!(T::KIND, ElementKind::F16 | ElementKind::Bf16)
 }

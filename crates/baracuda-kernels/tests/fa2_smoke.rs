@@ -78,17 +78,17 @@ fn gen_bf16(n: usize, phase: f32) -> Vec<bf16> {
 #[ignore]
 fn fa2_heuristic_short_picks_bespoke() {
     let (_ctx, stream) = setup();
-    let desc = FlashSdpaDescriptor {
-        batch_size: SC_B,
-        num_heads: SC_H,
-        query_len: SC_Q,
-        key_len: SC_K,
-        d_k: DK,
-        d_v: DV,
-        scale: default_scale(DK),
-        is_causal: false,
-        element: ElementKind::F16,
-    };
+    let desc = FlashSdpaDescriptor::new(
+            SC_B,
+            SC_H,
+            SC_Q,
+            SC_K,
+            DK,
+            DV,
+            default_scale(DK),
+            false,
+            ElementKind::F16,
+        );
     let plan = FlashSdpaPlan::<f16>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     assert_eq!(
@@ -107,17 +107,17 @@ fn fa2_heuristic_short_picks_bespoke() {
 #[ignore]
 fn fa2_heuristic_long_picks_fa2() {
     let (_ctx, stream) = setup();
-    let desc = FlashSdpaDescriptor {
-        batch_size: LC_B,
-        num_heads: LC_H,
-        query_len: LC_Q,
-        key_len: LC_K,
-        d_k: DK,
-        d_v: DV,
-        scale: default_scale(DK),
-        is_causal: false,
-        element: ElementKind::F16,
-    };
+    let desc = FlashSdpaDescriptor::new(
+            LC_B,
+            LC_H,
+            LC_Q,
+            LC_K,
+            DK,
+            DV,
+            default_scale(DK),
+            false,
+            ElementKind::F16,
+        );
     let plan = FlashSdpaPlan::<f16>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     assert_eq!(
@@ -136,17 +136,17 @@ fn fa2_heuristic_long_picks_fa2() {
 #[ignore]
 fn fa2_force_via_preference() {
     let (_ctx, stream) = setup();
-    let desc = FlashSdpaDescriptor {
-        batch_size: SC_B,
-        num_heads: SC_H,
-        query_len: SC_Q,
-        key_len: SC_K,
-        d_k: DK,
-        d_v: DV,
-        scale: default_scale(DK),
-        is_causal: false,
-        element: ElementKind::F16,
-    };
+    let desc = FlashSdpaDescriptor::new(
+            SC_B,
+            SC_H,
+            SC_Q,
+            SC_K,
+            DK,
+            DV,
+            default_scale(DK),
+            false,
+            ElementKind::F16,
+        );
     let pref = PlanPreference {
         prefer_backend: Some(BackendKind::FlashAttentionV2),
         ..Default::default()
@@ -180,17 +180,17 @@ fn run_correctness_f16(is_causal: bool) {
     let sy = [LC_B, LC_H, LC_Q, DV];
     let sl = [LC_B, LC_H, LC_Q];
 
-    let desc = FlashSdpaDescriptor {
-        batch_size: LC_B,
-        num_heads: LC_H,
-        query_len: LC_Q,
-        key_len: LC_K,
-        d_k: DK,
-        d_v: DV,
-        scale: default_scale(DK),
+    let desc = FlashSdpaDescriptor::new(
+        LC_B,
+        LC_H,
+        LC_Q,
+        LC_K,
+        DK,
+        DV,
+        default_scale(DK),
         is_causal,
-        element: ElementKind::F16,
-    };
+        ElementKind::F16,
+    );
 
     // --- bespoke (reference) ---
     let mut dy_ref: DeviceBuffer<f16> = DeviceBuffer::zeros(&ctx, n_y).expect("alloc y_ref");
@@ -233,6 +233,7 @@ fn run_correctness_f16(is_causal: bool) {
                     stride: contiguous_stride(sl),
                 },
                 mask: None,
+                            alibi_slopes: None,
             },
         )
         .expect("bespoke run");
@@ -282,6 +283,7 @@ fn run_correctness_f16(is_causal: bool) {
                     stride: contiguous_stride(sl),
                 },
                 mask: None,
+                            alibi_slopes: None,
             },
         )
         .expect("fa2 run");
@@ -350,17 +352,17 @@ fn run_correctness_bf16(is_causal: bool) {
     let sy = [LC_B, LC_H, LC_Q, DV];
     let sl = [LC_B, LC_H, LC_Q];
 
-    let desc = FlashSdpaDescriptor {
-        batch_size: LC_B,
-        num_heads: LC_H,
-        query_len: LC_Q,
-        key_len: LC_K,
-        d_k: DK,
-        d_v: DV,
-        scale: default_scale(DK),
+    let desc = FlashSdpaDescriptor::new(
+        LC_B,
+        LC_H,
+        LC_Q,
+        LC_K,
+        DK,
+        DV,
+        default_scale(DK),
         is_causal,
-        element: ElementKind::Bf16,
-    };
+        ElementKind::Bf16,
+    );
 
     let mut dy_ref: DeviceBuffer<bf16> = DeviceBuffer::zeros(&ctx, n_y).expect("alloc y_ref");
     let mut dlse_ref: DeviceBuffer<bf16> =
@@ -382,6 +384,7 @@ fn run_correctness_bf16(is_causal: bool) {
                 y: TensorMut { data: dy_ref.as_slice_mut(), shape: sy, stride: contiguous_stride(sy) },
                 lse: TensorMut { data: dlse_ref.as_slice_mut(), shape: sl, stride: contiguous_stride(sl) },
                 mask: None,
+                            alibi_slopes: None,
             },
         )
         .expect("bespoke bf16 run");
@@ -409,6 +412,7 @@ fn run_correctness_bf16(is_causal: bool) {
                 y: TensorMut { data: dy_fa2.as_slice_mut(), shape: sy, stride: contiguous_stride(sy) },
                 lse: TensorMut { data: dlse_fa2.as_slice_mut(), shape: sl, stride: contiguous_stride(sl) },
                 mask: None,
+                            alibi_slopes: None,
             },
         )
         .expect("fa2 bf16 run");
@@ -484,17 +488,17 @@ fn fa2_capture_falls_back_to_bespoke() {
     let sy = [LC_B, LC_H, LC_Q, DV];
     let sl = [LC_B, LC_H, LC_Q];
 
-    let desc = FlashSdpaDescriptor {
-        batch_size: LC_B,
-        num_heads: LC_H,
-        query_len: LC_Q,
-        key_len: LC_K,
-        d_k: DK,
-        d_v: DV,
-        scale: default_scale(DK),
-        is_causal: false,
-        element: ElementKind::F16,
-    };
+    let desc = FlashSdpaDescriptor::new(
+            LC_B,
+            LC_H,
+            LC_Q,
+            LC_K,
+            DK,
+            DV,
+            default_scale(DK),
+            false,
+            ElementKind::F16,
+        );
     let plan = FlashSdpaPlan::<f16>::select(&stream, &desc, PlanPreference::default())
         .expect("select");
     assert_eq!(plan.backend(), BackendKind::FlashAttentionV2);
@@ -518,6 +522,7 @@ fn fa2_capture_falls_back_to_bespoke() {
             y: TensorMut { data: dy.as_slice_mut(), shape: sy, stride: contiguous_stride(sy) },
             lse: TensorMut { data: dlse.as_slice_mut(), shape: sl, stride: contiguous_stride(sl) },
                 mask: None,
+                    alibi_slopes: None,
         },
     )
     .expect("captured run (should fallback to bespoke without error)");

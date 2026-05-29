@@ -100,17 +100,17 @@ fn flash_sdpa_sm89_f16_basic() {
     let mut dlse_ref: DeviceBuffer<f16> =
         DeviceBuffer::zeros(&ctx, (B * H * Q) as usize).expect("alloc lse_ref");
 
-    let ref_desc = FlashSdpaDescriptor {
-        batch_size: B,
-        num_heads: H,
-        query_len: Q,
-        key_len: K,
-        d_k: DK,
-        d_v: DV,
+    let ref_desc = FlashSdpaDescriptor::new(
+        B,
+        H,
+        Q,
+        K,
+        DK,
+        DV,
         scale,
-        is_causal: false,
-        element: ElementKind::F16,
-    };
+        false,
+        ElementKind::F16,
+    );
     let ref_plan = FlashSdpaPlan::<f16>::select(&stream, &ref_desc, PlanPreference::default())
         .expect("ref sel");
     ref_plan
@@ -144,6 +144,7 @@ fn flash_sdpa_sm89_f16_basic() {
                     stride: contiguous_stride(sl),
                 },
                 mask: None,
+                            alibi_slopes: None,
             },
         )
         .expect("ref run");
@@ -254,17 +255,17 @@ fn flash_sdpa_sm89_bf16_basic() {
     let mut dlse_ref: DeviceBuffer<bf16> =
         DeviceBuffer::zeros(&ctx, (B * H * Q) as usize).expect("alloc lse_ref");
 
-    let ref_desc = FlashSdpaDescriptor {
-        batch_size: B,
-        num_heads: H,
-        query_len: Q,
-        key_len: K,
-        d_k: DK,
-        d_v: DV,
+    let ref_desc = FlashSdpaDescriptor::new(
+        B,
+        H,
+        Q,
+        K,
+        DK,
+        DV,
         scale,
-        is_causal: false,
-        element: ElementKind::Bf16,
-    };
+        false,
+        ElementKind::Bf16,
+    );
     let ref_plan = FlashSdpaPlan::<bf16>::select(&stream, &ref_desc, PlanPreference::default())
         .expect("ref sel");
     ref_plan
@@ -298,6 +299,7 @@ fn flash_sdpa_sm89_bf16_basic() {
                     stride: contiguous_stride(sl),
                 },
                 mask: None,
+                            alibi_slopes: None,
             },
         )
         .expect("ref run");
@@ -404,17 +406,17 @@ fn flash_sdpa_sm89_f16_causal() {
     let mut dlse_ref: DeviceBuffer<f16> =
         DeviceBuffer::zeros(&ctx, (B * H * Q) as usize).expect("alloc lse_ref");
 
-    let ref_desc = FlashSdpaDescriptor {
-        batch_size: B,
-        num_heads: H,
-        query_len: Q,
-        key_len: K,
-        d_k: DK,
-        d_v: DV,
+    let ref_desc = FlashSdpaDescriptor::new(
+        B,
+        H,
+        Q,
+        K,
+        DK,
+        DV,
         scale,
-        is_causal: true,
-        element: ElementKind::F16,
-    };
+        true,
+        ElementKind::F16,
+    );
     let ref_plan = FlashSdpaPlan::<f16>::select(&stream, &ref_desc, PlanPreference::default())
         .expect("ref sel");
     ref_plan
@@ -448,6 +450,7 @@ fn flash_sdpa_sm89_f16_causal() {
                     stride: contiguous_stride(sl),
                 },
                 mask: None,
+                            alibi_slopes: None,
             },
         )
         .expect("ref run");

@@ -26,8 +26,9 @@ Attention v2 under its third-party attribution section.
 
 ## Scope: what we kept
 
-`src/` contains the minimum set of headers and `.cu` instantiations
-needed for the **Tier-1 integration** (Phase 42):
+`src/` contains the headers and `.cu` instantiations needed for the
+**Phase 42 Tier-1 integration** PLUS the **Phase 59a FW expansion** to
+the full upstream forward head_dim set.
 
 **Headers** (full FA2 src headers, ~16 files):
 - `flash.h` — `Flash_fwd_params` / `Flash_bwd_params` struct definitions.
@@ -39,21 +40,25 @@ needed for the **Tier-1 integration** (Phase 42):
 - `hardware_info.h` — CUDA device cap query.
 - `namespace_config.h` — `FLASH_NAMESPACE` macro.
 
-**Source `.cu` files** — Tier 1 only:
-- `flash_fwd_hdim128_fp16_sm80.cu`
-- `flash_fwd_hdim128_fp16_causal_sm80.cu`
-- `flash_fwd_hdim128_bf16_sm80.cu`
-- `flash_fwd_hdim128_bf16_causal_sm80.cu`
+**Source `.cu` files** — Phase 42 (Tier 1) + Phase 59a:
+- `flash_fwd_hdim32_{fp16,bf16}_{,causal}_sm80.cu` (4 files, Phase 59a)
+- `flash_fwd_hdim64_{fp16,bf16}_{,causal}_sm80.cu` (4 files, Phase 59a)
+- `flash_fwd_hdim96_{fp16,bf16}_{,causal}_sm80.cu` (4 files, Phase 59a)
+- `flash_fwd_hdim128_{fp16,bf16}_{,causal}_sm80.cu` (4 files, Phase 42)
+- `flash_fwd_hdim192_{fp16,bf16}_{,causal}_sm80.cu` (4 files, Phase 59a)
+- `flash_fwd_hdim256_{fp16,bf16}_{,causal}_sm80.cu` (4 files, Phase 59a)
+
+Total: 24 forward `.cu` files (6 head_dims × 2 dtypes × 2 causal/non-causal).
 
 ## Scope: what we removed
 
 - **Python bindings** (`flash_attn/` directory) — we expose FA2 through
-  `baracuda_kernels_fa2_sdpa_<dt>_run` FFI symbols, not Python.
+  `baracuda_kernels_fa2_sdpa_<dt>_run{,_v2}` FFI symbols, not Python.
 - **PyTorch C++ extension glue** (`csrc/flash_attn/flash_api.cpp`) —
   thin wrapper expecting `torch::Tensor` arguments; replaced by
   baracuda's own launcher (`kernels/attention/fa2_launcher.cu`).
 - **Hopper / sm_90 paths** (`hopper/`) — FA3 supersedes FA2 on Hopper;
-  hardware not in scope for Phase 42.
+  hardware not in scope.
 - **Composable Kernel ROCm path** (`csrc/composable_kernel/`,
   `csrc/flash_attn_ck/`) — AMD target, not applicable.
 - **fused_dense_lib**, **layer_norm**, **benchmarks/**, **tests/**,
@@ -62,14 +67,23 @@ needed for the **Tier-1 integration** (Phase 42):
 - **Vendored CUTLASS submodule** (`csrc/cutlass/`) — baracuda already
   carries CUTLASS through `baracuda-cutlass-sys`. Build script reuses
   the same include path. See **CUTLASS version note** below.
-- **Backward `.cu` files** (`flash_bwd_*`) — Tier-2 deferral.
+- **Backward `.cu` files** (`flash_bwd_*`) — Tier-2 deferral (Phase 59b).
 - **Backward kernel + preprocess headers** (`flash_bwd_kernel.h`,
   `flash_bwd_launch_template.h`, `flash_bwd_preprocess_kernel.h`) —
-  Tier-2 deferral (not referenced from any Tier-1 source).
+  Tier-2 deferral (not referenced from any FW source).
 - **Split-KV forward `.cu` files** (`flash_fwd_split_hdim*.cu`) —
-  paged-attention dispatch path; not in scope for Phase 42.
-- **Forward `.cu` files for hdim ≠ 128** — Tier-3 deferral
-  (head_dim ∈ {32, 64, 96, 192, 256}).
+  paged-attention dispatch path; Phase 46's FlashInfer cherry-pick
+  covers paged attention.
+- **Varlen forward path** — Phase 59b territory.
+
+### Head dimensions NOT supported
+
+Upstream FA2 v2.8.3 ships ONLY head_dim ∈ {32, 64, 96, 128, 192, 256}.
+Head dimensions **160, 224, and 512 are NOT supported** by upstream and
+are therefore permanently out-of-scope for this vendor — there are no
+`.cu` source files to copy. Callers requiring those exotic head_dims
+must use baracuda's bespoke `FlashSdpaPlan` (which supports d_k ≤ 128
+natively) or fall back to the naive `SdpaPlan`.
 
 ## PyTorch dependency stubs
 
@@ -116,11 +130,32 @@ override knobs.
 
 ## Future scope
 
-- **Tier 2**: vendor `flash_bwd_hdim128_{fp16,bf16}_{,causal}_sm80.cu` +
-  `flash_bwd_*.h` headers, expose `baracuda_kernels_fa2_sdpa_backward_<dt>_run`.
-- **Tier 3**: vendor remaining head dimensions (32, 64, 96, 192, 256)
-  + varlen path + GQA verification.
-- **FA3 / Hopper**: separate effort, not Phase 42.
+- **Phase 59b — BW path + varlen**: vendor `flash_bwd_hdim*_{fp16,bf16}_{,causal}_sm80.cu`
+  + `flash_bwd_*.h` headers + varlen forward / backward `.cu` files.
+  Expose `baracuda_kernels_fa2_sdpa_backward_<dt>_run` + varlen entry
+  points (cu_seqlens_q / cu_seqlens_k).
+- **FA3 / Hopper**: separate effort; hardware-blocked on the RTX 4070
+  dev box.
+
+## Phase 59a — FW expansion (completed)
+
+Closes Fuel's "still needs upstream FA2" gap on the forward side:
+
+- Vendored 20 new `.cu` files (head_dims 32, 64, 96, 192, 256 × {fp16, bf16}
+  × {causal, non-causal}); upstream-supported head_dim=128 stays from
+  Phase 42.
+- Extended the `fa2_launcher.cu` to dispatch all 6 supported head_dims
+  via a runtime switch on `params.d`.
+- Added `..._run_v2` + `..._can_implement_v2` FFI entry points that
+  expose the full Phase 59a feature set: GQA (via `num_heads_k`
+  parameter), ALiBi slopes, sliding window, and softcap. v1 entry
+  points preserved for backwards compatibility.
+- Lifted `should_use_fa2` heuristic to accept any FA2-supported head_dim
+  + GQA-divisible head counts.
+- Added `#[non_exhaustive]` + `::new()` builder pattern to
+  `FlashSdpaDescriptor` (per Phase 32 convention).
+- Added new smoke tests: head_dim fanout (5 new head_dims × dtypes),
+  GQA, ALiBi, sliding window, softcap.
 
 ## Pruning script
 

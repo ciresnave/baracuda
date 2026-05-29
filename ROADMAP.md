@@ -877,6 +877,104 @@ Smoke tests (3 files):
   per torch.chunk, single rank, empty shard at `rank >= n`). All 4
   green on this run.
 
+## Phase 59a — FA2 FW expansion (complete; pending consolidation alpha bump, 2026-05-29)
+
+**Closes Fuel's "still needs upstream FA2" gap on the forward side.**
+Phase 42 shipped a head_dim=128-only Tier-1 FA2 vendor integration.
+Phase 59a expands the FW pass to full upstream feature parity so Fuel
+can drop its bundled `flash-attention` FW path.
+
+- **Vendored 20 new `.cu` files** in
+  `crates/baracuda-kernels-sys/vendor/flash-attention/src/`:
+  `flash_fwd_hdim{32,64,96,192,256}_{fp16,bf16}_{,causal}_sm80.cu`
+  (5 head_dims × 2 dtypes × 2 causal variants). Source: Dao-AILab
+  `flash-attention` tag `v2.8.3` commit `060c9188`. Combined with the
+  Phase 42 hdim128 set, the vendor now carries **24 forward `.cu`
+  files** covering the full upstream FA2 v2.8.3 head_dim set.
+- **Critical correction to the original task spec**: head_dims 160,
+  224, and 512 are **NOT supported by upstream FA2 v2.8.3** —
+  `flash_fwd_launch_template.h` only instantiates
+  `run_mha_fwd_hdim{32,64,96,128,192,256}<T, is_causal>()`. The task
+  asked for {32, 64, 96, 160, 192, 224, 256, 512} (8 head_dims = 32
+  files); reality is {32, 64, 96, 192, 256} (5 new head_dims = 20
+  files). Documented in `vendor/flash-attention/VENDOR.md`.
+- **Launcher rewrite** (`kernels/attention/fa2_launcher.cu`):
+  runtime `switch (head_dim)` over all 6 supported head_dims; added
+  forward declarations for all 24 template instantiations; added
+  `_v2` entry points (one per dtype) carrying the Phase 59a feature
+  set: ALiBi slopes pointer + batch_stride, sliding window left/right,
+  softcap. v1 entry points preserved for backwards compatibility
+  (route through the same launcher with extras at disabled defaults).
+- **GQA lift**: launcher v1 already accepted distinct `num_heads_k`
+  but rejected `!= num_heads`; the gate is loosened to
+  `num_heads % num_heads_k == 0` (FA2's `h_h_k_ratio` handles the
+  K/V head broadcast in-kernel). No new FFI symbols.
+- **API extensions** (`#[non_exhaustive]` + builder per Phase 32):
+  `FlashSdpaDescriptor` gained `window_size_left: Option<i32>`,
+  `window_size_right: Option<i32>`, `softcap: f32`. New constructor
+  `FlashSdpaDescriptor::new(...)` with chainable
+  `with_window_size_left`, `with_window_size_right`, `with_softcap`
+  setters. `FlashSdpaArgs` gained `alibi_slopes: Option<TensorRef<f32, 2>>`
+  (shape `[1, H]` with stride[0]=0 for per-head broadcast or `[B, H]`
+  contiguous for per-batch-per-head; layout detected from shape[0]).
+- **Heuristic lift**: `should_use_fa2` accepts any FA2-supported
+  head_dim (was head_dim==128-only) and GQA-divisible head counts.
+  `fa2_is_eligible` follows.
+- **Plan-layer routing**: bespoke backend rejects sliding window /
+  softcap / ALiBi at `select()` time with `Error::Unsupported`.
+  Negative softcap rejected with `Error::InvalidProblem`. The FA2
+  path uses the `_v2` FFI symbols and plumbs all Phase 59a params
+  through.
+
+**FFI symbol delta**: +4 new symbols (`baracuda_kernels_fa2_sdpa_{f16,bf16}_run_v2`
+and the matching `_can_implement_v2`). v1 symbols untouched.
+
+**Source-compat breakage** (acceptable as pre-1.0 hardening):
+
+- `FlashSdpaDescriptor` is now `#[non_exhaustive]` — struct-literal
+  callers (~33 callsites across tests + benches + examples) migrated
+  to `FlashSdpaDescriptor::new(...)`.
+- `FlashSdpaArgs` gained the `alibi_slopes` field — callsites
+  (~30 across tests + benches + examples) updated to pass
+  `alibi_slopes: None` explicitly.
+- Bench files that were already broken (missing `mask: None` from
+  Phase 51) were fixed as part of this migration.
+
+**Smoke tests** (4 new files, `#[ignore]`-gated for real GPU +
+`--features fa2,sm80`):
+
+- `fa2_hdim_fanout_smoke.rs` — 20 tests covering all 5 new head_dims
+  × {fp16, bf16} × {causal, non-causal}. For head_dim ≤ 128 validates
+  numerically against the bespoke `FlashSdpaPlan`; for 192/256 the
+  bespoke kernel can't run so only finiteness is checked.
+- `fa2_gqa_smoke.rs` — Llama-shape GQA (32 query heads, 8 KV heads)
+  validated against the bespoke reference path with manually
+  broadcast K/V.
+- `fa2_alibi_smoke.rs` — per-head broadcast (shape `[1, H]`,
+  stride[0]=0) + per-batch-per-head (shape `[B, H]`) layouts; both
+  validated for finiteness. Also an unconditional negative test:
+  `alibi_slopes` on the bespoke backend must error.
+- `fa2_sliding_window_smoke.rs` — `with_window_size_left(Some(128))`
+  + causal+sliding combination (Mistral pattern); negative test on
+  bespoke.
+- `fa2_softcap_smoke.rs` — softcap=30.0 (Gemma-2 default) causal +
+  non-causal; negative tests for bespoke + negative softcap value.
+
+Total: 26 new test functions across 4 new test files.
+
+**Hardware**: targeted at RTX 4070 (sm_89). head_dim=256 may pick FA2's
+64×64 tile config (vs A100/H100's 128×64) on sm_89 due to SMEM budget;
+should fit in the 99 KiB opt-in SMEM. head_dim=512 is NOT vendored
+(not in upstream).
+
+**Out of scope (Phase 59b territory)**:
+
+- BW pass for any head_dim — needs `flash_bwd_*.cu` vendor +
+  `FlashSdpaBackwardPlan` FA2 routing.
+- Varlen path (cu_seqlens_q / cu_seqlens_k).
+- Split-KV / paged-KV — Phase 46's FlashInfer cherry-pick covers
+  paged attention.
+
 Out of scope (Phase 58 → future):
 
 - **ZeRO-2** (gradient sharding) — needs a `reduce_scatter` in step 1

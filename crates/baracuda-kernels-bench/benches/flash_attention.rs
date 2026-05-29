@@ -70,17 +70,17 @@ where
                     Err(_) => continue,
                 };
 
-                let desc = FlashSdpaDescriptor {
-                    batch_size: b,
-                    num_heads: h,
-                    query_len: q,
-                    key_len: k,
-                    d_k: d,
-                    d_v: d,
+                let desc = FlashSdpaDescriptor::new(
+                    b,
+                    h,
+                    q,
+                    k,
+                    d,
+                    d,
                     scale,
-                    is_causal: false,
-                    element: T::KIND,
-                };
+                    false,
+                    T::KIND,
+                );
                 let plan = match FlashSdpaPlan::<T>::select(
                     &stream,
                     &desc,
@@ -130,6 +130,8 @@ where
                                 shape: sl,
                                 stride: stl,
                             },
+                                                    mask: None,
+                                                    alibi_slopes: None,
                         };
                         plan.run(&stream, Workspace::None, args)
                             .expect("flash sdpa warmup run");
@@ -163,6 +165,8 @@ where
                                     shape: sl,
                                     stride: stl,
                                 },
+                                                            mask: None,
+                                                            alibi_slopes: None,
                             };
                             plan.run(&stream, Workspace::None, args).expect("flash sdpa run");
                         })

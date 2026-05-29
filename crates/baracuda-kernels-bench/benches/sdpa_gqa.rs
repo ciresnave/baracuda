@@ -82,17 +82,17 @@ where
             Err(_) => continue,
         };
 
-        let desc = FlashSdpaDescriptor {
-            batch_size: BATCH,
-            num_heads: NUM_Q_HEADS,
-            query_len: SEQ_LEN,
-            key_len: SEQ_LEN,
-            d_k: HEAD_DIM,
-            d_v: HEAD_DIM,
+        let desc = FlashSdpaDescriptor::new(
+            BATCH,
+            NUM_Q_HEADS,
+            SEQ_LEN,
+            SEQ_LEN,
+            HEAD_DIM,
+            HEAD_DIM,
             scale,
-            is_causal: false,
-            element: T::KIND,
-        };
+            false,
+            T::KIND,
+        );
         let plan = match FlashSdpaPlan::<T>::select(&stream, &desc, PlanPreference::default()) {
             Ok(p) => p,
             Err(_) => continue,
@@ -171,6 +171,8 @@ where
                     shape: sl,
                     stride: stl,
                 },
+                            mask: None,
+                            alibi_slopes: None,
             };
             plan.run(&stream, Workspace::None, args).expect("baracuda flash gqa");
         });
@@ -201,6 +203,8 @@ where
                     shape: sl,
                     stride: stl,
                 },
+                            mask: None,
+                            alibi_slopes: None,
             };
             plan.run(&stream, Workspace::None, args).expect("baracuda flash gqa");
         });
@@ -248,6 +252,8 @@ where
                             shape: sl,
                             stride: stl,
                         },
+                                            mask: None,
+                                            alibi_slopes: None,
                     };
                     plan.run(&stream, Workspace::None, args).expect("baracuda flash gqa");
                 })

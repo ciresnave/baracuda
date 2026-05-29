@@ -249,17 +249,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let d_v_packed = DeviceBuffer::from_slice(&ctx, &v_packed)?;
 
     let scale = 1.0 / (HEAD_DIM as f32).sqrt();
-    let desc = FlashSdpaDescriptor {
-        batch_size: BATCH,
-        num_heads: HEADS,
-        query_len: Q_LEN,
-        key_len: k_cur_len,
-        d_k: HEAD_DIM,
-        d_v: HEAD_DIM,
+    let desc = FlashSdpaDescriptor::new(
+        BATCH,
+        HEADS,
+        Q_LEN,
+        k_cur_len,
+        HEAD_DIM,
+        HEAD_DIM,
         scale,
-        is_causal: false, // tree mask handles all suppression
-        element: ElementKind::F32,
-    };
+        false, // is_causal — tree mask handles all suppression
+        ElementKind::F32,
+    );
     let plan = FlashSdpaPlan::<f32>::select(&stream, &desc, PlanPreference::default())?;
 
     plan.run(
@@ -296,6 +296,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 shape: mask_shape,
                 stride: contiguous_stride(mask_shape),
             }),
+            alibi_slopes: None,
         },
     )?;
     stream.synchronize()?;

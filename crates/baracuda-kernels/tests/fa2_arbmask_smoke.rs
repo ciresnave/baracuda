@@ -170,17 +170,17 @@ fn arbmask_random_f32_matches_host_ref() {
     let sm = [B, H, Q, K];
 
     let scale = 1.0 / (D as f32).sqrt();
-    let desc = FlashSdpaDescriptor {
-        batch_size: B,
-        num_heads: H,
-        query_len: Q,
-        key_len: K,
-        d_k: D,
-        d_v: D,
+    let desc = FlashSdpaDescriptor::new(
+        B,
+        H,
+        Q,
+        K,
+        D,
+        D,
         scale,
-        is_causal: false,
-        element: ElementKind::F32,
-    };
+        false,
+        ElementKind::F32,
+    );
     let plan =
         FlashSdpaPlan::<f32>::select(&stream, &desc, PlanPreference::default()).expect("sel");
     plan.run(
@@ -197,6 +197,7 @@ fn arbmask_random_f32_matches_host_ref() {
                 shape: sm,
                 stride: contiguous_stride(sm),
             }),
+                    alibi_slopes: None,
         },
     )
     .expect("arbmask run");
@@ -328,17 +329,17 @@ fn arbmask_tree_attention_pattern() {
     let sm = [B, H, Q, K];
 
     let scale = 1.0 / (D as f32).sqrt();
-    let desc = FlashSdpaDescriptor {
-        batch_size: B,
-        num_heads: H,
-        query_len: Q,
-        key_len: K,
-        d_k: D,
-        d_v: D,
+    let desc = FlashSdpaDescriptor::new(
+        B,
+        H,
+        Q,
+        K,
+        D,
+        D,
         scale,
-        is_causal: false,
-        element: ElementKind::F32,
-    };
+        false,
+        ElementKind::F32,
+    );
     let plan =
         FlashSdpaPlan::<f32>::select(&stream, &desc, PlanPreference::default()).expect("sel");
     plan.run(
@@ -355,6 +356,7 @@ fn arbmask_tree_attention_pattern() {
                 shape: sm,
                 stride: contiguous_stride(sm),
             }),
+                    alibi_slopes: None,
         },
     )
     .expect("arbmask tree run");
@@ -404,6 +406,7 @@ fn arbmask_tree_attention_pattern() {
                 shape: sm,
                 stride: contiguous_stride(sm),
             }),
+                    alibi_slopes: None,
         },
     )
     .expect("arbmask tree run 2");
@@ -506,17 +509,17 @@ fn arbmask_sliding_window_matches_naive() {
     let sm = [B, H, Q, K];
 
     let scale = 1.0 / (D as f32).sqrt();
-    let desc = FlashSdpaDescriptor {
-        batch_size: B,
-        num_heads: H,
-        query_len: Q,
-        key_len: K,
-        d_k: D,
-        d_v: D,
+    let desc = FlashSdpaDescriptor::new(
+        B,
+        H,
+        Q,
+        K,
+        D,
+        D,
         scale,
-        is_causal: false,
-        element: ElementKind::F32,
-    };
+        false,
+        ElementKind::F32,
+    );
     let plan =
         FlashSdpaPlan::<f32>::select(&stream, &desc, PlanPreference::default()).expect("sel");
     plan.run(
@@ -533,6 +536,7 @@ fn arbmask_sliding_window_matches_naive() {
                 shape: sm,
                 stride: contiguous_stride(sm),
             }),
+                    alibi_slopes: None,
         },
     )
     .expect("arbmask window run");
@@ -594,17 +598,17 @@ fn arbmask_with_causal_compose() {
     let sm = [B, H, Q, K];
 
     let scale = 1.0 / (D as f32).sqrt();
-    let desc = FlashSdpaDescriptor {
-        batch_size: B,
-        num_heads: H,
-        query_len: Q,
-        key_len: K,
-        d_k: D,
-        d_v: D,
+    let desc = FlashSdpaDescriptor::new(
+        B,
+        H,
+        Q,
+        K,
+        D,
+        D,
         scale,
-        is_causal: true,
-        element: ElementKind::F32,
-    };
+        true,
+        ElementKind::F32,
+    );
     let plan =
         FlashSdpaPlan::<f32>::select(&stream, &desc, PlanPreference::default()).expect("sel");
     plan.run(
@@ -621,6 +625,7 @@ fn arbmask_with_causal_compose() {
                 shape: sm,
                 stride: contiguous_stride(sm),
             }),
+                    alibi_slopes: None,
         },
     )
     .expect("arbmask+causal run");

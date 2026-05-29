@@ -267,13 +267,43 @@ fn main() {
             .arg("-DNDEBUG")
             .arg("-DFLASH_NAMESPACE=baracuda_fa2");
 
-        // FA2 Tier-1: 4 forward .cu files (head_dim=128, f16/bf16,
-        // causal/non-causal) + baracuda launcher.
+        // FA2 forward .cu files. Phase 42 (Tier-1) shipped head_dim=128
+        // only; Phase 59a expanded to the full upstream head_dim set
+        // {32, 64, 96, 128, 192, 256} × {fp16, bf16} × {causal, non-causal}
+        // = 24 .cu files. Upstream FA2 v2.8.3 does NOT ship 160/224/512
+        // — those are Tier-3-deferred forever (no upstream sources).
         for f in &[
+            // head_dim = 32 (Phase 59a)
+            "vendor/flash-attention/src/flash_fwd_hdim32_fp16_sm80.cu",
+            "vendor/flash-attention/src/flash_fwd_hdim32_fp16_causal_sm80.cu",
+            "vendor/flash-attention/src/flash_fwd_hdim32_bf16_sm80.cu",
+            "vendor/flash-attention/src/flash_fwd_hdim32_bf16_causal_sm80.cu",
+            // head_dim = 64 (Phase 59a)
+            "vendor/flash-attention/src/flash_fwd_hdim64_fp16_sm80.cu",
+            "vendor/flash-attention/src/flash_fwd_hdim64_fp16_causal_sm80.cu",
+            "vendor/flash-attention/src/flash_fwd_hdim64_bf16_sm80.cu",
+            "vendor/flash-attention/src/flash_fwd_hdim64_bf16_causal_sm80.cu",
+            // head_dim = 96 (Phase 59a)
+            "vendor/flash-attention/src/flash_fwd_hdim96_fp16_sm80.cu",
+            "vendor/flash-attention/src/flash_fwd_hdim96_fp16_causal_sm80.cu",
+            "vendor/flash-attention/src/flash_fwd_hdim96_bf16_sm80.cu",
+            "vendor/flash-attention/src/flash_fwd_hdim96_bf16_causal_sm80.cu",
+            // head_dim = 128 (Phase 42 Tier-1)
             "vendor/flash-attention/src/flash_fwd_hdim128_fp16_sm80.cu",
             "vendor/flash-attention/src/flash_fwd_hdim128_fp16_causal_sm80.cu",
             "vendor/flash-attention/src/flash_fwd_hdim128_bf16_sm80.cu",
             "vendor/flash-attention/src/flash_fwd_hdim128_bf16_causal_sm80.cu",
+            // head_dim = 192 (Phase 59a)
+            "vendor/flash-attention/src/flash_fwd_hdim192_fp16_sm80.cu",
+            "vendor/flash-attention/src/flash_fwd_hdim192_fp16_causal_sm80.cu",
+            "vendor/flash-attention/src/flash_fwd_hdim192_bf16_sm80.cu",
+            "vendor/flash-attention/src/flash_fwd_hdim192_bf16_causal_sm80.cu",
+            // head_dim = 256 (Phase 59a)
+            "vendor/flash-attention/src/flash_fwd_hdim256_fp16_sm80.cu",
+            "vendor/flash-attention/src/flash_fwd_hdim256_fp16_causal_sm80.cu",
+            "vendor/flash-attention/src/flash_fwd_hdim256_bf16_sm80.cu",
+            "vendor/flash-attention/src/flash_fwd_hdim256_bf16_causal_sm80.cu",
+            // launcher (Phase 42 + extended in Phase 59a)
             "kernels/attention/fa2_launcher.cu",
         ] {
             if std::path::Path::new(f).exists() {

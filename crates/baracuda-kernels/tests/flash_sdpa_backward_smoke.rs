@@ -183,17 +183,17 @@ fn flash_sdpa_backward_f32_basic() {
     let mut ddv_flash: DeviceBuffer<f32> =
         DeviceBuffer::zeros(&ctx, (B * H * K * DV) as usize).expect("flash dv");
 
-    let f_fw_desc = FlashSdpaDescriptor {
-        batch_size: B,
-        num_heads: H,
-        query_len: Q,
-        key_len: K,
-        d_k: DK,
-        d_v: DV,
+    let f_fw_desc = FlashSdpaDescriptor::new(
+        B,
+        H,
+        Q,
+        K,
+        DK,
+        DV,
         scale,
-        is_causal: false,
-        element: ElementKind::F32,
-    };
+        false,
+        ElementKind::F32,
+    );
     let f_fw_plan =
         FlashSdpaPlan::<f32>::select(&stream, &f_fw_desc, PlanPreference::default()).expect("");
     f_fw_plan
@@ -207,6 +207,7 @@ fn flash_sdpa_backward_f32_basic() {
                 y: TensorMut { data: dy_flash.as_slice_mut(), shape: sy, stride: contiguous_stride(sy) },
                 lse: TensorMut { data: dlse.as_slice_mut(), shape: sl, stride: contiguous_stride(sl) },
                 mask: None,
+                            alibi_slopes: None,
             },
         )
         .expect("flash fw");
@@ -399,17 +400,17 @@ fn flash_sdpa_backward_f64_basic() {
     let mut ddv_flash: DeviceBuffer<f64> =
         DeviceBuffer::zeros(&ctx, (B * H * K * DV) as usize).expect("flash dv");
 
-    let f_fw_desc = FlashSdpaDescriptor {
-        batch_size: B,
-        num_heads: H,
-        query_len: Q,
-        key_len: K,
-        d_k: DK,
-        d_v: DV,
+    let f_fw_desc = FlashSdpaDescriptor::new(
+        B,
+        H,
+        Q,
+        K,
+        DK,
+        DV,
         scale,
-        is_causal: false,
-        element: ElementKind::F64,
-    };
+        false,
+        ElementKind::F64,
+    );
     let f_fw_plan =
         FlashSdpaPlan::<f64>::select(&stream, &f_fw_desc, PlanPreference::default()).expect("");
     f_fw_plan
@@ -423,6 +424,7 @@ fn flash_sdpa_backward_f64_basic() {
                 y: TensorMut { data: dy_flash.as_slice_mut(), shape: sy, stride: contiguous_stride(sy) },
                 lse: TensorMut { data: dlse.as_slice_mut(), shape: sl, stride: contiguous_stride(sl) },
                 mask: None,
+                            alibi_slopes: None,
             },
         )
         .expect("flash fw");
@@ -573,10 +575,9 @@ fn flash_sdpa_backward_f16_basic() {
     let mut ddk_flash: DeviceBuffer<f16> = DeviceBuffer::zeros(&ctx, (B * H * K * DK) as usize).expect("");
     let mut ddv_flash: DeviceBuffer<f16> = DeviceBuffer::zeros(&ctx, (B * H * K * DV) as usize).expect("");
 
-    let f_fw_desc = FlashSdpaDescriptor {
-        batch_size: B, num_heads: H, query_len: Q, key_len: K,
-        d_k: DK, d_v: DV, scale, is_causal: false, element: ElementKind::F16,
-    };
+    let f_fw_desc = FlashSdpaDescriptor::new(
+        B, H, Q, K, DK, DV, scale, false, ElementKind::F16,
+    );
     let f_fw_plan = FlashSdpaPlan::<f16>::select(&stream, &f_fw_desc, PlanPreference::default()).expect("");
     f_fw_plan.run(&stream, Workspace::None, FlashSdpaArgs {
         q: TensorRef { data: dq_dev.as_slice(), shape: sq, stride: contiguous_stride(sq) },
@@ -585,6 +586,7 @@ fn flash_sdpa_backward_f16_basic() {
         y: TensorMut { data: dy_flash.as_slice_mut(), shape: sy, stride: contiguous_stride(sy) },
         lse: TensorMut { data: dlse.as_slice_mut(), shape: sl, stride: contiguous_stride(sl) },
                 mask: None,
+            alibi_slopes: None,
     }).expect("");
     stream.synchronize().expect("");
 
@@ -714,10 +716,9 @@ fn flash_sdpa_backward_bf16_basic() {
     let mut ddk_flash: DeviceBuffer<bf16> = DeviceBuffer::zeros(&ctx, (B * H * K * DK) as usize).expect("");
     let mut ddv_flash: DeviceBuffer<bf16> = DeviceBuffer::zeros(&ctx, (B * H * K * DV) as usize).expect("");
 
-    let f_fw_desc = FlashSdpaDescriptor {
-        batch_size: B, num_heads: H, query_len: Q, key_len: K,
-        d_k: DK, d_v: DV, scale, is_causal: false, element: ElementKind::Bf16,
-    };
+    let f_fw_desc = FlashSdpaDescriptor::new(
+        B, H, Q, K, DK, DV, scale, false, ElementKind::Bf16,
+    );
     let f_fw_plan = FlashSdpaPlan::<bf16>::select(&stream, &f_fw_desc, PlanPreference::default()).expect("");
     f_fw_plan.run(&stream, Workspace::None, FlashSdpaArgs {
         q: TensorRef { data: dq_dev.as_slice(), shape: sq, stride: contiguous_stride(sq) },
@@ -726,6 +727,7 @@ fn flash_sdpa_backward_bf16_basic() {
         y: TensorMut { data: dy_flash.as_slice_mut(), shape: sy, stride: contiguous_stride(sy) },
         lse: TensorMut { data: dlse.as_slice_mut(), shape: sl, stride: contiguous_stride(sl) },
                 mask: None,
+            alibi_slopes: None,
     }).expect("");
     stream.synchronize().expect("");
 
