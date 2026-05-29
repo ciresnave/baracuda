@@ -1,0 +1,17 @@
+bitsandbytes authors (NF4 quantization kernels)
+
+Tim Dettmers <dettmers@cs.washington.edu>  — original author and lead
+The bitsandbytes contributors                — see upstream `AUTHORS` /
+                                              git log at
+                                              https://github.com/bitsandbytes-foundation/bitsandbytes
+
+The NF4 (NormalFloat 4-bit) format was introduced in:
+
+  Tim Dettmers, Artidoro Pagnoni, Ari Holtzman, Luke Zettlemoyer.
+  "QLoRA: Efficient Finetuning of Quantized LLMs." NeurIPS 2023.
+  arXiv:2305.14314.
+
+The 16-entry NF4 codebook constants reproduced in baracuda's vendored
+launcher header derive from the NF4 paper's inverse-CDF-of-Normal
+construction (see Section 3.1 of arXiv:2305.14314), and are bit-identical
+to the constants used by upstream bitsandbytes.

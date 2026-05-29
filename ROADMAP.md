@@ -409,6 +409,91 @@ Trailblazer-only scope; deferred:
 - **Hybrid Mamba + Attention architectures (Jamba, Zamba)** —
   caller-side orchestration over baracuda primitives.
 
+## Phase 53 — bitsandbytes NF4 vendor (complete; alpha.57, 2026-05-28)
+
+Opens the **QLoRA-trained Llama / Mistral / Qwen inference class** on
+the HuggingFace Hub. NF4 (NormalFloat 4-bit) is the dominant 4-bit
+format for QLoRA-trained prebuilts — distinct from GGUF Q4_0
+(symmetric int4*scale; baracuda Phase 8) and AWQ int4 (asymmetric +
+zp). NF4 uses a 16-entry **non-uniform quantile codebook** derived
+from the inverse CDF of `N(0, 1)` — dequant is a 16-entry lookup,
+not arithmetic.
+
+### What shipped
+
+- **NEW `Nf4DequantizePlan<T>`** — bulk unpack `[N/2, K]` u8 → `[N, K]`
+  T. Primarily a debug / weight-export tool; inference path uses the
+  fused GEMV variants below.
+- **NEW `Nf4MmvqPlan<T>`** — fused dequant + matrix-vector multiply
+  (M=1 single-vector decode). `out[n] = Σ_k codebook[W_q[n, k]] ·
+  absmax[n, k/bs] · y[k]`.
+- **NEW `Nf4MmvqMultiMPlan<T>`** — same op for `M ∈ {1, 2, 4, 8}`
+  reusing each weight gmem read across all M activation rows
+  (Phase 33 GGUF multi-M pattern, applied here to NF4).
+
+11 new FFI symbols (3 dequant + 2 M=1 GEMV + 6 multi-M GEMV). Vendor
+metadata at `crates/baracuda-kernels-sys/vendor/bitsandbytes/{LICENSE,
+AUTHORS,VENDOR.md}` (MIT, Dettmers et al. arXiv:2305.14314). The 16
+codebook constants are reproduced bit-identical to upstream as a
+device-side switch + a host-side `NF4_CODEBOOK: [f32; 16]` const +
+`nf4_pack_weight` host quantize helper for caller weight-prep + tests.
+
+### Cargo feature gate
+
+NEW `bnb_nf4` on both `baracuda-kernels-sys` and `baracuda-kernels`,
+default OFF. Implies `sm80`. The Rust plan types compile
+unconditionally (mirroring the Phase 46 FlashInfer precedent) so the
+public API surface is stable regardless of whether the feature is
+enabled; the FFI dispatch helpers are `cfg`-gated and the `not`
+variants return `Unsupported`.
+
+### Pack layout (matches bitsandbytes upstream `Linear4bit`)
+
+- **Weight** `[N/2, K]` u8 — two 4-bit codes per byte. Row `n` lives
+  at byte `(n/2)*K + k`; low nibble for even `n`, high nibble for
+  odd. N must be **even**.
+- **Absmax** `[N * (K/block_size)]` f32 — per-output-row, per-K-block
+  scale. `block_size` typically 64.
+- **Output** `[M, N]` (GEMV) or `[N, K]` (dequant) in T_act ∈
+  {f16, bf16}.
+
+### Out of scope (deferred)
+
+- **8-bit optimizers** (`Adam8bit`, `Lion8bit`) — Phase 49 Apex
+  multi-tensor optimizers already cover the optimizer-step surface.
+- **LLM.int8()** vector-wise W8A8 with FP16 outlier path — obsoleted
+  by SmoothQuant (Phase 45) + Phase 8 int8 GEMM.
+- **FP4** — different format from NF4 (different codebook); a
+  separate phase if/when a caller asks.
+- **Double quantization of scales** — Tier-2 follow-up. The Phase 53
+  plan reads `absmax` from device memory directly.
+- **PyTorch ATen wrappers** — bitsandbytes is a Python C extension;
+  all Python binding glue is stripped from the vendored sources.
+
+### Tests
+
+3 smoke test files under `crates/baracuda-kernels/tests/`:
+`nf4_dequant_smoke.rs` (host-only codebook constants + monotonicity
+checks; `#[ignore]` device dequant roundtrip), `nf4_gemv_smoke.rs`
+(`#[ignore]` f16 + bf16 M=1 GEMV), `nf4_multim_smoke.rs` (`#[ignore]`
+M ∈ {1, 2, 4, 8} multi-M vs M=1-looped + host-only unsupported-M
+rejection test).
+
+### Tolerances measured
+
+- Roundtrip dequant (f32 path): `< 1e-6` (bit-equivalent — same
+  codebook + same absmax applied on host vs device).
+- M=1 GEMV f16: `< 0.02 * max_ref`.
+- M=1 GEMV bf16: `< 0.04 * max_ref` (bf16's narrower 8-bit mantissa
+  widens the tolerance vs f16's 11-bit).
+- Multi-M vs M=1-looped: `< 0.01 * max_ref` (same math, only the
+  final f16-store ulp drift differs).
+
+NF4 quantization itself is lossy — end-to-end vs original fp32 weight
+is `~1e-2` relative error class. The kernel matches
+*dequantize-then-matmul* tightly; the lossy step is upstream of the
+GPU.
+
 ## Phase 52 — NCCL foundation (complete; alpha.57, 2026-05-28)
 
 NCCL foundation (no callers yet) — the distributed-roadmap

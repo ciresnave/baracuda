@@ -81,6 +81,42 @@ flashinfer = ["sm80"]
 # compile time. Implies `sm80` (atomicAdd for f16/bf16 requires it).
 mamba = ["sm80"]
 
+# Phase 53 — Vendored bitsandbytes NF4 (NormalFloat 4-bit) dequant +
+# GEMV kernels (MIT, Dettmers et al. arXiv:2305.14314). Opens
+# QLoRA-trained Llama / Mistral / Qwen inference on the dominant 4-bit
+# format on the Hugging Face Hub. Compiles the bespoke
+# `baracuda_kernels_nf4_dequantize_*` and `baracuda_kernels_nf4_gemv_*`
+# FFI surfaces. Different from GGUF Q4_0 (symmetric int4 * scale) and
+# AWQ int4 (asymmetric int4 + zero-points): NF4 uses a 16-entry
+# non-uniform quantile codebook. Off by default — adds ~10s of nvcc
+# compile time. No arch implication (the kernels are sm_75+ but the
+# baracuda kernel ABI requires at least sm80 — gating on `sm80`
+# matches the rest of the kernel surface).
+bnb_nf4 = ["sm80"]
+
+# Phase 54 — Clean-room hand-port of facebookresearch/xFormers
+# (BSD-3-Clause) BlockSparseAttention algorithmic reference. Block-
+# sparse SDPA FW where the attention mask is a per-block boolean
+# pattern; only the active (q_block, k_block) pairs participate in the
+# QK^T matmul. Compiles the bespoke
+# `baracuda_kernels_sdpa_{f32,f16,bf16,f64}_block_sparse_*` FFI surface.
+# Off by default — adds ~30s of nvcc compile time. Implies `sm80` (uses
+# Phase 6.6 online-softmax tile pipeline). Independent from
+# `xformers_sparse24`. Attribution + LICENSE at `vendor/xformers/` (no
+# upstream sources vendored verbatim).
+xformers_blocksparse = ["sm80"]
+
+# Phase 54 — Clean-room hand-port of facebookresearch/xFormers
+# (BSD-3-Clause) 2:4 Structured Sparsity GEMM algorithmic reference.
+# Trailblazer uses an inflate-then-dense matmul path (correctness
+# first); sparse-tensor-core perf via `mma.sp.sync` / cuSPARSELt
+# deferred to Tier 2. Compiles the bespoke
+# `baracuda_kernels_gemm_{f32,f16,bf16}_sparse24_*` FFI surface. Off by
+# default. Implies `sm80` (2:4 sparse tensor cores require Ampere; the
+# trailblazer's inflate path is arch-agnostic but we keep the gate
+# uniform with `xformers_blocksparse`).
+xformers_sparse24 = ["sm80"]
+
 [dependencies]
 # Phase 24 — cutlass GEMM FFI re-export. Pull in the CUTLASS template
 # instantiations so the unified `baracuda_kernels_gemm_*` namespace can

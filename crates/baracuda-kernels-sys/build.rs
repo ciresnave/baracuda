@@ -356,6 +356,56 @@ fn main() {
         }
     }
 
+    // Phase 53 — bitsandbytes NF4 (vendored under
+    // `vendor/bitsandbytes/`). Gated by the `bnb_nf4` cargo feature.
+    // Compiles the baracuda C-ABI launcher (`nf4_launcher.cu`) that
+    // template-instantiates the dequant + GEMV kernels from the vendored
+    // headers (`vendor/bitsandbytes/src/nf4_*.cuh`).
+    //
+    // Required include paths:
+    //   `vendor/bitsandbytes/src/` for the launcher's relative
+    //   `#include "../../vendor/bitsandbytes/src/nf4_gemv.cuh"`.
+    //
+    // No special compiler flags — the NF4 kernels use only standard
+    // CUDA built-ins (`__half2float`, `__bfloat162float`, warp shuffles,
+    // no cooperative groups, no cp.async).
+    if cfg!(feature = "bnb_nf4") {
+        builder = builder.include_path("vendor/bitsandbytes/src");
+        for f in &[
+            "kernels/quantize/nf4_launcher.cu",
+        ] {
+            if std::path::Path::new(f).exists() {
+                builder = builder.source_files([*f]);
+            }
+        }
+    }
+
+    // Phase 54 — xFormers cherry-pick (BSD-3-Clause). Two independent
+    // bespoke kernel families ported clean-room from the xFormers
+    // algorithmic reference (no source vendored verbatim; see
+    // `vendor/xformers/VENDOR.md`):
+    //   * `xformers_blocksparse` — block-sparse SDPA FW. Iterates only
+    //     the active (q_block, k_block) pairs per a caller-supplied
+    //     pattern; real speedup on long-context with sparse mask.
+    //   * `xformers_sparse24` — 2:4 structured sparsity GEMM.
+    //     Trailblazer uses an inflate-then-dense path (correctness
+    //     first); sparse-tensor-core perf deferred to Tier 2.
+    // Both features are independent and off by default.
+    if cfg!(feature = "xformers_blocksparse") {
+        for f in &["kernels/attention/sdpa_block_sparse_fp.cu"] {
+            if std::path::Path::new(f).exists() {
+                builder = builder.source_files([*f]);
+            }
+        }
+    }
+    if cfg!(feature = "xformers_sparse24") {
+        for f in &["kernels/gemm/gemm_sparse24_fp.cu"] {
+            if std::path::Path::new(f).exists() {
+                builder = builder.source_files([*f]);
+            }
+        }
+    }
+
     if cfg!(feature = "sm90a") {
         builder = builder.compute_cap(90).arg("-DBARACUDA_KERNELS_HAS_SM90A");
     } else if cfg!(feature = "sm89") {

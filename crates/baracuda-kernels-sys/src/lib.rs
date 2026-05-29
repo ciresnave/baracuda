@@ -41026,3 +41026,332 @@ pub use curand_facade::*;
 mod cutlass_reexport;
 #[cfg(any(feature = "sm80", feature = "sm90a"))]
 pub use cutlass_reexport::*;
+
+// =============================================================================
+// Phase 53 — bitsandbytes NF4 (NormalFloat 4-bit) dequant + GEMV.
+// =============================================================================
+//
+// Vendored under `vendor/bitsandbytes/` (MIT, Dettmers et al.
+// arXiv:2305.14314). Gated behind `feature = "bnb_nf4"` — see the
+// Cargo.toml feature block for the rationale.
+//
+// Packing convention (matches bitsandbytes upstream `Linear4bit`):
+//   * weight `[N/2, K]` u8 — two 4-bit codes per byte. For byte at
+//     row `i`, column `k`: low nibble = code for output row `2*i`,
+//     high nibble = code for output row `2*i+1`.
+//   * absmax `[N * (K / block_size)]` f32 — per-output-row,
+//     per-K-block scale. `block_size` typically 64.
+//   * output `[M, N]` (GEMV) or `[N, K]` (dequant) in T_act ∈
+//     {f16, bf16}. The f32 dequant FFI exists for the
+//     quantize→dequant roundtrip smoke test only.
+//
+// The accumulator stays f32 for every variant. Activation load /
+// destination store handle the T_act ↔ f32 cast.
+//
+// Status codes: `0` success, `2` invalid problem, `5` launch failure.
+
+#[cfg(feature = "bnb_nf4")]
+unsafe extern "C" {
+    // -------- Dequant ----------------------------------------------------
+    /// NF4 dequantize → `[N, K]` `__half`.
+    pub fn baracuda_kernels_nf4_dequantize_f16_run(
+        n: i32, k: i32, block_size: i32,
+        w_packed: *const c_void,
+        absmax: *const c_void,
+        out: *mut c_void,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// NF4 dequantize → `[N, K]` `__nv_bfloat16`.
+    pub fn baracuda_kernels_nf4_dequantize_bf16_run(
+        n: i32, k: i32, block_size: i32,
+        w_packed: *const c_void,
+        absmax: *const c_void,
+        out: *mut c_void,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// NF4 dequantize → `[N, K]` `f32`. Smoke-test path only.
+    pub fn baracuda_kernels_nf4_dequantize_f32_run(
+        n: i32, k: i32, block_size: i32,
+        w_packed: *const c_void,
+        absmax: *const c_void,
+        out: *mut c_void,
+        stream: *mut c_void,
+    ) -> i32;
+
+    // -------- GEMV M=1 ---------------------------------------------------
+    /// NF4 W4A16 GEMV (M=1, single decode vector), f16 activation.
+    pub fn baracuda_kernels_nf4_gemv_m1_f16_run(
+        n: i32, k: i32, block_size: i32,
+        w_packed: *const c_void,
+        absmax: *const c_void,
+        y: *const c_void,
+        out: *mut c_void,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// NF4 W4A16 GEMV (M=1), bf16 activation.
+    pub fn baracuda_kernels_nf4_gemv_m1_bf16_run(
+        n: i32, k: i32, block_size: i32,
+        w_packed: *const c_void,
+        absmax: *const c_void,
+        y: *const c_void,
+        out: *mut c_void,
+        stream: *mut c_void,
+    ) -> i32;
+
+    // -------- GEMV multi-M (compile-time M ∈ {2, 4, 8}) ------------------
+    /// NF4 W4A16 GEMV multi-M=2, f16 activation. Output `[2, N]`.
+    pub fn baracuda_kernels_nf4_gemv_m2_f16_run(
+        n: i32, k: i32, block_size: i32,
+        w_packed: *const c_void,
+        absmax: *const c_void,
+        y: *const c_void,
+        out: *mut c_void,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// NF4 W4A16 GEMV multi-M=4, f16 activation. Output `[4, N]`.
+    pub fn baracuda_kernels_nf4_gemv_m4_f16_run(
+        n: i32, k: i32, block_size: i32,
+        w_packed: *const c_void,
+        absmax: *const c_void,
+        y: *const c_void,
+        out: *mut c_void,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// NF4 W4A16 GEMV multi-M=8, f16 activation. Output `[8, N]`.
+    pub fn baracuda_kernels_nf4_gemv_m8_f16_run(
+        n: i32, k: i32, block_size: i32,
+        w_packed: *const c_void,
+        absmax: *const c_void,
+        y: *const c_void,
+        out: *mut c_void,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// NF4 W4A16 GEMV multi-M=2, bf16 activation.
+    pub fn baracuda_kernels_nf4_gemv_m2_bf16_run(
+        n: i32, k: i32, block_size: i32,
+        w_packed: *const c_void,
+        absmax: *const c_void,
+        y: *const c_void,
+        out: *mut c_void,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// NF4 W4A16 GEMV multi-M=4, bf16 activation.
+    pub fn baracuda_kernels_nf4_gemv_m4_bf16_run(
+        n: i32, k: i32, block_size: i32,
+        w_packed: *const c_void,
+        absmax: *const c_void,
+        y: *const c_void,
+        out: *mut c_void,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// NF4 W4A16 GEMV multi-M=8, bf16 activation.
+    pub fn baracuda_kernels_nf4_gemv_m8_bf16_run(
+        n: i32, k: i32, block_size: i32,
+        w_packed: *const c_void,
+        absmax: *const c_void,
+        y: *const c_void,
+        out: *mut c_void,
+        stream: *mut c_void,
+    ) -> i32;
+}
+
+// =============================================================================
+// Phase 54 — xFormers cherry-pick: BlockSparseAttention (BSD-3-Clause).
+// =============================================================================
+//
+// Block-sparse SDPA FW where the attention mask is a per-block boolean
+// pattern `[B, H, num_blocks_q * num_blocks_k]` (uint8_t). Only the
+// active (q_block, k_block) pairs participate in the QK^T matmul +
+// online-softmax accumulation. Masked blocks are SKIPPED entirely (no
+// K/V load, no compute) — real wall-clock speedup on long-context
+// attention with known sparse patterns.
+//
+// Algorithmic reference: facebookresearch/xformers
+// `components/attention/blocksparse.py`. baracuda's kernel is a clean-
+// room hand-port that reuses the Phase 6.6 online-softmax tile pipeline
+// (see `kernels/include/baracuda_sdpa_block_sparse.cuh`).
+//
+// Layout contract (rank-4, contiguous, row-major):
+//   Q             : [B, H, Q_len, D_k]
+//   K             : [B, H, K_len, D_k]
+//   V             : [B, H, K_len, D_v]
+//   y             : [B, H, Q_len, D_v]
+//   lse           : [B, H, Q_len]
+//   block_pattern : [B, H, num_blocks_q * num_blocks_k]  (uint8_t)
+//
+// Tier-1 constraints:
+//   block_size ∈ [1, 64]
+//   d_k = d_v ≤ 128
+//   FW only (no BW); causal mask supported (composes with the block
+//   pattern — masked blocks AND causal-suppressed cells are skipped).
+//
+// Symbols gated behind the `xformers_blocksparse` cargo feature.
+
+#[cfg(feature = "xformers_blocksparse")]
+unsafe extern "C" {
+    pub fn baracuda_kernels_sdpa_f32_block_sparse_run(
+        batch: i32, heads: i32, q_len: i32, k_len: i32,
+        d_k: i32, d_v: i32, block_size: i32,
+        scale: f32, is_causal: i32,
+        q: *const c_void, k: *const c_void, v: *const c_void,
+        block_pattern: *const c_void,
+        y: *mut c_void, lse: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: u64,
+        stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_sdpa_f16_block_sparse_run(
+        batch: i32, heads: i32, q_len: i32, k_len: i32,
+        d_k: i32, d_v: i32, block_size: i32,
+        scale: f32, is_causal: i32,
+        q: *const c_void, k: *const c_void, v: *const c_void,
+        block_pattern: *const c_void,
+        y: *mut c_void, lse: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: u64,
+        stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_sdpa_bf16_block_sparse_run(
+        batch: i32, heads: i32, q_len: i32, k_len: i32,
+        d_k: i32, d_v: i32, block_size: i32,
+        scale: f32, is_causal: i32,
+        q: *const c_void, k: *const c_void, v: *const c_void,
+        block_pattern: *const c_void,
+        y: *mut c_void, lse: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: u64,
+        stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_sdpa_f64_block_sparse_run(
+        batch: i32, heads: i32, q_len: i32, k_len: i32,
+        d_k: i32, d_v: i32, block_size: i32,
+        scale: f32, is_causal: i32,
+        q: *const c_void, k: *const c_void, v: *const c_void,
+        block_pattern: *const c_void,
+        y: *mut c_void, lse: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: u64,
+        stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_sdpa_f32_block_sparse_can_implement(
+        batch: i32, heads: i32, q_len: i32, k_len: i32,
+        d_k: i32, d_v: i32, block_size: i32,
+    ) -> i32;
+    pub fn baracuda_kernels_sdpa_f16_block_sparse_can_implement(
+        batch: i32, heads: i32, q_len: i32, k_len: i32,
+        d_k: i32, d_v: i32, block_size: i32,
+    ) -> i32;
+    pub fn baracuda_kernels_sdpa_bf16_block_sparse_can_implement(
+        batch: i32, heads: i32, q_len: i32, k_len: i32,
+        d_k: i32, d_v: i32, block_size: i32,
+    ) -> i32;
+    pub fn baracuda_kernels_sdpa_f64_block_sparse_can_implement(
+        batch: i32, heads: i32, q_len: i32, k_len: i32,
+        d_k: i32, d_v: i32, block_size: i32,
+    ) -> i32;
+}
+
+// =============================================================================
+// Phase 54 — xFormers cherry-pick: 2:4 Structured Sparsity GEMM
+// (BSD-3-Clause).
+// =============================================================================
+//
+// 2:4 pattern: in every 4 consecutive weight cells, AT MOST 2 are
+// non-zero. Compressed format:
+//   W_compressed: [M, K/2] of dtype T
+//   W_metadata:   [M, K/8] of uint16_t (2 bytes; each byte encodes one
+//                 4-group's 2 non-zero positions — low 2 bits = pos0,
+//                 bits [2:3] = pos1).
+//
+// Output: Y[N, M] = X[N, K] @ W_dense^T (where W_dense is the inflated
+// [M, K] tensor from W_compressed + W_metadata).
+//
+// Algorithmic reference: facebookresearch/xformers `sparse24/`. baracuda's
+// kernel is a clean-room hand-port (see
+// `kernels/include/baracuda_gemm_sparse24.cuh`).
+//
+// Tier-1 implementation: **inflate-then-dense-matmul** path.
+// Sparse-tensor-core (`mma.sp.sync.aligned`) hardware speedup deferred
+// to Tier 2 alongside cuSPARSELt integration.
+//
+// Layout contract: all row-major contiguous.
+// K must be a multiple of 8 (one uint16 metadata covers 2 4-groups
+// each via the low/high byte).
+//
+// Workspace: `M * K * sizeof(T)` bytes for the inflated dense W tile.
+//
+// Symbols gated behind the `xformers_sparse24` cargo feature.
+
+#[cfg(feature = "xformers_sparse24")]
+unsafe extern "C" {
+    /// Inflate the compressed sparse-24 weight to the dense `[M, K]`
+    /// representation in caller-owned memory. Use this when you want
+    /// to drive the matmul through your own GEMM kernel afterwards.
+    pub fn baracuda_kernels_gemm_f32_sparse24_inflate(
+        m: i32, k: i32,
+        w_compressed: *const c_void, w_metadata: *const c_void,
+        w_dense: *mut c_void,
+        stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_gemm_f16_sparse24_inflate(
+        m: i32, k: i32,
+        w_compressed: *const c_void, w_metadata: *const c_void,
+        w_dense: *mut c_void,
+        stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_gemm_bf16_sparse24_inflate(
+        m: i32, k: i32,
+        w_compressed: *const c_void, w_metadata: *const c_void,
+        w_dense: *mut c_void,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// Reference end-to-end GEMM with on-the-fly inflation through the
+    /// caller-supplied workspace (size = `M * K * sizeof(T)` bytes).
+    /// Output Y[N, M] = X[N, K] @ inflate(W_compressed)^T.
+    pub fn baracuda_kernels_gemm_f32_sparse24_gemm_run(
+        n: i32, m: i32, k: i32,
+        x: *const c_void, w_compressed: *const c_void, w_metadata: *const c_void,
+        y: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: u64,
+        stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_gemm_f16_sparse24_gemm_run(
+        n: i32, m: i32, k: i32,
+        x: *const c_void, w_compressed: *const c_void, w_metadata: *const c_void,
+        y: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: u64,
+        stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_gemm_bf16_sparse24_gemm_run(
+        n: i32, m: i32, k: i32,
+        x: *const c_void, w_compressed: *const c_void, w_metadata: *const c_void,
+        y: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: u64,
+        stream: *mut c_void,
+    ) -> i32;
+
+    pub fn baracuda_kernels_gemm_f32_sparse24_gemm_can_implement(
+        n: i32, m: i32, k: i32,
+    ) -> i32;
+    pub fn baracuda_kernels_gemm_f16_sparse24_gemm_can_implement(
+        n: i32, m: i32, k: i32,
+    ) -> i32;
+    pub fn baracuda_kernels_gemm_bf16_sparse24_gemm_can_implement(
+        n: i32, m: i32, k: i32,
+    ) -> i32;
+
+    pub fn baracuda_kernels_gemm_f32_sparse24_gemm_workspace_bytes(
+        n: i32, m: i32, k: i32,
+    ) -> u64;
+    pub fn baracuda_kernels_gemm_f16_sparse24_gemm_workspace_bytes(
+        n: i32, m: i32, k: i32,
+    ) -> u64;
+    pub fn baracuda_kernels_gemm_bf16_sparse24_gemm_workspace_bytes(
+        n: i32, m: i32, k: i32,
+    ) -> u64;
+}

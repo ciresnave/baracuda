@@ -66,6 +66,14 @@ pub mod smoothquant;
 //     (upstream llama.cpp / Fuel ship only Q8_K dequant). ----
 pub mod gguf;
 
+// --- Phase 53 — bitsandbytes NF4 (NormalFloat 4-bit) dequant + GEMV.
+//     Vendored kernel sources at
+//     `crates/baracuda-kernels-sys/vendor/bitsandbytes/` (MIT,
+//     Dettmers et al. arXiv:2305.14314). Gated behind the `bnb_nf4`
+//     cargo feature; the Rust plan types compile unconditionally so
+//     the public API surface is stable. ----
+pub mod nf4;
+
 pub use dequantize_per_channel::{
     DequantizePerChannelArgs, DequantizePerChannelDescriptor, DequantizePerChannelPlan,
 };
@@ -149,6 +157,15 @@ pub use gguf::{
 // --- Phase 33 export — multi-M MMVQ via Q8_1 activation staging (prefill
 //     speedup). Q8_0 weights only; 4 compile-time M sizes (1/2/4/8). ---
 pub use gguf::{GgufMmvqMultiMArgs, GgufMmvqMultiMDescriptor, GgufMmvqMultiMPlan};
+
+// --- Phase 53 exports — bitsandbytes NF4 dequant + GEMV (QLoRA
+//     inference path; behind `bnb_nf4` feature). Plan types are
+//     always exported; the FFI dispatch is feature-gated inside the
+//     plan's `run()` method. ----
+pub use nf4::{
+    Nf4Activation, Nf4DequantizeArgs, Nf4DequantizePlan, Nf4Descriptor, Nf4MmvqArgs,
+    Nf4MmvqMultiMArgs, Nf4MmvqMultiMDescriptor, Nf4MmvqMultiMPlan, Nf4MmvqPlan, NF4_CODEBOOK,
+};
 
 use baracuda_cutlass::{Error, Result};
 
