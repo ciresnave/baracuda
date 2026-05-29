@@ -143,6 +143,7 @@ fn flash_sdpa_sm89_f16_basic() {
                     shape: sl,
                     stride: contiguous_stride(sl),
                 },
+                mask: None,
             },
         )
         .expect("ref run");
@@ -296,6 +297,7 @@ fn flash_sdpa_sm89_bf16_basic() {
                     shape: sl,
                     stride: contiguous_stride(sl),
                 },
+                mask: None,
             },
         )
         .expect("ref run");
@@ -445,6 +447,7 @@ fn flash_sdpa_sm89_f16_causal() {
                     shape: sl,
                     stride: contiguous_stride(sl),
                 },
+                mask: None,
             },
         )
         .expect("ref run");

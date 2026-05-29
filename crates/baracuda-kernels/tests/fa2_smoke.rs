@@ -232,6 +232,7 @@ fn run_correctness_f16(is_causal: bool) {
                     shape: sl,
                     stride: contiguous_stride(sl),
                 },
+                mask: None,
             },
         )
         .expect("bespoke run");
@@ -280,6 +281,7 @@ fn run_correctness_f16(is_causal: bool) {
                     shape: sl,
                     stride: contiguous_stride(sl),
                 },
+                mask: None,
             },
         )
         .expect("fa2 run");
@@ -379,6 +381,7 @@ fn run_correctness_bf16(is_causal: bool) {
                 v: TensorRef { data: dv.as_slice(), shape: sv, stride: contiguous_stride(sv) },
                 y: TensorMut { data: dy_ref.as_slice_mut(), shape: sy, stride: contiguous_stride(sy) },
                 lse: TensorMut { data: dlse_ref.as_slice_mut(), shape: sl, stride: contiguous_stride(sl) },
+                mask: None,
             },
         )
         .expect("bespoke bf16 run");
@@ -405,6 +408,7 @@ fn run_correctness_bf16(is_causal: bool) {
                 v: TensorRef { data: dv.as_slice(), shape: sv, stride: contiguous_stride(sv) },
                 y: TensorMut { data: dy_fa2.as_slice_mut(), shape: sy, stride: contiguous_stride(sy) },
                 lse: TensorMut { data: dlse_fa2.as_slice_mut(), shape: sl, stride: contiguous_stride(sl) },
+                mask: None,
             },
         )
         .expect("fa2 bf16 run");
@@ -513,6 +517,7 @@ fn fa2_capture_falls_back_to_bespoke() {
             v: TensorRef { data: dv.as_slice(), shape: sv, stride: contiguous_stride(sv) },
             y: TensorMut { data: dy.as_slice_mut(), shape: sy, stride: contiguous_stride(sy) },
             lse: TensorMut { data: dlse.as_slice_mut(), shape: sl, stride: contiguous_stride(sl) },
+                mask: None,
         },
     )
     .expect("captured run (should fallback to bespoke without error)");

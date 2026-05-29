@@ -130,6 +130,7 @@ fn flash_sdpa_sm89_strided_f16_contig_fast_path() {
                     shape: sl,
                     stride: contiguous_stride(sl),
                 },
+                mask: None,
             },
         )
         .expect("ref run");
@@ -291,6 +292,7 @@ fn flash_sdpa_sm89_strided_f16_transposed_q() {
                     shape: sl,
                     stride: contiguous_stride(sl),
                 },
+                mask: None,
             },
         )
         .expect("ref run");
@@ -468,6 +470,7 @@ fn flash_sdpa_sm89_strided_f16_gqa_broadcast() {
                     shape: sl,
                     stride: contiguous_stride(sl),
                 },
+                mask: None,
             },
         )
         .expect("ref run");
@@ -646,6 +649,7 @@ fn flash_sdpa_sm89_strided_bf16_transposed_q_causal() {
                     shape: sl,
                     stride: contiguous_stride(sl),
                 },
+                mask: None,
             },
         )
         .expect("ref run");

@@ -191,6 +191,7 @@ fn run_f32(is_causal: bool) {
                 shape: sl,
                 stride: contiguous_stride(sl),
             },
+                mask: None,
         },
     )
     .expect("flash run");
@@ -354,6 +355,7 @@ fn flash_sdpa_f64_basic() {
                 shape: sl,
                 stride: contiguous_stride(sl),
             },
+                mask: None,
         },
     )
     .expect("run");
@@ -501,6 +503,7 @@ fn flash_sdpa_f16_basic() {
                 shape: sl,
                 stride: contiguous_stride(sl),
             },
+                mask: None,
         },
     )
     .expect("run");
@@ -655,6 +658,7 @@ fn flash_sdpa_bf16_basic() {
                 shape: sl,
                 stride: contiguous_stride(sl),
             },
+                mask: None,
         },
     )
     .expect("run");

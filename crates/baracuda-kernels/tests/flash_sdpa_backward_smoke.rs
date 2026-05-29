@@ -206,6 +206,7 @@ fn flash_sdpa_backward_f32_basic() {
                 v: TensorRef { data: dv_dev.as_slice(), shape: sv, stride: contiguous_stride(sv) },
                 y: TensorMut { data: dy_flash.as_slice_mut(), shape: sy, stride: contiguous_stride(sy) },
                 lse: TensorMut { data: dlse.as_slice_mut(), shape: sl, stride: contiguous_stride(sl) },
+                mask: None,
             },
         )
         .expect("flash fw");
@@ -421,6 +422,7 @@ fn flash_sdpa_backward_f64_basic() {
                 v: TensorRef { data: dv_dev.as_slice(), shape: sv, stride: contiguous_stride(sv) },
                 y: TensorMut { data: dy_flash.as_slice_mut(), shape: sy, stride: contiguous_stride(sy) },
                 lse: TensorMut { data: dlse.as_slice_mut(), shape: sl, stride: contiguous_stride(sl) },
+                mask: None,
             },
         )
         .expect("flash fw");
@@ -582,6 +584,7 @@ fn flash_sdpa_backward_f16_basic() {
         v: TensorRef { data: dv_dev.as_slice(), shape: sv, stride: contiguous_stride(sv) },
         y: TensorMut { data: dy_flash.as_slice_mut(), shape: sy, stride: contiguous_stride(sy) },
         lse: TensorMut { data: dlse.as_slice_mut(), shape: sl, stride: contiguous_stride(sl) },
+                mask: None,
     }).expect("");
     stream.synchronize().expect("");
 
@@ -722,6 +725,7 @@ fn flash_sdpa_backward_bf16_basic() {
         v: TensorRef { data: dv_dev.as_slice(), shape: sv, stride: contiguous_stride(sv) },
         y: TensorMut { data: dy_flash.as_slice_mut(), shape: sy, stride: contiguous_stride(sy) },
         lse: TensorMut { data: dlse.as_slice_mut(), shape: sl, stride: contiguous_stride(sl) },
+                mask: None,
     }).expect("");
     stream.synchronize().expect("");
 

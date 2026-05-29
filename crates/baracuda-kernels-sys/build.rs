@@ -813,6 +813,13 @@ fn collect_kernel_files() -> Vec<&'static str> {
             // `lse` ([B, H, Q]) replaces the saved `attn` of naive SDPA.
             "attention/flash_sdpa_fp.cu",
             "attention/flash_sdpa_backward_fp.cu",
+            // Phase 51 — arbitrary additive-mask attention FW. Same
+            // online-softmax algorithm as flash_sdpa_fp.cu with an
+            // extra `mask: f32[B, H, Q, K]` bias applied to S before
+            // softmax. Unlocks spec-decode tree masks, MoE expert
+            // masking, prefix-LM, sliding-window-with-sinks. FW only;
+            // BW deferred (Tier 2). f32 / f16 / bf16 / f64.
+            "attention/attn_arbmask_fp.cu",
             // Milestone 6.4 — cuFFT companion kernels. fftshift /
             // ifftshift (cuFFT has no native shift) at 4/8/16-byte cell
             // widths covering f32 / f64 / Complex32 / Complex64; plus

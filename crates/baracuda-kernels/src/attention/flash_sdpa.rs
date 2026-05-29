@@ -170,6 +170,30 @@ pub struct FlashSdpaArgs<'a, T: Element> {
     /// `m_i + log(l_i)` after the FW pass; consumed by the
     /// [`FlashSdpaBackwardPlan`](crate::FlashSdpaBackwardPlan).
     pub lse: TensorMut<'a, T, 3>,
+    /// Optional arbitrary additive attention mask — shape
+    /// `[B, H, Q, K]`, contiguous, **always f32 regardless of `T`**.
+    /// Added to the score tile `S = Q·K^T·scale` **before** softmax.
+    ///
+    /// Use `-INFINITY` cells for exact suppression; finite values are
+    /// arbitrary additive biases. Composes with `desc.is_causal`
+    /// (causal-masked cells become `-INFINITY`, then the additive mask
+    /// adds — `a + -INF == -INF` for finite `a`, so causal cells stay
+    /// suppressed regardless of mask).
+    ///
+    /// When `Some(...)`, the plan routes through the arbitrary-mask
+    /// SDPA kernel (Phase 51) regardless of the FA2 heuristic — FA2
+    /// Tier-1 (Phase 42) does not plumb arbitrary masks. When `None`
+    /// (default), the original Phase 42 routing applies (FA2 for
+    /// long-context f16/bf16 head_dim=128, bespoke otherwise).
+    ///
+    /// Tier-1 constraints (Phase 51):
+    ///
+    /// - Dense / contiguous mask (no broadcast or strided masks).
+    /// - Tier-1 dtype set is `{f32, f16, bf16, f64}` for `T`; mask
+    ///   itself is always f32.
+    /// - FW only (BW deferred to Phase 51 Tier 2 — same deferral as
+    ///   the FA2 vendor).
+    pub mask: Option<TensorRef<'a, f32, 4>>,
 }
 
 /// Flash Attention forward plan (Tri Dao 2022).
@@ -365,6 +389,29 @@ impl<T: Element> FlashSdpaPlan<T> {
                 "baracuda-kernels::FlashSdpaPlan: trailblazer requires contiguous tensors",
             ));
         }
+        // Phase 51 — validate the optional arbitrary mask.
+        if let Some(mask) = args.mask.as_ref() {
+            let shape_mask = [
+                self.desc.batch_size,
+                self.desc.num_heads,
+                self.desc.query_len,
+                self.desc.key_len,
+            ];
+            if mask.shape != shape_mask {
+                return Err(Error::InvalidProblem(
+                    "baracuda-kernels::FlashSdpaPlan: mask shape must be [B, H, Q, K]",
+                ));
+            }
+            if !mask.is_contiguous() {
+                return Err(Error::Unsupported(
+                    "baracuda-kernels::FlashSdpaPlan: mask must be contiguous in Tier 1",
+                ));
+            }
+            let m_n = mask.numel();
+            if (mask.data.len() as i64) < m_n {
+                return Err(Error::BufferTooSmall { needed: m_n as usize, got: 0 });
+            }
+        }
         let q_n = args.q.numel();
         let k_n = args.k.numel();
         let v_n = args.v.numel();
@@ -440,6 +487,20 @@ impl<T: Element> FlashSdpaPlan<T> {
         let y_ptr = args.y.data.as_raw().0 as *mut c_void;
         let lse_ptr = args.lse.data.as_raw().0 as *mut c_void;
         let is_causal_flag = if self.desc.is_causal { 1 } else { 0 };
+
+        // Phase 51 — arbitrary-mask path. When `mask.is_some()`, route
+        // through the dedicated arbmask SDPA kernels regardless of
+        // backend heuristic. FA2 Tier 1 (Phase 42) does not plumb
+        // arbitrary masks (FA2 v2.8.3's `Mask` template only covers
+        // causal/local/alibi). The arbmask kernel is the bespoke
+        // online-softmax FW with an extra f32 [B, H, Q, K] additive
+        // bias applied to S before softmax.
+        if let Some(mask) = args.mask.as_ref() {
+            let _ = workspace; // arbmask path is workspace-free
+            let mask_ptr = mask.data.as_raw().0 as *const c_void;
+            return self.run_arbmask(stream_ptr, q_ptr, k_ptr, v_ptr, mask_ptr,
+                                    y_ptr, lse_ptr, is_causal_flag);
+        }
 
         // Phase 42 — FA2 dispatch path. Capture-mode triggers an
         // auto-fallback to bespoke (FA2's launch-time
@@ -635,6 +696,95 @@ impl<T: Element> FlashSdpaPlan<T> {
             _ => {
                 return Err(Error::Unsupported(
                     "baracuda-kernels::FlashSdpaPlan::run_fa2: FA2 supports only f16 / bf16",
+                ));
+            }
+        };
+        map_status(status)
+    }
+
+    /// Phase 51 — arbitrary additive-mask FW launch.
+    ///
+    /// Routes a `FlashSdpaArgs` with `mask = Some(_)` to the bespoke
+    /// arbmask kernel family (`baracuda_kernels_sdpa_{f32,f16,bf16,
+    /// f64}_arbmask_run`). The bespoke FA2 vendor does not handle
+    /// arbitrary masks under Tier 1, so this path is the universal
+    /// arbmask backend regardless of the backend heuristic.
+    ///
+    /// Kernel composes `is_causal` with the mask: causal cells become
+    /// `-INFINITY` first, then the additive mask add leaves them at
+    /// `-INFINITY` (`a + -INF == -INF` for finite `a`). Tier-1 dtypes:
+    /// {f32, f16, bf16, f64}.
+    fn run_arbmask(
+        &self,
+        stream_ptr: *mut c_void,
+        q_ptr: *const c_void,
+        k_ptr: *const c_void,
+        v_ptr: *const c_void,
+        mask_ptr: *const c_void,
+        y_ptr: *mut c_void,
+        lse_ptr: *mut c_void,
+        is_causal_flag: i32,
+    ) -> Result<()> {
+        let status = match T::KIND {
+            ElementKind::F32 => unsafe {
+                baracuda_kernels_sys::baracuda_kernels_sdpa_f32_arbmask_run(
+                    self.desc.batch_size,
+                    self.desc.num_heads,
+                    self.desc.query_len,
+                    self.desc.key_len,
+                    self.desc.d_k,
+                    self.desc.d_v,
+                    self.desc.scale,
+                    is_causal_flag,
+                    q_ptr, k_ptr, v_ptr, mask_ptr, y_ptr, lse_ptr,
+                    core::ptr::null_mut(), 0, stream_ptr,
+                )
+            },
+            ElementKind::F16 => unsafe {
+                baracuda_kernels_sys::baracuda_kernels_sdpa_f16_arbmask_run(
+                    self.desc.batch_size,
+                    self.desc.num_heads,
+                    self.desc.query_len,
+                    self.desc.key_len,
+                    self.desc.d_k,
+                    self.desc.d_v,
+                    self.desc.scale,
+                    is_causal_flag,
+                    q_ptr, k_ptr, v_ptr, mask_ptr, y_ptr, lse_ptr,
+                    core::ptr::null_mut(), 0, stream_ptr,
+                )
+            },
+            ElementKind::Bf16 => unsafe {
+                baracuda_kernels_sys::baracuda_kernels_sdpa_bf16_arbmask_run(
+                    self.desc.batch_size,
+                    self.desc.num_heads,
+                    self.desc.query_len,
+                    self.desc.key_len,
+                    self.desc.d_k,
+                    self.desc.d_v,
+                    self.desc.scale,
+                    is_causal_flag,
+                    q_ptr, k_ptr, v_ptr, mask_ptr, y_ptr, lse_ptr,
+                    core::ptr::null_mut(), 0, stream_ptr,
+                )
+            },
+            ElementKind::F64 => unsafe {
+                baracuda_kernels_sys::baracuda_kernels_sdpa_f64_arbmask_run(
+                    self.desc.batch_size,
+                    self.desc.num_heads,
+                    self.desc.query_len,
+                    self.desc.key_len,
+                    self.desc.d_k,
+                    self.desc.d_v,
+                    self.desc.scale,
+                    is_causal_flag,
+                    q_ptr, k_ptr, v_ptr, mask_ptr, y_ptr, lse_ptr,
+                    core::ptr::null_mut(), 0, stream_ptr,
+                )
+            },
+            _ => {
+                return Err(Error::Unsupported(
+                    "baracuda-kernels::FlashSdpaPlan::run_arbmask: dtype not in {f32, f16, bf16, f64}",
                 ));
             }
         };

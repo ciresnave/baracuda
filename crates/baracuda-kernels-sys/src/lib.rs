@@ -28093,6 +28093,143 @@ unsafe extern "C" {
         stream: *mut c_void,
     ) -> i32;
 
+    // =========================================================================
+    // Phase 51 — arbitrary additive-mask attention FW.
+    //
+    // Same online-softmax algorithm as the `flash_sdpa_*_run` family with
+    // an additional `mask: f32[B, H, Q, K]` additive bias applied to
+    // S = Q·K^T·scale before the row max/softmax. Mask is **always f32**
+    // regardless of element dtype — additive-bias precision is decoupled
+    // from QKV precision and keeps the FFI surface compact. Use
+    // `-INFINITY` cells in the mask to suppress exactly.
+    //
+    // Tier-1 dtype set: {f32, f16, bf16, f64}. FW only (BW deferred to
+    // Tier 2 — same as the FA2 vendor's deferral).
+    // =========================================================================
+
+    /// Arbitrary additive-mask SDPA FW, f32. `mask` shape `[B, H, Q, K]`
+    /// f32, applied as an additive bias on the score tile before softmax.
+    pub fn baracuda_kernels_sdpa_f32_arbmask_run(
+        batch: i32,
+        heads: i32,
+        q_len: i32,
+        k_len: i32,
+        d_k: i32,
+        d_v: i32,
+        scale: f32,
+        is_causal: i32,
+        q: *const c_void,
+        k: *const c_void,
+        v: *const c_void,
+        mask: *const c_void,
+        y: *mut c_void,
+        lse: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    /// Arbitrary additive-mask SDPA FW, f16 (f32 accumulators).
+    pub fn baracuda_kernels_sdpa_f16_arbmask_run(
+        batch: i32,
+        heads: i32,
+        q_len: i32,
+        k_len: i32,
+        d_k: i32,
+        d_v: i32,
+        scale: f32,
+        is_causal: i32,
+        q: *const c_void,
+        k: *const c_void,
+        v: *const c_void,
+        mask: *const c_void,
+        y: *mut c_void,
+        lse: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    /// Arbitrary additive-mask SDPA FW, bf16 (f32 accumulators).
+    pub fn baracuda_kernels_sdpa_bf16_arbmask_run(
+        batch: i32,
+        heads: i32,
+        q_len: i32,
+        k_len: i32,
+        d_k: i32,
+        d_v: i32,
+        scale: f32,
+        is_causal: i32,
+        q: *const c_void,
+        k: *const c_void,
+        v: *const c_void,
+        mask: *const c_void,
+        y: *mut c_void,
+        lse: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    /// Arbitrary additive-mask SDPA FW, f64.
+    pub fn baracuda_kernels_sdpa_f64_arbmask_run(
+        batch: i32,
+        heads: i32,
+        q_len: i32,
+        k_len: i32,
+        d_k: i32,
+        d_v: i32,
+        scale: f32,
+        is_causal: i32,
+        q: *const c_void,
+        k: *const c_void,
+        v: *const c_void,
+        mask: *const c_void,
+        y: *mut c_void,
+        lse: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// Arbitrary-mask SDPA host-side can-implement, f32.
+    pub fn baracuda_kernels_sdpa_f32_arbmask_can_implement(
+        batch: i32,
+        heads: i32,
+        q_len: i32,
+        k_len: i32,
+        d_k: i32,
+        d_v: i32,
+        is_causal: i32,
+    ) -> i32;
+    /// Arbitrary-mask SDPA host-side can-implement, f16.
+    pub fn baracuda_kernels_sdpa_f16_arbmask_can_implement(
+        batch: i32,
+        heads: i32,
+        q_len: i32,
+        k_len: i32,
+        d_k: i32,
+        d_v: i32,
+        is_causal: i32,
+    ) -> i32;
+    /// Arbitrary-mask SDPA host-side can-implement, bf16.
+    pub fn baracuda_kernels_sdpa_bf16_arbmask_can_implement(
+        batch: i32,
+        heads: i32,
+        q_len: i32,
+        k_len: i32,
+        d_k: i32,
+        d_v: i32,
+        is_causal: i32,
+    ) -> i32;
+    /// Arbitrary-mask SDPA host-side can-implement, f64.
+    pub fn baracuda_kernels_sdpa_f64_arbmask_can_implement(
+        batch: i32,
+        heads: i32,
+        q_len: i32,
+        k_len: i32,
+        d_k: i32,
+        d_v: i32,
+        is_causal: i32,
+    ) -> i32;
+
     /// Flash SDPA BW, f32. Given the FW-saved `y`, `lse`, plus upstream
     /// `dy`, computes `dQ`, `dK`, `dV`. The `d_ws` argument is a
     /// caller-allocated `[B, H, Q]` scratch buffer (overwritten with the

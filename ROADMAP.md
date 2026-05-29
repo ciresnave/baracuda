@@ -154,6 +154,7 @@ Phase 50b pending a v1-specific consumer (Mamba-7B).
   `baracuda-kernels-types` (`#[non_exhaustive]` so source-compat).
 
 Trailblazer-only scope; deferred:
+
 - **Mamba-1 selective_scan** — Phase 50b if a v1-specific consumer asks.
 - **Variable-length sequences** (`cu_seqlens` style).
 - **Paged SSM state** (analog of paged-attention).
@@ -164,6 +165,59 @@ Trailblazer-only scope; deferred:
   through baracuda's GEMM stack for intra/inter chunk matmul.
 - **Hybrid Mamba + Attention architectures (Jamba, Zamba)** —
   caller-side orchestration over baracuda primitives.
+
+## Phase 52 — NCCL foundation (complete; alpha.57, 2026-05-28)
+
+NCCL foundation (no callers yet) — the distributed-roadmap
+prerequisite for Ring Attention, distributed MoE, Megatron TP,
+FSDP collectives. Phase 52 only ships the substrate; consumer plans
+land in Phase 53+.
+
+- **`baracuda-nccl-sys`** — raw FFI types + 30+ function-pointer
+  typedefs + `Nccl` struct with libloading lazy-resolve (candidates
+  `libnccl.so.2` / `libnccl.so` on Linux, `nccl.dll` / `libnccl.dll`
+  on Windows). **No bindgen, no link-time dep on libnccl** — first
+  `nccl()` call returns `LoaderError::LibraryNotFound` on hosts
+  without NCCL. `cargo:rerun-if-env-changed=NCCL_ROOT` in build.rs.
+- **`baracuda-nccl`** — safe `Communicator` (RAII, `Drop` →
+  `ncclCommDestroy`) covering every collective: `all_reduce` /
+  `reduce` / `reduce_scatter` / `all_gather` / `broadcast` +
+  point-to-point `send` / `recv` + group API + `Communicator::split`
+  / `abort` / `finalize` / `get_async_error` / `register` /
+  `deregister` (zero-copy collectives) + `NcclMem` allocator +
+  `create_pre_mul_sum` custom reduction op (NCCL 2.11+) +
+  `last_error` (NCCL 2.13+). Sealed `NcclScalar` trait for
+  i8/u8/i32/u32/i64/u64/f32/f64 with optional `half::f16` /
+  `half::bf16` behind `half-crate` feature.
+- **Spec-compliant API surface (Phase 52 additions)**:
+  `Communicator::new_single_gpu(device)` — convenience for the
+  single-GPU smoke-test case; `new_with_id(id, world_size, rank)` —
+  multi-process / cluster-join path; cached infallible
+  `rank() -> i32` + `world_size() -> i32` (was `Result<i32>`,
+  technically breaking but only the in-crate test used the old API);
+  instance-method `comm.all_reduce(send, recv, op, stream)` and
+  `comm.broadcast(buf, root, stream)`; associated-function
+  `Communicator::group_start()` / `group_end()`; `NcclReduceOp` /
+  `NcclUniqueId` / `NcclDataType` aliases for the spec names;
+  `NcclUniqueId::generate()` alias for `UniqueId::new()`.
+- **Three smoke test files**: `dtypes_smoke.rs` (10 active tests —
+  no NCCL/GPU needed; runs on Windows), `single_gpu_smoke.rs` (7
+  ignored tests exercising every collective), `unique_id_smoke.rs`
+  (3 ignored tests for `generate()` + byte-cast roundtrip).
+  Pre-existing `smoke.rs` (2 ignored tests) updated to call the
+  new infallible `rank()` / `world_size()`.
+
+Out of scope for Phase 52 (deferred to Phase 53+):
+
+- Multi-rank correctness validation (needs 2+ GPUs or a process-
+  spawning test harness — not available in single-RTX-4070 dev env).
+- NCCL plugins (custom transport backends).
+- NVSHMEM integration (flagged as awkward in the FlashMoE recon).
+- Any kernels using NCCL — first consumer likely Ring Attention.
+- Windows physical link — `baracuda-nccl-sys/build.rs` doesn't
+  probe; the loader simply fails at first `nccl()` call. Consistent
+  with how every other `baracuda-*-sys` crate behaves on hosts
+  without the underlying library.
 
 ## How this file gets updated
 
