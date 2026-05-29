@@ -85,22 +85,22 @@ fn main() {
     }
 
     use baracuda_forge::KernelBuilder;
-    let mut builder = KernelBuilder::new()
+    let builder = KernelBuilder::new()
         .source_files(all_sources.iter().map(|p| p.to_string_lossy().into_owned()))
         .include_path("cuda/include")
         .include_path("cuda")
         .include_path(kernels_sys_include.to_string_lossy().into_owned())
-        // gemm.cu uses CUB-style separable compilation; preserve
-        // `-rdc=true` to allow host-device template instantiations
-        // across TUs. Matches the upstream CMakeLists'
-        // `CUDA_SEPARABLE_COMPILATION ON`.
-        .arg("-rdc=true")
-        .out_dir(&out_dir);
-
-    // Architecture: sm_89 default (RTX 4070 test target). Add sm_80
-    // + sm_90a as additional gencode targets so the same archive runs
-    // across Ampere / Ada / Hopper without rebuild.
-    builder = builder
+        // Note: upstream's CMakeLists set `CUDA_SEPARABLE_COMPILATION ON`
+        // for the LD_PRELOAD path. The baracuda integration doesn't need
+        // it — each TU's device kernels are self-contained (no cross-TU
+        // device-side template instantiations after the Phase 44b
+        // restructure). Avoiding `-rdc=true` removes the need to link
+        // `cudadevrt` + run a `--device-link` post-step, which complicates
+        // the static-archive build under Rust's cargo.
+        .out_dir(&out_dir)
+        // Architecture: sm_89 default (RTX 4070 test target). Add sm_80
+        // + sm_90a as additional gencode targets so the same archive runs
+        // across Ampere / Ada / Hopper without rebuild.
         .compute_cap(89)
         .arg("-gencode=arch=compute_80,code=sm_80")
         .arg("-gencode=arch=compute_90a,code=sm_90a");
@@ -122,10 +122,10 @@ fn main() {
         println!("cargo:rustc-link-lib=dylib=stdc++");
     }
 
-    // CUDA device-runtime link library for `-rdc=true` separable
-    // compilation. Required because gemm.cu spans multiple TUs with
-    // device-side template instantiations.
-    println!("cargo:rustc-link-lib=static=cudadevrt");
+    // No `cudadevrt` needed — we don't pass `-rdc=true` so each TU is
+    // self-contained and the device-runtime link library isn't
+    // referenced. See the upstream-CMake-vs-baracuda-build note in
+    // the KernelBuilder configuration above.
 }
 
 fn lib_static_path(out_dir: &str, name: &str) -> String {
