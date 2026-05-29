@@ -247,6 +247,10 @@ pub use attention::{
     SdpaDescriptor, SdpaPlan, FLASH_SDPA_MAX_D, ROPE_DEFAULT_BASE,
 };
 
+// Phase 45 — long-context RoPE scaling helpers (pure-Rust host-side
+// cos/sin table builders for YaRN + LongRoPE).
+pub use attention::{RopeScaledTableBuilder, RopeScaling};
+
 // Phase 10 Milestone 10.3 — sm_89 (Ada Lovelace) Flash Attention FW
 // sibling. Same descriptor / args shape as the sm_80 baseline so callers
 // swap plans by changing the type, with `cp.async` double-buffered K/V
@@ -437,6 +441,12 @@ pub use quantize::{
     DynamicRangeMode, DynamicRangeQuantizeArgs, DynamicRangeQuantizeDescriptor,
     DynamicRangeQuantizePlan, DynamicRangeScope, QuantizedLinearArgs,
     QuantizedLinearDescriptor, QuantizedLinearPlan,
+};
+
+// Phase 45 — SmoothQuant linear (pure Rust composition over the
+// existing `quantized_linear_w8a8` kernel; zero new CUDA).
+pub use quantize::{
+    SmoothQuantLinearArgs, SmoothQuantLinearDescriptor, SmoothQuantLinearPlan,
 };
 
 // Milestone 8.4 — GGUF block-format dequant + MMVQ (Category P).

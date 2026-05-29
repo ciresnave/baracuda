@@ -56,6 +56,10 @@ pub mod per_token_backward;
 pub mod dynamic_range;
 pub mod quantized_linear;
 
+// --- Phase 45 module — SmoothQuant linear (pure Rust composition over
+//     the existing `quantized_linear_w8a8` kernel; zero new CUDA). ----
+pub mod smoothquant;
+
 // --- Milestone 8.4 module — GGUF block-format quant family (vendored
 //     from llama.cpp via fuel-cuda-kernels). Full block-format coverage
 //     for both dequant and MMVQ. Phase 11.4 added a bespoke Q8_K MMVQ
@@ -121,6 +125,11 @@ pub use dynamic_range::{
 };
 pub use quantized_linear::{
     QuantizedLinearArgs, QuantizedLinearDescriptor, QuantizedLinearPlan,
+};
+
+// --- Phase 45 export — SmoothQuant linear (pure Rust composition). ---
+pub use smoothquant::{
+    SmoothQuantLinearArgs, SmoothQuantLinearDescriptor, SmoothQuantLinearPlan,
 };
 
 // --- Milestone 8.4 exports — GGUF block-format dequant + MMVQ ---

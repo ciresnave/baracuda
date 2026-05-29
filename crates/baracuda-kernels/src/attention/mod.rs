@@ -74,6 +74,9 @@ pub mod kv_cache;
 pub mod hyper_connection;
 pub mod rope;
 pub mod rope_backward;
+// Phase 45 — long-context position-interpolation helpers (host-side
+// cos/sin table builders for YaRN + LongRoPE). Pure Rust; no CUDA.
+pub mod rope_scaling;
 pub mod sdpa;
 pub mod sdpa_backward;
 
@@ -91,6 +94,8 @@ pub use hyper_connection::{
 pub use kv_cache::{KvCacheAppendArgs, KvCacheAppendDescriptor, KvCacheAppendPlan};
 pub use rope::{RopeArgs, RopeDescriptor, RopePlan};
 pub use rope_backward::{RopeBackwardArgs, RopeBackwardDescriptor, RopeBackwardPlan};
+// Phase 45 — RoPE scaling helpers.
+pub use rope_scaling::{RopeScaledTableBuilder, RopeScaling};
 pub use sdpa::{SdpaArgs, SdpaDescriptor, SdpaPlan};
 pub use sdpa_backward::{SdpaBackwardArgs, SdpaBackwardDescriptor, SdpaBackwardPlan};
 
