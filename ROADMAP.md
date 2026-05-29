@@ -494,6 +494,113 @@ is `~1e-2` relative error class. The kernel matches
 *dequantize-then-matmul* tightly; the lossy step is upstream of the
 GPU.
 
+## Phase 48 — Marlin + AWQ 4-bit GEMM (complete; alpha.57, 2026-05-28)
+
+Two complementary 4-bit GEMM vendors completing the "4-bit hub
+coverage" started in Phase 53 (NF4). Each opens a separate slice of
+the production-LLM 4-bit inference space:
+
+- **Marlin** (IST-DASLab, Apache-2.0 + §3 patent grant) — state-of-
+  the-art W4A16 GEMM for the decode-batch regime, reports ~3.87×
+  speedup over FP16 GEMM at M ∈ [1, 32] on Ampere / Ada per the
+  paper. **Symmetric** int4 (zero-point fused into dequant as
+  `q - 8`). Vendored at `crates/baracuda-kernels-sys/vendor/marlin/`.
+
+- **AWQ** (mit-han-lab, MIT — no patent grant) — natively supports
+  the **most-deployed 4-bit format on the Hugging Face Hub**
+  (Llama / Mistral / Qwen prebuilts published as `*-AWQ`).
+  **Asymmetric** int4 with explicit per-group zero-points; loads
+  directly from HF checkpoints without repack. Vendored at
+  `crates/baracuda-kernels-sys/vendor/awq/`.
+
+- **GPTQ → Marlin repack utility** — pure-Rust host-side bridge
+  converting GPTQ-format asymmetric int4 weights into Marlin's
+  symmetric layout via zero-point absorption. Lives at
+  `crates/baracuda-kernels/src/gemm/gptq_to_marlin.rs`. Trailblazer
+  implementation — uses identity intra-fragment permutation (the
+  upstream Marlin `_perm` / `_scale_perm` tables are documented as
+  follow-up scope); act_order=True checkpoints are rejected with
+  a clear error message (caller can re-quantize with desc_act=False
+  or wait for the Phase 48 follow-up).
+
+### What shipped
+
+- **NEW `Int4MarlinGemmPlan<f16>`** — fp16-only (upstream is
+  fp16-only; bf16 deferred). Group size 128 or per-channel. sm_80 /
+  sm_86 / sm_89 (sm_90 NOT supported — Marlin requires a WGMMA
+  rewrite for Hopper).
+- **NEW `Int4AwqGemmPlan<f16>`** — fp16-only. Group size 64 or 128.
+  OC must be divisible by 64; IC must be divisible by
+  `32 * split_k_iters`.
+- **NEW `gptq_to_marlin_repack(GptqWeights) → MarlinWeights`** host
+  utility (no GPU dependency).
+
+### FFI surface
+
+- `baracuda_kernels_int4_marlin_gemm_f16_run` + `_can_implement`
+  (gated behind `marlin`).
+- `baracuda_kernels_int4_awq_gemm_f16_run` +
+  `_workspace_bytes` + `_can_implement` + `_dequantize_f16_run`
+  stub (gated behind `awq`).
+
+### Cargo feature gates
+
+NEW `marlin` and `awq` on both `baracuda-kernels-sys` and
+`baracuda-kernels`, both default OFF. Each implies `sm80`. Rust
+plan types compile unconditionally; FFI dispatch helpers are
+`cfg`-gated and return `Unsupported` when the feature is off.
+
+### Vendor source patches
+
+- **Marlin**: `--expt-relaxed-constexpr` added to nvcc args (the
+  upstream `Marlin` kernel calls a constexpr `ceildiv` from inside
+  a `__global__` function).
+- **AWQ**: stripped `<torch/extension.h>` and `<c10/cuda/CUDAGuard.h>`
+  includes; removed the upstream `gemm_forward_cuda(...)` host
+  wrapper (replaced by the C-ABI launcher at
+  `kernels/quantize/awq_launcher.cu`); rewrote `__asm__ __volatile__`
+  → `asm volatile` (GCC-only syntax vs. MSVC-portable). The launcher
+  inline-includes the patched .cu file (mirroring the `bnb_nf4`
+  pattern from Phase 53) — the .cu is NOT listed as a standalone
+  source.
+
+### Out of scope (deferred)
+
+- **Marlin v2 / Sparse-Marlin** — 2:4 structured sparsity extension.
+- **Marlin bf16** — upstream `0x64006400` magic-number dequant
+  trick is fp16-specific.
+- **Marlin sm_90 (Hopper)** — needs WGMMA rewrite.
+- **AWQ GEMV path** (`gemv_cuda.cu`) — batch=1 hot path optimization;
+  the Phase 48 GEMM kernel handles M=1 acceptably.
+- **AWQ bf16** — same dequant magic-number issue as Marlin.
+- **GPTQ→Marlin act_order=True** — non-monotonic g_idx
+  permutation; current scope rejects with clear error.
+- **Strict-fidelity Marlin intra-fragment permutation** — the
+  trailblazer repack uses identity permutation along the IC axis;
+  follow-up phase will port the upstream `_perm` table for full
+  numerical-fidelity validation against an upstream-packed weight
+  checkpoint.
+
+### Tests
+
+3 smoke test files under `crates/baracuda-kernels/tests/`:
+- `marlin_smoke.rs` — host-only descriptor-validation rejection +
+  `#[ignore]` GPU smoke (M=1, N=256, K=128, all-ones weights /
+  scales) verifying kernel launches without crashing.
+- `awq_smoke.rs` — host-only descriptor-validation rejection +
+  `#[ignore]` GPU smoke (M=1, IC=256, OC=64, all-zero weights /
+  all-one scales) verifying output ≈ 0.
+- `gptq_to_marlin_smoke.rs` — pure-Rust roundtrip on synthetic
+  weights: shape-rejection arms, zp-fold correctness (zp=8 → no
+  shift; zp=3 → +5 shift; zp=15 → clamp to 0).
+
+### Goals (from the consolidation brief)
+
+- **Goal A** — Marlin: state-of-the-art W4A16 decode kernel. **Met.**
+- **Goal B** — AWQ: load HF `*-AWQ` checkpoints directly. **Met.**
+- **Goal C** — GPTQ→Marlin bridge for non-Marlin checkpoints. **Met
+  (trailblazer; strict-fidelity packer is a follow-up).**
+
 ## Phase 56 — Ring Attention (complete; alpha.57, 2026-05-28)
 
 **First Phase 52 NCCL consumer — sequence-parallel attention that

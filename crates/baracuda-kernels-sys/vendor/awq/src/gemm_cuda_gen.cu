@@ -10,10 +10,12 @@
 
 */
 
-#include <torch/extension.h>
-#include "gemm_cuda.h"
+// baracuda Phase 48: torch deps stripped; device kernel preserved
+// verbatim. Host-side wrapper `gemm_forward_cuda(...)` removed —
+// replaced by `kernels/quantize/awq_launcher.cu` which exposes a
+// C-ABI entry point. The dequantize.cuh device routine and the
+// `__pack_half2` / `make_divisible` device helpers are kept as-is.
 #include <cuda_fp16.h>
-#include <c10/cuda/CUDAGuard.h>
 
 
 // Pack two half values.
@@ -167,12 +169,12 @@ __global__ void __launch_bounds__(128) gemm_forward_4bit_cuda_m128n64k32(int spl
       for (int ax0_0 = 0; ax0_0 < 4; ++ax0_0) {
         {
           unsigned int addr;
-          __asm__ __volatile__(
+          asm volatile(
             "{ .reg .u64 addr; cvta.to.shared.u64 addr, %1; cvt.u32.u64 %0, addr; }\n"
             : "=r"(addr)
             : "l"((void *)((&(A_shared[((((((int)threadIdx.y) & 1) * 2560) + (ax0_0 * 640)) + (k_0_1 * 16))])) + (((((int)threadIdx.x) & 15) * 40) + ((((int)threadIdx.x) >> 4) * 8))))
           );
-          __asm__ __volatile__(
+          asm volatile(
             "ldmatrix.sync.aligned.m8n8.x4.shared.b16"
             "{%0, %1, %2, %3}, [%4];\n"
             : "=r"(((unsigned *)(A_shared_warp + (ax0_0 * 8)))[0]), "=r"(((unsigned *)(A_shared_warp + (ax0_0 * 8)))[1]), "=r"(((unsigned *)(A_shared_warp + (ax0_0 * 8)))[2]), "=r"(((unsigned *)(A_shared_warp + (ax0_0 * 8)))[3])
@@ -184,12 +186,12 @@ __global__ void __launch_bounds__(128) gemm_forward_4bit_cuda_m128n64k32(int spl
       for (int ax0_0_1 = 0; ax0_0_1 < 2; ++ax0_0_1) {
         {
           unsigned int addr;
-          __asm__ __volatile__(
+          asm volatile(
             "{ .reg .u64 addr; cvta.to.shared.u64 addr, %1; cvt.u32.u64 %0, addr; }\n"
             : "=r"(addr)
             : "l"((void *)((&(B_shared[((((((int)threadIdx.y) >> 1) * 1280) + (ax0_0_1 * 640)) + (k_0_1 * 16))])) + ((((((int)threadIdx.x) >> 4) * 320) + ((((int)threadIdx.x) & 7) * 40)) + (((((int)threadIdx.x) & 15) >> 3) * 8))))
           );
-          __asm__ __volatile__(
+          asm volatile(
             "ldmatrix.sync.aligned.m8n8.x4.shared.b16"
             "{%0, %1, %2, %3}, [%4];\n"
             : "=r"(((unsigned *)(B_shared_warp + (ax0_0_1 * 8)))[0]), "=r"(((unsigned *)(B_shared_warp + (ax0_0_1 * 8)))[1]), "=r"(((unsigned *)(B_shared_warp + (ax0_0_1 * 8)))[2]), "=r"(((unsigned *)(B_shared_warp + (ax0_0_1 * 8)))[3])
@@ -202,7 +204,7 @@ __global__ void __launch_bounds__(128) gemm_forward_4bit_cuda_m128n64k32(int spl
         for (int j_0_4 = 0; j_0_4 < 2; ++j_0_4) {
 
           {
-            __asm__ __volatile__(
+            asm volatile(
               "mma.sync.aligned.m16n8k16.row.col.f32.f16.f16.f32"
               "{%0, %1, %2, %3}, {%4, %5, %6, %7}, {%8, %9}, {%10, %11, %12, %13};\n"
               :  "=f"(((float *)(C_warp + ((i_0_3 * 16) + (j_0_4 * 8))))[0]), "=f"(((float *)(C_warp + ((i_0_3 * 16) + (j_0_4 * 8))))[1]), "=f"(((float *)(C_warp + ((i_0_3 * 16) + (j_0_4 * 8))))[2]), "=f"(((float *)(C_warp + ((i_0_3 * 16) + (j_0_4 * 8))))[3])
@@ -210,7 +212,7 @@ __global__ void __launch_bounds__(128) gemm_forward_4bit_cuda_m128n64k32(int spl
           }
 
           {
-            __asm__ __volatile__(
+            asm volatile(
               "mma.sync.aligned.m16n8k16.row.col.f32.f16.f16.f32"
               "{%0, %1, %2, %3}, {%4, %5, %6, %7}, {%8, %9}, {%10, %11, %12, %13};\n"
               :  "=f"(((float *)(C_warp + (((i_0_3 * 16) + (j_0_4 * 8)) + 4)))[0]), "=f"(((float *)(C_warp + (((i_0_3 * 16) + (j_0_4 * 8)) + 4)))[1]), "=f"(((float *)(C_warp + (((i_0_3 * 16) + (j_0_4 * 8)) + 4)))[2]), "=f"(((float *)(C_warp + (((i_0_3 * 16) + (j_0_4 * 8)) + 4)))[3])
@@ -236,63 +238,13 @@ __global__ void __launch_bounds__(128) gemm_forward_4bit_cuda_m128n64k32(int spl
   }
 }
 
-// in_feats: M, IC [float16]
-// kernel: IC, OC // 8 [int32] -> cast to IC, OC [uint4b]
-// scaling_factors: IC // G, OC [float16]
-// zeros: IC // G, OC // 8 [int32] -> cast to IC // G, OC [uint4b]
-// assume that batch_size < 16 for now
-
-torch::Tensor gemm_forward_cuda(
-    torch::Tensor _in_feats,
-    torch::Tensor _kernel,
-    torch::Tensor _scaling_factors,
-    torch::Tensor _zeros,
-    int group_size,
-    int split_k_iters)
-{
-    int num_in_feats = _in_feats.size(0);
-    int num_in_channels = _in_feats.size(1);
-    const at::cuda::OptionalCUDAGuard device_guard(device_of(_in_feats));
-
-    auto options = torch::TensorOptions().dtype(_in_feats.dtype()).device(_in_feats.device());
-    // for int4, need _kernel.size(1) * 8
-    at::Tensor _out_feats = torch::empty({split_k_iters, num_in_feats, _kernel.size(0)}, options);
-    int num_out_feats = _out_feats.size(-2);
-    int num_out_channels = _out_feats.size(-1);
-
-    auto in_feats = reinterpret_cast<half*>(_in_feats.data_ptr<at::Half>());
-    auto kernel = reinterpret_cast<int*>(_kernel.data_ptr<int>());
-    auto out_feats = reinterpret_cast<half*>(_out_feats.data_ptr<at::Half>());
-    auto scaling_factors = reinterpret_cast<half*>(_scaling_factors.data_ptr<at::Half>());
-    auto zeros = reinterpret_cast<int*>(_zeros.data_ptr<int>());
-
-    // blockIdx_x: i_factors[0] * j_factors[0]
-    // blockIdx_y: i_factors[1] * j_factors[1]
-
-    if (num_out_channels % 64 != 0)
-        throw std::invalid_argument("OC is not multiple of cta_N = 64");
-    if (num_out_channels % 8 != 0)
-        throw std::invalid_argument("OC is not multiple of pack_num = 8");
-    int j_factors1 = num_out_channels / 64 / 1;
-    dim3 num_blocks((num_out_feats + 128 - 1) / 128 * j_factors1 * split_k_iters);
-    
-    // threadIdx.x: 32
-    // threadIdx.y: i_factors[2] * j_factors[2]
-    dim3 threads_per_block(32, 4);
-    if (group_size == 128)
-    {
-      gemm_forward_4bit_cuda_m128n64k32<128><<<num_blocks, threads_per_block>>>(
-        split_k_iters, in_feats, kernel, scaling_factors, zeros, num_in_feats, num_in_channels, num_out_channels, out_feats);
-    }
-    else if (group_size == 64)
-    {
-      gemm_forward_4bit_cuda_m128n64k32<64><<<num_blocks, threads_per_block>>>(
-        split_k_iters, in_feats, kernel, scaling_factors, zeros, num_in_feats, num_in_channels, num_out_channels, out_feats);
-    }
-    else
-    {
-      throw std::invalid_argument("Group size temporarily not supported.");
-    }
-    return _out_feats.sum(0);
-}
+// baracuda Phase 48: original `gemm_forward_cuda(...)` torch host
+// wrapper removed. The baracuda C-ABI launcher at
+// `kernels/quantize/awq_launcher.cu` provides equivalent host-side
+// logic (split-k staging buffer allocation from the caller's
+// workspace, kernel launch, final reduce-sum along split-k axis).
+//
+// The device kernel `gemm_forward_4bit_cuda_m128n64k32<G>` above is
+// preserved verbatim and is the only symbol from this TU consumed
+// by the launcher.
 
