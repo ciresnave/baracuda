@@ -111,3 +111,62 @@ int baracuda_ozimmu_dgemm(mtk::ozimmu::handle_t handle,
 }
 
 }  // extern "C"
+
+// Forward declaration of the variant entry implemented in `gemm.cu`.
+// Lives outside `extern "C"` because the impl side uses C++ types
+// (`mtk::ozimmu::handle_t`, `mtk::ozimmu::operation_t`, …) directly;
+// the C-ABI wrapper below recasts the integer args before forwarding.
+int baracuda_ozimmu_gemm_double_variant_impl(
+    mtk::ozimmu::handle_t handle, const mtk::ozimmu::operation_t op_A,
+    const mtk::ozimmu::operation_t op_B, const std::size_t m,
+    const std::size_t n, const std::size_t k, const double *alpha,
+    const double *const a_ptr, const std::size_t lda,
+    const double *const b_ptr, const std::size_t ldb, const double *beta,
+    double *const c_ptr, std::size_t ldc,
+    const mtk::ozimmu::compute_mode_t compute_mode, const int variant);
+
+extern "C" {
+
+/// Phase 44c — variant-aware FP64 GEMM via the Ozaki scheme.
+///
+/// Identical signature to [`baracuda_ozimmu_dgemm`] except for the
+/// added `variant` parameter:
+///
+///   - `0` — Base (Ootomo / Ozaki / Yokota 2023, baseline ozIMMU)
+///   - `1` — EF (group-wise error-free summation; Uchino / Ozaki /
+///           Imamura 2024 §3.1)
+///   - `2` — RN (nearest-rounding split; same paper §3.2)
+///   - `3` — H  (RN + EF combined; same paper §3.3)
+///
+/// `compute_mode` follows the same convention as `baracuda_ozimmu_dgemm`
+/// (`COMPUTE_MODE_FP64_INT8_3` .. `COMPUTE_MODE_FP64_INT8_18` or
+/// `COMPUTE_MODE_FP64_INT8_AUTO`). The variant flag is independent of
+/// the slice count; e.g. `(compute_mode = INT8_8, variant = EF)`
+/// runs 8-slice ozIMMU with EF.
+///
+/// n-blocking (split large-N int8 GEMMs into 8192-wide chunks) is
+/// applied automatically by `matmul_core` regardless of the variant
+/// flag — there's no separate toggle. The threshold is hardcoded to
+/// the upstream value (n > 12288 enables blocking).
+int baracuda_ozimmu_dgemm_with_variant(
+    mtk::ozimmu::handle_t handle, int op_a, int op_b,
+    std::size_t m, std::size_t n, std::size_t k,
+    const double *alpha,
+    const double *a_ptr, std::size_t lda,
+    const double *b_ptr, std::size_t ldb,
+    const double *beta,
+    double *c_ptr, std::size_t ldc,
+    int compute_mode, int variant) {
+    const auto oa = op_a ? mtk::ozimmu::op_t : mtk::ozimmu::op_n;
+    const auto ob = op_b ? mtk::ozimmu::op_t : mtk::ozimmu::op_n;
+    const auto cm = static_cast<mtk::ozimmu::compute_mode_t>(compute_mode);
+    try {
+        return baracuda_ozimmu_gemm_double_variant_impl(
+            handle, oa, ob, m, n, k, alpha, a_ptr, lda, b_ptr, ldb, beta,
+            c_ptr, ldc, cm, variant);
+    } catch (...) {
+        return -1;
+    }
+}
+
+}  // extern "C"

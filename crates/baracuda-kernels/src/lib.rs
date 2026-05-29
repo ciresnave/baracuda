@@ -559,3 +559,19 @@ pub mod optim {
         SgdStepPlan, TensorList,
     };
 }
+
+// =========================================================================
+// Phase 46 — FlashInfer cherry-pick re-exports (at the crate root).
+// =========================================================================
+//
+// The three new plan families landed in `attention::*` and `random::*`;
+// mirror them at the crate root so callers can use
+// `baracuda_kernels::TopKTopPSamplingPlan` (the documented path).
+pub use attention::{
+    BatchPagedDecodeArgs, BatchPagedDecodeDescriptor, BatchPagedDecodePlan,
+    CascadeAttentionArgs, CascadeAttentionDescriptor, CascadeAttentionPlan,
+    PagedKvAppendArgs, PagedKvAppendDescriptor, PagedKvAppendPlan, PagedKvCacheDescriptor,
+};
+pub use random::{
+    SamplerKind, TopKTopPSamplingArgs, TopKTopPSamplingDescriptor, TopKTopPSamplingPlan,
+};

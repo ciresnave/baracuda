@@ -424,6 +424,7 @@ dependencies = [
  "baracuda-forge",
  "baracuda-kernels",
  "baracuda-kernels-types",
+ "baracuda-ozimmu",
  "baracuda-types",
  "criterion",
  "half",

@@ -172,6 +172,59 @@ impl Default for OzakiSlices {
     }
 }
 
+/// Phase 44c — ozIMMU algorithmic variant selector.
+///
+/// Selects between the original ozIMMU algorithm (Ootomo / Ozaki /
+/// Yokota 2023) and the RIKEN-RCCS perf-enhancement variants
+/// (Uchino / Ozaki / Imamura 2024, arXiv:2409.13313).
+///
+/// Variants are independent of the slice count — e.g.
+/// `OzakiVariant::EF` at `S = 8` runs the same int8 GEMM budget
+/// as Base at `S = 8` but with the error-free-sum accumulator
+/// instead of the per-pair flush.
+///
+/// `#[non_exhaustive]` per the baracuda Phase 28 audit — additional
+/// variants may land if the upstream perf work progresses (e.g. the
+/// 2025 Ozaki II / Hilbert variant is out of scope for Phase 44c
+/// but a plausible Phase 44d addition).
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Default)]
+#[non_exhaustive]
+pub enum OzakiVariant {
+    /// Original ozIMMU baseline. Bit-identical to the Phase 44b
+    /// output. Default when callers don't opt in.
+    #[default]
+    Base,
+    /// EF — group-wise error-free summation. Chains consecutive
+    /// `cublasGemmEx` int8 calls into the same int32 accumulator
+    /// (`beta_i = 1`) so the int32 → f64 materialization happens
+    /// once per group of `2^lim_accum_bits` pairs instead of after
+    /// every pair. Same accuracy as Base; ~5–15% faster on the
+    /// perf-paper benchmarks (workload-dependent).
+    EF,
+    /// RN — nearest-rounding split. Replaces the upstream's
+    /// truncation-style int8 extraction with the `(a + t) - t`
+    /// round-to-nearest trick. Same speed as Base; gains ~2 extra
+    /// effective bits of mantissa precision per slice, so callers
+    /// can drop one slice for the same accuracy.
+    RN,
+    /// H — EF + RN combined. Best accuracy + perf per the upstream
+    /// perf paper.
+    H,
+}
+
+impl OzakiVariant {
+    /// Cast to the integer flag the FFI shim expects.
+    /// `Base = 0`, `EF = 1`, `RN = 2`, `H = 3`.
+    pub fn to_ffi(self) -> i32 {
+        match self {
+            OzakiVariant::Base => sys::OZIMMU_VARIANT_BASE,
+            OzakiVariant::EF   => sys::OZIMMU_VARIANT_EF,
+            OzakiVariant::RN   => sys::OZIMMU_VARIANT_RN,
+            OzakiVariant::H    => sys::OZIMMU_VARIANT_H,
+        }
+    }
+}
+
 impl OzakiSlices {
     /// Cast to the integer `compute_mode_t` the FFI shim expects.
     pub fn to_compute_mode(self) -> sys::ComputeMode {
@@ -454,6 +507,88 @@ impl Handle {
                 c_ptr,
                 ldc,
                 compute_mode.to_compute_mode(),
+            )
+        };
+        if status != 0 {
+            return Err(Error::DgemmFailed(status));
+        }
+        Ok(())
+    }
+
+    /// Phase 44c — variant-aware FP64 GEMM via the Ozaki scheme.
+    ///
+    /// Same as [`Self::dgemm`] but with an extra `variant` parameter
+    /// selecting one of the RIKEN-RCCS perf-enhancement variants:
+    ///
+    ///   - [`OzakiVariant::Base`] — original ozIMMU (default; bit-
+    ///     identical to [`Self::dgemm`]).
+    ///   - [`OzakiVariant::EF`]   — group-wise error-free summation.
+    ///   - [`OzakiVariant::RN`]   — nearest-rounding split.
+    ///   - [`OzakiVariant::H`]    — EF + RN combined.
+    ///
+    /// n-blocking (chunk large-N int8 GEMMs into 8192-wide pieces)
+    /// is automatic; there's no per-call toggle.
+    ///
+    /// All other arguments mirror [`Self::dgemm`] exactly.
+    ///
+    /// # Safety
+    ///
+    /// Same contract as [`Self::dgemm`].
+    #[allow(clippy::too_many_arguments)]
+    pub unsafe fn dgemm_with_variant(
+        &self,
+        op_a: Op,
+        op_b: Op,
+        m: usize,
+        n: usize,
+        k: usize,
+        alpha: f64,
+        a_ptr: *const f64,
+        lda: usize,
+        b_ptr: *const f64,
+        ldb: usize,
+        beta: f64,
+        c_ptr: *mut f64,
+        ldc: usize,
+        compute_mode: OzakiSlices,
+        variant: OzakiVariant,
+    ) -> Result<()> {
+        if m == 0 || n == 0 || k == 0 {
+            return Err(Error::InvalidArgument("m, n, k must be > 0"));
+        }
+        let min_lda = if op_a == Op::N { m } else { k };
+        let min_ldb = if op_b == Op::N { k } else { n };
+        if lda < min_lda {
+            return Err(Error::InvalidArgument(
+                "lda smaller than the leading-dim minimum for op_a",
+            ));
+        }
+        if ldb < min_ldb {
+            return Err(Error::InvalidArgument(
+                "ldb smaller than the leading-dim minimum for op_b",
+            ));
+        }
+        if ldc < m {
+            return Err(Error::InvalidArgument("ldc must be >= m"));
+        }
+        let status = unsafe {
+            sys::baracuda_ozimmu_dgemm_with_variant(
+                self.raw,
+                op_a.to_ffi(),
+                op_b.to_ffi(),
+                m,
+                n,
+                k,
+                &alpha as *const f64,
+                a_ptr,
+                lda,
+                b_ptr,
+                ldb,
+                &beta as *const f64,
+                c_ptr,
+                ldc,
+                compute_mode.to_compute_mode(),
+                variant.to_ffi(),
             )
         };
         if status != 0 {

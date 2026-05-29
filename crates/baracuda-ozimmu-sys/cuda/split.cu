@@ -325,6 +325,194 @@ template void mtk::ozimmu::split_int8<cuDoubleComplex>(
     const unsigned bits_per_int8, const cudaStream_t cuda_stream);
 
 // ===========================================================================
+// Phase 44c — nearest-rounding splitter (RN / H variants).
+//
+// Ported from RIKEN-RCCS/accelerator_for_ozIMMU
+// `src_nearest_split+errfree_sum/split.cu` (the H variant — the
+// most compact of the three nearest-split flavours; the lone-RN
+// variant carried an extra `in_ptr_tmp` working buffer and per-slice
+// scale array that the H rewrite eliminated). See the Uchino / Ozaki
+// / Imamura 2024 perf paper, arXiv:2409.13313, for the algorithm.
+//
+// Conceptually the kernel computes one row of `A` (or column of
+// `B^T`) at a time:
+//
+//   1. Find `amax = max(|a_i|)` across the row (reuse `find_amax`
+//      reduction — algebraically identical to the upstream's
+//      `get_exp_max_element` but operating on `fabs` directly rather
+//      than on the exponent bits).
+//   2. Compute a row scale `s` and a rounding constant `t` calibrated
+//      to the row's magnitude (the `scalbn` calls handle the bias).
+//   3. For each slice `i ∈ [0, num_split)`:
+//        `a_i = (a + t) - t`   // round-to-nearest, multiple of `1/s`
+//        `out[i] = int8(a_i * s)`
+//        `a -= a_i`            // residual for the next slice
+//      and decrement `t, s` by `t_inc, s_inc` to step to the next
+//      lower significance band.
+//
+// Bit-width contract: the kernel writes ALL slices at uniform
+// `bits_per_int8` precision (the same constant the upstream signed
+// splitter uses). The per-slice significance factor enters the
+// accumulator via `scalbn(1.0, -bits_per_int8 * (A_id + B_id - 2))`
+// rather than per-slice scale arrays — that's the H variant's
+// memory-side win over the lone RN variant.
+// ===========================================================================
+
+namespace {
+
+/// Maximum exponent of `npt(x)` — Newton-pivoted to avoid expensive
+/// `frexp` / `log2` calls. `npt(x) = scalbn(x, 54)` rounds `x` to the
+/// next power of 2 ≥ `x`; reading the exponent gives `ceil(log2(x))`.
+__device__ short get_exp_npt(double x) {
+    x *= 18014398509481984.0;  // = 2^54
+    std::uint64_t bits = baracuda::fp::reinterpret_as_uint(x);
+    short exponent     = static_cast<short>(((bits >> 52) & 0x7FF) - 1077);
+    // Round up if the mantissa is non-zero (any bit set after the
+    // implicit leading 1 means `npt(x) > x`).
+    return exponent + ((bits & 0xFFFFFFFFFFFFFull) != 0 ? 1 : 0);
+}
+
+/// Per-row absolute-max reduction. Algebraically identical to
+/// `get_exp_max_element<double>` above (same hierarchical
+/// warp / threadblock pattern), but reads `fabs(*ptr)` directly
+/// instead of `reinterpret_as_fp(mask_exponent(*ptr))` — equivalent
+/// up to the `2×` factor that the upstream caller compensated for
+/// by multiplying the result by 2 (see `x2`).
+__device__ double find_amax_nearest(
+    const double *const ptr, const unsigned length, const unsigned inc,
+    double *const shm) {
+    double amax          = 0.;
+    const unsigned step  = inc * blockDim.x;
+    unsigned i           = threadIdx.x;
+    const double *in_ptr = ptr + i * inc;
+    for (; i < length; i += blockDim.x) {
+        const double tmp = fabs(*in_ptr);
+        if (amax < tmp) amax = tmp;
+        in_ptr += step;
+    }
+
+    for (unsigned offset = BARACUDA_WARP_SIZE_CONST >> 1; offset >= 1; offset >>= 1) {
+        const double tmp = __shfl_xor_sync(~0u, amax, offset);
+        if (amax < tmp) amax = tmp;
+    }
+
+    if ((threadIdx.x & 0x1f) == 0) {
+        shm[threadIdx.x >> 5] = amax;
+    }
+
+    __syncthreads();
+    amax = 0.;
+    if (threadIdx.x < BARACUDA_WARP_SIZE_CONST) {
+        if (threadIdx.x < (blockDim.x / BARACUDA_WARP_SIZE_CONST)) {
+            amax = shm[threadIdx.x];
+        }
+        for (unsigned offset = BARACUDA_WARP_SIZE_CONST >> 1; offset >= 1; offset >>= 1) {
+            const double tmp = __shfl_xor_sync(~0u, amax, offset);
+            if (amax < tmp) amax = tmp;
+        }
+        if (threadIdx.x == 0) {
+            shm[0] = amax;
+        }
+    }
+
+    __syncthreads();
+    return shm[0];
+}
+
+/// Extract `num_split` int8 slices of a single FP64 cell using
+/// nearest-rounding semantics. The `t / s / t_inc / s_inc` arguments
+/// are pre-computed per-row by the caller (`extract_int8_kernel`).
+__device__ void extract_int8_core_nearest(
+    std::int8_t *const out_ptr, const std::size_t inc, double a,
+    double t, double s, double t_inc, double s_inc,
+    const std::int8_t num_split) {
+    for (unsigned i = 0; i < num_split; ++i) {
+        // `(a + t) - t` rounds `a` to the nearest multiple of
+        // `2^(-bits) * 2^log2_npt` — the "round-half-to-even" trick
+        // that gives the kernel its name.
+        const double a_i = (a + t) - t;
+        a -= a_i;
+        out_ptr[i * inc] = static_cast<std::int8_t>(a_i * s);
+        t *= t_inc;
+        s *= s_inc;
+    }
+}
+
+__global__ void extract_int8_kernel(
+    std::int8_t *const out_ptr, const std::uint32_t ldo,
+    double *const sft, const std::size_t m, const std::size_t n,
+    const double *const in_ptr, const std::size_t ld,
+    const std::int8_t num_split, const std::int8_t bits,
+    const bool col_major) {
+    __shared__ double smem[32];
+    const auto row_index = blockIdx.x;
+    const auto amax      = find_amax_nearest(
+        in_ptr + (col_major ? row_index : (row_index * ld)),
+        n, (col_major ? ld : 1), smem);
+
+    const auto N = m * ldo;
+
+    const short log2_npt = get_exp_npt(amax);
+    double t             = scalbn(1.5, 53 - bits + log2_npt);
+    double s_inc         = static_cast<double>(1 << bits);
+    double s             = scalbn(s_inc, -1 - log2_npt);
+    double t_inc         = 1.0 / s_inc;
+
+    unsigned i;
+    for (i = threadIdx.x; i < n; i += blockDim.x) {
+        const double a =
+            in_ptr[(col_major ? (i * ld + row_index) : (i + row_index * ld))];
+        extract_int8_core_nearest(
+            out_ptr + row_index * ldo + i, N, a, t, s, t_inc, s_inc, num_split);
+    }
+    // Pad-fill: zero the tail of every slice for this row.
+    for (; i < ldo; i += blockDim.x) {
+        for (std::uint32_t j = 0; j < num_split; j++) {
+            *(out_ptr + row_index * ldo + i + j * N) = 0;
+        }
+    }
+
+    if (threadIdx.x == 0) {
+        sft[blockIdx.x] = 1.0 / s;
+    }
+}
+
+void split_int8_A_nearest(
+    std::int8_t *const out_ptr, const std::uint32_t ldo,
+    double *const sft, const mtk::ozimmu::operation_t op,
+    const std::size_t m, const std::size_t n, const double *const in_ptr,
+    const std::size_t ld, const std::int8_t num_split,
+    const std::int8_t bits, cudaStream_t cuda_stream) {
+    const dim3 block_size = 256;
+    const dim3 grid_size  = m;
+
+    const bool is_col_major = op == mtk::ozimmu::op_n;
+
+    extract_int8_kernel<<<grid_size, block_size, 0, cuda_stream>>>(
+        out_ptr, ldo, sft, m, n, in_ptr, ld, num_split, bits, is_col_major);
+}
+
+}  // namespace
+
+void mtk::ozimmu::split_int8_nearest(
+    std::int8_t *const out_ptr, const std::uint32_t ldo,
+    double *const sft, const std::size_t m, const std::size_t n,
+    const double *const in_ptr, const std::size_t ld,
+    const mtk::ozimmu::operation_t op,
+    const mtk::ozimmu::detail::matrix_t matrix, const std::int8_t num_split,
+    const std::int8_t bits_per_int8, const cudaStream_t cuda_stream) {
+    if (matrix == mtk::ozimmu::detail::matrix_A) {
+        split_int8_A_nearest(out_ptr, ldo, sft, op, m, n, in_ptr, ld,
+                             num_split, bits_per_int8, cuda_stream);
+    } else {
+        split_int8_A_nearest(
+            out_ptr, ldo, sft,
+            op == mtk::ozimmu::op_n ? mtk::ozimmu::op_t : mtk::ozimmu::op_n,
+            n, m, in_ptr, ld, num_split, bits_per_int8, cuda_stream);
+    }
+}
+
+// ===========================================================================
 // Mantissa-loss histogram for `auto_mode_select`
 // ===========================================================================
 

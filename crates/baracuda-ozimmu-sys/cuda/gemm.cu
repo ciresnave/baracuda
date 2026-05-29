@@ -27,10 +27,23 @@
 #include "utils.hpp"
 
 #include <cublas_v2.h>
+#include <cmath>    // std::scalbn
 #include <utility>  // std::pair
 #include <vector>
 
 #include "baracuda_fp_bits.cuh"
+
+// Phase 44c — RIKEN-RCCS perf-enhancement variants.
+//
+// `OZIMMU_VARIANT_*` integer codes used by the variant dispatcher.
+// Held inside this TU rather than the public header to keep the
+// upstream `mtk::ozimmu::` ABI source-compatible with Phase 44b.
+namespace {
+constexpr int OZIMMU_VARIANT_BASE = 0;
+constexpr int OZIMMU_VARIANT_EF   = 1;
+constexpr int OZIMMU_VARIANT_RN   = 2;
+constexpr int OZIMMU_VARIANT_H    = 3;
+}  // namespace
 
 namespace {
 
@@ -124,8 +137,13 @@ __global__ void axby_kernel(const std::size_t m, const std::size_t n,
 
     const auto memory_index = ni * ldy + mi;
 
+    // Phase 44c bugfix: upstream's `(1l << 44)` is UB on MSVC/Windows
+    // where `long` is 32-bit (LLP64). Use `1ll` (long long, 64-bit on
+    // every platform we target) or just an FP literal. Same fix
+    // applied to `axy_complex_kernel` below.
     const auto x =
-        x_ptr[tid] / (1l << 44) * a_max_exp_ptr[mi] * b_max_exp_ptr[ni];
+        x_ptr[tid] / static_cast<double>(1ull << 44)
+        * a_max_exp_ptr[mi] * b_max_exp_ptr[ni];
 
     if (b != 0) {
         y_ptr[memory_index] = a * x + b * y_ptr[memory_index];
@@ -161,8 +179,10 @@ __global__ void axy_complex_kernel(const std::size_t m, const std::size_t n,
 
     const auto memory_index = ni * ldy + mi;
 
+    // Same MSVC/Windows `1l << 44` bug as in axby_kernel — fixed here too.
     const auto x =
-        x_ptr[tid] / (1l << 44) * a_max_exp_ptr[mi] * b_max_exp_ptr[ni];
+        x_ptr[tid] / static_cast<double>(1ull << 44)
+        * a_max_exp_ptr[mi] * b_max_exp_ptr[ni];
 
     auto y = y_ptr[memory_index];
 
@@ -222,13 +242,33 @@ void init_c_complex(const std::size_t m, const std::size_t n,
     }
 }
 
+/// Core int8 GEMM dispatcher.
+///
+/// Phase 44c adds:
+///   - `beta_i_in` — replaces the previously-hardcoded `beta_i = 0`
+///     so the EF / H variants can chain int32 partial sums in-register
+///     (cublas accumulates `D = alpha*AB + beta*D` in int32; passing
+///     `beta_i = 1` reuses the existing `c_ptr_r` as the running sum
+///     and skips the `accumulate_in_f64` materialization between
+///     consecutive slice pairs of the same group).
+///   - n-blocking (`n > 12288 → split into 8192-wide chunks`). Ports
+///     RIKEN-RCCS/accelerator_for_ozIMMU `acc/gemm.cu`. cuBLAS' int8
+///     GEMM has a non-linear-throughput cliff around `n = 12288` on
+///     consumer Ada; the chunked launch keeps the GPU at the linear
+///     band and improves end-to-end perf at large N.
+///
+/// The thresholds (8192 chunk, 12288 single-launch ceiling) are
+/// upstream's; the ozIMMU perf paper documents them empirically on
+/// H100. They reproduce on RTX 4070 sm_89 too — the int8 tensor-core
+/// path on cuBLAS hits the same scheduling wall.
 void matmul_core(
     mtk::ozimmu::handle_t handle, const mtk::ozimmu::operation_t op_A,
     const mtk::ozimmu::operation_t op_B, const std::size_t m,
     const std::size_t n, const std::size_t k, const void *const a_ptr,
     const std::size_t lda, const mtk::ozimmu::data_t /*type_a*/,
     const void *const b_ptr, const std::size_t ldb,
-    const mtk::ozimmu::data_t /*type_b*/, void *const c_ptr,
+    const mtk::ozimmu::data_t /*type_b*/, const int beta_i_in,
+    void *const c_ptr,
     const mtk::ozimmu::detail::gemm_pair_config_t &gemm_pair_config,
     const mtk::ozimmu::compute_mode_t compute_mode,
     const void *const a_working_memory_ptr, const std::size_t ld_w_a,
@@ -266,20 +306,135 @@ void matmul_core(
 
     switch (gemm_mode) {
     case mtk::ozimmu::detail::int8tc: {
-        const int alpha_i = 1, beta_i = 0;
+        const int alpha_i = 1;
+        const int beta_i_const = beta_i_in;
         const auto op_A_r =
             gemm_pair_config.A_id == 0 ? to_cublasOperation_t(op_A) : CUBLAS_OP_T;
         const auto op_B_r =
             gemm_pair_config.B_id == 0 ? to_cublasOperation_t(op_B) : CUBLAS_OP_N;
 
-        cublasGemmEx(handle->cublas_handle, op_A_r, op_B_r, m, n, k,
-                     &alpha_i, a_ptr_r, CUDA_R_8I, lda_r, b_ptr_r,
-                     CUDA_R_8I, ldb_r, &beta_i, c_ptr_r, CUDA_R_32I, m,
-                     CUBLAS_COMPUTE_32I, CUBLAS_GEMM_DEFAULT_TENSOR_OP);
+        // n-blocking: chunk n into 8192-wide pieces if it exceeds the
+        // 12288 single-launch ceiling. Below 12288 we issue a single
+        // cublasGemmEx call equivalent to the Phase 44b path.
+        //
+        // Phase 44b parity guard: when n <= 12288 (the single-launch
+        // case), the chunk loop reduces to one call with offset=0
+        // and pointer arithmetic that is a no-op (offset * ldb_r = 0).
+        // We special-case it to make that obvious — and to avoid
+        // accidental signed/unsigned divergence in the pointer-cast
+        // arithmetic that bit me on Windows MSVC + CUDA 13 (release
+        // mode wave5 redux pattern).
+        if (n <= 12288) {
+            cublasGemmEx(handle->cublas_handle, op_A_r, op_B_r, m, n, k,
+                         &alpha_i, a_ptr_r, CUDA_R_8I, lda_r, b_ptr_r,
+                         CUDA_R_8I, ldb_r, &beta_i_const, c_ptr_r,
+                         CUDA_R_32I, m, CUBLAS_COMPUTE_32I,
+                         CUBLAS_GEMM_DEFAULT_TENSOR_OP);
+        } else {
+            const std::size_t blk = 8192;
+            std::size_t rem       = n;
+            std::size_t offset    = 0;
+            while (rem > 0) {
+                const std::size_t nn = (rem <= 12288) ? rem : blk;
+                const auto b_chunk =
+                    reinterpret_cast<const std::int8_t *>(b_ptr_r)
+                    + offset * ldb_r;
+                auto c_chunk = reinterpret_cast<std::int32_t *>(c_ptr_r)
+                             + offset * m;
+                cublasGemmEx(handle->cublas_handle, op_A_r, op_B_r, m, nn, k,
+                             &alpha_i, a_ptr_r, CUDA_R_8I, lda_r, b_chunk,
+                             CUDA_R_8I, ldb_r, &beta_i_const, c_chunk,
+                             CUDA_R_32I, m, CUBLAS_COMPUTE_32I,
+                             CUBLAS_GEMM_DEFAULT_TENSOR_OP);
+                offset += nn;
+                rem -= nn;
+            }
+        }
     } break;
     default:
         OZIMMU_NOT_IMPLEMENTED;
     }
+}
+
+/// Back-compat overload — Phase 44b call sites pass no `beta_i`.
+/// Forwards with `beta_i = 0` (the original behaviour).
+void matmul_core(
+    mtk::ozimmu::handle_t handle, const mtk::ozimmu::operation_t op_A,
+    const mtk::ozimmu::operation_t op_B, const std::size_t m,
+    const std::size_t n, const std::size_t k, const void *const a_ptr,
+    const std::size_t lda, const mtk::ozimmu::data_t type_a,
+    const void *const b_ptr, const std::size_t ldb,
+    const mtk::ozimmu::data_t type_b, void *const c_ptr,
+    const mtk::ozimmu::detail::gemm_pair_config_t &gemm_pair_config,
+    const mtk::ozimmu::compute_mode_t compute_mode,
+    const void *const a_working_memory_ptr, const std::size_t ld_w_a,
+    const void *const b_working_memory_ptr, const std::size_t ld_w_b) {
+    matmul_core(handle, op_A, op_B, m, n, k, a_ptr, lda, type_a, b_ptr, ldb,
+                type_b, /*beta_i_in=*/0, c_ptr, gemm_pair_config, compute_mode,
+                a_working_memory_ptr, ld_w_a, b_working_memory_ptr, ld_w_b);
+}
+
+// ===========================================================================
+// Phase 44c — nearest-split accumulator + axby.
+// ===========================================================================
+
+/// H-variant accumulator. Multiplies per-row scales `sft_a[mi]` and
+/// `sft_b[ni]` against the int32 partial-sum cell and folds in a
+/// per-slice-pair significance factor `scale = 2^(-bits*(A_id+B_id-2))`.
+__global__ void accumulate_in_f64_kernel_2(
+    const std::size_t m, double *const f64_ptr,
+    const std::int32_t *i32_ptr, const std::size_t length,
+    const double *const sft_a, const double *const sft_b,
+    const double scale) {
+    const auto tid = blockIdx.x * blockDim.x + threadIdx.x;
+    if (tid >= length) {
+        return;
+    }
+    const auto mi = tid % m;
+    const auto ni = tid / m;
+    f64_ptr[tid] +=
+        static_cast<double>(i32_ptr[tid]) * sft_a[mi] * sft_b[ni] * scale;
+}
+
+void accumulate_in_f64_2(const std::size_t m, double *const f64_ptr,
+                         const std::int32_t *i32_ptr, const std::size_t length,
+                         const double *const sft_a, const double *const sft_b,
+                         const double scale, cudaStream_t cuda_stream) {
+    constexpr std::size_t block_size = 256;
+    accumulate_in_f64_kernel_2<<<(length + block_size - 1) / block_size,
+                                 block_size, 0, cuda_stream>>>(
+        m, f64_ptr, i32_ptr, length, sft_a, sft_b, scale);
+}
+
+/// Nearest-split axby. Simpler than the base path — the per-row
+/// re-scale is already baked into the f64 accumulator by
+/// `accumulate_in_f64_2`, so the final copy only applies the user
+/// alpha / beta and the LD remap.
+__global__ void axby_kernel_2(const std::size_t m, const std::size_t n,
+                              const double a, const double *const x_ptr,
+                              const double b, double *const y_ptr,
+                              const std::size_t ldy) {
+    const auto tid = blockIdx.x * blockDim.x + threadIdx.x;
+    if (tid >= m * n) {
+        return;
+    }
+    const auto mi           = tid % m;
+    const auto ni           = tid / m;
+    const auto memory_index = ni * ldy + mi;
+
+    if (b != 0) {
+        y_ptr[memory_index] = a * x_ptr[tid] + b * y_ptr[memory_index];
+    } else {
+        y_ptr[memory_index] = a * x_ptr[tid];
+    }
+}
+
+void axby_2(const std::size_t m, const std::size_t n, const double a,
+            const double *const x_ptr, const double b, double *const y_ptr,
+            const std::size_t ldy, cudaStream_t cuda_stream) {
+    constexpr std::size_t block_size = 256;
+    axby_kernel_2<<<(m * n + block_size - 1) / block_size, block_size, 0,
+                    cuda_stream>>>(m, n, a, x_ptr, b, y_ptr, ldy);
 }
 
 template <class T>
@@ -348,6 +503,181 @@ int gemm_int8<double>(mtk::ozimmu::handle_t handle,
     axby(m, n, *alpha, c_f64_ptr, *beta, c_ptr, ldc, a_max_exp_ptr, b_max_exp_ptr,
          handle->cuda_stream);
 
+    return 0;
+}
+
+// ===========================================================================
+// Phase 44c — EF / RN / H variant dispatch for the FP64 real path.
+//
+// Each variant differs from the Base path in either the splitter
+// (RN, H replace `split_int8` with `split_int8_nearest`) or the
+// accumulator (EF, H delay the int32 → f64 conversion by chaining
+// cublasGemmEx calls with `beta_i = 1`).
+//
+// Common control parameter:
+//   `lim_accum` — how many consecutive int32 GEMMs can chain
+//   before risking overflow in the int32 accumulator. Derived
+//   from `31 - 2*bits - ceil(log2(k))` per the upstream's bit-budget
+//   analysis (each int8*int8 fits in 15 bits, k accumulations add
+//   ceil(log2(k)) bits, leaving `31 - 2*bits - log2(k)` headroom).
+//   `lim_accum > 0` enables grouping; `0` falls back to per-pair
+//   accumulation (saves nothing but the variant code path is
+//   still exercised and produces bit-identical output to Base + RN
+//   for the EF / H cases).
+// ===========================================================================
+int gemm_int8_double_variant(
+    mtk::ozimmu::handle_t handle, const mtk::ozimmu::operation_t op_A,
+    const mtk::ozimmu::operation_t op_B, const std::size_t m,
+    const std::size_t n, const std::size_t k, const double *alpha,
+    const double *const a_ptr, const std::size_t lda,
+    const double *const b_ptr, const std::size_t ldb, const double *beta,
+    double *const c_ptr, std::size_t ldc,
+    const mtk::ozimmu::compute_mode_t compute_mode, const int variant) {
+    const bool use_nearest_split =
+        (variant == OZIMMU_VARIANT_RN) || (variant == OZIMMU_VARIANT_H);
+    const bool use_errfree_sum =
+        (variant == OZIMMU_VARIANT_EF) || (variant == OZIMMU_VARIANT_H);
+
+    const unsigned num_split =
+        mtk::ozimmu::detail::get_split_config(compute_mode)
+            .matrix_A_split_types.size()
+        - 1;
+    const std::int32_t bits_per_int8 = mtk::ozimmu::get_bits_per_int8(k);
+
+    // Working-memory carve-up. The nearest-split path stores ONE
+    // f64 scale per row (one element per `m` for A, one per `n` for
+    // B) — same shape as Base's per-row `max_exp` arrays — so the
+    // layout below works for all variants.
+    double *const c_f64_ptr =
+        reinterpret_cast<double *>(handle->working_memory_ptr);
+    double *const a_scale_ptr = c_f64_ptr + m * n;
+    double *const b_scale_ptr = a_scale_ptr + m;
+    std::int32_t *const c_i32_ptr =
+        reinterpret_cast<std::int32_t *>(b_scale_ptr + n);
+    void *const working_memory_ptr = c_i32_ptr + m * n;
+
+    init_accumulator_buffer(c_f64_ptr, m * n, handle->cuda_stream);
+
+    const auto ld_int8_a =
+        mtk::ozimmu::get_slice_ld<std::int8_t>(m, k, mtk::ozimmu::op_t);
+    const auto ld_int8_b =
+        mtk::ozimmu::get_slice_ld<std::int8_t>(k, n, mtk::ozimmu::op_n);
+
+    const auto num_int8_a_slice_elements =
+        mtk::ozimmu::get_slice_num_elements<std::int8_t>(m, k, mtk::ozimmu::op_t);
+    const std::size_t A_working_memory_size =
+        num_int8_a_slice_elements * num_split;
+
+    auto a_int8_slices_ptr =
+        reinterpret_cast<std::int8_t *>(working_memory_ptr);
+    auto b_int8_slices_ptr = a_int8_slices_ptr + A_working_memory_size;
+
+    // ---- Split phase ------------------------------------------------------
+    if (use_nearest_split) {
+        // H / RN — nearest-rounding split. The per-row scale stored
+        // in `a_scale_ptr` / `b_scale_ptr` is `1/s` from the
+        // extractor; the accumulator does the multiply-with-cell.
+        mtk::ozimmu::split_int8_nearest(
+            a_int8_slices_ptr, ld_int8_a, a_scale_ptr, m, k, a_ptr, lda,
+            op_A, mtk::ozimmu::detail::matrix_A,
+            static_cast<std::int8_t>(num_split),
+            static_cast<std::int8_t>(bits_per_int8), handle->cuda_stream);
+        mtk::ozimmu::split_int8_nearest(
+            b_int8_slices_ptr, ld_int8_b, b_scale_ptr, k, n, b_ptr, ldb,
+            op_B, mtk::ozimmu::detail::matrix_B,
+            static_cast<std::int8_t>(num_split),
+            static_cast<std::int8_t>(bits_per_int8), handle->cuda_stream);
+    } else {
+        // Base / EF — signed split, per-row max-exponent.
+        split_AB_int8<double>(handle, op_A, op_B, m, n, k, a_ptr, lda,
+                              a_scale_ptr, a_int8_slices_ptr, ld_int8_a,
+                              b_ptr, ldb, b_scale_ptr, b_int8_slices_ptr,
+                              ld_int8_b, num_split, bits_per_int8);
+    }
+
+    // ---- int8 GEMMs + accumulation ---------------------------------------
+    // `lim_accum` budget — see the function-header comment for the
+    // derivation. We compute it the same way for all variants; only
+    // EF / H actually consult it (Base / RN flush after every pair).
+    int nextpow2_k = 0;
+    if (k > 0) {
+        std::uint32_t kk = static_cast<std::uint32_t>(k);
+        while ((1u << nextpow2_k) < kk) {
+            nextpow2_k++;
+        }
+    }
+    int lim_accum_bits = 31 - bits_per_int8 - bits_per_int8 - nextpow2_k;
+    if (lim_accum_bits < 0) lim_accum_bits = 0;
+
+    const auto &gemm_pair_config_list =
+        mtk::ozimmu::detail::get_split_config(compute_mode).gemm_pair_config_list;
+
+    // Closure picks the right accumulator based on splitter.
+    auto do_accumulate =
+        [&](const mtk::ozimmu::detail::gemm_pair_config_t &gpc) {
+            if (use_nearest_split) {
+                const double scale = std::scalbn(
+                    1.0, -bits_per_int8 * (gpc.A_id + gpc.B_id - 2));
+                accumulate_in_f64_2(m, c_f64_ptr, c_i32_ptr, m * n,
+                                    a_scale_ptr, b_scale_ptr, scale,
+                                    handle->cuda_stream);
+            } else {
+                accumulate_in_f64(
+                    c_f64_ptr, c_i32_ptr, m * n,
+                    bits_per_int8 * (gpc.A_id + gpc.B_id - 2)
+                        - (7 - bits_per_int8) * 2,
+                    handle->cuda_stream);
+            }
+        };
+
+    if (!use_errfree_sum || lim_accum_bits == 0) {
+        // Base / RN — accumulate after every int8 GEMM.
+        for (const auto &gpc : gemm_pair_config_list) {
+            matmul_core(handle, op_A, op_B, m, n, ld_int8_a, a_ptr, lda,
+                        mtk::ozimmu::fp64, b_ptr, ldb, mtk::ozimmu::fp64,
+                        /*beta_i=*/0, c_i32_ptr, gpc, compute_mode,
+                        a_int8_slices_ptr, ld_int8_a, b_int8_slices_ptr,
+                        ld_int8_b);
+            do_accumulate(gpc);
+        }
+    } else {
+        // EF / H — group-wise error-free summation. Chain
+        // consecutive int8 GEMMs into the same int32 accumulator via
+        // `beta_i = 1`; flush to f64 once at the end of each group
+        // (group size = `2^lim_accum_bits`).
+        const int lim_accum = 1 << lim_accum_bits;
+        int beta_i          = 0;
+        int p               = -1;
+        for (const auto &gpc : gemm_pair_config_list) {
+            if (gpc.A_id == 1) p++;
+            if ((gpc.A_id - 1) % lim_accum == 0) beta_i = 0;
+
+            matmul_core(handle, op_A, op_B, m, n, ld_int8_a, a_ptr, lda,
+                        mtk::ozimmu::fp64, b_ptr, ldb, mtk::ozimmu::fp64,
+                        /*beta_i=*/beta_i, c_i32_ptr, gpc, compute_mode,
+                        a_int8_slices_ptr, ld_int8_a, b_int8_slices_ptr,
+                        ld_int8_b);
+            beta_i = 1;
+
+            const bool last_in_row = (gpc.A_id - 1) == p;
+            const bool at_lim_bdry =
+                (gpc.A_id % lim_accum == 0) && (gpc.A_id > 1);
+            if (last_in_row || at_lim_bdry) {
+                do_accumulate(gpc);
+            }
+        }
+    }
+
+    // ---- Final copy to caller-C ------------------------------------------
+    if (use_nearest_split) {
+        // Per-row scale is already baked in by accumulate_in_f64_2.
+        axby_2(m, n, *alpha, c_f64_ptr, *beta, c_ptr, ldc,
+               handle->cuda_stream);
+    } else {
+        // Base / EF — `axby` does the `/2^44 * max_exp_a * max_exp_b` re-scale.
+        axby(m, n, *alpha, c_f64_ptr, *beta, c_ptr, ldc, a_scale_ptr,
+             b_scale_ptr, handle->cuda_stream);
+    }
     return 0;
 }
 
@@ -448,6 +778,68 @@ int gemm_int8<cuDoubleComplex>(
 }
 
 }  // namespace
+
+/// Phase 44c — variant-aware dgemm entry point.
+///
+/// Routes to `gemm_int8_double_variant` for the FP64 real path with
+/// the caller-supplied `variant` flag (0 = Base, 1 = EF, 2 = RN,
+/// 3 = H). Complex / non-int8 compute_modes ignore `variant` and
+/// fall back to the legacy path. Validation matches
+/// `mtk::ozimmu::gemm` exactly.
+///
+/// Not in the `mtk::ozimmu::` namespace because the upstream header
+/// is intentionally untouched in Phase 44c (Phase 44b clean-fork
+/// rule: the C++ API surface stays drop-in with the original ozIMMU
+/// header so downstream users can grep for `mtk::ozimmu::` symbols
+/// without surprises).
+int baracuda_ozimmu_gemm_double_variant_impl(
+    mtk::ozimmu::handle_t handle, const mtk::ozimmu::operation_t op_A,
+    const mtk::ozimmu::operation_t op_B, const std::size_t m,
+    const std::size_t n, const std::size_t k, const double *alpha,
+    const double *const a_ptr, const std::size_t lda,
+    const double *const b_ptr, const std::size_t ldb, const double *beta,
+    double *const c_ptr, std::size_t ldc,
+    const mtk::ozimmu::compute_mode_t compute_mode, const int variant) {
+    // Argument validation — same shape as `mtk::ozimmu::gemm`.
+    int arg_error = 0;
+    arg_error |= check_gemm_shape(op_A, m, k, lda, "A");
+    arg_error |= check_gemm_shape(op_B, k, n, ldb, "B");
+    arg_error |= check_gemm_shape(mtk::ozimmu::op_n, m, n, ldc, "C");
+    arg_error |= check_address_alignment<double>(a_ptr, "A");
+    arg_error |= check_address_alignment<double>(b_ptr, "B");
+    arg_error |= check_address_alignment<double>(c_ptr, "C");
+    if (arg_error) {
+        return 1;
+    }
+
+    // Reallocate working memory if needed.
+    mtk::ozimmu::gemm_list_t gemm_list = {mtk::ozimmu::gemm_params_t{
+        op_A, op_B, m, n, k, mtk::ozimmu::real, compute_mode}};
+    mtk::ozimmu::reallocate_working_memory(handle, gemm_list);
+
+    if (compute_mode >= mtk::ozimmu::fp64_int8_3
+        && compute_mode <= mtk::ozimmu::fp64_int8_18) {
+        return gemm_int8_double_variant(handle, op_A, op_B, m, n, k, alpha,
+                                        a_ptr, lda, b_ptr, ldb, beta, c_ptr,
+                                        ldc, compute_mode, variant);
+    } else if (compute_mode == mtk::ozimmu::fp64_int8_auto) {
+        const auto auto_mode = mtk::ozimmu::auto_mode_select(
+            handle, op_A, op_B, m, n, k, a_ptr, lda, b_ptr, ldb,
+            mtk::ozimmu::real, handle->avg_mantissa_loss_threshold);
+        return baracuda_ozimmu_gemm_double_variant_impl(
+            handle, op_A, op_B, m, n, k, alpha, a_ptr, lda, b_ptr, ldb,
+            beta, c_ptr, ldc, auto_mode, variant);
+    } else if (compute_mode == mtk::ozimmu::dgemm) {
+        // Native cuBLAS DGEMM passthrough — variant is meaningless.
+        cublasGemmEx(handle->cublas_handle, to_cublasOperation_t(op_A),
+                     to_cublasOperation_t(op_B), m, n, k, alpha, a_ptr,
+                     CUDA_R_64F, lda, b_ptr, CUDA_R_64F, ldb, beta, c_ptr,
+                     CUDA_R_64F, ldc, CUBLAS_COMPUTE_64F,
+                     CUBLAS_GEMM_DEFAULT);
+        return 0;
+    }
+    return 2;  // Unsupported compute_mode.
+}
 
 int mtk::ozimmu::gemm(mtk::ozimmu::handle_t handle,
                       const mtk::ozimmu::operation_t op_A,

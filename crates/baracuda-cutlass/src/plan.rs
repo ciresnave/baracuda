@@ -2277,9 +2277,23 @@ fn validate_ozaki_request(
         }
         // Layout is already constrained to Rcr / Rrr by the descriptor;
         // both are supported by `mtk::ozimmu::gemm`.
-        if slices != 0 && !(3..=18).contains(&slices) {
+        //
+        // Phase 44c extends the encoding to include variant flags.
+        // The low 5 bits are the slice count (0 = auto, 3..=18 = fixed);
+        // the high 3 bits are the variant (0 = Base, 1 = EF, 2 = RN,
+        // 3 = H). Reject anything else.
+        let s = slices & 0x1F; // low 5 bits = slice count
+        let v = slices >> 5;   // high 3 bits = variant
+        if s != 0 && !(3..=18).contains(&s) {
             return Err(Error::Unsupported(
-                "BackendKind::Ozaki slice count must be 0 (auto) or 3..=18",
+                "BackendKind::Ozaki slice count (low 5 bits) must be 0 \
+                 (auto) or 3..=18",
+            ));
+        }
+        if v > 3 {
+            return Err(Error::Unsupported(
+                "BackendKind::Ozaki variant (high 3 bits) must be 0 (Base), \
+                 1 (EF), 2 (RN), or 3 (H)",
             ));
         }
         Ok(())
@@ -3095,7 +3109,7 @@ impl<T: CutlassElement> GemmPlan<T> {
         beta_eff: T::Scalar,
         slices: u8,
     ) -> Result<()> {
-        use baracuda_ozimmu::{Op as OzakiOp, OzakiSlices};
+        use baracuda_ozimmu::{Op as OzakiOp, OzakiSlices, OzakiVariant};
 
         if !<T::Scalar as ScalarType>::IS_F64 {
             return Err(Error::Unsupported(
@@ -3113,7 +3127,14 @@ impl<T: CutlassElement> GemmPlan<T> {
             ));
         }
 
-        let slice_choice = match slices {
+        // Phase 44c — decode the discriminant. Low 5 bits = slice
+        // count (0 = auto, 3..=18 = fixed); high 3 bits = variant
+        // (0 = Base, 1 = EF, 2 = RN, 3 = H). The pure-slices-only
+        // values 0..=18 used by Phase 44b decode as Base, preserving
+        // source-compat for existing callers.
+        let s = slices & 0x1F;
+        let v = slices >> 5;
+        let slice_choice = match s {
             0 => OzakiSlices::Auto,
             3 => OzakiSlices::S3,
             4 => OzakiSlices::S4,
@@ -3134,6 +3155,18 @@ impl<T: CutlassElement> GemmPlan<T> {
             _ => {
                 return Err(Error::Unsupported(
                     "ozIMMU slice count out of range (validated at select; \
+                     this is unreachable)",
+                ));
+            }
+        };
+        let variant_choice = match v {
+            0 => OzakiVariant::Base,
+            1 => OzakiVariant::EF,
+            2 => OzakiVariant::RN,
+            3 => OzakiVariant::H,
+            _ => {
+                return Err(Error::Unsupported(
+                    "ozIMMU variant out of range (validated at select; \
                      this is unreachable)",
                 ));
             }
@@ -3168,8 +3201,13 @@ impl<T: CutlassElement> GemmPlan<T> {
 
         // SAFETY: the descriptor / args were validated by
         // can_implement(); pointers are live DeviceBuffer<f64> views.
+        //
+        // Phase 44c — always go through dgemm_with_variant. Base
+        // variant is bit-identical to the pre-44c dgemm path; the
+        // variant dispatch happens inside the C++ shim with no
+        // measurable per-call host overhead.
         unsafe {
-            handle.dgemm(
+            handle.dgemm_with_variant(
                 transa, transb,
                 // ozIMMU sees us computing D^T col-major: shape (n, m).
                 n, m, k,
@@ -3179,6 +3217,7 @@ impl<T: CutlassElement> GemmPlan<T> {
                 beta,
                 d_ptr, ldc,
                 slice_choice,
+                variant_choice,
             )
             .map_err(|e| {
                 use baracuda_ozimmu::Error as OzErr;

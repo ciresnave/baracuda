@@ -112,6 +112,25 @@ pub const COMPUTE_MODE_FP64_INT8_18: ComputeMode = 17;
 /// handle's `auto_mantissa_loss_threshold` (default 0).
 pub const COMPUTE_MODE_FP64_INT8_AUTO: ComputeMode = 18;
 
+/// Phase 44c variant flag — base ozIMMU (Ootomo / Ozaki / Yokota
+/// 2023, IJHPCA 2024). Bit-identical to the historical
+/// `baracuda_ozimmu_dgemm` path; default when callers don't opt in.
+pub const OZIMMU_VARIANT_BASE: c_int = 0;
+/// Phase 44c variant flag — EF (group-wise error-free summation).
+/// Reduces FP64 accumulation overhead vs Base by chaining int8
+/// GEMMs into the same int32 accumulator (`beta_i = 1`) and flushing
+/// to f64 once per `2^(31 - 2*bits - ceil(log2(k)))`-sized group.
+/// Same accuracy as Base.
+pub const OZIMMU_VARIANT_EF: c_int = 1;
+/// Phase 44c variant flag — RN (nearest-rounding split). Replaces
+/// the truncation-style int8 extraction with `(a + t) - t`
+/// round-to-nearest. ~2 extra effective bits per slice at the same
+/// throughput as Base.
+pub const OZIMMU_VARIANT_RN: c_int = 2;
+/// Phase 44c variant flag — H (EF + RN combined). Best accuracy /
+/// perf tradeoff per the upstream perf paper.
+pub const OZIMMU_VARIANT_H: c_int = 3;
+
 unsafe extern "C" {
     /// Create an ozIMMU handle. `malloc_mode_async` is `0` (sync)
     /// or `1` (async, only useful when the bound stream uses
@@ -154,6 +173,53 @@ unsafe extern "C" {
         handle: OzimmuHandleT,
         size_in_bytes: usize,
     ) -> usize;
+
+    /// Phase 44c — variant-aware FP64 GEMM via the Ozaki scheme.
+    ///
+    /// Identical to [`baracuda_ozimmu_dgemm`] except for the trailing
+    /// `variant` parameter, which selects a perf-enhancement variant
+    /// ported from RIKEN-RCCS/accelerator_for_ozIMMU:
+    ///
+    ///   - [`OZIMMU_VARIANT_BASE`] (= 0) — original ozIMMU (Ootomo /
+    ///     Ozaki / Yokota 2023). Bit-identical to
+    ///     [`baracuda_ozimmu_dgemm`] output.
+    ///   - [`OZIMMU_VARIANT_EF`]   (= 1) — group-wise error-free
+    ///     summation. Reduces the number of int32 → f64
+    ///     materialization passes by chaining consecutive
+    ///     `cublasGemmEx` calls into the same int32 accumulator. Same
+    ///     accuracy as Base, ~5–15% faster on perf-paper benchmarks.
+    ///   - [`OZIMMU_VARIANT_RN`]   (= 2) — nearest-rounding splitter.
+    ///     Replaces the upstream truncation-style int8 extraction with
+    ///     the `(a + t) - t` round-to-nearest trick (Uchino / Ozaki /
+    ///     Imamura 2024, §3.2). Same speed as Base, ~2 extra effective
+    ///     bits of mantissa precision per slice. Use to drop one
+    ///     slice for the same accuracy.
+    ///   - [`OZIMMU_VARIANT_H`]    (= 3) — EF + RN combined.
+    ///
+    /// n-blocking (chunk large-N int8 GEMMs into 8192-wide pieces) is
+    /// applied automatically by `matmul_core` regardless of the
+    /// variant flag.
+    ///
+    /// `compute_mode` follows the same convention as the base call;
+    /// the variant is independent of the slice count.
+    pub fn baracuda_ozimmu_dgemm_with_variant(
+        handle: OzimmuHandleT,
+        op_a: c_int,
+        op_b: c_int,
+        m: usize,
+        n: usize,
+        k: usize,
+        alpha: *const f64,
+        a_ptr: *const f64,
+        lda: usize,
+        b_ptr: *const f64,
+        ldb: usize,
+        beta: *const f64,
+        c_ptr: *mut f64,
+        ldc: usize,
+        compute_mode: c_int,
+        variant: c_int,
+    ) -> c_int;
 
     /// Run an FP64 GEMM via the Ozaki scheme.
     ///

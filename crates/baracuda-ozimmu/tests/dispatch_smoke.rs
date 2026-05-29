@@ -77,7 +77,13 @@ fn pregrown_workspace_then_dgemm() {
     // by accident, but the L2 norm shouldn't).
     let mut got = vec![0.0f64; m * m];
     c.copy_to_host(&mut got).expect("D2H");
-    let l2: f64 = got.iter().map(|v| v * v).sum::<f64>().sqrt();
+    let nonfinite = got.iter().filter(|v| !v.is_finite()).count();
+    let l2: f64 = got.iter().filter(|v| v.is_finite()).map(|v| v * v).sum::<f64>().sqrt();
+    assert_eq!(
+        nonfinite, 0,
+        "result has {} non-finite cells (ozIMMU produced inf/NaN)",
+        nonfinite,
+    );
     assert!(l2 > 0.0, "result has zero L2 norm (ozIMMU launch produced nothing?)");
 }
 

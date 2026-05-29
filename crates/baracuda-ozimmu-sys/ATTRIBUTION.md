@@ -17,6 +17,25 @@ The reference implementation we forked from is:
 - **`enp1s0/ozIMMU`** (Hiroyuki Ootomo, MIT-licensed) —
   <https://github.com/enp1s0/ozIMMU>.
 
+The Phase 44c perf-enhancement variants (EF / RN / H + n-blocking)
+are the work of:
+
+- **Tomonori Uchino, Katsuhisa Ozaki, Toshiyuki Imamura.**
+  "Performance enhancement of the Ozaki Scheme on integer matrix
+  multiplication unit." *arXiv preprint*
+  [arXiv:2409.13313](https://arxiv.org/abs/2409.13313) (2024). The
+  paper introduces the three accuracy / perf variants (`EF` =
+  error-free summation, `RN` = nearest-rounding split, `H` = EF + RN
+  combined) and the n-blocking transform on the int8 GEMM call to
+  recover scaling at large N.
+- The reference implementation we ported the patches from is
+  **`RIKEN-RCCS/accelerator_for_ozIMMU`** (MIT-licensed) —
+  <https://github.com/RIKEN-RCCS/accelerator_for_ozIMMU>. The repo
+  ships full source-replacement directories (one per variant)
+  rather than diff patches; baracuda Phase 44c reads them, lifts
+  the algorithmic deltas, and applies them to baracuda's already-
+  modified `cuda/gemm.cu` + `cuda/split.cu`.
+
 ## Phase 44 → 44b history
 
 - **Phase 44 (baracuda alpha.56)** vendored `enp1s0/ozIMMU` under
@@ -56,6 +75,27 @@ The reference implementation we forked from is:
     behavior preserved); on Windows it's a small struct that
     implements the operations the Ozaki splitter actually exercises.
   - The build path now works on Linux + Windows.
+- **Phase 44c (baracuda alpha.57, no version bump)** folds in the
+  RIKEN-RCCS perf-enhancement variants:
+  - `split_int8_nearest` (nearest-rounding splitter — H-variant
+    flavour, no per-slice scale array) added to `cuda/split.cu`.
+  - `accumulate_in_f64_2` + `axby_2` (RN/H reconstruction helpers)
+    added to `cuda/gemm.cu`.
+  - `matmul_core` extended with an optional `beta_i` parameter (for
+    EF/H group-wise accumulation) and n-blocking (n>12288 splits
+    into 8192-wide chunks).
+  - `gemm_int8_double_variant` dispatches Base / EF / RN / H based
+    on a `variant` integer flag.
+  - New C-ABI entry `baracuda_ozimmu_dgemm_with_variant` in
+    `cuda/baracuda_shim.cu`. The Phase 44b
+    `baracuda_ozimmu_dgemm` entry is unchanged (still routes to
+    `mtk::ozimmu::gemm` → base path).
+  - Public-API extension: `BackendKind::Ozaki { slices: u8 }`
+    discriminant gains a high-3-bits variant field (0 = Base, 1 =
+    EF, 2 = RN, 3 = H). New `OzakiVariant` enum + `OzakiSlices`
+    helper constructors (`ozaki_slices::ef(8)`, etc.) in
+    `baracuda-kernels-types::sku`. Source-compatible with Phase
+    44b callers (`slices: 8` still decodes as Base/S8).
 
 ## License
 

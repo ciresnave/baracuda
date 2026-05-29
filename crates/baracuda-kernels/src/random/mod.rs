@@ -27,9 +27,15 @@
 
 pub mod dropout;
 pub mod plan;
+// Phase 46 — FlashInfer sort-free top-K/top-P/min-P sampling.
+pub mod topk_topp_sampling;
 
 pub use dropout::{
     DropoutArgs, DropoutBackwardArgs, DropoutBackwardDescriptor, DropoutBackwardPlan,
     DropoutDescriptor, DropoutPlan,
 };
 pub use plan::{RandomArgs, RandomBoolArgs, RandomDescriptor, RandomPlan};
+// Phase 46 — sort-free sampling re-exports.
+pub use topk_topp_sampling::{
+    SamplerKind, TopKTopPSamplingArgs, TopKTopPSamplingDescriptor, TopKTopPSamplingPlan,
+};

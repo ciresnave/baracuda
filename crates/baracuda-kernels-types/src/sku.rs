@@ -147,6 +147,13 @@ pub enum BackendKind {
     /// added this as a backend choice on `FlashSdpaPlan` for the long-
     /// context regime where FA2's tiling wins over the bespoke kernel.
     FlashAttentionV2,
+    /// Vendored FlashInfer (Apache-2.0). Phase 46 added three plan
+    /// families backed by FlashInfer cherry-picked headers:
+    /// `BatchPagedDecodePlan` (batched paged-KV decode for vLLM-style
+    /// serving), `TopKTopPSamplingPlan` (sort-free combined top-K /
+    /// top-P / min-P sampling), and `CascadeAttentionPlan` (LSE-merge
+    /// for prefix-cache sharing across requests).
+    FlashInfer,
     /// Vendored ozIMMU (MIT). Phase 44 backend choice on FP64 `GemmPlan`
     /// that splits each operand into `slices` int8 slices and runs
     /// `slices²` tensor-core matmuls (the Ozaki scheme) to synthesize
@@ -155,15 +162,83 @@ pub enum BackendKind {
     /// `slices = 8` is the upstream-recommended sweet spot for
     /// well-conditioned inputs.
     ///
-    /// Slice-count discriminant: `0` selects ozIMMU's `fp64_int8_auto`
-    /// mode (runtime selection based on the inputs' mantissa-loss
-    /// histogram); `3..=18` selects the corresponding `fp64_int8_N`
-    /// fixed slice count. Values outside that range are rejected at
+    /// # Slice-count + variant discriminant encoding (Phase 44c)
+    ///
+    /// The `slices` byte is split into two bit-fields:
+    ///
+    /// - **Low 5 bits** (`slices & 0x1F`) — slice count `S`:
+    ///   - `0` = auto (`fp64_int8_auto`, runtime selection based on
+    ///     mantissa-loss histogram).
+    ///   - `3..=18` = fixed slice count (`fp64_int8_3` .. `fp64_int8_18`).
+    ///
+    /// - **High 3 bits** (`slices >> 5`) — Phase 44c variant flag:
+    ///   - `0` = Base (original ozIMMU; default for back-compat with
+    ///     Phase 44/44b callers).
+    ///   - `1` = EF (group-wise error-free summation; ~5–15% faster
+    ///     at the same accuracy).
+    ///   - `2` = RN (nearest-rounding split; ~2 extra effective bits
+    ///     per slice).
+    ///   - `3` = H (EF + RN combined).
+    ///
+    /// Use the [`ozaki_slices`] helper constructors for ergonomic
+    /// construction (`ozaki_slices::ef(8)` → `40` = EF variant at
+    /// S=8). Values with any other bit pattern are rejected at
     /// plan-select time.
+    ///
+    /// n-blocking (chunk large-N int8 GEMMs into 8192-wide pieces)
+    /// is applied automatically by the C++ shim regardless of the
+    /// variant flag.
     Ozaki {
-        /// Slice count `S` (0 = auto, 3..=18 = fixed).
+        /// Slice count + variant discriminant — see the
+        /// [`BackendKind::Ozaki`] doc-comment for the bit-field
+        /// layout. Prefer the [`ozaki_slices`] helpers over raw
+        /// integer construction.
         slices: u8,
     },
+}
+
+/// Phase 44c — helper constructors for the
+/// [`BackendKind::Ozaki { slices }`] discriminant.
+///
+/// Encodes a slice count + variant pair into a single byte per the
+/// `low-5 = slices, high-3 = variant` convention. Each helper takes a
+/// raw slice count in `0..=18` and returns the encoded discriminant.
+///
+/// ```ignore
+/// use baracuda_kernels_types::{BackendKind, sku::ozaki_slices};
+///
+/// // Original ozIMMU at S=8 (Phase 44b default — equivalent to
+/// // passing `slices: 8` directly).
+/// let base = BackendKind::Ozaki { slices: ozaki_slices::base(8) };
+///
+/// // RIKEN EF variant at S=8 — ~5-15% faster, same accuracy.
+/// let ef = BackendKind::Ozaki { slices: ozaki_slices::ef(8) };
+///
+/// // RIKEN RN variant at S=4 — similar accuracy to Base at S=5-6.
+/// let rn = BackendKind::Ozaki { slices: ozaki_slices::rn(4) };
+///
+/// // RIKEN H variant at S=8 — best of EF + RN.
+/// let h = BackendKind::Ozaki { slices: ozaki_slices::h(8) };
+/// ```
+pub mod ozaki_slices {
+    /// Base ozIMMU at the given slice count `s` (0 = auto, 3..=18 = fixed).
+    /// Equivalent to passing `s` directly — preserved for symmetry
+    /// with the other variant constructors.
+    pub const fn base(s: u8) -> u8 {
+        s
+    }
+    /// EF (group-wise error-free summation) variant.
+    pub const fn ef(s: u8) -> u8 {
+        (1 << 5) | (s & 0x1F)
+    }
+    /// RN (nearest-rounding split) variant.
+    pub const fn rn(s: u8) -> u8 {
+        (2 << 5) | (s & 0x1F)
+    }
+    /// H (EF + RN combined) variant.
+    pub const fn h(s: u8) -> u8 {
+        (3 << 5) | (s & 0x1F)
+    }
 }
 
 /// Generalized kernel SKU — covers every op category.

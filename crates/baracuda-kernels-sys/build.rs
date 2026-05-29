@@ -321,6 +321,41 @@ fn main() {
         }
     }
 
+    // Phase 46 — FlashInfer cherry-pick (vendored Apache-2.0). Compiles
+    // 4 baracuda launcher TUs that template-instantiate the FlashInfer
+    // header-only kernels for the three families in scope:
+    //   1. batched paged-KV decode + paged-KV append
+    //   2. sort-free top-K/top-P/min-P sampling
+    //   3. cascade attention LSE merge
+    if cfg!(feature = "flashinfer") {
+        builder = builder
+            .include_path("vendor/flashinfer/include")
+            .arg("--expt-relaxed-constexpr")
+            .arg("--expt-extended-lambda")
+            .arg("-DNDEBUG");
+        // NOTE Phase 46 in progress: `flashinfer_paged_decode_launcher.cu`
+        // hits an MSVC nvcc compatibility issue at the kernel-launch
+        // call ("cannot deduce auto type" / "no instance of
+        // cudaLaunchKernel_ptsz matches" — caused by Windows-default
+        // per-thread-default-stream API interaction with FlashInfer's
+        // `cudaLaunchKernel((void*)kernel, …)` cast). Skipped here so
+        // the rest of the launchers (sampling + cascade + paged_kv_
+        // append) can ship as a Phase 46 Checkpoint A. The paged
+        // decode launcher will land in a Phase 46 follow-up once the
+        // launch call is rewritten to satisfy the MSVC-side template
+        // deduction.
+        for f in &[
+            // "kernels/attention/flashinfer_paged_decode_launcher.cu",
+            "kernels/attention/flashinfer_paged_kv_append_launcher.cu",
+            "kernels/attention/flashinfer_cascade_launcher.cu",
+            "kernels/sampling/flashinfer_sampling_launcher.cu",
+        ] {
+            if std::path::Path::new(f).exists() {
+                builder = builder.source_files([*f]);
+            }
+        }
+    }
+
     if cfg!(feature = "sm90a") {
         builder = builder.compute_cap(90).arg("-DBARACUDA_KERNELS_HAS_SM90A");
     } else if cfg!(feature = "sm89") {

@@ -120,3 +120,25 @@ pub(crate) fn map_status(code: i32) -> Result<()> {
 /// Default RoPE base — `10000.0`, matching the original Llama /
 /// Mistral / Gemma conventions.
 pub const ROPE_DEFAULT_BASE: f32 = 10000.0;
+
+// =========================================================================
+// Phase 46 — FlashInfer cherry-pick: batched paged-KV decode, paged-KV
+// append, cascade LSE merge. Three new plan families behind the
+// `flashinfer` cargo feature. Plan files always compile; the FFI calls
+// inside `run()` are `#[cfg(feature = "flashinfer")]`-gated so the
+// public API surface exists even without the feature.
+// =========================================================================
+pub mod batch_paged_decode;
+pub mod cascade_attn;
+pub mod paged_kv_append;
+
+pub use batch_paged_decode::{
+    BatchPagedDecodeArgs, BatchPagedDecodeDescriptor, BatchPagedDecodePlan,
+    PagedKvCacheDescriptor,
+};
+pub use cascade_attn::{
+    CascadeAttentionArgs, CascadeAttentionDescriptor, CascadeAttentionPlan,
+};
+pub use paged_kv_append::{
+    PagedKvAppendArgs, PagedKvAppendDescriptor, PagedKvAppendPlan,
+};

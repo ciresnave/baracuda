@@ -47,6 +47,13 @@ mhc = ["baracuda-kernels/mhc"]
 # runs under `external/cuda-l2-probes/`).
 cuda_l2 = []
 
+# Phase 44c — ozIMMU variant bench. Gates the `gemm_ozaki_variants`
+# bench, which times Base / EF / RN / H ozIMMU dispatch at LLM-typical
+# FP64 shapes via `baracuda-ozimmu`. Off by default; flip on to compile
+# the ozIMMU CUDA static archive (~12 s nvcc cost) and run the A/B/C/D
+# comparison.
+ozimmu = ["dep:baracuda-ozimmu"]
+
 [dependencies]
 baracuda-kernels = { workspace = true }
 baracuda-kernels-types = { workspace = true }
@@ -56,6 +63,8 @@ baracuda-cublas = { workspace = true }
 baracuda-cublas-sys = { workspace = true }
 baracuda-cudnn = { workspace = true, features = ["half-crate"] }
 baracuda-types = { workspace = true, features = ["half-crate", "f8-crate"] }
+# Phase 44c — optional, gated behind the `ozimmu` feature on this crate.
+baracuda-ozimmu = { workspace = true, optional = true, features = ["build-vendor"] }
 half = { workspace = true }
 
 [build-dependencies]
@@ -160,6 +169,11 @@ harness = false
 #     files and the bench includes a live CUDA-L2 timing arm.
 [[bench]]
 name = "gemm_vs_cuda_l2"
+harness = false
+
+# Phase 44c — ozIMMU variant A/B/C/D timing.
+[[bench]]
+name = "gemm_ozaki_variants"
 harness = false
 
 [package.metadata.docs.rs]

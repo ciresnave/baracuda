@@ -22,19 +22,29 @@ multi-tensor Adam / LAMB / SGD) under the `optim` cargo feature:
   bf16 only — exposed as `HyperConnectionPlan` under the `mhc`
   feature. Replaces the bare residual `y = x + sublayer(x)` with a
   learned `n×n` Sinkhorn-Knopp doubly-stochastic mixing matrix.
-- **Phase 44 + 44b**: ozIMMU Ozaki-scheme DGEMM — synthesizes FP64
-  GEMM from S² int8 tensor-core matmuls — wired as opt-in
+- **Phase 44 + 44b + 44c**: ozIMMU Ozaki-scheme DGEMM — synthesizes
+  FP64 GEMM from S² int8 tensor-core matmuls — wired as opt-in
   `BackendKind::Ozaki { slices }` on `GemmPlan`'s f64 path. NEW
   sibling crates `baracuda-ozimmu-sys` + `baracuda-ozimmu`.
   Phase 44 (alpha.56) vendored enp1s0/ozIMMU + cutf submodule
   (Linux-only); Phase 44b (alpha.57) clean-forked the whole stack —
   cutf submodule eliminated (~360 LOC of useful utilities folded into
   baracuda; ~2,200 LOC of duplicates deleted), portable `Uint128`
-  unblocks Windows, LD_PRELOAD path removed. Default f64 GEMM stays
-  on CUTLASS/cuBLAS DGEMM (bit-exact); Ozaki is opt-in for callers
-  accepting the "comparable to DGEMM at S≥8" precision contract.
-  Algorithm and reference implementation from Ootomo/Ozaki/Yokota —
-  see `crates/baracuda-ozimmu-sys/ATTRIBUTION.md`.
+  unblocks Windows, LD_PRELOAD path removed.
+  **Phase 44c (alpha.57, no version bump)** folds in the RIKEN-RCCS
+  `accelerator_for_ozIMMU` perf-enhancement variants: `EF`
+  (group-wise error-free summation), `RN` (nearest-rounding split),
+  `H` (= EF + RN), plus n-blocking on the int8 cublas call (chunk
+  `n > 12288` into 8192-wide pieces). Variants selected via the
+  `BackendKind::Ozaki { slices }` discriminant's high-3-bits field
+  (`ozaki_slices::ef(8)` etc. helpers in `baracuda-kernels-types`).
+  Source-compatible with Phase 44b callers — `slices: 8` still
+  decodes as Base/S=8. Default f64 GEMM stays on CUTLASS/cuBLAS
+  DGEMM (bit-exact); Ozaki is opt-in for callers accepting the
+  "comparable to DGEMM at S≥8" precision contract.
+  Algorithm + reference implementations from Ootomo/Ozaki/Yokota
+  (base) and Uchino/Ozaki/Imamura (Phase 44c variants) — see
+  `crates/baracuda-ozimmu-sys/ATTRIBUTION.md`.
 
 **Phase 45 (alpha.56, no version bump yet)** ships two pure-Rust
 zero-new-CUDA composition wins over existing kernels:
@@ -84,6 +94,48 @@ Tier 2 deferred: `label_smoothing`, `lse_square_scale`, `softcap`,
 `ce_weight` (per-class), `return_z_loss`. All are scalar / per-class
 parameters Liger threads through the same kernel; adding them is
 mechanical fanout.
+
+**Phase 46 (alpha.57, no version bump — Checkpoint A)** ships **three
+FlashInfer cherry-picked kernel families** for vLLM-style serving +
+sort-free sampling + cascade attention. NVIDIA / FlashInfer-community
+v0.6.12 (Apache-2.0, commit `eee0d75f`) was surgically cherry-picked
+(~12 kLOC across 25 headers; NOT a wholesale wrap) into
+`crates/baracuda-kernels-sys/vendor/flashinfer/`. Three new plan
+families behind the opt-in `flashinfer` cargo feature:
+
+- **`BatchPagedDecodePlan`** + **`PagedKvAppendPlan`** — batched
+  paged-KV decode (the missing vLLM primitive) + decode-time KV-cache
+  append into the paged store. Companion to existing
+  `KvCacheAppendPlan` (contiguous-cache append, unchanged from Phase
+  6.5). `head_dim ∈ {64, 128, 256}` × `{f16, bf16, f32}` × kHND
+  layout × `DefaultAttention<false, false, false, false>` (no mask /
+  no sliding-window / no soft-cap / no ALiBi). `BlockManager` /
+  `BlockTable` (the free-list + refcount + fork/CoW allocator) is
+  caller-owned per the Phase 46 brief — Fuel provides it.
+- **`TopKTopPSamplingPlan`** — sort-free combined TopK / TopP / MinP
+  / TopK+TopP sampler. Single-kernel rejection sampling; much faster
+  than baracuda's existing argsort + softmax + multinomial decode
+  pipeline. f32 probs + i32 output. Deterministic mode wired
+  through.
+- **`CascadeAttentionPlan`** — LSE-aware merge of partial attention
+  states (`(v, s) <- merge((v, s), (v_other, s_other))`). The
+  building block for prefix-cache sharing across requests — system
+  prompts, RAG context reuse. Pairwise in-place merge in Tier 1;
+  many-way `MergeStates` FFI-exposed but plan-wrapping deferred.
+
+NEW `BackendKind::FlashInfer` + `RandomKind::Multinomial` SKU
+discriminants. ~25 new FFI symbols (Checkpoint A — sampling +
+cascade + paged-KV append launchers). Six MSVC-portability patches to
+vendored headers documented in
+`vendor/flashinfer/VENDOR.md`. Three `#[ignore]` smoke tests.
+
+**Checkpoint B (paged decode launcher)** is staged for a follow-up
+revision — the launcher hits an MSVC nvcc template-deduction issue
+at the `cudaLaunchKernel((void*)kernel, …)` call site
+(`cudaLaunchKernel_ptsz` per-thread-default-stream overload conflict).
+The Rust `BatchPagedDecodePlan` + FFI declarations + vendored
+headers are in place; only the `.cu` launcher TU is excluded from
+the build.
 
 **Phase 51 (alpha.57, no version bump)** ships **arbitrary-mask FW
 SDPA** as an optional path on `FlashSdpaPlan` — closing the FA2 Tier-1
