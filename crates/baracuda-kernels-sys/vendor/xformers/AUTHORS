@@ -1,0 +1,22 @@
+xFormers — facebookresearch/xformers
+Copyright (c) Facebook, Inc. and its affiliates. All rights reserved.
+
+Maintained by the Meta AI Research team.
+
+Upstream contributors are listed in the repository's git history at
+<https://github.com/facebookresearch/xformers>. The two algorithm
+families baracuda's Phase 54 cherry-picks from xFormers are:
+
+  - BlockSparseAttention (xformers/components/attention/blocksparse.py +
+    xformers/components/attention/csrc/) — block-sparse SDPA where the
+    attention mask is a per-block boolean pattern; only the marked
+    blocks participate in the QK^T matmul.
+
+  - 2:4 Structured Sparsity GEMM (xformers/sparse24/) — Ampere+ sparse
+    tensor-core GEMM exploiting the 2:4 pattern (in every 4 consecutive
+    weights, at most 2 are non-zero); offline-compressed weight format.
+
+baracuda's port is a clean-room reimplementation against the
+xFormers algorithmic reference (no source files vendored verbatim) —
+PyTorch / Triton / cuSPARSELt dependencies are stripped; the C-ABI
+shim matches baracuda's existing kernel pattern.

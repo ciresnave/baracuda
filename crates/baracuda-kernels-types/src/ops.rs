@@ -1233,6 +1233,16 @@ pub enum AttentionKind {
     /// `mHC.cu` (Andre Slavescu, MIT) under
     /// `crates/baracuda-kernels-sys/vendor/mhc/`.
     HyperConnection = 6,
+    /// Block-sparse SDPA (Phase 54, xFormers algorithmic-reference
+    /// hand-port). Attention mask is a per-block boolean pattern
+    /// `[B, H, num_blocks_q * num_blocks_k]`; only the active
+    /// (q_block, k_block) pairs participate in the QK^T matmul +
+    /// online-softmax accumulation. Different from
+    /// [`Self::FlashAttention`] (dense) and from the Phase 51
+    /// arbitrary-additive-mask path (which still computes every cell).
+    /// FW only in Tier 1; backed by bespoke `mma`-free tile kernel
+    /// behind the `xformers_blocksparse` cargo feature.
+    BlockSparseAttention = 9,
 }
 
 /// Indexing / scatter / gather op discriminant — Category L from the

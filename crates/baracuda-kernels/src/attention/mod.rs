@@ -117,6 +117,14 @@ pub(crate) fn map_status(code: i32) -> Result<()> {
     }
 }
 
+/// Crate-wide re-export of [`map_status`] for the sibling op-family
+/// modules (Phase 54 — `gemm::sparse24` etc.) that share the same
+/// status-code convention with the attention family.
+#[doc(hidden)]
+pub(crate) fn map_status_pub(code: i32) -> Result<()> {
+    map_status(code)
+}
+
 /// Default RoPE base — `10000.0`, matching the original Llama /
 /// Mistral / Gemma conventions.
 pub const ROPE_DEFAULT_BASE: f32 = 10000.0;
@@ -132,6 +140,13 @@ pub mod batch_paged_decode;
 pub mod cascade_attn;
 pub mod paged_kv_append;
 
+// Phase 54 — xFormers BlockSparseAttention (clean-room hand-port).
+// Behind the `xformers_blocksparse` cargo feature on baracuda-kernels.
+// Plan file always compiles; FFI calls inside `run()` are
+// `#[cfg(feature = "xformers_blocksparse")]`-gated so the public API
+// surface exists even without the feature.
+pub mod sdpa_block_sparse;
+
 pub use batch_paged_decode::{
     BatchPagedDecodeArgs, BatchPagedDecodeDescriptor, BatchPagedDecodePlan,
     PagedKvCacheDescriptor,
@@ -141,4 +156,10 @@ pub use cascade_attn::{
 };
 pub use paged_kv_append::{
     PagedKvAppendArgs, PagedKvAppendDescriptor, PagedKvAppendPlan,
+};
+
+// Phase 54 — xFormers BlockSparseAttention.
+pub use sdpa_block_sparse::{
+    SdpaBlockSparseArgs, SdpaBlockSparseDescriptor, SdpaBlockSparsePlan,
+    SDPA_BLOCK_SPARSE_MAX_BLOCK, SDPA_BLOCK_SPARSE_MAX_D,
 };
