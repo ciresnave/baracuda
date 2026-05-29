@@ -51,11 +51,41 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <mutex>
 #include <cuda_runtime.h>
 #include <cuda_fp16.h>
 #include <cuda_bf16.h>
 
 namespace baracuda { namespace flash_sdpa {
+
+// -----------------------------------------------------------------------------
+// Phase 59c (alpha.59 consolidation) — serialize cudaFuncSetAttribute calls
+// to fix a parallel-test SMEM-carveout race in the bespoke kernels.
+//
+// Symptoms before the fix: under `cargo test --test-threads >= 4` the bespoke
+// FW launch for d_k=96 + fp16 (which sits just past the 48 KiB default
+// dynamic-SMEM threshold) would intermittently return
+// `cudaErrorMissingConfiguration` (status `1000 + 1 = 1001`) from concurrent
+// `cudaFuncSetAttribute(kFunc, MaxDynamicSharedMemorySize, ...)` calls made
+// against the SAME templated kernel pointer with DIFFERENT smem sizes.
+//
+// CUDA documents this attribute as per-function; runtime-internal bookkeeping
+// is per-process but not guaranteed to be re-entrant during contention. The
+// fix here is a small process-wide mutex around the attribute set — the
+// kernel launch itself is still per-stream and fully concurrent. Cost: one
+// uncontended lock per kernel launch (negligible vs. ms-scale GPU time).
+//
+// Pre-existing flake (root cause is Phase 6 / Milestone 6.6 code); surfaced
+// by Phase 59a's 5-head_dim × 2-dtype × 2-causal = 20-test fanout.
+// -----------------------------------------------------------------------------
+inline cudaError_t set_dynamic_smem_serialized(const void* func, size_t bytes) {
+    static std::mutex s_attr_mutex;
+    std::lock_guard<std::mutex> lk(s_attr_mutex);
+    return cudaFuncSetAttribute(
+        func,
+        cudaFuncAttributeMaxDynamicSharedMemorySize,
+        (int)bytes);
+}
 
 // =============================================================================
 // Tile geometry.
@@ -477,10 +507,8 @@ __host__ inline int32_t launch_flash_sdpa_fp(
     // Opt into the full sm_80+ dynamic SMEM budget. Default carveout is
     // 48 KiB on most archs; this kernel can exceed that for f32/f64.
     if (smem > 48 * 1024) {
-        cudaError_t serr = cudaFuncSetAttribute(
-            (const void*)flash_sdpa_fw_kernel<T>,
-            cudaFuncAttributeMaxDynamicSharedMemorySize,
-            (int)smem);
+        cudaError_t serr = set_dynamic_smem_serialized(
+            (const void*)flash_sdpa_fw_kernel<T>, smem);
         if (serr != cudaSuccess) return 1000 + (int32_t)serr;
     }
     flash_sdpa_fw_kernel<T><<<grid, block, smem, stream>>>(
@@ -1058,10 +1086,8 @@ __host__ inline int32_t launch_flash_sdpa_backward_fp(
             dim3 block((unsigned)kThreadsPerBlock);
             size_t smem = flash_bw_dQ_smem_bytes<T>(d_k, d_v);
             if (smem > 48 * 1024) {
-                cudaError_t serr = cudaFuncSetAttribute(
-                    (const void*)flash_sdpa_bw_dQ_kernel<T>,
-                    cudaFuncAttributeMaxDynamicSharedMemorySize,
-                    (int)smem);
+                cudaError_t serr = set_dynamic_smem_serialized(
+                    (const void*)flash_sdpa_bw_dQ_kernel<T>, smem);
                 if (serr != cudaSuccess) return 1000 + (int32_t)serr;
             }
             flash_sdpa_bw_dQ_kernel<T><<<grid, block, smem, stream>>>(
@@ -1079,10 +1105,8 @@ __host__ inline int32_t launch_flash_sdpa_backward_fp(
             dim3 block((unsigned)kThreadsPerBlock);
             size_t smem = flash_bw_dKdV_smem_bytes<T>(d_k, d_v);
             if (smem > 48 * 1024) {
-                cudaError_t serr = cudaFuncSetAttribute(
-                    (const void*)flash_sdpa_bw_dKdV_kernel<T>,
-                    cudaFuncAttributeMaxDynamicSharedMemorySize,
-                    (int)smem);
+                cudaError_t serr = set_dynamic_smem_serialized(
+                    (const void*)flash_sdpa_bw_dKdV_kernel<T>, smem);
                 if (serr != cudaSuccess) return 1000 + (int32_t)serr;
             }
             flash_sdpa_bw_dKdV_kernel<T><<<grid, block, smem, stream>>>(

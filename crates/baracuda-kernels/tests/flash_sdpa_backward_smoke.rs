@@ -10,7 +10,7 @@
 
 use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
 use baracuda_kernels::{
-    contiguous_stride, ElementKind, FlashSdpaArgs, FlashSdpaBackwardArgs,
+    contiguous_stride, BackendKind, ElementKind, FlashSdpaArgs, FlashSdpaBackwardArgs,
     FlashSdpaBackwardDescriptor, FlashSdpaBackwardPlan, FlashSdpaDescriptor, FlashSdpaPlan,
     PlanPreference, SdpaArgs, SdpaBackwardArgs, SdpaBackwardDescriptor, SdpaBackwardPlan,
     SdpaDescriptor, SdpaPlan, TensorMut, TensorRef, Workspace,
@@ -582,7 +582,14 @@ fn flash_sdpa_backward_f16_basic() {
     let f_bw_desc = FlashSdpaBackwardDescriptor::new(
         B, H, Q, K, DK, DV, scale, false, ElementKind::F16,
     );
-    let f_bw_plan = FlashSdpaBackwardPlan::<f16>::select(&stream, &f_bw_desc, PlanPreference::default()).expect("");
+    // Phase 59b made FA2 the default BW backend for f16/bf16. This test
+    // validates the BESPOKE BW pipeline (deterministic, three-kernel,
+    // f16 lse), so force the bespoke backend.
+    let f_bw_pref = PlanPreference {
+        prefer_backend: Some(BackendKind::Bespoke),
+        ..Default::default()
+    };
+    let f_bw_plan = FlashSdpaBackwardPlan::<f16>::select(&stream, &f_bw_desc, f_bw_pref).expect("");
     f_bw_plan.run(&stream, Workspace::None, FlashSdpaBackwardArgs {
         q: TensorRef { data: dq_dev.as_slice(), shape: sq, stride: contiguous_stride(sq) },
         k: TensorRef { data: dk_dev.as_slice(), shape: sk, stride: contiguous_stride(sk) },
@@ -724,7 +731,14 @@ fn flash_sdpa_backward_bf16_basic() {
     let f_bw_desc = FlashSdpaBackwardDescriptor::new(
         B, H, Q, K, DK, DV, scale, false, ElementKind::Bf16,
     );
-    let f_bw_plan = FlashSdpaBackwardPlan::<bf16>::select(&stream, &f_bw_desc, PlanPreference::default()).expect("");
+    // Phase 59b made FA2 the default BW backend for f16/bf16. This test
+    // validates the BESPOKE BW pipeline (deterministic, three-kernel,
+    // bf16 lse), so force the bespoke backend.
+    let f_bw_pref = PlanPreference {
+        prefer_backend: Some(BackendKind::Bespoke),
+        ..Default::default()
+    };
+    let f_bw_plan = FlashSdpaBackwardPlan::<bf16>::select(&stream, &f_bw_desc, f_bw_pref).expect("");
     f_bw_plan.run(&stream, Workspace::None, FlashSdpaBackwardArgs {
         q: TensorRef { data: dq_dev.as_slice(), shape: sq, stride: contiguous_stride(sq) },
         k: TensorRef { data: dk_dev.as_slice(), shape: sk, stride: contiguous_stride(sk) },

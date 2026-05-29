@@ -72,6 +72,10 @@
 #include <cuda_fp16.h>
 #include <cuda_bf16.h>
 #include <cuda_pipeline.h>
+// Phase 59c (alpha.59 consolidation): brings in `set_dynamic_smem_serialized`
+// so the sm_89 sibling shares the same mutex with the sm_80 baseline (one
+// process-wide critical section, not one per kernel template).
+#include "baracuda_flash_sdpa.cuh"
 
 namespace baracuda { namespace flash_sdpa_sm89 {
 
@@ -500,10 +504,8 @@ __host__ inline int32_t launch_flash_sdpa_sm89_fp(
     dim3 block((unsigned)kThreadsPerBlock);
     size_t smem = flash_sm89_smem_bytes<T>(d_k, d_v);
     if (smem > 48 * 1024) {
-        cudaError_t serr = cudaFuncSetAttribute(
-            (const void*)flash_sdpa_sm89_fw_kernel<T>,
-            cudaFuncAttributeMaxDynamicSharedMemorySize,
-            (int)smem);
+        cudaError_t serr = baracuda::flash_sdpa::set_dynamic_smem_serialized(
+            (const void*)flash_sdpa_sm89_fw_kernel<T>, smem);
         if (serr != cudaSuccess) return 1000 + (int32_t)serr;
     }
     flash_sdpa_sm89_fw_kernel<T><<<grid, block, smem, stream>>>(
@@ -825,10 +827,8 @@ __host__ inline int32_t launch_flash_sdpa_sm89_fp_strided(
     dim3 block((unsigned)kThreadsPerBlock);
     size_t smem = flash_sm89_smem_bytes<T>(d_k, d_v);
     if (smem > 48 * 1024) {
-        cudaError_t serr = cudaFuncSetAttribute(
-            (const void*)flash_sdpa_sm89_fw_kernel_strided<T>,
-            cudaFuncAttributeMaxDynamicSharedMemorySize,
-            (int)smem);
+        cudaError_t serr = baracuda::flash_sdpa::set_dynamic_smem_serialized(
+            (const void*)flash_sdpa_sm89_fw_kernel_strided<T>, smem);
         if (serr != cudaSuccess) return 1000 + (int32_t)serr;
     }
     flash_sdpa_sm89_fw_kernel_strided<T><<<grid, block, smem, stream>>>(

@@ -7,8 +7,19 @@ effort within each category. Authoritative status per op lives in
 [`OP-MATRIX.md`](OP-MATRIX.md); historical phase summaries live in
 [`ARCHITECTURE.md`](ARCHITECTURE.md).
 
-The current tag is **v0.0.1-alpha.57** with **2339+ GPU tests
-passing, zero failures** on RTX 4070 (sm_89). Phase 42-44 add three
+The current tag is **v0.0.1-alpha.59** with **2152 GPU tests
+passing, zero failures** across the 6 critical test crates
+(baracuda-kernels, baracuda-optim, baracuda-megatron, baracuda-nccl,
+baracuda-transformer-engine, baracuda-ozimmu) on RTX 4070 (sm_89) —
+Phase 59a + 59b add the full FA2 v2.8.3 FW + BW + varlen surface
+(head_dims 32-256, GQA, ALiBi, sliding window, softcap) closing
+Fuel's FA2-retirement requirements (+48 new tests). Phase 59c
+(consolidation pass) fixed a pre-existing parallel-test race in the
+bespoke flash kernel's SMEM-carveout call surfaced by Phase 59a's
+hdim fanout, plus migrated `flash_sdpa_backward_smoke` to force the
+bespoke backend on f16/bf16 (Phase 59b made FA2 the default BW
+backend for fp16/bf16, breaking source-compat for the existing
+bespoke smoke tests). Phase 42-44 add three
 opt-in backends behind cargo features (none on the default build
 path), Phase 49 adds the `baracuda-optim` sibling crate (Apex
 multi-tensor Adam / LAMB / SGD) under the `optim` cargo feature,
@@ -877,7 +888,7 @@ Smoke tests (3 files):
   per torch.chunk, single rank, empty shard at `rank >= n`). All 4
   green on this run.
 
-## Phase 59a — FA2 FW expansion (complete; pending consolidation alpha bump, 2026-05-29)
+## Phase 59a — FA2 FW expansion (complete; alpha.59, 2026-05-29)
 
 **Closes Fuel's "still needs upstream FA2" gap on the forward side.**
 Phase 42 shipped a head_dim=128-only Tier-1 FA2 vendor integration.
@@ -967,7 +978,7 @@ Total: 26 new test functions across 4 new test files.
 should fit in the 99 KiB opt-in SMEM. head_dim=512 is NOT vendored
 (not in upstream).
 
-## Phase 59b — FA2 BW + varlen (complete; pending consolidation alpha bump, 2026-05-29)
+## Phase 59b — FA2 BW + varlen (complete; alpha.59, 2026-05-29)
 
 **Closes the Fuel FA2-retirement requirements.** Phase 59a covered FW
 expansion; Phase 59b adds the BW pass for the full head_dim set + the
