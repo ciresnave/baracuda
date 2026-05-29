@@ -122,6 +122,66 @@ Next: the Phase 46+48 mainstream-techniques roadmap (FlashInfer
 cherry-pick, Apex optimizers, Marlin/AWQ) synthesized from the recon
 round documented in `~/.claude/projects/.../memory/MEMORY.md`.
 Phase 50 (Mamba-2 SSD + causal-conv1d) shipped 2026-05-28.
+Phase 50b (Mamba-1 selective_scan) shipped 2026-05-28 — completes
+state-space LLM coverage; powers Mamba-7B, Falcon-Mamba,
+Codestral-Mamba.
+
+---
+
+## Phase 50b — Mamba-1 selective_scan (complete; alpha.57, 2026-05-28)
+
+Completes the state-space LLM coverage that Phase 50 explicitly
+deferred. Phase 50 shipped Mamba-2 SSD chunk-scan, which is correct
+for Mamba-2 / Codestral-Mamba / Falcon-Mamba / Zamba2 — but every
+Mamba-1-shipping LLM (Mamba-7B, the broader Mamba-1 family) uses the
+original `selective_scan` op family, not SSD. Phase 50b adds the
+sibling Plan family alongside the existing SSD path; the `mamba`
+cargo feature gates both.
+
+- **Mamba-1 selective_scan** (Gu + Dao, Apache-2.0) hand-port at
+  `crates/baracuda-kernels-sys/kernels/ssd/selective_scan_*.cu`.
+  Shape contract `(B, L, D, N)` with optional `D[d]` skip, optional
+  SiLU-gated `z[t, d]` tail, optional `delta_bias[d]` + optional
+  `softplus(delta)` mapping — all 9 args of the upstream
+  `selective_scan_fn` are wired. Dtypes: f32 / f16 / bf16 (complex
+  deferred — no shipping Mamba-1 model uses it).
+- **`SelectiveScanPlan`** + **`SelectiveScanBackwardPlan`** under
+  `attention/` (sibling to `SsdChunkScanPlan`). FW caps state at
+  `N ≤ 256`; BW uses a two-pass record-then-reverse pipeline with
+  `B * D * L * N * sizeof(T)` workspace.
+- **New `AttentionKind::SelectiveScan = 8`** variant added to
+  `baracuda-kernels-types` (`#[non_exhaustive]` so source-compat).
+- **Vendor metadata**: same `crates/baracuda-kernels-sys/vendor/mamba/`
+  directory as Phase 50 — no new LICENSE / AUTHORS files; `VENDOR.md`
+  updated to note the additional `selective_scan/` source files.
+- **17 new FFI symbols** total: 3 FW runners + 3 FW can-implement +
+  3 BW runners + 1 workspace-bytes helper + 4 module-internal
+  launchers. Symbols `baracuda_kernels_selective_scan_{f32,f16,bf16}_{run,backward_run,can_implement}`
+  + `baracuda_kernels_selective_scan_workspace_bytes`.
+- **Smoke tests** (3 new): `selective_scan_smoke` (FW vs CPU
+  reference across 4 option combinations + f16 / bf16 loose-tol),
+  `selective_scan_bw_smoke` (BW finite-diff for `du` / `ddelta` /
+  `dA` + finiteness for `dB` / `dC` + topology rejection check),
+  `mamba1_block_smoke` (end-to-end: `causal_conv1d` + selective_scan
+  full-option chain + residual).
+
+Caller contracts:
+
+- `dA`, `dB`, `dC`, `dD`, `d_delta_bias` MUST be zero-initialized
+  before BW launch — kernel uses `atomicAdd`.
+- `du`, `d_delta`, `dz` are deterministic (one writer per cell).
+- Optional-input presence must match between FW and BW (e.g. if FW
+  passed `d_skip`, BW must supply `d_d`; the plan rejects the
+  mismatch at `run` time).
+
+Trailblazer-only scope; deferred for future phases:
+
+- **Complex selective_scan** — reserved in upstream but no shipping
+  Mamba-1 LLM uses it.
+- **Variable-length sequences** (`cu_seqlens` packed batches).
+- **Paged SSM state** — analog of paged-attention.
+- **Hybrid Mamba + Attention architectures** (Jamba, Zamba) —
+  caller-side orchestration over baracuda primitives.
 
 ---
 

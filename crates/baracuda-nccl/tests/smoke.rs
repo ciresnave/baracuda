@@ -24,9 +24,9 @@ fn single_device_comm_roundtrip() {
     match Communicator::init_all(&[0]) {
         Ok(comms) => {
             assert_eq!(comms.len(), 1);
-            let rank = comms[0].rank().unwrap();
-            let n = comms[0].nranks().unwrap();
-            eprintln!("comm: rank={rank}, nranks={n}");
+            let rank = comms[0].rank();
+            let n = comms[0].world_size();
+            eprintln!("comm: rank={rank}, world_size={n}");
             assert_eq!(rank, 0);
             assert_eq!(n, 1);
         }

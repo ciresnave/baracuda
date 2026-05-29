@@ -166,8 +166,15 @@ impl UniqueId {
 }
 
 /// A NCCL communicator — one rank's view of a distributed group.
+///
+/// Holds the NCCL handle plus cached `rank` and `world_size` (read once
+/// from NCCL at construction). The cached form keeps the common
+/// `comm.rank()` / `comm.world_size()` calls infallible — both values
+/// are immutable for the lifetime of a communicator.
 pub struct Communicator {
     handle: ncclComm_t,
+    rank: i32,
+    world_size: i32,
 }
 
 unsafe impl Send for Communicator {}
@@ -176,11 +183,34 @@ impl core::fmt::Debug for Communicator {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("nccl::Communicator")
             .field("handle", &self.handle)
+            .field("rank", &self.rank)
+            .field("world_size", &self.world_size)
             .finish()
     }
 }
 
 impl Communicator {
+    /// Construct a single-process / single-GPU communicator (rank 0 of 1).
+    /// Useful for exercising the NCCL API surface on hosts with only one
+    /// GPU — collectives degenerate to no-ops but exercise the full
+    /// loader / dispatch path.
+    pub fn new_single_gpu(device: i32) -> Result<Self> {
+        let mut comms = Self::init_all(&[device])?;
+        // `init_all(&[device])` asks NCCL for exactly one communicator;
+        // on success NCCL fills the slot — pop is infallible in practice.
+        Ok(comms.pop().expect(
+            "ncclCommInitAll returned Success but produced no communicators",
+        ))
+    }
+
+    /// Multi-process initialization. `id` is a 128-byte unique identifier
+    /// generated on rank 0 via [`UniqueId::new`] / [`NcclUniqueId::generate`]
+    /// and broadcast (over MPI / TCP / a shared file / …) to every other
+    /// rank before they call this constructor.
+    pub fn new_with_id(id: UniqueId, world_size: i32, rank: i32) -> Result<Self> {
+        Self::init_rank(world_size, id, rank)
+    }
+
     /// Initialize `ndev` communicators (one per device) in this process.
     /// The returned vector is ordered to match `devices`.
     ///
@@ -191,7 +221,10 @@ impl Communicator {
         let ndev = devices.len() as core::ffi::c_int;
         let mut comms = vec![core::ptr::null_mut::<core::ffi::c_void>(); devices.len()];
         check(unsafe { cu(comms.as_mut_ptr(), ndev, devices.as_ptr()) })?;
-        Ok(comms.into_iter().map(|handle| Self { handle }).collect())
+        comms
+            .into_iter()
+            .map(|handle| Self::from_raw_handle(handle))
+            .collect()
     }
 
     /// Initialize one rank of a multi-process communicator.
@@ -200,7 +233,7 @@ impl Communicator {
         let cu = n.nccl_comm_init_rank()?;
         let mut handle: ncclComm_t = core::ptr::null_mut();
         check(unsafe { cu(&mut handle, nranks, id.0, rank) })?;
-        Ok(Self { handle })
+        Self::from_raw_handle(handle)
     }
 
     /// Like [`Self::init_rank`] but takes a pointer to a configured
@@ -224,25 +257,45 @@ impl Communicator {
         let cu = n.nccl_comm_init_rank_config()?;
         let mut handle: ncclComm_t = core::ptr::null_mut();
         check(cu(&mut handle, nranks, id.0, rank, config))?;
-        Ok(Self { handle })
+        Self::from_raw_handle(handle)
     }}
 
-    /// Number of ranks in the communicator.
-    pub fn nranks(&self) -> Result<i32> {
+    /// Wrap a raw `ncclComm_t` produced by NCCL itself (e.g. after
+    /// `ncclCommSplit`). Reads rank / world_size from the handle.
+    fn from_raw_handle(handle: ncclComm_t) -> Result<Self> {
         let n = nccl()?;
-        let cu = n.nccl_comm_count()?;
-        let mut c: core::ffi::c_int = 0;
-        check(unsafe { cu(self.handle, &mut c) })?;
-        Ok(c)
+        let cu_rank = n.nccl_comm_user_rank()?;
+        let cu_count = n.nccl_comm_count()?;
+        let mut rank: core::ffi::c_int = 0;
+        let mut count: core::ffi::c_int = 0;
+        check(unsafe { cu_rank(handle, &mut rank) })?;
+        check(unsafe { cu_count(handle, &mut count) })?;
+        Ok(Self {
+            handle,
+            rank,
+            world_size: count,
+        })
     }
 
-    /// Rank of this communicator within the group.
-    pub fn rank(&self) -> Result<i32> {
-        let n = nccl()?;
-        let cu = n.nccl_comm_user_rank()?;
-        let mut r: core::ffi::c_int = 0;
-        check(unsafe { cu(self.handle, &mut r) })?;
-        Ok(r)
+    /// This rank's index within the communicator (0..world_size).
+    /// Cached at construction — never re-queries NCCL.
+    #[inline]
+    pub fn rank(&self) -> i32 {
+        self.rank
+    }
+
+    /// Total number of ranks in the communicator.
+    /// Cached at construction — never re-queries NCCL.
+    #[inline]
+    pub fn world_size(&self) -> i32 {
+        self.world_size
+    }
+
+    /// Deprecated alias for [`Self::world_size`]. Returns a `Result` for
+    /// source-compatibility with the pre-Phase-52 API; never errors.
+    #[deprecated(note = "Use `world_size()` (infallible, cached)")]
+    pub fn nranks(&self) -> Result<i32> {
+        Ok(self.world_size)
     }
 
     /// Raw communicator handle. Use with care.
@@ -514,7 +567,7 @@ impl Communicator {
         let cu = n.nccl_comm_split()?;
         let mut new_comm: ncclComm_t = core::ptr::null_mut();
         check(unsafe { cu(self.handle, color, key, &mut new_comm, core::ptr::null_mut()) })?;
-        Ok(Communicator { handle: new_comm })
+        Communicator::from_raw_handle(new_comm)
     }
 
     /// Register a device buffer for zero-copy collective use. Returns an
@@ -626,5 +679,116 @@ impl Drop for NcclMem {
                 let _ = unsafe { cu(self.ptr) };
             }
         }
+    }
+}
+
+// ---- spec-named aliases (Phase 52) ---------------------------------------
+//
+// The free-function / shorter-name forms in this file predate the formal
+// Phase 52 spec. The aliases below match the spec verbatim so downstream
+// distributed-roadmap code (Ring Attention, Megatron TP, FSDP, …) can use
+// the canonical names directly. They are zero-cost re-exports / wrappers.
+
+/// Spec-name alias for [`RedOp`] — the NCCL reduction operation enum.
+pub use RedOp as NcclReduceOp;
+
+/// Spec-name alias for [`UniqueId`] — the 128-byte multi-rank handshake.
+pub use UniqueId as NcclUniqueId;
+
+/// Spec-name alias for the [`NcclScalar`] trait — sealed element-type
+/// trait identifying types that map to an `ncclDataType_t`.
+pub use NcclScalar as NcclDataType;
+
+/// Re-export the raw `ncclDataType_t` enum so callers can pattern-match
+/// or pass it to lower-level helpers if needed.
+pub use baracuda_nccl_sys::ncclDataType_t as RawNcclDataType;
+
+impl UniqueId {
+    /// Spec-name alias for [`UniqueId::new`] — generate a fresh 128-byte
+    /// unique id on rank 0. Broadcast the result (e.g. via
+    /// [`UniqueId::as_bytes`]) to every other rank before they call
+    /// [`Communicator::new_with_id`].
+    #[inline]
+    pub fn generate() -> Result<Self> {
+        Self::new()
+    }
+}
+
+impl Communicator {
+    /// Instance-method form of the free function [`all_reduce`].
+    ///
+    /// `send` and `recv` may alias (in-place AllReduce is legal).
+    /// `world_size = 1` (single-GPU communicator) makes this a stream-
+    /// ordered device-to-device copy — useful for smoke-testing the
+    /// API surface without multi-GPU hardware.
+    pub fn all_reduce<T: NcclScalar>(
+        &self,
+        send: &DeviceBuffer<T>,
+        recv: &mut DeviceBuffer<T>,
+        op: RedOp,
+        stream: &Stream,
+    ) -> Result<()> {
+        let count = core::cmp::min(send.len(), recv.len());
+        all_reduce(send, recv, count, op, self, stream)
+    }
+
+    /// Instance-method form of the free function [`broadcast`].
+    /// In-place broadcast is the typical caller pattern — pass `buf`
+    /// as both `send` and `recv`.
+    pub fn broadcast<T: NcclScalar>(
+        &self,
+        buf: &mut DeviceBuffer<T>,
+        root: i32,
+        stream: &Stream,
+    ) -> Result<()> {
+        let count = buf.len();
+        // SAFETY: NCCL's in-place broadcast is documented as legal —
+        // it just copies `recv ← send` when `send == recv`. We split
+        // the &mut reborrow into a const + mut alias via raw pointers
+        // here, then immediately re-form the safe references for the
+        // FFI call inside `broadcast()`.
+        //
+        // The borrow-checker can't see that NCCL only reads `send`
+        // before writing `recv` on the root rank, and vice versa on
+        // non-roots — but the contract is identical to a memcpy.
+        let send_ptr = buf as *const DeviceBuffer<T>;
+        let send_ref: &DeviceBuffer<T> = unsafe { &*send_ptr };
+        broadcast(send_ref, buf, count, root, self, stream)
+    }
+
+    /// Open a group of collectives that should be submitted atomically.
+    /// See [`group_start`] (free function) for details.
+    #[inline]
+    pub fn group_start() -> Result<()> {
+        group_start()
+    }
+
+    /// Close the most recently opened group. See [`group_end`].
+    #[inline]
+    pub fn group_end() -> Result<()> {
+        group_end()
+    }
+}
+
+#[cfg(test)]
+mod compile_time_alias_checks {
+    //! These tests compile-only — they assert that the spec-named
+    //! aliases resolve to the same types as the existing names.
+
+    use super::*;
+
+    #[allow(dead_code)]
+    fn red_op_alias_is_same(x: NcclReduceOp) -> RedOp {
+        x
+    }
+
+    #[allow(dead_code)]
+    fn unique_id_alias_is_same(x: NcclUniqueId) -> UniqueId {
+        x
+    }
+
+    #[allow(dead_code)]
+    fn nccl_data_type_alias_is_sealed<T: NcclDataType>(_: &T) {
+        // Compile-only — proves `NcclDataType` is reachable as a trait.
     }
 }
