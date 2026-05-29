@@ -1,0 +1,11 @@
+NVIDIA Apex
+Copyright (c) 2017-2025 NVIDIA Corporation
+All rights reserved.
+
+Project home: https://github.com/NVIDIA/apex
+Original authors: NVIDIA Corporation and contributors
+License: BSD-3-Clause (see LICENSE)
+
+The fused multi-tensor optimizer kernels (Adam, LAMB, SGD) and the
+multi_tensor_apply launch framework were originally authored by
+the NVIDIA Apex team and the broader open-source contributor community.

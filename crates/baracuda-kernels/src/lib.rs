@@ -174,6 +174,9 @@ pub use loss::{
     BceWithLogitsLossDescriptor, BceWithLogitsLossPlan, CrossEntropyLossArgs,
     CrossEntropyLossBackwardArgs, CrossEntropyLossBackwardDescriptor,
     CrossEntropyLossBackwardPlan, CrossEntropyLossDescriptor, CrossEntropyLossPlan,
+    FusedLinearCrossEntropyArgs, FusedLinearCrossEntropyBackwardArgs,
+    FusedLinearCrossEntropyBackwardDescriptor, FusedLinearCrossEntropyBackwardPlan,
+    FusedLinearCrossEntropyDescriptor, FusedLinearCrossEntropyPlan, FLCE_DEFAULT_IGNORE_INDEX,
     GaussianNllLossArgs, GaussianNllLossBackwardArgs, GaussianNllLossBackwardDescriptor,
     GaussianNllLossBackwardPlan, GaussianNllLossDescriptor, GaussianNllLossPlan, HuberLossArgs,
     HuberLossBackwardArgs, HuberLossBackwardDescriptor, HuberLossBackwardPlan,
@@ -512,3 +515,47 @@ pub use sort::{
     UniqueConsecutiveArgs, UniqueConsecutiveDescriptor, UniqueConsecutivePlan, UniqueDescriptor,
     UniquePlan, SORT_MAX_ROW, TOPK_MAX_K,
 };
+
+// Phase 50 — Mamba-2 causal-conv1d primitive. Bespoke kernel; lives at
+// the crate root because it isn't part of any existing op family
+// (no cuDNN dep, distinct shape contract from generic conv1d).
+#[cfg(feature = "mamba")]
+pub mod causal_conv1d;
+
+#[cfg(feature = "mamba")]
+pub use causal_conv1d::{
+    CausalConv1dArgs, CausalConv1dBackwardArgs, CausalConv1dBackwardDescriptor,
+    CausalConv1dBackwardPlan, CausalConv1dDescriptor, CausalConv1dPlan,
+};
+
+// Phase 50 — Mamba-2 SSD chunk-scan re-exports from the attention
+// family (SSD = State-Space Duality).
+#[cfg(feature = "mamba")]
+pub use attention::{
+    SsdChunkScanArgs, SsdChunkScanBackwardArgs, SsdChunkScanBackwardDescriptor,
+    SsdChunkScanBackwardPlan, SsdChunkScanDescriptor, SsdChunkScanPlan,
+};
+
+// Phase 50b — Mamba-1 selective_scan re-exports (sibling to SSD,
+// powers Mamba-7B / Falcon-Mamba / Codestral-Mamba).
+#[cfg(feature = "mamba")]
+pub use attention::{
+    SelectiveScanArgs, SelectiveScanBackwardArgs, SelectiveScanBackwardDescriptor,
+    SelectiveScanBackwardPlan, SelectiveScanDescriptor, SelectiveScanPlan,
+};
+
+// Phase 49 — Apex multi-tensor optimizer subset (Adam / LAMB / SGD).
+// Vendored from NVIDIA Apex (BSD-3-Clause) and exposed under the
+// `optim` cargo feature. Deliberate scope expansion (training-
+// framework-adjacent); inference-only consumers don't pay the FFI
+// surface cost because they don't enable the feature.
+#[cfg(feature = "optim")]
+pub mod optim {
+    //! Re-export of [`baracuda_optim`]'s optimizer plans into the
+    //! unified kernel facade. Gated behind the `optim` cargo feature.
+    pub use baracuda_optim::{
+        AdamConfig, AdamMode, AdamParamDtype, AdamStepPlan, Error as OptimError, LambConfig,
+        LambStepPlan, MultiTensorApplyContext, Result as OptimResult, SgdConfig, SgdParamDtype,
+        SgdStepPlan, TensorList,
+    };
+}

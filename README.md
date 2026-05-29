@@ -10,7 +10,7 @@ A unified Rust ML-op facade over the NVIDIA CUDA ecosystem.
 ![License](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue)
 ![Status](https://img.shields.io/badge/status-alpha.57-orange)
 ![CUDA](https://img.shields.io/badge/CUDA-12.x-76b900)
-![Tests](https://img.shields.io/badge/regression-2320%2F0-success)
+![Tests](https://img.shields.io/badge/regression-2326%2F0-success)
 
 ## What baracuda is
 
@@ -40,11 +40,14 @@ talk to one library directly.
 
 ## Status
 
-**In active development — alpha.57.** **2320 GPU tests passing**
-on an RTX 4070 (sm_89), across **616 binary targets**. Phase 42-44
+**In active development — alpha.57.** **2326 GPU tests passing**
+on an RTX 4070 (sm_89), across **617 binary targets**. Phase 42-44
 add three opt-in backends (FA2, mHC.cu, ozIMMU); none are on the
 default build path. Phase 44b internalized the ozIMMU sources
 (clean-fork; cutf submodule retired; Linux + Windows both build).
+Phase 49 adds the `baracuda-optim` sibling crate (Adam / LAMB / SGD
+via vendored Apex `multi_tensor_apply`) — gated behind the `optim`
+feature so inference-only consumers don't pay the FFI surface cost.
 
 Phase coverage (see [`ARCHITECTURE.md`](ARCHITECTURE.md) for the phase
 matrix):
@@ -101,7 +104,8 @@ matrix):
 | 51 | Arbitrary-mask `FlashSdpaPlan` + spec-decode composition doc (alpha.57, no version bump — consolidation phase will bump): NEW optional `mask: TensorRef<f32, 4>` field on `FlashSdpaArgs` routing to a bespoke arbmask SDPA kernel that adds an f32 `[B, H, Q, K]` additive bias to `S = Q·K^T·scale` before softmax. Unlocks spec-decode tree masks (EAGLE / Medusa / lookahead), MoE expert masking, prefix-LM, sliding-window with attention sinks — all entirely from caller-side composition. 4 dtypes (f32/f16/bf16/f64) × `_run` + `_can_implement` = 8 new FFI symbols. `is_causal` composes with the mask correctly (`-INF + finite == -INF`). New header `baracuda_attn_arbmask.cuh` reuses Phase 6.6's online-softmax tile pipeline; 1 new .cu instantiation file. FA2 vendor untouched (FA2 v2.8.3's `Mask` template has no arbitrary-mask hook). Runnable example at `crates/baracuda-kernels/examples/speculative_decode_compose.rs`; design doc at [`docs/guides/spec-decode.md`](docs/guides/spec-decode.md). FW only; BW deferred. | done |
 | 50 | Mamba-2 SSD chunk-scan + Dao-AILab causal-conv1d (alpha.57, gated behind `mamba` cargo feature): **opens the state-space LLM class (Mamba-2 8B, Codestral-Mamba, Falcon-Mamba, Zamba2 — Mamba-1 selective_scan deferred to Phase 50b).** NEW `SsdChunkScanPlan` + `SsdChunkScanBackwardPlan` (lives under `attention` because of the SSD-as-attention duality) and `CausalConv1dPlan` + `CausalConv1dBackwardPlan` (top-level module — bespoke kernels, no cuDNN dep). Vendor attribution + LICENSE at `crates/baracuda-kernels-sys/vendor/causal-conv1d/` (Tri Dao, BSD-3) and `crates/baracuda-kernels-sys/vendor/mamba/` (state-spaces/mamba, Apache-2.0). Hand-port of the upstream Triton SSD reference + causal-conv1d primitive. **Dtypes**: causal-conv1d f32/f16/bf16/f64 × widths 2/3/4 × {SiLU, identity}; SSD f32/f16/bf16 (no f64 upstream). FW caps state at D,N ≤ 256; BW tighter at 64 (SMEM budget). 30 new FFI symbols (8 causal-conv1d FW + 8 BW + 6 SSD FW + 6 SSD BW + 2 can_implement extras). 5 new smoke tests (causal_conv1d_smoke/bw + ssd_chunk_scan_smoke/bw + mamba2_block_smoke). | done |
 | 52 | NCCL foundation crate pair (alpha.57, no version bump — consolidation phase will bump): `baracuda-nccl-sys` (raw FFI types + libloading lazy-resolve, NO bindgen / NO link-time dep) + `baracuda-nccl` (safe `Communicator` with full collective surface — `all_reduce` / `reduce` / `reduce_scatter` / `all_gather` / `broadcast` / `send` / `recv` + group API + `NcclMem` + custom `pre_mul_sum` reduction op + `register` / `deregister` for zero-copy). **The distributed-roadmap prerequisite** for Ring Attention, distributed MoE, Megatron-LM tensor parallelism, FSDP-style shard collectives — Phase 52 only ships the substrate; consumer plans land in Phase 53+. Spec-named API: `Communicator::new_single_gpu` / `new_with_id`, cached infallible `rank()` / `world_size()`, `NcclReduceOp` / `NcclUniqueId` / `NcclDataType` aliases, `NcclUniqueId::generate()`. Linux-primary (NCCL ships with the CUDA toolkit there); Windows builds clean and defers the "is NCCL installed?" question to first `nccl()` call (loader fails with `LoaderError::LibraryNotFound`). 20 new smoke tests (10 dtype mapping — runs on every host; 10 `#[ignore]` NCCL-required). No baracuda-kernels integration in this phase. | done |
-| 46+ | Phase 46-51 mainstream-techniques roadmap (FlashInfer cherry-pick, Apex optimizers, Marlin/AWQ); Hopper sm_90a / Blackwell sm_100; 1.0 freeze. | pending (see [`ROADMAP.md`](ROADMAP.md)) |
+| 49 | Apex optimizer subset (alpha.57, gated behind `optim` cargo feature): **deliberate scope expansion — training-framework-adjacent.** NEW sibling crate `baracuda-optim` (~600 LOC Rust + ~750 LOC CUDA) vendoring the NVIDIA Apex (BSD-3-Clause) `multi_tensor_apply` idiom + fused Adam / LAMB / SGD functors. Single launch over thousands of parameter tensors (Apex `MAX_TENSORS_PER_LAUNCH = 110` per batch, multi-launch transparent) — eliminates the ~10,000-launch optimizer step overhead on 32B-param models. Plans: `AdamStepPlan<T>` (f32/f16/bf16 + AdamW mode), `LambStepPlan` (f32; two-stage with atomicAdd-fused L2-norm + sqrt + trust-ratio scaling), `SgdStepPlan<T>` (f32/f16/bf16 + momentum + Nesterov + weight-decay). Inference-only consumers (e.g. Fuel) don't pay the FFI surface cost — the vendored sources only build / link when the feature is enabled. Re-exported under `baracuda_kernels::optim` when enabled. **Measured 41× speedup at 1000-tensor multi-tensor Adam vs 1000 individual launches on RTX 4070** (0.173 ms vs 7.096 ms; smoke test in `crates/baracuda-optim/tests/multi_tensor_dispatch_smoke.rs`). 4 smoke tests, 6 GPU tests total, all green. | done |
+| 46+ | Phase 46-51 mainstream-techniques roadmap (FlashInfer cherry-pick, Marlin/AWQ); Hopper sm_90a / Blackwell sm_100; 1.0 freeze. | pending (see [`ROADMAP.md`](ROADMAP.md)) |
 
 API stability is **not** promised before beta.0. Breaking changes ship in
 each alpha bump and are documented in the workspace `CHANGELOG.md`.

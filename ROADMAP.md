@@ -7,10 +7,11 @@ effort within each category. Authoritative status per op lives in
 [`OP-MATRIX.md`](OP-MATRIX.md); historical phase summaries live in
 [`ARCHITECTURE.md`](ARCHITECTURE.md).
 
-The current tag is **v0.0.1-alpha.57** with **2320+ GPU tests
+The current tag is **v0.0.1-alpha.57** with **2326+ GPU tests
 passing, zero failures** on RTX 4070 (sm_89). Phase 42-44 add three
 opt-in backends behind cargo features (none on the default build
-path):
+path), and Phase 49 adds the `baracuda-optim` sibling crate (Apex
+multi-tensor Adam / LAMB / SGD) under the `optim` cargo feature:
 
 - **Phase 42**: Tri Dao's Flash Attention v2 (BSD-3) Tier-1 vendor —
   head_dim=128, fp16+bf16, sm_80, FW only — exposed as
@@ -218,6 +219,80 @@ Out of scope for Phase 52 (deferred to Phase 53+):
   probe; the loader simply fails at first `nccl()` call. Consistent
   with how every other `baracuda-*-sys` crate behaves on hosts
   without the underlying library.
+
+## Phase 49 — Apex optimizer subset (complete; alpha.57, 2026-05-28)
+
+**Deliberate scope expansion — training-framework-adjacent.**
+baracuda's main facade (`baracuda-kernels`) ships zero optimizers —
+it's a kernel substrate, not a training framework. Phase 49 added
+the sibling crate `baracuda-optim` (~600 LOC Rust + ~750 LOC CUDA)
+hosting Adam / LAMB / SGD plans built on the **`multi_tensor_apply`
+idiom** vendored from NVIDIA Apex (BSD-3-Clause).
+
+The crate boundary is deliberate: inference-only consumers (e.g.
+Fuel) don't pay the FFI surface cost because they simply don't depend
+on `baracuda-optim`. The `optim` cargo feature on `baracuda-kernels`
+re-exports the plans into the unified facade (under
+`baracuda_kernels::optim`) when a downstream wants the training
+surface.
+
+- **Vendored sources** (under `crates/baracuda-optim/vendor/apex/`):
+  `multi_tensor_apply.cuh` (launch scaffold + `TensorListMetadata<N>`
+  pack — replaces Apex's PyTorch-tied `multi_tensor_apply<T>`
+  host-side launcher with a baracuda C-ABI shim), `multi_tensor_adam.cuh`,
+  `multi_tensor_lamb.cuh`, `multi_tensor_sgd.cuh`. PyTorch ATen
+  frontends (`*_frontend.cpp`) stripped — the shim takes raw device
+  pointer arrays directly.
+- **C-ABI shim** at `crates/baracuda-optim/csrc/baracuda_optim_shim.cu`
+  (~470 LOC) hosts the kernel launchers + multi-launch chunking loop
+  (Apex caps `MAX_TENSORS_PER_LAUNCH = 110` and
+  `MAX_BLOCKS_PER_LAUNCH = 320` per launch; the shim transparently
+  splits larger problems into back-to-back launches).
+- **Plans** (in `crates/baracuda-optim/src/lib.rs`):
+  - `AdamStepPlan<T>` — f32 / f16 / bf16 params + grads with f32
+    moments. AdamW mode flag toggles between classic Adam (L2 fold-
+    in) and decoupled weight decay.
+  - `LambStepPlan` — f32 only. Two-stage: stage 1 fuses Adam update
+    + per-tensor L2-norm-via-atomicAdd; sqrt-in-place launch
+    between stages; stage 2 reads norms, computes trust_ratio =
+    `||w||/||u||`, applies weight update.
+  - `SgdStepPlan<T>` — f32 / f16 / bf16 params + grads with f32
+    momentum. Momentum + Nesterov + weight decay + Apex's
+    `weight_decay_after_momentum` flag + GradScaler-style grad_scale.
+- **TensorList**: opaque handle wrapping per-tensor device pointers +
+  sizes. Built from `&[&DeviceBuffer<T>]`; cheaply staged into the
+  Apex `TensorListMetadata<N>` pack inside each launch.
+- **MultiTensorApplyContext**: read-once geometry constants
+  (`chunk_size`, `max_tensors_per_launch`, `max_blocks_per_launch`).
+- **Smoke tests** (4 files, 6 GPU tests, all green on RTX 4070):
+  - `adam_smoke.rs` — single-step Adam over multiple tensors of
+    varying shapes vs CPU reference. AdamW mode tested.
+  - `sgd_smoke.rs` — momentum + Nesterov + weight decay vs CPU ref.
+  - `lamb_smoke.rs` — single-step LAMB; max-abs-err vs CPU ref =
+    4.77e-7 (relaxed 5e-4 tolerance documents the `atomicAdd` L2-norm
+    race the LAMB algorithm is provably robust to).
+  - `multi_tensor_dispatch_smoke.rs` — perf test validating the
+    value prop: **41.07× speedup** at 1000-tensor multi-tensor Adam
+    (0.173 ms) vs 1000 individual Adam launches (7.096 ms).
+
+Documented LAMB edge cases (preserved from Apex):
+- `||w|| == 0` or `||u|| == 0` ⇒ `trust_ratio = 1.0` (vanilla Adam
+  fallback). Triggers on freshly-initialized and zero-gradient layers.
+- atomicAdd L2-norm race produces 1-2-ulp deltas across launches;
+  LAMB is documented-robust.
+- Bias-correction disabled = caller pre-scales `lr` (Apex convention).
+
+Out of scope for Phase 49 (future):
+
+- **AdamW, AdaFactor, Sophia, Lion** — future additions; foundation
+  in place. Each is a ~150-LOC functor + Rust plan exercise on top
+  of `multi_tensor_apply`.
+- **8-bit optimizer state** (bitsandbytes) — separate phase (Tier 4
+  of the mainstream-techniques roadmap).
+- **ZeRO-style sharded optimizer / DistributedAdam** — needs NCCL
+  (now available from Phase 52, but consumer plans deferred).
+- **LAMB f16/bf16** — Phase 49 ships f32-only LAMB; mixed-precision
+  LAMB is a follow-up.
 
 ## How this file gets updated
 
