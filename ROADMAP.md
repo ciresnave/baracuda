@@ -967,13 +967,96 @@ Total: 26 new test functions across 4 new test files.
 should fit in the 99 KiB opt-in SMEM. head_dim=512 is NOT vendored
 (not in upstream).
 
-**Out of scope (Phase 59b territory)**:
+## Phase 59b — FA2 BW + varlen (complete; pending consolidation alpha bump, 2026-05-29)
 
-- BW pass for any head_dim — needs `flash_bwd_*.cu` vendor +
-  `FlashSdpaBackwardPlan` FA2 routing.
-- Varlen path (cu_seqlens_q / cu_seqlens_k).
-- Split-KV / paged-KV — Phase 46's FlashInfer cherry-pick covers
-  paged attention.
+**Closes the Fuel FA2-retirement requirements.** Phase 59a covered FW
+expansion; Phase 59b adds the BW pass for the full head_dim set + the
+varlen FW/BW path (packed-batch attention with `cu_seqlens_*`). Fuel
+can now drop their FA2 vendor entirely.
+
+- **Vendored 24 new BW `.cu` files** in
+  `crates/baracuda-kernels-sys/vendor/flash-attention/src/`:
+  `flash_bwd_hdim{32,64,96,128,192,256}_{fp16,bf16}_{,causal}_sm80.cu`
+  (mirrors the Phase 59a FW set 1:1). Source: FA2 v2.8.3, same
+  commit `060c9188`.
+- **Vendored 3 new BW headers**: `flash_bwd_kernel.h`,
+  `flash_bwd_launch_template.h`, `flash_bwd_preprocess_kernel.h`.
+  No new utility headers required — BW reuses FW's algorithm pieces.
+- **Critical pre-flight finding**: **varlen has NO separate .cu file
+  family** upstream. FA2 v2.8.3 dispatches varlen via a runtime
+  `params.cu_seqlens_q != nullptr` check inside the existing FW/BW
+  launch templates. The same `run_mha_{fwd,bwd}_<T, hdim, is_causal>`
+  instantiations serve dense and varlen callers; only the param
+  setup differs (zero batch_stride, packed row_stride, set
+  `unpadded_lse=true` for varlen). Phase 59b plumbs this through
+  new launcher TUs, not new vendor .cu files.
+- **New launcher TUs** in `crates/baracuda-kernels-sys/kernels/attention/`:
+  - `fa2_backward_launcher.cu` — BW dispatch for the 6 head_dims;
+    populates `Flash_bwd_params` for dense + varlen paths; allocates
+    dQ/dK/dV outputs + dQaccum / dsoftmax_d scratch from a single
+    caller-supplied workspace (zero-filled via `cudaMemsetAsync`
+    before launch).
+  - `fa2_varlen_launcher.cu` — varlen FW with packed Q/K/V/O strides;
+    `unpadded_lse=true`.
+- **FFI symbol delta**: 12 new symbols (BW dense × 2 dtypes ×
+  {`_run`, `_can_implement`} + workspace_size; varlen FW × 2 dtypes
+  × {`_run`, `_can_implement`} + lse_size; varlen BW × 2 dtypes ×
+  {`_run`, `_can_implement`} + workspace_size).
+- **API additions**:
+  - `FlashSdpaBackwardDescriptor` is now `#[non_exhaustive]` with
+    `::new(...)` + chainable `with_window_size_left/right/with_softcap`
+    setters (mirrors Phase 59a's FW descriptor pattern).
+  - `FlashSdpaBackwardArgs` gained `lse_f32: Option<TensorRef<f32, 3>>`
+    (REQUIRED on FA2 backend — FA2 stores LSE in f32 regardless of
+    operand dtype) and `alibi_slopes: Option<TensorRef<f32, 2>>`.
+    Bespoke-path fields untouched; bespoke callers pass
+    `lse_f32: None, alibi_slopes: None`.
+  - `FlashSdpaBackwardPlan` gained a `BackendChoice::FlashAttentionV2`
+    arm. Routing heuristic: FA2 whenever eligible (f16/bf16 +
+    head_dim in the FA2 set + GQA divisibility); override via
+    `PlanPreference::prefer_backend`.
+  - NEW `FlashSdpaVarlenPlan` / `FlashSdpaVarlenBackwardPlan` plan
+    families with matching `FlashSdpaVarlenDescriptor` and args
+    bundles. f16 / bf16 only; FA2-exclusive.
+- **BW workspace contract**: `dq_accum + dsoftmax_d` packed
+  back-to-back, sizes returned by
+  `baracuda_kernels_fa2_sdpa_backward_workspace_size(b, h, sq, d)`.
+  Launcher zero-fills via `cudaMemsetAsync` so callers don't have
+  to pre-zero. Determinism: NOT bit-stable (FA2 uses atomicAdd
+  into dq_accum); precision SKU honestly tags this as non-deterministic.
+- **Source-compat breakage** (acceptable as pre-1.0 hardening):
+  `FlashSdpaBackwardDescriptor` is now `#[non_exhaustive]` — 3
+  callsites in `flash_sdpa_backward_smoke.rs` migrated to
+  `::new(...)`. `FlashSdpaBackwardArgs` gained 2 new optional
+  fields — same 3 callsites updated to pass `None` explicitly.
+
+**Smoke tests** (2 new files, `#[ignore]`-gated for real GPU +
+`--features fa2,sm80`):
+
+- `fa2_backward_smoke.rs` — 12 tests:
+  workspace_size sanity (FA2 vs bespoke), eligibility (f32 →
+  bespoke, unsupported head_dim → bespoke), and end-to-end BW
+  execution for d ∈ {64, 128, 192, 256} × {f16, bf16} × {causal,
+  non-causal}. Asserts non-zero dQ rather than vs-bespoke numeric
+  comparison (FA2 BW uses atomicAdd, so non-deterministic; would
+  need a wide tolerance to compare).
+- `fa2_varlen_smoke.rs` — 5 tests:
+  plan-selection sanity, `lse_size` formula, varlen FW (3 sequences
+  of lengths {30, 70, 40}), varlen BW (2 sequences with causal
+  mask), and varlen × GQA combo (H=4, H_k=2, bf16, head_dim=128).
+
+**Hardware**: RTX 4070 (sm_89). The BW kernels are the heaviest
+templates in the FA2 vendor — first compile takes ~20 minutes for
+the 24 BW .cu instantiations. Subsequent rebuilds are incremental.
+
+**Out of scope** (intentional):
+
+- FA3 / Hopper sm_90a — hardware-blocked on RTX 4070.
+- head_dim ∉ {32, 64, 96, 128, 192, 256} — upstream limitation.
+- Paged-KV variants — Phase 46's FlashInfer cherry-pick is the
+  planned home for paged attention.
+- Split-KV by sequence-length (separate kernel family from
+  regular split-by-batch) — defer unless Fuel asks.
 
 Out of scope (Phase 58 → future):
 

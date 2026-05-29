@@ -305,6 +305,45 @@ fn main() {
             "vendor/flash-attention/src/flash_fwd_hdim256_bf16_causal_sm80.cu",
             // launcher (Phase 42 + extended in Phase 59a)
             "kernels/attention/fa2_launcher.cu",
+            // ----- Phase 59b — backward .cu instantiations -----
+            // 24 BW files: 6 head_dims × 2 dtypes × 2 causal/non-causal.
+            // Upstream FA2 v2.8.3 ships BW for the same 6 head_dims as FW
+            // (32, 64, 96, 128, 192, 256). No separate "varlen" .cu files
+            // exist — varlen is gated by a runtime `cu_seqlens_q != nullptr`
+            // check inside the BW launch template.
+            // head_dim = 32
+            "vendor/flash-attention/src/flash_bwd_hdim32_fp16_sm80.cu",
+            "vendor/flash-attention/src/flash_bwd_hdim32_fp16_causal_sm80.cu",
+            "vendor/flash-attention/src/flash_bwd_hdim32_bf16_sm80.cu",
+            "vendor/flash-attention/src/flash_bwd_hdim32_bf16_causal_sm80.cu",
+            // head_dim = 64
+            "vendor/flash-attention/src/flash_bwd_hdim64_fp16_sm80.cu",
+            "vendor/flash-attention/src/flash_bwd_hdim64_fp16_causal_sm80.cu",
+            "vendor/flash-attention/src/flash_bwd_hdim64_bf16_sm80.cu",
+            "vendor/flash-attention/src/flash_bwd_hdim64_bf16_causal_sm80.cu",
+            // head_dim = 96
+            "vendor/flash-attention/src/flash_bwd_hdim96_fp16_sm80.cu",
+            "vendor/flash-attention/src/flash_bwd_hdim96_fp16_causal_sm80.cu",
+            "vendor/flash-attention/src/flash_bwd_hdim96_bf16_sm80.cu",
+            "vendor/flash-attention/src/flash_bwd_hdim96_bf16_causal_sm80.cu",
+            // head_dim = 128
+            "vendor/flash-attention/src/flash_bwd_hdim128_fp16_sm80.cu",
+            "vendor/flash-attention/src/flash_bwd_hdim128_fp16_causal_sm80.cu",
+            "vendor/flash-attention/src/flash_bwd_hdim128_bf16_sm80.cu",
+            "vendor/flash-attention/src/flash_bwd_hdim128_bf16_causal_sm80.cu",
+            // head_dim = 192
+            "vendor/flash-attention/src/flash_bwd_hdim192_fp16_sm80.cu",
+            "vendor/flash-attention/src/flash_bwd_hdim192_fp16_causal_sm80.cu",
+            "vendor/flash-attention/src/flash_bwd_hdim192_bf16_sm80.cu",
+            "vendor/flash-attention/src/flash_bwd_hdim192_bf16_causal_sm80.cu",
+            // head_dim = 256
+            "vendor/flash-attention/src/flash_bwd_hdim256_fp16_sm80.cu",
+            "vendor/flash-attention/src/flash_bwd_hdim256_fp16_causal_sm80.cu",
+            "vendor/flash-attention/src/flash_bwd_hdim256_bf16_sm80.cu",
+            "vendor/flash-attention/src/flash_bwd_hdim256_bf16_causal_sm80.cu",
+            // Phase 59b BW + varlen launchers.
+            "kernels/attention/fa2_backward_launcher.cu",
+            "kernels/attention/fa2_varlen_launcher.cu",
         ] {
             if std::path::Path::new(f).exists() {
                 builder = builder.source_files([*f]);

@@ -42054,3 +42054,365 @@ unsafe extern "C" {
         batch: i32, heads: i32, q_local: i32, d: i32,
     ) -> i32;
 }
+
+// ============================================================================
+// Phase 59b — FA2 BW pass + varlen (FW + BW)
+// ============================================================================
+//
+// Closes the Fuel FA2-retirement requirements by adding:
+//
+//   1. BW symbols for every head_dim FA2 v2.8.3 ships
+//      ({32, 64, 96, 128, 192, 256}), per dtype (fp16, bf16).
+//   2. Varlen FW + BW: packed Q/K/V/O across heterogeneous sequences
+//      via `cu_seqlens_q` / `cu_seqlens_k` index tensors.
+//
+// FA2 v2.8.3's BW and varlen do NOT have separate .cu file families —
+// they reuse the same per-(headdim, dtype, causal) instantiations as
+// FW; varlen is gated by a runtime `params.cu_seqlens_* != nullptr`
+// check inside the BW launch template. As a result Phase 59b adds 24
+// new BW .cu source files (mirroring the Phase 59a FW set) plus two
+// new launcher TUs (`fa2_backward_launcher.cu`, `fa2_varlen_launcher.cu`),
+// but NO separate "varlen .cu" family.
+//
+// **BW workspace contract**: FA2 BW needs TWO f32 scratch buffers
+// (caller-supplied, packed back-to-back in `workspace`):
+//
+//   - `dq_accum`   — shape [B, seqlen_q_rounded, H, head_size_rounded] f32
+//                    (dense) or [total_q + 128*B, H, head_size_rounded] f32
+//                    (varlen).
+//   - `dsoftmax_d` — shape [B, H, seqlen_q_rounded] f32 (dense) or
+//                    [H, total_q + 128*B] f32 (varlen).
+//
+//   where `seqlen_q_rounded = round_up(sq, 128)` and
+//         `head_size_rounded = round_up(d, d <= 128 ? 32 : 64)`.
+//
+// The companion `..._backward_workspace_size` symbols return the total
+// byte size; the launcher zeros the scratch via `cudaMemsetAsync` before
+// the launch (FA2's BW kernels read dq_accum before final convert).
+//
+// **LSE input contract**: BW's `lse` arg must be the **f32** LSE
+// written by the FA2 FW pass (`softmax_lse` arg of the FW `..._run_v2`
+// symbols). Reusing baracuda's bespoke FlashSdpa LSE (typed T) is
+// INVALID — FA2 always stores LSE in f32.
+//
+// **Varlen layout**:
+//   - Q / O : packed [total_q, H,   D]   (row_stride = D * H,
+//                                          head_stride = D, batch_stride = 0)
+//   - K / V : packed [total_k, H_k, D]   (row_stride = D * H_k)
+//   - cu_seqlens_q : i32[batch + 1] — cumulative
+//                    (cu_seqlens_q[0] = 0, cu_seqlens_q[batch] = total_q)
+//   - cu_seqlens_k : i32[batch + 1] — same convention
+//   - varlen LSE   : f32 [H, total_q + 128 * batch] (unpadded format).
+
+#[cfg(feature = "fa2")]
+unsafe extern "C" {
+    /// FA2 backward, f16. Computes dQ, dK, dV given FW-saved O + LSE (f32)
+    /// and upstream gradient dO. ALiBi / sliding window / softcap plumbed.
+    ///
+    /// `workspace_bytes` must be at least
+    /// `baracuda_kernels_fa2_sdpa_backward_workspace_size(batch, num_heads, seq_q, head_dim)`
+    /// bytes. The launcher zero-fills the workspace internally.
+    pub fn baracuda_kernels_fa2_sdpa_backward_f16_run(
+        batch: i32,
+        num_heads: i32,
+        num_heads_k: i32,
+        seq_q: i32,
+        seq_k: i32,
+        head_dim: i32,
+        softmax_scale: f32,
+        is_causal: i32,
+        alibi_slopes_ptr: *const c_void,
+        alibi_batch_stride: i32,
+        window_size_left: i32,
+        window_size_right: i32,
+        softcap: f32,
+        q: *const c_void,
+        k: *const c_void,
+        v: *const c_void,
+        o: *const c_void,
+        dout: *const c_void,
+        lse: *const c_void,
+        dq: *mut c_void,
+        dk: *mut c_void,
+        dv: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// FA2 backward, bf16. See `..._backward_f16_run`.
+    pub fn baracuda_kernels_fa2_sdpa_backward_bf16_run(
+        batch: i32,
+        num_heads: i32,
+        num_heads_k: i32,
+        seq_q: i32,
+        seq_k: i32,
+        head_dim: i32,
+        softmax_scale: f32,
+        is_causal: i32,
+        alibi_slopes_ptr: *const c_void,
+        alibi_batch_stride: i32,
+        window_size_left: i32,
+        window_size_right: i32,
+        softcap: f32,
+        q: *const c_void,
+        k: *const c_void,
+        v: *const c_void,
+        o: *const c_void,
+        dout: *const c_void,
+        lse: *const c_void,
+        dq: *mut c_void,
+        dk: *mut c_void,
+        dv: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// FA2 BW host-side can-implement, f16.
+    pub fn baracuda_kernels_fa2_sdpa_backward_f16_can_implement(
+        batch: i32,
+        num_heads: i32,
+        num_heads_k: i32,
+        seq_q: i32,
+        seq_k: i32,
+        head_dim: i32,
+        is_causal: i32,
+        window_size_left: i32,
+        window_size_right: i32,
+        softcap: f32,
+    ) -> i32;
+
+    /// FA2 BW host-side can-implement, bf16.
+    pub fn baracuda_kernels_fa2_sdpa_backward_bf16_can_implement(
+        batch: i32,
+        num_heads: i32,
+        num_heads_k: i32,
+        seq_q: i32,
+        seq_k: i32,
+        head_dim: i32,
+        is_causal: i32,
+        window_size_left: i32,
+        window_size_right: i32,
+        softcap: f32,
+    ) -> i32;
+
+    /// Required BW workspace size in bytes (dense path). Caller passes
+    /// this much memory in the `workspace` arg of `..._backward_<dt>_run`.
+    pub fn baracuda_kernels_fa2_sdpa_backward_workspace_size(
+        batch: i32,
+        num_heads: i32,
+        seq_q: i32,
+        head_dim: i32,
+    ) -> usize;
+
+    /// FA2 varlen forward, f16. Packed Q/K/V/O across `batch` sequences.
+    /// Writes `out` (packed [total_q, H, D]) and `softmax_lse` (f32
+    /// [H, total_q + 128 * batch]).
+    pub fn baracuda_kernels_fa2_sdpa_varlen_f16_run(
+        batch: i32,
+        num_heads: i32,
+        num_heads_k: i32,
+        max_seqlen_q: i32,
+        max_seqlen_k: i32,
+        total_q: i32,
+        total_k: i32,
+        head_dim: i32,
+        softmax_scale: f32,
+        is_causal: i32,
+        alibi_slopes_ptr: *const c_void,
+        alibi_batch_stride: i32,
+        window_size_left: i32,
+        window_size_right: i32,
+        softcap: f32,
+        q: *const c_void,
+        k: *const c_void,
+        v: *const c_void,
+        cu_seqlens_q: *const i32,
+        cu_seqlens_k: *const i32,
+        out: *mut c_void,
+        softmax_lse: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// FA2 varlen forward, bf16.
+    pub fn baracuda_kernels_fa2_sdpa_varlen_bf16_run(
+        batch: i32,
+        num_heads: i32,
+        num_heads_k: i32,
+        max_seqlen_q: i32,
+        max_seqlen_k: i32,
+        total_q: i32,
+        total_k: i32,
+        head_dim: i32,
+        softmax_scale: f32,
+        is_causal: i32,
+        alibi_slopes_ptr: *const c_void,
+        alibi_batch_stride: i32,
+        window_size_left: i32,
+        window_size_right: i32,
+        softcap: f32,
+        q: *const c_void,
+        k: *const c_void,
+        v: *const c_void,
+        cu_seqlens_q: *const i32,
+        cu_seqlens_k: *const i32,
+        out: *mut c_void,
+        softmax_lse: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// FA2 varlen FW can-implement, f16.
+    pub fn baracuda_kernels_fa2_sdpa_varlen_f16_can_implement(
+        batch: i32,
+        num_heads: i32,
+        num_heads_k: i32,
+        max_seqlen_q: i32,
+        max_seqlen_k: i32,
+        total_q: i32,
+        total_k: i32,
+        head_dim: i32,
+        is_causal: i32,
+        window_size_left: i32,
+        window_size_right: i32,
+        softcap: f32,
+    ) -> i32;
+
+    /// FA2 varlen FW can-implement, bf16.
+    pub fn baracuda_kernels_fa2_sdpa_varlen_bf16_can_implement(
+        batch: i32,
+        num_heads: i32,
+        num_heads_k: i32,
+        max_seqlen_q: i32,
+        max_seqlen_k: i32,
+        total_q: i32,
+        total_k: i32,
+        head_dim: i32,
+        is_causal: i32,
+        window_size_left: i32,
+        window_size_right: i32,
+        softcap: f32,
+    ) -> i32;
+
+    /// Varlen LSE size in **f32 elements**: `num_heads * (total_q + 128 * batch)`.
+    /// Caller multiplies by 4 for bytes.
+    pub fn baracuda_kernels_fa2_sdpa_varlen_lse_size(
+        batch: i32,
+        num_heads: i32,
+        total_q: i32,
+    ) -> usize;
+
+    /// FA2 varlen backward, f16. Same packed layout as varlen FW.
+    /// Workspace size: `..._varlen_backward_workspace_size(...)`.
+    pub fn baracuda_kernels_fa2_sdpa_varlen_backward_f16_run(
+        batch: i32,
+        num_heads: i32,
+        num_heads_k: i32,
+        max_seqlen_q: i32,
+        max_seqlen_k: i32,
+        total_q: i32,
+        total_k: i32,
+        head_dim: i32,
+        softmax_scale: f32,
+        is_causal: i32,
+        alibi_slopes_ptr: *const c_void,
+        alibi_batch_stride: i32,
+        window_size_left: i32,
+        window_size_right: i32,
+        softcap: f32,
+        q: *const c_void,
+        k: *const c_void,
+        v: *const c_void,
+        o: *const c_void,
+        dout: *const c_void,
+        lse: *const c_void,
+        cu_seqlens_q: *const i32,
+        cu_seqlens_k: *const i32,
+        dq: *mut c_void,
+        dk: *mut c_void,
+        dv: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// FA2 varlen backward, bf16.
+    pub fn baracuda_kernels_fa2_sdpa_varlen_backward_bf16_run(
+        batch: i32,
+        num_heads: i32,
+        num_heads_k: i32,
+        max_seqlen_q: i32,
+        max_seqlen_k: i32,
+        total_q: i32,
+        total_k: i32,
+        head_dim: i32,
+        softmax_scale: f32,
+        is_causal: i32,
+        alibi_slopes_ptr: *const c_void,
+        alibi_batch_stride: i32,
+        window_size_left: i32,
+        window_size_right: i32,
+        softcap: f32,
+        q: *const c_void,
+        k: *const c_void,
+        v: *const c_void,
+        o: *const c_void,
+        dout: *const c_void,
+        lse: *const c_void,
+        cu_seqlens_q: *const i32,
+        cu_seqlens_k: *const i32,
+        dq: *mut c_void,
+        dk: *mut c_void,
+        dv: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// FA2 varlen BW can-implement, f16.
+    pub fn baracuda_kernels_fa2_sdpa_varlen_backward_f16_can_implement(
+        batch: i32,
+        num_heads: i32,
+        num_heads_k: i32,
+        max_seqlen_q: i32,
+        max_seqlen_k: i32,
+        total_q: i32,
+        total_k: i32,
+        head_dim: i32,
+        is_causal: i32,
+        window_size_left: i32,
+        window_size_right: i32,
+        softcap: f32,
+    ) -> i32;
+
+    /// FA2 varlen BW can-implement, bf16.
+    pub fn baracuda_kernels_fa2_sdpa_varlen_backward_bf16_can_implement(
+        batch: i32,
+        num_heads: i32,
+        num_heads_k: i32,
+        max_seqlen_q: i32,
+        max_seqlen_k: i32,
+        total_q: i32,
+        total_k: i32,
+        head_dim: i32,
+        is_causal: i32,
+        window_size_left: i32,
+        window_size_right: i32,
+        softcap: f32,
+    ) -> i32;
+
+    /// Required varlen BW workspace size in bytes. Same layout as dense
+    /// BW workspace (dq_accum + dsoftmax_sum back-to-back), sized off
+    /// `total_q + 128 * batch` rows.
+    pub fn baracuda_kernels_fa2_sdpa_varlen_backward_workspace_size(
+        batch: i32,
+        num_heads: i32,
+        max_seqlen_q: i32,
+        total_q: i32,
+        head_dim: i32,
+    ) -> usize;
+}

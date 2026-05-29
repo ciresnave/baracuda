@@ -253,13 +253,16 @@ pub mod attention;
 pub use attention::{
     AlibiArgs, AlibiBackwardArgs, AlibiBackwardDescriptor, AlibiBackwardPlan, AlibiDescriptor,
     AlibiPlan, FlashSdpaArgs, FlashSdpaBackwardArgs, FlashSdpaBackwardDescriptor,
-    FlashSdpaBackwardPlan, FlashSdpaDescriptor, FlashSdpaPlan, HyperConnectionArgs,
-    HyperConnectionDescriptor, HyperConnectionPlan, KvCacheAppendArgs, KvCacheAppendDescriptor,
-    KvCacheAppendPlan, RopeArgs, RopeBackwardArgs, RopeBackwardDescriptor, RopeBackwardPlan,
-    RopeDescriptor, RopePlan, SdpaArgs, SdpaBackwardArgs, SdpaBackwardDescriptor, SdpaBackwardPlan,
-    SdpaBlockSparseArgs, SdpaBlockSparseDescriptor, SdpaBlockSparsePlan,
-    SdpaDescriptor, SdpaPlan, FLASH_SDPA_MAX_D, ROPE_DEFAULT_BASE,
-    SDPA_BLOCK_SPARSE_MAX_BLOCK, SDPA_BLOCK_SPARSE_MAX_D,
+    FlashSdpaBackwardPlan, FlashSdpaDescriptor, FlashSdpaPlan,
+    // Phase 59b — packed-batch (varlen) FlashAttention v2 plans.
+    FlashSdpaVarlenArgs, FlashSdpaVarlenBackwardArgs, FlashSdpaVarlenBackwardPlan,
+    FlashSdpaVarlenDescriptor, FlashSdpaVarlenPlan,
+    HyperConnectionArgs, HyperConnectionDescriptor, HyperConnectionPlan, KvCacheAppendArgs,
+    KvCacheAppendDescriptor, KvCacheAppendPlan, RopeArgs, RopeBackwardArgs,
+    RopeBackwardDescriptor, RopeBackwardPlan, RopeDescriptor, RopePlan, SdpaArgs,
+    SdpaBackwardArgs, SdpaBackwardDescriptor, SdpaBackwardPlan, SdpaBlockSparseArgs,
+    SdpaBlockSparseDescriptor, SdpaBlockSparsePlan, SdpaDescriptor, SdpaPlan,
+    FLASH_SDPA_MAX_D, ROPE_DEFAULT_BASE, SDPA_BLOCK_SPARSE_MAX_BLOCK, SDPA_BLOCK_SPARSE_MAX_D,
 };
 
 // Phase 45 — long-context RoPE scaling helpers (pure-Rust host-side

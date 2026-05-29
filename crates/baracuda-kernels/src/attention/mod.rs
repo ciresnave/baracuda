@@ -68,6 +68,11 @@ pub mod alibi;
 pub mod alibi_backward;
 pub mod flash_sdpa;
 pub mod flash_sdpa_backward;
+// Phase 59b — packed-batch (varlen) FlashAttention v2 plans (FW + BW).
+// Gated on the `fa2` cargo feature at runtime (descriptor compiles
+// unconditionally for API discoverability; the run path errors with
+// Unsupported when the feature is off).
+pub mod flash_sdpa_varlen;
 #[cfg(feature = "sm89")]
 pub mod flash_sdpa_sm89;
 pub mod kv_cache;
@@ -85,6 +90,11 @@ pub use alibi_backward::{AlibiBackwardArgs, AlibiBackwardDescriptor, AlibiBackwa
 pub use flash_sdpa::{FlashSdpaArgs, FlashSdpaDescriptor, FlashSdpaPlan, FLASH_SDPA_MAX_D};
 pub use flash_sdpa_backward::{
     FlashSdpaBackwardArgs, FlashSdpaBackwardDescriptor, FlashSdpaBackwardPlan,
+};
+// Phase 59b — varlen FW + BW.
+pub use flash_sdpa_varlen::{
+    FlashSdpaVarlenArgs, FlashSdpaVarlenBackwardArgs, FlashSdpaVarlenBackwardPlan,
+    FlashSdpaVarlenDescriptor, FlashSdpaVarlenPlan,
 };
 #[cfg(feature = "sm89")]
 pub use flash_sdpa_sm89::{FlashSdpaSm89Args, FlashSdpaSm89Descriptor, FlashSdpaSm89Plan};

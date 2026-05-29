@@ -28,27 +28,37 @@ Attention v2 under its third-party attribution section.
 
 `src/` contains the headers and `.cu` instantiations needed for the
 **Phase 42 Tier-1 integration** PLUS the **Phase 59a FW expansion** to
-the full upstream forward head_dim set.
+the full upstream forward head_dim set PLUS the **Phase 59b BW
+expansion + varlen FW/BW path**.
 
-**Headers** (full FA2 src headers, ~16 files):
+**Headers** (full FA2 src headers, ~19 files):
 - `flash.h` — `Flash_fwd_params` / `Flash_bwd_params` struct definitions.
 - `flash_fwd_kernel.h` — main `compute_attn` / `compute_attn_splitkv` device code.
-- `flash_fwd_launch_template.h` — host-side dispatcher + grid setup.
+- `flash_fwd_launch_template.h` — host-side dispatcher + grid setup (FW).
+- `flash_bwd_kernel.h` — BW dq/dk/dv device code (Phase 59b).
+- `flash_bwd_launch_template.h` — BW host-side dispatcher (Phase 59b).
+- `flash_bwd_preprocess_kernel.h` — BW preprocess (dot(do, o), dQaccum clear; Phase 59b).
 - `kernel_traits.h` — block / warp / SMEM tile sizing.
 - `mask.h`, `softmax.h`, `dropout.h`, `alibi.h`, `rotary.h` — algorithm pieces.
 - `block_info.h`, `static_switch.h`, `utils.h`, `philox.cuh`, `philox_unpack.cuh` — utilities.
 - `hardware_info.h` — CUDA device cap query.
 - `namespace_config.h` — `FLASH_NAMESPACE` macro.
 
-**Source `.cu` files** — Phase 42 (Tier 1) + Phase 59a:
-- `flash_fwd_hdim32_{fp16,bf16}_{,causal}_sm80.cu` (4 files, Phase 59a)
-- `flash_fwd_hdim64_{fp16,bf16}_{,causal}_sm80.cu` (4 files, Phase 59a)
-- `flash_fwd_hdim96_{fp16,bf16}_{,causal}_sm80.cu` (4 files, Phase 59a)
-- `flash_fwd_hdim128_{fp16,bf16}_{,causal}_sm80.cu` (4 files, Phase 42)
-- `flash_fwd_hdim192_{fp16,bf16}_{,causal}_sm80.cu` (4 files, Phase 59a)
-- `flash_fwd_hdim256_{fp16,bf16}_{,causal}_sm80.cu` (4 files, Phase 59a)
+**Source `.cu` files** — Phase 42 (Tier 1) + Phase 59a + Phase 59b:
+- `flash_fwd_hdim{32,64,96,128,192,256}_{fp16,bf16}_{,causal}_sm80.cu`
+  (24 files; Phase 42 + 59a)
+- `flash_bwd_hdim{32,64,96,128,192,256}_{fp16,bf16}_{,causal}_sm80.cu`
+  (24 files; **Phase 59b**)
 
-Total: 24 forward `.cu` files (6 head_dims × 2 dtypes × 2 causal/non-causal).
+Total: 48 `.cu` files (24 FW + 24 BW; 6 head_dims × 2 dtypes ×
+2 causal/non-causal × 2 directions).
+
+**Varlen** does NOT have a separate .cu file family — upstream FA2
+v2.8.3 dispatches varlen via a runtime `params.cu_seqlens_q != nullptr`
+check inside `flash_{fwd,bwd}_launch_template.h`. Phase 59b plumbs
+varlen through `kernels/attention/fa2_varlen_launcher.cu` (FW)
+and the existing `fa2_backward_launcher.cu` (BW) using the same .cu
+instantiations as the dense path. No additional vendoring needed.
 
 ## Scope: what we removed
 
@@ -67,14 +77,9 @@ Total: 24 forward `.cu` files (6 head_dims × 2 dtypes × 2 causal/non-causal).
 - **Vendored CUTLASS submodule** (`csrc/cutlass/`) — baracuda already
   carries CUTLASS through `baracuda-cutlass-sys`. Build script reuses
   the same include path. See **CUTLASS version note** below.
-- **Backward `.cu` files** (`flash_bwd_*`) — Tier-2 deferral (Phase 59b).
-- **Backward kernel + preprocess headers** (`flash_bwd_kernel.h`,
-  `flash_bwd_launch_template.h`, `flash_bwd_preprocess_kernel.h`) —
-  Tier-2 deferral (not referenced from any FW source).
 - **Split-KV forward `.cu` files** (`flash_fwd_split_hdim*.cu`) —
   paged-attention dispatch path; Phase 46's FlashInfer cherry-pick
   covers paged attention.
-- **Varlen forward path** — Phase 59b territory.
 
 ### Head dimensions NOT supported
 
@@ -136,6 +141,44 @@ override knobs.
   points (cu_seqlens_q / cu_seqlens_k).
 - **FA3 / Hopper**: separate effort; hardware-blocked on the RTX 4070
   dev box.
+
+## Phase 59b — BW + varlen (completed)
+
+Closes the FA2-retirement requirements on the backward + varlen
+fronts (the second-and-final piece needed for Fuel to drop their
+FA2 vendor entirely):
+
+- Vendored 24 new BW `.cu` files (full head_dim set × {fp16, bf16}
+  × {causal, non-causal}; mirrors the FW set).
+- Vendored 3 new BW headers (`flash_bwd_kernel.h`,
+  `flash_bwd_launch_template.h`, `flash_bwd_preprocess_kernel.h`).
+- Added `kernels/attention/fa2_backward_launcher.cu` — dispatches
+  the BW kernels for the 6 head_dims via runtime switch; populates
+  `Flash_bwd_params` with dQ/dK/dV outputs, dQaccum + dsoftmax_d
+  scratch (workspace-supplied), the f32 LSE input, and full Phase
+  59a feature plumbing (ALiBi, sliding window, softcap).
+- Added `kernels/attention/fa2_varlen_launcher.cu` — varlen FW path
+  (FA2 v2.8.3 dispatches varlen via runtime `cu_seqlens_*` check
+  inside the existing FW launch template, so no separate .cu file
+  family is needed).
+- FFI surface: 12 new symbols (BW × 2 dtypes × {run, can_implement} +
+  workspace_size; varlen FW × 2 dtypes × {run, can_implement} +
+  lse_size; varlen BW × 2 dtypes × {run, can_implement} +
+  workspace_size).
+- API: NEW `FlashSdpaVarlenPlan` / `FlashSdpaVarlenBackwardPlan`
+  families. `FlashSdpaBackwardPlan` extended (additive) with
+  `BackendChoice::FlashAttentionV2` arm, ALiBi / sliding-window
+  / softcap plumbing on the descriptor (`#[non_exhaustive]` +
+  builder pattern), and an optional `lse_f32` arg on the args
+  bundle (FA2 stores LSE in f32 regardless of operand dtype).
+- BW workspace contract: `dq_accum + dsoftmax_sum` packed
+  back-to-back; sizes returned by
+  `baracuda_kernels_fa2_sdpa_backward_workspace_size`. Launcher
+  zero-fills via `cudaMemsetAsync` before launch.
+- Smoke tests: 12+ new tests covering eligibility / workspace
+  sizing / e2e BW for all 6 head_dims × 2 dtypes × 2 causal
+  modes, plus varlen FW (multi-sequence), varlen BW, and
+  varlen × GQA.
 
 ## Phase 59a — FW expansion (completed)
 
