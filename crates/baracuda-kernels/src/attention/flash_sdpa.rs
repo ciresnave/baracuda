@@ -111,7 +111,7 @@ impl BackendChoice {
 /// Used by both the heuristic and the eligibility check. 160, 224,
 /// and 512 are NOT supported — no upstream sources to vendor.
 #[cfg(feature = "fa2")]
-const FA2_SUPPORTED_HEAD_DIMS: &[i32] = &[32, 64, 96, 128, 192, 256];
+const FA2_SUPPORTED_HEAD_DIMS: &[i32] = &[32, 64, 96, 128, 160, 192, 224, 256, 512];
 
 #[cfg(feature = "fa2")]
 #[inline]
@@ -154,7 +154,7 @@ fn should_use_fa2(desc: &FlashSdpaDescriptor, num_heads_k: i32) -> bool {
 ///
 /// Trailblazer enforces `d_k == d_v` (single head-dim cap shared across
 /// Q/K and V) and `d_k ≤ 128` on the bespoke path; the FA2 path lifts
-/// the cap to any `d_k ∈ {32, 64, 96, 128, 192, 256}`. Use
+/// the cap to any `d_k ∈ {32, 64, 96, 128, 160, 192, 224, 256, 512}`. Use
 /// [`crate::SdpaPlan`] for the relaxed case where `d_k != d_v`, or for
 /// problems that need an explicit additive mask.
 ///
@@ -1076,8 +1076,12 @@ fn pick_backend<T: Element>(
 /// Used to validate caller overrides — returns true iff FA2 *can*
 /// run this descriptor at all.
 ///
-/// Phase 59a: FA2 supports head_dim ∈ {32, 64, 96, 128, 192, 256}
-/// (upstream v2.8.3 set; 160/224/512 are NOT supported).
+/// Phase 60: FA2 supports head_dim ∈ {32, 64, 96, 128, 160, 192, 224, 256, 512}.
+/// Phase 59a vendored the upstream v2.8.3 set {32, 64, 96, 128, 192, 256};
+/// Phase 60 added 160/224 from Candle (PR #245 + PR #2688) and 512 from
+/// Candle PR #3417 (Eric Buehler), each with appropriate SMEM opt-in for
+/// the larger tiles. See vendor/flash-attention/VENDOR.md for full
+/// provenance.
 #[cfg(feature = "fa2")]
 fn fa2_is_eligible<T: Element>(desc: &FlashSdpaDescriptor) -> bool {
     fa2_supports_head_dim(desc.d_k)

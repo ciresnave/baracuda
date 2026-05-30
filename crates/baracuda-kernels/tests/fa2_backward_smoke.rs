@@ -488,3 +488,9 @@ fn fa2_bw_smoke_bf16_d128_noncausal() { run_fa2_bw_bf16(128, false); }
 #[test]
 #[ignore]
 fn fa2_bw_smoke_bf16_d128_causal() { run_fa2_bw_bf16(128, true); }
+
+// Phase 60: hd160/hd224/hd512 BW NOT supported by FA2 — see
+// FA2_BW_SUPPORTED_HEAD_DIMS in flash_sdpa_backward.rs for the
+// kernel-level constraints. FW works for all three (Phase 60 FW
+// vendor); only BW falls back to bespoke SDPA BW.
+// No Phase 60 BW smoke tests to add.

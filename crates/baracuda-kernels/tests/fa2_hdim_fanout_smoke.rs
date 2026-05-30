@@ -290,9 +290,28 @@ hdim_test!(fa2_fanout_hdim192_f16_causal,    192, run_one_f16, true );
 hdim_test!(fa2_fanout_hdim192_bf16_noncausal, 192, run_one_bf16, false);
 hdim_test!(fa2_fanout_hdim192_bf16_causal,    192, run_one_bf16, true );
 
+// head_dim = 160 (Phase 60; vendored from EricLBuehler/candle@main, originally Candle PR #245)
+hdim_test!(fa2_fanout_hdim160_f16_noncausal, 160, run_one_f16, false);
+hdim_test!(fa2_fanout_hdim160_f16_causal,    160, run_one_f16, true );
+hdim_test!(fa2_fanout_hdim160_bf16_noncausal, 160, run_one_bf16, false);
+hdim_test!(fa2_fanout_hdim160_bf16_causal,    160, run_one_bf16, true );
+
+// head_dim = 224 (Phase 60; vendored from EricLBuehler/candle@main, restored by Candle PR #2688)
+hdim_test!(fa2_fanout_hdim224_f16_noncausal, 224, run_one_f16, false);
+hdim_test!(fa2_fanout_hdim224_f16_causal,    224, run_one_f16, true );
+hdim_test!(fa2_fanout_hdim224_bf16_noncausal, 224, run_one_bf16, false);
+hdim_test!(fa2_fanout_hdim224_bf16_causal,    224, run_one_bf16, true );
+
 // head_dim = 256 (FA2-only; may exceed sm_89 SMEM in some shapes —
 // FA2's hdim256 launcher picks 64x64 tiles for non-A100/H100 GPUs).
 hdim_test!(fa2_fanout_hdim256_f16_noncausal, 256, run_one_f16, false);
 hdim_test!(fa2_fanout_hdim256_f16_causal,    256, run_one_f16, true );
 hdim_test!(fa2_fanout_hdim256_bf16_noncausal, 256, run_one_bf16, false);
 hdim_test!(fa2_fanout_hdim256_bf16_causal,    256, run_one_bf16, true );
+
+// head_dim = 512 (Phase 60; vendored from huggingface/candle@5430d32c, Candle PR #3417 by Eric Buehler).
+// SMEM opt-in path: on sm_89 picks 32x32 tiles (~96 KiB); A100+ picks 64x32 (~128 KiB).
+hdim_test!(fa2_fanout_hdim512_f16_noncausal, 512, run_one_f16, false);
+hdim_test!(fa2_fanout_hdim512_f16_causal,    512, run_one_f16, true );
+hdim_test!(fa2_fanout_hdim512_bf16_noncausal, 512, run_one_bf16, false);
+hdim_test!(fa2_fanout_hdim512_bf16_causal,    512, run_one_bf16, true );

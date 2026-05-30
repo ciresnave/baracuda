@@ -261,6 +261,13 @@ void run_mha_bwd_hdim128(Flash_bwd_params &params, cudaStream_t stream) {
     });
 }
 
+// Phase 60: hd160 BW intentionally NOT instantiated.
+// kHeadDim=160 sets kBlockKSmem=32 (since 160 % 64 != 0), which FA2's
+// BW kernel does not fully support — the BW atom_layout assumes
+// kBlockKSmem=64. Upstream FA2 v2.8.3 and Candle both ship hd160 FW
+// without hd160 BW for the same reason. Callers needing BW at hd160
+// fall back to baracuda's bespoke SDPA BW path.
+
 template<typename T, bool Is_causal>
 void run_mha_bwd_hdim192(Flash_bwd_params &params, cudaStream_t stream) {
     constexpr static int Headdim = 192;
@@ -280,6 +287,9 @@ void run_mha_bwd_hdim192(Flash_bwd_params &params, cudaStream_t stream) {
         }
     });
 }
+
+// Phase 60: hd224 BW intentionally NOT instantiated (same kBlockKSmem=32
+// limitation as hd160). Caller falls back to bespoke SDPA BW.
 
 template<typename T, bool Is_causal>
 void run_mha_bwd_hdim256(Flash_bwd_params &params, cudaStream_t stream) {
@@ -304,5 +314,15 @@ void run_mha_bwd_hdim256(Flash_bwd_params &params, cudaStream_t stream) {
         }
     });
 }
+
+// Phase 60: hd512 BW intentionally NOT instantiated.
+// FA2's BW kernel atom_layout requires kBlockM >= 64; hd512 BW with
+// kBlockM=64+ at any kBlockN would need >256KB SMEM (exceeds even
+// H100's 228KB cap), so the only candidate is kBlockM=32 — which
+// fails 7 static_asserts in Flash_bwd_kernel_traits. baracuda Phase
+// 60 attempted hd512 BW empirically; nvcc reports 7 errors that
+// baracuda-forge's stderr capture truncates but they're consistent
+// with the kBlockM constraint. Upstream FA2 v2.8.3 and Candle don't
+// ship hd512 BW either. Caller falls back to bespoke SDPA BW.
 
 } // namespace FLASH_NAMESPACE {

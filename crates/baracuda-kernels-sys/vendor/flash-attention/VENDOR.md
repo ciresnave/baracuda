@@ -29,7 +29,9 @@ Attention v2 under its third-party attribution section.
 `src/` contains the headers and `.cu` instantiations needed for the
 **Phase 42 Tier-1 integration** PLUS the **Phase 59a FW expansion** to
 the full upstream forward head_dim set PLUS the **Phase 59b BW
-expansion + varlen FW/BW path**.
+expansion + varlen FW/BW path** PLUS the **Phase 60 head_dim
+{160, 224, 512} expansion** (sourced from the Candle fork — see
+Attribution / Phase 60 sources section below).
 
 **Headers** (full FA2 src headers, ~19 files):
 - `flash.h` — `Flash_fwd_params` / `Flash_bwd_params` struct definitions.
@@ -44,14 +46,36 @@ expansion + varlen FW/BW path**.
 - `hardware_info.h` — CUDA device cap query.
 - `namespace_config.h` — `FLASH_NAMESPACE` macro.
 
-**Source `.cu` files** — Phase 42 (Tier 1) + Phase 59a + Phase 59b:
+**Source `.cu` files** — Phase 42 (Tier 1) + Phase 59a + Phase 59b + Phase 60:
 - `flash_fwd_hdim{32,64,96,128,192,256}_{fp16,bf16}_{,causal}_sm80.cu`
-  (24 files; Phase 42 + 59a)
+  (24 files; Phase 42 + 59a — from upstream FA2 v2.8.3)
+- `flash_fwd_hdim{160,224}_{fp16,bf16}_{,causal}_sm80.cu` (8 files;
+  Phase 60 — from `EricLBuehler/candle@main/candle-flash-attn/kernels/`,
+  originally vendored to Candle by Laurent Mazare in PR #245
+  (huggingface/candle@2ce5f125, 2023-07-26); hd224 restored after a
+  prior upgrade had removed it by Michael Feil in PR #2688
+  (huggingface/candle@71cd6d55, 2024-12-31).)
+- `flash_fwd_hdim512_{fp16,bf16}_{,causal}_sm80.cu` (4 files;
+  Phase 60 — from
+  `huggingface/candle@5430d32c97c687973c53a4e65fac318d9be2a834/candle-flash-attn/kernels/`,
+  added by Eric Buehler in PR #3417 (merged 2026-03-28). PR #3417 also
+  added the `cudaDeviceGetAttribute(cudaDevAttrMaxSharedMemoryPerBlockOptin)`
+  SMEM opt-in pattern in `run_mha_fwd_hdim512()` (lines 363-385 of the
+  post-patch `flash_fwd_launch_template.h`) and updated the splitkv
+  block-size formula to `kBlockN = Headdim <= 64 ? 256 : (Headdim <= 128
+  ? 128 : (Headdim <= 256 ? 64 : 32))`. Both adopted verbatim by
+  baracuda Phase 60.)
 - `flash_bwd_hdim{32,64,96,128,192,256}_{fp16,bf16}_{,causal}_sm80.cu`
-  (24 files; **Phase 59b**)
+  (24 files; **Phase 59b** — from upstream FA2 v2.8.3)
 
-Total: 48 `.cu` files (24 FW + 24 BW; 6 head_dims × 2 dtypes ×
-2 causal/non-causal × 2 directions).
+**Phase 60 BW expansion NOT shipped — see "hd160/hd224/hd512 BW caveat"
+below.** Phase 60 attempted to extend BW to the 3 new head_dims and
+discovered the limitation is structural to FA2's BW algorithm, not a
+missing file. The attempt + reasoning + nvcc evidence is preserved in
+code comments at `build.rs` (lines 349-369) and in
+`crates/baracuda-kernels/src/attention/flash_sdpa_backward.rs` docstring.
+
+Total: 60 `.cu` files (36 FW + 24 BW).
 
 **Varlen** does NOT have a separate .cu file family — upstream FA2
 v2.8.3 dispatches varlen via a runtime `params.cu_seqlens_q != nullptr`
@@ -81,14 +105,55 @@ instantiations as the dense path. No additional vendoring needed.
   paged-attention dispatch path; Phase 46's FlashInfer cherry-pick
   covers paged attention.
 
-### Head dimensions NOT supported
+### Head dimension coverage (post-Phase 60)
 
-Upstream FA2 v2.8.3 ships ONLY head_dim ∈ {32, 64, 96, 128, 192, 256}.
-Head dimensions **160, 224, and 512 are NOT supported** by upstream and
-are therefore permanently out-of-scope for this vendor — there are no
-`.cu` source files to copy. Callers requiring those exotic head_dims
-must use baracuda's bespoke `FlashSdpaPlan` (which supports d_k ≤ 128
-natively) or fall back to the naive `SdpaPlan`.
+baracuda's vendored FA2 supports:
+
+- **FW**: `head_dim ∈ {32, 64, 96, 128, 160, 192, 224, 256, 512}` (9 dims)
+- **BW**: `head_dim ∈ {32, 64, 96, 128, 192, 256}` (6 dims)
+
+Provenance:
+- Upstream FA2 v2.8.3 ships `.cu` files only for {32, 64, 96, 128, 192,
+  256} — that's the Phase 42 + 59a + 59b set, for both FW and BW.
+- Head dimensions {160, 224, 512} **FW** are NOT in upstream FA2 v2.8.3
+  releases. Phase 60 added them via the Candle fork (which carried
+  them since 2023 and 2026 respectively — see Phase 60 sources above).
+- Head dimensions {160, 224, 512} **BW** are not supported by FA2's
+  BW algorithm at all (see caveat sections below). Phase 60 verified
+  this experimentally and documented the limitation.
+
+**Earlier baracuda releases (alpha.59 and prior) incorrectly claimed
+160/224/512 were permanently out-of-scope FOR FW.** That claim was based
+on an upstream-tag check by the Phase 59a agent and overlooked that the
+Candle fork had already extended the head_dim set. Phase 60 corrects
+the FW error; BW remains genuinely out-of-scope for these three.
+
+### hd160/hd224 BW caveat (kernel-traits limitation)
+
+FA2's BW kernel requires `kBlockKSmem == 64`, which translates to
+`kHeadDim % 64 == 0`. hd160 and hd224 don't satisfy this and route
+through a kBlockKSmem=32 path that the BW kernel's atom_layout
+doesn't implement. Upstream FA2 v2.8.3 and Candle confirm the
+limitation by not shipping BW for these dims either.
+
+baracuda's FA2 BW heuristic (`FA2_BW_SUPPORTED_HEAD_DIMS`) excludes
+hd160 and hd224; callers needing BW at those head_dims get the
+bespoke `SdpaBackwardPlan` path automatically. FW works fine for
+both (different kernel path).
+
+### hd512 BW caveat (kBlockM static-assert)
+
+FA2's BW kernel_traits static-asserts `kBlockM >= 64`. hd512 would
+require `kBlockM = 32` to fit any reasonable SMEM budget — even with
+the 228 KiB sm_90 opt-in cap, `kBlockM = 64 × kHeadDim = 512` exceeds
+viable BW tile sizes. Phase 60 attempted `kBlockM = 32` and got 7
+static_assert failures from `Flash_bwd_kernel_traits`. Upstream FA2
+v2.8.3 and Candle confirm the limitation by not shipping hd512 BW.
+
+baracuda's FA2 BW heuristic (`FA2_BW_SUPPORTED_HEAD_DIMS`) excludes
+hd512; callers needing BW at hd512 get the bespoke `SdpaBackwardPlan`
+path automatically. FW works fine (different kernel path; Buehler's
+PR #3417 added the SMEM opt-in pattern for FW only).
 
 ## PyTorch dependency stubs
 

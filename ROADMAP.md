@@ -7,10 +7,33 @@ effort within each category. Authoritative status per op lives in
 [`OP-MATRIX.md`](OP-MATRIX.md); historical phase summaries live in
 [`ARCHITECTURE.md`](ARCHITECTURE.md).
 
-The current tag is **v0.0.1-alpha.59** with **2152 GPU tests
+The current tag is **v0.0.1-alpha.60** with **2152+ GPU tests
 passing, zero failures** across the 6 critical test crates
 (baracuda-kernels, baracuda-optim, baracuda-megatron, baracuda-nccl,
-baracuda-transformer-engine, baracuda-ozimmu) on RTX 4070 (sm_89) —
+baracuda-transformer-engine, baracuda-ozimmu) on RTX 4070 (sm_89).
+**Phase 60 (alpha.60) corrects a Phase 59a inaccuracy** — head_dims
+{160, 224, 512} FW is NOT permanently out-of-scope as alpha.59 claimed;
+the Candle fork has carried them since 2023 (PR #245 by Laurent
+Mazare for hd160/192/224/256; PR #2688 by Michael Feil restored hd224
+after a prior upgrade had removed it; PR #3417 by Eric Buehler added
+hd512 with the SMEM-opt-in pattern). Phase 60 vendors the 12 missing FW
+.cu files from those Candle PRs into baracuda's FA2 tree (8 hd160/224
+from `EricLBuehler/candle@main`; 4 hd512 from `huggingface/candle@5430d32c`).
+**BW path NOT extended** — hd160/224 fall on FA2 BW kernel's
+`kBlockKSmem = (kHeadDim % 64 == 0) ? 64 : 32` constraint (BW
+atom_layout assumes 64); hd512 needs `kBlockM = 32` to fit any
+SMEM budget but BW kernel_traits static-asserts `kBlockM >= 64`.
+Upstream FA2 and the Candle fork ship no BW for these three either —
+this limitation is fundamental to FA2's BW algorithm. The Phase 60
+BW experiment + reasoning is documented in
+`crates/baracuda-kernels-sys/vendor/flash-attention/VENDOR.md`,
+in code comments at the dropped registration sites, and in
+`FA2_BW_SUPPORTED_HEAD_DIMS` (kept at `{32, 64, 96, 128, 192, 256}`).
+Callers needing BW at hd160/224/512 transparently fall back to the
+bespoke 3-kernel SDPA BW pipeline (the only path supporting them
+previously, anyway).
++12 new FW smoke tests in `fa2_hdim_fanout_smoke`.
+
 Phase 59a + 59b add the full FA2 v2.8.3 FW + BW + varlen surface
 (head_dims 32-256, GQA, ALiBi, sliding window, softcap) closing
 Fuel's FA2-retirement requirements (+48 new tests). Phase 59c

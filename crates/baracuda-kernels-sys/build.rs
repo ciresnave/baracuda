@@ -293,17 +293,32 @@ fn main() {
             "vendor/flash-attention/src/flash_fwd_hdim128_fp16_causal_sm80.cu",
             "vendor/flash-attention/src/flash_fwd_hdim128_bf16_sm80.cu",
             "vendor/flash-attention/src/flash_fwd_hdim128_bf16_causal_sm80.cu",
+            // head_dim = 160 (Phase 60; from EricLBuehler/candle@main, originally Candle PR #245 by Laurent Mazare)
+            "vendor/flash-attention/src/flash_fwd_hdim160_fp16_sm80.cu",
+            "vendor/flash-attention/src/flash_fwd_hdim160_fp16_causal_sm80.cu",
+            "vendor/flash-attention/src/flash_fwd_hdim160_bf16_sm80.cu",
+            "vendor/flash-attention/src/flash_fwd_hdim160_bf16_causal_sm80.cu",
             // head_dim = 192 (Phase 59a)
             "vendor/flash-attention/src/flash_fwd_hdim192_fp16_sm80.cu",
             "vendor/flash-attention/src/flash_fwd_hdim192_fp16_causal_sm80.cu",
             "vendor/flash-attention/src/flash_fwd_hdim192_bf16_sm80.cu",
             "vendor/flash-attention/src/flash_fwd_hdim192_bf16_causal_sm80.cu",
+            // head_dim = 224 (Phase 60; from EricLBuehler/candle@main, restored by Candle PR #2688 Michael Feil)
+            "vendor/flash-attention/src/flash_fwd_hdim224_fp16_sm80.cu",
+            "vendor/flash-attention/src/flash_fwd_hdim224_fp16_causal_sm80.cu",
+            "vendor/flash-attention/src/flash_fwd_hdim224_bf16_sm80.cu",
+            "vendor/flash-attention/src/flash_fwd_hdim224_bf16_causal_sm80.cu",
             // head_dim = 256 (Phase 59a)
             "vendor/flash-attention/src/flash_fwd_hdim256_fp16_sm80.cu",
             "vendor/flash-attention/src/flash_fwd_hdim256_fp16_causal_sm80.cu",
             "vendor/flash-attention/src/flash_fwd_hdim256_bf16_sm80.cu",
             "vendor/flash-attention/src/flash_fwd_hdim256_bf16_causal_sm80.cu",
-            // launcher (Phase 42 + extended in Phase 59a)
+            // head_dim = 512 (Phase 60; from huggingface/candle@5430d32c, Candle PR #3417 by Eric Buehler; SMEM opt-in path)
+            "vendor/flash-attention/src/flash_fwd_hdim512_fp16_sm80.cu",
+            "vendor/flash-attention/src/flash_fwd_hdim512_fp16_causal_sm80.cu",
+            "vendor/flash-attention/src/flash_fwd_hdim512_bf16_sm80.cu",
+            "vendor/flash-attention/src/flash_fwd_hdim512_bf16_causal_sm80.cu",
+            // launcher (Phase 42 + extended in Phase 59a + 60)
             "kernels/attention/fa2_launcher.cu",
             // ----- Phase 59b — backward .cu instantiations -----
             // 24 BW files: 6 head_dims × 2 dtypes × 2 causal/non-causal.
@@ -331,16 +346,27 @@ fn main() {
             "vendor/flash-attention/src/flash_bwd_hdim128_fp16_causal_sm80.cu",
             "vendor/flash-attention/src/flash_bwd_hdim128_bf16_sm80.cu",
             "vendor/flash-attention/src/flash_bwd_hdim128_bf16_causal_sm80.cu",
+            // head_dim = 160 BW: NOT SUPPORTED — kernel_traits sets kBlockKSmem=32
+            // (160 % 64 != 0), which the BW kernel's atom_layout assumes to be 64.
+            // Upstream FA2 and Candle don't ship BW for hd160 either. Callers that
+            // need BW at hd160 must fall back to the bespoke SDPA BW path.
             // head_dim = 192
             "vendor/flash-attention/src/flash_bwd_hdim192_fp16_sm80.cu",
             "vendor/flash-attention/src/flash_bwd_hdim192_fp16_causal_sm80.cu",
             "vendor/flash-attention/src/flash_bwd_hdim192_bf16_sm80.cu",
             "vendor/flash-attention/src/flash_bwd_hdim192_bf16_causal_sm80.cu",
+            // head_dim = 224 BW: NOT SUPPORTED — same kBlockKSmem=32 issue as hd160
+            // (224 % 64 != 0). Caller falls back to bespoke SDPA BW.
             // head_dim = 256
             "vendor/flash-attention/src/flash_bwd_hdim256_fp16_sm80.cu",
             "vendor/flash-attention/src/flash_bwd_hdim256_fp16_causal_sm80.cu",
             "vendor/flash-attention/src/flash_bwd_hdim256_bf16_sm80.cu",
             "vendor/flash-attention/src/flash_bwd_hdim256_bf16_causal_sm80.cu",
+            // head_dim = 512 BW: NOT SUPPORTED — FA2's BW kernel assumes kBlockM >= 64,
+            // but hd512 needs kBlockM=32 to fit in any SMEM budget (even with opt-in).
+            // The kernel_traits static asserts fail. baracuda Phase 60 attempted hd512
+            // BW with 32x32 tiles but nvcc reports 7 errors. Caller falls back to
+            // bespoke SDPA BW for hd512.
             // Phase 59b BW + varlen launchers.
             "kernels/attention/fa2_backward_launcher.cu",
             "kernels/attention/fa2_varlen_launcher.cu",

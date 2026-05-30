@@ -87,7 +87,28 @@ impl BackendChoice {
     }
 }
 
-/// Upstream FA2 v2.8.3 supports exactly these BW head_dims (same as FW).
+/// FA2 BW head_dim coverage. Phase 59b vendored upstream v2.8.3's 6
+/// BW kernels {32, 64, 96, 128, 192, 256}.
+///
+/// **hd160, hd224, hd512 BW are NOT supported** despite their FW
+/// kernels working (Phase 60). Two distinct kernel-level constraints:
+///
+/// - **hd160 / hd224**: kernel_traits sets kBlockKSmem=32 (since
+///   `160 % 64 != 0` and `224 % 64 != 0`), which FA2's BW kernel's
+///   atom_layout doesn't support.
+/// - **hd512**: FA2's BW kernel atom_layout requires kBlockM >= 64,
+///   but hd512 at any kBlockN >= 32 would need >256 KB SMEM at
+///   kBlockM=64 (exceeds H100's 228 KB cap). Only kBlockM=32 fits,
+///   but that fails 7 static_asserts in `Flash_bwd_kernel_traits`.
+///
+/// Upstream FA2 v2.8.3 and Candle don't ship any of these three BW
+/// instantiations for the same reasons. Phase 60 attempted all three
+/// empirically and confirmed the constraints; documented in
+/// `vendor/flash-attention/VENDOR.md`.
+///
+/// BW callers at hd160/hd224/hd512 fall back to baracuda's bespoke
+/// `SdpaBackwardPlan` automatically (the FA2 dispatch heuristic
+/// rejects them and the plan re-routes).
 #[cfg(feature = "fa2")]
 const FA2_BW_SUPPORTED_HEAD_DIMS: &[i32] = &[32, 64, 96, 128, 192, 256];
 

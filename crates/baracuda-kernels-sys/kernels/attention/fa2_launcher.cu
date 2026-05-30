@@ -6,11 +6,15 @@
 // `vendor/flash-attention/src/flash_fwd_hdim*_sm80.cu`.
 //
 // Phase 42 (Tier-1) shipped head_dim=128 only, no GQA, no extras.
-// Phase 59a extends FW coverage to the full upstream feature surface:
+// Phase 59a extended FW coverage to the full upstream FA2 v2.8.3
+// surface ({32, 64, 96, 128, 192, 256}). Phase 60 added the three
+// head_dims the Candle fork has been carrying since 2023 ({160, 224}
+// from PR #245 by Laurent Mazare + PR #2688 by Michael Feil; {512}
+// from PR #3417 by Eric Buehler). Full FW surface now:
 //
-//   * head_dim ∈ {32, 64, 96, 128, 192, 256}, dispatched at runtime.
-//     Upstream FA2 v2.8.3 does NOT ship head_dims 160, 224, or 512 —
-//     those are permanently Tier-3-deferred (no upstream sources).
+//   * head_dim ∈ {32, 64, 96, 128, 160, 192, 224, 256, 512}, dispatched
+//     at runtime. BW remains 6 head_dims (kBlockKSmem=32 atom_layout
+//     limitation; see flash_sdpa_backward.rs).
 //   * GQA — `num_heads_k != num_heads` accepted when
 //     `num_heads % num_heads_k == 0`. FA2's kernel handles the
 //     broadcast via its `h_h_k_ratio` mechanism.
@@ -48,7 +52,8 @@ namespace FLASH_NAMESPACE {
 // emitted by the vendored .cu files. Avoids pulling
 // `flash_fwd_launch_template.h` into this translation unit (it would
 // re-instantiate the heavy CUTLASS templates here for no gain).
-// Phase 42 + 59a: full head_dim set ∈ {32, 64, 96, 128, 192, 256}.
+// Phase 42 + 59a + 60: full FW head_dim set ∈
+//   {32, 64, 96, 128, 160, 192, 224, 256, 512}.
 template<> void run_mha_fwd_<cutlass::half_t,     32,  false>(Flash_fwd_params&, cudaStream_t);
 template<> void run_mha_fwd_<cutlass::half_t,     32,  true >(Flash_fwd_params&, cudaStream_t);
 template<> void run_mha_fwd_<cutlass::half_t,     64,  false>(Flash_fwd_params&, cudaStream_t);
@@ -57,10 +62,16 @@ template<> void run_mha_fwd_<cutlass::half_t,     96,  false>(Flash_fwd_params&,
 template<> void run_mha_fwd_<cutlass::half_t,     96,  true >(Flash_fwd_params&, cudaStream_t);
 template<> void run_mha_fwd_<cutlass::half_t,     128, false>(Flash_fwd_params&, cudaStream_t);
 template<> void run_mha_fwd_<cutlass::half_t,     128, true >(Flash_fwd_params&, cudaStream_t);
+template<> void run_mha_fwd_<cutlass::half_t,     160, false>(Flash_fwd_params&, cudaStream_t);
+template<> void run_mha_fwd_<cutlass::half_t,     160, true >(Flash_fwd_params&, cudaStream_t);
 template<> void run_mha_fwd_<cutlass::half_t,     192, false>(Flash_fwd_params&, cudaStream_t);
 template<> void run_mha_fwd_<cutlass::half_t,     192, true >(Flash_fwd_params&, cudaStream_t);
+template<> void run_mha_fwd_<cutlass::half_t,     224, false>(Flash_fwd_params&, cudaStream_t);
+template<> void run_mha_fwd_<cutlass::half_t,     224, true >(Flash_fwd_params&, cudaStream_t);
 template<> void run_mha_fwd_<cutlass::half_t,     256, false>(Flash_fwd_params&, cudaStream_t);
 template<> void run_mha_fwd_<cutlass::half_t,     256, true >(Flash_fwd_params&, cudaStream_t);
+template<> void run_mha_fwd_<cutlass::half_t,     512, false>(Flash_fwd_params&, cudaStream_t);
+template<> void run_mha_fwd_<cutlass::half_t,     512, true >(Flash_fwd_params&, cudaStream_t);
 
 template<> void run_mha_fwd_<cutlass::bfloat16_t, 32,  false>(Flash_fwd_params&, cudaStream_t);
 template<> void run_mha_fwd_<cutlass::bfloat16_t, 32,  true >(Flash_fwd_params&, cudaStream_t);
@@ -70,10 +81,16 @@ template<> void run_mha_fwd_<cutlass::bfloat16_t, 96,  false>(Flash_fwd_params&,
 template<> void run_mha_fwd_<cutlass::bfloat16_t, 96,  true >(Flash_fwd_params&, cudaStream_t);
 template<> void run_mha_fwd_<cutlass::bfloat16_t, 128, false>(Flash_fwd_params&, cudaStream_t);
 template<> void run_mha_fwd_<cutlass::bfloat16_t, 128, true >(Flash_fwd_params&, cudaStream_t);
+template<> void run_mha_fwd_<cutlass::bfloat16_t, 160, false>(Flash_fwd_params&, cudaStream_t);
+template<> void run_mha_fwd_<cutlass::bfloat16_t, 160, true >(Flash_fwd_params&, cudaStream_t);
 template<> void run_mha_fwd_<cutlass::bfloat16_t, 192, false>(Flash_fwd_params&, cudaStream_t);
 template<> void run_mha_fwd_<cutlass::bfloat16_t, 192, true >(Flash_fwd_params&, cudaStream_t);
+template<> void run_mha_fwd_<cutlass::bfloat16_t, 224, false>(Flash_fwd_params&, cudaStream_t);
+template<> void run_mha_fwd_<cutlass::bfloat16_t, 224, true >(Flash_fwd_params&, cudaStream_t);
 template<> void run_mha_fwd_<cutlass::bfloat16_t, 256, false>(Flash_fwd_params&, cudaStream_t);
 template<> void run_mha_fwd_<cutlass::bfloat16_t, 256, true >(Flash_fwd_params&, cudaStream_t);
+template<> void run_mha_fwd_<cutlass::bfloat16_t, 512, false>(Flash_fwd_params&, cudaStream_t);
+template<> void run_mha_fwd_<cutlass::bfloat16_t, 512, true >(Flash_fwd_params&, cudaStream_t);
 }  // namespace FLASH_NAMESPACE
 
 namespace {
@@ -84,10 +101,13 @@ constexpr int STATUS_OK          = 0;
 constexpr int STATUS_INVALID_ARG = 2;
 constexpr int STATUS_UNSUPPORTED = 3;
 
-// FA2 v2.8.3 supports exactly these forward head_dims. We do NOT ship
-// 160/224/512 — no upstream sources exist for them.
+// Phase 60 FW head_dim set — upstream FA2 v2.8.3 ships {32, 64, 96,
+// 128, 192, 256}; Candle fork added {160, 192, 224, 256} (PR #245 +
+// #2688) and {512} (PR #3417). Phase 60 vendors the missing FW .cu
+// files.
 inline bool is_supported_hdim(int d) {
-    return d == 32 || d == 64 || d == 96 || d == 128 || d == 192 || d == 256;
+    return d == 32 || d == 64 || d == 96 || d == 128 || d == 160
+        || d == 192 || d == 224 || d == 256 || d == 512;
 }
 
 // Fill a Flash_fwd_params for the dense case with full Phase 59a
@@ -232,8 +252,11 @@ bool dispatch_fwd(int head_dim, bool is_causal,
             case 64:  FLASH_NAMESPACE::run_mha_fwd_<T, 64,  true>(params, s); return true;
             case 96:  FLASH_NAMESPACE::run_mha_fwd_<T, 96,  true>(params, s); return true;
             case 128: FLASH_NAMESPACE::run_mha_fwd_<T, 128, true>(params, s); return true;
+            case 160: FLASH_NAMESPACE::run_mha_fwd_<T, 160, true>(params, s); return true;
             case 192: FLASH_NAMESPACE::run_mha_fwd_<T, 192, true>(params, s); return true;
+            case 224: FLASH_NAMESPACE::run_mha_fwd_<T, 224, true>(params, s); return true;
             case 256: FLASH_NAMESPACE::run_mha_fwd_<T, 256, true>(params, s); return true;
+            case 512: FLASH_NAMESPACE::run_mha_fwd_<T, 512, true>(params, s); return true;
             default:  return false;
         }
     } else {
@@ -242,8 +265,11 @@ bool dispatch_fwd(int head_dim, bool is_causal,
             case 64:  FLASH_NAMESPACE::run_mha_fwd_<T, 64,  false>(params, s); return true;
             case 96:  FLASH_NAMESPACE::run_mha_fwd_<T, 96,  false>(params, s); return true;
             case 128: FLASH_NAMESPACE::run_mha_fwd_<T, 128, false>(params, s); return true;
+            case 160: FLASH_NAMESPACE::run_mha_fwd_<T, 160, false>(params, s); return true;
             case 192: FLASH_NAMESPACE::run_mha_fwd_<T, 192, false>(params, s); return true;
+            case 224: FLASH_NAMESPACE::run_mha_fwd_<T, 224, false>(params, s); return true;
             case 256: FLASH_NAMESPACE::run_mha_fwd_<T, 256, false>(params, s); return true;
+            case 512: FLASH_NAMESPACE::run_mha_fwd_<T, 512, false>(params, s); return true;
             default:  return false;
         }
     }

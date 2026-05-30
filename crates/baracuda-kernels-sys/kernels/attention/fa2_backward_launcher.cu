@@ -392,8 +392,10 @@ bool dispatch_bwd(int head_dim, bool is_causal,
             case 64:  FLASH_NAMESPACE::run_mha_bwd_<T, 64,  true>(params, s); return true;
             case 96:  FLASH_NAMESPACE::run_mha_bwd_<T, 96,  true>(params, s); return true;
             case 128: FLASH_NAMESPACE::run_mha_bwd_<T, 128, true>(params, s); return true;
+            // hd160/224 BW NOT SUPPORTED (kBlockKSmem=32 path; caller falls back to bespoke)
             case 192: FLASH_NAMESPACE::run_mha_bwd_<T, 192, true>(params, s); return true;
             case 256: FLASH_NAMESPACE::run_mha_bwd_<T, 256, true>(params, s); return true;
+            // hd512 BW NOT SUPPORTED (FA2 BW kernel requires kBlockM >= 64; caller falls back to bespoke)
             default:  return false;
         }
     } else {
@@ -402,8 +404,10 @@ bool dispatch_bwd(int head_dim, bool is_causal,
             case 64:  FLASH_NAMESPACE::run_mha_bwd_<T, 64,  false>(params, s); return true;
             case 96:  FLASH_NAMESPACE::run_mha_bwd_<T, 96,  false>(params, s); return true;
             case 128: FLASH_NAMESPACE::run_mha_bwd_<T, 128, false>(params, s); return true;
+            // hd160/224 BW NOT SUPPORTED (kBlockKSmem=32 path; caller falls back to bespoke)
             case 192: FLASH_NAMESPACE::run_mha_bwd_<T, 192, false>(params, s); return true;
             case 256: FLASH_NAMESPACE::run_mha_bwd_<T, 256, false>(params, s); return true;
+            // hd512 BW NOT SUPPORTED (FA2 BW kernel requires kBlockM >= 64)
             default:  return false;
         }
     }
