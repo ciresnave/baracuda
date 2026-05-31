@@ -8,7 +8,7 @@
 A unified Rust ML-op facade over the NVIDIA CUDA ecosystem.
 
 ![License](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue)
-![Status](https://img.shields.io/badge/status-alpha.61-orange)
+![Status](https://img.shields.io/badge/status-alpha.62-orange)
 ![CUDA](https://img.shields.io/badge/CUDA-12.x-76b900)
 ![Tests](https://img.shields.io/badge/regression-2152%2F0-success)
 
@@ -40,21 +40,32 @@ talk to one library directly.
 
 ## Status
 
-**In active development — alpha.61.** **2184+ GPU tests passing,
+**In active development — alpha.62.** **2229+ GPU tests passing,
 zero failures** across the 6 critical test crates on an RTX 4070
-(sm_89) — Phase 60 lifted FA2 FW to the full Candle-fork-extended
+(sm_89). Phase 62 (alpha.62, Fuel-ask) lifts the in-place op
+contract from contig-only (Phase 61) to **strided** by shipping
+11 new affine in-place FFI symbols (4 contig int dtype backfill —
+`i32`/`i64`/`u8`/`i8` matching forward affine; 7 strided variants
+across the full forward-strided dtype matrix — `f32`/`f64`/`i32`/`i64`/`u8`/`bf16`/`f16`)
+and documenting the **stride-equality precondition** for
+same-pointer aliasing on the unary / binary / ternary strided
+trailblazers as a stable public contract. NEW
+`baracuda_kernels_types::strides_equal` host helper for callers
+to validate the precondition before dispatch. Zero new bespoke
+kernels for the elementwise unary/binary/ternary families —
+their existing strided launchers are aliasing-safe under the
+contract. Test investment: 14 host-only unit tests +
+17 GPU smoke tests for the new FFI surface + 7 aliasing-contract
+proof tests across contig + strided trailblazers (also backfills
+the Phase 61 contig contract that shipped without test coverage).
+Phase 61 (alpha.61) completed the alpha.55 baseline with bf16/f16
+in-place affine + the original contig same-pointer contract doc.
+Phase 60 lifted FA2 FW to the full Candle-fork-extended
 9-head_dim set ({32, 64, 96, 128, 160, 192, 224, 256, 512}) via
-12 new vendored `.cu` files + 32 FW smoke tests. Phase 61
-(alpha.61, Fuel-ask) completes the 4-dtype matrix on the in-place
-affine helper (`baracuda_kernels_affine_inplace_{bf16,f16}_run`)
-and documents same-pointer aliasing safety as a stable public
-contract on the unary / binary / ternary contig elementwise
-trailblazers — unblocks Fuel's planned in-place op fanout (16+
-families) with zero new baracuda symbols per family.
-Phase 59a + 59b had added the full FA2 v2.8.3 surface (FW + BW
-+ varlen across head_dims 32-256, GQA, ALiBi, sliding window,
-softcap) plus 48 new smoke tests, closing Fuel's FA2-retirement
-requirements. Phase 59c (consolidation pass, alpha.59) fixed a
+12 new vendored `.cu` files + 32 FW smoke tests. Phase 59a + 59b
+added the full FA2 v2.8.3 surface (FW + BW + varlen across
+head_dims 32-256, GQA, ALiBi, sliding window, softcap) plus 48
+new smoke tests, closing Fuel's FA2-retirement requirements. Phase 59c (consolidation pass, alpha.59) fixed a
 pre-existing parallel-test race in the bespoke flash kernel's
 SMEM-carveout call surfaced by Phase 59a's 5-head_dim fanout, plus
 updated `flash_sdpa_backward_smoke` to force the bespoke backend on
@@ -83,6 +94,7 @@ matrix):
 | 59c | Bespoke flash SMEM-carveout race fix + flash_sdpa_backward smoke test routing fix (alpha.59 consolidation pass): added `std::mutex`-serialized helper `set_dynamic_smem_serialized` around all `cudaFuncSetAttribute(MaxDynamicSharedMemorySize)` calls in `baracuda_flash_sdpa.cuh` + `baracuda_flash_sdpa_sm89.cuh` (5 call sites total: FW + BW dQ + BW dKdV + sm_89 FW + sm_89 strided FW). Pre-existing flake (root cause: Phase 6 / Milestone 6.6 host wrapper) that surfaced as `CutlassInternal(1001)` (= `cudaErrorMissingConfiguration`) at ~33% rate on Phase 59a's 20-test hdim fanout, specifically for d_k=96 + fp16 (smem ~50 KiB, just past the 48 KiB cudaFuncSetAttribute trigger). Confirmed fix via 3 stress runs after fix: 60/60 tests pass. Also fixed `flash_sdpa_backward_smoke`'s f16/bf16 paths to explicitly request `BackendKind::Bespoke` — Phase 59b made FA2 the default BW backend for f16/bf16 (more permissive heuristic), which broke source-compat for the existing bespoke BW smoke tests (they fed `lse: f16` not `lse_f32`). | done |
 | 59b | FA2 BW + varlen (alpha.59; closes Fuel's FA2-retirement requirements): vendored 24 new BW `.cu` files (`flash_bwd_hdim{32,64,96,128,192,256}_{fp16,bf16}_{,causal}_sm80.cu` — full FA2 v2.8.3 BW set, mirrors 59a FW vendor 1:1) plus 3 new BW headers (`flash_bwd_kernel.h`, `flash_bwd_launch_template.h`, `flash_bwd_preprocess_kernel.h`). **Key finding**: varlen does NOT have a separate .cu file family upstream — FA2 v2.8.3 dispatches varlen via a runtime `cu_seqlens_q != nullptr` check inside the existing FW/BW launch templates, so the same per-(headdim, dtype, causal) instantiations serve dense and varlen callers. NEW `kernels/attention/fa2_backward_launcher.cu` (BW dispatch, supports dense + varlen via two `fill_*_params` helpers) + `fa2_varlen_launcher.cu` (varlen FW). +12 new FFI symbols (BW dense ×2 + can_implement ×2 + workspace_size; varlen FW ×2 + can_implement ×2 + lse_size; varlen BW ×2 + can_implement ×2 + workspace_size). API: `FlashSdpaBackwardDescriptor` is now `#[non_exhaustive]` with `::new(...)` + sliding-window/softcap builders. `FlashSdpaBackwardArgs` gained `lse_f32: Option<TensorRef<f32, 3>>` (FA2 stores LSE in f32 regardless of T) + `alibi_slopes`. `FlashSdpaBackwardPlan` extended with `BackendChoice::FlashAttentionV2` arm (additive — bespoke path source-compat preserved). NEW `FlashSdpaVarlenPlan` / `FlashSdpaVarlenBackwardPlan` plan families with packed-batch `[total_q, H, D]` layout + `cu_seqlens_q`/`cu_seqlens_k` index tensors + f32 LSE `[H, total_q + 128*B]`. BW workspace = `dq_accum + dsoftmax_d` (sizes via `..._backward_workspace_size`); launcher zero-fills via `cudaMemsetAsync`. Determinism: FA2 BW uses atomicAdd into dq_accum, so NOT bit-stable run-to-run (precision SKU tags this honestly). 2 new smoke test files: `fa2_backward_smoke.rs` (12 tests: workspace sizing + eligibility + e2e BW for d ∈ {64,128,192,256} × {f16,bf16} × {causal,non-causal}), `fa2_varlen_smoke.rs` (5 tests: plan selection, lse_size formula, varlen FW with 3 packed sequences, varlen BW with 2 sequences, varlen × GQA). | done |
 | 60 | FA2 head_dim {160, 224, 512} FW expansion (alpha.60) — **corrects Phase 59a's incorrect "permanently out-of-scope" claim**. The Candle fork (`EricLBuehler/candle`) has carried hd160/192/224/256 since 2023-07 (PR #245 by Laurent Mazare); hd224 was restored by PR #2688 (Michael Feil, 2024-12-31); hd512 was added by PR #3417 (Eric Buehler, merged 2026-03-28 — adds the `cudaDeviceGetAttribute(cudaDevAttrMaxSharedMemoryPerBlockOptin)` SMEM opt-in path and updates the splitkv block-size formula). Phase 60 vendors the 12 missing FW `.cu` files from those PRs into baracuda's FA2 tree (8 hd160/224 from `EricLBuehler/candle@main`; 4 hd512 from `huggingface/candle@5430d32c`) plus the corresponding `flash_fwd_launch_template.h` + `static_switch.h` patches. **BW path NOT extended** — hd160/224 fall on FA2 BW kernel's `kBlockKSmem = (kHeadDim % 64 == 0) ? 64 : 32` constraint (BW atom_layout assumes 64); hd512 needs `kBlockM = 32` to fit any SMEM budget but BW kernel_traits static-asserts `kBlockM >= 64`. Upstream FA2 and the Candle fork ship no BW for these three either — limitation is fundamental to FA2's BW algorithm, not an oversight. Phase 60 attempted both paths; the experiment + reasoning is documented in `VENDOR.md`, in code comments at the dropped registration sites, and in `FA2_BW_SUPPORTED_HEAD_DIMS` (kept at `{32, 64, 96, 128, 192, 256}`). Callers needing BW at hd160/224/512 transparently fall back to the bespoke 3-kernel SDPA BW pipeline (the only path that was supporting them previously, anyway). 12 new FW smoke test functions in `fa2_hdim_fanout_smoke`. `FA2_SUPPORTED_HEAD_DIMS` (FW) lifted to `{32, 64, 96, 128, 160, 192, 224, 256, 512}` — full Candle-fork-extended set. | done |
+| 62 | Strided in-place op support + comprehensive test investment (alpha.62, Fuel-ask). Lifts the in-place contract from contig-only (Phase 61) to strided. **11 new FFI symbols** on the affine in-place family: 4 contig int dtype backfill (`i32`/`i64`/`u8`/`i8` matching forward affine matrix) + 7 strided variants across the full forward-strided dtype set (`f32`/`f64`/`i32`/`i64`/`u8`/`bf16`/`f16`). Half-precision strided uses the same f32-scalar / upcast-to-f32 / downcast pattern as the forward strided f16/bf16 kernels. **Same-pointer aliasing contract documented for the strided trailblazers** (`unary_neg_f32_strided_run`, `binary_add_f32_strided_run`, `ternary_clamp_f32_strided_run`) as a stable public contract: aliasing is safe IFF the aliased input's stride array equals `stride_y` element-for-element. NEW `baracuda_kernels_types::strides_equal(a, b)` host helper for callers to validate the precondition before dispatching. **Zero new bespoke CUDA kernels** for the elementwise unary/binary/ternary families — their existing strided launchers are structurally aliasing-safe under the contract (each thread reads its own stride-offset cell before writing, same per-thread pattern as the contig case). Unblocks Fuel's strided in-place op fanout (every existing strided unary/binary/ternary forward kernel becomes an in-place candidate with `x_ptr == y_ptr` + equal strides). **Test investment**: 14 new host-only unit tests for `strides_equal` + `contiguous_stride` in `baracuda-kernels-types`; 17 new GPU direct-FFI smoke tests covering all 11 new affine in-place symbols + backfill tests for the alpha.55 baseline (f32/f64) and alpha.61 half-precision (bf16/f16) contig in-place; 7 aliasing-contract proof tests across contig + strided trailblazers (also backfills the Phase 61 contig contract that shipped without test coverage). Multi-pass families (Softmax / LayerNorm / RMSNorm / etc.) explicitly out of scope — same as Phase 61. | done |
 | 61 | In-place op infrastructure completion + same-pointer aliasing contract (alpha.61, Fuel-ask) — 2 new bf16/f16 FFI symbols + docstring tightening. (1) `baracuda_kernels_affine_inplace_{bf16,f16}_run` complete the 4-dtype matrix on top of the alpha.60 f32/f64 in-place affine helper, with f32-scalar ABI matching the forward `affine_{bf16,f16}_run` convention (avoids passing `__nv_bfloat16`/`__half` by value through the C ABI). Kernels reuse the forward upcast-to-f32 / downcast-to-storage pattern from `affine_contig_kernel_{f16,bf16}`. Unblocks Fuel's `Op::AddScalar`/`Op::MulScalar` in-place rewrites + weight-decay scaling on bf16/f16 model weights without the previous Cast → Affine → Cast scratch-buffer round-trip. (2) Documented same-pointer aliasing safety as a stable public contract on the three contig elementwise trailblazers — `unary_neg_f32_run` (covers ~30 plain unary launchers + `unary_param_*` family across all dtypes via the existing "Same device-pointer contract..." inheritance line), `binary_add_f32_run` (covers ~20 binary launchers), `ternary_clamp_f32_run` (already documented since alpha.36). Unblocks Fuel's planned in-place expansion (16+ unary in-place op families + 4 binary in-place op families + ClampInplace + PowIInplace) with zero new baracuda symbols for the elementwise case — Fuel dispatches the forward symbol with `x_ptr == y_ptr` (or `a_ptr == y_ptr` for binary). Strided in-place variants (Phase 62 candidate) deferred — v1 contract from Fuel's executor is contiguous + zero-offset. | done |
 | 0 | Crate scaffolding, shared type vocabulary | done |
 | 1 | int8 GEMM RRR (Fuel-blocking, 18 SKUs) | done |

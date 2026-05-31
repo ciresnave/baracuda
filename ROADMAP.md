@@ -7,10 +7,31 @@ effort within each category. Authoritative status per op lives in
 [`OP-MATRIX.md`](OP-MATRIX.md); historical phase summaries live in
 [`ARCHITECTURE.md`](ARCHITECTURE.md).
 
-The current tag is **v0.0.1-alpha.61** with **2184+ GPU tests
+The current tag is **v0.0.1-alpha.62** with **2229+ GPU tests
 passing, zero failures** across the 6 critical test crates
 (baracuda-kernels, baracuda-optim, baracuda-megatron, baracuda-nccl,
 baracuda-transformer-engine, baracuda-ozimmu) on RTX 4070 (sm_89).
+
+**Phase 62 (alpha.62, Fuel-ask)** lifts the in-place op contract
+from contig-only (Phase 61) to strided. 11 new affine in-place FFI
+symbols: 4 contig int dtype backfill (`i32`/`i64`/`u8`/`i8`
+matching the forward affine dtype matrix) + 7 strided variants
+across the full forward-strided dtype set (`f32`/`f64`/`i32`/`i64`/`u8`/`bf16`/`f16`).
+Same-pointer aliasing safety on the unary / binary / ternary strided
+trailblazers documented as a stable public contract: aliasing is
+safe IFF the aliased input's stride array equals `stride_y`
+element-for-element. NEW `baracuda_kernels_types::strides_equal`
+host helper for callers to validate the precondition before
+dispatching. Zero new bespoke CUDA kernels for the elementwise
+unary/binary/ternary families — their existing strided launchers
+are aliasing-safe under the contract (per-thread access pattern is
+read-then-write at the same cell, identical to the contig case).
+Test investment: 14 new host-only unit tests + 17 new GPU
+direct-FFI smoke tests for the new affine in-place surface +
+backfill for Phase 61's bf16/f16 + 7 aliasing-contract proof tests
+on contig + strided trailblazers (also backfills the Phase 61
+contig contract that shipped without test coverage). Multi-pass
+families (Softmax / LayerNorm / RMSNorm) explicitly out of scope.
 
 **Phase 61 (alpha.61, Fuel-ask)** completes the 4-dtype matrix on
 the in-place affine helper (`baracuda_kernels_affine_inplace_{bf16,f16}_run`,
@@ -23,9 +44,7 @@ family — Fuel dispatches the forward symbol with `x_ptr == y_ptr`
 (or `a_ptr == y_ptr` for binary). Half-precision in-place affine
 kernels use the same upcast-to-f32 / downcast-to-storage pattern as
 the forward `affine_contig_kernel_{f16,bf16}`; scalars are `f32`
-through the FFI matching the forward convention. Strided in-place
-variants (Phase 62 candidate) deferred — v1 contract from Fuel's
-executor is contiguous + zero-offset.
+through the FFI matching the forward convention.
 
 **Phase 60 (alpha.60) corrects a Phase 59a inaccuracy** — head_dims
 {160, 224, 512} FW is NOT permanently out-of-scope as alpha.59 claimed;

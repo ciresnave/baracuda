@@ -3176,6 +3176,9 @@ unsafe extern "C" {
 #[cfg(any(feature = "sm80", feature = "sm89", feature = "sm90a"))]
 unsafe extern "C" {
     /// Binary elementwise `add`, f32 dtype, strided / broadcast path.
+    /// This is the binary-strided trailblazer — its safety contract
+    /// (including aliasing) carries over to every other binary strided
+    /// launcher across all dtypes.
     ///
     /// # Safety
     /// All device pointer args must be device-resident and remain valid
@@ -3185,6 +3188,28 @@ unsafe extern "C" {
     /// (the launcher copies them into the kernel parameter block
     /// before returning — they may be freed after the host call
     /// completes, before the kernel completes on device).
+    ///
+    /// **Aliasing (Phase 62)**: aliasing `y` with either input
+    /// (`a == y` or `b == y`) is safe IF AND ONLY IF the aliased
+    /// input's stride array equals `stride_y` element-for-element
+    /// (use [`baracuda_kernels_types::strides_equal`] to check). With
+    /// equal strides, each thread reads its own `off_y` cell from the
+    /// aliased input then writes the same cell, identical structure
+    /// to the contig binary case. With unequal strides, different
+    /// threads can read cells that other threads have already
+    /// overwritten — silent data corruption. The kernel does no
+    /// validation; this is the caller's contract. The `__restrict__`
+    /// qualifiers on the kernel signature are an optimizer hint
+    /// (additional reordering freedom) — they are safe to violate
+    /// only when the per-thread access pattern remains read-then-write
+    /// at the same cell, i.e., when strides are equal.
+    ///
+    /// Additional preconditions (apply with or without aliasing): no
+    /// zero strides on `y`, and `(shape, stride_y)` must specify a
+    /// valid permutation (no two linear `i` values mapping to the
+    /// same `off_y` cell).
+    ///
+    /// This contract is stable across baracuda versions.
     pub fn baracuda_kernels_binary_add_f32_strided_run(
         numel: i64,
         rank: i32,
@@ -4313,6 +4338,9 @@ unsafe extern "C" {
     ) -> i32;
 
     /// Ternary elementwise `clamp`, f32, strided / broadcast path.
+    /// This is the ternary-strided trailblazer — its safety contract
+    /// (including aliasing) carries over to every ternary strided
+    /// launcher across all dtypes.
     ///
     /// Handles non-contig views and broadcast — each input's
     /// per-axis stride may be 0 (broadcast along that axis) or any
@@ -4320,6 +4348,27 @@ unsafe extern "C" {
     /// `clamp(x, min=lo, max=hi)` typically has `lo` / `hi` as scalars
     /// — represent them as rank-N tensors with `shape[d] = 1` and
     /// `stride[d] = 0` on every axis.
+    ///
+    /// **Aliasing (Phase 62)**: aliasing `y` with any input (`a == y`,
+    /// `b == y`, or `c == y`) is safe IF AND ONLY IF the aliased
+    /// input's stride array equals `stride_y` element-for-element
+    /// (use [`baracuda_kernels_types::strides_equal`] to check). With
+    /// equal strides, each thread reads its own `off_y` cell from the
+    /// aliased input then writes the same cell. With unequal strides
+    /// (including the common broadcast-of-scalar case where the input
+    /// stride has zeros), different threads can read cells that other
+    /// threads have already overwritten — silent data corruption. The
+    /// kernel does no validation; this is the caller's contract. Note
+    /// that broadcasting the lo/hi bounds via zero strides is itself
+    /// fine — what's NOT fine is aliasing a broadcast input pointer
+    /// with `y`.
+    ///
+    /// Additional preconditions (apply with or without aliasing): no
+    /// zero strides on `y`, and `(shape, stride_y)` must specify a
+    /// valid permutation (no two linear `i` values mapping to the
+    /// same `off_y` cell).
+    ///
+    /// This contract is stable across baracuda versions.
     pub fn baracuda_kernels_ternary_clamp_f32_strided_run(
         numel: i64,
         rank: i32,
@@ -16213,7 +16262,11 @@ unsafe extern "C" {
         y: *const c_void,
     ) -> i32;
 
-    /// Unary elementwise `neg`, f32 dtype, strided path.
+    /// Unary elementwise `neg`, f32 dtype, strided path. This is the
+    /// unary-strided trailblazer — its safety contract (including
+    /// aliasing) carries over to every other unary strided launcher
+    /// AND every parameterized-unary strided launcher (`powi`,
+    /// `threshold`, `elu`, `prelu`, `lerp`) across all dtypes.
     ///
     /// Handles non-contig views (transposed, sliced). Input shape must
     /// equal output shape — broadcast is not a meaningful unary
@@ -16225,6 +16278,26 @@ unsafe extern "C" {
     /// least `rank` elements that must remain valid for the duration
     /// of the host-side launch call (the launcher copies them into
     /// the kernel parameter block before returning).
+    ///
+    /// **Aliasing (Phase 62)**: aliasing `y` with `x` is safe IF AND
+    /// ONLY IF `stride_x == stride_y` element-for-element (use
+    /// [`baracuda_kernels_types::strides_equal`] to check). With equal
+    /// strides, each thread reads its own `off` cell then writes the
+    /// same cell, identical structure to the contig unary case. With
+    /// unequal strides, different threads can read cells that other
+    /// threads have already overwritten — silent data corruption. The
+    /// kernel does no validation; this is the caller's contract. The
+    /// `__restrict__` qualifiers on the kernel signature are an
+    /// optimizer hint — they are safe to violate only when the
+    /// per-thread access pattern remains read-then-write at the same
+    /// cell, i.e., when strides are equal.
+    ///
+    /// Additional preconditions (apply with or without aliasing): no
+    /// zero strides on `y`, and `(shape, stride_y)` must specify a
+    /// valid permutation (no two linear `i` values mapping to the
+    /// same `off_y` cell).
+    ///
+    /// This contract is stable across baracuda versions.
     pub fn baracuda_kernels_unary_neg_f32_strided_run(
         numel: i64,
         rank: i32,
@@ -26793,6 +26866,214 @@ unsafe extern "C" {
     /// `__half` values.
     pub fn baracuda_kernels_affine_inplace_f16_run(
         numel: i64,
+        scale: f32,
+        offset: f32,
+        y: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    // ========================================================================
+    // Phase 62 — int dtype contig in-place backfill (i32 / i64 / u8 / i8).
+    // Matches the forward `affine_<int>_run` dtype set. Scalars are
+    // dtype-typed (i32 in-place takes i32 scale/offset; etc.) — matches
+    // the forward int affine convention. Integer overflow wraps per
+    // C++20 two's-complement modular semantics (same as forward int
+    // affine, see Phase 37 reduce-int integer-accumulator gotcha).
+    // ========================================================================
+
+    /// In-place affine `y = scale * y + offset` (i32). Phase 62.
+    ///
+    /// # Safety
+    /// `y` points to `numel * 4` bytes holding `int32_t` values.
+    pub fn baracuda_kernels_affine_inplace_i32_run(
+        numel: i64,
+        scale: i32,
+        offset: i32,
+        y: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// In-place affine `y = scale * y + offset` (i64). Phase 62.
+    ///
+    /// # Safety
+    /// `y` points to `numel * 8` bytes holding `int64_t` values.
+    pub fn baracuda_kernels_affine_inplace_i64_run(
+        numel: i64,
+        scale: i64,
+        offset: i64,
+        y: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// In-place affine `y = scale * y + offset` (u8). Phase 62.
+    ///
+    /// # Safety
+    /// `y` points to `numel` bytes holding `uint8_t` values.
+    pub fn baracuda_kernels_affine_inplace_u8_run(
+        numel: i64,
+        scale: u8,
+        offset: u8,
+        y: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// In-place affine `y = scale * y + offset` (i8). Phase 62.
+    ///
+    /// # Safety
+    /// `y` points to `numel` bytes holding `int8_t` values.
+    pub fn baracuda_kernels_affine_inplace_i8_run(
+        numel: i64,
+        scale: i8,
+        offset: i8,
+        y: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    // ========================================================================
+    // Phase 62 — strided in-place affine. ABI extends the contig
+    // version with `(rank, shape, stride_y)`; rank ≤ 8 enforced.
+    // Single stride array — caller is responsible for ensuring it's a
+    // valid permutation of element offsets (no zero strides on output;
+    // no two linear indices mapping to the same `y` cell). The kernel
+    // does no validation.
+    //
+    // If a caller is using this to replace a forward
+    // `affine_<dtype>_strided_run` with `x_ptr == y_ptr` semantics, the
+    // additional contract is `stride_x == stride_y` (use
+    // `baracuda_kernels_types::strides_equal` to check). With the
+    // contract honored, the kernel is structurally aliasing-safe (each
+    // thread reads its own `off_y` cell once, then writes back to the
+    // same cell — same per-thread access pattern as the contig
+    // affine_inplace family).
+    //
+    // Dtype set matches the forward `affine_<dtype>_strided_run` set:
+    // f32 / f64 / i32 / i64 / u8 / bf16 / f16 (no i8 strided forward,
+    // so no i8 strided in-place).
+    // ========================================================================
+
+    /// In-place affine `y[off] = scale * y[off] + offset` over a strided
+    /// view (f32). Phase 62.
+    ///
+    /// # Safety
+    /// `y` points to `numel * 4` bytes holding `float` values. `shape`
+    /// and `stride_y` are host-side arrays of length `rank` (≤ 8).
+    pub fn baracuda_kernels_affine_inplace_f32_strided_run(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_y: *const i64,
+        scale: f32,
+        offset: f32,
+        y: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// Strided in-place affine (f64). Phase 62.
+    ///
+    /// # Safety
+    /// `y` points to `numel * 8` bytes holding `double` values.
+    pub fn baracuda_kernels_affine_inplace_f64_strided_run(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_y: *const i64,
+        scale: f64,
+        offset: f64,
+        y: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// Strided in-place affine (i32). Phase 62.
+    ///
+    /// # Safety
+    /// `y` points to `numel * 4` bytes holding `int32_t` values.
+    pub fn baracuda_kernels_affine_inplace_i32_strided_run(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_y: *const i64,
+        scale: i32,
+        offset: i32,
+        y: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// Strided in-place affine (i64). Phase 62.
+    ///
+    /// # Safety
+    /// `y` points to `numel * 8` bytes holding `int64_t` values.
+    pub fn baracuda_kernels_affine_inplace_i64_strided_run(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_y: *const i64,
+        scale: i64,
+        offset: i64,
+        y: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// Strided in-place affine (u8). Phase 62.
+    ///
+    /// # Safety
+    /// `y` points to `numel` bytes holding `uint8_t` values.
+    pub fn baracuda_kernels_affine_inplace_u8_strided_run(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_y: *const i64,
+        scale: u8,
+        offset: u8,
+        y: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// Strided in-place affine (bf16; f32 scalars). Phase 62.
+    ///
+    /// # Safety
+    /// `y` points to `numel * 2` bytes holding `__nv_bfloat16` values.
+    pub fn baracuda_kernels_affine_inplace_bf16_strided_run(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_y: *const i64,
+        scale: f32,
+        offset: f32,
+        y: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// Strided in-place affine (f16; f32 scalars). Phase 62.
+    ///
+    /// # Safety
+    /// `y` points to `numel * 2` bytes holding `__half` values.
+    pub fn baracuda_kernels_affine_inplace_f16_strided_run(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_y: *const i64,
         scale: f32,
         offset: f32,
         y: *mut c_void,

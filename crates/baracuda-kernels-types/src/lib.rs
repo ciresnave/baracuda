@@ -78,4 +78,4 @@ pub use ops::{
 };
 pub use plan::{PlanPreference, PrecisionGuarantee, Workspace};
 pub use sku::{BackendKind, KernelSku, OpCategory};
-pub use tensor::{contiguous_stride, TensorMut, TensorRef};
+pub use tensor::{contiguous_stride, strides_equal, TensorMut, TensorRef};

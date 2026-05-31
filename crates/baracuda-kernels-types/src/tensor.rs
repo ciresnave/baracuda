@@ -156,3 +156,173 @@ pub fn contiguous_stride<const N: usize>(shape: [i32; N]) -> [i64; N] {
     }
     stride
 }
+
+/// Element-wise equality check between two stride arrays.
+///
+/// Returns `true` iff `a.len() == b.len()` and `a[i] == b[i]` for every
+/// `i`. The trivial slice-compare (`a == b`) does the same thing, but
+/// this helper exists as a one-place callsite that the
+/// **Phase 62 strided in-place aliasing contract** can cite:
+///
+/// > For unary / binary / ternary / parameterized-unary / affine
+/// > strided `_run` launchers, aliasing the output `y` with an input
+/// > pointer is safe IF AND ONLY IF the aliased input's stride array
+/// > equals `stride_y` element-for-element.
+///
+/// Callers (Fuel's executor, or any other consumer doing in-place
+/// dispatch over a strided forward symbol with `x_ptr == y_ptr` /
+/// `a_ptr == y_ptr` / etc.) should invoke this before dispatching to
+/// validate the precondition. The kernel does no validation; aliasing
+/// with unequal strides is silent data corruption.
+///
+/// Cheap (single pass over two short arrays), `#[inline]`, no
+/// allocations. Trivially `const`-eval-friendly when called with
+/// fixed-length arrays.
+///
+/// # Examples
+///
+/// ```rust
+/// use baracuda_kernels_types::{contiguous_stride, strides_equal};
+///
+/// let shape = [4, 8];
+/// let s_contig = contiguous_stride(shape);
+/// let s_other  = [8_i64, 1_i64];  // also contiguous
+/// let s_perm   = [1_i64, 4_i64];  // transposed
+///
+/// assert!(strides_equal(&s_contig, &s_other));
+/// assert!(!strides_equal(&s_contig, &s_perm));
+/// // Length mismatch is always unequal.
+/// assert!(!strides_equal(&[1_i64], &[1_i64, 2_i64]));
+/// ```
+#[inline]
+pub fn strides_equal(a: &[i64], b: &[i64]) -> bool {
+    a == b
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ---- contiguous_stride ----
+
+    #[test]
+    fn contiguous_stride_rank0_is_empty() {
+        let s: [i64; 0] = contiguous_stride([]);
+        assert_eq!(s, [] as [i64; 0]);
+    }
+
+    #[test]
+    fn contiguous_stride_rank1_is_one() {
+        assert_eq!(contiguous_stride([5]), [1]);
+        assert_eq!(contiguous_stride([100]), [1]);
+    }
+
+    #[test]
+    fn contiguous_stride_rank2_row_major() {
+        // shape [4, 8] → stride [8, 1]
+        assert_eq!(contiguous_stride([4, 8]), [8, 1]);
+        // shape [3, 5] → stride [5, 1]
+        assert_eq!(contiguous_stride([3, 5]), [5, 1]);
+    }
+
+    #[test]
+    fn contiguous_stride_rank3() {
+        // shape [2, 4, 8] → stride [32, 8, 1]
+        assert_eq!(contiguous_stride([2, 4, 8]), [32, 8, 1]);
+    }
+
+    #[test]
+    fn contiguous_stride_rank4() {
+        // shape [2, 3, 5, 7] → stride [105, 35, 7, 1]
+        assert_eq!(contiguous_stride([2, 3, 5, 7]), [105, 35, 7, 1]);
+    }
+
+    // ---- strides_equal ----
+    //
+    // This helper anchors the Phase 62 strided in-place aliasing
+    // contract — see the docstring on `strides_equal` for the
+    // load-bearing semantics. Tests cover the patterns Fuel's
+    // executor will exercise.
+
+    #[test]
+    fn strides_equal_empty_slices_are_equal() {
+        let a: [i64; 0] = [];
+        let b: [i64; 0] = [];
+        assert!(strides_equal(&a, &b));
+    }
+
+    #[test]
+    fn strides_equal_identical_arrays() {
+        assert!(strides_equal(&[1, 2, 3], &[1, 2, 3]));
+        assert!(strides_equal(&[8, 1], &[8, 1]));
+        assert!(strides_equal(&[1024, 32, 1], &[1024, 32, 1]));
+    }
+
+    #[test]
+    fn strides_equal_different_values() {
+        assert!(!strides_equal(&[1, 2, 3], &[1, 2, 4]));
+        assert!(!strides_equal(&[8, 1], &[1, 8]));
+    }
+
+    #[test]
+    fn strides_equal_different_lengths() {
+        assert!(!strides_equal(&[1, 2], &[1, 2, 3]));
+        assert!(!strides_equal(&[1], &[]));
+    }
+
+    #[test]
+    fn strides_equal_matches_contiguous_stride_output() {
+        // Phase 62's intended use: caller computes contiguous_stride
+        // for both x and y, then checks equality before in-place
+        // dispatch. Round-trip should always be equal.
+        for shape in &[[4, 8], [16, 32], [3, 5]] {
+            let s = contiguous_stride(*shape);
+            assert!(strides_equal(&s, &s));
+        }
+    }
+
+    #[test]
+    fn strides_equal_detects_transpose() {
+        // A transposed view (swapped axis order) has a different
+        // stride array than the original. This is precisely the case
+        // that makes in-place dispatch UNSAFE — strides_equal must
+        // return false here.
+        let contig = contiguous_stride([4, 8]); // [8, 1]
+        let transposed = [1_i64, 4_i64];        // shape [4,8] transposed → stride [1, 4] mapped to [4,1] on T()
+        assert!(!strides_equal(&contig, &transposed));
+    }
+
+    #[test]
+    fn strides_equal_detects_broadcast_zero_stride() {
+        // A broadcast operand (one axis with stride 0) is unequal to
+        // the regular target — confirms strides_equal will reject
+        // aliasing a broadcast input with the output.
+        let contig = contiguous_stride([4, 8]); // [8, 1]
+        let broadcast = [0_i64, 1_i64];          // broadcast over axis 0
+        assert!(!strides_equal(&contig, &broadcast));
+    }
+
+    #[test]
+    fn strides_equal_detects_negative_stride() {
+        // Flipped views have negative strides — different from any
+        // positive-stride layout, so aliasing dispatch must reject.
+        let contig = contiguous_stride([4]); // [1]
+        let flipped = [-1_i64];
+        assert!(!strides_equal(&contig, &flipped));
+    }
+
+    // ---- TensorRef::numel + is_contiguous parity check ----
+
+    #[test]
+    fn numel_matches_shape_product() {
+        // Verify shape [4, 8] has numel 32 via direct construction
+        // (avoid needing a real DeviceSlice).
+        // We can't easily construct TensorRef without device buffers,
+        // so just verify the contiguous_stride math composes
+        // sensibly: 4 * 8 * 1 = 32 (product of stride[0] * shape[-1]).
+        let shape = [4, 8];
+        let stride = contiguous_stride(shape);
+        // stride[0] * shape[0] should give the total element count.
+        assert_eq!(stride[0] * shape[0] as i64, 32);
+    }
+}
