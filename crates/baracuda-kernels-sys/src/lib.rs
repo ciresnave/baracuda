@@ -1330,13 +1330,29 @@ unsafe extern "C" {
 
 #[cfg(any(feature = "sm80", feature = "sm89", feature = "sm90a"))]
 unsafe extern "C" {
-    /// Binary elementwise `add`, f32 dtype, contiguous fast path.
+    /// Binary elementwise `add`, f32 dtype, contiguous fast path. This
+    /// is the binary-pointwise trailblazer — its safety contract carries
+    /// over to every other binary contig launcher (`add`, `sub`, `mul`,
+    /// `div`, `min`, `max`, `pow`, comparison ops, etc.) across all
+    /// dtypes.
     ///
     /// # Safety
     /// All pointer args must be device-resident and remain valid for the
     /// duration of the launch. `stream` must be a live CUDA stream in
     /// the current context. `a`, `b`, and `y` must each point to at
     /// least `numel` `float`s of device memory.
+    ///
+    /// **Aliasing**: aliasing `y` with either input (`a == y` or
+    /// `b == y`, or both) is safe. The contig kernel evaluates
+    /// `y[i] = op(a[i], b[i])` with each thread touching only its own
+    /// index `i` (read `a[i]` + `b[i]` before write `y[i]`), so callers
+    /// implementing in-place binary ops (e.g. Fuel's `Op::AddInplace`,
+    /// `Op::MulInplace`) can dispatch the forward symbol with
+    /// `a_ptr == y_ptr` or `b_ptr == y_ptr` without a dedicated
+    /// `_inplace_` variant. The `__restrict__` qualifiers on the kernel
+    /// signature are an optimizer hint; the per-thread access pattern
+    /// makes aliasing structurally safe regardless. This contract is
+    /// stable across baracuda versions.
     pub fn baracuda_kernels_binary_add_f32_run(
         numel: i64,
         a: *const c_void,
@@ -16151,14 +16167,30 @@ unsafe extern "C" {
 
 #[cfg(any(feature = "sm80", feature = "sm89", feature = "sm90a"))]
 unsafe extern "C" {
-    /// Unary elementwise `neg`, f32 dtype, contiguous fast path.
+    /// Unary elementwise `neg`, f32 dtype, contiguous fast path. This
+    /// is the unary-pointwise trailblazer — its safety contract carries
+    /// over to every plain unary launcher (`neg`, `abs`, `sqr`, `sqrt`,
+    /// `rsqrt`, `recip`, `exp`, `log`, `sin`, `cos`, `tan`, `sign`,
+    /// `floor`, `ceil`, `round`, `erf`, `relu`, `silu`, `gelu`, `tanh`,
+    /// `sigmoid`, etc.) AND every parameterized-unary launcher
+    /// (`unary_param_*` family: `powi`, `threshold`, `elu`, `prelu`,
+    /// `lerp`, etc.) across all dtypes. See also `binary_add_f32_run`
+    /// for the binary contig aliasing contract and `ternary_clamp_f32_run`
+    /// for the ternary one.
     ///
     /// # Safety
     /// All pointer args must be device-resident and remain valid for the
     /// duration of the launch. `stream` must be a live CUDA stream in
     /// the current context. `x` and `y` must each point to at least
-    /// `numel` `float`s of device memory. Aliasing `y` with `x` is
-    /// safe — each thread reads x[i] before writing y[i].
+    /// `numel` `float`s of device memory.
+    ///
+    /// **Aliasing**: aliasing `y` with `x` is safe — each thread reads
+    /// `x[i]` before writing `y[i]`, with no cross-index dependencies.
+    /// Callers implementing in-place elementwise unary ops (e.g. Fuel's
+    /// `Op::ReluInplace`, `Op::SiluInplace`, etc.) can dispatch the
+    /// forward symbol with `x_ptr == y_ptr` without a dedicated
+    /// `_inplace_` variant. This contract is stable across baracuda
+    /// versions.
     pub fn baracuda_kernels_unary_neg_f32_run(
         numel: i64,
         x: *const c_void,
@@ -26719,6 +26751,50 @@ unsafe extern "C" {
         numel: i64,
         scale: f64,
         offset: f64,
+        y: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// In-place affine `y = scale * y + offset` (bf16). **Phase 61** —
+    /// added for Fuel's INPLACE_AFFINE op family completion (bf16/f16
+    /// weight-decay scaling, `Op::AddScalar` / `Op::MulScalar` on bf16
+    /// model weights).
+    ///
+    /// `scale` and `offset` are always `f32` regardless of storage
+    /// dtype — matches the forward `affine_bf16_run` convention and
+    /// avoids passing `__nv_bfloat16` by value through the C ABI.
+    /// Internal compute happens at f32; storage at `__nv_bfloat16`.
+    ///
+    /// # Safety
+    /// `y` points to `numel * 2` bytes of device memory holding
+    /// `__nv_bfloat16` values. Same-pointer-only contract — there is no
+    /// `x` input.
+    pub fn baracuda_kernels_affine_inplace_bf16_run(
+        numel: i64,
+        scale: f32,
+        offset: f32,
+        y: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+
+    /// In-place affine `y = scale * y + offset` (f16). **Phase 61** —
+    /// added for Fuel's INPLACE_AFFINE op family completion.
+    ///
+    /// `scale` and `offset` are always `f32` regardless of storage
+    /// dtype — matches the forward `affine_f16_run` convention. Internal
+    /// compute happens at f32; storage at `__half`.
+    ///
+    /// # Safety
+    /// `y` points to `numel * 2` bytes of device memory holding
+    /// `__half` values.
+    pub fn baracuda_kernels_affine_inplace_f16_run(
+        numel: i64,
+        scale: f32,
+        offset: f32,
         y: *mut c_void,
         workspace: *mut c_void,
         workspace_bytes: usize,

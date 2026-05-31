@@ -18,72 +18,72 @@ categories = ["api-bindings", "external-ffi-bindings", "hardware-support"]
 
 [workspace.dependencies]
 # Internal crates (path + version so we can publish independently)
-baracuda = { version = "0.0.1-alpha.60", path = "crates/baracuda" }
-baracuda-types = { version = "0.0.1-alpha.60", path = "crates/baracuda-types" }
-baracuda-types-derive = { version = "0.0.1-alpha.60", path = "crates/baracuda-types-derive" }
-baracuda-core = { version = "0.0.1-alpha.60", path = "crates/baracuda-core" }
-baracuda-build = { version = "0.0.1-alpha.60", path = "crates/baracuda-build" }
-baracuda-forge = { version = "0.0.1-alpha.60", path = "crates/baracuda-forge" }
-baracuda-cutlass-sys = { version = "0.0.1-alpha.60", path = "crates/baracuda-cutlass-sys" }
-baracuda-cutlass-kernels-sys = { version = "0.0.1-alpha.60", path = "crates/baracuda-cutlass-kernels-sys" }
-baracuda-cutlass = { version = "0.0.1-alpha.60", path = "crates/baracuda-cutlass" }
-baracuda-kernels-types = { version = "0.0.1-alpha.60", path = "crates/baracuda-kernels-types" }
-baracuda-kernels-sys = { version = "0.0.1-alpha.60", path = "crates/baracuda-kernels-sys" }
-baracuda-kernels = { version = "0.0.1-alpha.60", path = "crates/baracuda-kernels" }
-baracuda-kernels-bench = { version = "0.0.1-alpha.60", path = "crates/baracuda-kernels-bench" }
-baracuda-cuda-sys = { version = "0.0.1-alpha.60", path = "crates/baracuda-cuda-sys" }
-baracuda-driver = { version = "0.0.1-alpha.60", path = "crates/baracuda-driver" }
-baracuda-runtime = { version = "0.0.1-alpha.60", path = "crates/baracuda-runtime" }
-baracuda-nvrtc-sys = { version = "0.0.1-alpha.60", path = "crates/baracuda-nvrtc-sys" }
-baracuda-nvrtc = { version = "0.0.1-alpha.60", path = "crates/baracuda-nvrtc" }
-baracuda-cublas-sys = { version = "0.0.1-alpha.60", path = "crates/baracuda-cublas-sys" }
-baracuda-cublas = { version = "0.0.1-alpha.60", path = "crates/baracuda-cublas" }
-baracuda-curand-sys = { version = "0.0.1-alpha.60", path = "crates/baracuda-curand-sys" }
-baracuda-curand = { version = "0.0.1-alpha.60", path = "crates/baracuda-curand" }
-baracuda-nvjitlink-sys = { version = "0.0.1-alpha.60", path = "crates/baracuda-nvjitlink-sys" }
-baracuda-nvjitlink = { version = "0.0.1-alpha.60", path = "crates/baracuda-nvjitlink" }
-baracuda-cufft-sys = { version = "0.0.1-alpha.60", path = "crates/baracuda-cufft-sys" }
-baracuda-cufft = { version = "0.0.1-alpha.60", path = "crates/baracuda-cufft" }
-baracuda-cusparse-sys = { version = "0.0.1-alpha.60", path = "crates/baracuda-cusparse-sys" }
-baracuda-cusparse = { version = "0.0.1-alpha.60", path = "crates/baracuda-cusparse" }
-baracuda-cusolver-sys = { version = "0.0.1-alpha.60", path = "crates/baracuda-cusolver-sys" }
-baracuda-cusolver = { version = "0.0.1-alpha.60", path = "crates/baracuda-cusolver" }
-baracuda-cudnn-sys = { version = "0.0.1-alpha.60", path = "crates/baracuda-cudnn-sys" }
-baracuda-cudnn = { version = "0.0.1-alpha.60", path = "crates/baracuda-cudnn" }
-baracuda-nccl-sys = { version = "0.0.1-alpha.60", path = "crates/baracuda-nccl-sys" }
-baracuda-nccl = { version = "0.0.1-alpha.60", path = "crates/baracuda-nccl" }
-baracuda-nvml-sys = { version = "0.0.1-alpha.60", path = "crates/baracuda-nvml-sys" }
-baracuda-nvml = { version = "0.0.1-alpha.60", path = "crates/baracuda-nvml" }
-baracuda-nvjpeg-sys = { version = "0.0.1-alpha.60", path = "crates/baracuda-nvjpeg-sys" }
-baracuda-nvjpeg = { version = "0.0.1-alpha.60", path = "crates/baracuda-nvjpeg" }
-baracuda-npp-sys = { version = "0.0.1-alpha.60", path = "crates/baracuda-npp-sys" }
-baracuda-npp = { version = "0.0.1-alpha.60", path = "crates/baracuda-npp" }
-baracuda-nvcomp-sys = { version = "0.0.1-alpha.60", path = "crates/baracuda-nvcomp-sys" }
-baracuda-nvcomp = { version = "0.0.1-alpha.60", path = "crates/baracuda-nvcomp" }
-baracuda-cvcuda-sys = { version = "0.0.1-alpha.60", path = "crates/baracuda-cvcuda-sys" }
-baracuda-cvcuda = { version = "0.0.1-alpha.60", path = "crates/baracuda-cvcuda" }
-baracuda-cufile-sys = { version = "0.0.1-alpha.60", path = "crates/baracuda-cufile-sys" }
-baracuda-cufile = { version = "0.0.1-alpha.60", path = "crates/baracuda-cufile" }
-baracuda-cupti-sys = { version = "0.0.1-alpha.60", path = "crates/baracuda-cupti-sys" }
-baracuda-cupti = { version = "0.0.1-alpha.60", path = "crates/baracuda-cupti" }
-baracuda-cutensor-sys = { version = "0.0.1-alpha.60", path = "crates/baracuda-cutensor-sys" }
-baracuda-cutensor = { version = "0.0.1-alpha.60", path = "crates/baracuda-cutensor" }
-baracuda-tensorrt-sys = { version = "0.0.1-alpha.60", path = "crates/baracuda-tensorrt-sys" }
-baracuda-tensorrt = { version = "0.0.1-alpha.60", path = "crates/baracuda-tensorrt" }
-baracuda-cudf-sys = { version = "0.0.1-alpha.60", path = "crates/baracuda-cudf-sys" }
-baracuda-cudf = { version = "0.0.1-alpha.60", path = "crates/baracuda-cudf" }
+baracuda = { version = "0.0.1-alpha.61", path = "crates/baracuda" }
+baracuda-types = { version = "0.0.1-alpha.61", path = "crates/baracuda-types" }
+baracuda-types-derive = { version = "0.0.1-alpha.61", path = "crates/baracuda-types-derive" }
+baracuda-core = { version = "0.0.1-alpha.61", path = "crates/baracuda-core" }
+baracuda-build = { version = "0.0.1-alpha.61", path = "crates/baracuda-build" }
+baracuda-forge = { version = "0.0.1-alpha.61", path = "crates/baracuda-forge" }
+baracuda-cutlass-sys = { version = "0.0.1-alpha.61", path = "crates/baracuda-cutlass-sys" }
+baracuda-cutlass-kernels-sys = { version = "0.0.1-alpha.61", path = "crates/baracuda-cutlass-kernels-sys" }
+baracuda-cutlass = { version = "0.0.1-alpha.61", path = "crates/baracuda-cutlass" }
+baracuda-kernels-types = { version = "0.0.1-alpha.61", path = "crates/baracuda-kernels-types" }
+baracuda-kernels-sys = { version = "0.0.1-alpha.61", path = "crates/baracuda-kernels-sys" }
+baracuda-kernels = { version = "0.0.1-alpha.61", path = "crates/baracuda-kernels" }
+baracuda-kernels-bench = { version = "0.0.1-alpha.61", path = "crates/baracuda-kernels-bench" }
+baracuda-cuda-sys = { version = "0.0.1-alpha.61", path = "crates/baracuda-cuda-sys" }
+baracuda-driver = { version = "0.0.1-alpha.61", path = "crates/baracuda-driver" }
+baracuda-runtime = { version = "0.0.1-alpha.61", path = "crates/baracuda-runtime" }
+baracuda-nvrtc-sys = { version = "0.0.1-alpha.61", path = "crates/baracuda-nvrtc-sys" }
+baracuda-nvrtc = { version = "0.0.1-alpha.61", path = "crates/baracuda-nvrtc" }
+baracuda-cublas-sys = { version = "0.0.1-alpha.61", path = "crates/baracuda-cublas-sys" }
+baracuda-cublas = { version = "0.0.1-alpha.61", path = "crates/baracuda-cublas" }
+baracuda-curand-sys = { version = "0.0.1-alpha.61", path = "crates/baracuda-curand-sys" }
+baracuda-curand = { version = "0.0.1-alpha.61", path = "crates/baracuda-curand" }
+baracuda-nvjitlink-sys = { version = "0.0.1-alpha.61", path = "crates/baracuda-nvjitlink-sys" }
+baracuda-nvjitlink = { version = "0.0.1-alpha.61", path = "crates/baracuda-nvjitlink" }
+baracuda-cufft-sys = { version = "0.0.1-alpha.61", path = "crates/baracuda-cufft-sys" }
+baracuda-cufft = { version = "0.0.1-alpha.61", path = "crates/baracuda-cufft" }
+baracuda-cusparse-sys = { version = "0.0.1-alpha.61", path = "crates/baracuda-cusparse-sys" }
+baracuda-cusparse = { version = "0.0.1-alpha.61", path = "crates/baracuda-cusparse" }
+baracuda-cusolver-sys = { version = "0.0.1-alpha.61", path = "crates/baracuda-cusolver-sys" }
+baracuda-cusolver = { version = "0.0.1-alpha.61", path = "crates/baracuda-cusolver" }
+baracuda-cudnn-sys = { version = "0.0.1-alpha.61", path = "crates/baracuda-cudnn-sys" }
+baracuda-cudnn = { version = "0.0.1-alpha.61", path = "crates/baracuda-cudnn" }
+baracuda-nccl-sys = { version = "0.0.1-alpha.61", path = "crates/baracuda-nccl-sys" }
+baracuda-nccl = { version = "0.0.1-alpha.61", path = "crates/baracuda-nccl" }
+baracuda-nvml-sys = { version = "0.0.1-alpha.61", path = "crates/baracuda-nvml-sys" }
+baracuda-nvml = { version = "0.0.1-alpha.61", path = "crates/baracuda-nvml" }
+baracuda-nvjpeg-sys = { version = "0.0.1-alpha.61", path = "crates/baracuda-nvjpeg-sys" }
+baracuda-nvjpeg = { version = "0.0.1-alpha.61", path = "crates/baracuda-nvjpeg" }
+baracuda-npp-sys = { version = "0.0.1-alpha.61", path = "crates/baracuda-npp-sys" }
+baracuda-npp = { version = "0.0.1-alpha.61", path = "crates/baracuda-npp" }
+baracuda-nvcomp-sys = { version = "0.0.1-alpha.61", path = "crates/baracuda-nvcomp-sys" }
+baracuda-nvcomp = { version = "0.0.1-alpha.61", path = "crates/baracuda-nvcomp" }
+baracuda-cvcuda-sys = { version = "0.0.1-alpha.61", path = "crates/baracuda-cvcuda-sys" }
+baracuda-cvcuda = { version = "0.0.1-alpha.61", path = "crates/baracuda-cvcuda" }
+baracuda-cufile-sys = { version = "0.0.1-alpha.61", path = "crates/baracuda-cufile-sys" }
+baracuda-cufile = { version = "0.0.1-alpha.61", path = "crates/baracuda-cufile" }
+baracuda-cupti-sys = { version = "0.0.1-alpha.61", path = "crates/baracuda-cupti-sys" }
+baracuda-cupti = { version = "0.0.1-alpha.61", path = "crates/baracuda-cupti" }
+baracuda-cutensor-sys = { version = "0.0.1-alpha.61", path = "crates/baracuda-cutensor-sys" }
+baracuda-cutensor = { version = "0.0.1-alpha.61", path = "crates/baracuda-cutensor" }
+baracuda-tensorrt-sys = { version = "0.0.1-alpha.61", path = "crates/baracuda-tensorrt-sys" }
+baracuda-tensorrt = { version = "0.0.1-alpha.61", path = "crates/baracuda-tensorrt" }
+baracuda-cudf-sys = { version = "0.0.1-alpha.61", path = "crates/baracuda-cudf-sys" }
+baracuda-cudf = { version = "0.0.1-alpha.61", path = "crates/baracuda-cudf" }
 # Phase 44 (vendor) + 44b (clean-fork) — ozIMMU Ozaki-scheme FP64 GEMM,
 # MIT. Optional dep behind the `ozimmu` feature on baracuda-cutlass /
 # baracuda-kernels. Sources internalized at
 # `crates/baracuda-ozimmu-sys/cuda/` in Phase 44b — see that crate's
 # ATTRIBUTION.md for provenance.
-baracuda-ozimmu-sys = { version = "0.0.1-alpha.60", path = "crates/baracuda-ozimmu-sys" }
-baracuda-ozimmu = { version = "0.0.1-alpha.60", path = "crates/baracuda-ozimmu" }
+baracuda-ozimmu-sys = { version = "0.0.1-alpha.61", path = "crates/baracuda-ozimmu-sys" }
+baracuda-ozimmu = { version = "0.0.1-alpha.61", path = "crates/baracuda-ozimmu" }
 # Phase 49 — vendored Apex multi-tensor optimizer kernels (BSD-3-Clause).
 # Deliberate scope expansion (training-framework-adjacent). Optional dep
 # behind the `optim` feature on baracuda-kernels so inference-only
 # consumers (e.g. Fuel) don't pay the FFI surface cost.
-baracuda-optim = { version = "0.0.1-alpha.60", path = "crates/baracuda-optim" }
+baracuda-optim = { version = "0.0.1-alpha.61", path = "crates/baracuda-optim" }
 # Phase 57 — Megatron-LM tensor-parallel primitives (Column / Row Parallel
 # Linear). Pure-composition crate — local GEMM via baracuda-cublas +
 # cross-rank collectives via baracuda-nccl. No new CUDA kernels.
@@ -92,7 +92,7 @@ baracuda-optim = { version = "0.0.1-alpha.60", path = "crates/baracuda-optim" }
 # non-distributed consumers don't pay the dep surface cost.
 # Algorithmic reference: Shoeybi et al. arXiv:1909.08053 (NVIDIA
 # Megatron-LM, Apache-2.0).
-baracuda-megatron = { version = "0.0.1-alpha.60", path = "crates/baracuda-megatron" }
+baracuda-megatron = { version = "0.0.1-alpha.61", path = "crates/baracuda-megatron" }
 # Phase 55 — NVIDIA TransformerEngine FP8 cast/transpose + delayed-
 # scaling recipe primitives (Apache-2.0). NEW sibling crate pair
 # `baracuda-transformer-engine-sys` + `baracuda-transformer-engine`.
@@ -104,8 +104,8 @@ baracuda-megatron = { version = "0.0.1-alpha.60", path = "crates/baracuda-megatr
 # the wins on this hardware are bandwidth-saving (KV cache, weights)
 # not compute. Recipe machinery is forward-compatible with Hopper /
 # Blackwell, where the compute wins also materialize.
-baracuda-transformer-engine-sys = { version = "0.0.1-alpha.60", path = "crates/baracuda-transformer-engine-sys" }
-baracuda-transformer-engine = { version = "0.0.1-alpha.60", path = "crates/baracuda-transformer-engine" }
+baracuda-transformer-engine-sys = { version = "0.0.1-alpha.61", path = "crates/baracuda-transformer-engine-sys" }
+baracuda-transformer-engine = { version = "0.0.1-alpha.61", path = "crates/baracuda-transformer-engine" }
 
 # External crates used across the workspace
 libloading = "0.8"

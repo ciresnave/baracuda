@@ -23,6 +23,8 @@
 #include <cstddef>
 #include <cstdint>
 #include <cuda_runtime.h>
+#include <cuda_bf16.h>
+#include <cuda_fp16.h>
 
 namespace baracuda { namespace random {
 
@@ -180,6 +182,73 @@ __host__ inline int32_t launch_affine_inplace(
     return (err == cudaSuccess) ? 0 : 5;
 }
 
+// Half-precision in-place affine — compute at f32, store at __half.
+// Mirrors the forward `affine_contig_kernel_f16` upcast/downcast pattern;
+// `__half * __half + __half` has no native operator path (would require
+// `__hmul`/`__hadd` intrinsics).
+__global__ inline void affine_inplace_kernel_f16(
+    __half* __restrict__ y,
+    int64_t numel,
+    float scale,
+    float offset)
+{
+    int64_t tid  = (int64_t)blockIdx.x * (int64_t)blockDim.x + (int64_t)threadIdx.x;
+    int64_t step = (int64_t)gridDim.x  * (int64_t)blockDim.x;
+    for (int64_t i = tid; i < numel; i += step) {
+        float yi = __half2float(y[i]);
+        y[i] = __float2half(scale * yi + offset);
+    }
+}
+
+// bf16 in-place affine — compute at f32, store at __nv_bfloat16.
+__global__ inline void affine_inplace_kernel_bf16(
+    __nv_bfloat16* __restrict__ y,
+    int64_t numel,
+    float scale,
+    float offset)
+{
+    int64_t tid  = (int64_t)blockIdx.x * (int64_t)blockDim.x + (int64_t)threadIdx.x;
+    int64_t step = (int64_t)gridDim.x  * (int64_t)blockDim.x;
+    for (int64_t i = tid; i < numel; i += step) {
+        float yi = __bfloat162float(y[i]);
+        y[i] = __float2bfloat16(scale * yi + offset);
+    }
+}
+
+__host__ inline int32_t launch_affine_inplace_f16(
+    __half* y,
+    int64_t numel,
+    float scale,
+    float offset,
+    cudaStream_t stream)
+{
+    constexpr int kBlock = 256;
+    constexpr int64_t kMaxBlocks = 65535;
+    int64_t blocks_i64 = (numel + kBlock - 1) / kBlock;
+    int blocks = static_cast<int>(blocks_i64 > kMaxBlocks ? kMaxBlocks : blocks_i64);
+    if (blocks <= 0) blocks = 1;
+    affine_inplace_kernel_f16<<<blocks, kBlock, 0, stream>>>(y, numel, scale, offset);
+    cudaError_t err = cudaGetLastError();
+    return (err == cudaSuccess) ? 0 : 5;
+}
+
+__host__ inline int32_t launch_affine_inplace_bf16(
+    __nv_bfloat16* y,
+    int64_t numel,
+    float scale,
+    float offset,
+    cudaStream_t stream)
+{
+    constexpr int kBlock = 256;
+    constexpr int64_t kMaxBlocks = 65535;
+    int64_t blocks_i64 = (numel + kBlock - 1) / kBlock;
+    int blocks = static_cast<int>(blocks_i64 > kMaxBlocks ? kMaxBlocks : blocks_i64);
+    if (blocks <= 0) blocks = 1;
+    affine_inplace_kernel_bf16<<<blocks, kBlock, 0, stream>>>(y, numel, scale, offset);
+    cudaError_t err = cudaGetLastError();
+    return (err == cudaSuccess) ? 0 : 5;
+}
+
 } } // namespace baracuda::random
 
 // =============================================================================
@@ -267,7 +336,8 @@ __host__ inline int32_t launch_affine_inplace(
 //
 // In-place affine map `y[i] = scale * y[i] + offset`. Used to remap a
 // cuRAND uniform-(0, 1] buffer into Uniform(low, high] without a second
-// kernel set.
+// kernel set, and (Phase 61) for in-place weight-decay / Op::AddScalar /
+// Op::MulScalar on contiguous tensors in Fuel's executor.
 #define BARACUDA_KERNELS_AFFINE_INPLACE_INSTANTIATE(NAME, T)                                       \
     extern "C" int32_t baracuda_kernels_affine_inplace_##NAME##_run(                               \
         int64_t numel,                                                                              \
@@ -282,6 +352,37 @@ __host__ inline int32_t launch_affine_inplace(
         if (y == nullptr) return 2;                                                                 \
         cudaStream_t stream = static_cast<cudaStream_t>(stream_ptr);                               \
         return baracuda::random::launch_affine_inplace<T>(                                          \
+            static_cast<T*>(y), numel, scale, offset, stream);                                      \
+    }
+
+// f32-scalar variant for half-precision storage types (Phase 61).
+//
+// Same ABI shape, but `scale` and `offset` are always `float` regardless
+// of the storage dtype. This matches the forward `affine_{f16,bf16}_run`
+// convention (avoids passing `__half` / `__nv_bfloat16` by value through
+// C ABI, which is compiler-dependent) and matches how Fuel's CPU
+// `affine_inplace_{f16,bf16}` kernels carry their scalars. Half-precision
+// kernels use the same upcast-to-f32, compute, downcast pattern as the
+// forward `affine_contig_kernel_{f16,bf16}`.
+//
+// NAME : `f16` or `bf16` — must match the suffix of the
+//        `launch_affine_inplace_<NAME>` host wrapper.
+// T    : `__half` or `__nv_bfloat16` — storage type, for the y pointer
+//        cast.
+#define BARACUDA_KERNELS_AFFINE_INPLACE_F32SCALAR_INSTANTIATE(NAME, T)                             \
+    extern "C" int32_t baracuda_kernels_affine_inplace_##NAME##_run(                               \
+        int64_t numel,                                                                              \
+        float scale,                                                                                \
+        float offset,                                                                               \
+        void* y,                                                                                    \
+        void* /*workspace*/, size_t /*workspace_bytes*/,                                            \
+        void* stream_ptr)                                                                           \
+    {                                                                                               \
+        if (numel < 0) return 2;                                                                   \
+        if (numel == 0) return 0;                                                                  \
+        if (y == nullptr) return 2;                                                                 \
+        cudaStream_t stream = static_cast<cudaStream_t>(stream_ptr);                               \
+        return baracuda::random::launch_affine_inplace_##NAME(                                      \
             static_cast<T*>(y), numel, scale, offset, stream);                                      \
     }
 

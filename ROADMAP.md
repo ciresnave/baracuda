@@ -7,10 +7,26 @@ effort within each category. Authoritative status per op lives in
 [`OP-MATRIX.md`](OP-MATRIX.md); historical phase summaries live in
 [`ARCHITECTURE.md`](ARCHITECTURE.md).
 
-The current tag is **v0.0.1-alpha.60** with **2152+ GPU tests
+The current tag is **v0.0.1-alpha.61** with **2184+ GPU tests
 passing, zero failures** across the 6 critical test crates
 (baracuda-kernels, baracuda-optim, baracuda-megatron, baracuda-nccl,
 baracuda-transformer-engine, baracuda-ozimmu) on RTX 4070 (sm_89).
+
+**Phase 61 (alpha.61, Fuel-ask)** completes the 4-dtype matrix on
+the in-place affine helper (`baracuda_kernels_affine_inplace_{bf16,f16}_run`,
++2 FFI symbols) and documents same-pointer aliasing safety on the
+unary / binary / ternary contig elementwise trailblazers as a stable
+public contract. Unblocks Fuel's planned in-place op fanout (16+
+unary in-place op families + 4 binary in-place op families +
+ClampInplace + PowIInplace) with zero new baracuda symbols per
+family — Fuel dispatches the forward symbol with `x_ptr == y_ptr`
+(or `a_ptr == y_ptr` for binary). Half-precision in-place affine
+kernels use the same upcast-to-f32 / downcast-to-storage pattern as
+the forward `affine_contig_kernel_{f16,bf16}`; scalars are `f32`
+through the FFI matching the forward convention. Strided in-place
+variants (Phase 62 candidate) deferred — v1 contract from Fuel's
+executor is contiguous + zero-offset.
+
 **Phase 60 (alpha.60) corrects a Phase 59a inaccuracy** — head_dims
 {160, 224, 512} FW is NOT permanently out-of-scope as alpha.59 claimed;
 the Candle fork has carried them since 2023 (PR #245 by Laurent
