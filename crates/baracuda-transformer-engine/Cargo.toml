@@ -1,6 +1,6 @@
 [package]
 name = "baracuda-transformer-engine"
-version = "0.0.1-alpha.62"
+version = "0.0.1-alpha.63"
 description = "Safe Rust wrapper for baracuda's port of NVIDIA TransformerEngine's FP8 cast/transpose + delayed-scaling recipe primitives. Provides `Fp8Recipe` (delayed-scaling state with amax history), `Fp8CastPlan` for {f32, f16, bf16} → FP8 with running amax, `Fp8DequantPlan` for FP8 → {f32, f16, bf16}. Cast/recipe subset only — `normalization` / `fused_rope` / `fused_attn` / `fused_softmax` / `activation` / `gemm` skipped (overlap existing baracuda phases). NO cuDNN dep, NO pybind11. On Ada (sm_89) the FP8 wins are bandwidth-saving only (KV cache, weights); FP8 tensor-core math throughput equals BF16. Forward-compatible with Hopper / Blackwell where the compute wins also materialize."
 edition.workspace = true
 rust-version.workspace = true

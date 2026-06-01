@@ -7,10 +7,35 @@ effort within each category. Authoritative status per op lives in
 [`OP-MATRIX.md`](OP-MATRIX.md); historical phase summaries live in
 [`ARCHITECTURE.md`](ARCHITECTURE.md).
 
-The current tag is **v0.0.1-alpha.62** with **2229+ GPU tests
+The current tag is **v0.0.1-alpha.63** with **2240+ GPU tests
 passing, zero failures** across the 6 critical test crates
 (baracuda-kernels, baracuda-optim, baracuda-megatron, baracuda-nccl,
 baracuda-transformer-engine, baracuda-ozimmu) on RTX 4070 (sm_89).
+
+**Phase 63 (alpha.63, Fuel-ask)** closes the FlashAttention
+saved-tensor wiring gap for downstream autograd integration. NEW
+`baracuda_kernels_fa2_sdpa_lse_size(batch, num_heads, seq_q) -> usize`
+dense LSE size helper (sibling of the existing `_varlen_lse_size`
+from Phase 59b). The FA2 forward v1 + v2 have written `softmax_lse`
+since alpha.56; what was missing was the size helper for
+pre-allocation + clarity on the FW→saved-LSE→BW pattern. **Load-bearing
+"LSE saved-tensor contract" documented** on the FW + BW trailblazers
+naming the exact handoff: pre-allocate via `_lse_size`, pass same
+f32 buffer to FW as output and BW as input, ALiBi/sliding-window/
+softcap parameters must match between FW and BW. NEW docs guide at
+`docs/guides/fa2-saved-tensor-contract.md` showing the wiring
+pattern downstream autograd frameworks should use. BW head_dim cap
+confirmed at 256 (matches Fuel's Vulkan limit); hd160/224/512 BW
+remains structurally not supported by FA2 per Phase 60, callers
+fall back to bespoke `SdpaBackwardPlan`. Test investment: 12 new
+tests (3 host-only `_lse_size` sanity + 5 GPU FW→BW roundtrip
+proofs across f16/bf16 × head_dim × causal/noncausal + 4 BW
+feature-surface tests for sliding window / softcap / ALiBi /
+all-features composed — backfills the BW feature-test gaps in
+`fa2_backward_smoke.rs`). Option B (recompute-LSE backward
+variant) rejected: 2× backward compute for zero functional
+benefit when the saved-tensor pattern already works. PagedAttention
+backward filed as "ask if needed".
 
 **Phase 62 (alpha.62, Fuel-ask)** lifts the in-place op contract
 from contig-only (Phase 61) to strided. 11 new affine in-place FFI

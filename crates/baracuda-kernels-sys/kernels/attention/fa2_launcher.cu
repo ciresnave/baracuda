@@ -460,4 +460,20 @@ int baracuda_kernels_fa2_sdpa_bf16_can_implement_v2(
     return STATUS_OK;
 }
 
+// Phase 63 — dense FW LSE size in f32 elements: batch * num_heads * seq_q.
+// Caller multiplies by sizeof(float) = 4 for the byte count. Sibling of
+// the existing baracuda_kernels_fa2_sdpa_varlen_lse_size; both forward
+// kernels write LSE in f32 regardless of the operand dtype.
+//
+// The LSE buffer is a load-bearing saved-tensor input for the BW pass
+// (see baracuda_kernels_fa2_sdpa_backward_<dt>_run). Pre-allocate via
+// this helper, pass the same buffer to FW (`softmax_lse` arg) and
+// BW (`lse` arg).
+std::size_t baracuda_kernels_fa2_sdpa_lse_size(
+    int32_t batch, int32_t num_heads, int32_t seq_q)
+{
+    if (batch <= 0 || num_heads <= 0 || seq_q <= 0) return 0;
+    return (std::size_t)batch * (std::size_t)num_heads * (std::size_t)seq_q;
+}
+
 }  // extern "C"

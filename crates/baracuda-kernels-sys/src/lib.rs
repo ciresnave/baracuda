@@ -28940,7 +28940,31 @@ unsafe extern "C" {
 
 #[cfg(feature = "fa2")]
 unsafe extern "C" {
-    /// FA2 forward, f16 (f32 LSE).
+    /// FA2 forward, f16 (f32 LSE). This is the FA2 forward trailblazer
+    /// — its safety + LSE saved-tensor contract carries over to the
+    /// bf16 sibling and the v2 forward entry points.
+    ///
+    /// # LSE saved-tensor contract (Phase 63)
+    ///
+    /// `softmax_lse` is a load-bearing OUTPUT of this kernel and the
+    /// load-bearing INPUT to the corresponding
+    /// [`baracuda_kernels_fa2_sdpa_backward_f16_run`]. Callers
+    /// implementing differentiable attention (e.g. an autograd
+    /// framework's `FlashAttn` op) MUST:
+    ///
+    ///   1. Pre-allocate `softmax_lse` with
+    ///      [`baracuda_kernels_fa2_sdpa_lse_size`]`(batch, num_heads, seq_q)`
+    ///      f32 elements (multiply by 4 for bytes).
+    ///   2. Pass the buffer as `softmax_lse` here.
+    ///   3. **Save the buffer** alongside the operand tensors (`q`,
+    ///      `k`, `v`, `out`) for the BW pass — same exact pointer.
+    ///   4. Pass the saved buffer as `lse` to the BW launcher.
+    ///
+    /// LSE is always f32 regardless of the operand dtype (f16 / bf16
+    /// operands both produce f32 LSE). FA2 internally accumulates
+    /// softmax in f32 to preserve range across long sequences. Reusing
+    /// the bespoke `FlashSdpaPlan`'s typed-T LSE on the FA2 BW path
+    /// is INVALID and rejected at the safe-plan layer.
     pub fn baracuda_kernels_fa2_sdpa_f16_run(
         batch: i32,
         num_heads: i32,
@@ -29143,6 +29167,25 @@ unsafe extern "C" {
         window_size_right: i32,
         softcap: f32,
     ) -> i32;
+
+    /// Dense FA2 forward LSE size in **f32 elements**:
+    /// `batch * num_heads * seq_q`. Caller multiplies by 4 for bytes.
+    /// **Phase 63** — sibling of [`baracuda_kernels_fa2_sdpa_varlen_lse_size`].
+    ///
+    /// The LSE buffer is the load-bearing saved-tensor input for the BW
+    /// pass (see `baracuda_kernels_fa2_sdpa_backward_<dt>_run`'s `lse`
+    /// parameter). Pre-allocate via this helper, pass the same buffer
+    /// to FW (`softmax_lse` arg) and BW (`lse` arg). LSE is always
+    /// f32 regardless of operand dtype — see the "LSE saved-tensor
+    /// contract" section on `baracuda_kernels_fa2_sdpa_f16_run`.
+    ///
+    /// Returns `0` if any dimension is non-positive (call is then a no-op
+    /// the safe-plan layer would reject up-front).
+    pub fn baracuda_kernels_fa2_sdpa_lse_size(
+        batch: i32,
+        num_heads: i32,
+        seq_q: i32,
+    ) -> usize;
 }
 
 // ============================================================================
@@ -42465,10 +42508,38 @@ unsafe extern "C" {
 unsafe extern "C" {
     /// FA2 backward, f16. Computes dQ, dK, dV given FW-saved O + LSE (f32)
     /// and upstream gradient dO. ALiBi / sliding window / softcap plumbed.
+    /// This is the FA2 backward trailblazer — its contract carries over
+    /// to the bf16 sibling.
     ///
     /// `workspace_bytes` must be at least
     /// `baracuda_kernels_fa2_sdpa_backward_workspace_size(batch, num_heads, seq_q, head_dim)`
     /// bytes. The launcher zero-fills the workspace internally.
+    ///
+    /// # LSE saved-tensor contract (Phase 63)
+    ///
+    /// `lse` MUST be the exact same f32 buffer written by the
+    /// corresponding [`baracuda_kernels_fa2_sdpa_f16_run`] (or
+    /// `..._run_v2`) forward call on the same `(q, k, v)`. Pre-allocate
+    /// via [`baracuda_kernels_fa2_sdpa_lse_size`]`(batch, num_heads, seq_q)`
+    /// f32 elements. See the FW trailblazer doc for the full
+    /// FW→saved-LSE→BW handoff pattern.
+    ///
+    /// Passing a different LSE buffer (e.g. recomputed, or from a
+    /// different FW pass) produces silently-wrong gradients — the BW
+    /// kernel uses LSE as the numerically-stable softmax normalizer
+    /// and trusts the value.
+    ///
+    /// # Supported head_dim (Phase 63 — surfaced from `flash_sdpa_backward.rs`)
+    ///
+    /// FA2 BW supports head_dim ∈ {32, 64, 96, 128, 192, 256}. hd160 /
+    /// hd224 / hd512 BW are fundamentally not supported by FA2's BW
+    /// algorithm (kBlockKSmem=32 atom_layout + kBlockM≥64 static_assert
+    /// constraints; see `crates/baracuda-kernels/src/attention/flash_sdpa_backward.rs`
+    /// `FA2_BW_SUPPORTED_HEAD_DIMS` and Phase 60 VENDOR.md for the
+    /// experimental confirmation). Callers needing BW at hd160 / hd224
+    /// / hd512 must fall back to the bespoke `SdpaBackwardPlan` (Phase
+    /// 6 / Milestone 6.6) which supports d_k ≤ 128. This BW
+    /// head_dim limit matches Fuel's Vulkan FA backward cap.
     pub fn baracuda_kernels_fa2_sdpa_backward_f16_run(
         batch: i32,
         num_heads: i32,
