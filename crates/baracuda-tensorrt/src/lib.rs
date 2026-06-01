@@ -4,6 +4,25 @@
 //! `trtexec` or the TRT Python API), build an execution context, bind tensor
 //! addresses, and enqueue execution on a CUDA stream. Engine construction
 //! (the builder / network definition API) is C++-only and is not wrapped here.
+//!
+//! # Status: requires a C-ABI shim (not yet shipped)
+//!
+//! **TensorRT exposes no flat C ABI.** Its public headers (`NvInfer.h`,
+//! `NvInferRuntime.h`, …) are C++-only; the only `extern "C"` exports in
+//! `libnvinfer` are `createInferRuntime_INTERNAL` and `getInferLibVersion`.
+//! Every other symbol this crate's loader resolves
+//! (`trtRuntimeDeserializeCudaEngine`, `trtCudaEngineGetNbIOTensors`,
+//! `trtExecutionContextEnqueueV3`, …) is a *baracuda-defined* name that must
+//! be provided by a small C++ translation unit linking against the real
+//! TensorRT C++ API. That shim is **not built yet** (`build.rs` compiles
+//! nothing), so against a stock `libnvinfer` these calls fail at
+//! symbol-resolution time, surfacing as [`Error::Loader`] (wrapping
+//! [`baracuda_core::LoaderError`]).
+//!
+//! Until the shim lands (tracked in `AUDIT.md`), the Rust surface below is the
+//! *target* API: it compiles and the type-level lifecycle is correct, but it
+//! cannot execute inference. See `crates/baracuda-tensorrt/AUDIT.md` for the
+//! shim spec, the exact symbol list, and the TensorRT install requirement.
 
 #![warn(missing_debug_implementations, rust_2018_idioms)]
 
@@ -12,6 +31,7 @@ use std::marker::PhantomData;
 use std::os::raw::c_void;
 
 use baracuda_cuda_sys::runtime::cudaStream_t;
+use baracuda_driver::Stream;
 use baracuda_tensorrt_sys as sys;
 
 #[derive(Debug, thiserror::Error)]
@@ -105,7 +125,10 @@ impl Runtime {
         unsafe { Self::new(core::ptr::null_mut()) }
     }
 
-    pub fn deserialize(&self, blob: &[u8]) -> Result<Engine<'_>> {
+    /// Deserialize a serialized TensorRT engine blob (produced by `trtexec`,
+    /// the TRT Python API, or [`Engine::serialize`]) into a runnable
+    /// [`Engine`] borrowed from this runtime.
+    pub fn deserialize_engine(&self, blob: &[u8]) -> Result<Engine<'_>> {
         let t = sys::tensorrt()?;
         let raw = unsafe {
             (t.deserialize_cuda_engine()?)(self.raw, blob.as_ptr() as *const c_void, blob.len())
@@ -119,6 +142,12 @@ impl Runtime {
             raw,
             _owner: PhantomData,
         })
+    }
+
+    /// Alias for [`Runtime::deserialize_engine`] kept for source-compat.
+    #[inline]
+    pub fn deserialize(&self, blob: &[u8]) -> Result<Engine<'_>> {
+        self.deserialize_engine(blob)
     }
 
     pub fn as_raw(&self) -> sys::trtIRuntime_t {
@@ -361,13 +390,36 @@ impl ExecutionContext<'_> {
         Ok(unsafe { (t.context_get_tensor_address()?)(self.raw, c.as_ptr()) })
     }
 
-    /// Enqueue the inference on the given CUDA stream. Returns Ok if TRT
-    /// reports success; the stream is still responsible for ordering, and the
-    /// caller must ensure all tensor addresses have been set.
+    /// Enqueue the inference on a baracuda [`Stream`]. This is the preferred
+    /// entry point — it accepts the same [`Stream`] type the rest of the
+    /// baracuda stack uses, so callers never touch a raw `cudaStream_t`.
+    ///
+    /// Returns Ok if TRT reports success; the stream is still responsible for
+    /// ordering, and the caller must ensure all tensor addresses have been set.
     ///
     /// # Safety
+    /// All device pointers bound via [`set_tensor_address`] must still point to
+    /// valid device memory of sufficient size for the bound shapes, and must
+    /// remain valid until the stream completes this enqueue. (The [`Stream`]
+    /// itself is valid by construction.)
+    ///
+    /// [`set_tensor_address`]: ExecutionContext::set_tensor_address
+    pub unsafe fn enqueue_v3(&self, stream: &Stream) -> Result<()> {
+        // CUstream and cudaStream_t are both `*mut CUstream_st`; the cast is a
+        // no-op reinterpret (same pattern as baracuda-cudnn's `set_stream`).
+        unsafe { self.enqueue_v3_raw(stream.as_raw() as cudaStream_t) }
+    }
+
+    /// Enqueue on a raw `cudaStream_t`. Prefer [`enqueue_v3`] with a baracuda
+    /// [`Stream`]; this lower-level form exists for callers that already hold a
+    /// raw runtime-API stream handle from elsewhere.
+    ///
+    /// # Safety
+    /// In addition to the tensor-address requirements of [`enqueue_v3`],
     /// `stream` must be a valid `cudaStream_t` that outlives the enqueue.
-    pub unsafe fn enqueue_v3(&self, stream: cudaStream_t) -> Result<()> { unsafe {
+    ///
+    /// [`enqueue_v3`]: ExecutionContext::enqueue_v3
+    pub unsafe fn enqueue_v3_raw(&self, stream: cudaStream_t) -> Result<()> { unsafe {
         let t = sys::tensorrt()?;
         let ok = (t.context_enqueue_v3()?)(self.raw, stream);
         if !ok {
