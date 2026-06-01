@@ -16,6 +16,40 @@ adding a large batch of in-place ops; baracuda is accumulating
 in-place-coverage closures across multiple kernel families before
 the next release.
 
+**Phase 65a (in-progress, no version bump)** — SMEM staging
+infrastructure for the normalizer-family retrofit. Adds two
+reusable kernel-helper headers under
+`crates/baracuda-kernels-sys/kernels/include/`:
+
+- `baracuda_smem_row_stager.cuh` — cooperative load/store helpers
+  for the "one block per row, all threads stage a row in SMEM"
+  pattern. Supports contig + strided variants and a runtime
+  per-arch SMEM-budget helper.
+- `baracuda_smem_reduce.cuh` — warp + block reductions (sum/max/min)
+  using warp-shuffles + cross-warp SMEM aggregation. Lifts the
+  pre-existing `warp_reduce_sum`/`warp_reduce_max` from
+  `baracuda_moe.cuh` into a shared header + adds `block_reduce_*`.
+
+Both headers are independently testable + designed to be reused
+across any future per-block multi-pass kernel (not just norms —
+also future fused activations, dropout-with-recompute, etc.).
+
+Phase 65b will use these headers to retrofit the 6 normalizer
+families (RMSNorm, LayerNorm, Softmax, LogSoftmax, BatchNorm,
+GroupNorm; InstanceNorm delegates to GroupNorm) for SMEM-staged
+single-global-read + single-global-write — enabling in-place
+dispatch (`y_ptr == x_ptr`) for the dominant last-axis-contig
+case AND providing a 1.2-2× perf win even in the out-of-place
+case (cuDNN's normalizer pattern). The legacy global-read kernels
+stay as fallback for dims exceeding SMEM budget.
+
+Phase 65 audit finding (recorded for context): the current
+normalizer kernels read input from global memory 2-3 times per
+output cell (no SMEM cache layer), making them silently UNSAFE
+for same-pointer aliasing. The retrofit fixes this for the
+common case + ships a `_max_inplace_dim` helper so callers can
+check before dispatch.
+
 **Phase 64 (in-progress, no version bump — accumulating for next
 release)** closes baracuda's documentation gap on five additional
 kernel families that are structurally per-thread-isolated and
