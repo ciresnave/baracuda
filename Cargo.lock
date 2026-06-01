@@ -380,6 +380,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "baracuda-flashinfer"
+version = "0.0.1-alpha.63"
+dependencies = [
+ "baracuda-driver",
+ "baracuda-flashinfer-sys",
+ "baracuda-kernels",
+ "baracuda-kernels-sys",
+ "half",
+]
+
+[[package]]
+name = "baracuda-flashinfer-sys"
+version = "0.0.1-alpha.63"
+dependencies = [
+ "baracuda-kernels-sys",
+]
+
+[[package]]
 name = "baracuda-forge"
 version = "0.0.1-alpha.63"
 dependencies = [

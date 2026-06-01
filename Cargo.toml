@@ -107,6 +107,13 @@ baracuda-megatron = { version = "0.0.1-alpha.63", path = "crates/baracuda-megatr
 baracuda-transformer-engine-sys = { version = "0.0.1-alpha.63", path = "crates/baracuda-transformer-engine-sys" }
 baracuda-transformer-engine = { version = "0.0.1-alpha.63", path = "crates/baracuda-transformer-engine" }
 
+# Phase 66 — FlashInfer inference-serving safe wrapper crate pair. The
+# vendored kernels + launcher shims live in baracuda-kernels-sys (gated
+# behind its `flashinfer` feature); these crates are the raw-FFI facade
+# + typed safe Plans over that surface.
+baracuda-flashinfer-sys = { version = "0.0.1-alpha.63", path = "crates/baracuda-flashinfer-sys" }
+baracuda-flashinfer = { version = "0.0.1-alpha.63", path = "crates/baracuda-flashinfer" }
+
 # External crates used across the workspace
 libloading = "0.8"
 thiserror = "1"
