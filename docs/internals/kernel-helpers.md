@@ -58,6 +58,12 @@ Helper categories so far:
 These two seed the library. Phase 65b will be the first user of them
 (retrofitting the normalizer family).
 
+### Phase 67d (committed `PENDING`, 2026-06-01)
+
+| File | What it provides |
+|---|---|
+| [`baracuda_smem_scan.cuh`](../../crates/baracuda-kernels-sys/kernels/include/baracuda_smem_scan.cuh) | `baracuda::scan::warp_scan_inclusive_{sum,max,min}_f32` + `warp_scan_inclusive_sum_f64` (Kogge-Stone `__shfl_up_sync`, 5 rounds) + `block_scan_inclusive_{sum,max,min}_f32(value, warp_buf)` + `block_scan_exclusive_sum_f32` + `block_scan_inclusive_sum_f64` / `block_scan_exclusive_sum_f64`. Cross-warp aggregation via a 32-slot SMEM scratch (`warp_buf`) — same buffer layout as `block_reduce_*` in `baracuda_smem_reduce.cuh`, so a kernel that both reduces and scans can share one scratch. One-value-per-thread O(log N) prefix scans for the scan-kernel family (cumsum/cumprod/cummax/cummin/logcumsumexp) + online-softmax running stats. **Limitations:** one value per thread, and `blockDim.x` must be a multiple of 32 (the per-warp total is read from lane 31, so a partial final warp leaves its slot unwritten). For multi-`ITEMS_PER_THREAD` block scans use `cub::BlockScan` directly (see sparsemax_fp.cu); for device-wide scans use `cub::DeviceScan`. Pure templates — nvcc sm_89 compile + functional `[1,1,…]→[1,2,3,…]` / inc-max / inc-min checks pass on RTX 4070. |
+
 ### Pre-existing kernel-author helpers (in scope to lift if duplicated elsewhere)
 
 - `load_as_acc<T>` / `store_from_acc<T>` in [`baracuda_norm.cuh`](../../crates/baracuda-kernels-sys/kernels/include/baracuda_norm.cuh) — dtype promotion to f32 for compute. Currently scoped to norm.cuh; should be lifted to a shared `baracuda_dtype_promote.cuh` (see planned helpers below).
@@ -73,7 +79,7 @@ The prompts are self-contained — a new session can pick one up and run.
 | `baracuda_dtype_promote.cuh` | [`kernel-helper-dtype-promote.md`](../sessions/kernel-helper-dtype-promote.md) | planned |
 | `baracuda_coord_unravel.cuh` | [`kernel-helper-coord-unravel.md`](../sessions/kernel-helper-coord-unravel.md) | planned |
 | `baracuda_block_atomic.cuh` | [`kernel-helper-block-atomic.md`](../sessions/kernel-helper-block-atomic.md) | planned |
-| `baracuda_smem_scan.cuh` | [`kernel-helper-smem-scan.md`](../sessions/kernel-helper-smem-scan.md) | planned |
+| `baracuda_smem_scan.cuh` | [`kernel-helper-smem-scan.md`](../sessions/kernel-helper-smem-scan.md) | shipped (Phase 67d) |
 | `baracuda_smem_tile.cuh` | [`kernel-helper-smem-tile.md`](../sessions/kernel-helper-smem-tile.md) | planned |
 | `baracuda_hmath.cuh` | [`kernel-helper-hmath.md`](../sessions/kernel-helper-hmath.md) | planned |
 
