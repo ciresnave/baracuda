@@ -1,0 +1,23 @@
+[package]
+name = "baracuda-nvshmem"
+version = "0.0.1-alpha.63"
+description = "Safe Rust wrappers for NVIDIA NVSHMEM host API (symmetric-heap one-sided GPU communication)."
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[features]
+default = []
+
+[dependencies]
+baracuda-types.workspace = true
+baracuda-core.workspace = true
+baracuda-cuda-sys.workspace = true
+baracuda-nvshmem-sys.workspace = true
+baracuda-driver.workspace = true
+thiserror.workspace = true

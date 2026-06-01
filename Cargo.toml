@@ -52,6 +52,13 @@ baracuda-cudnn-sys = { version = "0.0.1-alpha.63", path = "crates/baracuda-cudnn
 baracuda-cudnn = { version = "0.0.1-alpha.63", path = "crates/baracuda-cudnn" }
 baracuda-nccl-sys = { version = "0.0.1-alpha.63", path = "crates/baracuda-nccl-sys" }
 baracuda-nccl = { version = "0.0.1-alpha.63", path = "crates/baracuda-nccl" }
+# Phase 69 — NVSHMEM host-side wrapper (symmetric-heap one-sided GPU comms).
+# Sibling to baracuda-nccl: NCCL = collectives, NVSHMEM = fine-grained
+# one-sided RDMA. Lazily loaded via libloading (no link-time NVSHMEM dep, no
+# bundling); device-side API deferred to a future shim crate. Optional dep
+# behind the `nvshmem` feature on baracuda-kernels (default OFF).
+baracuda-nvshmem-sys = { version = "0.0.1-alpha.63", path = "crates/baracuda-nvshmem-sys" }
+baracuda-nvshmem = { version = "0.0.1-alpha.63", path = "crates/baracuda-nvshmem" }
 baracuda-nvml-sys = { version = "0.0.1-alpha.63", path = "crates/baracuda-nvml-sys" }
 baracuda-nvml = { version = "0.0.1-alpha.63", path = "crates/baracuda-nvml" }
 baracuda-nvjpeg-sys = { version = "0.0.1-alpha.63", path = "crates/baracuda-nvjpeg-sys" }
