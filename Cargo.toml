@@ -56,6 +56,12 @@ baracuda-nvml-sys = { version = "0.0.1-alpha.63", path = "crates/baracuda-nvml-s
 baracuda-nvml = { version = "0.0.1-alpha.63", path = "crates/baracuda-nvml" }
 baracuda-nvjpeg-sys = { version = "0.0.1-alpha.63", path = "crates/baracuda-nvjpeg-sys" }
 baracuda-nvjpeg = { version = "0.0.1-alpha.63", path = "crates/baracuda-nvjpeg" }
+# Phase 70 — nvImageCodec, NVIDIA's unified GPU image codec library
+# (JPEG/JPEG2000/TIFF/PNG/BMP/WebP). Supersedes the standalone nvJPEG;
+# coexists with baracuda-nvjpeg. Lazy `libloading` resolution — no
+# link-time dependency; the library ships separately from the CUDA toolkit.
+baracuda-nvimagecodec-sys = { version = "0.0.1-alpha.63", path = "crates/baracuda-nvimagecodec-sys" }
+baracuda-nvimagecodec = { version = "0.0.1-alpha.63", path = "crates/baracuda-nvimagecodec" }
 baracuda-npp-sys = { version = "0.0.1-alpha.63", path = "crates/baracuda-npp-sys" }
 baracuda-npp = { version = "0.0.1-alpha.63", path = "crates/baracuda-npp" }
 baracuda-nvcomp-sys = { version = "0.0.1-alpha.63", path = "crates/baracuda-nvcomp-sys" }

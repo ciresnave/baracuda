@@ -46,6 +46,7 @@ dependencies = [
  "baracuda-nccl",
  "baracuda-npp",
  "baracuda-nvcomp",
+ "baracuda-nvimagecodec",
  "baracuda-nvjitlink",
  "baracuda-nvjpeg",
  "baracuda-nvml",
@@ -527,6 +528,29 @@ name = "baracuda-nvcomp-sys"
 version = "0.0.1-alpha.63"
 dependencies = [
  "baracuda-core",
+ "baracuda-types",
+ "libloading",
+]
+
+[[package]]
+name = "baracuda-nvimagecodec"
+version = "0.0.1-alpha.63"
+dependencies = [
+ "baracuda-core",
+ "baracuda-cuda-sys",
+ "baracuda-driver",
+ "baracuda-nvimagecodec-sys",
+ "baracuda-types",
+ "thiserror",
+]
+
+[[package]]
+name = "baracuda-nvimagecodec-sys"
+version = "0.0.1-alpha.63"
+dependencies = [
+ "baracuda-build",
+ "baracuda-core",
+ "baracuda-cuda-sys",
  "baracuda-types",
  "libloading",
 ]

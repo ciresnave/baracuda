@@ -4,6 +4,13 @@ Safe Rust wrappers for **NVIDIA nvJPEG** — GPU-accelerated JPEG decode
 and encode. Comprehensive coverage of single + batched paths and the
 modern three-phase hybrid pipeline.
 
+> **Preferred new path: [`baracuda-nvimagecodec`].** NVIDIA's nvImageCodec
+> supersedes the standalone nvJPEG and adds PNG / TIFF / JPEG2000 / WebP /
+> BMP behind one batched pipeline (it uses nvJPEG internally for JPEG). This
+> crate remains fully supported for back-compat and JPEG-only callers, and
+> the two coexist (different shared objects). New code that needs more than
+> JPEG should reach for `baracuda-nvimagecodec`.
+
 ## Coverage
 
 - **Single-image decode**: `nvjpegDecode` with planar / interleaved
@@ -49,3 +56,4 @@ Part of the [baracuda](https://github.com/ciresnave/baracuda) workspace.
 Dual MIT / Apache-2.0.
 
 [`baracuda-nvjpeg-sys`]: https://docs.rs/baracuda-nvjpeg-sys
+[`baracuda-nvimagecodec`]: https://docs.rs/baracuda-nvimagecodec
