@@ -11,6 +11,34 @@ The current tag is **v0.0.1-alpha.63** with **2240+ GPU tests
 passing, zero failures** across the 6 critical test crates
 (baracuda-kernels, baracuda-optim, baracuda-megatron, baracuda-nccl,
 baracuda-transformer-engine, baracuda-ozimmu) on RTX 4070 (sm_89).
+Phase 64 work is **in progress (no version bump yet)** — Fuel is
+adding a large batch of in-place ops; baracuda is accumulating
+in-place-coverage closures across multiple kernel families before
+the next release.
+
+**Phase 64 (in-progress, no version bump — accumulating for next
+release)** closes baracuda's documentation gap on five additional
+kernel families that are structurally per-thread-isolated and
+therefore safe to dispatch with same-pointer aliasing, but lacked
+the explicit FFI-level aliasing contract. Documented as stable
+public contract on the trailblazers: **Cast** (safe IFF source and
+dest dtypes have the same byte width — e.g. f32↔i32, f16↔bf16),
+**Where** (`a == y` or `b == y` safe), **Triu / Tril**
+(`input == output` safe), **Activation BW** (`dx == saved` or
+`dx == dy` safe, applies to all of relu/gelu/silu/tanh/sigmoid/
+elu/leaky_relu/mish/hardswish/hardsigmoid/erf/erfc backwards),
+**Fill** (trivially write-only). Also added **NOT-safe warnings**
+on Flip / Roll / Permute / RoPE — these have shape-permuting
+access patterns where two threads concurrently touch each cell,
+making same-pointer dispatch silent data corruption (an earlier
+audit suggested they were safe; deeper analysis shows they aren't).
+NEW docs guide at `docs/guides/inplace-op-coverage.md` — single
+source of truth on which kernels can be in-place-dispatched. Test
+investment: 8 new aliasing-contract proof tests in
+`crates/baracuda-kernels/tests/inplace_aliasing_extended_smoke.rs`
+covering the 5 safe families. No new FFI symbols, no new CUDA
+kernels — pure documentation + test work consolidating the
+in-place coverage matrix.
 
 **Phase 63 (alpha.63, Fuel-ask)** closes the FlashAttention
 saved-tensor wiring gap for downstream autograd integration. NEW

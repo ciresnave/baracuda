@@ -9502,11 +9502,29 @@ unsafe extern "C" {
 // ============================================================================
 // Shape / layout — Flip (Category N)
 // ============================================================================
+//
+// **Aliasing (Phase 64)**: Flip, Roll, and Permute are **NOT** in-place
+// safe. Unlike the elementwise unary/binary/ternary trailblazers, these
+// shape ops have each thread reading from one coordinate and writing
+// to a DIFFERENT coordinate (the flipped / shifted / permuted target).
+// Two distinct threads can touch the same memory cell — one as a read,
+// another as a write — and there's no guarantee about scheduling order.
+// Same-pointer aliasing with these symbols is silent data corruption.
+//
+// If a caller needs an in-place flip/roll/permute, they must materialize
+// the result into a fresh buffer and copy back (or use a bespoke
+// in-place algorithm with paired-swap synchronization, which baracuda
+// does not provide).
 
 #[cfg(any(feature = "sm80", feature = "sm89", feature = "sm90a"))]
 unsafe extern "C" {
     /// Flip (reverse along selected axes), f32. `flip_axes[d]` is
     /// 1 = reverse axis d, 0 = no-op.
+    ///
+    /// **NOT in-place safe** — see the family-level aliasing note
+    /// above. Thread `i` reads from the flipped source coordinate and
+    /// writes to its output coordinate; two threads concurrently touch
+    /// each cell (one read, one write).
     pub fn baracuda_kernels_flip_f32_run(
         numel: i64,
         rank: i32,
@@ -9570,11 +9588,19 @@ unsafe extern "C" {
 // ============================================================================
 // Shape / layout — Roll (Category N)
 // ============================================================================
+//
+// **Aliasing**: NOT in-place safe — same reason as Flip (see the
+// flip-family aliasing note above). Roll shifts each cell to a
+// different output coordinate; same-pointer aliasing produces data
+// corruption.
 
 #[cfg(any(feature = "sm80", feature = "sm89", feature = "sm90a"))]
 unsafe extern "C" {
     /// Roll (cyclic shift along axes), f32. `shifts[d]` is the shift
     /// amount on axis d (positive or negative, mod shape[d]).
+    ///
+    /// **NOT in-place safe** — thread `i` reads at source coord and
+    /// writes at shifted dest coord; same-pointer aliasing is unsafe.
     pub fn baracuda_kernels_roll_f32_run(
         numel: i64,
         rank: i32,
@@ -9766,7 +9792,22 @@ unsafe extern "C" {
         stream: *mut c_void,
     ) -> i32;
 
-    /// Triu, f32.
+    /// Triu, f32. This is the triu trailblazer — its aliasing contract
+    /// carries over to every other `triu_<dt>_run`, `triu_<dt>_strided_run`,
+    /// and the sibling `tril_*` family.
+    ///
+    /// Returns the upper-triangular part of the input matrix, zeroing
+    /// the strict lower triangle below `diagonal`.
+    ///
+    /// **Aliasing (Phase 64)**: aliasing `output` with `input` is safe
+    /// (apply the triangular mask in-place). The kernel body is
+    /// `output[k] = pred(i, j, diagonal) ? input[k] : 0` where each
+    /// thread `k` reads `input[k]` before writing `output[k]` at the
+    /// same linear index. No cross-thread dependencies. Callers
+    /// implementing `Op::TriuInplace` / `Op::TrilInplace` (e.g. for
+    /// causal-mask preparation in attention or LU decomposition
+    /// triangular extraction) can dispatch with `input_ptr ==
+    /// output_ptr` without a dedicated `_inplace_` variant.
     pub fn baracuda_kernels_triu_f32_run(
         input: *const c_void,
         output: *mut c_void,
@@ -11321,10 +11362,18 @@ unsafe extern "C" {
 //
 // `y = x.permute(dims)` — output axis d is input axis `dims[d]`. The
 // kernel walks input cells and writes to permuted output positions.
+//
+// **Aliasing**: NOT in-place safe — same reason as Flip / Roll.
+// Permute remaps every cell to a different output coordinate; two
+// threads can concurrently touch each cell (one as a read of the
+// pre-permute source, another as a write of the post-permute dest).
+// Same-pointer aliasing produces data corruption.
 
 #[cfg(any(feature = "sm80", feature = "sm89", feature = "sm90a"))]
 unsafe extern "C" {
     /// Materialized permute, f32.
+    ///
+    /// **NOT in-place safe** — see family-level aliasing note above.
     pub fn baracuda_kernels_permute_f32_run(
         input_numel: i64,
         rank: i32,
@@ -12238,6 +12287,10 @@ unsafe extern "C" {
 #[cfg(any(feature = "sm80", feature = "sm89", feature = "sm90a"))]
 unsafe extern "C" {
     /// `where(cond, a, b)`, f32 values + u8 cond, contig fast path.
+    /// This is the where-ternary trailblazer — its safety + aliasing
+    /// contract carries over to every other where-family launcher
+    /// across all value dtypes and cond-dtype variants (`where_u32cond_*`,
+    /// `where_i64cond_*`).
     ///
     /// `y = cond ? a : b` elementwise. `cond` is interpreted as bool
     /// per PyTorch convention (0 → b, non-zero → a).
@@ -12246,6 +12299,19 @@ unsafe extern "C" {
     /// All device pointers must remain valid for the duration of the
     /// launch. `cond` must point to at least `numel` `u8`s; `a`, `b`,
     /// `y` to at least `numel` `f32`s.
+    ///
+    /// **Aliasing (Phase 64)**: aliasing `y` with `a` or `b` (or both,
+    /// if `a == b`) is safe — the contig kernel evaluates
+    /// `y[i] = cond[i] ? a[i] : b[i]` with each thread touching only
+    /// its own index `i` (read `cond[i]` + `a[i]` + `b[i]` before
+    /// write `y[i]`). Callers implementing `Op::WhereInplace` /
+    /// conditional gradient masking can dispatch the forward symbol
+    /// with `a_ptr == y_ptr` (or `b_ptr == y_ptr`) without a dedicated
+    /// `_inplace_` variant. Aliasing `y` with `cond` requires `cond`
+    /// and `y` to have the same byte width (the u8-cond variant won't
+    /// alias against an f32 `y`; the u32-cond / i64-cond variants
+    /// align with f32 / f64 `y` respectively). This contract is
+    /// stable across baracuda versions.
     pub fn baracuda_kernels_where_f32_run(
         numel: i64,
         cond: *const c_void,
@@ -14329,7 +14395,26 @@ unsafe extern "C" {
 
     // ---- Activation BW (saved-x, piecewise — Category B' trailblazer + fanout) ----
 
-    /// ReLU backward, f32. `dx = (x > 0) ? dy : 0`. Saved-x.
+    /// ReLU backward, f32. `dx = (x > 0) ? dy : 0`. Saved-x. This is the
+    /// activation-BW trailblazer — its aliasing contract carries over to
+    /// every other `unary_<op>_backward_<dt>_run` (gelu, silu, tanh,
+    /// sigmoid, elu, leaky_relu, mish, hardswish, hardsigmoid, gelu_tanh,
+    /// erf, erfc, etc.) across all dtypes, both saved-x and saved-y
+    /// variants.
+    ///
+    /// **Aliasing (Phase 64)**: aliasing `dx` with `saved` or `dy` (or
+    /// both, if `saved == dy`) is safe — the kernel evaluates
+    /// `dx[i] = f(saved[i]) * dy[i]` (or piecewise variant for ReLU)
+    /// with each thread touching only its own index `i` (read
+    /// `saved[i]` + `dy[i]` before write `dx[i]`). Callers
+    /// implementing in-place activation gradient ops (e.g. an
+    /// autograd framework reusing the saved-x or dy buffer for the
+    /// gradient) can dispatch the forward symbol with
+    /// `dx_ptr == saved_ptr` (or `dx_ptr == dy_ptr`) without a
+    /// dedicated `_inplace_` variant. This contract is stable across
+    /// baracuda versions and applies to both the saved-x family
+    /// (ReLU/GELU/SiLU/ELU/HardSwish/HardSigmoid/Mish/LeakyReLU/Erf/Erfc)
+    /// and the saved-y family (Sigmoid/Tanh).
     pub fn baracuda_kernels_unary_relu_backward_f32_run(
         numel: i64, dy: *const c_void, saved: *const c_void, dx: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
@@ -27386,6 +27471,20 @@ unsafe extern "C" {
     // per `bh` row.
 
     /// RoPE apply FW, f32. Cos/sin tables provided by caller.
+    ///
+    /// **Aliasing (Phase 64) — NOT in-place safe**: aliasing `y` with
+    /// `x` is UNSAFE. RoPE rotates pairs `(x[even], x[odd])` via a
+    /// 2×2 rotation matrix, with two threads per pair both reading
+    /// both pair elements. If the even thread runs first and writes
+    /// `y[even]`, the odd thread then reads `y[even]` (= rotated
+    /// value) instead of the original `x[even]`, producing the wrong
+    /// rotation. Callers that need an in-place RoPE must do it via
+    /// an explicit double-buffer (or accept a fresh output buffer).
+    /// Aliasing `y` with `cos_tab` / `sin_tab` is also unsafe (those
+    /// tables are read across multiple threads). This contract is
+    /// stable across baracuda versions and applies to every
+    /// `rope_apply_<dt>_run`, `rope_apply_interleaved_<dt>_run`,
+    /// and `rope_apply_thd_<dt>_run` variant.
     pub fn baracuda_kernels_rope_apply_f32_run(
         bh: i32,
         td: i32,
@@ -36352,6 +36451,20 @@ unsafe extern "C" {
 //   memory in the input / output element type respectively.
 // - `stream` must be a live CUDA stream in the current context.
 // - `_can_implement` performs host-side checks only.
+//
+// **Aliasing (Phase 64)**: aliasing `y` with `x` is safe IF AND ONLY IF
+// `sizeof(TIn) == sizeof(TOut)` (same byte width across the cast). The
+// kernel body is `y[i] = cast(x[i])` — each thread reads its own input
+// cell, then writes its own output cell. With matching byte widths,
+// both reads and writes share an address (per i), so per-thread access
+// is structurally safe regardless of `__restrict__`. With differing
+// byte widths, the output element at index i lives at a byte offset
+// `i * sizeof(TOut)` that overlaps OTHER threads' input cells at
+// `j * sizeof(TIn)`, producing a data race. Same-width casts that
+// are aliasing-safe today include f32↔i32, f32↔u32, i32↔u32, f16↔bf16,
+// f64↔i64, f64↔u64, u8↔i8 (and identity casts cast_<T>_<T>). All
+// other casts (e.g. f32→f64, f16→f32) are NOT aliasing-safe.
+// This contract is stable across baracuda versions.
 #[cfg(any(feature = "sm80", feature = "sm89", feature = "sm90a"))]
 unsafe extern "C" {
     // f32 -> *
@@ -36903,11 +37016,18 @@ unsafe extern "C" {
 
     // ----- Fill ------------------------------------------------------------
 
-    /// Fill `y` with `value`, f32 dtype.
+    /// Fill `y` with `value`, f32 dtype. This is the fill trailblazer —
+    /// every `fill_<dt>_run` (and `_strided_run`) variant follows the
+    /// same write-only contract.
     ///
     /// # Safety
     /// `y` must point to at least `numel * sizeof::<f32>()` bytes of
     /// device memory. `stream` must be a live CUDA stream.
+    ///
+    /// **Aliasing (Phase 64)**: fill is write-only — there are no
+    /// input device pointers to alias against. The kernel body is
+    /// trivially `y[i] = value` (write-only per thread, no reads).
+    /// Trivially in-place; no aliasing concerns.
     pub fn baracuda_kernels_fill_f32_run(
         numel: i64,
         y: *mut c_void,
