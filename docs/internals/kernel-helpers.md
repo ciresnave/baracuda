@@ -58,7 +58,7 @@ Helper categories so far:
 These two seed the library. Phase 65b will be the first user of them
 (retrofitting the normalizer family).
 
-### Phase 67a (committed `c45f83f`, 2026-06-01)
+### Phase 67a (committed `7379753`, 2026-06-01)
 
 | File | What it provides |
 |---|---|
