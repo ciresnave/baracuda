@@ -58,6 +58,12 @@ Helper categories so far:
 These two seed the library. Phase 65b will be the first user of them
 (retrofitting the normalizer family).
 
+### Phase 67e (committed `PENDING`, 2026-06-01)
+
+| File | What it provides |
+|---|---|
+| [`baracuda_smem_tile.cuh`](../../crates/baracuda-kernels-sys/kernels/include/baracuda_smem_tile.cuh) | `baracuda::tile::SmemTile2D<T, ROWS, COLS, PAD=1>` — bank-conflict-padded 2D SMEM tile (`data[ROWS][COLS+PAD]`, `operator()` hides padding, `rows()`/`cols()`/`pad()`/`bytes()` constexpr accessors) + cooperative `tile_load_row_major<BLOCK_THREADS>` (syncs) / `tile_store_row_major<BLOCK_THREADS>` (no trailing sync) / `tile_load_col_major<BLOCK_THREADS>` (transposed K-operand load, syncs). f32 fast path issues coalesced `float4` global transfers for row-major load/store when `COLS%4==0` and the stride is 4-aligned; scalar fallback otherwise. **Limitation:** targets SIMT-style scalar-column-stride tiles — does NOT cover the dense `[M_TILE][K_TILE]` `ldmatrix`/warp-MMA tiles in `baracuda_{int8_rrr_sm80,fp8_*_sm89,int4_*_sm89,bin_*_sm89}.cuh` (their access pattern is fixed by the hardware fragment layout; padding would break `ldmatrix` addressing). Pure templates — compile-verified (nvcc sm_89), no standalone test; validated at first retrofit. |
+
 ### Pre-existing kernel-author helpers (in scope to lift if duplicated elsewhere)
 
 - `load_as_acc<T>` / `store_from_acc<T>` in [`baracuda_norm.cuh`](../../crates/baracuda-kernels-sys/kernels/include/baracuda_norm.cuh) — dtype promotion to f32 for compute. Currently scoped to norm.cuh; should be lifted to a shared `baracuda_dtype_promote.cuh` (see planned helpers below).
@@ -74,7 +80,7 @@ The prompts are self-contained — a new session can pick one up and run.
 | `baracuda_coord_unravel.cuh` | [`kernel-helper-coord-unravel.md`](../sessions/kernel-helper-coord-unravel.md) | planned |
 | `baracuda_block_atomic.cuh` | [`kernel-helper-block-atomic.md`](../sessions/kernel-helper-block-atomic.md) | planned |
 | `baracuda_smem_scan.cuh` | [`kernel-helper-smem-scan.md`](../sessions/kernel-helper-smem-scan.md) | planned |
-| `baracuda_smem_tile.cuh` | [`kernel-helper-smem-tile.md`](../sessions/kernel-helper-smem-tile.md) | planned |
+| `baracuda_smem_tile.cuh` | [`kernel-helper-smem-tile.md`](../sessions/kernel-helper-smem-tile.md) | **done — Phase 67e** (see existing) |
 | `baracuda_hmath.cuh` | [`kernel-helper-hmath.md`](../sessions/kernel-helper-hmath.md) | planned |
 
 ## Adding a new helper — checklist for sessions
