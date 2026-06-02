@@ -1750,6 +1750,56 @@ They remain valid 1.0-freeze gates.
 
 Not phase-specific; tracked here so they don't fall off the radar.
 
+- **Strided siblings for library-backed conv / pool / FFT** — these
+  families are contiguous-only at the plan surface today (caller must
+  `Contiguize` first), unlike the bespoke elementwise / reduction /
+  norm / loss / index / shape families, which all carry strided
+  `TensorRef` paths for both FW and BW. The opportunity here is narrow
+  and worth it for one reason: the *backend* can already express
+  per-axis strides at full speed, so a strided sibling skips the
+  materialization copy without writing a slow strided kernel.
+  - **Conv / pool (cuDNN)** — highest value. `cudnnSetTensorNdDescriptor`
+    takes full per-axis strides, and **channels-last (NHWC) is native
+    and often *faster* than NCHW on tensor cores** — so this is not
+    just a rare-fallback convenience, it's a real perf layout. Mostly
+    plumbing strides from `TensorRef` into the cuDNN descriptor rather
+    than a new kernel.
+  - **FFT (cuFFT)** — secondary. cuFFT "advanced data layout"
+    (`istride` / `idist` / …) is native; lets callers FFT a
+    non-contiguous slice without packing. Cheap plumbing.
+  - **Explicitly NOT candidates** (recorded so a future sweep doesn't
+    over-reach): **GEMM** is already covered — cuBLAS / CUTLASS expose
+    transpose flags + leading dimension + strided-batched, which handle
+    the realistic non-contiguous matmul cases; truly-arbitrary
+    inner-stride GEMM needs a copy anyway (tensor cores want aligned
+    vector loads). **Linalg (cuSOLVER)** is column-major `lda`-only —
+    a "strided" sibling would copy internally, so no gain over an
+    explicit contiguize. **Sort / TopK / segment / image** are bespoke
+    but low-value on a non-contiguous path. Decision rule: a strided
+    sibling earns its keep only when `cost(strided) < cost(copy) +
+    cost(contig)` AND the backend expresses the strides at full speed.
+  - **Bar: demonstrated need.** Add per a real caller or a measured
+    copy cost, not for completeness — the sibling surface is already
+    large (FFI symbols + tests + `can_implement` companions per family).
+  - **Natural consumer: a layout planner.** The more strided siblings
+    exist, the more often a future automatic layout planner (see the
+    note below) can satisfy the next op with a *zero-copy* logical
+    descriptor reorder instead of a physical `PermutePlan` copy. The
+    two pieces are complementary.
+- **Automatic layout planner (layout-for-next-op)** — baracuda today is
+  layout *mechanism* (strided kernels + caller-specified `PermutePlan` /
+  `ContiguizePlan`), with *policy* pushed downstream to the Fuel
+  autotuner. A planner that inspects the next op's preferred layout and
+  emits either a zero-copy logical reorder (rewrite the `TensorRef`
+  `shape` / `stride` arrays — no kernel) or a physical `PermutePlan`
+  copy when the downstream kernel can't consume that stride pattern
+  would close the "ideal layout for the next kernel" gap. Prereq: each
+  `Plan` would need to expose a layout-requirement / preferred-layout
+  hint (innermost axis, stride-1 constraints, NHWC preference) plus a
+  rough strided-vs-(copy+contig) cost — the same machinery as the
+  sibling-racing judge. Natural home is the autotuner layer (downstream
+  Fuel, or a new `baracuda-plan` crate sitting on top of the kernels
+  crate). Pairs with the strided-siblings item above.
 - **Sparsemax for extents > 1024** — Phase 11.6 lifted the cap from
   64 → 1024 via `cub::BlockRadixSort` + `BlockScan`. Larger rows
   would need a multi-block / global sort pipeline. Low priority
