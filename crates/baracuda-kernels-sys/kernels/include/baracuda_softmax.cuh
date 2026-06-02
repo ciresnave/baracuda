@@ -35,6 +35,7 @@
 #include <cuda/functional> // for cuda::maximum (replaces removed cub::Max)
 
 #include "baracuda_elementwise.cuh" // for DimsI32 / DimsI64 / MAX_RANK
+#include "baracuda_smem_reduce.cuh" // Phase 65c — block_reduce_{sum,max}_f32 + warp_buf
 
 namespace baracuda { namespace softmax {
 
@@ -184,6 +185,73 @@ __global__ void softmax_fp_kernel<double>(
     }
 }
 
+// =============================================================================
+// Softmax FW — SMEM-staged fast path (Phase 65c)
+//
+// Pattern mirrors Phase 65b's RMSNorm + Phase 65c's LayerNorm: one
+// block per row, three phases (stage → block-reduce max + sum →
+// write back). In-place safe (`y_ptr == x_ptr`) for the same reason:
+// input fully staged before any output write.
+//
+// Eligibility: contig last-axis (softmax_axis == rank-1 AND last-axis
+// strides == 1 in both x and y), contig outer (stride[rank-2] ==
+// extent in both), SMEM-fits, dtype != f64.
+// =============================================================================
+
+template <typename T>
+__global__ void softmax_smem_kernel(
+    const T* __restrict__ x,
+    T* __restrict__ y,
+    int64_t row_count,
+    int64_t row_stride_x_elems,
+    int64_t row_stride_y_elems,
+    int32_t softmax_extent)
+{
+    extern __shared__ float smem_storage_sm[];
+    float* smem_row = smem_storage_sm;
+    float* warp_buf = smem_storage_sm + softmax_extent;
+
+    for (int64_t row = (int64_t)blockIdx.x; row < row_count; row += (int64_t)gridDim.x) {
+        const T* x_row = x + row * row_stride_x_elems;
+        T*       y_row = y + row * row_stride_y_elems;
+
+        // Phase 1: stage row into SMEM with dtype promotion to f32.
+        for (int64_t i = (int64_t)threadIdx.x; i < (int64_t)softmax_extent; i += (int64_t)blockDim.x) {
+            smem_row[i] = load_as_acc<T>(x_row[i]);
+        }
+        __syncthreads();
+
+        // Phase 2a: block-reduce max.
+        float local_max = -INFINITY;
+        for (int64_t i = (int64_t)threadIdx.x; i < (int64_t)softmax_extent; i += (int64_t)blockDim.x) {
+            float v = smem_row[i];
+            if (v > local_max) local_max = v;
+        }
+        float row_max = baracuda::block_reduce_max_f32(local_max, warp_buf);
+
+        // Phase 2b: block-reduce sum(exp(x - max)).
+        float local_sum = 0.0f;
+        for (int64_t i = (int64_t)threadIdx.x; i < (int64_t)softmax_extent; i += (int64_t)blockDim.x) {
+            local_sum += expf(smem_row[i] - row_max);
+        }
+        float row_sum = baracuda::block_reduce_sum_f32(local_sum, warp_buf);
+        float inv_sum = 1.0f / row_sum;
+
+        // Phase 3: write back normalized output.
+        for (int64_t i = (int64_t)threadIdx.x; i < (int64_t)softmax_extent; i += (int64_t)blockDim.x) {
+            float yk = expf(smem_row[i] - row_max) * inv_sum;
+            y_row[i] = store_from_acc<T>(yk);
+        }
+
+        __syncthreads();
+    }
+}
+
+__host__ inline std::size_t softmax_smem_bytes(int32_t softmax_extent) {
+    return (std::size_t)softmax_extent * sizeof(float)
+         + (std::size_t)baracuda::BARACUDA_MAX_WARPS * sizeof(float);
+}
+
 template <typename T>
 __host__ inline int32_t launch_softmax_fp(
     const T* x, T* y,
@@ -203,6 +271,37 @@ __host__ inline int32_t launch_softmax_fp(
     using baracuda::elementwise::DimsI64;
     if (rank < 0 || rank > MAX_RANK) return 2;
     if (softmax_axis < 0 || softmax_axis >= rank) return 2;
+
+    // -------- Phase 65c SMEM-staged fast path eligibility --------
+    constexpr std::size_t SMEM_BUDGET_DEFAULT = 47 * 1024;
+    constexpr bool eligible_dtype = (sizeof(T) <= 4);
+    bool simple_last_axis = (softmax_axis == rank - 1);
+    bool contig_last_axis_x = (rank > 0) && (stride_x_host[rank - 1] == 1);
+    bool contig_last_axis_y = (rank > 0) && (stride_y_host[rank - 1] == 1);
+    std::size_t smem_bytes = softmax_smem_bytes(softmax_extent);
+
+    if (eligible_dtype && simple_last_axis && contig_last_axis_x && contig_last_axis_y
+        && smem_bytes <= SMEM_BUDGET_DEFAULT) {
+        bool contig_outer = true;
+        if (rank > 1) {
+            if (stride_x_host[rank - 2] != (int64_t)softmax_extent) contig_outer = false;
+            if (stride_y_host[rank - 2] != (int64_t)softmax_extent) contig_outer = false;
+        }
+        if (contig_outer) {
+            int64_t row_count = numel / (int64_t)softmax_extent;
+            int64_t row_stride_x = (int64_t)softmax_extent;
+            int64_t row_stride_y = (int64_t)softmax_extent;
+            constexpr int kBlock = 256;
+            int blocks = (int)(row_count > 65535 ? 65535 : row_count);
+            if (blocks <= 0) blocks = 1;
+            softmax_smem_kernel<T><<<blocks, kBlock, smem_bytes, stream>>>(
+                x, y, row_count, row_stride_x, row_stride_y, softmax_extent);
+            cudaError_t err = cudaGetLastError();
+            return (err == cudaSuccess) ? 0 : 5;
+        }
+    }
+
+    // -------- Legacy multi-pass-global fallback --------
     DimsI32 shape = {};
     DimsI64 sx = {}, sy = {};
     for (int i = 0; i < rank; ++i) {
@@ -479,6 +578,61 @@ __global__ void log_softmax_fp_kernel<double>(
     }
 }
 
+// =============================================================================
+// LogSoftmax FW — SMEM-staged fast path (Phase 65c)
+// Same pattern as Softmax SMEM kernel; emits `(x - max) - log(sum_exp)`
+// instead of `exp(x - max) / sum_exp`.
+// =============================================================================
+
+template <typename T>
+__global__ void log_softmax_smem_kernel(
+    const T* __restrict__ x,
+    T* __restrict__ y,
+    int64_t row_count,
+    int64_t row_stride_x_elems,
+    int64_t row_stride_y_elems,
+    int32_t softmax_extent)
+{
+    extern __shared__ float smem_storage_lsm[];
+    float* smem_row = smem_storage_lsm;
+    float* warp_buf = smem_storage_lsm + softmax_extent;
+
+    for (int64_t row = (int64_t)blockIdx.x; row < row_count; row += (int64_t)gridDim.x) {
+        const T* x_row = x + row * row_stride_x_elems;
+        T*       y_row = y + row * row_stride_y_elems;
+
+        // Phase 1: stage row.
+        for (int64_t i = (int64_t)threadIdx.x; i < (int64_t)softmax_extent; i += (int64_t)blockDim.x) {
+            smem_row[i] = load_as_acc<T>(x_row[i]);
+        }
+        __syncthreads();
+
+        // Phase 2a: row max.
+        float local_max = -INFINITY;
+        for (int64_t i = (int64_t)threadIdx.x; i < (int64_t)softmax_extent; i += (int64_t)blockDim.x) {
+            float v = smem_row[i];
+            if (v > local_max) local_max = v;
+        }
+        float row_max = baracuda::block_reduce_max_f32(local_max, warp_buf);
+
+        // Phase 2b: sum of exp.
+        float local_sum = 0.0f;
+        for (int64_t i = (int64_t)threadIdx.x; i < (int64_t)softmax_extent; i += (int64_t)blockDim.x) {
+            local_sum += expf(smem_row[i] - row_max);
+        }
+        float row_sum = baracuda::block_reduce_sum_f32(local_sum, warp_buf);
+        float log_row_sum = logf(row_sum);
+
+        // Phase 3: write back.
+        for (int64_t i = (int64_t)threadIdx.x; i < (int64_t)softmax_extent; i += (int64_t)blockDim.x) {
+            float yk = (smem_row[i] - row_max) - log_row_sum;
+            y_row[i] = store_from_acc<T>(yk);
+        }
+
+        __syncthreads();
+    }
+}
+
 template <typename T>
 __host__ inline int32_t launch_log_softmax_fp(
     const T* x, T* y,
@@ -498,6 +652,37 @@ __host__ inline int32_t launch_log_softmax_fp(
     using baracuda::elementwise::DimsI64;
     if (rank < 0 || rank > MAX_RANK) return 2;
     if (softmax_axis < 0 || softmax_axis >= rank) return 2;
+
+    // -------- Phase 65c SMEM-staged fast path eligibility --------
+    constexpr std::size_t SMEM_BUDGET_DEFAULT = 47 * 1024;
+    constexpr bool eligible_dtype = (sizeof(T) <= 4);
+    bool simple_last_axis = (softmax_axis == rank - 1);
+    bool contig_last_axis_x = (rank > 0) && (stride_x_host[rank - 1] == 1);
+    bool contig_last_axis_y = (rank > 0) && (stride_y_host[rank - 1] == 1);
+    std::size_t smem_bytes = softmax_smem_bytes(softmax_extent);
+
+    if (eligible_dtype && simple_last_axis && contig_last_axis_x && contig_last_axis_y
+        && smem_bytes <= SMEM_BUDGET_DEFAULT) {
+        bool contig_outer = true;
+        if (rank > 1) {
+            if (stride_x_host[rank - 2] != (int64_t)softmax_extent) contig_outer = false;
+            if (stride_y_host[rank - 2] != (int64_t)softmax_extent) contig_outer = false;
+        }
+        if (contig_outer) {
+            int64_t row_count = numel / (int64_t)softmax_extent;
+            int64_t row_stride_x = (int64_t)softmax_extent;
+            int64_t row_stride_y = (int64_t)softmax_extent;
+            constexpr int kBlock = 256;
+            int blocks = (int)(row_count > 65535 ? 65535 : row_count);
+            if (blocks <= 0) blocks = 1;
+            log_softmax_smem_kernel<T><<<blocks, kBlock, smem_bytes, stream>>>(
+                x, y, row_count, row_stride_x, row_stride_y, softmax_extent);
+            cudaError_t err = cudaGetLastError();
+            return (err == cudaSuccess) ? 0 : 5;
+        }
+    }
+
+    // -------- Legacy multi-pass-global fallback --------
     DimsI32 shape = {};
     DimsI64 sx = {}, sy = {};
     for (int i = 0; i < rank; ++i) {

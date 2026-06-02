@@ -1040,6 +1040,101 @@ __global__ void layer_norm_fp_kernel<double>(
     }
 }
 
+// =============================================================================
+// LayerNorm FW — SMEM-staged fast path (Phase 65c)
+//
+// Mirrors the Phase 65b SMEM-staged RMSNorm kernel. One block per
+// output row; grid-strides over rows when row_count > 65535. Phase 1:
+// cooperative load into f32 SMEM. Phase 2a: block_reduce_sum_f32 →
+// mean. Phase 2b: block_reduce_sum_f32 → variance. Phase 3:
+// cooperative write of normalized + affine output.
+//
+// In-place safe (`y_ptr == x_ptr`) for the same reason as RMSNorm:
+// input fully staged before any output write. Eligible when:
+//   * norm_axes is exactly the last axis
+//   * input + output both contig along the last axis
+//   * input + output have stride_outer == norm_total_extent (contig outer)
+//   * row_bytes (row in f32 + 32-float warp_buf) ≤ 47 KB
+//   * mean_out / inv_std_out (if non-null) have stride 1 per row
+//
+// f64 stays on the legacy multi-pass-global kernel (no in-place safety,
+// no perf win) — same constraint as Phase 65b. To re-enable f64 in
+// the SMEM path, add `block_reduce_sum_f64` to baracuda_smem_reduce.cuh.
+// =============================================================================
+
+template <typename T>
+__global__ void layer_norm_smem_kernel(
+    const T* __restrict__ x,
+    const T* __restrict__ gamma,
+    const T* __restrict__ beta,
+    T* __restrict__ y,
+    T* __restrict__ mean_out,
+    T* __restrict__ inv_std_out,
+    float eps,
+    int64_t row_count,
+    int64_t row_stride_x_elems,
+    int64_t row_stride_y_elems,
+    int64_t row_stride_save_elems,
+    int32_t norm_total_extent)
+{
+    extern __shared__ float smem_storage_ln[];
+    float* smem_row = smem_storage_ln;
+    float* warp_buf = smem_storage_ln + norm_total_extent;
+
+    float invN = 1.0f / (float)norm_total_extent;
+
+    for (int64_t row = (int64_t)blockIdx.x; row < row_count; row += (int64_t)gridDim.x) {
+        const T* x_row = x + row * row_stride_x_elems;
+        T*       y_row = y + row * row_stride_y_elems;
+
+        // Phase 1: stage row into SMEM with dtype promotion to f32.
+        for (int64_t i = (int64_t)threadIdx.x; i < (int64_t)norm_total_extent; i += (int64_t)blockDim.x) {
+            smem_row[i] = load_as_acc<T>(x_row[i]);
+        }
+        __syncthreads();
+
+        // Phase 2a: block-reduce sum → mean.
+        float local_sum = 0.0f;
+        for (int64_t i = (int64_t)threadIdx.x; i < (int64_t)norm_total_extent; i += (int64_t)blockDim.x) {
+            local_sum += smem_row[i];
+        }
+        float total_sum = baracuda::block_reduce_sum_f32(local_sum, warp_buf);
+        float mean = total_sum * invN;
+
+        // Phase 2b: block-reduce sum-of-(x-mean)² → variance.
+        float local_sum_sq = 0.0f;
+        for (int64_t i = (int64_t)threadIdx.x; i < (int64_t)norm_total_extent; i += (int64_t)blockDim.x) {
+            float v = smem_row[i] - mean;
+            local_sum_sq += v * v;
+        }
+        float total_sum_sq = baracuda::block_reduce_sum_f32(local_sum_sq, warp_buf);
+        float var = total_sum_sq * invN;
+        float inv_std = rsqrtf(var + eps);
+
+        // Phase 3: cooperative write of normalized + affine output.
+        for (int64_t i = (int64_t)threadIdx.x; i < (int64_t)norm_total_extent; i += (int64_t)blockDim.x) {
+            float xh = (smem_row[i] - mean) * inv_std;
+            float gk = (gamma != nullptr) ? load_as_acc<T>(gamma[i]) : 1.0f;
+            float bk = (beta  != nullptr) ? load_as_acc<T>(beta[i])  : 0.0f;
+            y_row[i] = store_from_acc<T>(xh * gk + bk);
+        }
+
+        // Save mean + inv_std once per row.
+        if (threadIdx.x == 0) {
+            if (mean_out    != nullptr) mean_out[row * row_stride_save_elems]    = store_from_acc<T>(mean);
+            if (inv_std_out != nullptr) inv_std_out[row * row_stride_save_elems] = store_from_acc<T>(inv_std);
+        }
+
+        __syncthreads();
+    }
+}
+
+__host__ inline std::size_t layer_norm_smem_bytes(int32_t norm_total_extent) {
+    // Always stages in f32 (only eligible for f32/f16/bf16 storage; f64 falls back to legacy).
+    return (std::size_t)norm_total_extent * sizeof(float)
+         + (std::size_t)baracuda::BARACUDA_MAX_WARPS * sizeof(float);
+}
+
 template <typename T>
 __host__ inline int32_t launch_layer_norm_fp(
     const T* x, const T* gamma, const T* beta,
@@ -1061,6 +1156,46 @@ __host__ inline int32_t launch_layer_norm_fp(
     if (rank < 0 || rank > MAX_RANK) return 2;
     if (norm_axes_mask == 0) return 2;
     if (norm_total_extent <= 0) return 2;
+
+    // -------- Phase 65c SMEM-staged fast path eligibility --------
+    constexpr std::size_t SMEM_BUDGET_DEFAULT = 47 * 1024;
+    constexpr bool eligible_dtype = (sizeof(T) <= 4);
+    bool simple_last_axis = (rank > 0)
+        && (norm_axes_mask == (int32_t)(1u << (uint32_t)(rank - 1)));
+    bool contig_last_axis_x = (rank > 0) && (stride_x_host[rank - 1] == 1);
+    bool contig_last_axis_y = (rank > 0) && (stride_y_host[rank - 1] == 1);
+    std::size_t smem_bytes = layer_norm_smem_bytes(norm_total_extent);
+
+    if (eligible_dtype && simple_last_axis && contig_last_axis_x && contig_last_axis_y
+        && smem_bytes <= SMEM_BUDGET_DEFAULT) {
+        bool contig_outer = true;
+        if (rank > 1) {
+            if (stride_x_host[rank - 2] != (int64_t)norm_total_extent) contig_outer = false;
+            if (stride_y_host[rank - 2] != (int64_t)norm_total_extent) contig_outer = false;
+        }
+        if (contig_outer) {
+            int64_t row_stride_save = 1;
+            bool save_ok = true;
+            if ((mean_out != nullptr || inv_std_out != nullptr) && stride_save_host != nullptr && rank > 1) {
+                if (stride_save_host[rank - 2] != 1) save_ok = false;
+            }
+            if (save_ok) {
+                int64_t row_count = numel / (int64_t)norm_total_extent;
+                int64_t row_stride_x = (int64_t)norm_total_extent;
+                int64_t row_stride_y = (int64_t)norm_total_extent;
+                constexpr int kBlock = 256;
+                int blocks = (int)(row_count > 65535 ? 65535 : row_count);
+                if (blocks <= 0) blocks = 1;
+                layer_norm_smem_kernel<T><<<blocks, kBlock, smem_bytes, stream>>>(
+                    x, gamma, beta, y, mean_out, inv_std_out, eps, row_count,
+                    row_stride_x, row_stride_y, row_stride_save, norm_total_extent);
+                cudaError_t err = cudaGetLastError();
+                return (err == cudaSuccess) ? 0 : 5;
+            }
+        }
+    }
+
+    // -------- Legacy multi-pass-global fallback (pre-Phase 65 path) --------
     DimsI32 shape = {};
     DimsI64 sx = {}, sy = {}, ssv = {};
     for (int i = 0; i < rank; ++i) {
