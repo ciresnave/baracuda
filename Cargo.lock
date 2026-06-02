@@ -331,6 +331,30 @@ dependencies = [
 ]
 
 [[package]]
+name = "baracuda-cuvs"
+version = "0.0.1-alpha.63"
+dependencies = [
+ "baracuda-core",
+ "baracuda-cuda-sys",
+ "baracuda-cuvs-sys",
+ "baracuda-driver",
+ "baracuda-types",
+ "half",
+ "thiserror",
+]
+
+[[package]]
+name = "baracuda-cuvs-sys"
+version = "0.0.1-alpha.63"
+dependencies = [
+ "baracuda-build",
+ "baracuda-core",
+ "baracuda-cuda-sys",
+ "baracuda-types",
+ "libloading",
+]
+
+[[package]]
 name = "baracuda-cvcuda"
 version = "0.0.1-alpha.63"
 dependencies = [

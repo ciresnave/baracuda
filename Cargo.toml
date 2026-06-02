@@ -72,6 +72,12 @@ baracuda-tensorrt-sys = { version = "0.0.1-alpha.63", path = "crates/baracuda-te
 baracuda-tensorrt = { version = "0.0.1-alpha.63", path = "crates/baracuda-tensorrt" }
 baracuda-cudf-sys = { version = "0.0.1-alpha.63", path = "crates/baracuda-cudf-sys" }
 baracuda-cudf = { version = "0.0.1-alpha.63", path = "crates/baracuda-cudf" }
+# Phase 71 — cuVS GPU vector search / ANN (RAPIDS, sibling to cudf). IVF-Flat
+# + brute-force k-NN over device buffers, for RAG / embedding-store / vector-DB
+# inference workloads. Lazy `libloading` (no link-time dep); whole surface
+# behind the off-by-default `cuvs` feature since RAPIDS is Linux/WSL2-only.
+baracuda-cuvs-sys = { version = "0.0.1-alpha.63", path = "crates/baracuda-cuvs-sys" }
+baracuda-cuvs = { version = "0.0.1-alpha.63", path = "crates/baracuda-cuvs" }
 # Phase 44 (vendor) + 44b (clean-fork) — ozIMMU Ozaki-scheme FP64 GEMM,
 # MIT. Optional dep behind the `ozimmu` feature on baracuda-cutlass /
 # baracuda-kernels. Sources internalized at

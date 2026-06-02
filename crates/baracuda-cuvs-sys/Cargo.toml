@@ -1,0 +1,30 @@
+[package]
+name = "baracuda-cuvs-sys"
+version = "0.0.1-alpha.63"
+description = "Raw FFI bindings and dynamic loader for NVIDIA cuVS (GPU vector search / ANN)."
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories = ["external-ffi-bindings"]
+
+[features]
+default = []
+# Compile the cuVS loader + FFI surface. Off by default: cuVS ships only as
+# part of NVIDIA RAPIDS (`libcuvs.so` + `libraft.so`), which has no native
+# Windows distribution and is a heavyweight conda/pip install on Linux.
+# Downstream opts in explicitly. The symbols are resolved lazily at runtime
+# via `libloading`, so enabling the feature never adds a link-time dependency.
+cuvs = []
+
+[dependencies]
+baracuda-core.workspace = true
+baracuda-types.workspace = true
+baracuda-cuda-sys.workspace = true
+libloading.workspace = true
+
+[build-dependencies]
+baracuda-build.workspace = true
