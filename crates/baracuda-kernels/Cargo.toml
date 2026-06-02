@@ -174,6 +174,16 @@ ring_attention = ["baracuda-kernels-sys/ring_attention", "dep:baracuda-nccl", "d
 # — the kernel primitives are reused from the rest of the baracuda stack.
 megatron_tp = ["dep:baracuda-megatron", "baracuda-megatron/half-crate"]
 
+# Phase 69 — NVSHMEM host-side wrapper (symmetric-heap one-sided GPU comms).
+# Sibling to NCCL (collectives): NVSHMEM is fine-grained one-sided RDMA. When
+# ON, pulls in the `baracuda-nvshmem` / `baracuda-nvshmem-sys` crate pair as
+# optional deps so consumers can build NVSHMEM-backed multi-GPU plans (DeepEP
+# MoE all-to-all, Ring Attention over symmetric heap, …) on top of the kernel
+# facade. Off by default — one-sided comms only help on multi-GPU, and the
+# NVSHMEM runtime is Linux-only. No CUDA kernels and no plans wire it yet;
+# this just makes the wrapper available alongside the kernel surface.
+nvshmem = ["dep:baracuda-nvshmem", "dep:baracuda-nvshmem-sys"]
+
 [dependencies]
 baracuda-kernels-types = { workspace = true }
 baracuda-kernels-sys = { workspace = true }
@@ -195,6 +205,10 @@ baracuda-nccl-sys = { workspace = true, optional = true }
 # Phase 57 — Megatron-LM TP primitives. Optional; only pulled in under
 # the `megatron_tp` cargo feature.
 baracuda-megatron = { workspace = true, optional = true }
+# Phase 69 — NVSHMEM host-side wrapper. Optional; only pulled in under the
+# `nvshmem` cargo feature. Symmetric-heap one-sided comms (sibling to NCCL).
+baracuda-nvshmem = { workspace = true, optional = true }
+baracuda-nvshmem-sys = { workspace = true, optional = true }
 half = { workspace = true }
 thiserror = { workspace = true }
 
