@@ -58,6 +58,21 @@ Helper categories so far:
 These two seed the library. Phase 65b will be the first user of them
 (retrofitting the normalizer family).
 
+### Phase 69 device tier (2026-06-01)
+
+| File | What it provides |
+|---|---|
+| [`baracuda_nvshmem_device.cuh`](../../crates/baracuda-kernels-sys/kernels/include/baracuda_nvshmem_device.cuh) | `baracuda::nvshmem::` device-side NVSHMEM glue — `my_pe`/`n_pes`/`team_*` queries, bulk `put`/`get`(+`_nbi`) + cooperative `put_block`/`put_warp`/`get_*`, typed single-element `p`/`g`, `fence`/`quiet`/`barrier_all`/`sync_all`, and `put_signal`(+`_block`)/`signal_wait_until`/`signal_fetch` |
+
+**Unusual gating** — unlike the free-standing `smem_*` helpers, this header
+wraps an *external* library (the NVSHMEM device API in `libnvshmem_device.a`,
+which baracuda cannot bundle under MIT/Apache per NVIDIA's SLA). The whole
+body is behind `#ifdef BARACUDA_ENABLE_NVSHMEM_DEVICE`; with the gate off the
+header is an empty namespace (safe to include, no `<nvshmem.h>` dependency,
+no rebuild trigger). A consumer enables it by installing NVSHMEM, compiling
+the TU with `-rdc=true` + the define, and device-linking the archive — see
+the file-top docstring. Pairs with the host-side `baracuda-nvshmem` crate.
+
 ### Pre-existing kernel-author helpers (in scope to lift if duplicated elsewhere)
 
 - `load_as_acc<T>` / `store_from_acc<T>` in [`baracuda_norm.cuh`](../../crates/baracuda-kernels-sys/kernels/include/baracuda_norm.cuh) — dtype promotion to f32 for compute. Currently scoped to norm.cuh; should be lifted to a shared `baracuda_dtype_promote.cuh` (see planned helpers below).
