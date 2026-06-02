@@ -240,11 +240,13 @@ Patches applied to vendored headers (record every divergence here):
 
 ## Future scope
 
-- **Tier 2 prefill: DONE** (Phase 66) — `prefill.cuh` vendored;
-  `BatchPagedPrefillPlan` ships f16/bf16 paged prefill (causal +
-  non-causal) via `disable_split_kv`. Remaining prefill follow-ups:
-  KV-split parallelism (long-context, few-request) + the ragged
-  (non-paged) `BatchPrefillWithRaggedKVCache` variant.
+- **Tier 2 prefill: COMPLETE** (Phase 66) — `prefill.cuh` vendored;
+  `BatchPagedPrefillPlan` + `BatchRaggedPrefillPlan` ship f16/bf16 paged
+  AND ragged prefill (causal + non-causal), with opt-in KV-split
+  parallelism (`enable_kv_split` → the dispatcher's internal
+  `VariableLengthMergeStates`). Also vendored from `sampling.cuh`:
+  `ChainSpeculativeSampling` (spec-decode verify) + the per-row `*_arr`
+  samplers. FP8 KV decode reuses the vendored `decode.cuh`.
 - **MLA**: DeepSeek-V3 specific; depends on customer demand.
 - **POD (mixed prefill+decode)**: niche scheduling optimization.
 - **NVFP4 GEMM (Blackwell)**, **mamba / SSM**: separate vendor
