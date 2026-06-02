@@ -45,6 +45,8 @@ cudf = ["dep:baracuda-cudf"]
 # Imaging / IO.
 npp = ["dep:baracuda-npp", "driver"]
 nvjpeg = ["dep:baracuda-nvjpeg", "driver"]
+# nvImageCodec — unified GPU image decode; supersedes nvjpeg, coexists with it.
+nvimagecodec = ["dep:baracuda-nvimagecodec", "driver"]
 nvcomp = ["dep:baracuda-nvcomp"]
 cvcuda = ["dep:baracuda-cvcuda"]
 
@@ -67,7 +69,7 @@ half-crate = [
 
 # Curated bundles.
 math = ["cublas", "curand", "cufft", "cusparse", "cusolver"]
-imaging = ["npp", "nvjpeg", "cvcuda"]
+imaging = ["npp", "nvjpeg", "nvimagecodec", "cvcuda"]
 ml = [
     "driver",
     "runtime",
@@ -96,6 +98,7 @@ baracuda-tensorrt = { workspace = true, optional = true }
 baracuda-cudf = { workspace = true, optional = true }
 baracuda-npp = { workspace = true, optional = true }
 baracuda-nvjpeg = { workspace = true, optional = true }
+baracuda-nvimagecodec = { workspace = true, optional = true }
 baracuda-nvcomp = { workspace = true, optional = true }
 baracuda-cvcuda = { workspace = true, optional = true }
 baracuda-nvml = { workspace = true, optional = true }
