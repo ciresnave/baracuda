@@ -479,15 +479,24 @@ __host__ inline int32_t launch_rms_norm_fp(
     // Falls back to legacy multi-pass-global kernel if any precondition
     // fails. Legacy path stays numerically equivalent + in-place UNSAFE
     // (callers should use a separate output buffer when not eligible).
+    //
+    // **f64 fallback**: the SMEM kernel's cross-warp reduction routes
+    // through `block_reduce_sum_f32`, which casts to f32 for the
+    // cross-warp aggregation step. That ~7-digit precision loss is
+    // unacceptable for f64 callers' tolerance. Phase 65b therefore
+    // restricts the SMEM path to T ∈ {f32, f16, bf16}; f64 stays on
+    // the legacy multi-pass-global kernel until smem_reduce.cuh grows
+    // an f64 block-reduce. (Tracked: future Phase 65b.1.)
     constexpr std::size_t SMEM_BUDGET_DEFAULT = 47 * 1024;
+    constexpr bool eligible_dtype = (sizeof(T) <= 4);  // f32 / f16 / bf16 / i32 / u32
     bool simple_last_axis = (rank > 0)
         && (norm_axes_mask == (int32_t)(1u << (uint32_t)(rank - 1)));
     bool contig_last_axis_x = (rank > 0) && (stride_x_host[rank - 1] == 1);
     bool contig_last_axis_y = (rank > 0) && (stride_y_host[rank - 1] == 1);
-    std::size_t element_size = (sizeof(T) <= 4) ? sizeof(float) : sizeof(double);
+    std::size_t element_size = sizeof(float);  // SMEM stages in f32 always (only eligible types)
     std::size_t smem_bytes = rms_norm_smem_bytes(norm_total_extent, element_size);
 
-    if (simple_last_axis && contig_last_axis_x && contig_last_axis_y
+    if (eligible_dtype && simple_last_axis && contig_last_axis_x && contig_last_axis_y
         && smem_bytes <= SMEM_BUDGET_DEFAULT) {
         // Row stride along the dimension immediately outside the norm axis.
         // For fully-contig input with last-axis normalization this equals
