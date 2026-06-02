@@ -945,6 +945,11 @@ pub struct FusedLinearCrossEntropyBackwardArgs<'a, T: Element> {
 /// Backward plan for FLCE. Just multiplies the saved gradients by
 /// the upstream `dy` scalar.
 pub struct FusedLinearCrossEntropyBackwardPlan<T: Element> {
+    // The BW plan validates `desc` at `select()` time and then runs a
+    // pure dy-scalar broadcast; nothing on the runtime path reads the
+    // descriptor back. Kept on the struct for shape-symmetry with the
+    // FW plan and for future use (e.g. mixed-precision toggles).
+    #[allow(dead_code)]
     desc: FusedLinearCrossEntropyBackwardDescriptor,
     sku: KernelSku,
     _marker: PhantomData<T>,
