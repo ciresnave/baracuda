@@ -44,7 +44,6 @@
 //! in v1 (it syncs the stream before returning). Prefill is not the
 //! per-token hot path, so this is acceptable.
 
-use core::ffi::c_void;
 use core::marker::PhantomData;
 
 use baracuda_cutlass::{Error, Result};
@@ -55,7 +54,6 @@ use baracuda_kernels_types::{
 };
 
 use super::batch_paged_decode::PagedKvCacheDescriptor;
-use super::map_status;
 
 /// Descriptor for a batched paged-KV prefill op.
 #[derive(Copy, Clone, Debug)]

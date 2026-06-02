@@ -24,7 +24,6 @@ use baracuda_kernels_types::{
     OpCategory, PlanPreference, PrecisionGuarantee, TensorMut, TensorRef, Workspace,
 };
 
-use super::map_status;
 
 /// FP8 encoding of the KV cache.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]

@@ -61,7 +61,6 @@ use baracuda_kernels_types::{
     OpCategory, PlanPreference, PrecisionGuarantee, TensorMut, TensorRef, Workspace,
 };
 
-use super::map_status;
 
 /// Descriptor for a paged KV-cache descriptor (kHND layout). Mirrors
 /// FlashInfer's `paged_kv_t` host-side fields.

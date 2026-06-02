@@ -41,7 +41,6 @@
 //!   sample was accepted; 0 means rejection sampling timed out and
 //!   the caller should re-draw with a fresh seed.
 
-use core::ffi::c_void;
 
 use baracuda_cutlass::{Error, Result};
 use baracuda_driver::Stream;
@@ -50,7 +49,6 @@ use baracuda_kernels_types::{
     PrecisionGuarantee, RandomKind, TensorMut, TensorRef, Workspace,
 };
 
-use crate::attention::map_status;
 
 /// Which sort-free sampler to run.
 ///

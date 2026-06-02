@@ -59,7 +59,6 @@
 //! Zero — `lse` is the only saved tensor (for prospective BW; FW
 //! doesn't need it as scratch).
 
-use core::ffi::c_void;
 use core::marker::PhantomData;
 
 use baracuda_cutlass::{Error, Result};
@@ -69,7 +68,6 @@ use baracuda_kernels_types::{
     OpCategory, PlanPreference, PrecisionGuarantee, TensorMut, TensorRef, Workspace,
 };
 
-use super::map_status;
 
 /// Maximum supported block size for the Tier-1 block-sparse trailblazer.
 /// Capped at 64 by the dynamic SMEM budget at `d_k = d_v = 128`.

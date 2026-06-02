@@ -62,7 +62,6 @@ use baracuda_kernels_types::{
     OpCategory, PlanPreference, PrecisionGuarantee, TensorMut, TensorRef, Workspace,
 };
 
-use super::map_status;
 
 // ---------------------------------------------------------------------------
 // Descriptor (shared between FW + BW)

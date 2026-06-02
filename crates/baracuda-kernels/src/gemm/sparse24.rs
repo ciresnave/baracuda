@@ -63,7 +63,6 @@
 //! `M * K * sizeof(T)` bytes for the inflated dense W. Query via
 //! [`GemmSparse24Plan::workspace_size`].
 
-use core::ffi::c_void;
 use core::marker::PhantomData;
 
 use baracuda_cutlass::{Error, Result};

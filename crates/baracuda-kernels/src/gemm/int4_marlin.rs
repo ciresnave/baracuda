@@ -60,7 +60,7 @@ use baracuda_cutlass::{Error, Result};
 use baracuda_driver::Stream;
 use baracuda_kernels_types::{
     ArchSku, BackendKind, Element, ElementKind, KernelSku, MathPrecision, OpCategory,
-    PlanPreference, PrecisionGuarantee, QuantizeKind, TensorMut, TensorRef, Workspace, U8,
+    PlanPreference, PrecisionGuarantee, QuantizeKind, TensorMut, TensorRef, Workspace,
 };
 use half::f16;
 

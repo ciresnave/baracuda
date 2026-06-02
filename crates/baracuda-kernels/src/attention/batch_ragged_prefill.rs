@@ -20,7 +20,6 @@
 //! `head_dim ∈ {64,128,256}`, integer GQA, `T ∈ {f16, bf16}`, causal or
 //! full, optional KV-split, synchronous `run`.
 
-use core::ffi::c_void;
 use core::marker::PhantomData;
 
 use baracuda_cutlass::{Error, Result};
@@ -30,7 +29,6 @@ use baracuda_kernels_types::{
     OpCategory, PlanPreference, PrecisionGuarantee, TensorMut, TensorRef, Workspace,
 };
 
-use super::map_status;
 
 /// Descriptor for a batched ragged-KV prefill op.
 #[derive(Copy, Clone, Debug)]

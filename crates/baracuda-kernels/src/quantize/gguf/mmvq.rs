@@ -296,7 +296,7 @@ unsafe fn dispatch_ffi<T: GgufMmvqActivation>(
     y_ptr: *const c_void,
     dst_ptr: *mut c_void,
     stream_ptr: *mut c_void,
-) -> i32 {
+) -> i32 { unsafe {
     match T::KIND {
         ElementKind::F32 => {
             if !use_strided {
@@ -321,7 +321,7 @@ unsafe fn dispatch_ffi<T: GgufMmvqActivation>(
         }
         _ => unreachable!("GgufMmvqActivation is sealed to f32 / f16 / bf16"),
     }
-}
+}}
 
 // ---- f32 dispatch (legacy contig + strided) ------------------------------
 
@@ -333,7 +333,7 @@ unsafe fn dispatch_f32_contig(
     y_ptr: *const c_void,
     dst_ptr: *mut c_void,
     stream_ptr: *mut c_void,
-) -> i32 {
+) -> i32 { unsafe {
     let ws = core::ptr::null_mut();
     match fmt {
         GgufBlockFormat::Q4_0 => baracuda_kernels_sys::baracuda_kernels_mmvq_q4_0_run(
@@ -363,7 +363,7 @@ unsafe fn dispatch_f32_contig(
         // `map_status` translator in `quantize::mod`.
         _ => 3,
     }
-}
+}}
 
 #[allow(clippy::too_many_arguments)]
 unsafe fn dispatch_f32_strided(
@@ -376,7 +376,7 @@ unsafe fn dispatch_f32_strided(
     y_ptr: *const c_void,
     dst_ptr: *mut c_void,
     stream_ptr: *mut c_void,
-) -> i32 {
+) -> i32 { unsafe {
     let ws = core::ptr::null_mut();
     match fmt {
         GgufBlockFormat::Q4_0 => baracuda_kernels_sys::baracuda_kernels_mmvq_q4_0_actstrided_run(
@@ -404,7 +404,7 @@ unsafe fn dispatch_f32_strided(
         // Defensive arm — `GgufBlockFormat` is `#[non_exhaustive]`.
         _ => 3,
     }
-}
+}}
 
 // ---- f16 dispatch (Phase 18.1) -------------------------------------------
 
@@ -416,7 +416,7 @@ unsafe fn dispatch_f16_contig(
     y_ptr: *const c_void,
     dst_ptr: *mut c_void,
     stream_ptr: *mut c_void,
-) -> i32 {
+) -> i32 { unsafe {
     let ws = core::ptr::null_mut();
     match fmt {
         GgufBlockFormat::Q4_0 => baracuda_kernels_sys::baracuda_kernels_mmvq_q4_0_f16_run(
@@ -444,7 +444,7 @@ unsafe fn dispatch_f16_contig(
         // Defensive arm — `GgufBlockFormat` is `#[non_exhaustive]`.
         _ => 3,
     }
-}
+}}
 
 #[allow(clippy::too_many_arguments)]
 unsafe fn dispatch_f16_strided(
@@ -457,7 +457,7 @@ unsafe fn dispatch_f16_strided(
     y_ptr: *const c_void,
     dst_ptr: *mut c_void,
     stream_ptr: *mut c_void,
-) -> i32 {
+) -> i32 { unsafe {
     let ws = core::ptr::null_mut();
     match fmt {
         GgufBlockFormat::Q4_0 => baracuda_kernels_sys::baracuda_kernels_mmvq_q4_0_actstrided_f16_run(
@@ -485,7 +485,7 @@ unsafe fn dispatch_f16_strided(
         // Defensive arm — `GgufBlockFormat` is `#[non_exhaustive]`.
         _ => 3,
     }
-}
+}}
 
 // ---- bf16 dispatch (Phase 18.1) ------------------------------------------
 
@@ -497,7 +497,7 @@ unsafe fn dispatch_bf16_contig(
     y_ptr: *const c_void,
     dst_ptr: *mut c_void,
     stream_ptr: *mut c_void,
-) -> i32 {
+) -> i32 { unsafe {
     let ws = core::ptr::null_mut();
     match fmt {
         GgufBlockFormat::Q4_0 => baracuda_kernels_sys::baracuda_kernels_mmvq_q4_0_bf16_run(
@@ -525,7 +525,7 @@ unsafe fn dispatch_bf16_contig(
         // Defensive arm — `GgufBlockFormat` is `#[non_exhaustive]`.
         _ => 3,
     }
-}
+}}
 
 #[allow(clippy::too_many_arguments)]
 unsafe fn dispatch_bf16_strided(
@@ -538,7 +538,7 @@ unsafe fn dispatch_bf16_strided(
     y_ptr: *const c_void,
     dst_ptr: *mut c_void,
     stream_ptr: *mut c_void,
-) -> i32 {
+) -> i32 { unsafe {
     let ws = core::ptr::null_mut();
     match fmt {
         GgufBlockFormat::Q4_0 => baracuda_kernels_sys::baracuda_kernels_mmvq_q4_0_actstrided_bf16_run(
@@ -566,7 +566,7 @@ unsafe fn dispatch_bf16_strided(
         // Defensive arm — `GgufBlockFormat` is `#[non_exhaustive]`.
         _ => 3,
     }
-}
+}}
 
 /// Natural byte alignment of a packed GGUF block struct, derived from
 /// the layouts in `baracuda_gguf.cuh`:

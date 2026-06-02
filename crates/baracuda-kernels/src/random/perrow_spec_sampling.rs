@@ -10,7 +10,6 @@
 //!
 //! Both require the `flashinfer` cargo feature for `run`.
 
-use core::ffi::c_void;
 
 use baracuda_cutlass::{Error, Result};
 use baracuda_driver::Stream;
@@ -19,7 +18,6 @@ use baracuda_kernels_types::{
     PrecisionGuarantee, RandomKind, TensorMut, TensorRef, Workspace,
 };
 
-use crate::attention::map_status;
 
 /// Which per-row sampler to run (thresholds supplied as device arrays in
 /// the args, not the descriptor).

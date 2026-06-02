@@ -14,7 +14,6 @@
 //!   must allocate a new page and extend `indices` / `indptr` BEFORE
 //!   the next call.
 
-use core::ffi::c_void;
 use core::marker::PhantomData;
 
 use baracuda_cutlass::{Error, Result};
@@ -25,7 +24,6 @@ use baracuda_kernels_types::{
 };
 
 use super::batch_paged_decode::PagedKvCacheDescriptor;
-use super::map_status;
 
 /// Descriptor for a paged KV-cache append op (decode-time).
 #[derive(Copy, Clone, Debug)]

@@ -39,7 +39,6 @@
 //! - No mask (pairwise merge always merges; pass equal LSE values
 //!   if you want to weight one side out).
 
-use core::ffi::c_void;
 use core::marker::PhantomData;
 
 use baracuda_cutlass::{Error, Result};
@@ -49,7 +48,6 @@ use baracuda_kernels_types::{
     OpCategory, PlanPreference, PrecisionGuarantee, TensorMut, TensorRef, Workspace,
 };
 
-use super::map_status;
 
 /// Descriptor for a cascade-attention LSE merge.
 #[derive(Copy, Clone, Debug)]
