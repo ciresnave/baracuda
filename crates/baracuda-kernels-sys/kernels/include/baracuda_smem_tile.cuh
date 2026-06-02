@@ -24,7 +24,7 @@
 // PAD defaults to 1 (correct for 4-byte elements). It is a template arg
 // so callers with 8-byte elements (f64) that still conflict at PAD=1 can
 // bump to PAD=2, and callers that genuinely want a dense tile (e.g. when
-// the consumer is a warp-MMA `ldmatrix` path that does not stride columns
+// the consumer is a warp-MMA fragment path that does not stride columns
 // scalar-wise) can pass PAD=0.
 //
 // Relationship to other helpers / libraries:
@@ -37,14 +37,39 @@
 //     replace it. Use CUB when you want register-resident 1D tiles; use
 //     this when you want a padded 2D SMEM tile the whole block reads.
 //
-// LIMITATION — does not cover swizzled-SMEM tensor-core kernels.
+// LIMITATION — does not cover tensor-core (warp-MMA) kernels.
 // baracuda's MMA-fragment GEMMs (`baracuda_int8_rrr_sm80.cuh`,
 // `baracuda_{fp8,int4,bin}_*_sm89.cuh`) declare *dense* `[M_TILE][K_TILE]`
-// SMEM tiles and feed them to `ldmatrix` / warp-MMA, where the access
-// pattern is fixed by the hardware fragment layout rather than scalar
-// column strides — padding there would break the `ldmatrix` addressing.
-// Those kernels are intentionally out of scope. This helper targets
-// SIMT-style tiled kernels that read the tile with scalar column strides.
+// SMEM tiles and read them into `mma.sync` fragments via 4-byte
+// `reinterpret_cast<const uint32_t*>(&smem[r][c])` loads, where the
+// thread→data mapping is dictated by the hardware fragment layout, not
+// by scalar column strides. A one-element pad there is *wrong* twice
+// over: their access pattern is not the column-stride one the pad cures,
+// and on a 1-byte element type the `+1` byte misaligns the 4-byte
+// fragment reads. Those kernels are intentionally out of scope; this
+// helper targets SIMT-style tiled kernels that read the tile with scalar
+// `operator()(r, c)` column strides.
+//
+// WHEN TO REACH FOR A SWIZZLED LAYOUT INSTEAD OF PADDING.
+// Padding is the default and the right tool for the SIMT scalar-stride
+// case: it works for any `COLS`, any element size, and keeps each row
+// physically contiguous (so `&tile(r, c)` pointer/vector access is
+// valid). An XOR-swizzled layout (`[r][c ^ f(r)]`, à la CUTLASS
+// `cute::Swizzle`) eliminates the *same* conflict while wasting zero
+// SMEM — but only helps in two specific situations, and carries real
+// preconditions (inner width must be a power of two; the 4-byte bank
+// model complicates non-4-byte elements; logical≠physical contiguity
+// breaks pointer-span / vectorized access unless co-designed). Add a
+// swizzled layout (as a *layout policy* template parameter on this tile
+// type, NOT a parallel struct) only when a profile shows that:
+//   (1) SMEM capacity is throttling occupancy / tile size, so the
+//       padding's wasted column actually costs a buffer stage; or
+//   (2) the kernel reads the *same* tile in two orientations (row AND
+//       column fragment access) — padding de-aligns only one stride,
+//       whereas a swizzle can be conflict-free in both at once.
+// For warp-MMA tiles prefer CUTLASS `cute::Swizzle` over a hand-rolled
+// one. Until a real consumer hits (1) or (2), padding stays the only
+// layout here — validated at first retrofit, not added speculatively.
 //
 // Pure device-side, header-only, zero side effects on inclusion. The
 // only host-visible members are the `constexpr` shape accessors.
