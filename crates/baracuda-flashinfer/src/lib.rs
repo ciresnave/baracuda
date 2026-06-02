@@ -33,26 +33,28 @@
 //!   reuse.
 //! - [`CascadeMergeStatesPlan`] — many-way (fan-in > 2) cascade merge, for
 //!   multi-level shared-prefix trees / overlapping prefix caches.
+//! - [`BatchPagedDecodeFp8Plan`] — paged decode with an **fp8** KV cache
+//!   (e4m3 / e5m2), Q/O in f16/bf16. Halves KV bandwidth + footprint.
 //!
-//! ## [`sampling`] — sort-free token sampling
+//! ## [`sampling`] — sort-free token sampling + verification
 //!
 //! - [`TopKTopPSamplingPlan`] — top-K / top-P / min-P / combined
 //!   top-K+top-P sampling directly from a probability tensor, with no
 //!   global sort. Select the variant via [`SamplerKind`].
+//! - [`PerRowSamplingPlan`] — the same samplers with per-request
+//!   thresholds supplied as device arrays.
+//! - [`SpeculativeSamplingPlan`] — speculative-decode accept/reject
+//!   verification (`ChainSpeculativeSampling`).
+//! - [`TokenPenaltyPlan`] — repetition / frequency / presence penalty
+//!   logit transform (native baracuda op; not feature-gated).
 //!
 //! # Feature gating
 //!
-//! All kernels are behind the `flashinfer` cargo feature (OFF by
-//! default). With the feature off the plan types still exist and
+//! The FlashInfer-backed kernels are behind the `flashinfer` cargo feature
+//! (OFF by default). With the feature off the plan types still exist and
 //! `select` / `can_implement` still validate shapes, but `run` returns
-//! `Error::Unsupported`. Enable the feature to compile the vendored
-//! kernels and execute on device.
-//!
-//! # What is *not* here (yet)
-//!
-//! FlashInfer's speculative-decode verification and FP8 KV-cache paths
-//! require additional vendored sources / instantiations beyond baracuda's
-//! current cherry-pick. They are tracked as follow-up tiers.
+//! `Error::Unsupported`. ([`TokenPenaltyPlan`] is a native baracuda op and
+//! runs regardless.) Enable the feature to compile the vendored kernels.
 //!
 //! # Example shape (paged decode)
 //!
@@ -106,14 +108,18 @@ pub use baracuda_flashinfer_sys as sys;
 /// Glob-importable common surface: `use baracuda_flashinfer::prelude::*;`.
 pub mod prelude {
     pub use crate::attention::{
-        BatchPagedDecodeArgs, BatchPagedDecodeDescriptor, BatchPagedDecodePlan,
+        BatchPagedDecodeArgs, BatchPagedDecodeDescriptor, BatchPagedDecodeFp8Args,
+        BatchPagedDecodeFp8Descriptor, BatchPagedDecodeFp8Plan, BatchPagedDecodePlan,
         BatchPagedPrefillArgs, BatchPagedPrefillDescriptor, BatchPagedPrefillPlan,
         CascadeAttentionArgs, CascadeAttentionDescriptor, CascadeAttentionPlan,
-        CascadeMergeStatesArgs, CascadeMergeStatesDescriptor, CascadeMergeStatesPlan,
+        CascadeMergeStatesArgs, CascadeMergeStatesDescriptor, CascadeMergeStatesPlan, Fp8KvDtype,
         PagedKvAppendArgs, PagedKvAppendDescriptor, PagedKvAppendPlan, PagedKvCacheDescriptor,
     };
     pub use crate::sampling::{
-        SamplerKind, TopKTopPSamplingArgs, TopKTopPSamplingDescriptor, TopKTopPSamplingPlan,
+        PerRowSampler, PerRowSamplingArgs, PerRowSamplingDescriptor, PerRowSamplingPlan,
+        SamplerKind, SpeculativeSamplingArgs, SpeculativeSamplingDescriptor, SpeculativeSamplingPlan,
+        TokenPenaltyArgs, TokenPenaltyDescriptor, TokenPenaltyPlan, TopKTopPSamplingArgs,
+        TopKTopPSamplingDescriptor, TopKTopPSamplingPlan,
     };
     pub use crate::{
         contiguous_stride, BackendKind, ElementKind, Error, PlanPreference, Result, TensorMut,

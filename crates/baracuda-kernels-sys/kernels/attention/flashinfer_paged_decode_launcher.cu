@@ -57,6 +57,7 @@
 #include <cuda_runtime.h>
 #include <cuda_fp16.h>
 #include <cuda_bf16.h>
+#include <cuda_fp8.h>  // Phase 66 Tier 2: fp8 KV-cache decode
 
 // --- MSVC nvcc per-thread-default-stream workaround --------------------
 // FlashInfer's `decode.cuh` calls `cudaLaunchKernel((void*)kernel, ...)`.
@@ -255,6 +256,91 @@ int dispatch_head_dim(
     return STATUS_UNSUPPORTED;
 }
 
+// --- FP8 KV-cache decode (Phase 66 Tier 2) ----------------------------
+// Mixed-dtype variant: Q / O in f16 or bf16, KV stored as fp8 (e4m3 /
+// e5m2). The decode kernel `cast_load`s the fp8 KV to float on the fly,
+// so no separate dequant scale is needed (the fp8 format carries the
+// value directly). Halves KV-cache bandwidth + footprint.
+template <typename DTypeQO, typename DTypeKV, int HEAD_DIM>
+int run_paged_decode_mixed(
+    int32_t batch_size, int32_t page_size,
+    int32_t num_qo_heads, int32_t num_kv_heads, float sm_scale,
+    void* k_data, void* v_data, int32_t* indices, int32_t* indptr, int32_t* last_page_len,
+    const void* q, void* o, void* lse, int32_t* workspace_i32, void* stream)
+{
+    cudaStream_t s = reinterpret_cast<cudaStream_t>(stream);
+    int32_t* request_indices  = workspace_i32;
+    int32_t* kv_tile_indices  = workspace_i32 + batch_size;
+    int32_t* o_indptr         = workspace_i32 + 2 * batch_size;
+    int32_t* kv_chunk_size_p  = workspace_i32 + 3 * batch_size + 1;
+
+    int32_t init_threads = batch_size + 1;
+    init_decode_workspace_kernel<<<1, init_threads, 0, s>>>(
+        request_indices, kv_tile_indices, o_indptr, kv_chunk_size_p, batch_size);
+    cudaError_t e = cudaGetLastError();
+    if (e != cudaSuccess) return translate(e);
+
+    flashinfer::paged_kv_t<DTypeKV, int32_t> paged_kv(
+        static_cast<uint32_t>(num_kv_heads), static_cast<uint32_t>(page_size),
+        static_cast<uint32_t>(HEAD_DIM), static_cast<uint32_t>(batch_size),
+        flashinfer::QKVLayout::kHND,
+        reinterpret_cast<DTypeKV*>(k_data), reinterpret_cast<DTypeKV*>(v_data),
+        indices, indptr, last_page_len, /*rope_pos_offset=*/nullptr);
+
+    using Params = flashinfer::BatchDecodeParams<DTypeQO, DTypeKV, DTypeQO, int32_t>;
+    Params params;
+    params.q                = reinterpret_cast<DTypeQO*>(const_cast<void*>(q));
+    params.q_rope_offset    = nullptr;
+    params.paged_kv         = paged_kv;
+    params.o                = reinterpret_cast<DTypeQO*>(o);
+    params.lse              = reinterpret_cast<float*>(lse);
+    params.maybe_alibi_slopes = nullptr;
+    params.padded_batch_size = static_cast<uint32_t>(batch_size);
+    params.num_qo_heads     = static_cast<uint32_t>(num_qo_heads);
+    params.q_stride_n       = static_cast<int32_t>(num_qo_heads) * HEAD_DIM;
+    params.q_stride_h       = HEAD_DIM;
+    params.window_left      = -1;
+    params.logits_soft_cap  = 0.0f;
+    params.sm_scale         = sm_scale;
+    params.rope_rcp_scale   = 1.0f;
+    params.rope_rcp_theta   = 1.0f / 10000.0f;
+    params.request_indices  = request_indices;
+    params.kv_tile_indices  = kv_tile_indices;
+    params.o_indptr         = o_indptr;
+    params.kv_chunk_size_ptr = kv_chunk_size_p;
+    params.block_valid_mask = nullptr;
+    params.partition_kv     = false;
+
+    using Variant = flashinfer::DefaultAttention<false, false, false, false>;
+    e = flashinfer::BatchDecodeWithPagedKVCacheDispatched<
+        HEAD_DIM, flashinfer::PosEncodingMode::kNone, Variant, Params>(
+            params, /*tmp_v=*/nullptr, /*tmp_s=*/nullptr, /*enable_pdl=*/false, s);
+    return translate(e);
+}
+
+template <typename DTypeQO, typename DTypeKV>
+int dispatch_head_dim_mixed(
+    int32_t batch_size, int32_t page_size, int32_t head_dim,
+    int32_t num_qo_heads, int32_t num_kv_heads, float sm_scale,
+    void* k_data, void* v_data, int32_t* indices, int32_t* indptr, int32_t* last_page_len,
+    const void* q, void* o, void* lse, int32_t* workspace_i32, void* stream)
+{
+    if (head_dim == 64) {
+        return run_paged_decode_mixed<DTypeQO, DTypeKV, 64>(
+            batch_size, page_size, num_qo_heads, num_kv_heads, sm_scale,
+            k_data, v_data, indices, indptr, last_page_len, q, o, lse, workspace_i32, stream);
+    } else if (head_dim == 128) {
+        return run_paged_decode_mixed<DTypeQO, DTypeKV, 128>(
+            batch_size, page_size, num_qo_heads, num_kv_heads, sm_scale,
+            k_data, v_data, indices, indptr, last_page_len, q, o, lse, workspace_i32, stream);
+    } else if (head_dim == 256) {
+        return run_paged_decode_mixed<DTypeQO, DTypeKV, 256>(
+            batch_size, page_size, num_qo_heads, num_kv_heads, sm_scale,
+            k_data, v_data, indices, indptr, last_page_len, q, o, lse, workspace_i32, stream);
+    }
+    return STATUS_UNSUPPORTED;
+}
+
 inline std::size_t compute_workspace_bytes(int32_t batch_size) {
     // request_indices[batch] + kv_tile_indices[batch] + o_indptr[batch+1]
     // + kv_chunk_size_ptr[1]
@@ -360,5 +446,35 @@ int baracuda_kernels_flashinfer_paged_decode_can_implement(
     if (!head_dim_supported(head_dim)) return STATUS_UNSUPPORTED;
     return STATUS_OK;
 }
+
+// --- FP8 KV-cache decode FFI (Phase 66 Tier 2). k_data/v_data hold fp8
+// (e4m3 or e5m2); q/o are f16 or bf16. Same arg layout + workspace as the
+// homogeneous decode runs. ---
+#define BARACUDA_FI_FP8_DECODE(NAME, DTYPE_QO, DTYPE_KV)                                       \
+    int NAME(int32_t batch_size, int32_t page_size, int32_t head_dim,                          \
+             int32_t num_qo_heads, int32_t num_kv_heads, float sm_scale,                       \
+             void* k_data, void* v_data, void* indices, void* indptr, void* last_page_len,     \
+             const void* q, void* o, void* lse,                                                \
+             void* workspace, std::size_t workspace_bytes, void* stream) {                     \
+        if (batch_size <= 0 || page_size <= 0 || num_qo_heads <= 0 || num_kv_heads <= 0)       \
+            return STATUS_INVALID_ARG;                                                         \
+        if (num_qo_heads % num_kv_heads != 0) return STATUS_INVALID_ARG;                       \
+        if (!head_dim_supported(head_dim)) return STATUS_UNSUPPORTED;                          \
+        if (!q || !o || !lse || !k_data || !v_data) return STATUS_INVALID_ARG;                 \
+        if (!indices || !indptr || !last_page_len || !workspace) return STATUS_INVALID_ARG;    \
+        if (workspace_bytes < compute_workspace_bytes(batch_size)) return STATUS_INVALID_ARG;  \
+        return dispatch_head_dim_mixed<DTYPE_QO, DTYPE_KV>(                                     \
+            batch_size, page_size, head_dim, num_qo_heads, num_kv_heads, sm_scale,             \
+            k_data, v_data, reinterpret_cast<int32_t*>(indices),                               \
+            reinterpret_cast<int32_t*>(indptr), reinterpret_cast<int32_t*>(last_page_len),     \
+            q, o, lse, reinterpret_cast<int32_t*>(workspace), stream);                         \
+    }
+
+BARACUDA_FI_FP8_DECODE(baracuda_kernels_flashinfer_paged_decode_f16_e4m3_run, __half, __nv_fp8_e4m3)
+BARACUDA_FI_FP8_DECODE(baracuda_kernels_flashinfer_paged_decode_f16_e5m2_run, __half, __nv_fp8_e5m2)
+BARACUDA_FI_FP8_DECODE(baracuda_kernels_flashinfer_paged_decode_bf16_e4m3_run, __nv_bfloat16, __nv_fp8_e4m3)
+BARACUDA_FI_FP8_DECODE(baracuda_kernels_flashinfer_paged_decode_bf16_e5m2_run, __nv_bfloat16, __nv_fp8_e5m2)
+
+#undef BARACUDA_FI_FP8_DECODE
 
 }  // extern "C"

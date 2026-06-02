@@ -283,4 +283,83 @@ int baracuda_kernels_flashinfer_top_k_top_p_sampling_f32_can_implement(
     return STATUS_OK;
 }
 
+// =====================================================================
+// Per-row parameter variants (Phase 66 Tier 2)
+// =====================================================================
+//
+// Identical to the scalar samplers above but the filter threshold is a
+// device array `[batch]` — one value per request. The vendored kernels
+// already support this (`top_k_arr == nullptr ? top_k_val : top_k_arr[bx]`);
+// these entry points just forward a non-null array pointer. The scalar
+// fallback value is passed too but ignored by the kernel when the array
+// is present.
+
+// (Standalone per-row Top-K is intentionally not exposed: FlashInfer types
+// its `top_k_arr` as `T*` (float) for the standalone sampler but as
+// `IdType*` (int32) for the combined Top-K+Top-P sampler. We expose only
+// the consistent int32 per-row Top-K via the combined `*_top_k_top_p_*_arr`
+// entry point below — set top_p = 1.0 per row for effectively Top-K-only.)
+
+int baracuda_kernels_flashinfer_top_p_sampling_f32_arr_run(
+    int32_t batch, int32_t vocab, const void* top_p_arr,
+    int32_t deterministic, uint64_t seed_val, uint64_t offset_val,
+    const void* probs, void* output, void* valid, void* stream)
+{
+    if (batch <= 0 || vocab <= 0) return STATUS_INVALID_ARG;
+    if (!probs || !output || !top_p_arr) return STATUS_INVALID_ARG;
+    cudaStream_t st = reinterpret_cast<cudaStream_t>(stream);
+    bool* success = nullptr; void* scratch = nullptr;
+    if (!acquire_success(valid, batch, st, &success, &scratch)) return STATUS_INVALID_ARG;
+    cudaError_t e = flashinfer::sampling::TopPSamplingFromProb<float, int32_t>(
+        reinterpret_cast<float*>(const_cast<void*>(probs)),
+        reinterpret_cast<int32_t*>(output), success, /*indices=*/nullptr,
+        reinterpret_cast<float*>(const_cast<void*>(top_p_arr)),
+        static_cast<uint32_t>(batch), /*top_p_val=*/0.0f, static_cast<uint32_t>(vocab),
+        deterministic != 0, /*seed_arr=*/nullptr, seed_val, /*offset_arr=*/nullptr, offset_val, st);
+    release_success(scratch, st);
+    return translate(e);
+}
+
+int baracuda_kernels_flashinfer_min_p_sampling_f32_arr_run(
+    int32_t batch, int32_t vocab, const void* min_p_arr,
+    int32_t deterministic, uint64_t seed_val, uint64_t offset_val,
+    const void* probs, void* output, void* valid, void* stream)
+{
+    if (batch <= 0 || vocab <= 0) return STATUS_INVALID_ARG;
+    if (!probs || !output || !min_p_arr) return STATUS_INVALID_ARG;
+    cudaStream_t st = reinterpret_cast<cudaStream_t>(stream);
+    bool* success = nullptr; void* scratch = nullptr;
+    if (!acquire_success(valid, batch, st, &success, &scratch)) return STATUS_INVALID_ARG;
+    cudaError_t e = flashinfer::sampling::MinPSamplingFromProb<float, int32_t>(
+        reinterpret_cast<float*>(const_cast<void*>(probs)),
+        reinterpret_cast<float*>(const_cast<void*>(min_p_arr)),
+        reinterpret_cast<int32_t*>(output), success, /*indices=*/nullptr,
+        static_cast<uint32_t>(batch), /*min_p_val=*/0.0f, static_cast<uint32_t>(vocab),
+        deterministic != 0, /*seed_arr=*/nullptr, seed_val, /*offset_arr=*/nullptr, offset_val, st);
+    release_success(scratch, st);
+    return translate(e);
+}
+
+int baracuda_kernels_flashinfer_top_k_top_p_sampling_f32_arr_run(
+    int32_t batch, int32_t vocab, const void* top_k_arr, const void* top_p_arr,
+    int32_t deterministic, uint64_t seed_val, uint64_t offset_val,
+    const void* probs, void* output, void* valid, void* stream)
+{
+    if (batch <= 0 || vocab <= 0) return STATUS_INVALID_ARG;
+    if (!probs || !output || !top_k_arr || !top_p_arr) return STATUS_INVALID_ARG;
+    cudaStream_t st = reinterpret_cast<cudaStream_t>(stream);
+    bool* success = nullptr; void* scratch = nullptr;
+    if (!acquire_success(valid, batch, st, &success, &scratch)) return STATUS_INVALID_ARG;
+    cudaError_t e = flashinfer::sampling::TopKTopPSamplingFromProb<float, int32_t>(
+        reinterpret_cast<float*>(const_cast<void*>(probs)),
+        reinterpret_cast<int32_t*>(const_cast<void*>(top_k_arr)),
+        reinterpret_cast<float*>(const_cast<void*>(top_p_arr)),
+        reinterpret_cast<int32_t*>(output), success, /*indices=*/nullptr,
+        static_cast<uint32_t>(batch), /*top_k_val=*/0, /*top_p_val=*/0.0f,
+        static_cast<uint32_t>(vocab), deterministic != 0,
+        /*seed_arr=*/nullptr, seed_val, /*offset_arr=*/nullptr, offset_val, st);
+    release_success(scratch, st);
+    return translate(e);
+}
+
 }  // extern "C"

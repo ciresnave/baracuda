@@ -20,9 +20,10 @@
 //!    with [`CascadeAttentionPlan`].
 
 pub use baracuda_kernels::{
-    BatchPagedDecodeArgs, BatchPagedDecodeDescriptor, BatchPagedDecodePlan, BatchPagedPrefillArgs,
-    BatchPagedPrefillDescriptor, BatchPagedPrefillPlan, CascadeAttentionArgs,
+    BatchPagedDecodeArgs, BatchPagedDecodeDescriptor, BatchPagedDecodeFp8Args,
+    BatchPagedDecodeFp8Descriptor, BatchPagedDecodeFp8Plan, BatchPagedDecodePlan,
+    BatchPagedPrefillArgs, BatchPagedPrefillDescriptor, BatchPagedPrefillPlan, CascadeAttentionArgs,
     CascadeAttentionDescriptor, CascadeAttentionPlan, CascadeMergeStatesArgs,
-    CascadeMergeStatesDescriptor, CascadeMergeStatesPlan, PagedKvAppendArgs,
+    CascadeMergeStatesDescriptor, CascadeMergeStatesPlan, Fp8KvDtype, PagedKvAppendArgs,
     PagedKvAppendDescriptor, PagedKvAppendPlan, PagedKvCacheDescriptor,
 };

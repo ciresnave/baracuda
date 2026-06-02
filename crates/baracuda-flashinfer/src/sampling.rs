@@ -30,14 +30,18 @@
 //! passes `None`, so `valid: None` is now safe (verified on an RTX 4070
 //! in `tests/sampling_smoke.rs`).
 //!
-//! # Not yet wired
+//! # Related plans
 //!
-//! Repetition- / frequency- / presence-penalty logit transforms and
-//! per-row sampler parameter arrays are FlashInfer features that require
-//! additional vendored sources; they are tracked as a follow-up tier.
-//! Apply penalties with baracuda's elementwise / scatter ops before
-//! normalizing to `probs` in the meantime.
+//! - [`PerRowSamplingPlan`] — per-request top-K/P/min-P thresholds
+//!   (device arrays) instead of batch-wide scalars.
+//! - [`SpeculativeSamplingPlan`] — speculative-decode accept/reject
+//!   verification.
+//! - [`TokenPenaltyPlan`] — repetition / frequency / presence penalty
+//!   logit transform (a native baracuda op; apply before softmax).
 
 pub use baracuda_kernels::{
-    SamplerKind, TopKTopPSamplingArgs, TopKTopPSamplingDescriptor, TopKTopPSamplingPlan,
+    PerRowSampler, PerRowSamplingArgs, PerRowSamplingDescriptor, PerRowSamplingPlan, SamplerKind,
+    SpeculativeSamplingArgs, SpeculativeSamplingDescriptor, SpeculativeSamplingPlan,
+    TokenPenaltyArgs, TokenPenaltyDescriptor, TokenPenaltyPlan, TopKTopPSamplingArgs,
+    TopKTopPSamplingDescriptor, TopKTopPSamplingPlan,
 };

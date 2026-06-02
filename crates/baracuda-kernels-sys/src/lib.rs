@@ -29548,6 +29548,83 @@ unsafe extern "C" {
     pub fn baracuda_kernels_flashinfer_top_k_top_p_sampling_f32_can_implement(
         batch: i32, vocab: i32, top_k_val: i32, top_p_val: f32,
     ) -> i32;
+
+    // Per-row sampler parameter arrays (Phase 66 Tier 2). The threshold
+    // is a device array `[batch]` instead of a scalar. (Standalone Top-K
+    // per-row is omitted — see the launcher comment; use top_k_top_p.)
+    pub fn baracuda_kernels_flashinfer_top_p_sampling_f32_arr_run(
+        batch: i32, vocab: i32, top_p_arr: *const c_void,
+        deterministic: i32, seed_val: u64, offset_val: u64,
+        probs: *const c_void, output: *mut c_void, valid: *mut c_void, stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_flashinfer_min_p_sampling_f32_arr_run(
+        batch: i32, vocab: i32, min_p_arr: *const c_void,
+        deterministic: i32, seed_val: u64, offset_val: u64,
+        probs: *const c_void, output: *mut c_void, valid: *mut c_void, stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_flashinfer_top_k_top_p_sampling_f32_arr_run(
+        batch: i32, vocab: i32, top_k_arr: *const c_void, top_p_arr: *const c_void,
+        deterministic: i32, seed_val: u64, offset_val: u64,
+        probs: *const c_void, output: *mut c_void, valid: *mut c_void, stream: *mut c_void,
+    ) -> i32;
+
+    // Speculative-decode verification (Phase 66 Tier 2).
+    pub fn baracuda_kernels_flashinfer_chain_speculative_sampling_f32_run(
+        batch: i32, num_speculative_tokens: i32, vocab: i32,
+        deterministic: i32, seed_val: u64, offset_val: u64,
+        draft_probs: *const c_void, draft_token_ids: *const c_void, target_probs: *const c_void,
+        output_token_ids: *mut c_void, output_accepted_token_num: *mut c_void,
+        output_emitted_draft_token_num: *mut c_void, stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_flashinfer_chain_speculative_sampling_f32_can_implement(
+        batch: i32, num_speculative_tokens: i32, vocab: i32,
+    ) -> i32;
+
+    // FP8 KV-cache decode (Phase 66 Tier 2). k_data/v_data are fp8
+    // (e4m3 / e5m2); q/o are f16 or bf16. Same arg layout as the
+    // homogeneous `paged_decode_*_run` symbols.
+    pub fn baracuda_kernels_flashinfer_paged_decode_f16_e4m3_run(
+        batch_size: i32, page_size: i32, head_dim: i32,
+        num_qo_heads: i32, num_kv_heads: i32, sm_scale: f32,
+        k_data: *mut c_void, v_data: *mut c_void,
+        indices: *mut c_void, indptr: *mut c_void, last_page_len: *mut c_void,
+        q: *const c_void, o: *mut c_void, lse: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_flashinfer_paged_decode_f16_e5m2_run(
+        batch_size: i32, page_size: i32, head_dim: i32,
+        num_qo_heads: i32, num_kv_heads: i32, sm_scale: f32,
+        k_data: *mut c_void, v_data: *mut c_void,
+        indices: *mut c_void, indptr: *mut c_void, last_page_len: *mut c_void,
+        q: *const c_void, o: *mut c_void, lse: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_flashinfer_paged_decode_bf16_e4m3_run(
+        batch_size: i32, page_size: i32, head_dim: i32,
+        num_qo_heads: i32, num_kv_heads: i32, sm_scale: f32,
+        k_data: *mut c_void, v_data: *mut c_void,
+        indices: *mut c_void, indptr: *mut c_void, last_page_len: *mut c_void,
+        q: *const c_void, o: *mut c_void, lse: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_flashinfer_paged_decode_bf16_e5m2_run(
+        batch_size: i32, page_size: i32, head_dim: i32,
+        num_qo_heads: i32, num_kv_heads: i32, sm_scale: f32,
+        k_data: *mut c_void, v_data: *mut c_void,
+        indices: *mut c_void, indptr: *mut c_void, last_page_len: *mut c_void,
+        q: *const c_void, o: *mut c_void, lse: *mut c_void,
+        workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+}
+
+// Bespoke token-penalty logit transform (Phase 66 Tier 2). NOT behind the
+// `flashinfer` feature — a native baracuda elementwise op.
+unsafe extern "C" {
+    pub fn baracuda_kernels_apply_token_penalty_f32_run(
+        batch: i32, vocab: i32, rep_penalty: f32, freq_penalty: f32, pres_penalty: f32,
+        logits: *mut c_void, counts: *const c_void, stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_apply_token_penalty_f32_can_implement(batch: i32, vocab: i32) -> i32;
 }
 
 // ============================================================================

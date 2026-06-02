@@ -442,6 +442,7 @@ fn main() {
             "kernels/attention/flashinfer_paged_kv_append_launcher.cu",
             "kernels/attention/flashinfer_cascade_launcher.cu",
             "kernels/sampling/flashinfer_sampling_launcher.cu",
+            "kernels/sampling/flashinfer_spec_sampling_launcher.cu",
         ] {
             if std::path::Path::new(f).exists() {
                 builder = builder.source_files([*f]);
@@ -1083,6 +1084,10 @@ fn collect_kernel_files() -> Vec<&'static str> {
             "random/random_bernoulli.cu",
             "random/random_dropout_fp.cu",
             "random/random_dropout_backward_fp.cu",
+            // Phase 66 Tier 2 — bespoke token-penalty logit transform
+            // (repetition / frequency / presence). Native baracuda op,
+            // not behind the `flashinfer` feature.
+            "sampling/token_penalty.cu",
             // Phase 6.1 — attention positional encodings (Category K).
             // RoPE (rotary) + ALiBi (linear biases). FW + BW × 4 FP
             // dtypes. ALiBi BW uses one-block-per-head warp-shuffle
