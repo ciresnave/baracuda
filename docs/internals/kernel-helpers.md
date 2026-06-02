@@ -77,6 +77,12 @@ These two seed the library. Phase 65b will be the first user of them
 | [`baracuda_atomic.cuh`](../../crates/baracuda-kernels-sys/kernels/include/baracuda_atomic.cuh) | (Pre-existing, Phase 11.3 — now indexed.) `baracuda::atomic::add<T>` — native `atomicAdd` for f32/f64/i32/i64/u32/u64; 32-bit `atomicCAS` loop for `__half` / `__nv_bfloat16`. Already consumed by `baracuda_indexing.cuh` + `baracuda_segment.cuh`. |
 | [`baracuda_block_atomic.cuh`](../../crates/baracuda-kernels-sys/kernels/include/baracuda_block_atomic.cuh) | Cross-block atomic-merge family. `#include`s + re-exports `baracuda_atomic.cuh`'s `add`, then adds `baracuda::atomic::max<T>` / `min<T>` (native `atomicMax`/`atomicMin` for int/uint/ll/ull, `atomicCAS`-bit-trick for f32/f64, 16-bit-in-32 CAS for half/bf16) and `mul<T>` (always CAS — no native atomic multiply; f32/f64/half/bf16 + int/uint/ll/ull). Validated add/max/min/mul × all 8 dtypes on RTX 4070 (sm_89); compiles clean on sm_80/sm_89/sm_90a. |
 
+### Phase 67d (branch `phase67d-smem-scan`, 2026-06-01)
+
+| File | What it provides |
+|---|---|
+| [`baracuda_smem_scan.cuh`](../../crates/baracuda-kernels-sys/kernels/include/baracuda_smem_scan.cuh) | `baracuda::scan::warp_scan_inclusive_{sum,max,min}_f32` + `warp_scan_inclusive_sum_f64` (Kogge-Stone `__shfl_up_sync`, 5 rounds) + `block_scan_inclusive_{sum,max,min}_f32(value, warp_buf)` + `block_scan_exclusive_sum_f32` + `block_scan_inclusive_sum_f64` / `block_scan_exclusive_sum_f64`. Cross-warp aggregation via a 32-slot SMEM scratch (`warp_buf`) — same buffer layout as `block_reduce_*` in `baracuda_smem_reduce.cuh`, so a kernel that both reduces and scans can share one scratch. One-value-per-thread O(log N) prefix scans for the scan-kernel family (cumsum/cumprod/cummax/cummin/logcumsumexp) + online-softmax running stats. **Limitations:** one value per thread, and `blockDim.x` must be a multiple of 32 (the per-warp total is read from lane 31, so a partial final warp leaves its slot unwritten). For multi-`ITEMS_PER_THREAD` block scans use `cub::BlockScan` directly (see sparsemax_fp.cu); for device-wide scans use `cub::DeviceScan`. Pure templates — nvcc sm_89 compile + functional `[1,1,…]→[1,2,3,…]` / inc-max / inc-min checks pass on RTX 4070. |
+
 ### Phase 67f (branch `phase67f-hmath`)
 
 | File | What it provides |
@@ -98,7 +104,7 @@ The prompts are self-contained — a new session can pick one up and run.
 | `baracuda_dtype_promote.cuh` | [`kernel-helper-dtype-promote.md`](../sessions/kernel-helper-dtype-promote.md) | ✅ done (Phase 67a) |
 | `baracuda_coord_unravel.cuh` | [`kernel-helper-coord-unravel.md`](../sessions/kernel-helper-coord-unravel.md) | ✅ done (Phase 67b) |
 | `baracuda_block_atomic.cuh` | [`kernel-helper-block-atomic.md`](../sessions/kernel-helper-block-atomic.md) | ✅ done (Phase 67c) |
-| `baracuda_smem_scan.cuh` | [`kernel-helper-smem-scan.md`](../sessions/kernel-helper-smem-scan.md) | planned |
+| `baracuda_smem_scan.cuh` | [`kernel-helper-smem-scan.md`](../sessions/kernel-helper-smem-scan.md) | ✅ done (Phase 67d) |
 | `baracuda_smem_tile.cuh` | [`kernel-helper-smem-tile.md`](../sessions/kernel-helper-smem-tile.md) | planned |
 | `baracuda_hmath.cuh` | [`kernel-helper-hmath.md`](../sessions/kernel-helper-hmath.md) | ✅ shipped (Phase 67f) |
 
