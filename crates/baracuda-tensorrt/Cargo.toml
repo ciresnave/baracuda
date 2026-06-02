@@ -11,9 +11,17 @@ homepage.workspace = true
 keywords.workspace = true
 categories = ["api-bindings"]
 
+[features]
+default = []
+# Build + link the C++ runtime shim (forwards to baracuda-tensorrt-sys/shim).
+# Required to actually run inference; needs the TensorRT SDK headers at build
+# time. See AUDIT.md.
+shim = ["baracuda-tensorrt-sys/shim"]
+
 [dependencies]
 baracuda-core.workspace = true
 baracuda-types.workspace = true
 baracuda-cuda-sys.workspace = true
+baracuda-driver.workspace = true
 baracuda-tensorrt-sys.workspace = true
 thiserror.workspace = true

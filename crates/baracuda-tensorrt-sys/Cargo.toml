@@ -1,7 +1,7 @@
 [package]
 name = "baracuda-tensorrt-sys"
 version = "0.0.1-alpha.63"
-description = "Raw FFI bindings and dynamic loader for NVIDIA TensorRT (C API)."
+description = "Raw FFI bindings + dynamic loader for NVIDIA TensorRT, plus an optional C++ shim exposing a flat C ABI over TensorRT's C++-only runtime."
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
@@ -10,10 +10,21 @@ repository.workspace = true
 homepage.workspace = true
 keywords.workspace = true
 categories = ["external-ffi-bindings"]
+# Reserves the native-lib name for the optional C++ shim archive (cc-built in
+# build.rs when the `shim` feature is on). Harmless when the feature is off.
+links = "baracuda_trt_shim"
+build = "build.rs"
 
 [features]
 default = []
 bindgen = ["baracuda-build/bindgen"]
+# Compile + statically link the C++ shim (`shim/trt_shim.cpp`) that forwards a
+# flat `trt*` C ABI to TensorRT's C++ vtable API. Requires the TensorRT SDK
+# headers at build time (point `TENSORRT_INCLUDE_DIR` or `TENSORRT_PATH` at
+# them; the CUDA headers they include are found via `CUDA_PATH`). libnvinfer
+# itself is still loaded dynamically at runtime — the shim does pure vtable
+# dispatch on pointers handed in from Rust, so it links no import library.
+shim = []
 
 [dependencies]
 baracuda-core.workspace = true
@@ -23,3 +34,4 @@ libloading.workspace = true
 
 [build-dependencies]
 baracuda-build.workspace = true
+cc.workspace = true

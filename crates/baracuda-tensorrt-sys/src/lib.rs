@@ -133,71 +133,245 @@ pub type PFN_getInferLibVersion = unsafe extern "C" fn() -> i32;
 pub type trtLogCallback =
     unsafe extern "C" fn(severity: trtSeverity_t, msg: *const c_char, user: *mut c_void);
 
+/// `createInferRuntime_INTERNAL(void* logger, int32_t version)` — the real
+/// `extern "C"` factory exported by `libnvinfer`. The `version` argument must
+/// equal the runtime's own version (the inline C++ wrapper passes
+/// `NV_TENSORRT_VERSION`); pass [`PFN_getInferLibVersion`]'s result, which is
+/// that value for the loaded library.
 pub type PFN_createInferRuntime =
-    unsafe extern "C" fn(logger: trtILogger_t) -> trtIRuntime_t;
-pub type PFN_destroyInferRuntime = unsafe extern "C" fn(runtime: trtIRuntime_t);
+    unsafe extern "C" fn(logger: trtILogger_t, version: c_int) -> trtIRuntime_t;
 
-pub type PFN_deserializeCudaEngine = unsafe extern "C" fn(
-    runtime: trtIRuntime_t,
-    blob: *const c_void,
-    size: usize,
-) -> trtICudaEngine_t;
-pub type PFN_destroyCudaEngine = unsafe extern "C" fn(engine: trtICudaEngine_t);
+// ---- shim-backed runtime operations --------------------------------------
+//
+// TensorRT exposes no flat C ABI for the runtime methods (deserialize, the
+// engine/context getters, tensor binding, enqueueV3, …). `libnvinfer` only
+// exports `getInferLibVersion` + `createInferRuntime_INTERNAL` as `extern "C"`.
+//
+// With the `shim` feature, `shim/trt_shim.cpp` is compiled and statically
+// linked, defining the `trt*` symbols below as `extern "C"` forwarders over
+// TensorRT's C++ vtable API (verified against the TRT 10.7 headers). The shim
+// references no libnvinfer symbol — it does pure vtable dispatch on the opaque
+// pointers handed in from Rust, so libnvinfer stays dynamically loaded at
+// runtime via the loader above.
+//
+// Without the feature (default), the stubs return null/false/0 so the safe
+// crate degrades gracefully and the workspace builds with no TensorRT SDK.
 
-pub type PFN_engineGetNbIOTensors =
-    unsafe extern "C" fn(engine: trtICudaEngine_t) -> i32;
-pub type PFN_engineGetIOTensorName =
-    unsafe extern "C" fn(engine: trtICudaEngine_t, index: i32) -> *const c_char;
-pub type PFN_engineGetTensorIOMode = unsafe extern "C" fn(
-    engine: trtICudaEngine_t,
-    name: *const c_char,
-) -> trtTensorIOMode_t;
-pub type PFN_engineGetTensorDataType = unsafe extern "C" fn(
-    engine: trtICudaEngine_t,
-    name: *const c_char,
-) -> trtDataType_t;
-pub type PFN_engineGetTensorShape =
-    unsafe extern "C" fn(engine: trtICudaEngine_t, name: *const c_char) -> trtDims_t;
-pub type PFN_engineGetTensorBytesPerComponent =
-    unsafe extern "C" fn(engine: trtICudaEngine_t, name: *const c_char) -> i32;
-pub type PFN_engineCreateExecutionContext =
-    unsafe extern "C" fn(engine: trtICudaEngine_t) -> trtIExecutionContext_t;
-pub type PFN_engineCreateExecutionContextWithStrategy = unsafe extern "C" fn(
-    engine: trtICudaEngine_t,
-    strategy: trtExecutionContextAllocationStrategy_t,
-) -> trtIExecutionContext_t;
-pub type PFN_destroyExecutionContext = unsafe extern "C" fn(ctx: trtIExecutionContext_t);
+/// `true` when the C++ shim (the `shim` feature) was compiled in. The safe
+/// crate consults this to return a clear error instead of a null-handle when
+/// the runtime path is exercised on a shim-less build.
+pub const SHIM_BUILT: bool = cfg!(feature = "shim");
 
-pub type PFN_contextSetInputShape = unsafe extern "C" fn(
-    ctx: trtIExecutionContext_t,
-    name: *const c_char,
-    dims: *const trtDims_t,
-) -> bool;
-pub type PFN_contextGetTensorShape = unsafe extern "C" fn(
-    ctx: trtIExecutionContext_t,
-    name: *const c_char,
-) -> trtDims_t;
-pub type PFN_contextSetTensorAddress = unsafe extern "C" fn(
-    ctx: trtIExecutionContext_t,
-    name: *const c_char,
-    data: *mut c_void,
-) -> bool;
-pub type PFN_contextGetTensorAddress = unsafe extern "C" fn(
-    ctx: trtIExecutionContext_t,
-    name: *const c_char,
-) -> *mut c_void;
-pub type PFN_contextEnqueueV3 =
-    unsafe extern "C" fn(ctx: trtIExecutionContext_t, stream: cudaStream_t) -> bool;
+#[cfg(feature = "shim")]
+extern "C" {
+    pub fn trtRuntimeDeserializeCudaEngine(
+        runtime: trtIRuntime_t,
+        blob: *const c_void,
+        size: usize,
+    ) -> trtICudaEngine_t;
+    pub fn trtRuntimeDestroy(runtime: trtIRuntime_t);
 
-pub type PFN_engineGetName =
-    unsafe extern "C" fn(engine: trtICudaEngine_t) -> *const c_char;
-pub type PFN_engineGetNbOptimizationProfiles =
-    unsafe extern "C" fn(engine: trtICudaEngine_t) -> i32;
+    pub fn trtCudaEngineDestroy(engine: trtICudaEngine_t);
+    pub fn trtCudaEngineGetNbIOTensors(engine: trtICudaEngine_t) -> i32;
+    pub fn trtCudaEngineGetIOTensorName(engine: trtICudaEngine_t, index: i32) -> *const c_char;
+    pub fn trtCudaEngineGetTensorIOMode(
+        engine: trtICudaEngine_t,
+        name: *const c_char,
+    ) -> trtTensorIOMode_t;
+    pub fn trtCudaEngineGetTensorDataType(
+        engine: trtICudaEngine_t,
+        name: *const c_char,
+    ) -> trtDataType_t;
+    pub fn trtCudaEngineGetTensorShape(
+        engine: trtICudaEngine_t,
+        name: *const c_char,
+    ) -> trtDims_t;
+    pub fn trtCudaEngineGetTensorBytesPerComponent(
+        engine: trtICudaEngine_t,
+        name: *const c_char,
+    ) -> i32;
+    pub fn trtCudaEngineCreateExecutionContext(
+        engine: trtICudaEngine_t,
+    ) -> trtIExecutionContext_t;
+    pub fn trtCudaEngineCreateExecutionContextWithStrategy(
+        engine: trtICudaEngine_t,
+        strategy: i32,
+    ) -> trtIExecutionContext_t;
+    pub fn trtCudaEngineGetName(engine: trtICudaEngine_t) -> *const c_char;
+    pub fn trtCudaEngineGetNbOptimizationProfiles(engine: trtICudaEngine_t) -> i32;
+    pub fn trtCudaEngineSerialize(engine: trtICudaEngine_t) -> trtIHostMemory_t;
 
-pub type PFN_engineSerialize = unsafe extern "C" fn(engine: trtICudaEngine_t) -> trtIHostMemory_t;
-pub type PFN_hostMemoryData = unsafe extern "C" fn(mem: trtIHostMemory_t) -> *mut c_void;
-pub type PFN_hostMemorySize = unsafe extern "C" fn(mem: trtIHostMemory_t) -> usize;
-pub type PFN_hostMemoryDestroy = unsafe extern "C" fn(mem: trtIHostMemory_t);
+    pub fn trtExecutionContextDestroy(ctx: trtIExecutionContext_t);
+    pub fn trtExecutionContextSetInputShape(
+        ctx: trtIExecutionContext_t,
+        name: *const c_char,
+        dims: *const trtDims_t,
+    ) -> bool;
+    pub fn trtExecutionContextGetTensorShape(
+        ctx: trtIExecutionContext_t,
+        name: *const c_char,
+    ) -> trtDims_t;
+    pub fn trtExecutionContextSetTensorAddress(
+        ctx: trtIExecutionContext_t,
+        name: *const c_char,
+        data: *mut c_void,
+    ) -> bool;
+    pub fn trtExecutionContextGetTensorAddress(
+        ctx: trtIExecutionContext_t,
+        name: *const c_char,
+    ) -> *mut c_void;
+    pub fn trtExecutionContextEnqueueV3(ctx: trtIExecutionContext_t, stream: cudaStream_t) -> bool;
+
+    pub fn trtHostMemoryData(mem: trtIHostMemory_t) -> *mut c_void;
+    pub fn trtHostMemorySize(mem: trtIHostMemory_t) -> usize;
+    pub fn trtHostMemoryDestroy(mem: trtIHostMemory_t);
+}
+
+/// Feature-off stubs: no shim was compiled, so the runtime operations are
+/// unavailable. They return null/false/0 (never call into anything) so the
+/// safe crate maps the result to a clear "shim not built" error.
+#[cfg(not(feature = "shim"))]
+mod shim_stubs {
+    use super::*;
+
+    #[inline]
+    pub unsafe fn trtRuntimeDeserializeCudaEngine(
+        _runtime: trtIRuntime_t,
+        _blob: *const c_void,
+        _size: usize,
+    ) -> trtICudaEngine_t {
+        core::ptr::null_mut()
+    }
+    #[inline]
+    pub unsafe fn trtRuntimeDestroy(_runtime: trtIRuntime_t) {}
+
+    #[inline]
+    pub unsafe fn trtCudaEngineDestroy(_engine: trtICudaEngine_t) {}
+    #[inline]
+    pub unsafe fn trtCudaEngineGetNbIOTensors(_engine: trtICudaEngine_t) -> i32 {
+        0
+    }
+    #[inline]
+    pub unsafe fn trtCudaEngineGetIOTensorName(
+        _engine: trtICudaEngine_t,
+        _index: i32,
+    ) -> *const c_char {
+        core::ptr::null()
+    }
+    #[inline]
+    pub unsafe fn trtCudaEngineGetTensorIOMode(
+        _engine: trtICudaEngine_t,
+        _name: *const c_char,
+    ) -> trtTensorIOMode_t {
+        trtTensorIOMode_t::None
+    }
+    #[inline]
+    pub unsafe fn trtCudaEngineGetTensorDataType(
+        _engine: trtICudaEngine_t,
+        _name: *const c_char,
+    ) -> trtDataType_t {
+        trtDataType_t::Float
+    }
+    #[inline]
+    pub unsafe fn trtCudaEngineGetTensorShape(
+        _engine: trtICudaEngine_t,
+        _name: *const c_char,
+    ) -> trtDims_t {
+        trtDims_t {
+            nb_dims: -1,
+            d: [0; TRT_MAX_DIMS],
+        }
+    }
+    #[inline]
+    pub unsafe fn trtCudaEngineGetTensorBytesPerComponent(
+        _engine: trtICudaEngine_t,
+        _name: *const c_char,
+    ) -> i32 {
+        0
+    }
+    #[inline]
+    pub unsafe fn trtCudaEngineCreateExecutionContext(
+        _engine: trtICudaEngine_t,
+    ) -> trtIExecutionContext_t {
+        core::ptr::null_mut()
+    }
+    #[inline]
+    pub unsafe fn trtCudaEngineCreateExecutionContextWithStrategy(
+        _engine: trtICudaEngine_t,
+        _strategy: i32,
+    ) -> trtIExecutionContext_t {
+        core::ptr::null_mut()
+    }
+    #[inline]
+    pub unsafe fn trtCudaEngineGetName(_engine: trtICudaEngine_t) -> *const c_char {
+        core::ptr::null()
+    }
+    #[inline]
+    pub unsafe fn trtCudaEngineGetNbOptimizationProfiles(_engine: trtICudaEngine_t) -> i32 {
+        0
+    }
+    #[inline]
+    pub unsafe fn trtCudaEngineSerialize(_engine: trtICudaEngine_t) -> trtIHostMemory_t {
+        core::ptr::null_mut()
+    }
+
+    #[inline]
+    pub unsafe fn trtExecutionContextDestroy(_ctx: trtIExecutionContext_t) {}
+    #[inline]
+    pub unsafe fn trtExecutionContextSetInputShape(
+        _ctx: trtIExecutionContext_t,
+        _name: *const c_char,
+        _dims: *const trtDims_t,
+    ) -> bool {
+        false
+    }
+    #[inline]
+    pub unsafe fn trtExecutionContextGetTensorShape(
+        _ctx: trtIExecutionContext_t,
+        _name: *const c_char,
+    ) -> trtDims_t {
+        trtDims_t {
+            nb_dims: -1,
+            d: [0; TRT_MAX_DIMS],
+        }
+    }
+    #[inline]
+    pub unsafe fn trtExecutionContextSetTensorAddress(
+        _ctx: trtIExecutionContext_t,
+        _name: *const c_char,
+        _data: *mut c_void,
+    ) -> bool {
+        false
+    }
+    #[inline]
+    pub unsafe fn trtExecutionContextGetTensorAddress(
+        _ctx: trtIExecutionContext_t,
+        _name: *const c_char,
+    ) -> *mut c_void {
+        core::ptr::null_mut()
+    }
+    #[inline]
+    pub unsafe fn trtExecutionContextEnqueueV3(
+        _ctx: trtIExecutionContext_t,
+        _stream: cudaStream_t,
+    ) -> bool {
+        false
+    }
+
+    #[inline]
+    pub unsafe fn trtHostMemoryData(_mem: trtIHostMemory_t) -> *mut c_void {
+        core::ptr::null_mut()
+    }
+    #[inline]
+    pub unsafe fn trtHostMemorySize(_mem: trtIHostMemory_t) -> usize {
+        0
+    }
+    #[inline]
+    pub unsafe fn trtHostMemoryDestroy(_mem: trtIHostMemory_t) {}
+}
+
+#[cfg(not(feature = "shim"))]
+pub use shim_stubs::*;
 
 // ---- loader --------------------------------------------------------------
 
@@ -235,35 +409,13 @@ macro_rules! trt_fns {
 }
 
 trt_fns! {
-    // The symbol names below mirror the C API exported by TensorRT 10
-    // (`NvInferRuntimeCAPI.h`). Symbol-name mismatches against older TRT
-    // versions fall back to `LoaderError::SymbolUnavailable`, which the safe
-    // crate maps to `Error::FeatureNotSupported`.
+    // Only these two are real `extern "C"` exports of `libnvinfer`. Everything
+    // else on the runtime path is a C++ vtable method with no flat symbol — it
+    // is reached through the `shim` functions above, not the dynamic loader.
+    // `createInferRuntime_INTERNAL` takes `(logger, version)`; pass
+    // `get_infer_lib_version()` as the version.
     get_infer_lib_version as "getInferLibVersion": PFN_getInferLibVersion;
     create_infer_runtime as "createInferRuntime_INTERNAL": PFN_createInferRuntime;
-    destroy_infer_runtime as "destroyInferRuntime": PFN_destroyInferRuntime;
-    deserialize_cuda_engine as "trtRuntimeDeserializeCudaEngine": PFN_deserializeCudaEngine;
-    destroy_cuda_engine as "trtCudaEngineDestroy": PFN_destroyCudaEngine;
-    engine_get_nb_io_tensors as "trtCudaEngineGetNbIOTensors": PFN_engineGetNbIOTensors;
-    engine_get_io_tensor_name as "trtCudaEngineGetIOTensorName": PFN_engineGetIOTensorName;
-    engine_get_tensor_io_mode as "trtCudaEngineGetTensorIOMode": PFN_engineGetTensorIOMode;
-    engine_get_tensor_data_type as "trtCudaEngineGetTensorDataType": PFN_engineGetTensorDataType;
-    engine_get_tensor_shape as "trtCudaEngineGetTensorShape": PFN_engineGetTensorShape;
-    engine_get_tensor_bytes_per_component as "trtCudaEngineGetTensorBytesPerComponent": PFN_engineGetTensorBytesPerComponent;
-    engine_create_execution_context as "trtCudaEngineCreateExecutionContext": PFN_engineCreateExecutionContext;
-    engine_create_execution_context_with_strategy as "trtCudaEngineCreateExecutionContextWithStrategy": PFN_engineCreateExecutionContextWithStrategy;
-    destroy_execution_context as "trtExecutionContextDestroy": PFN_destroyExecutionContext;
-    context_set_input_shape as "trtExecutionContextSetInputShape": PFN_contextSetInputShape;
-    context_get_tensor_shape as "trtExecutionContextGetTensorShape": PFN_contextGetTensorShape;
-    context_set_tensor_address as "trtExecutionContextSetTensorAddress": PFN_contextSetTensorAddress;
-    context_get_tensor_address as "trtExecutionContextGetTensorAddress": PFN_contextGetTensorAddress;
-    context_enqueue_v3 as "trtExecutionContextEnqueueV3": PFN_contextEnqueueV3;
-    engine_get_name as "trtCudaEngineGetName": PFN_engineGetName;
-    engine_get_nb_optimization_profiles as "trtCudaEngineGetNbOptimizationProfiles": PFN_engineGetNbOptimizationProfiles;
-    engine_serialize as "trtCudaEngineSerialize": PFN_engineSerialize;
-    host_memory_data as "trtHostMemoryData": PFN_hostMemoryData;
-    host_memory_size as "trtHostMemorySize": PFN_hostMemorySize;
-    host_memory_destroy as "trtHostMemoryDestroy": PFN_hostMemoryDestroy;
 }
 
 pub fn tensorrt() -> Result<&'static TensorRt, LoaderError> {
