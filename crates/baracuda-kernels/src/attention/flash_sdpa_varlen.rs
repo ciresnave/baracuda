@@ -774,7 +774,12 @@ fn alibi_dispatch(
     }
 }
 
+// Fallback shape-matched stub for the `fa2`-OFF path. The varlen plan's
+// `run()` returns `Error::Unsupported` without ever calling this when
+// `fa2` is OFF, so the function is dead in that build; we keep it so the
+// call-site type-checks under both feature configurations.
 #[cfg(not(feature = "fa2"))]
+#[allow(dead_code)]
 fn alibi_dispatch(
     _desc: &FlashSdpaVarlenDescriptor,
     _slopes: &Option<TensorRef<'_, f32, 2>>,

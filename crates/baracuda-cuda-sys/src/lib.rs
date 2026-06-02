@@ -1,6 +1,8 @@
-//! Raw FFI + dynamic loader for the CUDA Driver API (and, in later sprint
-//! days, the Runtime API). Consumed by the safe wrappers in
-//! `baracuda-driver` / `baracuda-runtime`.
+//! Raw FFI + dynamic loader for the CUDA Driver + Runtime APIs.
+//! Consumed by the safe wrappers in `baracuda-driver` /
+//! `baracuda-runtime`. Use those crates directly unless you need a
+//! function that the safe layer hasn't wrapped yet (in which case
+//! please file a bug).
 //!
 //! # Layout
 //!

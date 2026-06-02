@@ -1,4 +1,10 @@
 //! Raw FFI + dynamic loader for NVIDIA nvJPEG (GPU JPEG decode/encode).
+//!
+//! `baracuda-nvjpeg` wraps this with a safe, typed API. Use this crate
+//! directly only if you need a function that the safe layer hasn't
+//! wrapped yet (in which case please file a bug). Note that
+//! [`baracuda-nvimagecodec`] is the modern (Phase 70) replacement and
+//! covers JPEG / PNG / TIFF; nvJPEG is kept for back-compat.
 
 #![allow(non_camel_case_types, non_snake_case, non_upper_case_globals)]
 #![warn(missing_debug_implementations)]

@@ -17,6 +17,9 @@
 //! Use 2% relative + a small absolute floor — matches the MoE WMMA mix
 //! that Phase 15.3 tuned tolerances for.
 
+// Test names use the upstream llama.cpp K-block notation (Q4_K etc.).
+#![allow(non_snake_case)]
+
 use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
 use baracuda_kernels::{
     contiguous_stride, BlockQ4K, BlockQ8K, BlockQ8_0, GgufBlockFormat, GgufMmvqArgs,

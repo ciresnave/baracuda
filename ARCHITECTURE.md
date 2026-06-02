@@ -432,22 +432,47 @@ When we vendor, the convention is:
   the upstream commit hash and any patches live in a per-crate
   `NOTICE` file.
 
-Currently vendored kernels: HuggingFace candle's CUDA elementwise set
-via fuel-cuda-kernels (cast / fill / affine); llama.cpp's
-`ggml-cuda` GGUF block-format dequantization and MMVQ kernels (Q4_0
-through Q8_K plus the k-quants); `guoqingbao/attention.rs`'s fused
-MoE expert kernels (FP WMMA, scalar GGUF, combined WMMA+GGUF).
+Currently vendored kernels (Phase 8 → 70 vendoring track):
+
+- **HuggingFace candle** CUDA elementwise set (cast / fill / affine).
+- **llama.cpp `ggml-cuda`** GGUF block-format dequantization and
+  MMVQ kernels (Q4_0 through Q8_K plus the k-quants; Phase 8 → 34).
+- **`guoqingbao/attention.rs`** fused MoE expert kernels (FP WMMA,
+  scalar GGUF, combined WMMA+GGUF; Phase 8.5).
+- **Dao-AILab FlashAttention v2** (BSD-3) — Tier-1 vendor at
+  `vendor/flash-attention/` (Phase 42; Phase 59 BW, varlen,
+  sliding, softcap, ALiBi; Phase 60 head_dim expansion).
+- **DeepSeek-AI mHC.cu** (MIT) — HyperConnection plan
+  (`vendor/mhc/`; Phase 43).
+- **ozIMMU clean-fork** (MIT) — Ozaki-scheme DGEMM
+  (`crates/baracuda-ozimmu-sys/cuda/`; Phase 44 + 44b Windows port).
+- **FlashInfer** (Apache-2.0) — paged-KV decode/prefill, cascade,
+  sampling (Phase 46 + Phase 66 Tier-2 closure).
+- **IST-DASLab Marlin** + **mit-han-lab llm-awq** (Phase 48) —
+  W4A16 GEMM for symmetric (Marlin) + asymmetric (AWQ) int4 weight
+  formats.
+- **NVIDIA Apex** (BSD-3) — multi-tensor optimizer kernels
+  (`baracuda-optim`; Phase 49).
+- **Dao-AILab Mamba-2 + causal-conv1d** (Phase 50) — SSD chunk
+  scan and causal 1d convolution.
+- **bitsandbytes NF4** (MIT) — 4-bit non-uniform quantile QLoRA
+  inference (Phase 53).
+- **xFormers algorithmic reference** (BSD-3, clean-room hand-port)
+  for block-sparse SDPA + 2:4 structured sparsity GEMM (Phase 54).
+- **NVIDIA TransformerEngine** (Apache-2.0) — FP8 cast / dequant +
+  delayed-scaling recipe (`baracuda-transformer-engine`; Phase 55).
+- **Ring Attention** (Apache-2.0 reference) — sequence-parallel
+  attention atop NCCL (Phase 56).
 
 ## Phase roadmap
 
-The original comprehensive plan is in
-`~/.claude/plans/baracuda-kernels-comprehensive.md` and
-`baracuda-kernels-design-notes.md`. The numbered phases through 10
-followed that plan; from Phase 11 onward the work has been
-**downstream-driven** — Fuel team integration feedback and follow-on
-asks have set the agenda, so the phase numbering no longer maps to
-the original Hopper / 1.0-freeze roadmap. Outstanding deferrals from
-all phases are tracked in [`ROADMAP.md`](ROADMAP.md).
+The numbered phases through 10 followed an internal comprehensive
+plan. From Phase 11 onward the work has been **downstream-driven** —
+Fuel team integration feedback and follow-on asks set the agenda, so
+the phase numbering no longer maps to the original Hopper / 1.0-freeze
+roadmap. Each completed phase has a one-line entry in
+[`CHANGELOG.md`](CHANGELOG.md); per-phase scopes and remaining work
+are tracked in [`ROADMAP.md`](ROADMAP.md).
 
 ### Phases 0-10 — planned roadmap (complete)
 
@@ -526,13 +551,110 @@ downstream-driven work.
   Plan-layer dispatch routes canonical-contig inputs to the existing
   fast path; non-canonical inputs route to the new strided FFI.
 
+### Phases 15-29 — Fuel-driven completion of the planned matrix
+
+This band closed every remaining deferral from Phases 3-10 and added
+the 1.0-freeze prerequisites surfaced during Phase 19.
+
+- **Phase 15 (alpha.32)** — MMVQ alignment guard; OneHot / Nonzero
+  i64 wrappers; MoE fixture race fix.
+- **Phase 16 (alpha.33)** — Pool completion: bit-exact
+  AdaptiveAvgPool/MaxPool {1,2,3}d (replaces cuDNN approximation),
+  LpPool {1,2}d, FractionalMaxPool {2,3}d. 48 new FFI symbols.
+- **Phase 17 (alpha.34)** — Flash SDPA sm_89 strided FW sibling +
+  SDPA BW + GQA broadcast (template-bool `if constexpr` dispatch to
+  `atomic::add<T>` for dK/dV). Caller-zero contract for dK/dV under
+  broadcast.
+- **Phase 18 (alpha.35)** — f16 / bf16 activations for GgufMmvqPlan
+  across all 11 block formats × contig + strided = 44 new FFI symbols.
+- **Phase 19 (alpha.36)** — Fuel retirement asks: non-adaptive pool
+  FFI surface (48 symbols), Conv / ConvTranspose FFI (72), Upsample
+  Nearest2d + Bilinear2d (12), im2col / col2im (12). 140 new FFI
+  symbols. **Surfaced design correction**: all library-backed Rust
+  plans need `baracuda-kernels-sys` FFI wrappers — 1.0-freeze prereq.
+- **Phase 20 (alpha.37)** — MoE batched MMVQ × N-experts kernel
+  family (36 new FFI symbols).
+- **Phase 21 (alpha.38)** — Bilinear interpolate expansion
+  (align_corners + scale_h/w_factor) + f16 / bf16 fanout.
+- **Phase 22 (alpha.39)** — MMVQ ncols≥64 debug-build assertion +
+  cuSOLVER FFI facade (10 plan families, ~50 C symbols).
+- **Phase 23 (alpha.40)** — cuFFT + cuRAND FFI facade (32 C symbols).
+- **Phase 24 (alpha.41)** — CUTLASS GEMM re-export FFI facade
+  (210 thin trampolines). **Completes the Phase 19 1.0-freeze
+  prereq** — every library-backed Rust plan now has a
+  `baracuda-kernels-sys` FFI symbol.
+- **Phase 25-26 (alpha.42)** — Segment + EmbeddingBag BW completion
+  (9 new plans + 24 FFI symbols); BatchedOrmqrWy complex variants
+  via bespoke WY-block kernels + cuBLAS C/Z gemmStridedBatched.
+- **Phase 27** — Q8_1 MMVQ perf inspection (doc-only). Established
+  the multi-M MMVQ port as the material opportunity for prefill
+  (closed in Phase 33+34).
+- **Phase 28 (alpha.43)** — API hygiene for 1.0 prep: NEW
+  `KernelDtype` umbrella sealed trait; `#[non_exhaustive]` on 28
+  enums.
+- **Phase 29 (alpha.44)** — Cross-implementation bench suite vs
+  cuBLAS / cuDNN. Established the f16/bf16 GEMM decode-regime gap
+  closed by Phase 30.
+
+### Phases 30-58 — vendor track + perf closure + training adjacency
+
+The recent band added third-party vendoring (FA2, mHC, ozIMMU,
+FlashInfer, Mamba, Marlin, AWQ, NF4, xFormers, TransformerEngine,
+Ring Attention, Megatron-TP) alongside continued op-matrix backfill
+and bench-driven perf wins. Highlights:
+
+- **Phase 30 (alpha.45)** — `GemmPlan` cuBLAS-backed dispatch;
+  3× speedup at M=32 f16 decode batch.
+- **Phase 33-34 (alpha.48-49)** — Multi-M MMVQ for all 10 GGUF
+  block formats. Q5_0 peaks at 17.32× at M=8 (target was 3-7×).
+- **Phase 42 (alpha.56)** — Tri Dao FlashAttention v2 Tier-1
+  vendor (head_dim=128, fp16+bf16, FW).
+- **Phase 43-44 (alpha.56)** — mHC.cu + ozIMMU vendors.
+- **Phase 46 (alpha.51)** — FlashInfer Tier-1 (paged decode,
+  cascade, sampling).
+- **Phase 48 (alpha.53)** — Marlin + AWQ W4A16 GEMM.
+- **Phase 49-50 (alpha.54-55)** — Apex multi-tensor optimizers +
+  Mamba-2 SSD.
+- **Phase 53-55 (alpha.55-58)** — bitsandbytes NF4, xFormers
+  sparse, TransformerEngine FP8.
+- **Phase 56-57 (alpha.58)** — Ring Attention + Megatron-LM TP.
+- **Phase 59 (alpha.59)** — FA2 BW + varlen.
+- **Phase 60 (alpha.60)** — FA2 head_dim {160, 224, 512} expansion.
+- **Phase 61-62 (alpha.61-62)** — Same-pointer in-place op
+  family completion (contig + strided contracts).
+- **Phase 63 (alpha.63)** — FA2 saved-tensor wiring for downstream
+  autograd.
+
+### Phases 64-71 — released-with the next alpha
+
+Currently accumulating into the next published alpha (no version
+bump yet — see `CHANGELOG.md`).
+
+- **Phase 64** — Extended in-place aliasing docs for Cast / Where /
+  Triu / Tril / Activation BW / Fill (safe); Flip / Roll / Permute /
+  RoPE explicitly marked NOT safe.
+- **Phase 65a-d** — SMEM helper headers + SMEM-staged
+  RMSNorm / LayerNorm / Softmax / LogSoftmax (in-place safe for
+  f32/f16/bf16); BN / GN / IN proven in-place safe by construction
+  (f64 covered too). 24 in-place proof tests.
+- **Phase 66** — FlashInfer Tier-2 closure (paged prefill,
+  spec-decode, FP8 KV, ragged prefill).
+- **Phase 67a-f** — Reusable kernel-helper headers
+  (`baracuda_smem_*`, fp_bits, cp_async).
+- **Phase 68** — TensorRT vtable-dispatch C++ shim (`shim` feature).
+- **Phase 69** — NVSHMEM host-side wrapper pair.
+- **Phase 70** — nvImageCodec sys + safe wrapper (supersedes nvJPEG).
+- **Phase 71** — RAPIDS cuVS GPU vector-search pair.
+
 ### Outstanding work
 
-Outstanding items (deferrals from Phases 5-14, plus the original
-"Phase 11 = Hopper" and "Phase 12 = 1.0 freeze" roadmap items) are
-tracked in [`ROADMAP.md`](ROADMAP.md). The order in which we tackle
-them is driven by Fuel's near-term integration needs in tension with
-the long-arc 1.0 freeze target.
+Outstanding items are tracked in [`ROADMAP.md`](ROADMAP.md). The
+order in which we tackle them is driven by Fuel's near-term
+integration needs in tension with the long-arc 1.0-freeze target.
+The original "Phase 11 = Hopper sm_90a" and "Phase 12 = 1.0 freeze"
+items remain valid targets but are sequenced behind ongoing
+downstream-driven work.
 
-The current tag is **v0.0.1-alpha.31** with **1890 GPU tests
-passing** on RTX 4070 across **602 binary targets**.
+The current published tag is **v0.0.1-alpha.63**. Phases 64-71 are
+queued for the next alpha; consult `CHANGELOG.md` for the
+release-by-release detail.

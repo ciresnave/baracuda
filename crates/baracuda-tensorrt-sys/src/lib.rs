@@ -1,5 +1,9 @@
 //! Raw FFI + dynamic loader for NVIDIA TensorRT (C API surface).
 //!
+//! `baracuda-tensorrt` wraps this with a safe, typed API. Use this
+//! crate directly only if you need a function that the safe layer
+//! hasn't wrapped yet (in which case please file a bug).
+//!
 //! TensorRT's native public API is C++; NVIDIA ships a partial C-ABI surface
 //! suitable for language bindings in `NvInferRuntimeCAPI.h` (TRT 10+). This
 //! crate wraps that surface for runtime deserialization and inference. The

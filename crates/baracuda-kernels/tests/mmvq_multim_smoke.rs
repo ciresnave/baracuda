@@ -7,6 +7,9 @@
 //! for the activation-side Q8_1 quantization step (8-bit symmetric quant
 //! introduces O(1/127) error per dot).
 
+// Test names use the upstream llama.cpp K-block notation (Q4_K etc.).
+#![allow(non_snake_case)]
+
 use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
 use baracuda_kernels::{
     contiguous_stride, BlockQ8_0, GgufBlockFormat, GgufMmvqMultiMArgs, GgufMmvqMultiMDescriptor,

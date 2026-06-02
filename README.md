@@ -262,16 +262,25 @@ them stand-alone):
 ```text
 baracuda-cublas{,-sys}       # cuBLAS + cuBLASLt + cuBLASXt
 baracuda-cudnn{,-sys}        # cuDNN classic + Graph API
+baracuda-cudf{,-sys}         # cuDF (RAPIDS dataframe; Linux-only)
 baracuda-cufft{,-sys}        # cuFFT
 baracuda-cusolver{,-sys}     # cuSOLVER dense + sparse + Rf + Mg
 baracuda-cusparse{,-sys}     # cuSPARSE
 baracuda-curand{,-sys}       # cuRAND
 baracuda-cutensor{,-sys}     # cuTENSOR
+baracuda-cutlass{,-sys}      # CUTLASS GEMM kernel templates
+baracuda-cutlass-kernels-sys # CUTLASS kernel-only compile target
+baracuda-cuvs{,-sys}         # RAPIDS cuVS GPU vector search (Phase 71)
+baracuda-cvcuda{,-sys}       # CV-CUDA image processing
+baracuda-flashinfer{,-sys}   # FlashInfer paged-KV + cascade + sampling (Phase 46/66)
 baracuda-npp{,-sys}          # NPP
 baracuda-nccl{,-sys}         # NCCL
-baracuda-cvcuda{,-sys}       # CV-CUDA
-baracuda-nvjpeg{,-sys}       # nvJPEG
 baracuda-nvcomp{,-sys}       # nvCOMP
+baracuda-nvimagecodec{,-sys} # nvImageCodec (Phase 70 — supersedes nvJPEG)
+baracuda-nvjpeg{,-sys}       # nvJPEG (kept for back-compat)
+baracuda-nvshmem{,-sys}      # NVSHMEM symmetric-heap RDMA (Phase 69)
+baracuda-ozimmu{,-sys}       # ozIMMU Ozaki-scheme DGEMM (Phase 44)
+baracuda-transformer-engine{,-sys}  # TransformerEngine FP8 (Phase 55)
 ```
 
 And the supporting low-level crates (FFI, build infrastructure, profiling):
@@ -283,11 +292,19 @@ baracuda-nvjitlink{,-sys}    # CUDA 12+ JIT linker
 baracuda-cupti{,-sys}        # profiling APIs
 baracuda-nvml{,-sys}         # device monitoring
 baracuda-cufile{,-sys}       # GPUDirect Storage (Linux-only)
-baracuda-tensorrt{,-sys}     # TensorRT inference runtime
+baracuda-tensorrt{,-sys}     # TensorRT inference runtime (Phase 68 — vtable-dispatch C++ shim)
 baracuda-forge              # build-time .cu → PTX compiler driver
 baracuda-build              # build.rs helpers
 baracuda-core                # loader + Error plumbing
 baracuda-types{,-derive}     # pure-data types: Half, BFloat16, Complex, DeviceRepr
+```
+
+Vendor-track training / optimization crates (opt-in via feature gates on
+`baracuda-kernels`):
+
+```text
+baracuda-megatron            # Megatron-LM TP primitives (Phase 57; composition, no kernels)
+baracuda-optim               # NVIDIA Apex multi-tensor optimizers (Phase 49)
 ```
 
 The full umbrella crate (`baracuda`) re-exports everything behind cargo
@@ -315,19 +332,67 @@ sibling plans tuned for Ada's larger register file.
 
 ## Cargo features
 
-The kernel facade exposes a small feature set:
+The kernel facade exposes a broad opt-in feature set. Architecture and
+library-integration features are off by default — pick what your
+deployment needs. **Important:** unless a feature is enabled, its
+plans are not built, not linked, and not present in the public API.
+Always check the feature gate when scanning for an op family.
+
+### Architecture targets
 
 | Feature | Default | Effect |
 | --- | --- | --- |
-| `sm80` | yes | Build the Ampere-baseline kernel set. |
-| `sm89` | no | Build the Ada Lovelace specializations (FP8 GEMM, `FlashSdpaSm89Plan`). |
-| `sm90a` | no | Build the Hopper-specialized kernels (stubs today). |
-| `cudnn` | no | Link cuDNN and enable conv / pool / `CtcLossCudnnPlan`. |
+| `sm80` | yes | Ampere-baseline kernel set (RTX 30xx, A100). |
+| `sm89` | no | Ada Lovelace specializations (FP8 GEMM, `FlashSdpaSm89Plan`). |
+| `sm90a` | no | Hopper-specialized kernels (stubs today; tracked for Phase 7x). |
 
-`cudnn` is off by default because cuDNN is a separate NVIDIA download not
-bundled with the stock CUDA toolkit installer. Enabling it without cuDNN
-installed produces a linker error on `cudnn.lib` / `libcudnn.so` — see
-the building section for the auto-discovery paths the build script probes.
+### NVIDIA library integrations
+
+| Feature | Default | Phase | Effect |
+| --- | --- | --- | --- |
+| `cudnn` | no | 7 | Link cuDNN. Enables Conv2d / Pool2d / `CtcLossCudnnPlan`. Separate NVIDIA download. |
+
+### Vendored kernel families
+
+| Feature | Default | Phase | Effect |
+| --- | --- | --- | --- |
+| `fa2` | no | 42 | Vendored Tri Dao FlashAttention v2 (BSD-3). Long-context routing on `FlashSdpaPlan`. |
+| `mhc` | no | 43 | Vendored DeepSeek-AI mHC.cu (MIT). `HyperConnectionPlan` (learned residuals). |
+| `ozimmu` | no | 44 | Vendored ozIMMU (MIT). Ozaki-scheme DGEMM via S² int8 tensor-core matmuls. |
+| `flashinfer` | no | 46/66 | Vendored FlashInfer (Apache-2.0). Paged-KV decode/prefill, cascade, sampling. |
+| `marlin` | no | 48 | Vendored IST-DASLab Marlin (Apache-2.0). Symmetric int4 W4A16 GEMM. |
+| `awq` | no | 48 | Vendored mit-han-lab llm-awq (MIT). Asymmetric int4 W4A16 GEMM. |
+| `optim` | no | 49 | Vendored NVIDIA Apex (BSD-3). Multi-tensor Adam/Lamb/SGD step kernels. |
+| `mamba` | no | 50 | Vendored Mamba-2 SSD + Dao causal-conv1d. State-space LLM ops. |
+| `bnb_nf4` | no | 53 | Vendored bitsandbytes NF4 (MIT). 4-bit non-uniform quantile QLoRA. |
+| `xformers_blocksparse` | no | 54 | Clean-room port of xFormers block-sparse SDPA (BSD-3). |
+| `xformers_sparse24` | no | 54 | Clean-room port of xFormers 2:4 structured sparsity GEMM (BSD-3). |
+| `tensor_engine` | no | 55 | Vendored NVIDIA TransformerEngine (Apache-2.0). FP8 cast/dequant + delayed-scaling recipe. |
+| `ring_attention` | no | 56 | Sequence-parallel ring attention (Apache-2.0 reference). Pulls in NCCL. |
+| `megatron_tp` | no | 57 | Megatron-LM tensor-parallel primitives (composition, no new kernels). |
+| `nvshmem` | no | 69 | NVSHMEM host-side wrapper (one-sided RDMA, sibling to NCCL). Linux-only. |
+
+Sibling crates also have their own feature gates:
+
+- `baracuda-cuvs` — `cuvs` feature in `baracuda-kernels-sys` ecosystem
+  pulls in RAPIDS cuVS vector-search (Phase 71, Linux-only). Not yet
+  re-exported by `baracuda-kernels` itself.
+- `baracuda-tensorrt` — `shim` feature builds the vtable-dispatch C++
+  shim required to call TensorRT (Phase 68 — no flat C ABI upstream).
+- `baracuda-flashinfer` — same `flashinfer` feature as above.
+
+**Notes:**
+
+- `cudnn` is off by default because cuDNN is a separate NVIDIA download
+  not bundled with the stock CUDA toolkit installer. Enabling it without
+  cuDNN installed produces a linker error on `cudnn.lib` / `libcudnn.so`
+  — see the [Building](#building) section for auto-discovery paths.
+- Most vendored features add 30s–5 min to first build (template-heavy
+  CUDA). Subsequent builds incremental.
+- Features that pull in optional sibling crates (`optim`, `tensor_engine`,
+  `megatron_tp`, `nvshmem`, `ring_attention`) only compile the sibling
+  when the feature is enabled — inference-only consumers don't pay the
+  surface cost.
 
 ## Building
 

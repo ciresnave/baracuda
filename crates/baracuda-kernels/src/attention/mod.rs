@@ -129,8 +129,11 @@ pub(crate) fn map_status(code: i32) -> Result<()> {
 
 /// Crate-wide re-export of [`map_status`] for the sibling op-family
 /// modules (Phase 54 — `gemm::sparse24` etc.) that share the same
-/// status-code convention with the attention family.
+/// status-code convention with the attention family. Dead-code allowed
+/// because the call sites are feature-gated (`xformers_sparse24`) and
+/// the function ships unconditionally.
 #[doc(hidden)]
+#[allow(dead_code)]
 pub(crate) fn map_status_pub(code: i32) -> Result<()> {
     map_status(code)
 }

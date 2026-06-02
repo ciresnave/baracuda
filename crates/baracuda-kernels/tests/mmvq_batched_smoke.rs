@@ -12,6 +12,9 @@
 //! `mmvq_f16_bf16_smoke.rs` — Q8_0's f16 scale forces ~1e-2 relative;
 //! pure-FP and Q8_K's f32 scale tolerate ~1e-3.
 
+// Test names use the upstream llama.cpp K-block notation (Q4_K etc.).
+#![allow(non_snake_case)]
+
 use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
 use baracuda_kernels::{
     contiguous_stride, BlockQ4K, BlockQ8_0, GgufBlockFormat, GgufMmvqArgs, GgufMmvqBatchedArgs,

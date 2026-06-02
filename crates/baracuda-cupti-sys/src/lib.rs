@@ -1,5 +1,9 @@
 //! Raw FFI + dynamic loader skeleton for CUPTI (CUDA Profiling Tools Interface).
 //!
+//! `baracuda-cupti` wraps this with a safe, typed API. Use this crate
+//! directly only if you need a function that the safe layer hasn't
+//! wrapped yet (in which case please file a bug).
+//!
 //! CUPTI's surface is huge (activity API, callback API, event/metric APIs,
 //! PC sampling, the modern profiler host API). v0.1 ships the loader +
 //! status/version types so the crate compiles; concrete profiler wrappers

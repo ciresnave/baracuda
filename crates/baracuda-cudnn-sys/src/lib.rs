@@ -1,5 +1,9 @@
 //! Raw FFI + dynamic loader for NVIDIA cuDNN (classic-API subset).
 //!
+//! `baracuda-cudnn` wraps this with a safe, typed API. Use this crate
+//! directly only if you need a function that the safe layer hasn't
+//! wrapped yet (in which case please file a bug).
+//!
 //! Handles the non-standard cuDNN install location on Windows
 //! (`C:\Program Files\NVIDIA\CUDNN\v<ver>\bin\<cuda-major>`) by probing
 //! it in addition to the usual `baracuda-core::platform` search paths.

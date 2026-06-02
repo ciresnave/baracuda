@@ -1,5 +1,9 @@
 //! Raw FFI + dynamic loader for the NVIDIA Management Library (NVML).
 //!
+//! `baracuda-nvml` wraps this with a safe, typed API. Use this crate
+//! directly only if you need a function that the safe layer hasn't
+//! wrapped yet (in which case please file a bug).
+//!
 //! NVML ships with the NVIDIA driver (not the CUDA toolkit), so it's
 //! available on any host with a functional NVIDIA GPU — no separate
 //! install needed.

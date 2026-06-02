@@ -1309,6 +1309,89 @@ Out of scope for Phase 49 (future):
 - **LAMB f16/bf16** — Phase 49 ships f32-only LAMB; mixed-precision
   LAMB is a follow-up.
 
+## Future-phase candidates (release-readiness audit, 2026-06-02)
+
+These items surfaced during the pre-release audit that prepared the
+Phase 64+65 rollup. Each is independently doable in its own phase;
+priority is set by Fuel ask and release-line ergonomics, not
+intrinsic technical urgency.
+
+### `_can_implement` companion fanout (~2032 symbols)
+
+baracuda's stated FFI convention is **one `_can_implement` validator
+per `_run` symbol**, so callers can probe support without launching
+a kernel. The release-readiness audit measured:
+
+- ~2683 `_run` FFI symbols across `crates/baracuda-kernels-sys/src/lib.rs`
+- ~657 `_can_implement` symbols
+- **~2032 `_run` symbols without their `_can_implement` companion**
+
+The gap is worst on the strided fanout (Phase 14/18 strided siblings):
+434 `_strided_*_run` vs only 11 `_strided_*_can_implement`. Specific
+hotspot: `where_strided` has 33 `_run` symbols and zero strided
+validators.
+
+**Scope:** mechanical sweep across the FFI surface. Each missing
+companion is a thin re-implementation of the host-side preconditions
+(shape rank, dtype, alignment, workspace-bytes calc) factored out of
+the matching `_run` symbol. Effort is in the symbol count, not per-
+symbol complexity — likely 3-5 days of mechanical fanout.
+
+**Why deferred:** non-blocking — every `_run` already does the same
+checks internally before launch and returns the right status code on
+failure. The standalone `_can_implement` is a UX convenience for
+callers building dispatch tables; nothing breaks without it.
+
+### Strided FFI siblings for normalizer + shape ops
+
+Phase 14/18 established the strided-sibling convention but a handful
+of op families never got it. Each ships 4 contig dtypes with zero
+strided variants:
+
+- `rms_norm` / `layer_norm` / `softmax` / `log_softmax`
+- `flip` / `roll` / `permute`
+
+**Scope:** for each op, one new `_strided_<dtype>_run` FFI symbol per
+dtype (~4 each) + its `_can_implement` companion. ~56 new FFI symbols
+in total + matching plan-layer dispatcher updates so callers see one
+plan whether they hit the contig fast path or the strided fallback.
+
+**Why deferred:** the Conv / Pool / cuDNN-backed families also lack
+strided FFI but route through safe wrappers that may make that moot.
+For the bespoke normalizers above, the safe wrapper at the
+`baracuda-kernels` layer does the strided/contig branching today via
+`Contiguize`; making the FFI strided would let callers skip that
+copy. Priority is bench-driven (Phase 29+ benches haven't yet
+isolated this as a hot path).
+
+### f64 in-place dispatch for SMEM-staged normalizers
+
+Phase 65b/c shipped SMEM-staged
+RMSNorm / LayerNorm / Softmax / LogSoftmax with the in-place
+contract for f32 / f16 / bf16 only; f64 falls back to the legacy
+multi-pass-global kernel which is **not** in-place safe.
+
+**Scope:** add `block_reduce_sum_f64` (and `_max_f64` / `_min_f64`)
+to `crates/baracuda-kernels-sys/kernels/include/baracuda_smem_reduce.cuh`,
+then specialize each SMEM-staged kernel for `double`. ~1 day if Fuel
+ever needs f64 in-place for these ops.
+
+**Why deferred:** Fuel hasn't asked. BN / GN / IN already cover f64
+in-place by construction (Phase 65d) so the f64 SMEM gap is only on
+the row-shape normalizers.
+
+### Test gaps surfaced by the audit
+
+- `bincount` (`crates/baracuda-kernels/src/sort/bincount.rs`) ships
+  2 FFI `_run` symbols with zero smoke tests in
+  `crates/baracuda-kernels/tests/`.
+- `HyperConnectionPlan` (mHC, Phase 43) has bench coverage but no
+  `tests/` smoke. Production gating for the `mhc` feature.
+- FlashInfer paged-decode / prefill / ragged / append family
+  (Phase 46+66) has no `tests/` smoke at the FFI direct-call layer.
+  Safe-wrapper layer tests exist; the FFI surface itself is
+  unexercised.
+
 ## How this file gets updated
 
 - New deferral discovered during a phase → add to the matching

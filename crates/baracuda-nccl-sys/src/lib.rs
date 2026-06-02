@@ -1,5 +1,9 @@
 //! Raw FFI + dynamic loader for NVIDIA NCCL (multi-GPU collective communication).
 //!
+//! `baracuda-nccl` wraps this with a safe, typed API. Use this crate
+//! directly only if you need a function that the safe layer hasn't
+//! wrapped yet (in which case please file a bug).
+//!
 //! NCCL is primarily a Linux library; Windows support landed in later NCCL
 //! versions but is uncommon. This crate compiles everywhere and defers the
 //! "is NCCL actually installed?" question to runtime — [`nccl()`] returns

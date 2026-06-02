@@ -1,5 +1,9 @@
 //! Raw FFI + dynamic loader for NVIDIA NPP (Performance Primitives).
 //!
+//! `baracuda-npp` wraps this with a safe, typed API. Use this crate
+//! directly only if you need a function that the safe layer hasn't
+//! wrapped yet (in which case please file a bug).
+//!
 //! NPP ships as ~10 separate DLLs on Windows (nppc, nppial, nppicc, nppidei,
 //! nppif, nppig, nppim, nppist, nppisu, nppitc, npps). v0.1 exposes `nppc`
 //! (core) and `npps` (signal) — enough for version queries and a demo

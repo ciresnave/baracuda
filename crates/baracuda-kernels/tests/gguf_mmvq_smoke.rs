@@ -8,6 +8,11 @@
 //! mismatch isolates the MMVQ launcher / kernel rather than the
 //! dequant math.
 
+// GGUF block format names (Q2_K, Q3_K, ..., Q8_K) come from upstream
+// llama.cpp and are part of the public quantization vocabulary; keep
+// the capital `K` in test names.
+#![allow(non_snake_case)]
+
 use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
 use baracuda_kernels::{
     contiguous_stride, BlockQ8K, BlockQ8_0, GgufBlockFormat, GgufMmvqArgs, GgufMmvqDescriptor,

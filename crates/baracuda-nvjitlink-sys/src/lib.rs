@@ -1,4 +1,8 @@
 //! Raw FFI + dynamic loader for NVIDIA nvJitLink (CUDA 12.0+).
+//!
+//! `baracuda-nvjitlink` wraps this with a safe, typed API. Use this
+//! crate directly only if you need a function that the safe layer
+//! hasn't wrapped yet (in which case please file a bug).
 
 #![allow(non_camel_case_types)]
 #![warn(missing_debug_implementations)]
