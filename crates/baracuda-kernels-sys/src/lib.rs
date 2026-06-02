@@ -9122,6 +9122,21 @@ unsafe extern "C" {
     /// `(mean, inv_std)` from the batch + spatial cells, writes them to
     /// `saved_mean` / `saved_rstd` for BW. `gamma` / `beta` optional
     /// (both supplied together per PyTorch convention).
+    ///
+    /// **In-place aliasing contract (Phase 65d)**: aliasing `y` with
+    /// `x` (`x_ptr == y_ptr`) is safe. BN runs as two cooperating
+    /// kernels: stage-1 reads `x` and writes only `saved_mean` /
+    /// `saved_rstd` (never touches `y`); stage-2 reads each `x[i]`
+    /// into a register before writing `y[i]` in the same thread (a
+    /// strict single-read-then-single-write per cell). Both stages
+    /// are aliasing-safe regardless of dtype — **f64 is in-place safe
+    /// here**, unlike Phase 65b/c normalizers where f64 falls back to
+    /// a multi-pass-global path. `saved_mean` / `saved_rstd` must be
+    /// distinct from `x` / `y` (their layout is `[group_count]`, a
+    /// different shape entirely). The same contract covers the
+    /// matching `bf16` / `f16` / `f64` FFI siblings and the GroupNorm
+    /// family (`group_kind = 1`) including the InstanceNorm dispatch
+    /// (`num_groups = c_extent`).
     pub fn baracuda_kernels_batch_norm_f32_run(
         n_extent: i32,
         c_extent: i32,
@@ -9284,6 +9299,12 @@ unsafe extern "C" {
     /// per-channel affine. `num_groups` must divide `c_extent`.
     /// `group_kind = 1` selects the GN dispatch (also used by
     /// InstanceNorm with `num_groups == c_extent`).
+    ///
+    /// **In-place aliasing contract (Phase 65d)**: aliasing `y` with
+    /// `x` (`x_ptr == y_ptr`) is safe for **all dtypes including
+    /// f64**, by the same two-stage argument as the BN trailblazer
+    /// (see [`baracuda_kernels_batch_norm_f32_run`]). The InstanceNorm
+    /// dispatch (`num_groups == c_extent`) inherits this contract.
     pub fn baracuda_kernels_group_norm_f32_run(
         n_extent: i32,
         c_extent: i32,
