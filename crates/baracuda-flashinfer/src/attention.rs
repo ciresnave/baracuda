@@ -21,6 +21,7 @@
 
 pub use baracuda_kernels::{
     BatchPagedDecodeArgs, BatchPagedDecodeDescriptor, BatchPagedDecodePlan, CascadeAttentionArgs,
-    CascadeAttentionDescriptor, CascadeAttentionPlan, PagedKvAppendArgs, PagedKvAppendDescriptor,
-    PagedKvAppendPlan, PagedKvCacheDescriptor,
+    CascadeAttentionDescriptor, CascadeAttentionPlan, CascadeMergeStatesArgs,
+    CascadeMergeStatesDescriptor, CascadeMergeStatesPlan, PagedKvAppendArgs,
+    PagedKvAppendDescriptor, PagedKvAppendPlan, PagedKvCacheDescriptor,
 };

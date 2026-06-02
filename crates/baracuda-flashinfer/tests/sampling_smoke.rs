@@ -76,12 +76,19 @@ fn sampling_one_hot_is_deterministic() {
     probs[HOT] = 1.0;
     let probs_dev = DeviceBuffer::from_slice(&ctx, &probs).expect("upload probs");
 
-    for sampler in [
+    // Alternate `valid: None` / `Some(..)` across variants. The `None`
+    // case is the Phase 66 regression check: the vendored kernel writes
+    // the per-row success flag unconditionally, so the launcher must hand
+    // it a scratch buffer when the caller passes null (else CUDA 700).
+    for (i, sampler) in [
         SamplerKind::TopK { top_k: 1 },
         SamplerKind::TopP { top_p: 0.5 },
         SamplerKind::MinP { min_p: 0.5 },
         SamplerKind::TopKTopP { top_k: 1, top_p: 0.5 },
-    ] {
+    ]
+    .into_iter()
+    .enumerate()
+    {
         let desc = TopKTopPSamplingDescriptor {
             batch_size: 1,
             vocab_size: VOCAB as i32,
@@ -93,6 +100,12 @@ fn sampling_one_hot_is_deterministic() {
 
         let mut out_dev: DeviceBuffer<i32> = DeviceBuffer::zeros(&ctx, 1).expect("alloc out");
         let mut valid_dev: DeviceBuffer<u8> = DeviceBuffer::zeros(&ctx, 1).expect("alloc valid");
+        let use_valid = i % 2 == 1;
+        let valid = if use_valid {
+            Some(TensorMut { data: valid_dev.as_slice_mut(), shape: [1], stride: [1] })
+        } else {
+            None // exercises the null-success scratch path
+        };
         let probs_shape = [1, VOCAB as i32];
         plan.run(
             &stream,
@@ -104,7 +117,7 @@ fn sampling_one_hot_is_deterministic() {
                     stride: contiguous_stride(probs_shape),
                 },
                 output: TensorMut { data: out_dev.as_slice_mut(), shape: [1], stride: [1] },
-                valid: Some(TensorMut { data: valid_dev.as_slice_mut(), shape: [1], stride: [1] }),
+                valid,
                 seed_val: 0x1234_5678,
                 offset_val: 0,
             },
@@ -116,7 +129,7 @@ fn sampling_one_hot_is_deterministic() {
         out_dev.copy_to_host(&mut out_host).expect("download out");
         assert_eq!(
             out_host[0] as usize, HOT,
-            "one-hot row must sample the hot index for sampler {sampler:?}",
+            "one-hot row must sample the hot index for sampler {sampler:?} (valid={use_valid})",
         );
     }
 }

@@ -639,6 +639,7 @@ pub mod megatron {
 pub use attention::{
     BatchPagedDecodeArgs, BatchPagedDecodeDescriptor, BatchPagedDecodePlan,
     CascadeAttentionArgs, CascadeAttentionDescriptor, CascadeAttentionPlan,
+    CascadeMergeStatesArgs, CascadeMergeStatesDescriptor, CascadeMergeStatesPlan,
     PagedKvAppendArgs, PagedKvAppendDescriptor, PagedKvAppendPlan, PagedKvCacheDescriptor,
 };
 pub use random::{

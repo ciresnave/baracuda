@@ -61,6 +61,33 @@ constexpr int STATUS_UNSUPPORTED = 3;
 inline int translate(cudaError_t e) {
     return e == cudaSuccess ? STATUS_OK : STATUS_INVALID_ARG;
 }
+
+// The vendored FlashInfer sampling kernels dereference the per-row
+// success ("output emitted") pointer UNCONDITIONALLY — a null caller
+// pointer is an illegal access (CUDA 700), not a no-op. When the caller
+// doesn't want the flag (`valid == nullptr`) we hand the kernel a
+// stream-ordered scratch buffer and release it after the launch.
+// Returns false only if the scratch allocation fails.
+inline bool acquire_success(void* valid, int32_t batch, cudaStream_t stream,
+                            bool** success_out, void** scratch_out) {
+    if (valid) {
+        *success_out = reinterpret_cast<bool*>(valid);
+        *scratch_out = nullptr;
+        return true;
+    }
+    void* scratch = nullptr;
+    if (cudaMallocAsync(&scratch, static_cast<size_t>(batch) * sizeof(bool), stream)
+        != cudaSuccess) {
+        return false;
+    }
+    *success_out = reinterpret_cast<bool*>(scratch);
+    *scratch_out = scratch;
+    return true;
+}
+
+inline void release_success(void* scratch, cudaStream_t stream) {
+    if (scratch) cudaFreeAsync(scratch, stream);
+}
 }  // namespace
 
 extern "C" {
@@ -84,10 +111,13 @@ int baracuda_kernels_flashinfer_top_k_sampling_f32_run(
     if (batch <= 0 || vocab <= 0 || top_k_val <= 0) return STATUS_INVALID_ARG;
     if (top_k_val > vocab) return STATUS_INVALID_ARG;
     if (!probs || !output) return STATUS_INVALID_ARG;
+    cudaStream_t st = reinterpret_cast<cudaStream_t>(stream);
+    bool* success = nullptr; void* scratch = nullptr;
+    if (!acquire_success(valid, batch, st, &success, &scratch)) return STATUS_INVALID_ARG;
     cudaError_t e = flashinfer::sampling::TopKSamplingFromProb<float, int32_t>(
         reinterpret_cast<float*>(const_cast<void*>(probs)),
         reinterpret_cast<int32_t*>(output),
-        reinterpret_cast<bool*>(valid),
+        success,
         /*indices=*/nullptr,
         /*top_k_arr=*/nullptr,
         static_cast<uint32_t>(batch),
@@ -98,7 +128,8 @@ int baracuda_kernels_flashinfer_top_k_sampling_f32_run(
         seed_val,
         /*offset_arr=*/nullptr,
         offset_val,
-        reinterpret_cast<cudaStream_t>(stream));
+        st);
+    release_success(scratch, st);
     return translate(e);
 }
 
@@ -125,10 +156,13 @@ int baracuda_kernels_flashinfer_top_p_sampling_f32_run(
     if (batch <= 0 || vocab <= 0) return STATUS_INVALID_ARG;
     if (!(top_p_val > 0.0f && top_p_val <= 1.0f)) return STATUS_INVALID_ARG;
     if (!probs || !output) return STATUS_INVALID_ARG;
+    cudaStream_t st = reinterpret_cast<cudaStream_t>(stream);
+    bool* success = nullptr; void* scratch = nullptr;
+    if (!acquire_success(valid, batch, st, &success, &scratch)) return STATUS_INVALID_ARG;
     cudaError_t e = flashinfer::sampling::TopPSamplingFromProb<float, int32_t>(
         reinterpret_cast<float*>(const_cast<void*>(probs)),
         reinterpret_cast<int32_t*>(output),
-        reinterpret_cast<bool*>(valid),
+        success,
         /*indices=*/nullptr,
         /*top_p_arr=*/nullptr,
         static_cast<uint32_t>(batch),
@@ -139,7 +173,8 @@ int baracuda_kernels_flashinfer_top_p_sampling_f32_run(
         seed_val,
         /*offset_arr=*/nullptr,
         offset_val,
-        reinterpret_cast<cudaStream_t>(stream));
+        st);
+    release_success(scratch, st);
     return translate(e);
 }
 
@@ -167,11 +202,14 @@ int baracuda_kernels_flashinfer_min_p_sampling_f32_run(
     if (batch <= 0 || vocab <= 0) return STATUS_INVALID_ARG;
     if (!(min_p_val > 0.0f && min_p_val <= 1.0f)) return STATUS_INVALID_ARG;
     if (!probs || !output) return STATUS_INVALID_ARG;
+    cudaStream_t st = reinterpret_cast<cudaStream_t>(stream);
+    bool* success = nullptr; void* scratch = nullptr;
+    if (!acquire_success(valid, batch, st, &success, &scratch)) return STATUS_INVALID_ARG;
     cudaError_t e = flashinfer::sampling::MinPSamplingFromProb<float, int32_t>(
         reinterpret_cast<float*>(const_cast<void*>(probs)),
         /*min_p_arr=*/nullptr,
         reinterpret_cast<int32_t*>(output),
-        reinterpret_cast<bool*>(valid),
+        success,
         /*indices=*/nullptr,
         static_cast<uint32_t>(batch),
         min_p_val,
@@ -181,7 +219,8 @@ int baracuda_kernels_flashinfer_min_p_sampling_f32_run(
         seed_val,
         /*offset_arr=*/nullptr,
         offset_val,
-        reinterpret_cast<cudaStream_t>(stream));
+        st);
+    release_success(scratch, st);
     return translate(e);
 }
 
@@ -211,12 +250,15 @@ int baracuda_kernels_flashinfer_top_k_top_p_sampling_f32_run(
     if (top_k_val > vocab) return STATUS_INVALID_ARG;
     if (!(top_p_val > 0.0f && top_p_val <= 1.0f)) return STATUS_INVALID_ARG;
     if (!probs || !output) return STATUS_INVALID_ARG;
+    cudaStream_t st = reinterpret_cast<cudaStream_t>(stream);
+    bool* success = nullptr; void* scratch = nullptr;
+    if (!acquire_success(valid, batch, st, &success, &scratch)) return STATUS_INVALID_ARG;
     cudaError_t e = flashinfer::sampling::TopKTopPSamplingFromProb<float, int32_t>(
         reinterpret_cast<float*>(const_cast<void*>(probs)),
         /*top_k_arr=*/nullptr,
         /*top_p_arr=*/nullptr,
         reinterpret_cast<int32_t*>(output),
-        reinterpret_cast<bool*>(valid),
+        success,
         /*indices=*/nullptr,
         static_cast<uint32_t>(batch),
         static_cast<int32_t>(top_k_val),
@@ -227,7 +269,8 @@ int baracuda_kernels_flashinfer_top_k_top_p_sampling_f32_run(
         seed_val,
         /*offset_arr=*/nullptr,
         offset_val,
-        reinterpret_cast<cudaStream_t>(stream));
+        st);
+    release_success(scratch, st);
     return translate(e);
 }
 

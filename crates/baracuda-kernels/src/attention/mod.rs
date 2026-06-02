@@ -186,6 +186,7 @@ pub use batch_paged_decode::{
 };
 pub use cascade_attn::{
     CascadeAttentionArgs, CascadeAttentionDescriptor, CascadeAttentionPlan,
+    CascadeMergeStatesArgs, CascadeMergeStatesDescriptor, CascadeMergeStatesPlan,
 };
 pub use paged_kv_append::{
     PagedKvAppendArgs, PagedKvAppendDescriptor, PagedKvAppendPlan,

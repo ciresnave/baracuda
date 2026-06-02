@@ -24,8 +24,11 @@
 //!   serving primitive. f16 / bf16 / f32, head_dim ∈ {64, 128, 256}.
 //! - [`PagedKvAppendPlan`] — decode-time KV-cache **append** (writes the
 //!   freshly-computed K/V for the current token into the paged store).
-//! - [`CascadeAttentionPlan`] — LSE-aware **merge** of partial attention
-//!   states, the building block for prefix-cache / shared-prompt reuse.
+//! - [`CascadeAttentionPlan`] — LSE-aware pairwise **merge** of partial
+//!   attention states, the building block for prefix-cache / shared-prompt
+//!   reuse.
+//! - [`CascadeMergeStatesPlan`] — many-way (fan-in > 2) cascade merge, for
+//!   multi-level shared-prefix trees / overlapping prefix caches.
 //!
 //! ## [`sampling`] — sort-free token sampling
 //!
@@ -101,8 +104,9 @@ pub use baracuda_flashinfer_sys as sys;
 pub mod prelude {
     pub use crate::attention::{
         BatchPagedDecodeArgs, BatchPagedDecodeDescriptor, BatchPagedDecodePlan,
-        CascadeAttentionArgs, CascadeAttentionDescriptor, CascadeAttentionPlan, PagedKvAppendArgs,
-        PagedKvAppendDescriptor, PagedKvAppendPlan, PagedKvCacheDescriptor,
+        CascadeAttentionArgs, CascadeAttentionDescriptor, CascadeAttentionPlan,
+        CascadeMergeStatesArgs, CascadeMergeStatesDescriptor, CascadeMergeStatesPlan,
+        PagedKvAppendArgs, PagedKvAppendDescriptor, PagedKvAppendPlan, PagedKvCacheDescriptor,
     };
     pub use crate::sampling::{
         SamplerKind, TopKTopPSamplingArgs, TopKTopPSamplingDescriptor, TopKTopPSamplingPlan,

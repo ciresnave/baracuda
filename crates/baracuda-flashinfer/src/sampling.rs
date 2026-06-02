@@ -21,18 +21,14 @@
 //! `probs` is bit-stable. Set `deterministic` in the descriptor to make
 //! the rare cumulative-boundary tiebreak reproducible as well.
 //!
-//! # IMPORTANT — `valid` is currently required
-//!
-//! Although [`TopKTopPSamplingArgs::valid`] is an `Option` and is
-//! *documented* by the Phase 46 plan as skippable with `None`, the
-//! vendored FlashInfer sampling kernel (v0.6.12) dereferences the
-//! per-row success pointer **unconditionally**. Passing `None` therefore
-//! triggers a CUDA illegal-memory-access (surfacing at the next stream
-//! sync), not a clean error — confirmed on an RTX 4070. Until the
-//! underlying Phase 46 launcher is fixed to allocate a scratch success
-//! buffer when `valid` is null, **always pass `Some(buffer)`** of
-//! `[batch]` `u8`. The `tests/sampling_smoke.rs` smoke tests pass a
-//! `valid` buffer for exactly this reason.
+//! [`TopKTopPSamplingArgs::valid`] is optional (`None` to skip the
+//! per-row "sample accepted" flags). Note: the vendored FlashInfer
+//! sampling kernel (v0.6.12) dereferences its per-row success pointer
+//! **unconditionally**, so passing a raw null straight to the kernel
+//! would be an illegal access. Phase 66 fixed the launcher to hand the
+//! kernel a stream-ordered scratch success buffer whenever the caller
+//! passes `None`, so `valid: None` is now safe (verified on an RTX 4070
+//! in `tests/sampling_smoke.rs`).
 //!
 //! # Not yet wired
 //!
