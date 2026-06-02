@@ -186,8 +186,8 @@ Add the kernel facade and the driver crate:
 
 ```toml
 [dependencies]
-baracuda-kernels = { version = "0.0.1-alpha.57", features = ["sm89", "cudnn"] }
-baracuda-driver  = "0.0.1-alpha.57"
+baracuda-kernels = { version = "0.0.1-alpha.63", features = ["sm89", "cudnn"] }
+baracuda-driver  = "0.0.1-alpha.63"
 ```
 
 A representative example — single-axis numerically stable softmax over a

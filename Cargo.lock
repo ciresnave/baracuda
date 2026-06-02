@@ -449,6 +449,8 @@ dependencies = [
  "baracuda-megatron",
  "baracuda-nccl",
  "baracuda-nccl-sys",
+ "baracuda-nvshmem",
+ "baracuda-nvshmem-sys",
  "baracuda-optim",
  "baracuda-transformer-engine",
  "baracuda-types",
@@ -678,6 +680,29 @@ version = "0.0.1-alpha.63"
 dependencies = [
  "baracuda-build",
  "baracuda-core",
+ "baracuda-types",
+ "libloading",
+]
+
+[[package]]
+name = "baracuda-nvshmem"
+version = "0.0.1-alpha.63"
+dependencies = [
+ "baracuda-core",
+ "baracuda-cuda-sys",
+ "baracuda-driver",
+ "baracuda-nvshmem-sys",
+ "baracuda-types",
+ "thiserror",
+]
+
+[[package]]
+name = "baracuda-nvshmem-sys"
+version = "0.0.1-alpha.63"
+dependencies = [
+ "baracuda-build",
+ "baracuda-core",
+ "baracuda-cuda-sys",
  "baracuda-types",
  "libloading",
 ]
