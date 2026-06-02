@@ -247,9 +247,55 @@ __global__ void softmax_smem_kernel(
     }
 }
 
-__host__ inline std::size_t softmax_smem_bytes(int32_t softmax_extent) {
-    return (std::size_t)softmax_extent * sizeof(float)
-         + (std::size_t)baracuda::BARACUDA_MAX_WARPS * sizeof(float);
+// f64 specialization — true double-precision throughout. Phase 65d-ext.
+template <>
+__global__ void softmax_smem_kernel<double>(
+    const double* __restrict__ x,
+    double* __restrict__ y,
+    int64_t row_count,
+    int64_t row_stride_x_elems,
+    int64_t row_stride_y_elems,
+    int32_t softmax_extent)
+{
+    extern __shared__ double smem_storage_sm_f64[];
+    double* smem_row = smem_storage_sm_f64;
+    double* warp_buf = smem_storage_sm_f64 + softmax_extent;
+
+    for (int64_t row = (int64_t)blockIdx.x; row < row_count; row += (int64_t)gridDim.x) {
+        const double* x_row = x + row * row_stride_x_elems;
+        double*       y_row = y + row * row_stride_y_elems;
+
+        for (int64_t i = (int64_t)threadIdx.x; i < (int64_t)softmax_extent; i += (int64_t)blockDim.x) {
+            smem_row[i] = x_row[i];
+        }
+        __syncthreads();
+
+        double local_max = -INFINITY;
+        for (int64_t i = (int64_t)threadIdx.x; i < (int64_t)softmax_extent; i += (int64_t)blockDim.x) {
+            double v = smem_row[i];
+            if (v > local_max) local_max = v;
+        }
+        double row_max = baracuda::block_reduce_max_f64(local_max, warp_buf);
+
+        double local_sum = 0.0;
+        for (int64_t i = (int64_t)threadIdx.x; i < (int64_t)softmax_extent; i += (int64_t)blockDim.x) {
+            local_sum += exp(smem_row[i] - row_max);
+        }
+        double row_sum = baracuda::block_reduce_sum_f64(local_sum, warp_buf);
+        double inv_sum = 1.0 / row_sum;
+
+        for (int64_t i = (int64_t)threadIdx.x; i < (int64_t)softmax_extent; i += (int64_t)blockDim.x) {
+            y_row[i] = exp(smem_row[i] - row_max) * inv_sum;
+        }
+
+        __syncthreads();
+    }
+}
+
+// SMEM bytes; element_size = 4 for {f32, f16, bf16} (upcast to f32), 8 for f64.
+__host__ inline std::size_t softmax_smem_bytes(int32_t softmax_extent, std::size_t element_size) {
+    return (std::size_t)softmax_extent * element_size
+         + (std::size_t)baracuda::BARACUDA_MAX_WARPS * element_size;
 }
 
 template <typename T>
@@ -273,12 +319,14 @@ __host__ inline int32_t launch_softmax_fp(
     if (softmax_axis < 0 || softmax_axis >= rank) return 2;
 
     // -------- Phase 65c SMEM-staged fast path eligibility --------
+    // Phase 65d-ext: f64 now supported via `block_reduce_{max,sum}_f64`.
     constexpr std::size_t SMEM_BUDGET_DEFAULT = 47 * 1024;
-    constexpr bool eligible_dtype = (sizeof(T) <= 4);
+    constexpr bool eligible_dtype = (sizeof(T) <= 8);
     bool simple_last_axis = (softmax_axis == rank - 1);
     bool contig_last_axis_x = (rank > 0) && (stride_x_host[rank - 1] == 1);
     bool contig_last_axis_y = (rank > 0) && (stride_y_host[rank - 1] == 1);
-    std::size_t smem_bytes = softmax_smem_bytes(softmax_extent);
+    std::size_t element_size = (sizeof(T) == 8) ? sizeof(double) : sizeof(float);
+    std::size_t smem_bytes = softmax_smem_bytes(softmax_extent, element_size);
 
     if (eligible_dtype && simple_last_axis && contig_last_axis_x && contig_last_axis_y
         && smem_bytes <= SMEM_BUDGET_DEFAULT) {
@@ -633,6 +681,51 @@ __global__ void log_softmax_smem_kernel(
     }
 }
 
+// f64 specialization — true double-precision throughout. Phase 65d-ext.
+template <>
+__global__ void log_softmax_smem_kernel<double>(
+    const double* __restrict__ x,
+    double* __restrict__ y,
+    int64_t row_count,
+    int64_t row_stride_x_elems,
+    int64_t row_stride_y_elems,
+    int32_t softmax_extent)
+{
+    extern __shared__ double smem_storage_lsm_f64[];
+    double* smem_row = smem_storage_lsm_f64;
+    double* warp_buf = smem_storage_lsm_f64 + softmax_extent;
+
+    for (int64_t row = (int64_t)blockIdx.x; row < row_count; row += (int64_t)gridDim.x) {
+        const double* x_row = x + row * row_stride_x_elems;
+        double*       y_row = y + row * row_stride_y_elems;
+
+        for (int64_t i = (int64_t)threadIdx.x; i < (int64_t)softmax_extent; i += (int64_t)blockDim.x) {
+            smem_row[i] = x_row[i];
+        }
+        __syncthreads();
+
+        double local_max = -INFINITY;
+        for (int64_t i = (int64_t)threadIdx.x; i < (int64_t)softmax_extent; i += (int64_t)blockDim.x) {
+            double v = smem_row[i];
+            if (v > local_max) local_max = v;
+        }
+        double row_max = baracuda::block_reduce_max_f64(local_max, warp_buf);
+
+        double local_sum = 0.0;
+        for (int64_t i = (int64_t)threadIdx.x; i < (int64_t)softmax_extent; i += (int64_t)blockDim.x) {
+            local_sum += exp(smem_row[i] - row_max);
+        }
+        double row_sum = baracuda::block_reduce_sum_f64(local_sum, warp_buf);
+        double log_row_sum = log(row_sum);
+
+        for (int64_t i = (int64_t)threadIdx.x; i < (int64_t)softmax_extent; i += (int64_t)blockDim.x) {
+            y_row[i] = (smem_row[i] - row_max) - log_row_sum;
+        }
+
+        __syncthreads();
+    }
+}
+
 template <typename T>
 __host__ inline int32_t launch_log_softmax_fp(
     const T* x, T* y,
@@ -654,12 +747,14 @@ __host__ inline int32_t launch_log_softmax_fp(
     if (softmax_axis < 0 || softmax_axis >= rank) return 2;
 
     // -------- Phase 65c SMEM-staged fast path eligibility --------
+    // Phase 65d-ext: f64 supported via `block_reduce_{max,sum}_f64`.
     constexpr std::size_t SMEM_BUDGET_DEFAULT = 47 * 1024;
-    constexpr bool eligible_dtype = (sizeof(T) <= 4);
+    constexpr bool eligible_dtype = (sizeof(T) <= 8);
     bool simple_last_axis = (softmax_axis == rank - 1);
     bool contig_last_axis_x = (rank > 0) && (stride_x_host[rank - 1] == 1);
     bool contig_last_axis_y = (rank > 0) && (stride_y_host[rank - 1] == 1);
-    std::size_t smem_bytes = softmax_smem_bytes(softmax_extent);
+    std::size_t element_size = (sizeof(T) == 8) ? sizeof(double) : sizeof(float);
+    std::size_t smem_bytes = softmax_smem_bytes(softmax_extent, element_size);
 
     if (eligible_dtype && simple_last_axis && contig_last_axis_x && contig_last_axis_y
         && smem_bytes <= SMEM_BUDGET_DEFAULT) {

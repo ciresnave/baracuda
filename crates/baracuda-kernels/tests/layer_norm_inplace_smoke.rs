@@ -308,3 +308,75 @@ fn layer_norm_bf16_inplace_matches_non_aliased() {
         );
     }
 }
+
+#[test]
+#[ignore]
+fn layer_norm_f64_inplace_matches_non_aliased() {
+    // Phase 65d-ext: f64 routes through SMEM via `block_reduce_sum_f64`.
+    let (ctx, stream) = setup();
+    let outer: usize = 4;
+    let inner: usize = 128;
+    let numel = outer * inner;
+    let eps: f32 = 1e-5;
+    let shape: [i32; 2] = [outer as i32, inner as i32];
+    let stride_contig: [i64; 2] = [inner as i64, 1];
+    let stride_save: [i64; 2] = [1, 0];
+
+    let host_x: Vec<f64> = (0..numel)
+        .map(|i| ((i as f64) * 0.011 + 0.3).sin() * 0.7 - 0.2)
+        .collect();
+
+    let dev_x_ref = DeviceBuffer::from_slice(&ctx, &host_x).expect("up");
+    let mut dev_y_ref: DeviceBuffer<f64> = DeviceBuffer::zeros(&ctx, numel).expect("alloc");
+    let mut dev_mean_ref: DeviceBuffer<f64> = DeviceBuffer::zeros(&ctx, outer).expect("mean");
+    let mut dev_inv_std_ref: DeviceBuffer<f64> = DeviceBuffer::zeros(&ctx, outer).expect("inv_std");
+    let status = unsafe {
+        baracuda_kernels_sys::baracuda_kernels_layer_norm_f64_run(
+            eps, numel as i64, 2,
+            shape.as_ptr(),
+            stride_contig.as_ptr(), stride_contig.as_ptr(), stride_save.as_ptr(),
+            0b10, inner as i32,
+            dev_x_ref.as_slice().as_raw().0 as *const c_void,
+            core::ptr::null(), core::ptr::null(),
+            dev_y_ref.as_slice_mut().as_raw().0 as *mut c_void,
+            dev_mean_ref.as_slice_mut().as_raw().0 as *mut c_void,
+            dev_inv_std_ref.as_slice_mut().as_raw().0 as *mut c_void,
+            core::ptr::null_mut(), 0,
+            stream.as_raw() as *mut c_void,
+        )
+    };
+    assert_eq!(status, 0, "f64 non-aliased");
+    stream.synchronize().expect("sync ref");
+    let mut ref_out = vec![0_f64; numel];
+    dev_y_ref.copy_to_host(&mut ref_out).expect("dl");
+
+    let mut dev_inplace = DeviceBuffer::from_slice(&ctx, &host_x).expect("up");
+    let mut dev_mean_inplace: DeviceBuffer<f64> = DeviceBuffer::zeros(&ctx, outer).expect("mean");
+    let mut dev_inv_std_inplace: DeviceBuffer<f64> = DeviceBuffer::zeros(&ctx, outer).expect("inv_std");
+    let p = dev_inplace.as_slice_mut().as_raw().0;
+    let status = unsafe {
+        baracuda_kernels_sys::baracuda_kernels_layer_norm_f64_run(
+            eps, numel as i64, 2,
+            shape.as_ptr(),
+            stride_contig.as_ptr(), stride_contig.as_ptr(), stride_save.as_ptr(),
+            0b10, inner as i32,
+            p as *const c_void,
+            core::ptr::null(), core::ptr::null(),
+            p as *mut c_void,
+            dev_mean_inplace.as_slice_mut().as_raw().0 as *mut c_void,
+            dev_inv_std_inplace.as_slice_mut().as_raw().0 as *mut c_void,
+            core::ptr::null_mut(), 0,
+            stream.as_raw() as *mut c_void,
+        )
+    };
+    assert_eq!(status, 0, "f64 aliased");
+    stream.synchronize().expect("sync aliased");
+    let mut aliased_out = vec![0_f64; numel];
+    dev_inplace.copy_to_host(&mut aliased_out).expect("dl");
+
+    for i in 0..numel {
+        assert_eq!(aliased_out[i].to_bits(), ref_out[i].to_bits(),
+            "f64 in-place LayerNorm @ {i}: aliased={} non-aliased={}",
+            aliased_out[i], ref_out[i]);
+    }
+}

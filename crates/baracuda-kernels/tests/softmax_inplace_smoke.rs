@@ -220,3 +220,61 @@ fn softmax_bf16_inplace_matches_non_aliased() {
             "bf16 in-place softmax @ {i}");
     }
 }
+
+#[test]
+#[ignore]
+fn softmax_f64_inplace_matches_non_aliased() {
+    // Phase 65d-ext: f64 routes through SMEM via `block_reduce_{max,sum}_f64`.
+    let (ctx, stream) = setup();
+    let outer: usize = 4;
+    let inner: usize = 128;
+    let numel = outer * inner;
+    let shape: [i32; 2] = [outer as i32, inner as i32];
+    let stride_contig: [i64; 2] = [inner as i64, 1];
+
+    let host_x: Vec<f64> = (0..numel)
+        .map(|i| ((i as f64) * 0.017 + 0.1).cos() * 1.4)
+        .collect();
+
+    let dev_x_ref = DeviceBuffer::from_slice(&ctx, &host_x).expect("up");
+    let mut dev_y_ref: DeviceBuffer<f64> = DeviceBuffer::zeros(&ctx, numel).expect("alloc y");
+    let status = unsafe {
+        baracuda_kernels_sys::baracuda_kernels_softmax_f64_run(
+            numel as i64, 2, shape.as_ptr(),
+            stride_contig.as_ptr(), stride_contig.as_ptr(),
+            1, inner as i32, 1, 1,
+            dev_x_ref.as_slice().as_raw().0 as *const c_void,
+            dev_y_ref.as_slice_mut().as_raw().0 as *mut c_void,
+            core::ptr::null_mut(), 0,
+            stream.as_raw() as *mut c_void,
+        )
+    };
+    assert_eq!(status, 0, "f64 non-aliased softmax");
+    stream.synchronize().expect("sync ref");
+    let mut ref_out = vec![0_f64; numel];
+    dev_y_ref.copy_to_host(&mut ref_out).expect("dl ref");
+
+    let mut dev_inplace = DeviceBuffer::from_slice(&ctx, &host_x).expect("up");
+    let p = dev_inplace.as_slice_mut().as_raw().0;
+    let status = unsafe {
+        baracuda_kernels_sys::baracuda_kernels_softmax_f64_run(
+            numel as i64, 2, shape.as_ptr(),
+            stride_contig.as_ptr(), stride_contig.as_ptr(),
+            1, inner as i32, 1, 1,
+            p as *const c_void,
+            p as *mut c_void,
+            core::ptr::null_mut(), 0,
+            stream.as_raw() as *mut c_void,
+        )
+    };
+    assert_eq!(status, 0, "f64 aliased softmax");
+    stream.synchronize().expect("sync aliased");
+    let mut aliased_out = vec![0_f64; numel];
+    dev_inplace.copy_to_host(&mut aliased_out).expect("dl");
+
+    for i in 0..numel {
+        assert_eq!(aliased_out[i].to_bits(), ref_out[i].to_bits(),
+            "f64 in-place softmax @ {i}: aliased={} non-aliased={}",
+            aliased_out[i], ref_out[i]);
+    }
+}

@@ -142,6 +142,107 @@ __device__ __forceinline__ float block_reduce_min_f32(
 }
 
 // =============================================================================
+// f64 variants — same pattern, double accumulator. Added Phase 65d-ext
+// to unblock f64 in-place dispatch on the SMEM-staged normalizers
+// (RMSNorm / LayerNorm / Softmax / LogSoftmax). The warp_buf scratch
+// is `double[BARACUDA_MAX_WARPS]` for these (callers must reserve
+// double-sized scratch when calling the f64 path).
+// =============================================================================
+
+__device__ __forceinline__ double warp_reduce_sum_f64(double x) {
+    #pragma unroll
+    for (int offset = 16; offset > 0; offset >>= 1) {
+        x += __shfl_xor_sync(0xffffffff, x, offset, 32);
+    }
+    return x;
+}
+
+__device__ __forceinline__ double warp_reduce_max_f64(double x) {
+    #pragma unroll
+    for (int offset = 16; offset > 0; offset >>= 1) {
+        x = fmax(x, __shfl_xor_sync(0xffffffff, x, offset, 32));
+    }
+    return x;
+}
+
+__device__ __forceinline__ double warp_reduce_min_f64(double x) {
+    #pragma unroll
+    for (int offset = 16; offset > 0; offset >>= 1) {
+        x = fmin(x, __shfl_xor_sync(0xffffffff, x, offset, 32));
+    }
+    return x;
+}
+
+__device__ __forceinline__ double block_reduce_sum_f64(
+    double x,
+    double* __restrict__ warp_buf)
+{
+    int lane_id = threadIdx.x & 31;
+    int warp_id = threadIdx.x >> 5;
+    int num_warps = (blockDim.x + 31) >> 5;
+
+    double sum = warp_reduce_sum_f64(x);
+
+    if (lane_id == 0) warp_buf[warp_id] = sum;
+    __syncthreads();
+
+    if (warp_id == 0) {
+        double v = (lane_id < num_warps) ? warp_buf[lane_id] : 0.0;
+        v = warp_reduce_sum_f64(v);
+        if (lane_id == 0) warp_buf[0] = v;
+    }
+    __syncthreads();
+
+    return warp_buf[0];
+}
+
+__device__ __forceinline__ double block_reduce_max_f64(
+    double x,
+    double* __restrict__ warp_buf)
+{
+    int lane_id = threadIdx.x & 31;
+    int warp_id = threadIdx.x >> 5;
+    int num_warps = (blockDim.x + 31) >> 5;
+
+    double m = warp_reduce_max_f64(x);
+
+    if (lane_id == 0) warp_buf[warp_id] = m;
+    __syncthreads();
+
+    if (warp_id == 0) {
+        double v = (lane_id < num_warps) ? warp_buf[lane_id] : -CUDART_INF;
+        v = warp_reduce_max_f64(v);
+        if (lane_id == 0) warp_buf[0] = v;
+    }
+    __syncthreads();
+
+    return warp_buf[0];
+}
+
+__device__ __forceinline__ double block_reduce_min_f64(
+    double x,
+    double* __restrict__ warp_buf)
+{
+    int lane_id = threadIdx.x & 31;
+    int warp_id = threadIdx.x >> 5;
+    int num_warps = (blockDim.x + 31) >> 5;
+
+    double m = warp_reduce_min_f64(x);
+
+    if (lane_id == 0) warp_buf[warp_id] = m;
+    __syncthreads();
+
+    if (warp_id == 0) {
+        double v = (lane_id < num_warps) ? warp_buf[lane_id] : CUDART_INF;
+        v = warp_reduce_min_f64(v);
+        if (lane_id == 0) warp_buf[0] = v;
+    }
+    __syncthreads();
+
+    return warp_buf[0];
+}
+
+// =============================================================================
 // Aggregator — multi-stat in one block-reduction pass. Used by LayerNorm,
 // online-softmax, RMSNorm to compute (sum, sum_sq) or (max, sum_exp)
 // from a single sweep over the row.

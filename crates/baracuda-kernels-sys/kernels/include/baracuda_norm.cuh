@@ -386,7 +386,9 @@ __global__ void rms_norm_smem_kernel(
     }
 }
 
-// f64 specialization — accumulate + store in f64; SMEM stages in f64 too.
+// f64 specialization — accumulate + store in f64; SMEM stages in f64
+// and uses the f64 block-reduce primitive (Phase 65d-ext). True double
+// precision throughout — no f32 cast at the cross-warp boundary.
 template <>
 __global__ void rms_norm_smem_kernel<double>(
     const double* __restrict__ x,
@@ -402,9 +404,7 @@ __global__ void rms_norm_smem_kernel<double>(
 {
     extern __shared__ double smem_storage_f64[];
     double* smem_row = smem_storage_f64;
-    // For f64 we still use the f32 block_reduce (cast at the boundary).
-    // Reuse the second half of the SMEM allocation as the f32 warp buf.
-    float* warp_buf = reinterpret_cast<float*>(smem_storage_f64 + norm_total_extent);
+    double* warp_buf = smem_storage_f64 + norm_total_extent;
 
     double eps_d = (double)eps;
     for (int64_t row = (int64_t)blockIdx.x; row < row_count; row += (int64_t)gridDim.x) {
@@ -416,18 +416,12 @@ __global__ void rms_norm_smem_kernel<double>(
         }
         __syncthreads();
 
-        // Accumulate in f64 via per-thread partial; block-reduce via f32
-        // (loss of precision below ~1e-7 of magnitude; acceptable for
-        // sum-of-squares of N up to a few thousand elements). Callers
-        // needing strict f64 precision can fall back to the legacy kernel
-        // via a non-eligible stride / axes pattern.
         double local_sum_sq = 0.0;
         for (int64_t i = (int64_t)threadIdx.x; i < (int64_t)norm_total_extent; i += (int64_t)blockDim.x) {
             double v = smem_row[i];
             local_sum_sq += v * v;
         }
-        float total_sum_sq_f32 = baracuda::block_reduce_sum_f32((float)local_sum_sq, warp_buf);
-        double total_sum_sq = (double)total_sum_sq_f32;
+        double total_sum_sq = baracuda::block_reduce_sum_f64(local_sum_sq, warp_buf);
 
         double mean_sq = total_sum_sq / (double)norm_total_extent;
         double rms = sqrt(mean_sq + eps_d);
@@ -446,12 +440,13 @@ __global__ void rms_norm_smem_kernel<double>(
     }
 }
 
-// SMEM byte budget for the staged path. Conservative default (47 KB)
-// avoids needing `cudaFuncSetAttribute` opt-in (which on sm_70+ allows
-// up to ~100 KB depending on arch). Larger rows fall back to legacy.
+// SMEM byte budget for the staged path. `element_size` is the SMEM
+// stage element size: f32 for {f32, f16, bf16} (upcasts to f32), f64
+// for f64. The warp_buf accumulator size matches the stage size to
+// preserve precision through the cross-warp reduction.
 __host__ inline std::size_t rms_norm_smem_bytes(int32_t norm_total_extent, std::size_t element_size) {
     return (std::size_t)norm_total_extent * element_size
-         + (std::size_t)baracuda::BARACUDA_MAX_WARPS * sizeof(float);
+         + (std::size_t)baracuda::BARACUDA_MAX_WARPS * element_size;
 }
 
 template <typename T>
@@ -480,20 +475,20 @@ __host__ inline int32_t launch_rms_norm_fp(
     // fails. Legacy path stays numerically equivalent + in-place UNSAFE
     // (callers should use a separate output buffer when not eligible).
     //
-    // **f64 fallback**: the SMEM kernel's cross-warp reduction routes
-    // through `block_reduce_sum_f32`, which casts to f32 for the
-    // cross-warp aggregation step. That ~7-digit precision loss is
-    // unacceptable for f64 callers' tolerance. Phase 65b therefore
-    // restricts the SMEM path to T ∈ {f32, f16, bf16}; f64 stays on
-    // the legacy multi-pass-global kernel until smem_reduce.cuh grows
-    // an f64 block-reduce. (Tracked: future Phase 65b.1.)
+    // **Phase 65d-ext**: f64 now supported through the SMEM path via
+    // the new `block_reduce_sum_f64` helper in `baracuda_smem_reduce.cuh`.
+    // f64 stages and reduces in true double precision; SMEM budget per
+    // row doubles (8 bytes per element + 8 bytes per warp) so the
+    // max-eligible extent halves vs the f32-staged path.
     constexpr std::size_t SMEM_BUDGET_DEFAULT = 47 * 1024;
-    constexpr bool eligible_dtype = (sizeof(T) <= 4);  // f32 / f16 / bf16 / i32 / u32
+    constexpr bool eligible_dtype = (sizeof(T) <= 8);  // f32 / f16 / bf16 / f64
     bool simple_last_axis = (rank > 0)
         && (norm_axes_mask == (int32_t)(1u << (uint32_t)(rank - 1)));
     bool contig_last_axis_x = (rank > 0) && (stride_x_host[rank - 1] == 1);
     bool contig_last_axis_y = (rank > 0) && (stride_y_host[rank - 1] == 1);
-    std::size_t element_size = sizeof(float);  // SMEM stages in f32 always (only eligible types)
+    // SMEM stage element size: f32 for {f32, f16, bf16} (load_as_acc<T>
+    // upcasts to f32); f64 for double. Matches the kernel specializations.
+    std::size_t element_size = (sizeof(T) == 8) ? sizeof(double) : sizeof(float);
     std::size_t smem_bytes = rms_norm_smem_bytes(norm_total_extent, element_size);
 
     if (eligible_dtype && simple_last_axis && contig_last_axis_x && contig_last_axis_y
@@ -1129,10 +1124,77 @@ __global__ void layer_norm_smem_kernel(
     }
 }
 
-__host__ inline std::size_t layer_norm_smem_bytes(int32_t norm_total_extent) {
-    // Always stages in f32 (only eligible for f32/f16/bf16 storage; f64 falls back to legacy).
-    return (std::size_t)norm_total_extent * sizeof(float)
-         + (std::size_t)baracuda::BARACUDA_MAX_WARPS * sizeof(float);
+// f64 specialization — true double-precision throughout. Stages in f64,
+// reduces via `block_reduce_sum_f64`. Phase 65d-ext.
+template <>
+__global__ void layer_norm_smem_kernel<double>(
+    const double* __restrict__ x,
+    const double* __restrict__ gamma,
+    const double* __restrict__ beta,
+    double* __restrict__ y,
+    double* __restrict__ mean_out,
+    double* __restrict__ inv_std_out,
+    float eps,
+    int64_t row_count,
+    int64_t row_stride_x_elems,
+    int64_t row_stride_y_elems,
+    int64_t row_stride_save_elems,
+    int32_t norm_total_extent)
+{
+    extern __shared__ double smem_storage_ln_f64[];
+    double* smem_row = smem_storage_ln_f64;
+    double* warp_buf = smem_storage_ln_f64 + norm_total_extent;
+
+    double invN = 1.0 / (double)norm_total_extent;
+    double eps_d = (double)eps;
+
+    for (int64_t row = (int64_t)blockIdx.x; row < row_count; row += (int64_t)gridDim.x) {
+        const double* x_row = x + row * row_stride_x_elems;
+        double*       y_row = y + row * row_stride_y_elems;
+
+        for (int64_t i = (int64_t)threadIdx.x; i < (int64_t)norm_total_extent; i += (int64_t)blockDim.x) {
+            smem_row[i] = x_row[i];
+        }
+        __syncthreads();
+
+        double local_sum = 0.0;
+        for (int64_t i = (int64_t)threadIdx.x; i < (int64_t)norm_total_extent; i += (int64_t)blockDim.x) {
+            local_sum += smem_row[i];
+        }
+        double total_sum = baracuda::block_reduce_sum_f64(local_sum, warp_buf);
+        double mean = total_sum * invN;
+
+        double local_sum_sq = 0.0;
+        for (int64_t i = (int64_t)threadIdx.x; i < (int64_t)norm_total_extent; i += (int64_t)blockDim.x) {
+            double v = smem_row[i] - mean;
+            local_sum_sq += v * v;
+        }
+        double total_sum_sq = baracuda::block_reduce_sum_f64(local_sum_sq, warp_buf);
+        double var = total_sum_sq * invN;
+        double inv_std = 1.0 / sqrt(var + eps_d);
+
+        for (int64_t i = (int64_t)threadIdx.x; i < (int64_t)norm_total_extent; i += (int64_t)blockDim.x) {
+            double xh = (smem_row[i] - mean) * inv_std;
+            double gk = (gamma != nullptr) ? gamma[i] : 1.0;
+            double bk = (beta  != nullptr) ? beta[i]  : 0.0;
+            y_row[i] = xh * gk + bk;
+        }
+
+        if (threadIdx.x == 0) {
+            if (mean_out    != nullptr) mean_out[row * row_stride_save_elems]    = mean;
+            if (inv_std_out != nullptr) inv_std_out[row * row_stride_save_elems] = inv_std;
+        }
+
+        __syncthreads();
+    }
+}
+
+// SMEM byte budget. `element_size` is the stage element size: f32 for
+// {f32, f16, bf16} (upcast to f32); f64 for double. Warp_buf accumulator
+// size matches.
+__host__ inline std::size_t layer_norm_smem_bytes(int32_t norm_total_extent, std::size_t element_size) {
+    return (std::size_t)norm_total_extent * element_size
+         + (std::size_t)baracuda::BARACUDA_MAX_WARPS * element_size;
 }
 
 template <typename T>
@@ -1158,13 +1220,17 @@ __host__ inline int32_t launch_layer_norm_fp(
     if (norm_total_extent <= 0) return 2;
 
     // -------- Phase 65c SMEM-staged fast path eligibility --------
+    // Phase 65d-ext: f64 now supported through the SMEM path via the
+    // f64 `block_reduce_sum_f64` reducer; max-eligible extent halves
+    // vs the f32-staged path (8-byte stage element).
     constexpr std::size_t SMEM_BUDGET_DEFAULT = 47 * 1024;
-    constexpr bool eligible_dtype = (sizeof(T) <= 4);
+    constexpr bool eligible_dtype = (sizeof(T) <= 8);
     bool simple_last_axis = (rank > 0)
         && (norm_axes_mask == (int32_t)(1u << (uint32_t)(rank - 1)));
     bool contig_last_axis_x = (rank > 0) && (stride_x_host[rank - 1] == 1);
     bool contig_last_axis_y = (rank > 0) && (stride_y_host[rank - 1] == 1);
-    std::size_t smem_bytes = layer_norm_smem_bytes(norm_total_extent);
+    std::size_t element_size = (sizeof(T) == 8) ? sizeof(double) : sizeof(float);
+    std::size_t smem_bytes = layer_norm_smem_bytes(norm_total_extent, element_size);
 
     if (eligible_dtype && simple_last_axis && contig_last_axis_x && contig_last_axis_y
         && smem_bytes <= SMEM_BUDGET_DEFAULT) {
