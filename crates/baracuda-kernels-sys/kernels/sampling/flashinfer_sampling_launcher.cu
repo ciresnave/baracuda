@@ -88,6 +88,15 @@ inline bool acquire_success(void* valid, int32_t batch, cudaStream_t stream,
 inline void release_success(void* scratch, cudaStream_t stream) {
     if (scratch) cudaFreeAsync(scratch, stream);
 }
+
+// Standalone `TopKSamplingFromProb` types its per-row top_k array as `T*`
+// (float), unlike the combined sampler which uses `IdType*` (int32).
+// baracuda keeps a uniform int32 per-row top_k API and converts here.
+__global__ void convert_i32_to_f32_kernel(const int32_t* __restrict__ src,
+                                          float* __restrict__ dst, int32_t n) {
+    int32_t i = static_cast<int32_t>(blockIdx.x) * blockDim.x + threadIdx.x;
+    if (i < n) dst[i] = static_cast<float>(src[i]);
+}
 }  // namespace
 
 extern "C" {
@@ -294,11 +303,41 @@ int baracuda_kernels_flashinfer_top_k_top_p_sampling_f32_can_implement(
 // fallback value is passed too but ignored by the kernel when the array
 // is present.
 
-// (Standalone per-row Top-K is intentionally not exposed: FlashInfer types
-// its `top_k_arr` as `T*` (float) for the standalone sampler but as
-// `IdType*` (int32) for the combined Top-K+Top-P sampler. We expose only
-// the consistent int32 per-row Top-K via the combined `*_top_k_top_p_*_arr`
-// entry point below — set top_p = 1.0 per row for effectively Top-K-only.)
+// Standalone per-row Top-K. `top_k_arr` is int32 `[batch]` (baracuda's
+// uniform convention); we convert to the float array FlashInfer's
+// standalone sampler expects via a stream-ordered scratch buffer.
+int baracuda_kernels_flashinfer_top_k_sampling_f32_arr_run(
+    int32_t batch, int32_t vocab, const void* top_k_arr,
+    int32_t deterministic, uint64_t seed_val, uint64_t offset_val,
+    const void* probs, void* output, void* valid, void* stream)
+{
+    if (batch <= 0 || vocab <= 0) return STATUS_INVALID_ARG;
+    if (!probs || !output || !top_k_arr) return STATUS_INVALID_ARG;
+    cudaStream_t st = reinterpret_cast<cudaStream_t>(stream);
+    // i32 -> f32 scratch for the float-typed top_k_arr.
+    float* top_k_f32 = nullptr;
+    if (cudaMallocAsync(&top_k_f32, static_cast<size_t>(batch) * sizeof(float), st) != cudaSuccess)
+        return STATUS_INVALID_ARG;
+    {
+        int blocks = (batch + 255) / 256;
+        convert_i32_to_f32_kernel<<<blocks, 256, 0, st>>>(
+            reinterpret_cast<const int32_t*>(top_k_arr), top_k_f32, batch);
+    }
+    bool* success = nullptr; void* scratch = nullptr;
+    if (!acquire_success(valid, batch, st, &success, &scratch)) {
+        cudaFreeAsync(top_k_f32, st);
+        return STATUS_INVALID_ARG;
+    }
+    cudaError_t e = flashinfer::sampling::TopKSamplingFromProb<float, int32_t>(
+        reinterpret_cast<float*>(const_cast<void*>(probs)),
+        reinterpret_cast<int32_t*>(output), success, /*indices=*/nullptr,
+        /*top_k_arr (T*=float)=*/top_k_f32,
+        static_cast<uint32_t>(batch), /*top_k_val=*/0u, static_cast<uint32_t>(vocab),
+        deterministic != 0, /*seed_arr=*/nullptr, seed_val, /*offset_arr=*/nullptr, offset_val, st);
+    release_success(scratch, st);
+    cudaFreeAsync(top_k_f32, st);
+    return translate(e);
+}
 
 int baracuda_kernels_flashinfer_top_p_sampling_f32_arr_run(
     int32_t batch, int32_t vocab, const void* top_p_arr,

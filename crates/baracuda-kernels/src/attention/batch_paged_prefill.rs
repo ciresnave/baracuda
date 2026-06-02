@@ -70,6 +70,12 @@ pub struct BatchPagedPrefillDescriptor {
     pub sm_scale: f32,
     /// Apply causal (autoregressive) masking.
     pub causal: bool,
+    /// Opt into FlashInfer's KV-split parallelism (the scheduler may split
+    /// long KV across CTAs; the kernel merges partial states internally).
+    /// Costs a transient float workspace per call — enable for
+    /// long-context / few-request prefill where the GPU would otherwise be
+    /// under-utilized. `false` keeps the lighter no-split path.
+    pub enable_kv_split: bool,
     /// Paged cache descriptor (shared between K and V).
     pub paged_kv: PagedKvCacheDescriptor,
 }
@@ -268,12 +274,13 @@ impl<T: Element> BatchPagedPrefillPlan<T> {
             let o_ptr = args.o.data.as_raw().0 as *mut c_void;
             let lse_ptr = args.lse.data.as_raw().0 as *mut c_void;
             let causal = if d.causal { 1 } else { 0 };
+            let enable_split = if d.enable_kv_split { 1 } else { 0 };
 
             let status = match T::KIND {
                 ElementKind::F16 => unsafe {
                     baracuda_kernels_sys::baracuda_kernels_flashinfer_paged_prefill_f16_run(
                         d.batch_size, d.total_num_rows, d.paged_kv.page_size, d.paged_kv.head_dim,
-                        d.num_qo_heads, d.paged_kv.num_kv_heads, d.sm_scale, causal,
+                        d.num_qo_heads, d.paged_kv.num_kv_heads, d.sm_scale, causal, enable_split,
                         k_ptr, v_ptr, kv_indices_ptr, kv_indptr_ptr, last_page_len_ptr,
                         q_ptr, q_indptr_ptr, o_ptr, lse_ptr, stream_ptr,
                     )
@@ -281,7 +288,7 @@ impl<T: Element> BatchPagedPrefillPlan<T> {
                 ElementKind::Bf16 => unsafe {
                     baracuda_kernels_sys::baracuda_kernels_flashinfer_paged_prefill_bf16_run(
                         d.batch_size, d.total_num_rows, d.paged_kv.page_size, d.paged_kv.head_dim,
-                        d.num_qo_heads, d.paged_kv.num_kv_heads, d.sm_scale, causal,
+                        d.num_qo_heads, d.paged_kv.num_kv_heads, d.sm_scale, causal, enable_split,
                         k_ptr, v_ptr, kv_indices_ptr, kv_indptr_ptr, last_page_len_ptr,
                         q_ptr, q_indptr_ptr, o_ptr, lse_ptr, stream_ptr,
                     )

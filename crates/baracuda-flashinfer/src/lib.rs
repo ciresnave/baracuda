@@ -24,8 +24,11 @@
 //!   serving primitive. f16 / bf16 / f32, head_dim ∈ {64, 128, 256}.
 //! - [`BatchPagedPrefillPlan`] — batched paged-KV **prefill** (multiple
 //!   query rows per request, ragged via `q_indptr`, attending over the
-//!   paged history; causal or full). The prompt-ingestion primitive.
-//!   f16 / bf16.
+//!   paged history; causal or full; optional KV-split parallelism for
+//!   long-context / few-request). The prompt-ingestion primitive. f16 /
+//!   bf16.
+//! - [`BatchRaggedPrefillPlan`] — prefill over a **contiguous** (non-paged)
+//!   ragged KV store (`kv_indptr`), for the not-yet-paged path.
 //! - [`PagedKvAppendPlan`] — decode-time KV-cache **append** (writes the
 //!   freshly-computed K/V for the current token into the paged store).
 //! - [`CascadeAttentionPlan`] — LSE-aware pairwise **merge** of partial
@@ -111,6 +114,7 @@ pub mod prelude {
         BatchPagedDecodeArgs, BatchPagedDecodeDescriptor, BatchPagedDecodeFp8Args,
         BatchPagedDecodeFp8Descriptor, BatchPagedDecodeFp8Plan, BatchPagedDecodePlan,
         BatchPagedPrefillArgs, BatchPagedPrefillDescriptor, BatchPagedPrefillPlan,
+        BatchRaggedPrefillArgs, BatchRaggedPrefillDescriptor, BatchRaggedPrefillPlan,
         CascadeAttentionArgs, CascadeAttentionDescriptor, CascadeAttentionPlan,
         CascadeMergeStatesArgs, CascadeMergeStatesDescriptor, CascadeMergeStatesPlan, Fp8KvDtype,
         PagedKvAppendArgs, PagedKvAppendDescriptor, PagedKvAppendPlan, PagedKvCacheDescriptor,

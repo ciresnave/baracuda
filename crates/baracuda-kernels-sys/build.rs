@@ -439,6 +439,7 @@ fn main() {
         for f in &[
             "kernels/attention/flashinfer_paged_decode_launcher.cu",
             "kernels/attention/flashinfer_paged_prefill_launcher.cu",
+            "kernels/attention/flashinfer_ragged_prefill_launcher.cu",
             "kernels/attention/flashinfer_paged_kv_append_launcher.cu",
             "kernels/attention/flashinfer_cascade_launcher.cu",
             "kernels/sampling/flashinfer_sampling_launcher.cu",

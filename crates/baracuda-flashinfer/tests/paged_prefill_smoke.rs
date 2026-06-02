@@ -48,6 +48,7 @@ fn paged_prefill_plan_select_validates() {
         num_qo_heads: 8,
         sm_scale: 1.0 / (HEAD_DIM as f32).sqrt(),
         causal: true,
+        enable_kv_split: false,
         paged_kv: paged,
     };
     let _plan = BatchPagedPrefillPlan::<f16>::select(&stream, &desc, PlanPreference::default())
@@ -114,7 +115,9 @@ fn make_fixture(ctx: &Context, qo_len: usize, kv_len: usize, v_vals: &[f32]) -> 
     }
 }
 
-fn run_prefill(stream: &Stream, fx: &mut Fixture, qo_len: usize, kv_len: usize, causal: bool) -> Vec<f32> {
+fn run_prefill(
+    stream: &Stream, fx: &mut Fixture, qo_len: usize, kv_len: usize, causal: bool, enable_split: bool,
+) -> Vec<f32> {
     let paged = PagedKvCacheDescriptor {
         page_size: kv_len as i32, // single page holds the whole history
         num_total_pages: 1,
@@ -128,6 +131,7 @@ fn run_prefill(stream: &Stream, fx: &mut Fixture, qo_len: usize, kv_len: usize, 
         num_qo_heads: 1,
         sm_scale: 1.0 / (HEAD_DIM as f32).sqrt(),
         causal,
+        enable_kv_split: enable_split,
         paged_kv: paged,
     };
     let plan = BatchPagedPrefillPlan::<f16>::select(stream, &desc, PlanPreference::default())
@@ -167,7 +171,7 @@ fn paged_prefill_uniform_key_non_causal_is_mean() {
     let v_vals = [1.0f32, 3.0];
     let mean = (v_vals[0] + v_vals[1]) / 2.0; // 2.0
     let mut fx = make_fixture(&ctx, /*qo_len=*/ 2, /*kv_len=*/ 2, &v_vals);
-    let got = run_prefill(&stream, &mut fx, 2, 2, /*causal=*/ false);
+    let got = run_prefill(&stream, &mut fx, 2, 2, /*causal=*/ false, /*enable_split=*/ false);
     for (r, &g) in got.iter().enumerate() {
         assert!(
             (g - mean).abs() < 3e-2,
@@ -184,8 +188,38 @@ fn paged_prefill_uniform_key_causal_is_prefix_mean() {
     let (ctx, stream) = setup();
     let v_vals = [1.0f32, 3.0];
     let mut fx = make_fixture(&ctx, /*qo_len=*/ 2, /*kv_len=*/ 2, &v_vals);
-    let got = run_prefill(&stream, &mut fx, 2, 2, /*causal=*/ true);
+    let got = run_prefill(&stream, &mut fx, 2, 2, /*causal=*/ true, /*enable_split=*/ false);
     // row 0 attends KV[0] only → V0; row 1 attends KV[0..=1] → mean.
     assert!((got[0] - 1.0).abs() < 3e-2, "causal row 0: got {}, expected V0 = 1.0", got[0]);
     assert!((got[1] - 2.0).abs() < 3e-2, "causal row 1: got {}, expected mean = 2.0", got[1]);
+}
+
+/// KV-split parallelism must produce the SAME result as the no-split path.
+/// A single request with a long KV (1 q row, many KV tokens, 1 kv head)
+/// is the regime the scheduler splits; uniform keys ⇒ output = mean(V),
+/// independent of the split decision. We assert split == no-split == mean.
+#[test]
+#[ignore]
+fn paged_prefill_kv_split_matches_no_split() {
+    let (ctx, stream) = setup();
+    // 1 query row, 512 KV tokens, identical keys, V[t] = (t % 4) as a value.
+    let kv_len = 512usize;
+    let v_vals: Vec<f32> = (0..kv_len).map(|t| (t % 4) as f32).collect();
+    let mean: f32 = v_vals.iter().sum::<f32>() / kv_len as f32;
+
+    let got_nosplit = {
+        let mut fx = make_fixture(&ctx, 1, kv_len, &v_vals);
+        run_prefill(&stream, &mut fx, 1, kv_len, /*causal=*/ false, /*enable_split=*/ false)
+    };
+    let got_split = {
+        let mut fx = make_fixture(&ctx, 1, kv_len, &v_vals);
+        run_prefill(&stream, &mut fx, 1, kv_len, /*causal=*/ false, /*enable_split=*/ true)
+    };
+    assert!((got_nosplit[0] - mean).abs() < 5e-2, "no-split: {} vs mean {mean}", got_nosplit[0]);
+    assert!((got_split[0] - mean).abs() < 5e-2, "split: {} vs mean {mean}", got_split[0]);
+    assert!(
+        (got_split[0] - got_nosplit[0]).abs() < 2e-2,
+        "split {} must match no-split {}",
+        got_split[0], got_nosplit[0],
+    );
 }

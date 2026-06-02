@@ -66,6 +66,52 @@ fn perrow_top_k_top_p_one_hot() {
     assert_eq!(got[1] as usize, hot[1], "row 1");
 }
 
+/// Standalone per-row top-K (i32 array, converted to float internally) over
+/// one-hot rows must return each row's hot index.
+#[test]
+#[ignore]
+fn perrow_top_k_one_hot() {
+    let (ctx, stream) = setup();
+    const VOCAB: usize = 16;
+    let hot = [2usize, 9];
+    let mut probs = vec![0.0f32; 2 * VOCAB];
+    probs[0 * VOCAB + hot[0]] = 1.0;
+    probs[1 * VOCAB + hot[1]] = 1.0;
+    let probs_dev = DeviceBuffer::from_slice(&ctx, &probs).expect("probs");
+    let top_k_dev = DeviceBuffer::from_slice(&ctx, &[1i32, 1]).expect("top_k");
+    let mut out_dev: DeviceBuffer<i32> = DeviceBuffer::zeros(&ctx, 2).expect("out");
+
+    let desc = PerRowSamplingDescriptor {
+        batch_size: 2,
+        vocab_size: VOCAB as i32,
+        sampler: PerRowSampler::TopK,
+        deterministic: false,
+    };
+    let plan = PerRowSamplingPlan::select(&stream, &desc, PlanPreference::default()).expect("select");
+    let pshape = [2, VOCAB as i32];
+    plan.run(
+        &stream,
+        Workspace::None,
+        PerRowSamplingArgs {
+            probs: TensorRef { data: probs_dev.as_slice(), shape: pshape, stride: contiguous_stride(pshape) },
+            top_k_arr: Some(TensorRef { data: top_k_dev.as_slice(), shape: [2], stride: [1] }),
+            top_p_arr: None,
+            min_p_arr: None,
+            output: TensorMut { data: out_dev.as_slice_mut(), shape: [2], stride: [1] },
+            valid: None,
+            seed_val: 11,
+            offset_val: 0,
+        },
+    )
+    .expect("perrow topk run");
+    stream.synchronize().expect("sync");
+
+    let mut got = [0i32; 2];
+    out_dev.copy_to_host(&mut got).expect("download");
+    assert_eq!(got[0] as usize, hot[0], "row 0");
+    assert_eq!(got[1] as usize, hot[1], "row 1");
+}
+
 /// Identical draft + target one-hot distributions ⇒ every draft token is
 /// accepted; the bonus token is sampled from the target's extra step.
 #[test]

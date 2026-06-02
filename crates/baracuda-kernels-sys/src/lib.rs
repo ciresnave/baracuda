@@ -29437,10 +29437,11 @@ unsafe extern "C" {
     ) -> i32;
 
     // Batched paged-KV prefill (Phase 66 Tier 2). Ragged q via q_indptr;
-    // f16/bf16; causal flag; workspace allocated internally (synchronous).
+    // f16/bf16; causal flag; `enable_split` opts into KV-split parallelism.
+    // Workspace allocated internally (synchronous).
     pub fn baracuda_kernels_flashinfer_paged_prefill_f16_run(
         batch_size: i32, total_num_rows: i32, page_size: i32, head_dim: i32,
-        num_qo_heads: i32, num_kv_heads: i32, sm_scale: f32, causal: i32,
+        num_qo_heads: i32, num_kv_heads: i32, sm_scale: f32, causal: i32, enable_split: i32,
         k_data: *mut c_void, v_data: *mut c_void,
         kv_indices: *mut c_void, kv_indptr: *mut c_void, last_page_len: *mut c_void,
         q: *const c_void, q_indptr: *mut c_void, o: *mut c_void, lse: *mut c_void,
@@ -29448,7 +29449,7 @@ unsafe extern "C" {
     ) -> i32;
     pub fn baracuda_kernels_flashinfer_paged_prefill_bf16_run(
         batch_size: i32, total_num_rows: i32, page_size: i32, head_dim: i32,
-        num_qo_heads: i32, num_kv_heads: i32, sm_scale: f32, causal: i32,
+        num_qo_heads: i32, num_kv_heads: i32, sm_scale: f32, causal: i32, enable_split: i32,
         k_data: *mut c_void, v_data: *mut c_void,
         kv_indices: *mut c_void, kv_indptr: *mut c_void, last_page_len: *mut c_void,
         q: *const c_void, q_indptr: *mut c_void, o: *mut c_void, lse: *mut c_void,
@@ -29456,6 +29457,27 @@ unsafe extern "C" {
     ) -> i32;
     pub fn baracuda_kernels_flashinfer_paged_prefill_can_implement(
         batch_size: i32, total_num_rows: i32, page_size: i32, head_dim: i32,
+        num_qo_heads: i32, num_kv_heads: i32,
+    ) -> i32;
+
+    // Batched RAGGED-KV prefill (Phase 66 Tier 2). K/V contiguous via
+    // kv_indptr (no page table). f16/bf16; causal + enable_split flags.
+    pub fn baracuda_kernels_flashinfer_ragged_prefill_f16_run(
+        batch_size: i32, total_num_rows: i32, total_kv_rows: i32, head_dim: i32,
+        num_qo_heads: i32, num_kv_heads: i32, sm_scale: f32, causal: i32, enable_split: i32,
+        k_data: *const c_void, v_data: *const c_void,
+        kv_indptr: *mut c_void, q: *const c_void, q_indptr: *mut c_void,
+        o: *mut c_void, lse: *mut c_void, stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_flashinfer_ragged_prefill_bf16_run(
+        batch_size: i32, total_num_rows: i32, total_kv_rows: i32, head_dim: i32,
+        num_qo_heads: i32, num_kv_heads: i32, sm_scale: f32, causal: i32, enable_split: i32,
+        k_data: *const c_void, v_data: *const c_void,
+        kv_indptr: *mut c_void, q: *const c_void, q_indptr: *mut c_void,
+        o: *mut c_void, lse: *mut c_void, stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_flashinfer_ragged_prefill_can_implement(
+        batch_size: i32, total_num_rows: i32, total_kv_rows: i32, head_dim: i32,
         num_qo_heads: i32, num_kv_heads: i32,
     ) -> i32;
 
@@ -29550,8 +29572,13 @@ unsafe extern "C" {
     ) -> i32;
 
     // Per-row sampler parameter arrays (Phase 66 Tier 2). The threshold
-    // is a device array `[batch]` instead of a scalar. (Standalone Top-K
-    // per-row is omitted — see the launcher comment; use top_k_top_p.)
+    // is a device array `[batch]` instead of a scalar. `top_k_arr` is i32
+    // (converted to float internally for the standalone Top-K sampler).
+    pub fn baracuda_kernels_flashinfer_top_k_sampling_f32_arr_run(
+        batch: i32, vocab: i32, top_k_arr: *const c_void,
+        deterministic: i32, seed_val: u64, offset_val: u64,
+        probs: *const c_void, output: *mut c_void, valid: *mut c_void, stream: *mut c_void,
+    ) -> i32;
     pub fn baracuda_kernels_flashinfer_top_p_sampling_f32_arr_run(
         batch: i32, vocab: i32, top_p_arr: *const c_void,
         deterministic: i32, seed_val: u64, offset_val: u64,

@@ -640,6 +640,7 @@ pub use attention::{
     BatchPagedDecodeArgs, BatchPagedDecodeDescriptor, BatchPagedDecodePlan,
     BatchPagedDecodeFp8Args, BatchPagedDecodeFp8Descriptor, BatchPagedDecodeFp8Plan,
     BatchPagedPrefillArgs, BatchPagedPrefillDescriptor, BatchPagedPrefillPlan,
+    BatchRaggedPrefillArgs, BatchRaggedPrefillDescriptor, BatchRaggedPrefillPlan,
     CascadeAttentionArgs, CascadeAttentionDescriptor, CascadeAttentionPlan,
     CascadeMergeStatesArgs, CascadeMergeStatesDescriptor, CascadeMergeStatesPlan, Fp8KvDtype,
     PagedKvAppendArgs, PagedKvAppendDescriptor, PagedKvAppendPlan, PagedKvCacheDescriptor,

@@ -26,15 +26,13 @@ use crate::attention::map_status;
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum PerRowSampler {
+    /// Per-row top-K (`top_k_arr` i32 required).
+    TopK,
     /// Per-row top-P (`top_p_arr` required).
     TopP,
     /// Per-row min-P (`min_p_arr` required).
     MinP,
     /// Per-row top-K + top-P (`top_k_arr` i32 + `top_p_arr` f32 required).
-    /// For effectively top-K-only per row, pass `top_p_arr` of all `1.0`.
-    /// (Standalone per-row top-K is omitted because FlashInfer types its
-    /// `top_k_arr` inconsistently across the two samplers — see the
-    /// launcher comment.)
     TopKTopP,
 }
 
@@ -121,7 +119,7 @@ impl PerRowSamplingPlan {
         if args.output.shape != [b] {
             return Err(Error::InvalidProblem("PerRowSamplingPlan: output shape must be [batch]"));
         }
-        let need_k = matches!(self.desc.sampler, PerRowSampler::TopKTopP);
+        let need_k = matches!(self.desc.sampler, PerRowSampler::TopK | PerRowSampler::TopKTopP);
         let need_p = matches!(self.desc.sampler, PerRowSampler::TopP | PerRowSampler::TopKTopP);
         let need_minp = matches!(self.desc.sampler, PerRowSampler::MinP);
         if need_k && args.top_k_arr.is_none() {
@@ -218,6 +216,12 @@ impl PerRowSamplingPlan {
                 .map_or(core::ptr::null::<c_void>(), |t| t.data.as_raw().0 as *const c_void);
 
             let status = match self.desc.sampler {
+                PerRowSampler::TopK => unsafe {
+                    baracuda_kernels_sys::baracuda_kernels_flashinfer_top_k_sampling_f32_arr_run(
+                        self.desc.batch_size, self.desc.vocab_size, k_ptr, det,
+                        args.seed_val, args.offset_val, probs_ptr, output_ptr, valid_ptr, stream_ptr,
+                    )
+                },
                 PerRowSampler::TopP => unsafe {
                     baracuda_kernels_sys::baracuda_kernels_flashinfer_top_p_sampling_f32_arr_run(
                         self.desc.batch_size, self.desc.vocab_size, p_ptr, det,
