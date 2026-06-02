@@ -58,6 +58,13 @@ Helper categories so far:
 These two seed the library. Phase 65b will be the first user of them
 (retrofitting the normalizer family).
 
+### Phase 67c (committed on `phase67c-block-atomic`, 2026-06-01)
+
+| File | What it provides |
+|---|---|
+| [`baracuda_atomic.cuh`](../../crates/baracuda-kernels-sys/kernels/include/baracuda_atomic.cuh) | (Pre-existing, Phase 11.3 — now indexed.) `baracuda::atomic::add<T>` — native `atomicAdd` for f32/f64/i32/i64/u32/u64; 32-bit `atomicCAS` loop for `__half` / `__nv_bfloat16`. Already consumed by `baracuda_indexing.cuh` + `baracuda_segment.cuh`. |
+| [`baracuda_block_atomic.cuh`](../../crates/baracuda-kernels-sys/kernels/include/baracuda_block_atomic.cuh) | Cross-block atomic-merge family. `#include`s + re-exports `baracuda_atomic.cuh`'s `add`, then adds `baracuda::atomic::max<T>` / `min<T>` (native `atomicMax`/`atomicMin` for int/uint/ll/ull, `atomicCAS`-bit-trick for f32/f64, 16-bit-in-32 CAS for half/bf16) and `mul<T>` (always CAS — no native atomic multiply; f32/f64/half/bf16 + int/uint/ll/ull). Validated add/max/min/mul × all 8 dtypes on RTX 4070 (sm_89); compiles clean on sm_80/sm_89/sm_90a. |
+
 ### Pre-existing kernel-author helpers (in scope to lift if duplicated elsewhere)
 
 - `load_as_acc<T>` / `store_from_acc<T>` in [`baracuda_norm.cuh`](../../crates/baracuda-kernels-sys/kernels/include/baracuda_norm.cuh) — dtype promotion to f32 for compute. Currently scoped to norm.cuh; should be lifted to a shared `baracuda_dtype_promote.cuh` (see planned helpers below).
@@ -72,7 +79,7 @@ The prompts are self-contained — a new session can pick one up and run.
 |---|---|---|
 | `baracuda_dtype_promote.cuh` | [`kernel-helper-dtype-promote.md`](../sessions/kernel-helper-dtype-promote.md) | planned |
 | `baracuda_coord_unravel.cuh` | [`kernel-helper-coord-unravel.md`](../sessions/kernel-helper-coord-unravel.md) | planned |
-| `baracuda_block_atomic.cuh` | [`kernel-helper-block-atomic.md`](../sessions/kernel-helper-block-atomic.md) | planned |
+| `baracuda_block_atomic.cuh` | [`kernel-helper-block-atomic.md`](../sessions/kernel-helper-block-atomic.md) | ✅ done (Phase 67c) |
 | `baracuda_smem_scan.cuh` | [`kernel-helper-smem-scan.md`](../sessions/kernel-helper-smem-scan.md) | planned |
 | `baracuda_smem_tile.cuh` | [`kernel-helper-smem-tile.md`](../sessions/kernel-helper-smem-tile.md) | planned |
 | `baracuda_hmath.cuh` | [`kernel-helper-hmath.md`](../sessions/kernel-helper-hmath.md) | planned |
