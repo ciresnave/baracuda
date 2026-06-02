@@ -79,11 +79,24 @@ under its third-party attribution section.
 - **`decode.cuh`** — the main paged-KV decode dispatcher
   (`BatchDecodeWithPagedKVCacheDispatched`) + single-batch
   (`SingleDecodeWithKVCacheDispatched`). Powers `BatchPagedDecodePlan`.
+- **`prefill.cuh`** *(added Phase 66 Tier 2)* — the paged-KV prefill
+  dispatcher (`BatchPrefillWithPagedKVCacheDispatched`). Powers
+  `BatchPagedPrefillPlan` (f16/bf16, causal/non-causal, head_dim
+  {64,128,256}, `disable_split_kv` path).
+- **`default_prefill_params.cuh`** *(added Phase 66 Tier 2)* —
+  `BatchPrefillPagedParams<>` / `BatchPrefillRaggedParams<>` /
+  `SinglePrefillParams<>` struct definitions used by the prefill launcher.
+- **`fp16.h`** *(added Phase 66 Tier 2)* — constexpr fp32↔fp16 bit
+  conversion (Marat Dukhan / AMD, MIT). Pulled in by `prefill.cuh`.
+  Patched to drop a Boost dependency (see Patch list #8).
 - **`cascade.cuh`** — `MergeStateInPlace`, `MergeStates`, `MergeStatesLarge`.
-  Powers `CascadeAttentionPlan`.
-- **`scheduler.cuh`** — host-side workspace-size + tile-plan helpers
-  consumed by the decode dispatcher. baracuda's plan layer drives
-  this directly from `BatchPagedDecodePlan::select`.
+  Powers `CascadeAttentionPlan` + `CascadeMergeStatesPlan`.
+- **`scheduler.cuh`** — host-side workspace-size + tile-plan helpers.
+  Phase 46 vendored it but never compiled it (decode uses a manual
+  init kernel). Phase 66 Tier 2 is the first consumer: the prefill
+  launcher calls `PrefillPlan` for work partitioning. Compiled cleanly
+  under MSVC nvcc (the LLP64 `std::max` hazards live in the decode/MLA/
+  SM90 plan templates, which the prefill path does not instantiate).
 - **`state.cuh`** — `state_t<>` template for the running
   attention-state accumulator.
 - **`mask.cuh`** — `MaskMode` enum referenced by the decode params.
@@ -122,19 +135,21 @@ We skip these top-level headers:
   reference any symbols from it; the include is patched out (search
   for `// baracuda: removed unused #include "topk.cuh"` in
   `sampling.cuh`).
-- **`pod.cuh`**, **`batch_pod.cuh`**, **`prefill.cuh`**, **`persistent.cuh`**,
-  **`mla.cuh`**, **`concat_mla.cuh`**, **`cutlass_mla.cuh`** — prefill /
+- **`pod.cuh`**, **`batch_pod.cuh`**, **`persistent.cuh`**,
+  **`mla.cuh`**, **`concat_mla.cuh`**, **`cutlass_mla.cuh`** —
   POD (mixed prefill+decode) / MLA (DeepSeek-V3) / persistent-kernel
-  paths. All explicit Phase 46 non-goals.
+  paths. Phase 46/66 non-goals. (`prefill.cuh` was a Phase 46 non-goal
+  but is now vendored — see "what we kept" above.)
 - **`activation.cuh`**, **`norm.cuh`**, **`pos_enc.cuh`** — overlap with
   baracuda Phase 5 / Phase 14 / Phase 36 / Phase 41 plans.
   (`pos_enc.cuh` IS vendored because `decode.cuh` references it
   for on-the-fly RoPE in the kernel.)
 - **`quantization.cuh`**, **`profiler.cuh`**, **`logging.cuh`**,
   **`fast_topk_clusters_exact.cuh`**, **`fp4_layout.cuh`**,
-  **`fp16.h`**, **`cubin_loader.h`**, **`cutlass_utils.cuh`**,
-  **`arch_condition.h`** — not in the dependency closure of the three
-  vendored kernel families.
+  **`cubin_loader.h`**, **`cutlass_utils.cuh`**,
+  **`arch_condition.h`** — not in the dependency closure of the
+  vendored kernel families. (`fp16.h` WAS here until Phase 66 Tier 2
+  pulled it in via `prefill.cuh` — now vendored, see above.)
 
 We also skip the entire `csrc/`, `flashinfer/` (the Python package),
 `tests/`, `benchmarks/`, `docker/`, `docs/`, `scripts/`, `ci/`,
@@ -217,12 +232,21 @@ Patches applied to vendored headers (record every divergence here):
    std::max matches the argument list". Unblocks Phase 46 paged decode
    launcher compile on Windows. Verified at consolidation pass
    2026-05-28.
+8. `fp16.h` lines 12 + 28 *(Phase 66 Tier 2)* — dropped
+   `#include <boost/math/ccmath/fabs.hpp>` and replaced its single use
+   (`boost::math::ccmath::fabs<float>(f)`, used only for a constexpr
+   `fabs`) with a constexpr ternary `(f < 0.0f ? -f : f)`. baracuda's
+   nvcc host toolchain has no Boost. Bit-identical for finite inputs.
 
 ## Future scope
 
-- **Tier 2**: prefill path (`prefill.cuh`). baracuda's bespoke
-  `SdpaPlan` / `FlashSdpaPlan` already cover this; would only vendor
-  if benchmark data shows a 1.5×+ win on prefill shapes.
+- **Tier 2 prefill: COMPLETE** (Phase 66) — `prefill.cuh` vendored;
+  `BatchPagedPrefillPlan` + `BatchRaggedPrefillPlan` ship f16/bf16 paged
+  AND ragged prefill (causal + non-causal), with opt-in KV-split
+  parallelism (`enable_kv_split` → the dispatcher's internal
+  `VariableLengthMergeStates`). Also vendored from `sampling.cuh`:
+  `ChainSpeculativeSampling` (spec-decode verify) + the per-row `*_arr`
+  samplers. FP8 KV decode reuses the vendored `decode.cuh`.
 - **MLA**: DeepSeek-V3 specific; depends on customer demand.
 - **POD (mixed prefill+decode)**: niche scheduling optimization.
 - **NVFP4 GEMM (Blackwell)**, **mamba / SSM**: separate vendor

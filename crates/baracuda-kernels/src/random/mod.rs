@@ -29,6 +29,10 @@ pub mod dropout;
 pub mod plan;
 // Phase 46 — FlashInfer sort-free top-K/top-P/min-P sampling.
 pub mod topk_topp_sampling;
+// Phase 66 Tier 2 — per-row sampling + speculative-decode verification.
+pub mod perrow_spec_sampling;
+// Phase 66 Tier 2 — bespoke token-penalty logit transform.
+pub mod token_penalty;
 
 pub use dropout::{
     DropoutArgs, DropoutBackwardArgs, DropoutBackwardDescriptor, DropoutBackwardPlan,
@@ -39,3 +43,9 @@ pub use plan::{RandomArgs, RandomBoolArgs, RandomDescriptor, RandomPlan};
 pub use topk_topp_sampling::{
     SamplerKind, TopKTopPSamplingArgs, TopKTopPSamplingDescriptor, TopKTopPSamplingPlan,
 };
+// Phase 66 Tier 2 re-exports.
+pub use perrow_spec_sampling::{
+    PerRowSampler, PerRowSamplingArgs, PerRowSamplingDescriptor, PerRowSamplingPlan,
+    SpeculativeSamplingArgs, SpeculativeSamplingDescriptor, SpeculativeSamplingPlan,
+};
+pub use token_penalty::{TokenPenaltyArgs, TokenPenaltyDescriptor, TokenPenaltyPlan};

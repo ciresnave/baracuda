@@ -1,0 +1,31 @@
+[package]
+name = "baracuda-flashinfer"
+version = "0.0.1-alpha.63"
+description = "Safe, typed Rust wrappers for NVIDIA FlashInfer's inference-serving kernels: batched paged-KV attention decode, decode-time KV-cache append, cascade / prefix-cache attention-state merge, and sort-free top-K / top-P / min-P sampling. The canonical vLLM-style serving surface for the baracuda CUDA stack. Apache-2.0 (FlashInfer upstream)."
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords = ["cuda", "flashinfer", "attention", "paged-attention", "llm"]
+categories = ["api-bindings", "science"]
+
+[features]
+default = []
+# Enable the FlashInfer-backed plans. Pulls the vendored kernel
+# compilation in through `baracuda-kernels/flashinfer`. OFF by default;
+# enable when wiring vLLM-style serving infrastructure.
+flashinfer = [
+    "baracuda-kernels/flashinfer",
+    "baracuda-flashinfer-sys/flashinfer",
+]
+
+[dependencies]
+baracuda-kernels.workspace = true
+baracuda-flashinfer-sys.workspace = true
+
+[dev-dependencies]
+baracuda-driver.workspace = true
+baracuda-kernels-sys.workspace = true
+half = { workspace = true }

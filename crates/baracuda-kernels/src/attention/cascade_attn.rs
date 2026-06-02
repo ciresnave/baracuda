@@ -246,3 +246,221 @@ impl<T: Element> CascadeAttentionPlan<T> {
         }
     }
 }
+
+// =========================================================================
+// Many-way merge (cascade depth > 2) — Phase 66.
+// =========================================================================
+//
+// Phase 46 wired only the pairwise in-place merge above. This plan wraps
+// FlashInfer's `MergeStates` many-way merge: given `num_index_sets`
+// partial attention states stacked per `(seq_pos, head)` cell, collapse
+// them to a single merged state in one launch. This is the building block
+// for cascade depth > 2 — e.g. a multi-level shared-prefix tree (global
+// system prompt → per-tenant prefix → per-request suffix) or fusing the
+// partial states of several overlapping prefix caches / LoRA adapters.
+
+/// Descriptor for a many-way cascade state merge.
+#[derive(Copy, Clone, Debug)]
+pub struct CascadeMergeStatesDescriptor {
+    /// Number of partial states to merge per cell (cascade fan-in).
+    pub num_index_sets: i32,
+    /// Sequence length (per-request output query length).
+    pub seq_len: i32,
+    /// Number of heads.
+    pub num_heads: i32,
+    /// Per-head dimension. Must be 64, 128, or 256.
+    pub head_dim: i32,
+    /// Element type of `v` / `v_merged`.
+    pub element: ElementKind,
+}
+
+/// Args bundle for a many-way cascade merge launch.
+///
+/// Inputs are stacked along the `num_index_sets` axis; outputs collapse
+/// that axis away.
+pub struct CascadeMergeStatesArgs<'a, T: Element> {
+    /// Stacked partial `v` —
+    /// `[seq_len, num_index_sets, num_heads, head_dim]`.
+    pub v: TensorRef<'a, T, 4>,
+    /// Stacked partial `s` (base-2 LSE) —
+    /// `[seq_len, num_index_sets, num_heads]` f32.
+    pub s: TensorRef<'a, f32, 3>,
+    /// Merged `v` output — `[seq_len, num_heads, head_dim]`.
+    pub v_merged: TensorMut<'a, T, 3>,
+    /// Merged `s` (base-2 LSE) output — `[seq_len, num_heads]` f32.
+    pub s_merged: TensorMut<'a, f32, 2>,
+}
+
+/// Many-way cascade-attention LSE-merge plan.
+///
+/// Routes to FlashInfer's `MergeStates<DType, DType>`. Requires the
+/// `flashinfer` cargo feature.
+///
+/// **Workspace**: zero. **Precision**: f32 accumulation; deterministic on
+/// same-hardware repeat.
+pub struct CascadeMergeStatesPlan<T: Element> {
+    desc: CascadeMergeStatesDescriptor,
+    sku: KernelSku,
+    _marker: PhantomData<T>,
+}
+
+impl<T: Element> CascadeMergeStatesPlan<T> {
+    /// Pick a kernel + validate fan-in / head_dim / element gates.
+    pub fn select(
+        _stream: &Stream,
+        desc: &CascadeMergeStatesDescriptor,
+        _pref: PlanPreference,
+    ) -> Result<Self> {
+        if desc.element != T::KIND {
+            return Err(Error::Unsupported(
+                "CascadeMergeStatesPlan: descriptor element != T",
+            ));
+        }
+        if desc.num_index_sets <= 0 || desc.seq_len <= 0 || desc.num_heads <= 0 {
+            return Err(Error::InvalidProblem(
+                "CascadeMergeStatesPlan: extents must be positive",
+            ));
+        }
+        if !matches!(desc.head_dim, 64 | 128 | 256) {
+            return Err(Error::Unsupported(
+                "CascadeMergeStatesPlan: head_dim must be 64, 128, or 256",
+            ));
+        }
+        if !matches!(T::KIND, ElementKind::F16 | ElementKind::Bf16 | ElementKind::F32) {
+            return Err(Error::Unsupported(
+                "CascadeMergeStatesPlan: element type must be f16, bf16, or f32",
+            ));
+        }
+        let precision_guarantee = PrecisionGuarantee {
+            math_precision: MathPrecision::F32,
+            accumulator: ElementKind::F32,
+            bit_stable_on_same_hardware: true,
+            deterministic: true,
+        };
+        let sku = KernelSku {
+            category: OpCategory::Attention,
+            op: AttentionKind::PagedAttention as u16,
+            element: T::KIND,
+            aux_element: None,
+            layout: None,
+            epilogue: None,
+            arch: ArchSku::Sm80,
+            backend: BackendKind::FlashInfer,
+            precision_guarantee,
+        };
+        Ok(Self {
+            desc: *desc,
+            sku,
+            _marker: PhantomData,
+        })
+    }
+
+    /// Validate args against the descriptor (shape + contiguity checks).
+    pub fn can_implement(&self, args: &CascadeMergeStatesArgs<'_, T>) -> Result<()> {
+        let v_shape = [
+            self.desc.seq_len,
+            self.desc.num_index_sets,
+            self.desc.num_heads,
+            self.desc.head_dim,
+        ];
+        let s_shape = [self.desc.seq_len, self.desc.num_index_sets, self.desc.num_heads];
+        let v_merged_shape = [self.desc.seq_len, self.desc.num_heads, self.desc.head_dim];
+        let s_merged_shape = [self.desc.seq_len, self.desc.num_heads];
+        if args.v.shape != v_shape {
+            return Err(Error::InvalidProblem("CascadeMergeStatesPlan: v shape mismatch"));
+        }
+        if args.s.shape != s_shape {
+            return Err(Error::InvalidProblem("CascadeMergeStatesPlan: s shape mismatch"));
+        }
+        if args.v_merged.shape != v_merged_shape {
+            return Err(Error::InvalidProblem(
+                "CascadeMergeStatesPlan: v_merged shape mismatch",
+            ));
+        }
+        if args.s_merged.shape != s_merged_shape {
+            return Err(Error::InvalidProblem(
+                "CascadeMergeStatesPlan: s_merged shape mismatch",
+            ));
+        }
+        if !args.v.is_contiguous()
+            || !args.s.is_contiguous()
+            || !args.v_merged.is_contiguous()
+            || !args.s_merged.is_contiguous()
+        {
+            return Err(Error::Unsupported(
+                "CascadeMergeStatesPlan: tensors must be contiguous (Tier 1)",
+            ));
+        }
+        Ok(())
+    }
+
+    /// Required workspace bytes (always 0).
+    #[inline]
+    pub fn workspace_size(&self) -> usize {
+        0
+    }
+
+    /// SKU identity (telemetry / autotuner key).
+    #[inline]
+    pub fn sku(&self) -> KernelSku {
+        self.sku
+    }
+
+    /// Numerical guarantees of this plan.
+    #[inline]
+    pub fn precision_guarantee(&self) -> PrecisionGuarantee {
+        self.sku.precision_guarantee
+    }
+
+    /// Many-way merge of `num_index_sets` partial states into one.
+    pub fn run(
+        &self,
+        stream: &Stream,
+        _workspace: Workspace<'_>,
+        args: CascadeMergeStatesArgs<'_, T>,
+    ) -> Result<()> {
+        self.can_implement(&args)?;
+        #[cfg(not(feature = "flashinfer"))]
+        {
+            let _ = (stream, &args);
+            Err(Error::Unsupported(
+                "CascadeMergeStatesPlan: `flashinfer` cargo feature is not enabled",
+            ))
+        }
+        #[cfg(feature = "flashinfer")]
+        {
+            let stream_ptr = stream.as_raw() as *mut c_void;
+            let v_ptr = args.v.data.as_raw().0 as *const c_void;
+            let s_ptr = args.s.data.as_raw().0 as *const c_void;
+            let v_merged_ptr = args.v_merged.data.as_raw().0 as *mut c_void;
+            let s_merged_ptr = args.s_merged.data.as_raw().0 as *mut c_void;
+
+            let status = match T::KIND {
+                ElementKind::F16 => unsafe {
+                    baracuda_kernels_sys::baracuda_kernels_flashinfer_merge_states_f16_run(
+                        self.desc.num_index_sets, self.desc.seq_len, self.desc.num_heads,
+                        self.desc.head_dim, v_ptr, s_ptr, v_merged_ptr, s_merged_ptr, stream_ptr,
+                    )
+                },
+                ElementKind::Bf16 => unsafe {
+                    baracuda_kernels_sys::baracuda_kernels_flashinfer_merge_states_bf16_run(
+                        self.desc.num_index_sets, self.desc.seq_len, self.desc.num_heads,
+                        self.desc.head_dim, v_ptr, s_ptr, v_merged_ptr, s_merged_ptr, stream_ptr,
+                    )
+                },
+                ElementKind::F32 => unsafe {
+                    baracuda_kernels_sys::baracuda_kernels_flashinfer_merge_states_f32_run(
+                        self.desc.num_index_sets, self.desc.seq_len, self.desc.num_heads,
+                        self.desc.head_dim, v_ptr, s_ptr, v_merged_ptr, s_merged_ptr, stream_ptr,
+                    )
+                },
+                _ => {
+                    return Err(Error::Unsupported(
+                        "CascadeMergeStatesPlan::run reached an unimplemented dtype",
+                    ));
+                }
+            };
+            map_status(status)
+        }
+    }
+}

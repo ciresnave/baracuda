@@ -147,6 +147,9 @@ pub const ROPE_DEFAULT_BASE: f32 = 10000.0;
 // public API surface exists even without the feature.
 // =========================================================================
 pub mod batch_paged_decode;
+pub mod batch_paged_decode_fp8;
+pub mod batch_paged_prefill;
+pub mod batch_ragged_prefill;
 pub mod cascade_attn;
 pub mod paged_kv_append;
 
@@ -184,8 +187,18 @@ pub use batch_paged_decode::{
     BatchPagedDecodeArgs, BatchPagedDecodeDescriptor, BatchPagedDecodePlan,
     PagedKvCacheDescriptor,
 };
+pub use batch_paged_prefill::{
+    BatchPagedPrefillArgs, BatchPagedPrefillDescriptor, BatchPagedPrefillPlan,
+};
+pub use batch_paged_decode_fp8::{
+    BatchPagedDecodeFp8Args, BatchPagedDecodeFp8Descriptor, BatchPagedDecodeFp8Plan, Fp8KvDtype,
+};
+pub use batch_ragged_prefill::{
+    BatchRaggedPrefillArgs, BatchRaggedPrefillDescriptor, BatchRaggedPrefillPlan,
+};
 pub use cascade_attn::{
     CascadeAttentionArgs, CascadeAttentionDescriptor, CascadeAttentionPlan,
+    CascadeMergeStatesArgs, CascadeMergeStatesDescriptor, CascadeMergeStatesPlan,
 };
 pub use paged_kv_append::{
     PagedKvAppendArgs, PagedKvAppendDescriptor, PagedKvAppendPlan,
