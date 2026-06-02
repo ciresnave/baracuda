@@ -89,6 +89,12 @@ These two seed the library. Phase 65b will be the first user of them
 |---|---|
 | [`baracuda_hmath.cuh`](../../crates/baracuda-kernels-sys/kernels/include/baracuda_hmath.cuh) | Uniform half-precision math facade in `namespace baracuda::hmath`. Scalar `hadd`/`hsub`/`hmul`/`hfma` overloaded for `__half` + `__nv_bfloat16` (native intrinsics on sm_53+/sm_80+, f32-promotion fallback otherwise); transcendentals `hexp`/`hlog`/`htanh`/`hsigmoid`/`hsqrt` (always f32-stable path); packed `hadd2`/`hmul2`/`hfma2` for `__half2` + `__nv_bfloat162` (native `*2` SIMD, component-wise f32 fallback) |
 
+### Phase 67e (branch `phase67e-smem-tile`, 2026-06-01)
+
+| File | What it provides |
+|---|---|
+| [`baracuda_smem_tile.cuh`](../../crates/baracuda-kernels-sys/kernels/include/baracuda_smem_tile.cuh) | `baracuda::tile::SmemTile2D<T, ROWS, COLS, PAD=1>` — bank-conflict-padded 2D SMEM tile (`data[ROWS][COLS+PAD]`, `operator()` hides padding, `rows()`/`cols()`/`pad()`/`bytes()` constexpr accessors) + cooperative `tile_load_row_major<BLOCK_THREADS>` (syncs) / `tile_store_row_major<BLOCK_THREADS>` (no trailing sync) / `tile_load_col_major<BLOCK_THREADS>` (transposed K-operand load, syncs). f32 fast path issues coalesced `float4` global transfers for row-major load/store when `COLS%4==0` and the stride is 4-aligned; scalar fallback otherwise. **Limitation:** targets SIMT-style scalar-column-stride tiles — does NOT cover the dense `[M_TILE][K_TILE]` warp-MMA tiles in `baracuda_{int8_rrr_sm80,fp8_*_sm89,int4_*_sm89,bin_*_sm89}.cuh` (they read SMEM into `mma.sync` fragments via 4-byte `uint32_t` loads dictated by the hardware fragment layout, not scalar column strides — and a 1-byte `+1` pad would misalign those reads). **Padding vs. swizzle:** padding is the default (any width/dtype, preserves row contiguity); an XOR-swizzled layout wastes zero SMEM but only wins when a profile shows SMEM capacity throttling occupancy *or* same-tile dual-orientation access — add it then as a *layout-policy template param*, not a parallel type (prefer CUTLASS `cute::Swizzle` for warp-MMA tiles). Header docstring carries the full decision criteria. Pure templates — compile-verified (nvcc sm_89), no standalone test; validated at first retrofit. |
+
 ### Pre-existing kernel-author helpers (in scope to lift if duplicated elsewhere)
 
 - `load_as_acc<T>` / `store_from_acc<T>` in [`baracuda_norm.cuh`](../../crates/baracuda-kernels-sys/kernels/include/baracuda_norm.cuh) — dtype promotion to f32 for compute. The shared successor (`load_as_f32`/`store_from_f32` in `baracuda_dtype_promote.cuh`, Phase 67a) now exists; norm.cuh's local copy stays until that kernel is the retrofit target. Same for the local `load_as_f32`/`store_from_f32` copies in `baracuda_attention.cuh` / `baracuda_sdpa.cuh` / others — retrofit one kernel at a time.
@@ -105,8 +111,8 @@ The prompts are self-contained — a new session can pick one up and run.
 | `baracuda_coord_unravel.cuh` | [`kernel-helper-coord-unravel.md`](../sessions/kernel-helper-coord-unravel.md) | ✅ done (Phase 67b) |
 | `baracuda_block_atomic.cuh` | [`kernel-helper-block-atomic.md`](../sessions/kernel-helper-block-atomic.md) | ✅ done (Phase 67c) |
 | `baracuda_smem_scan.cuh` | [`kernel-helper-smem-scan.md`](../sessions/kernel-helper-smem-scan.md) | ✅ done (Phase 67d) |
-| `baracuda_smem_tile.cuh` | [`kernel-helper-smem-tile.md`](../sessions/kernel-helper-smem-tile.md) | planned |
-| `baracuda_hmath.cuh` | [`kernel-helper-hmath.md`](../sessions/kernel-helper-hmath.md) | ✅ shipped (Phase 67f) |
+| `baracuda_smem_tile.cuh` | [`kernel-helper-smem-tile.md`](../sessions/kernel-helper-smem-tile.md) | ✅ done (Phase 67e) |
+| `baracuda_hmath.cuh` | [`kernel-helper-hmath.md`](../sessions/kernel-helper-hmath.md) | ✅ done (Phase 67f) |
 
 ## Adding a new helper — checklist for sessions
 
