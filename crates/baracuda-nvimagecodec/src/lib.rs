@@ -172,6 +172,8 @@ impl<'data> CodeStream<'data> {
                 &mut raw,
                 data.as_ptr() as *const c_uchar,
                 data.len(),
+                // code_stream_view: NULL = parse the whole bitstream.
+                core::ptr::null(),
             )
         })?;
         Ok(Self {
@@ -206,7 +208,15 @@ impl CodeStream<'static> {
             status: nvimgcodecStatus_t::INVALID_PARAMETER,
         })?;
         let mut raw: nvimgcodecCodeStream_t = core::ptr::null_mut();
-        check(unsafe { create(instance.raw, &mut raw, c_path.as_ptr() as *const c_char) })?;
+        check(unsafe {
+            create(
+                instance.raw,
+                &mut raw,
+                c_path.as_ptr() as *const c_char,
+                // code_stream_view: NULL = default parsing.
+                core::ptr::null(),
+            )
+        })?;
         Ok(Self {
             raw,
             _data: PhantomData,
@@ -324,7 +334,6 @@ impl<'buf> Image<'buf> {
         info.plane_info[0].sample_type = nvimgcodecSampleDataType_t::Uint8;
         info.plane_info[0].precision = 8;
         info.buffer = buffer.as_raw().0 as *mut core::ffi::c_void;
-        info.buffer_size = needed;
         info.buffer_kind = nvimgcodecImageBufferKind_t::StridedDevice;
         info.cuda_stream = stream_raw(stream);
 

@@ -384,10 +384,10 @@ pub struct nvimgcodecImageInfo_t {
     pub orientation: nvimgcodecOrientation_t,
     pub num_planes: u32,
     pub plane_info: [nvimgcodecImagePlaneInfo_t; NVIMGCODEC_MAX_NUM_PLANES],
-    /// Output buffer pointer (device or host per `buffer_kind`).
+    /// Output buffer pointer (device or host per `buffer_kind`). The library
+    /// derives the required size from `plane_info` (`row_stride * height` per
+    /// plane); there is no separate `buffer_size` field in `nvimgcodec.h`.
     pub buffer: *mut c_void,
-    /// Size of `buffer` in bytes.
-    pub buffer_size: usize,
     pub buffer_kind: nvimgcodecImageBufferKind_t,
     pub cuda_stream: cudaStream_t,
 }
@@ -406,7 +406,6 @@ impl nvimgcodecImageInfo_t {
             num_planes: 0,
             plane_info: [nvimgcodecImagePlaneInfo_t::new(); NVIMGCODEC_MAX_NUM_PLANES],
             buffer: core::ptr::null_mut(),
-            buffer_size: 0,
             buffer_kind: nvimgcodecImageBufferKind_t::Unknown,
             cuda_stream: core::ptr::null_mut(),
         }
@@ -426,7 +425,6 @@ impl core::fmt::Debug for nvimgcodecImageInfo_t {
             .field("color_spec", &self.color_spec)
             .field("num_planes", &self.num_planes)
             .field("buffer", &self.buffer)
-            .field("buffer_size", &self.buffer_size)
             .field("buffer_kind", &self.buffer_kind)
             .finish_non_exhaustive()
     }
@@ -565,12 +563,20 @@ pub type PFN_nvimgcodecCodeStreamCreateFromHostMem = unsafe extern "C" fn(
     code_stream: *mut nvimgcodecCodeStream_t,
     data: *const c_uchar,
     length: usize,
+    // Optional `const nvimgcodecCodeStreamView_t*` (parse offset / image
+    // limit). Added on nvImageCodec `main`; older 0.x releases omit it. We
+    // always pass NULL — correct on new libraries, and on the C ABIs
+    // baracuda targets (x86-64 SysV / Win64) an extra trailing pointer the
+    // callee ignores is harmless on older ones.
+    code_stream_view: *const c_void,
 ) -> nvimgcodecStatus_t;
 
 pub type PFN_nvimgcodecCodeStreamCreateFromFile = unsafe extern "C" fn(
     instance: nvimgcodecInstance_t,
     code_stream: *mut nvimgcodecCodeStream_t,
     file_name: *const c_char,
+    // Optional `const nvimgcodecCodeStreamView_t*`; see the HostMem variant.
+    code_stream_view: *const c_void,
 ) -> nvimgcodecStatus_t;
 
 pub type PFN_nvimgcodecCodeStreamGetImageInfo = unsafe extern "C" fn(
