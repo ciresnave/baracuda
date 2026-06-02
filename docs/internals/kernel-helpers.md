@@ -58,6 +58,12 @@ Helper categories so far:
 These two seed the library. Phase 65b will be the first user of them
 (retrofitting the normalizer family).
 
+### Phase 67f (branch `phase67f-hmath`)
+
+| File | What it provides |
+|---|---|
+| [`baracuda_hmath.cuh`](../../crates/baracuda-kernels-sys/kernels/include/baracuda_hmath.cuh) | Uniform half-precision math facade in `namespace baracuda::hmath`. Scalar `hadd`/`hsub`/`hmul`/`hfma` overloaded for `__half` + `__nv_bfloat16` (native intrinsics on sm_53+/sm_80+, f32-promotion fallback otherwise); transcendentals `hexp`/`hlog`/`htanh`/`hsigmoid`/`hsqrt` (always f32-stable path); packed `hadd2`/`hmul2`/`hfma2` for `__half2` + `__nv_bfloat162` (native `*2` SIMD, component-wise f32 fallback) |
+
 ### Pre-existing kernel-author helpers (in scope to lift if duplicated elsewhere)
 
 - `load_as_acc<T>` / `store_from_acc<T>` in [`baracuda_norm.cuh`](../../crates/baracuda-kernels-sys/kernels/include/baracuda_norm.cuh) — dtype promotion to f32 for compute. Currently scoped to norm.cuh; should be lifted to a shared `baracuda_dtype_promote.cuh` (see planned helpers below).
@@ -75,7 +81,7 @@ The prompts are self-contained — a new session can pick one up and run.
 | `baracuda_block_atomic.cuh` | [`kernel-helper-block-atomic.md`](../sessions/kernel-helper-block-atomic.md) | planned |
 | `baracuda_smem_scan.cuh` | [`kernel-helper-smem-scan.md`](../sessions/kernel-helper-smem-scan.md) | planned |
 | `baracuda_smem_tile.cuh` | [`kernel-helper-smem-tile.md`](../sessions/kernel-helper-smem-tile.md) | planned |
-| `baracuda_hmath.cuh` | [`kernel-helper-hmath.md`](../sessions/kernel-helper-hmath.md) | planned |
+| `baracuda_hmath.cuh` | [`kernel-helper-hmath.md`](../sessions/kernel-helper-hmath.md) | ✅ shipped (Phase 67f) |
 
 ## Adding a new helper — checklist for sessions
 
