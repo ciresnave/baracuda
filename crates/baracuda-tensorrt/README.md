@@ -4,18 +4,29 @@ Safe Rust wrappers for **NVIDIA TensorRT** — the high-performance
 inference runtime. Loads pre-built engine blobs and executes them on
 GPU.
 
-## Status: target API, pending a C-ABI shim
+## How it links: dynamic libnvinfer + a C++ shim
 
 TensorRT exposes **no flat C ABI** — its public headers are C++-only, and
 `libnvinfer` exports only `getInferLibVersion` and
 `createInferRuntime_INTERNAL` as `extern "C"`. The runtime calls this crate
-makes (`deserializeCudaEngine`, `enqueueV3`, tensor binding, …) therefore go
-through baracuda-defined `trt*` symbols that a small C++ shim must supply by
-forwarding to the C++ vtable API. **That shim is not built yet**, so on a
-stock `libnvinfer` these calls fail at symbol-resolution time. The Rust
-surface below compiles and is type-correct, but inference cannot run until the
-shim lands. See [`AUDIT.md`](AUDIT.md) for the shim spec, the full symbol
-list, and the TensorRT install requirement.
+makes (`deserializeCudaEngine`, `enqueueV3`, tensor binding, …) go through a
+small C++ shim (`baracuda-tensorrt-sys/shim/trt_shim.cpp`) that forwards flat
+`trt*` symbols to TensorRT's C++ vtable API. The shim references **no**
+libnvinfer symbol (pure vtable dispatch on pointers from Rust), so `libnvinfer`
+is still loaded **dynamically at runtime** via `libloading` — no link-time
+TensorRT dependency.
+
+The shim is compiled (and statically linked) only with the **`shim` feature**,
+which needs the TensorRT SDK headers at build time:
+
+```bash
+cargo build -p baracuda-tensorrt --features shim   # with TENSORRT_PATH + CUDA_PATH set
+```
+
+Without it (the default), `version()` and `Runtime` construction work, but
+`Runtime::deserialize_engine` returns `Error::ShimNotBuilt` (check via
+`shim_built()`). See [`AUDIT.md`](AUDIT.md) for the full symbol map, the
+header-verified ABI, and the build/test recipe.
 
 ## Scope: runtime side only
 
@@ -28,8 +39,8 @@ The runtime side is what this crate wraps:
 
 - **`Runtime`**: deserialize an engine blob (`deserialize_engine`). Created
   with a raw `ILogger*` (`unsafe Runtime::new`) or none
-  (`Runtime::with_null_logger`). A typed safe `Logger` is deferred (it needs
-  the shim — see `AUDIT.md`).
+  (`Runtime::with_null_logger`). A typed safe `Logger` is a future addition
+  (it needs an extra shim object that constructs an `ILogger` — see `AUDIT.md`).
 - **`Engine`**: inspect IO bindings (names, shapes, dtypes), query the engine
   name + number of optimization profiles, and serialize back to bytes
   (round-trip) via `Engine::serialize` → `HostMemory::as_slice`.

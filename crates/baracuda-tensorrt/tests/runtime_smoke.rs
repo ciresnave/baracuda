@@ -1,12 +1,13 @@
 //! Runtime-path smoke tests for `baracuda-tensorrt`.
 //!
-//! The inference tests are `#[ignore]`d: they require both a working TensorRT
-//! install (`libnvinfer` resolvable on the loader path) **and** the C-ABI shim
-//! that exports the baracuda-defined `trt*` symbols (see `AUDIT.md`). Neither is
-//! present on a stock machine, so these are opt-in:
+//! The inference tests are `#[ignore]`d: they require a working TensorRT
+//! install (`libnvinfer` resolvable on the loader path) **and** the C-ABI shim,
+//! which is compiled only with the `shim` feature (needs the TensorRT SDK
+//! headers; see `AUDIT.md`). Neither is present on a stock machine, so these are
+//! opt-in:
 //!
 //! ```text
-//! cargo test -p baracuda-tensorrt -- --ignored
+//! cargo test -p baracuda-tensorrt --features shim -- --ignored
 //! ```
 //!
 //! The non-ignored test exercises the pure-Rust `Dims` helper and always runs.
