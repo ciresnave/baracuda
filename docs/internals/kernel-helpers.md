@@ -64,6 +64,12 @@ These two seed the library. Phase 65b will be the first user of them
 |---|---|
 | [`baracuda_dtype_promote.cuh`](../../crates/baracuda-kernels-sys/kernels/include/baracuda_dtype_promote.cuh) | Three dtype-promotion lanes (all `__device__ __forceinline__`, in `namespace baracuda`): f32 lane `load_as_f32<T>` / `store_from_f32<T>` (lifted from `norm.cuh`'s `load_as_acc`/`store_from_acc`; specializations for `__half`/`__nv_bfloat16`); f64 lane `load_as_f64<T>` / `store_from_f64<T>`; i64 lane `load_as_i64<T>` / `store_from_i64<T>` (integer accumulator, sign/zero-extend on load + two's-complement modular narrow on store, matching `baracuda_reduce_int.cuh`'s `WidePolicy` contract). Pure templates — no standalone test; verified at first retrofit. |
 
+### Phase 67b (branch `phase67b-coord-unravel`, 2026-06-01)
+
+| File | What it provides |
+|---|---|
+| [`baracuda_coord_unravel.cuh`](../../crates/baracuda-kernels-sys/kernels/include/baracuda_coord_unravel.cuh) | The linear-index → multi-coordinate → byte-offset loop duplicated across ~25 strided kernels (flip, roll, permute, affine_strided, where_strided, ternary_clamp_strided, rms_norm helpers, indexing, …). Four `__device__ __forceinline__` templates under `namespace baracuda::coord`: `unravel_offset_1` (single stride array, returns offset), `unravel_offsets_2` (input+output), `unravel_offsets_3` (binary-op+output), `unravel_offsets_4` (ternary/where+output — 3 call sites justify it). Functions are **templated over `Shape`/`Stride`** so callers pass their own in-scope `DimsI32`/`DimsI64` (deduced at call site) — sidesteps the ODR clash from the 8 existing per-subsystem `Dims*` definitions, which are deliberately left unmodified. Bit-for-bit identical arithmetic to the hand-written loops (including the `s == 0` empty-axis guard); honors the stride-0 broadcast convention transparently. Pure templates — verified by host syntax-check, no standalone test. |
+
 ### Phase 67c (committed on `phase67c-block-atomic`, 2026-06-01)
 
 | File | What it provides |
@@ -89,8 +95,8 @@ The prompts are self-contained — a new session can pick one up and run.
 
 | Helper | Session prompt | Status |
 |---|---|---|
-| `baracuda_dtype_promote.cuh` | [`kernel-helper-dtype-promote.md`](../sessions/kernel-helper-dtype-promote.md) | **done — Phase 67a** (see existing) |
-| `baracuda_coord_unravel.cuh` | [`kernel-helper-coord-unravel.md`](../sessions/kernel-helper-coord-unravel.md) | planned |
+| `baracuda_dtype_promote.cuh` | [`kernel-helper-dtype-promote.md`](../sessions/kernel-helper-dtype-promote.md) | ✅ done (Phase 67a) |
+| `baracuda_coord_unravel.cuh` | [`kernel-helper-coord-unravel.md`](../sessions/kernel-helper-coord-unravel.md) | ✅ done (Phase 67b) |
 | `baracuda_block_atomic.cuh` | [`kernel-helper-block-atomic.md`](../sessions/kernel-helper-block-atomic.md) | ✅ done (Phase 67c) |
 | `baracuda_smem_scan.cuh` | [`kernel-helper-smem-scan.md`](../sessions/kernel-helper-smem-scan.md) | planned |
 | `baracuda_smem_tile.cuh` | [`kernel-helper-smem-tile.md`](../sessions/kernel-helper-smem-tile.md) | planned |
