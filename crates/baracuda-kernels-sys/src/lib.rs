@@ -29436,6 +29436,29 @@ unsafe extern "C" {
         num_qo_heads: i32, num_kv_heads: i32,
     ) -> i32;
 
+    // Batched paged-KV prefill (Phase 66 Tier 2). Ragged q via q_indptr;
+    // f16/bf16; causal flag; workspace allocated internally (synchronous).
+    pub fn baracuda_kernels_flashinfer_paged_prefill_f16_run(
+        batch_size: i32, total_num_rows: i32, page_size: i32, head_dim: i32,
+        num_qo_heads: i32, num_kv_heads: i32, sm_scale: f32, causal: i32,
+        k_data: *mut c_void, v_data: *mut c_void,
+        kv_indices: *mut c_void, kv_indptr: *mut c_void, last_page_len: *mut c_void,
+        q: *const c_void, q_indptr: *mut c_void, o: *mut c_void, lse: *mut c_void,
+        stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_flashinfer_paged_prefill_bf16_run(
+        batch_size: i32, total_num_rows: i32, page_size: i32, head_dim: i32,
+        num_qo_heads: i32, num_kv_heads: i32, sm_scale: f32, causal: i32,
+        k_data: *mut c_void, v_data: *mut c_void,
+        kv_indices: *mut c_void, kv_indptr: *mut c_void, last_page_len: *mut c_void,
+        q: *const c_void, q_indptr: *mut c_void, o: *mut c_void, lse: *mut c_void,
+        stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_flashinfer_paged_prefill_can_implement(
+        batch_size: i32, total_num_rows: i32, page_size: i32, head_dim: i32,
+        num_qo_heads: i32, num_kv_heads: i32,
+    ) -> i32;
+
     // Cascade: in-place pairwise LSE merge.
     pub fn baracuda_kernels_flashinfer_merge_state_in_place_f16_run(
         seq_len: i32, num_heads: i32, head_dim: i32,

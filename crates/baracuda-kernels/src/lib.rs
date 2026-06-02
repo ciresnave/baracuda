@@ -638,6 +638,7 @@ pub mod megatron {
 // `baracuda_kernels::TopKTopPSamplingPlan` (the documented path).
 pub use attention::{
     BatchPagedDecodeArgs, BatchPagedDecodeDescriptor, BatchPagedDecodePlan,
+    BatchPagedPrefillArgs, BatchPagedPrefillDescriptor, BatchPagedPrefillPlan,
     CascadeAttentionArgs, CascadeAttentionDescriptor, CascadeAttentionPlan,
     CascadeMergeStatesArgs, CascadeMergeStatesDescriptor, CascadeMergeStatesPlan,
     PagedKvAppendArgs, PagedKvAppendDescriptor, PagedKvAppendPlan, PagedKvCacheDescriptor,

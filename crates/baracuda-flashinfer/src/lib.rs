@@ -22,6 +22,10 @@
 //! - [`BatchPagedDecodePlan`] — batched paged-KV **decode** (one query
 //!   row per request, KV history in a paged store). The core vLLM
 //!   serving primitive. f16 / bf16 / f32, head_dim ∈ {64, 128, 256}.
+//! - [`BatchPagedPrefillPlan`] — batched paged-KV **prefill** (multiple
+//!   query rows per request, ragged via `q_indptr`, attending over the
+//!   paged history; causal or full). The prompt-ingestion primitive.
+//!   f16 / bf16.
 //! - [`PagedKvAppendPlan`] — decode-time KV-cache **append** (writes the
 //!   freshly-computed K/V for the current token into the paged store).
 //! - [`CascadeAttentionPlan`] — LSE-aware pairwise **merge** of partial
@@ -46,10 +50,9 @@
 //!
 //! # What is *not* here (yet)
 //!
-//! FlashInfer's prefill (`BatchPrefillWithPagedKVCache`), speculative-
-//! decode verification, multi-LoRA cascade plan layer, and FP8 KV-cache
-//! paths require additional vendored sources beyond baracuda's current
-//! cherry-pick. They are tracked as follow-up tiers.
+//! FlashInfer's speculative-decode verification and FP8 KV-cache paths
+//! require additional vendored sources / instantiations beyond baracuda's
+//! current cherry-pick. They are tracked as follow-up tiers.
 //!
 //! # Example shape (paged decode)
 //!
@@ -104,6 +107,7 @@ pub use baracuda_flashinfer_sys as sys;
 pub mod prelude {
     pub use crate::attention::{
         BatchPagedDecodeArgs, BatchPagedDecodeDescriptor, BatchPagedDecodePlan,
+        BatchPagedPrefillArgs, BatchPagedPrefillDescriptor, BatchPagedPrefillPlan,
         CascadeAttentionArgs, CascadeAttentionDescriptor, CascadeAttentionPlan,
         CascadeMergeStatesArgs, CascadeMergeStatesDescriptor, CascadeMergeStatesPlan,
         PagedKvAppendArgs, PagedKvAppendDescriptor, PagedKvAppendPlan, PagedKvCacheDescriptor,
