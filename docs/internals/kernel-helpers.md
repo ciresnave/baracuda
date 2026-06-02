@@ -58,6 +58,12 @@ Helper categories so far:
 These two seed the library. Phase 65b will be the first user of them
 (retrofitting the normalizer family).
 
+### Phase 67a (committed `7379753`, 2026-06-01)
+
+| File | What it provides |
+|---|---|
+| [`baracuda_dtype_promote.cuh`](../../crates/baracuda-kernels-sys/kernels/include/baracuda_dtype_promote.cuh) | Three dtype-promotion lanes (all `__device__ __forceinline__`, in `namespace baracuda`): f32 lane `load_as_f32<T>` / `store_from_f32<T>` (lifted from `norm.cuh`'s `load_as_acc`/`store_from_acc`; specializations for `__half`/`__nv_bfloat16`); f64 lane `load_as_f64<T>` / `store_from_f64<T>`; i64 lane `load_as_i64<T>` / `store_from_i64<T>` (integer accumulator, sign/zero-extend on load + two's-complement modular narrow on store, matching `baracuda_reduce_int.cuh`'s `WidePolicy` contract). Pure templates — no standalone test; verified at first retrofit. |
+
 ### Phase 67c (committed on `phase67c-block-atomic`, 2026-06-01)
 
 | File | What it provides |
@@ -73,7 +79,7 @@ These two seed the library. Phase 65b will be the first user of them
 
 ### Pre-existing kernel-author helpers (in scope to lift if duplicated elsewhere)
 
-- `load_as_acc<T>` / `store_from_acc<T>` in [`baracuda_norm.cuh`](../../crates/baracuda-kernels-sys/kernels/include/baracuda_norm.cuh) — dtype promotion to f32 for compute. Currently scoped to norm.cuh; should be lifted to a shared `baracuda_dtype_promote.cuh` (see planned helpers below).
+- `load_as_acc<T>` / `store_from_acc<T>` in [`baracuda_norm.cuh`](../../crates/baracuda-kernels-sys/kernels/include/baracuda_norm.cuh) — dtype promotion to f32 for compute. The shared successor (`load_as_f32`/`store_from_f32` in `baracuda_dtype_promote.cuh`, Phase 67a) now exists; norm.cuh's local copy stays until that kernel is the retrofit target. Same for the local `load_as_f32`/`store_from_f32` copies in `baracuda_attention.cuh` / `baracuda_sdpa.cuh` / others — retrofit one kernel at a time.
 - `warp_reduce_sum` / `warp_reduce_max` in [`baracuda_moe.cuh`](../../crates/baracuda-kernels-sys/kernels/include/baracuda_moe.cuh) — already lifted into `baracuda_smem_reduce.cuh` as of Phase 65a. The moe.cuh copy can stay until moe.cuh is the next retrofit target.
 
 ## Planned helpers (parallel-buildable)
@@ -83,7 +89,7 @@ The prompts are self-contained — a new session can pick one up and run.
 
 | Helper | Session prompt | Status |
 |---|---|---|
-| `baracuda_dtype_promote.cuh` | [`kernel-helper-dtype-promote.md`](../sessions/kernel-helper-dtype-promote.md) | planned |
+| `baracuda_dtype_promote.cuh` | [`kernel-helper-dtype-promote.md`](../sessions/kernel-helper-dtype-promote.md) | **done — Phase 67a** (see existing) |
 | `baracuda_coord_unravel.cuh` | [`kernel-helper-coord-unravel.md`](../sessions/kernel-helper-coord-unravel.md) | planned |
 | `baracuda_block_atomic.cuh` | [`kernel-helper-block-atomic.md`](../sessions/kernel-helper-block-atomic.md) | ✅ done (Phase 67c) |
 | `baracuda_smem_scan.cuh` | [`kernel-helper-smem-scan.md`](../sessions/kernel-helper-smem-scan.md) | planned |
