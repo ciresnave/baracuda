@@ -77,6 +77,12 @@ $order = @(
     "baracuda-kernels-types",
 
     # --- Safe wrappers (each depends on its -sys + baracuda-driver) ---
+    # Inter-wrapper deps observed in alpha.64 publish run (topo MUST honor):
+    #   baracuda-cutlass     -> baracuda-cublas
+    #   baracuda-kernels     -> baracuda-cutlass (+ many other sibling safe wrappers)
+    #   baracuda-flashinfer  -> baracuda-kernels
+    #   baracuda-megatron    -> baracuda-kernels
+    # Wrappers below are ordered so each precedes its consumer.
     "baracuda-cudf",
     "baracuda-cudnn",
     "baracuda-cufft",
@@ -86,17 +92,17 @@ $order = @(
     "baracuda-cusolver",
     "baracuda-cusparse",
     "baracuda-cutensor",
-    "baracuda-cutlass",
+    "baracuda-cublas",                      # before cutlass (cutlass depends on cublas)
+    "baracuda-cutlass",                     # before kernels (kernels depends on cutlass)
     "baracuda-cuvs",                        # NEW (Phase 71)
     "baracuda-cvcuda",
-    "baracuda-cublas",
     "baracuda-ozimmu",
     "baracuda-transformer-engine",
     "baracuda-nccl",
     "baracuda-nvshmem",                     # NEW (Phase 69; depends on -sys)
     "baracuda-optim",
+    "baracuda-kernels",                     # before flashinfer + megatron
     "baracuda-flashinfer",                  # NEW (Phase 66; depends on baracuda-kernels)
-    "baracuda-kernels",
     "baracuda-megatron",
     "baracuda-npp",
     "baracuda-nvcomp",
@@ -113,6 +119,24 @@ $logFile = "target/publish_alpha64.log"
 New-Item -ItemType Directory -Force -Path "target" | Out-Null
 Set-Content -Path $logFile -Value "alpha.64 publish run started $(Get-Date)" -NoNewline:$false
 
+# Strip baracuda-* lines from [dev-dependencies] section, write to dst.
+# Used to work around the dev-dep cycle (e.g. baracuda-types <-> baracuda-types-
+# derive) where cargo publish's manifest-resolution check tries to find the
+# sibling on crates.io before it's been uploaded. Restored after each crate.
+function Strip-BaracudaDevDeps {
+    param([string]$Src, [string]$Dst)
+    $lines = Get-Content $Src
+    $out = New-Object System.Collections.Generic.List[string]
+    $inDev = $false
+    foreach ($line in $lines) {
+        if ($line -match '^\[dev-dependencies(\..*)?\]') { $inDev = $true; $out.Add($line); continue }
+        if ($line -match '^\[') { $inDev = $false; $out.Add($line); continue }
+        if ($inDev -and $line -match '^baracuda-') { continue }
+        $out.Add($line)
+    }
+    Set-Content -Path $Dst -Value $out
+}
+
 $burstBudget = 28
 $published = 0
 $skipped = 0
@@ -124,9 +148,13 @@ for ($i = 0; $i -lt $order.Count; $i++) {
     Write-Host "[$idx/$($order.Count)] $crate ..."
     Add-Content -Path $logFile -Value "`n=== [$idx/$($order.Count)] $crate ==="
 
-    $maxRetries = 3
+    $cargoToml = "crates/$crate/Cargo.toml"
+    $backupToml = "$cargoToml.bak"
+
+    $maxRetries = 4
     $exit = -1
     $skippedThis = $false
+    $stripped = $false
     for ($attempt = 1; $attempt -le $maxRetries; $attempt++) {
         $out = (cargo publish -p $crate --no-verify --allow-dirty 2>&1) -join "`n"
         Add-Content -Path $logFile -Value $out
@@ -142,15 +170,33 @@ for ($i = 0; $i -lt $order.Count; $i++) {
             Start-Sleep -Seconds 30
             continue
         }
+        # Dev-dep cycle: a [dev-dependencies] line references a sibling
+        # baracuda-* crate that hasn't been published yet at this version.
+        # Strip those lines + retry. Restored at end-of-iteration.
+        $devCycle = $out -match "failed to select a version for the requirement ``baracuda-" -or `
+                     $out -match "no matching package named ``baracuda-"
+        if ($devCycle -and -not $stripped) {
+            Write-Host "    [retry $attempt/$maxRetries] dev-dep cycle - stripping baracuda-* from [dev-dependencies]"
+            Copy-Item $cargoToml $backupToml -Force
+            Strip-BaracudaDevDeps $cargoToml "$cargoToml.tmp"
+            Move-Item "$cargoToml.tmp" $cargoToml -Force
+            $stripped = $true
+            continue
+        }
         if ($out -match "no matching package named .* found") {
-            # Dep just-published but index not refreshed yet — common in early
-            # batches of a multi-crate release. Aggressively refresh + retry.
+            # Non-baracuda dep just-published but index not refreshed yet.
             Write-Host "    [retry $attempt/$maxRetries] dep not yet visible in index - refreshing + backing off 30s"
             cargo update --workspace --aggressive 2>&1 | Out-Null
             Start-Sleep -Seconds 30
             continue
         }
         break
+    }
+
+    # Restore the original Cargo.toml if we stripped.
+    if ($stripped -and (Test-Path $backupToml)) {
+        Move-Item $backupToml $cargoToml -Force
+        Write-Host "    restored $cargoToml"
     }
 
     if ($exit -ne 0) {
