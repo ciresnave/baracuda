@@ -166,7 +166,10 @@ proptest = "1"
 criterion = { version = "0.5", default-features = false, features = ["cargo_bench_support"] }
 
 [workspace.lints.rust]
-missing_docs = "warn"
+# Promoted from warn → deny in Round 8 after the workspace-wide
+# docs sweep took missing_docs to zero. Keeps the docs from
+# regressing as new symbols land.
+missing_docs = "deny"
 missing_debug_implementations = "warn"
 unreachable_pub = "warn"
 

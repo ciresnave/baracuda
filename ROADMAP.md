@@ -1324,8 +1324,13 @@ intrinsic technical urgency.
 - Tier-2 cross-crate docs/tests polish — **CLOSED**. Doctests +
   examples + READMEs + workspace lints + ~440 missing_docs fixes
   shipped in commit `928d385`.
+- `-sys` crate `missing_docs` sweep — **CLOSED** (commits `6af9533`
+  + `757c9f4`). ~6900 one-line `///` docs authored across 13 `-sys`
+  crates. **Zero `missing_docs` warnings workspace-wide.** Workspace
+  lints clause promoted from `warn` → `deny` so the docs can't
+  regress as new symbols land.
 
-### `-sys` crate `missing_docs` follow-up (~5400 warnings)
+### `-sys` crate `missing_docs` follow-up (~5400 warnings) — CLOSED
 
 The workspace now has `[workspace.lints.rust] missing_docs = "warn"`
 which surfaces every undocumented public item. Safe-wrapper crates
