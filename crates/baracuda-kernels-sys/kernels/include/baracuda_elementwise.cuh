@@ -5476,6 +5476,19 @@ __host__ inline int32_t launch_gated_activation_backward_contig(
             static_cast<const T*>(a), static_cast<const T*>(b), static_cast<T*>(y),               \
             output_numel, rank, output_shape, concat_dim, split_offset,                           \
             stride_a, stride_b, stride_y, stream);                                                \
+    }                                                                                              \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                   \
+        int64_t output_numel, int32_t rank,                                                       \
+        const int32_t* output_shape,                                                              \
+        int32_t /*concat_dim*/, int32_t /*split_offset*/,                                         \
+        const int64_t* stride_a, const int64_t* stride_b, const int64_t* stride_y,                \
+        const void* /*a*/, const void* /*b*/, const void* /*y*/)                                  \
+    {                                                                                              \
+        if (output_numel < 0) return 2;                                                           \
+        if (rank < 0) return 2;                                                                   \
+        if (output_numel > 0 && (output_shape == nullptr || stride_a == nullptr ||                \
+                                  stride_b == nullptr || stride_y == nullptr)) return 2;          \
+        return 0;                                                                                  \
     }
 
 // Emit one Pad-constant launcher.
@@ -5506,6 +5519,19 @@ __host__ inline int32_t launch_gated_activation_backward_contig(
             static_cast<const T*>(x), static_cast<T*>(y), output_numel, rank,                     \
             input_shape, output_shape, pad_low, stride_x, stride_y,                               \
             value, stream);                                                                       \
+    }                                                                                              \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                   \
+        int64_t output_numel, int32_t rank,                                                       \
+        const int32_t* input_shape, const int32_t* output_shape, const int32_t* pad_low,          \
+        const int64_t* stride_x, const int64_t* stride_y,                                         \
+        const void* /*x*/, const void* /*y*/, T /*value*/)                                        \
+    {                                                                                              \
+        if (output_numel < 0) return 2;                                                           \
+        if (rank < 0) return 2;                                                                   \
+        if (output_numel > 0 && (input_shape == nullptr || output_shape == nullptr ||             \
+                                  pad_low == nullptr || stride_x == nullptr ||                    \
+                                  stride_y == nullptr)) return 2;                                 \
+        return 0;                                                                                  \
     }
 
 // Emit one Pad-reflect launcher. No `value` parameter — pad-region
@@ -5535,6 +5561,19 @@ __host__ inline int32_t launch_gated_activation_backward_contig(
         return baracuda::elementwise::launch_pad_reflect<T>(                                      \
             static_cast<const T*>(x), static_cast<T*>(y), output_numel, rank,                     \
             input_shape, output_shape, pad_low, stride_x, stride_y, stream);                      \
+    }                                                                                              \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                   \
+        int64_t output_numel, int32_t rank,                                                       \
+        const int32_t* input_shape, const int32_t* output_shape, const int32_t* pad_low,          \
+        const int64_t* stride_x, const int64_t* stride_y,                                         \
+        const void* /*x*/, const void* /*y*/)                                                     \
+    {                                                                                              \
+        if (output_numel < 0) return 2;                                                           \
+        if (rank < 0) return 2;                                                                   \
+        if (output_numel > 0 && (input_shape == nullptr || output_shape == nullptr ||             \
+                                  pad_low == nullptr || stride_x == nullptr ||                    \
+                                  stride_y == nullptr)) return 2;                                 \
+        return 0;                                                                                  \
     }
 
 // Emit one Pad-replicate launcher. No `value` parameter — pad-region
@@ -5587,6 +5626,19 @@ __host__ inline int32_t launch_gated_activation_backward_contig(
         return baracuda::elementwise::launch_pad_circular<T>(                                     \
             static_cast<const T*>(x), static_cast<T*>(y), output_numel, rank,                     \
             input_shape, output_shape, pad_low, stride_x, stride_y, stream);                      \
+    }                                                                                              \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                   \
+        int64_t output_numel, int32_t rank,                                                       \
+        const int32_t* input_shape, const int32_t* output_shape, const int32_t* pad_low,          \
+        const int64_t* stride_x, const int64_t* stride_y,                                         \
+        const void* /*x*/, const void* /*y*/)                                                     \
+    {                                                                                              \
+        if (output_numel < 0) return 2;                                                           \
+        if (rank < 0) return 2;                                                                   \
+        if (output_numel > 0 && (input_shape == nullptr || output_shape == nullptr ||             \
+                                  pad_low == nullptr || stride_x == nullptr ||                    \
+                                  stride_y == nullptr)) return 2;                                 \
+        return 0;                                                                                  \
     }
 
 // Emit one Pad-constant backward (slice) launcher.
@@ -5615,6 +5667,18 @@ __host__ inline int32_t launch_gated_activation_backward_contig(
         return baracuda::elementwise::launch_pad_constant_backward<T>(                            \
             static_cast<const T*>(dy), static_cast<T*>(dx), input_numel, rank,                    \
             input_shape, pad_low, stride_dy, stride_dx, stream);                                  \
+    }                                                                                              \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                   \
+        int64_t input_numel, int32_t rank,                                                        \
+        const int32_t* input_shape, const int32_t* pad_low,                                       \
+        const int64_t* stride_dy, const int64_t* stride_dx,                                       \
+        const void* /*dy*/, const void* /*dx*/)                                                   \
+    {                                                                                              \
+        if (input_numel < 0) return 2;                                                            \
+        if (rank < 0) return 2;                                                                   \
+        if (input_numel > 0 && (input_shape == nullptr || pad_low == nullptr ||                   \
+                                  stride_dy == nullptr || stride_dx == nullptr)) return 2;        \
+        return 0;                                                                                  \
     }
 
 // Emit one Repeat backward (gather-adjoint sum) launcher.
@@ -5644,6 +5708,18 @@ __host__ inline int32_t launch_gated_activation_backward_contig(
         return baracuda::elementwise::launch_repeat_backward<T>(                                  \
             static_cast<const T*>(dy), static_cast<T*>(dx), input_numel, rank,                    \
             input_shape, repeats, stride_dy, stride_dx, stream);                                  \
+    }                                                                                              \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                   \
+        int64_t input_numel, int32_t rank,                                                        \
+        const int32_t* input_shape, const int32_t* repeats,                                       \
+        const int64_t* stride_dy, const int64_t* stride_dx,                                       \
+        const void* /*dy*/, const void* /*dx*/)                                                   \
+    {                                                                                              \
+        if (input_numel < 0) return 2;                                                            \
+        if (rank < 0) return 2;                                                                   \
+        if (input_numel > 0 && (input_shape == nullptr || repeats == nullptr ||                   \
+                                  stride_dy == nullptr || stride_dx == nullptr)) return 2;        \
+        return 0;                                                                                  \
     }
 
 // Emit one Concat2 backward (slice-split) launcher.
@@ -5676,6 +5752,19 @@ __host__ inline int32_t launch_gated_activation_backward_contig(
             static_cast<const T*>(dy), static_cast<T*>(da), static_cast<T*>(db),                  \
             output_numel, rank, output_shape, concat_dim, split_offset,                           \
             stride_dy, stride_da, stride_db, stream);                                             \
+    }                                                                                              \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                   \
+        int64_t output_numel, int32_t rank,                                                       \
+        const int32_t* output_shape,                                                              \
+        int32_t /*concat_dim*/, int32_t /*split_offset*/,                                         \
+        const int64_t* stride_dy, const int64_t* stride_da, const int64_t* stride_db,             \
+        const void* /*dy*/, const void* /*da*/, const void* /*db*/)                               \
+    {                                                                                              \
+        if (output_numel < 0) return 2;                                                           \
+        if (rank < 0) return 2;                                                                   \
+        if (output_numel > 0 && (output_shape == nullptr || stride_dy == nullptr ||               \
+                                  stride_da == nullptr || stride_db == nullptr)) return 2;        \
+        return 0;                                                                                  \
     }
 
 // Emit one Reduce-axis launcher.
@@ -5902,6 +5991,22 @@ __host__ inline int32_t launch_gated_activation_backward_contig(
             shape, stride_x, stride_y,                                                            \
             scan_axis, scan_extent, scan_stride_x, reverse,                                       \
             stream);                                                                              \
+    }                                                                                              \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                   \
+        int64_t numel, int32_t rank,                                                              \
+        const int32_t* shape,                                                                     \
+        const int64_t* stride_x, const int64_t* stride_y,                                         \
+        int32_t scan_axis, int32_t scan_extent,                                                   \
+        int64_t /*scan_stride_x*/, int32_t /*reverse*/,                                           \
+        const void* /*x*/, const void* /*y*/)                                                     \
+    {                                                                                              \
+        if (numel < 0) return 2;                                                                  \
+        if (rank < 0) return 2;                                                                   \
+        if (scan_axis < 0 || scan_axis >= rank) return 2;                                         \
+        if (scan_extent <= 0) return 2;                                                           \
+        if (numel > 0 && (shape == nullptr || stride_x == nullptr ||                              \
+                           stride_y == nullptr)) return 2;                                        \
+        return 0;                                                                                  \
     }
 
 // Emit one scan-cumprod backward launcher.
@@ -5936,6 +6041,23 @@ __host__ inline int32_t launch_gated_activation_backward_contig(
             static_cast<const T*>(y), static_cast<T*>(dx),                                        \
             numel, rank, shape, stride_dy, stride_x, stride_y, stride_dx,                         \
             scan_axis, scan_extent, reverse, stream);                                             \
+    }                                                                                              \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                   \
+        int64_t numel, int32_t rank,                                                              \
+        const int32_t* shape,                                                                     \
+        const int64_t* stride_dy, const int64_t* stride_x,                                        \
+        const int64_t* stride_y, const int64_t* stride_dx,                                        \
+        int32_t scan_axis, int32_t scan_extent, int32_t /*reverse*/,                              \
+        const void* /*dy*/, const void* /*x*/, const void* /*y*/, const void* /*dx*/)             \
+    {                                                                                              \
+        if (numel < 0) return 2;                                                                  \
+        if (rank < 0) return 2;                                                                   \
+        if (scan_axis < 0 || scan_axis >= rank) return 2;                                         \
+        if (scan_extent <= 0) return 2;                                                           \
+        if (numel > 0 && (shape == nullptr || stride_dy == nullptr ||                             \
+                           stride_x == nullptr || stride_y == nullptr ||                          \
+                           stride_dx == nullptr)) return 2;                                       \
+        return 0;                                                                                  \
     }
 
 // Emit one scan-cummax-or-cummin backward launcher.
@@ -5969,6 +6091,21 @@ __host__ inline int32_t launch_gated_activation_backward_contig(
             static_cast<const T*>(dy), static_cast<const T*>(x), static_cast<T*>(dx),             \
             numel, rank, shape, stride_dy, stride_x, stride_dx,                                   \
             scan_axis, scan_extent, reverse, stream);                                             \
+    }                                                                                              \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                   \
+        int64_t numel, int32_t rank,                                                              \
+        const int32_t* shape,                                                                     \
+        const int64_t* stride_dy, const int64_t* stride_x, const int64_t* stride_dx,              \
+        int32_t scan_axis, int32_t scan_extent, int32_t /*reverse*/,                              \
+        const void* /*dy*/, const void* /*x*/, const void* /*dx*/)                                \
+    {                                                                                              \
+        if (numel < 0) return 2;                                                                  \
+        if (rank < 0) return 2;                                                                   \
+        if (scan_axis < 0 || scan_axis >= rank) return 2;                                         \
+        if (scan_extent <= 0) return 2;                                                           \
+        if (numel > 0 && (shape == nullptr || stride_dy == nullptr ||                             \
+                           stride_x == nullptr || stride_dx == nullptr)) return 2;                \
+        return 0;                                                                                  \
     }
 
 // Emit one log-cumsum-exp FW launcher. ABI mirrors
@@ -6095,6 +6232,21 @@ __host__ inline int32_t launch_gated_activation_backward_contig(
             static_cast<const T*>(a), static_cast<const T*>(b),                                \
             static_cast<const T*>(c), static_cast<T*>(y),                                       \
             numel, rank, shape, stride_a, stride_b, stride_c, stride_y, scale, stream);        \
+    }                                                                                           \
+    extern "C" int32_t baracuda_kernels_##NAME##_strided_can_implement(                        \
+        int64_t numel, int32_t rank,                                                           \
+        const int32_t* shape,                                                                  \
+        const int64_t* stride_a, const int64_t* stride_b,                                      \
+        const int64_t* stride_c, const int64_t* stride_y,                                      \
+        const void* /*a*/, const void* /*b*/, const void* /*c*/, const void* /*y*/,            \
+        float /*scale*/)                                                                       \
+    {                                                                                           \
+        if (numel < 0) return 2;                                                               \
+        if (rank < 0) return 2;                                                                \
+        if (numel > 0 && (shape == nullptr || stride_a == nullptr ||                           \
+                           stride_b == nullptr || stride_c == nullptr ||                       \
+                           stride_y == nullptr)) return 2;                                     \
+        return 0;                                                                               \
     }
 
 // Emit one ternary backward launcher (Fma / Clamp family — no scale).
@@ -6124,6 +6276,14 @@ __host__ inline int32_t launch_gated_activation_backward_contig(
             static_cast<const T*>(a), static_cast<const T*>(b), static_cast<const T*>(c),      \
             static_cast<T*>(da), static_cast<T*>(db), static_cast<T*>(dc),                     \
             numel, stream);                                                                    \
+    }                                                                                           \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                \
+        int64_t numel,                                                                          \
+        const void* /*dy*/, const void* /*a*/, const void* /*b*/, const void* /*c*/,           \
+        const void* /*da*/, const void* /*db*/, const void* /*dc*/)                            \
+    {                                                                                           \
+        if (numel < 0) return 2;                                                               \
+        return 0;                                                                               \
     }
 
 // Emit one scaled ternary backward launcher (Addcmul / Addcdiv family —
@@ -6152,6 +6312,15 @@ __host__ inline int32_t launch_gated_activation_backward_contig(
             static_cast<const T*>(a), static_cast<const T*>(b), static_cast<const T*>(c),      \
             static_cast<T*>(da), static_cast<T*>(db), static_cast<T*>(dc),                     \
             numel, scale, stream);                                                              \
+    }                                                                                           \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                \
+        int64_t numel,                                                                          \
+        const void* /*dy*/, const void* /*a*/, const void* /*b*/, const void* /*c*/,           \
+        const void* /*da*/, const void* /*db*/, const void* /*dc*/,                            \
+        float /*scale*/)                                                                       \
+    {                                                                                           \
+        if (numel < 0) return 2;                                                               \
+        return 0;                                                                               \
     }
 
 // Emit one where (heterogeneous-cond ternary) contig launcher pair with
@@ -6217,6 +6386,20 @@ __host__ inline int32_t launch_gated_activation_backward_contig(
             static_cast<const T*>(b),                                                             \
             static_cast<T*>(y),                                                                    \
             numel, rank, shape, stride_cond, stride_a, stride_b, stride_y, stream);               \
+    }                                                                                              \
+    extern "C" int32_t baracuda_kernels_##NAME##_strided_can_implement(                           \
+        int64_t numel, int32_t rank,                                                              \
+        const int32_t* shape,                                                                     \
+        const int64_t* stride_cond, const int64_t* stride_a,                                      \
+        const int64_t* stride_b, const int64_t* stride_y,                                         \
+        const void* /*cond*/, const void* /*a*/, const void* /*b*/, const void* /*y*/)            \
+    {                                                                                              \
+        if (numel < 0) return 2;                                                                  \
+        if (rank < 0) return 2;                                                                   \
+        if (numel > 0 && (shape == nullptr || stride_cond == nullptr ||                           \
+                           stride_a == nullptr || stride_b == nullptr ||                          \
+                           stride_y == nullptr)) return 2;                                        \
+        return 0;                                                                                  \
     }
 
 // Source-compat wrapper for the original u8-cond strided instantiation.
@@ -6250,6 +6433,14 @@ __host__ inline int32_t launch_gated_activation_backward_contig(
             static_cast<T*>(da),                                                                  \
             static_cast<T*>(db),                                                                  \
             numel, stream);                                                                       \
+    }                                                                                              \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                   \
+        int64_t numel,                                                                             \
+        const void* /*cond*/, const void* /*dy*/,                                                 \
+        const void* /*da*/, const void* /*db*/)                                                   \
+    {                                                                                              \
+        if (numel < 0) return 2;                                                                  \
+        return 0;                                                                                  \
     }
 
 // Emit one binary comparison contig launcher pair.
@@ -6309,6 +6500,18 @@ __host__ inline int32_t launch_gated_activation_backward_contig(
             static_cast<const T*>(b),                                                              \
             static_cast<uint8_t*>(y),                                                              \
             numel, rank, shape, stride_a, stride_b, stride_y, stream);                            \
+    }                                                                                              \
+    extern "C" int32_t baracuda_kernels_##NAME##_strided_can_implement(                           \
+        int64_t numel, int32_t rank,                                                              \
+        const int32_t* shape,                                                                     \
+        const int64_t* stride_a, const int64_t* stride_b, const int64_t* stride_y,                \
+        const void* /*a*/, const void* /*b*/, const void* /*y*/)                                  \
+    {                                                                                              \
+        if (numel < 0) return 2;                                                                  \
+        if (rank < 0) return 2;                                                                   \
+        if (numel > 0 && (shape == nullptr || stride_a == nullptr ||                              \
+                           stride_b == nullptr || stride_y == nullptr)) return 2;                 \
+        return 0;                                                                                  \
     }
 
 // Emit one unary contig pointwise launcher pair.
@@ -6413,6 +6616,19 @@ __host__ inline int32_t launch_gated_activation_backward_contig(
             static_cast<const T*>(x), static_cast<T*>(y),                                         \
             output_numel, rank, output_shape, split_dim, x_half_offset,                           \
             stride_x, stride_y, stream);                                                          \
+    }                                                                                              \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                   \
+        int64_t output_numel, int32_t rank,                                                       \
+        const int32_t* output_shape,                                                              \
+        int32_t /*split_dim*/, int64_t /*x_half_offset*/,                                         \
+        const int64_t* stride_x, const int64_t* stride_y,                                         \
+        const void* /*x*/, const void* /*y*/)                                                     \
+    {                                                                                              \
+        if (output_numel < 0) return 2;                                                           \
+        if (rank < 0) return 2;                                                                   \
+        if (output_numel > 0 && (output_shape == nullptr || stride_x == nullptr ||                \
+                                  stride_y == nullptr)) return 2;                                 \
+        return 0;                                                                                  \
     }
 
 // Emit one gated-activation backward contig launcher.
@@ -6454,6 +6670,19 @@ __host__ inline int32_t launch_gated_activation_backward_contig(
             output_numel, rank, output_shape, split_dim,                                          \
             x_half_offset, dx_half_offset,                                                        \
             stride_x, stride_dy, stride_dx, stream);                                              \
+    }                                                                                              \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                   \
+        int64_t output_numel, int32_t rank,                                                       \
+        const int32_t* output_shape,                                                              \
+        int32_t /*split_dim*/, int64_t /*x_half_offset*/, int64_t /*dx_half_offset*/,             \
+        const int64_t* stride_x, const int64_t* stride_dy, const int64_t* stride_dx,              \
+        const void* /*x*/, const void* /*dy*/, const void* /*dx*/)                                \
+    {                                                                                              \
+        if (output_numel < 0) return 2;                                                           \
+        if (rank < 0) return 2;                                                                   \
+        if (output_numel > 0 && (output_shape == nullptr || stride_x == nullptr ||                \
+                                  stride_dy == nullptr || stride_dx == nullptr)) return 2;        \
+        return 0;                                                                                  \
     }
 
 // Emit one parameterized unary pointwise launcher. Sibling of
@@ -6652,6 +6881,14 @@ __host__ inline int32_t launch_gated_activation_backward_contig(
         return baracuda::elementwise::launch_binary_param_pointwise_contig<T, FUNCTOR>(           \
             static_cast<const T*>(a), static_cast<const T*>(b), static_cast<T*>(y),               \
             numel, p, stream);                                                                    \
+    }                                                                                              \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                   \
+        int64_t numel,                                                                             \
+        const void* /*a*/, const void* /*b*/, const void* /*y*/,                                  \
+        float /*p*/)                                                                              \
+    {                                                                                              \
+        if (numel < 0) return 2;                                                                  \
+        return 0;                                                                                  \
     }
 
 // Emit one parameterized binary backward launcher (no-save variant — the
@@ -6680,6 +6917,14 @@ __host__ inline int32_t launch_gated_activation_backward_contig(
         return baracuda::elementwise::launch_binary_param_backward_nosave<T, FUNCTOR>(            \
             static_cast<const T*>(dy), static_cast<T*>(da), static_cast<T*>(db),                  \
             numel, p, stream);                                                                    \
+    }                                                                                              \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                   \
+        int64_t numel,                                                                             \
+        const void* /*dy*/, const void* /*da*/, const void* /*db*/,                               \
+        float /*p*/)                                                                              \
+    {                                                                                              \
+        if (numel < 0) return 2;                                                                  \
+        return 0;                                                                                  \
     }
 
 #endif // BARACUDA_ELEMENTWISE_CUH
