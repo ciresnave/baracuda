@@ -1,5 +1,9 @@
 //! Raw FFI + dynamic loader skeleton for NVIDIA CV-CUDA.
 //!
+//! `baracuda-cvcuda` wraps this with a safe, typed API. Use this
+//! crate directly only if you need a function that the safe layer
+//! hasn't wrapped yet (in which case please file a bug).
+//!
 //! CV-CUDA is a separate NVIDIA download (not bundled with the CUDA
 //! Toolkit). v0.1 ships only the loader; the operator surface lands when
 //! we can test against an installed CV-CUDA.

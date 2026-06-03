@@ -21,15 +21,45 @@
 //!
 //! ## Status
 //!
-//! Phase 0 scaffolding: the facade currently re-exports the existing
-//! `baracuda-cutlass` plan types so downstream callers can switch their
-//! import paths now (`use baracuda_kernels::IntGemmPlan;` instead of
-//! `use baracuda_cutlass::IntGemmPlan;`) and gain the new layouts /
-//! dtypes as later phases land — no API breakage at the switch.
+//! Active. Covers ~2700 FFI launch points across Phase 1–66 work
+//! including: full elementwise unary/binary/ternary matrix (fwd + bwd,
+//! contig + strided), all standard reductions and scans, the
+//! normalizer family (RMS / Layer / Batch / Group / Instance with
+//! in-place SMEM-staged kernels for f32/f16/bf16/f64), softmax /
+//! log-softmax / sparsemax / gumbel-softmax (+ BW), full attention
+//! suite (SDPA contig + strided + BW, Flash SDPA sm_80 + sm_89 +
+//! varlen + Tri Dao FA2 v2.8.3, RoPE / ALiBi / KV-cache, paged-KV
+//! decode/prefill via FlashInfer, ring attention, block-sparse SDPA,
+//! arbitrary-mask SDPA), GEMM (f16/bf16/tf32/f32/f64/s8/u8/s4/u4/bin/
+//! fp8 with optional bias + ReLU/GELU/SiLU epilogues), GGUF MMVQ
+//! (11 block formats × {contig, strided, batched, multi-M}), the
+//! complete loss family (15 losses × FW+BW + CTC), conv + pool
+//! (cuDNN-backed + bit-exact bespoke Adaptive / LpPool /
+//! FractionalMaxPool), image ops (interpolate / upsample / grid
+//! sample / ROI / NMS / pixel shuffle), linalg (cuSOLVER facade +
+//! bespoke batched Ormqr WY + QR materialize, real + complex), FFT /
+//! cuRAND facades, full quantize family + GGUF + NF4 + AWQ +
+//! Marlin + STE backward, segment + embedding + indexing + scatter,
+//! Mamba-2 SSD + causal conv1d, TransformerEngine FP8 cast /
+//! recipe, mHC hyper-connections.
 //!
-//! The first bespoke kernels (int8 GEMM RRR — `LayoutSku::Rrr` over
-//! `{S8, U8} × {Identity, Bias, BiasRelu, BiasGelu, BiasSilu} × {f32, i32}` bias)
-//! land in workspace alpha.16.
+//! Every public `_run` FFI symbol has a matching `_can_implement`
+//! pre-launch validator companion (Phase 66 closure, alpha.64).
+//!
+//! Cargo features are documented in the workspace `README.md`. The
+//! default build (`sm80` only) covers Ampere-baseline kernels;
+//! `sm89` adds Ada specializations (FP8 GEMM, sm_89 Flash SDPA);
+//! `sm90a` reserves the Hopper namespace. Feature flags for the
+//! vendored kernel families (`fa2`, `mhc`, `ozimmu`, `flashinfer`,
+//! `mamba`, `bnb_nf4`, `marlin`, `awq`, `xformers_*`,
+//! `tensor_engine`, `optim`, `ring_attention`, `megatron_tp`,
+//! `nvshmem`) are off by default.
+//!
+//! See [`ROADMAP.md`] for the live backlog and [`OP-MATRIX.md`] for
+//! per-op support status.
+//!
+//! [`ROADMAP.md`]: https://github.com/ciresnave/baracuda/blob/main/ROADMAP.md
+//! [`OP-MATRIX.md`]: https://github.com/ciresnave/baracuda/blob/main/OP-MATRIX.md
 
 #![deny(missing_docs)]
 

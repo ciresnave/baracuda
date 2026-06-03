@@ -1,14 +1,43 @@
-//! Safe Rust wrappers for NVIDIA NCCL.
+//! Safe Rust wrappers for NVIDIA NCCL (multi-GPU collective communication).
 //!
-//! v0.1 covers the communicator (single-process multi-GPU via
-//! `ncclCommInitAll`, multi-process via `ncclCommInitRank` + `UniqueId`) and
-//! the `all_reduce` + `broadcast` collectives — enough for synchronous
-//! data-parallel training.
+//! Layered on top of [`baracuda-nccl-sys`](https://docs.rs/baracuda-nccl-sys).
+//! Use this crate directly for typed, RAII-managed communicators +
+//! collectives; reach for `-sys` only when adding a function the safe
+//! layer doesn't expose yet.
 //!
-//! NCCL is a Linux library; Windows has experimental support but no
-//! general distribution. On hosts without NCCL, [`Communicator::init_all`]
-//! returns `LoaderError::LibraryNotFound` — callers can fall back to
-//! single-device execution.
+//! ## Scope
+//!
+//! - **Communicator lifecycle**: single-process multi-GPU via
+//!   `ncclCommInitAll`, multi-process via `ncclCommInitRank` +
+//!   `UniqueId` exchange, communicator destruction, error querying.
+//! - **All collectives**: `all_reduce`, `all_gather`, `broadcast`,
+//!   `reduce`, `reduce_scatter`, `send` / `recv` (point-to-point used
+//!   by `baracuda-kernels`'s Ring Attention K/V chunk rotation).
+//! - **Group operations**: `group_start` / `group_end` for batched
+//!   collective launches (essential for Megatron-LM TP all-reduce
+//!   patterns).
+//! - **Communicator features**: stream binding, error checking,
+//!   abort + finalize for graceful shutdown.
+//! - **Datatype helpers**: f32/f64/f16/bf16/u8/i32/i64/u64 reduction
+//!   support via `DataType` enum.
+//! - **Reduction ops**: `sum`, `prod`, `min`, `max`, `avg`,
+//!   `pre_mul_sum`.
+//!
+//! ## Platform support
+//!
+//! NCCL is primarily a **Linux library**. Windows has experimental
+//! support in newer NCCL versions but is uncommon. The crate compiles
+//! on Windows but [`Communicator::init_all`] returns
+//! `LoaderError::LibraryNotFound` at runtime on hosts without NCCL —
+//! single-device callers can detect this and fall back gracefully.
+//!
+//! ## Usage with baracuda-kernels
+//!
+//! `baracuda-kernels`'s Ring Attention plan (Phase 56,
+//! `ring_attention` feature) and Megatron-LM TP primitives (Phase 57,
+//! `megatron_tp` feature) both consume this crate. Direct callers
+//! commonly use the communicator for synchronous data-parallel
+//! training all-reduce.
 
 #![warn(missing_debug_implementations)]
 

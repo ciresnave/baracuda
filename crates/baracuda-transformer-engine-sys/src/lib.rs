@@ -201,6 +201,58 @@ unsafe extern "C" {
         hist_len: i32,
         stream: *mut c_void,
     ) -> i32;
+
+    // ------------------------------------------------------------------
+    // _can_implement companions — host-side validators (Phase 66-prep).
+    // Each mirrors its `_run` minus the `stream` arg; output pointers
+    // demoted to const. Returns 0 for supported, 1 for invalid_arg.
+    // ------------------------------------------------------------------
+
+    /// Pre-launch implementability check for `baracuda_te_fused_cast_amax_run`.
+    /// Validates `numel >= 0`, `write_pos >= 0`, `fmt ∈ {0, 1}`,
+    /// `in_dtype ∈ {0, 1, 2}`. Host-side only; no dereferences.
+    pub fn baracuda_te_fused_cast_amax_can_implement(
+        x_in: *const c_void,
+        x_out: *const c_void,
+        scale: *const f32,
+        amax_history: *const f32,
+        write_pos: i32,
+        numel: i64,
+        fmt: i32,
+        in_dtype: i32,
+    ) -> i32;
+
+    /// Pre-launch implementability check for `baracuda_te_dequant_run`.
+    /// Validates `numel >= 0`, `fmt ∈ {0, 1}`, `out_dtype ∈ {0, 1, 2}`.
+    pub fn baracuda_te_dequant_can_implement(
+        x_in: *const c_void,
+        y_out: *const c_void,
+        scale_inv: *const f32,
+        numel: i64,
+        fmt: i32,
+        out_dtype: i32,
+    ) -> i32;
+
+    /// Pre-launch implementability check for `baracuda_te_recipe_update_run`.
+    /// Validates `hist_len ∈ [1, BARACUDA_TE_MAX_HISTORY]`,
+    /// `write_pos ∈ [0, hist_len)`, `fmt ∈ {0, 1}`.
+    pub fn baracuda_te_recipe_update_can_implement(
+        amax_history: *const f32,
+        scale: *const f32,
+        scale_inv: *const f32,
+        hist_len: i32,
+        write_pos: i32,
+        fmt: i32,
+    ) -> i32;
+
+    /// Pre-launch implementability check for `baracuda_te_recipe_init_run`.
+    /// Validates `hist_len ∈ [1, BARACUDA_TE_MAX_HISTORY]`.
+    pub fn baracuda_te_recipe_init_can_implement(
+        amax_history: *const f32,
+        scale: *const f32,
+        scale_inv: *const f32,
+        hist_len: i32,
+    ) -> i32;
 }
 
 /// Status code returned by the shim on success.

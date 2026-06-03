@@ -1,5 +1,9 @@
 //! Raw FFI + dynamic loader for NVIDIA libcudf (RAPIDS cuDF GPU dataframes).
 //!
+//! `baracuda-cudf` wraps this with a safe, typed API. Use this crate
+//! directly only if you need a function that the safe layer hasn't
+//! wrapped yet (in which case please file a bug).
+//!
 //! **Status: skeleton.** libcudf is a C++ library; RAPIDS has a nascent C ABI
 //! (`cudf_c`) that is still evolving. This crate gives you a loader and a
 //! small surface covering I/O (CSV/Parquet reader handles) and columnar

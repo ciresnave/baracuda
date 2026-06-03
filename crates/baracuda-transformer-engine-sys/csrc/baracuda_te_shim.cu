@@ -568,4 +568,60 @@ int32_t baracuda_te_recipe_init_run(
     return 0;
 }
 
+// ============================================================================
+// _can_implement companions — host-side validators (Phase 66-prep)
+// ============================================================================
+
+int32_t baracuda_te_fused_cast_amax_can_implement(
+    const void* /*x_in*/, const void* /*x_out*/,
+    const float* /*scale*/, const float* /*amax_history*/,
+    int32_t write_pos,
+    int64_t numel,
+    int32_t fmt,
+    int32_t in_dtype)
+{
+    if (numel < 0) return 1;
+    if (write_pos < 0) return 1;
+    if (fmt != 0 && fmt != 1) return 1;
+    if (in_dtype < 0 || in_dtype > 2) return 1;
+    return 0;
+}
+
+int32_t baracuda_te_dequant_can_implement(
+    const void* /*x_in*/, const void* /*y_out*/,
+    const float* /*scale_inv*/,
+    int64_t numel,
+    int32_t fmt,
+    int32_t out_dtype)
+{
+    if (numel < 0) return 1;
+    if (fmt != 0 && fmt != 1) return 1;
+    if (out_dtype < 0 || out_dtype > 2) return 1;
+    return 0;
+}
+
+int32_t baracuda_te_recipe_update_can_implement(
+    const float* /*amax_history*/,
+    const float* /*scale*/,
+    const float* /*scale_inv*/,
+    int32_t hist_len,
+    int32_t write_pos,
+    int32_t fmt)
+{
+    if (hist_len <= 0 || hist_len > baracuda_te::BARACUDA_TE_MAX_HISTORY) return 1;
+    if (write_pos < 0 || write_pos >= hist_len) return 1;
+    if (fmt != 0 && fmt != 1) return 1;
+    return 0;
+}
+
+int32_t baracuda_te_recipe_init_can_implement(
+    const float* /*amax_history*/,
+    const float* /*scale*/,
+    const float* /*scale_inv*/,
+    int32_t hist_len)
+{
+    if (hist_len <= 0 || hist_len > baracuda_te::BARACUDA_TE_MAX_HISTORY) return 1;
+    return 0;
+}
+
 }  // extern "C"

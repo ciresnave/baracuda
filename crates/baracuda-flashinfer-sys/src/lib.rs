@@ -1,5 +1,9 @@
 //! Raw C-ABI FFI surface for the vendored FlashInfer inference kernels.
 //!
+//! `baracuda-flashinfer` wraps this with a safe, typed API. Use this
+//! crate directly only if you need a function that the safe layer
+//! hasn't wrapped yet (in which case please file a bug).
+//!
 //! FlashInfer (`flashinfer-ai/flashinfer`, Apache-2.0) is header-only /
 //! template-heavy, so there is no shared library to dynamically load.
 //! Instead, baracuda compiles thin C-ABI launcher shims around the

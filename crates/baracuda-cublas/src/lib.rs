@@ -1,8 +1,33 @@
-//! Safe Rust wrappers for NVIDIA cuBLAS.
+//! Safe Rust wrappers for NVIDIA cuBLAS (+ cuBLASLt + cuBLASXt).
 //!
-//! v0.1 covers the handle + stream binding, generic `gemm` (S/D) and
-//! `axpy` (S/D). cuBLASLt and the batched / strided-batched variants
-//! land in a follow-up crate version.
+//! Layered on top of [`baracuda-cublas-sys`](https://docs.rs/baracuda-cublas-sys).
+//! Use this crate directly for typed, RAII-managed cuBLAS handles +
+//! ops; reach for `-sys` only when adding a function the safe layer
+//! doesn't expose yet.
+//!
+//! ## Scope
+//!
+//! - Level-1 BLAS (vector ops: `axpy`, `scal`, `dot`, `nrm2`, `asum`,
+//!   `amax`, `amin`, `rot`, `copy`, `swap`) for f32/f64.
+//! - Level-2 BLAS (matrix-vector: `gemv`, `gbmv`, `symv`, `trmv`,
+//!   `trsv`, etc.).
+//! - Level-3 BLAS — the dominant compute path:
+//!   - `gemm` for f32 / f64 (`Sgemm` / `Dgemm`)
+//!   - `gemmEx` / `gemmStridedBatchedEx` for the mixed-precision
+//!     paths (f16/bf16 inputs × f32 accumulator), used by
+//!     `baracuda-kernels`'s GEMM dispatcher
+//!   - Strided + non-strided batched gemm
+//!   - TRSM / TRMM / SYRK / HERK
+//! - **cuBLASLt** ([`lt`] module) — modern matmul descriptor API
+//!   used by FlashInfer + Megatron-LM TP for higher-throughput
+//!   epilogue fusion.
+//! - **cuBLASXt** ([`xt`] module) — multi-GPU dense GEMM for
+//!   workstation workloads.
+//! - **Direct batched** ([`direct_batched`]) — `cublasS/D/CgemmBatched`
+//!   for pointer-array batches (used by `baracuda-kernels`'s
+//!   `BatchedOrmqrWyPlan`).
+//!
+//! ## Usage
 //!
 //! ```no_run
 //! use baracuda_driver::{Context, Device, DeviceBuffer};
@@ -23,6 +48,29 @@
 //! gemm(&handle, Op::N, Op::N, 2, 2, 3, 1.0, &a, 2, &b, 3, 0.0, &mut c, 2)?;
 //! # Ok(()) }
 //! ```
+//!
+//! ```no_run
+//! use baracuda_driver::{Context, Device, DeviceBuffer};
+//! use baracuda_cublas::{gemm, Handle, Op};
+//!
+//! # fn demo() -> Result<(), Box<dyn std::error::Error>> {
+//! let device = Device::get(0)?;
+//! let ctx = Context::new(&device)?;
+//! let handle = Handle::new()?;
+//!
+//! // 2×3 × 3×2 = 2×2, column-major.
+//! let a_host: Vec<f32> = vec![1.0, 4.0, 2.0, 5.0, 3.0, 6.0]; // 2×3
+//! let b_host: Vec<f32> = vec![7.0, 9.0, 11.0, 8.0, 10.0, 12.0]; // 3×2
+//! let a = DeviceBuffer::from_slice(&ctx, &a_host)?;
+//! let b = DeviceBuffer::from_slice(&ctx, &b_host)?;
+//! let mut c: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, 4)?;
+//!
+//! gemm(&handle, Op::N, Op::N, 2, 2, 3, 1.0, &a, 2, &b, 3, 0.0, &mut c, 2)?;
+//! # Ok(()) }
+//! ```
+//!
+//! cuBLAS ships as part of the standard CUDA Toolkit — no separate
+//! download needed.
 
 #![warn(missing_debug_implementations)]
 

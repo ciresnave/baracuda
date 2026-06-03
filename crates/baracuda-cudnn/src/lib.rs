@@ -1,13 +1,47 @@
 //! Safe Rust wrappers for NVIDIA cuDNN.
 //!
-//! v0.1 covers the handle, 4-D tensor descriptors, activation descriptors,
-//! and `cudnnActivationForward` — enough to demonstrate the loader works
-//! and to run simple ML pointwise ops.
+//! Layered on top of [`baracuda-cudnn-sys`](https://docs.rs/baracuda-cudnn-sys).
+//! Use this crate directly for typed, RAII-managed cuDNN handles +
+//! descriptors; reach for `-sys` only when adding a function the safe
+//! layer doesn't expose yet.
 //!
-//! Convolution, pooling, batch-norm, RNN, and the modern graph API all
-//! land in follow-ups. The plan documents explicitly wrapping the cuDNN
-//! **backend/graph API** rather than the C++ frontend; this crate takes
-//! that path.
+//! ## Scope
+//!
+//! Covers the cuDNN classic API surface that `baracuda-kernels`'s
+//! Phase 7+ Conv2d / Pool2d / CTCLoss / BatchNorm / GroupNorm plans
+//! and the Phase 11 Conv1d/3d/Transpose/depthwise + Pool1d/3d/Adaptive
+//! fanout dispatch through. Concretely:
+//!
+//! - Handle management + stream binding.
+//! - Tensor / filter / convolution / pooling / activation /
+//!   batch-norm / RNN / dropout / op-tensor / reduce-tensor /
+//!   LRN / SpatialTransform / Attn descriptors.
+//! - Conv2d / Conv1d / Conv3d (FW + BW data + BW weight) with all
+//!   algo enums.
+//! - Pool2d / Pool1d / Pool3d (Avg + Max, deterministic + non-det).
+//! - BatchNorm FW training/inference + BW + persistent mode.
+//! - LRN, Softmax (classic — modern softmax is bespoke in
+//!   `baracuda-kernels`).
+//! - CTC loss FW + BW (the cuDNN path; bespoke
+//!   `baracuda-kernels::CtcLossPlan` covers the non-cuDNN path).
+//! - Op-tensor + reduce-tensor (gluing primitives for fused ops).
+//! - RNN classic API (cells, sequences, persistent).
+//! - DropoutDescriptor + state management.
+//!
+//! The cuDNN **backend / graph API** (the modern fusion API) is NOT
+//! wrapped here — `baracuda-kernels` builds bespoke fused kernels
+//! directly via `baracuda-kernels-sys` for the ops where graph-API
+//! fusion would be the win, so the maintenance cost of wrapping the
+//! graph API duplicate hasn't been justified yet.
+//!
+//! ## Build requirement
+//!
+//! cuDNN is a **separate NVIDIA download** not bundled with the stock
+//! CUDA toolkit. The `baracuda-kernels-sys` build script auto-discovers
+//! it via `CUDNN_PATH` / `CUDNN_ROOT` / `CUDNN_HOME` env vars or the
+//! standard Windows / Linux install paths — see the workspace
+//! [`README.md`](https://github.com/ciresnave/baracuda#building)
+//! "Building" section for the full probe order.
 
 #![warn(missing_debug_implementations)]
 

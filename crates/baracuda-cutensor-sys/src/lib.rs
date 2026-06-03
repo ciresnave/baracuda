@@ -1,5 +1,9 @@
 //! Raw FFI + dynamic loader skeleton for NVIDIA cuTENSOR.
 //!
+//! `baracuda-cutensor` wraps this with a safe, typed API. Use this
+//! crate directly only if you need a function that the safe layer
+//! hasn't wrapped yet (in which case please file a bug).
+//!
 //! cuTENSOR is a separately-installed NVIDIA library for high-performance
 //! tensor contraction, reduction, and element-wise ops. v0.1 ships the
 //! loader + status enum; concrete contraction/permutation/reduction

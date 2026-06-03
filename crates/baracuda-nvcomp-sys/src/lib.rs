@@ -1,5 +1,9 @@
 //! Raw FFI + dynamic loader skeleton for NVIDIA nvCOMP (GPU compression).
 //!
+//! `baracuda-nvcomp` wraps this with a safe, typed API. Use this
+//! crate directly only if you need a function that the safe layer
+//! hasn't wrapped yet (in which case please file a bug).
+//!
 //! v0.1 ships the loader + status enum so the crate compiles everywhere;
 //! the wide surface of per-codec entry points (LZ4, Snappy, GDeflate, Zstd,
 //! Bitcomp, ANS, batched helpers) lands when we have a testable install.

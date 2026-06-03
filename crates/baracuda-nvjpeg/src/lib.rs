@@ -1,8 +1,29 @@
-//! Safe Rust wrappers for NVIDIA nvJPEG.
+//! Safe Rust wrappers for NVIDIA nvJPEG (JPEG decode/encode on GPU).
 //!
-//! v0.1 covers single-image JPEG decode with the default CPU+GPU hybrid
-//! backend. Encoding and the batched/multi-phase decoders land in
-//! follow-ups.
+//! Layered on top of [`baracuda-nvjpeg-sys`](https://docs.rs/baracuda-nvjpeg-sys).
+//! Use this crate directly for typed, RAII-managed JPEG decoding /
+//! encoding through nvJPEG; reach for `-sys` only when adding a
+//! function the safe layer doesn't expose yet.
+//!
+//! **Note**: [`baracuda-nvimagecodec`](https://docs.rs/baracuda-nvimagecodec)
+//! is the modern (Phase 70) replacement and covers JPEG / PNG / TIFF
+//! decode + encode through a unified API. nvJPEG is kept for
+//! back-compat with code that pins to it specifically.
+//!
+//! ## Scope
+//!
+//! - Single-image and batched JPEG decode with the default CPU+GPU
+//!   hybrid backend.
+//! - Multi-phase (host-decode-phase, transfer-phase, GPU-decode-phase)
+//!   pipelined decoding for high-throughput servers.
+//! - Encoding (3-phase pipeline: setup → host encode → GPU finalize).
+//! - Pinned-host-memory buffer management for the staged transfers.
+//!
+//! ## Linux-only
+//!
+//! nvJPEG ships as a separate NVIDIA-toolkit DLL on Linux. Windows is
+//! not officially supported by upstream. The crate compiles on Windows
+//! but `nvjpeg()` returns `LoaderError::LibraryNotFound` at runtime.
 
 #![warn(missing_debug_implementations)]
 

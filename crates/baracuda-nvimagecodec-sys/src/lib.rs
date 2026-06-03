@@ -1,6 +1,10 @@
 //! Raw FFI + dynamic loader for NVIDIA **nvImageCodec** — the unified GPU
 //! image codec library (JPEG / JPEG2000 / TIFF / PNG / BMP / WebP / ...).
 //!
+//! `baracuda-nvimagecodec` wraps this with a safe, typed API. Use this
+//! crate directly only if you need a function that the safe layer
+//! hasn't wrapped yet (in which case please file a bug).
+//!
 //! nvImageCodec supersedes the standalone nvJPEG (which baracuda also wraps
 //! via [`baracuda-nvjpeg-sys`](https://docs.rs/baracuda-nvjpeg-sys)) and
 //! exposes a single batched high-level decode/encode pipeline:

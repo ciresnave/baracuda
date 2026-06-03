@@ -1,6 +1,10 @@
 //! Raw FFI + dynamic loader for the **NVIDIA NVSHMEM host library**
 //! (`libnvshmem_host.so`).
 //!
+//! `baracuda-nvshmem` wraps this with a safe, typed API. Use this
+//! crate directly only if you need a function that the safe layer
+//! hasn't wrapped yet (in which case please file a bug).
+//!
 //! [NVSHMEM](https://developer.nvidia.com/nvshmem) is NVIDIA's
 //! implementation of the OpenSHMEM symmetric-heap programming model on
 //! GPUs. Where [NCCL](../baracuda_nccl_sys/index.html) provides *collective*
