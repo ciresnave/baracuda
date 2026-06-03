@@ -7890,7 +7890,19 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
-
+    pub fn baracuda_kernels_scan_log_cumsum_exp_f32_can_implement(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        scan_axis: i32,
+        scan_extent: i32,
+        scan_stride_x: i64,
+        reverse: i32,
+        x: *const c_void,
+        y: *const c_void,
+    ) -> i32;
     /// LogCumsumExp FW, f16. f32-detour accumulator inside the kernel.
     pub fn baracuda_kernels_scan_log_cumsum_exp_f16_run(
         numel: i64,
@@ -7908,7 +7920,19 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
-
+    pub fn baracuda_kernels_scan_log_cumsum_exp_f16_can_implement(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        scan_axis: i32,
+        scan_extent: i32,
+        scan_stride_x: i64,
+        reverse: i32,
+        x: *const c_void,
+        y: *const c_void,
+    ) -> i32;
     /// LogCumsumExp FW, bf16.
     pub fn baracuda_kernels_scan_log_cumsum_exp_bf16_run(
         numel: i64,
@@ -7926,7 +7950,19 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
-
+    pub fn baracuda_kernels_scan_log_cumsum_exp_bf16_can_implement(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        scan_axis: i32,
+        scan_extent: i32,
+        scan_stride_x: i64,
+        reverse: i32,
+        x: *const c_void,
+        y: *const c_void,
+    ) -> i32;
     /// LogCumsumExp FW, f64.
     pub fn baracuda_kernels_scan_log_cumsum_exp_f64_run(
         numel: i64,
@@ -7944,7 +7980,19 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
-
+    pub fn baracuda_kernels_scan_log_cumsum_exp_f64_can_implement(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        scan_axis: i32,
+        scan_extent: i32,
+        scan_stride_x: i64,
+        reverse: i32,
+        x: *const c_void,
+        y: *const c_void,
+    ) -> i32;
     /// LogCumsumExp BW, f32. Per-cell accumulator of
     /// `Σ dy[i] * exp(x[k] - y[i])` over the FW-direction-dependent
     /// `i` range. Needs both saved `x` and saved `y` (same shape since
@@ -7969,7 +8017,22 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
-
+    pub fn baracuda_kernels_scan_log_cumsum_exp_backward_f32_can_implement(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_dy: *const i64,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        stride_dx: *const i64,
+        scan_axis: i32,
+        scan_extent: i32,
+        reverse: i32,
+        dy: *const c_void,
+        x: *const c_void,
+        y: *const c_void,
+        dx: *const c_void,
+    ) -> i32;
     /// LogCumsumExp BW, f16. f32-detour accumulator.
     pub fn baracuda_kernels_scan_log_cumsum_exp_backward_f16_run(
         numel: i64,
@@ -7990,7 +8053,22 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
-
+    pub fn baracuda_kernels_scan_log_cumsum_exp_backward_f16_can_implement(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_dy: *const i64,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        stride_dx: *const i64,
+        scan_axis: i32,
+        scan_extent: i32,
+        reverse: i32,
+        dy: *const c_void,
+        x: *const c_void,
+        y: *const c_void,
+        dx: *const c_void,
+    ) -> i32;
     /// LogCumsumExp BW, bf16.
     pub fn baracuda_kernels_scan_log_cumsum_exp_backward_bf16_run(
         numel: i64,
@@ -8011,7 +8089,22 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
-
+    pub fn baracuda_kernels_scan_log_cumsum_exp_backward_bf16_can_implement(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_dy: *const i64,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        stride_dx: *const i64,
+        scan_axis: i32,
+        scan_extent: i32,
+        reverse: i32,
+        dy: *const c_void,
+        x: *const c_void,
+        y: *const c_void,
+        dx: *const c_void,
+    ) -> i32;
     /// LogCumsumExp BW, f64.
     pub fn baracuda_kernels_scan_log_cumsum_exp_backward_f64_run(
         numel: i64,
@@ -8031,6 +8124,22 @@ unsafe extern "C" {
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_scan_log_cumsum_exp_backward_f64_can_implement(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_dy: *const i64,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        stride_dx: *const i64,
+        scan_axis: i32,
+        scan_extent: i32,
+        reverse: i32,
+        dy: *const c_void,
+        x: *const c_void,
+        y: *const c_void,
+        dx: *const c_void,
     ) -> i32;
 }
 
@@ -8059,7 +8168,19 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
-
+    pub fn baracuda_kernels_softmax_f32_can_implement(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        softmax_axis: i32,
+        softmax_extent: i32,
+        softmax_stride_x: i64,
+        softmax_stride_y: i64,
+        x: *const c_void,
+        y: *const c_void,
+    ) -> i32;
     /// Softmax FW, f16. f32 accumulator inside the kernel.
     pub fn baracuda_kernels_softmax_f16_run(
         numel: i64,
@@ -8077,7 +8198,19 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
-
+    pub fn baracuda_kernels_softmax_f16_can_implement(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        softmax_axis: i32,
+        softmax_extent: i32,
+        softmax_stride_x: i64,
+        softmax_stride_y: i64,
+        x: *const c_void,
+        y: *const c_void,
+    ) -> i32;
     /// Softmax FW, bf16.
     pub fn baracuda_kernels_softmax_bf16_run(
         numel: i64,
@@ -8095,7 +8228,19 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
-
+    pub fn baracuda_kernels_softmax_bf16_can_implement(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        softmax_axis: i32,
+        softmax_extent: i32,
+        softmax_stride_x: i64,
+        softmax_stride_y: i64,
+        x: *const c_void,
+        y: *const c_void,
+    ) -> i32;
     /// Softmax FW, f64.
     pub fn baracuda_kernels_softmax_f64_run(
         numel: i64,
@@ -8113,7 +8258,19 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
-
+    pub fn baracuda_kernels_softmax_f64_can_implement(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        softmax_axis: i32,
+        softmax_extent: i32,
+        softmax_stride_x: i64,
+        softmax_stride_y: i64,
+        x: *const c_void,
+        y: *const c_void,
+    ) -> i32;
     /// Softmax BW, f32. `dx[k] = y[k] * (dy[k] - Σ_j y[j] * dy[j])`.
     /// Caller passes the saved forward output `y`.
     pub fn baracuda_kernels_softmax_backward_f32_run(
@@ -8134,7 +8291,21 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
-
+    pub fn baracuda_kernels_softmax_backward_f32_can_implement(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_dy: *const i64,
+        stride_y: *const i64,
+        stride_dx: *const i64,
+        softmax_axis: i32,
+        softmax_extent: i32,
+        softmax_stride_dy: i64,
+        softmax_stride_y: i64,
+        dy: *const c_void,
+        y: *const c_void,
+        dx: *const c_void,
+    ) -> i32;
     /// Softmax BW, f16.
     pub fn baracuda_kernels_softmax_backward_f16_run(
         numel: i64,
@@ -8154,7 +8325,21 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
-
+    pub fn baracuda_kernels_softmax_backward_f16_can_implement(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_dy: *const i64,
+        stride_y: *const i64,
+        stride_dx: *const i64,
+        softmax_axis: i32,
+        softmax_extent: i32,
+        softmax_stride_dy: i64,
+        softmax_stride_y: i64,
+        dy: *const c_void,
+        y: *const c_void,
+        dx: *const c_void,
+    ) -> i32;
     /// Softmax BW, bf16.
     pub fn baracuda_kernels_softmax_backward_bf16_run(
         numel: i64,
@@ -8174,7 +8359,21 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
-
+    pub fn baracuda_kernels_softmax_backward_bf16_can_implement(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_dy: *const i64,
+        stride_y: *const i64,
+        stride_dx: *const i64,
+        softmax_axis: i32,
+        softmax_extent: i32,
+        softmax_stride_dy: i64,
+        softmax_stride_y: i64,
+        dy: *const c_void,
+        y: *const c_void,
+        dx: *const c_void,
+    ) -> i32;
     /// Softmax BW, f64.
     pub fn baracuda_kernels_softmax_backward_f64_run(
         numel: i64,
@@ -8194,7 +8393,21 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
-
+    pub fn baracuda_kernels_softmax_backward_f64_can_implement(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_dy: *const i64,
+        stride_y: *const i64,
+        stride_dx: *const i64,
+        softmax_axis: i32,
+        softmax_extent: i32,
+        softmax_stride_dy: i64,
+        softmax_stride_y: i64,
+        dy: *const c_void,
+        y: *const c_void,
+        dx: *const c_void,
+    ) -> i32;
     /// LogSoftmax FW, f32. `y[k] = (x[k] - max) - log(Σ exp(x[j] - max))`
     /// along `softmax_axis`. Numerically stable.
     pub fn baracuda_kernels_log_softmax_f32_run(
@@ -8213,7 +8426,19 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
-
+    pub fn baracuda_kernels_log_softmax_f32_can_implement(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        softmax_axis: i32,
+        softmax_extent: i32,
+        softmax_stride_x: i64,
+        softmax_stride_y: i64,
+        x: *const c_void,
+        y: *const c_void,
+    ) -> i32;
     /// LogSoftmax FW, f16. f32 accumulator inside the kernel.
     pub fn baracuda_kernels_log_softmax_f16_run(
         numel: i64,
@@ -8231,7 +8456,19 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
-
+    pub fn baracuda_kernels_log_softmax_f16_can_implement(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        softmax_axis: i32,
+        softmax_extent: i32,
+        softmax_stride_x: i64,
+        softmax_stride_y: i64,
+        x: *const c_void,
+        y: *const c_void,
+    ) -> i32;
     /// LogSoftmax FW, bf16.
     pub fn baracuda_kernels_log_softmax_bf16_run(
         numel: i64,
@@ -8249,7 +8486,19 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
-
+    pub fn baracuda_kernels_log_softmax_bf16_can_implement(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        softmax_axis: i32,
+        softmax_extent: i32,
+        softmax_stride_x: i64,
+        softmax_stride_y: i64,
+        x: *const c_void,
+        y: *const c_void,
+    ) -> i32;
     /// LogSoftmax FW, f64.
     pub fn baracuda_kernels_log_softmax_f64_run(
         numel: i64,
@@ -8267,7 +8516,19 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
-
+    pub fn baracuda_kernels_log_softmax_f64_can_implement(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        softmax_axis: i32,
+        softmax_extent: i32,
+        softmax_stride_x: i64,
+        softmax_stride_y: i64,
+        x: *const c_void,
+        y: *const c_void,
+    ) -> i32;
     /// LogSoftmax BW, f32. `dx[k] = dy[k] - exp(y[k]) * Σ_j dy[j]`.
     /// Caller passes the saved forward output `y` (log-softmax values).
     pub fn baracuda_kernels_log_softmax_backward_f32_run(
@@ -8288,7 +8549,21 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
-
+    pub fn baracuda_kernels_log_softmax_backward_f32_can_implement(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_dy: *const i64,
+        stride_y: *const i64,
+        stride_dx: *const i64,
+        softmax_axis: i32,
+        softmax_extent: i32,
+        softmax_stride_dy: i64,
+        softmax_stride_y: i64,
+        dy: *const c_void,
+        y: *const c_void,
+        dx: *const c_void,
+    ) -> i32;
     /// LogSoftmax BW, f16.
     pub fn baracuda_kernels_log_softmax_backward_f16_run(
         numel: i64,
@@ -8308,7 +8583,21 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
-
+    pub fn baracuda_kernels_log_softmax_backward_f16_can_implement(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_dy: *const i64,
+        stride_y: *const i64,
+        stride_dx: *const i64,
+        softmax_axis: i32,
+        softmax_extent: i32,
+        softmax_stride_dy: i64,
+        softmax_stride_y: i64,
+        dy: *const c_void,
+        y: *const c_void,
+        dx: *const c_void,
+    ) -> i32;
     /// LogSoftmax BW, bf16.
     pub fn baracuda_kernels_log_softmax_backward_bf16_run(
         numel: i64,
@@ -8328,7 +8617,21 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
-
+    pub fn baracuda_kernels_log_softmax_backward_bf16_can_implement(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_dy: *const i64,
+        stride_y: *const i64,
+        stride_dx: *const i64,
+        softmax_axis: i32,
+        softmax_extent: i32,
+        softmax_stride_dy: i64,
+        softmax_stride_y: i64,
+        dy: *const c_void,
+        y: *const c_void,
+        dx: *const c_void,
+    ) -> i32;
     /// LogSoftmax BW, f64.
     pub fn baracuda_kernels_log_softmax_backward_f64_run(
         numel: i64,
@@ -8348,7 +8651,21 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
-
+    pub fn baracuda_kernels_log_softmax_backward_f64_can_implement(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_dy: *const i64,
+        stride_y: *const i64,
+        stride_dx: *const i64,
+        softmax_axis: i32,
+        softmax_extent: i32,
+        softmax_stride_dy: i64,
+        softmax_stride_y: i64,
+        dy: *const c_void,
+        y: *const c_void,
+        dx: *const c_void,
+    ) -> i32;
     /// GumbelSoftmax FW, f32. `y = softmax((x + g) / τ)` where
     /// `g = -log(-log(u))` and `u` is a caller-supplied cuRAND uniform
     /// buffer (one f32 per output cell, dense / contiguous layout).
@@ -8372,6 +8689,22 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    pub fn baracuda_kernels_gumbel_softmax_f32_can_implement(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        softmax_axis: i32,
+        softmax_extent: i32,
+        softmax_stride_x: i64,
+        softmax_stride_y: i64,
+        inv_tau: f32,
+        hard: i32,
+        x: *const c_void,
+        u_rand: *const c_void,
+        y: *const c_void,
+    ) -> i32;
 
     /// GumbelSoftmax FW, f16.
     pub fn baracuda_kernels_gumbel_softmax_f16_run(
@@ -8392,6 +8725,22 @@ unsafe extern "C" {
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_gumbel_softmax_f16_can_implement(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        softmax_axis: i32,
+        softmax_extent: i32,
+        softmax_stride_x: i64,
+        softmax_stride_y: i64,
+        inv_tau: f32,
+        hard: i32,
+        x: *const c_void,
+        u_rand: *const c_void,
+        y: *const c_void,
     ) -> i32;
 
     /// GumbelSoftmax FW, bf16.
@@ -8414,6 +8763,22 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    pub fn baracuda_kernels_gumbel_softmax_bf16_can_implement(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        softmax_axis: i32,
+        softmax_extent: i32,
+        softmax_stride_x: i64,
+        softmax_stride_y: i64,
+        inv_tau: f32,
+        hard: i32,
+        x: *const c_void,
+        u_rand: *const c_void,
+        y: *const c_void,
+    ) -> i32;
 
     /// GumbelSoftmax FW, f64.
     pub fn baracuda_kernels_gumbel_softmax_f64_run(
@@ -8435,6 +8800,22 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    pub fn baracuda_kernels_gumbel_softmax_f64_can_implement(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        softmax_axis: i32,
+        softmax_extent: i32,
+        softmax_stride_x: i64,
+        softmax_stride_y: i64,
+        inv_tau: f32,
+        hard: i32,
+        x: *const c_void,
+        u_rand: *const c_void,
+        y: *const c_void,
+    ) -> i32;
 
     /// Sparsemax FW, f32. `y = ProjSimplex(x)` via threshold τ found
     /// after sorting the row descending. Row extent limited to 64.
@@ -8454,6 +8835,19 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    pub fn baracuda_kernels_sparsemax_f32_can_implement(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        softmax_axis: i32,
+        softmax_extent: i32,
+        softmax_stride_x: i64,
+        softmax_stride_y: i64,
+        x: *const c_void,
+        y: *const c_void,
+    ) -> i32;
 
     /// Sparsemax FW, f16.
     pub fn baracuda_kernels_sparsemax_f16_run(
@@ -8471,6 +8865,19 @@ unsafe extern "C" {
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_sparsemax_f16_can_implement(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        softmax_axis: i32,
+        softmax_extent: i32,
+        softmax_stride_x: i64,
+        softmax_stride_y: i64,
+        x: *const c_void,
+        y: *const c_void,
     ) -> i32;
 
     /// Sparsemax FW, bf16.
@@ -8490,6 +8897,19 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    pub fn baracuda_kernels_sparsemax_bf16_can_implement(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        softmax_axis: i32,
+        softmax_extent: i32,
+        softmax_stride_x: i64,
+        softmax_stride_y: i64,
+        x: *const c_void,
+        y: *const c_void,
+    ) -> i32;
 
     /// Sparsemax FW, f64.
     pub fn baracuda_kernels_sparsemax_f64_run(
@@ -8507,6 +8927,19 @@ unsafe extern "C" {
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_sparsemax_f64_can_implement(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        softmax_axis: i32,
+        softmax_extent: i32,
+        softmax_stride_x: i64,
+        softmax_stride_y: i64,
+        x: *const c_void,
+        y: *const c_void,
     ) -> i32;
 
     /// Sparsemax BW, f32. `dx[i] = dy[i] - sum_dy_active / n_active` for
@@ -8529,6 +8962,21 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    pub fn baracuda_kernels_sparsemax_backward_f32_can_implement(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_dy: *const i64,
+        stride_y: *const i64,
+        stride_dx: *const i64,
+        softmax_axis: i32,
+        softmax_extent: i32,
+        softmax_stride_dy: i64,
+        softmax_stride_y: i64,
+        dy: *const c_void,
+        y: *const c_void,
+        dx: *const c_void,
+    ) -> i32;
 
     /// Sparsemax BW, f16.
     pub fn baracuda_kernels_sparsemax_backward_f16_run(
@@ -8548,6 +8996,21 @@ unsafe extern "C" {
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_sparsemax_backward_f16_can_implement(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_dy: *const i64,
+        stride_y: *const i64,
+        stride_dx: *const i64,
+        softmax_axis: i32,
+        softmax_extent: i32,
+        softmax_stride_dy: i64,
+        softmax_stride_y: i64,
+        dy: *const c_void,
+        y: *const c_void,
+        dx: *const c_void,
     ) -> i32;
 
     /// Sparsemax BW, bf16.
@@ -8569,6 +9032,21 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    pub fn baracuda_kernels_sparsemax_backward_bf16_can_implement(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_dy: *const i64,
+        stride_y: *const i64,
+        stride_dx: *const i64,
+        softmax_axis: i32,
+        softmax_extent: i32,
+        softmax_stride_dy: i64,
+        softmax_stride_y: i64,
+        dy: *const c_void,
+        y: *const c_void,
+        dx: *const c_void,
+    ) -> i32;
 
     /// Sparsemax BW, f64.
     pub fn baracuda_kernels_sparsemax_backward_f64_run(
@@ -8588,6 +9066,21 @@ unsafe extern "C" {
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_sparsemax_backward_f64_can_implement(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_dy: *const i64,
+        stride_y: *const i64,
+        stride_dx: *const i64,
+        softmax_axis: i32,
+        softmax_extent: i32,
+        softmax_stride_dy: i64,
+        softmax_stride_y: i64,
+        dy: *const c_void,
+        y: *const c_void,
+        dx: *const c_void,
     ) -> i32;
 }
 
@@ -8614,6 +9107,14 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// MSE FW `_can_implement`, f32. Host-side validator (no launch).
+    pub fn baracuda_kernels_loss_mse_f32_can_implement(
+        numel: i64,
+        reduction_mode: i32,
+        pred: *const c_void,
+        target: *const c_void,
+        out: *const c_void,
+    ) -> i32;
     /// MSE FW, f16.
     pub fn baracuda_kernels_loss_mse_f16_run(
         numel: i64,
@@ -8624,6 +9125,14 @@ unsafe extern "C" {
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,
+    ) -> i32;
+    /// MSE FW `_can_implement`, f16.
+    pub fn baracuda_kernels_loss_mse_f16_can_implement(
+        numel: i64,
+        reduction_mode: i32,
+        pred: *const c_void,
+        target: *const c_void,
+        out: *const c_void,
     ) -> i32;
     /// MSE FW, bf16.
     pub fn baracuda_kernels_loss_mse_bf16_run(
@@ -8636,6 +9145,14 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// MSE FW `_can_implement`, bf16.
+    pub fn baracuda_kernels_loss_mse_bf16_can_implement(
+        numel: i64,
+        reduction_mode: i32,
+        pred: *const c_void,
+        target: *const c_void,
+        out: *const c_void,
+    ) -> i32;
     /// MSE FW, f64.
     pub fn baracuda_kernels_loss_mse_f64_run(
         numel: i64,
@@ -8646,6 +9163,14 @@ unsafe extern "C" {
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,
+    ) -> i32;
+    /// MSE FW `_can_implement`, f64.
+    pub fn baracuda_kernels_loss_mse_f64_can_implement(
+        numel: i64,
+        reduction_mode: i32,
+        pred: *const c_void,
+        target: *const c_void,
+        out: *const c_void,
     ) -> i32;
 
     /// MSE BW, f32. `dpred = 2·(pred - target) · scale`.
@@ -8661,6 +9186,16 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// MSE BW `_can_implement`, f32.
+    pub fn baracuda_kernels_loss_mse_backward_f32_can_implement(
+        numel: i64,
+        reduction_mode: i32,
+        scale_scalar: f32,
+        pred: *const c_void,
+        target: *const c_void,
+        dy: *const c_void,
+        dpred: *const c_void,
+    ) -> i32;
     /// MSE BW, f16.
     pub fn baracuda_kernels_loss_mse_backward_f16_run(
         numel: i64,
@@ -8673,6 +9208,16 @@ unsafe extern "C" {
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,
+    ) -> i32;
+    /// MSE BW `_can_implement`, f16.
+    pub fn baracuda_kernels_loss_mse_backward_f16_can_implement(
+        numel: i64,
+        reduction_mode: i32,
+        scale_scalar: f32,
+        pred: *const c_void,
+        target: *const c_void,
+        dy: *const c_void,
+        dpred: *const c_void,
     ) -> i32;
     /// MSE BW, bf16.
     pub fn baracuda_kernels_loss_mse_backward_bf16_run(
@@ -8687,6 +9232,16 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// MSE BW `_can_implement`, bf16.
+    pub fn baracuda_kernels_loss_mse_backward_bf16_can_implement(
+        numel: i64,
+        reduction_mode: i32,
+        scale_scalar: f32,
+        pred: *const c_void,
+        target: *const c_void,
+        dy: *const c_void,
+        dpred: *const c_void,
+    ) -> i32;
     /// MSE BW, f64.
     pub fn baracuda_kernels_loss_mse_backward_f64_run(
         numel: i64,
@@ -8699,6 +9254,16 @@ unsafe extern "C" {
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,
+    ) -> i32;
+    /// MSE BW `_can_implement`, f64.
+    pub fn baracuda_kernels_loss_mse_backward_f64_can_implement(
+        numel: i64,
+        reduction_mode: i32,
+        scale_scalar: f32,
+        pred: *const c_void,
+        target: *const c_void,
+        dy: *const c_void,
+        dpred: *const c_void,
     ) -> i32;
 
     /// BCE FW, f32. `-(t·log(p) + (1-t)·log(1-p))` per-cell, then reduce.
@@ -8713,6 +9278,14 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// BCE FW `_can_implement`, f32.
+    pub fn baracuda_kernels_loss_bce_f32_can_implement(
+        numel: i64,
+        reduction_mode: i32,
+        pred: *const c_void,
+        target: *const c_void,
+        out: *const c_void,
+    ) -> i32;
     /// BCE FW, f16.
     pub fn baracuda_kernels_loss_bce_f16_run(
         numel: i64,
@@ -8723,6 +9296,14 @@ unsafe extern "C" {
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,
+    ) -> i32;
+    /// BCE FW `_can_implement`, f16.
+    pub fn baracuda_kernels_loss_bce_f16_can_implement(
+        numel: i64,
+        reduction_mode: i32,
+        pred: *const c_void,
+        target: *const c_void,
+        out: *const c_void,
     ) -> i32;
     /// BCE FW, bf16.
     pub fn baracuda_kernels_loss_bce_bf16_run(
@@ -8735,6 +9316,14 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// BCE FW `_can_implement`, bf16.
+    pub fn baracuda_kernels_loss_bce_bf16_can_implement(
+        numel: i64,
+        reduction_mode: i32,
+        pred: *const c_void,
+        target: *const c_void,
+        out: *const c_void,
+    ) -> i32;
     /// BCE FW, f64.
     pub fn baracuda_kernels_loss_bce_f64_run(
         numel: i64,
@@ -8745,6 +9334,14 @@ unsafe extern "C" {
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,
+    ) -> i32;
+    /// BCE FW `_can_implement`, f64.
+    pub fn baracuda_kernels_loss_bce_f64_can_implement(
+        numel: i64,
+        reduction_mode: i32,
+        pred: *const c_void,
+        target: *const c_void,
+        out: *const c_void,
     ) -> i32;
 
     /// BCE BW, f32. `dpred = (pred - target) / (pred·(1-pred)) · scale`.
@@ -8760,6 +9357,16 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// BCE BW `_can_implement`, f32.
+    pub fn baracuda_kernels_loss_bce_backward_f32_can_implement(
+        numel: i64,
+        reduction_mode: i32,
+        scale_scalar: f32,
+        pred: *const c_void,
+        target: *const c_void,
+        dy: *const c_void,
+        dpred: *const c_void,
+    ) -> i32;
     /// BCE BW, f16.
     pub fn baracuda_kernels_loss_bce_backward_f16_run(
         numel: i64,
@@ -8772,6 +9379,16 @@ unsafe extern "C" {
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,
+    ) -> i32;
+    /// BCE BW `_can_implement`, f16.
+    pub fn baracuda_kernels_loss_bce_backward_f16_can_implement(
+        numel: i64,
+        reduction_mode: i32,
+        scale_scalar: f32,
+        pred: *const c_void,
+        target: *const c_void,
+        dy: *const c_void,
+        dpred: *const c_void,
     ) -> i32;
     /// BCE BW, bf16.
     pub fn baracuda_kernels_loss_bce_backward_bf16_run(
@@ -8786,6 +9403,16 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// BCE BW `_can_implement`, bf16.
+    pub fn baracuda_kernels_loss_bce_backward_bf16_can_implement(
+        numel: i64,
+        reduction_mode: i32,
+        scale_scalar: f32,
+        pred: *const c_void,
+        target: *const c_void,
+        dy: *const c_void,
+        dpred: *const c_void,
+    ) -> i32;
     /// BCE BW, f64.
     pub fn baracuda_kernels_loss_bce_backward_f64_run(
         numel: i64,
@@ -8798,6 +9425,16 @@ unsafe extern "C" {
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,
+    ) -> i32;
+    /// BCE BW `_can_implement`, f64.
+    pub fn baracuda_kernels_loss_bce_backward_f64_can_implement(
+        numel: i64,
+        reduction_mode: i32,
+        scale_scalar: f32,
+        pred: *const c_void,
+        target: *const c_void,
+        dy: *const c_void,
+        dpred: *const c_void,
     ) -> i32;
 
     /// KLDiv FW, f32. `target·(log(target) - input)` per-cell. PyTorch
@@ -8812,6 +9449,14 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// KLDiv FW `_can_implement`, f32.
+    pub fn baracuda_kernels_loss_kl_div_f32_can_implement(
+        numel: i64,
+        reduction_mode: i32,
+        pred: *const c_void,
+        target: *const c_void,
+        out: *const c_void,
+    ) -> i32;
     /// KLDiv FW, f16.
     pub fn baracuda_kernels_loss_kl_div_f16_run(
         numel: i64,
@@ -8822,6 +9467,14 @@ unsafe extern "C" {
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,
+    ) -> i32;
+    /// KLDiv FW `_can_implement`, f16.
+    pub fn baracuda_kernels_loss_kl_div_f16_can_implement(
+        numel: i64,
+        reduction_mode: i32,
+        pred: *const c_void,
+        target: *const c_void,
+        out: *const c_void,
     ) -> i32;
     /// KLDiv FW, bf16.
     pub fn baracuda_kernels_loss_kl_div_bf16_run(
@@ -8834,6 +9487,14 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// KLDiv FW `_can_implement`, bf16.
+    pub fn baracuda_kernels_loss_kl_div_bf16_can_implement(
+        numel: i64,
+        reduction_mode: i32,
+        pred: *const c_void,
+        target: *const c_void,
+        out: *const c_void,
+    ) -> i32;
     /// KLDiv FW, f64.
     pub fn baracuda_kernels_loss_kl_div_f64_run(
         numel: i64,
@@ -8844,6 +9505,14 @@ unsafe extern "C" {
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,
+    ) -> i32;
+    /// KLDiv FW `_can_implement`, f64.
+    pub fn baracuda_kernels_loss_kl_div_f64_can_implement(
+        numel: i64,
+        reduction_mode: i32,
+        pred: *const c_void,
+        target: *const c_void,
+        out: *const c_void,
     ) -> i32;
 
     /// KLDiv BW, f32. `dinput = -target · scale`.
@@ -8858,6 +9527,15 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// KLDiv BW `_can_implement`, f32.
+    pub fn baracuda_kernels_loss_kl_div_backward_f32_can_implement(
+        numel: i64,
+        reduction_mode: i32,
+        scale_scalar: f32,
+        target: *const c_void,
+        dy: *const c_void,
+        dinput: *const c_void,
+    ) -> i32;
     /// KLDiv BW, f16.
     pub fn baracuda_kernels_loss_kl_div_backward_f16_run(
         numel: i64,
@@ -8869,6 +9547,15 @@ unsafe extern "C" {
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,
+    ) -> i32;
+    /// KLDiv BW `_can_implement`, f16.
+    pub fn baracuda_kernels_loss_kl_div_backward_f16_can_implement(
+        numel: i64,
+        reduction_mode: i32,
+        scale_scalar: f32,
+        target: *const c_void,
+        dy: *const c_void,
+        dinput: *const c_void,
     ) -> i32;
     /// KLDiv BW, bf16.
     pub fn baracuda_kernels_loss_kl_div_backward_bf16_run(
@@ -8882,6 +9569,15 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// KLDiv BW `_can_implement`, bf16.
+    pub fn baracuda_kernels_loss_kl_div_backward_bf16_can_implement(
+        numel: i64,
+        reduction_mode: i32,
+        scale_scalar: f32,
+        target: *const c_void,
+        dy: *const c_void,
+        dinput: *const c_void,
+    ) -> i32;
     /// KLDiv BW, f64.
     pub fn baracuda_kernels_loss_kl_div_backward_f64_run(
         numel: i64,
@@ -8893,6 +9589,15 @@ unsafe extern "C" {
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,
+    ) -> i32;
+    /// KLDiv BW `_can_implement`, f64.
+    pub fn baracuda_kernels_loss_kl_div_backward_f64_can_implement(
+        numel: i64,
+        reduction_mode: i32,
+        scale_scalar: f32,
+        target: *const c_void,
+        dy: *const c_void,
+        dinput: *const c_void,
     ) -> i32;
 
     /// NLL FW, f32. `-input[i, target[i]]` per row. Heterogeneous-dtype:
@@ -8911,6 +9616,16 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// NLL FW `_can_implement`, f32.
+    pub fn baracuda_kernels_loss_nll_f32_can_implement(
+        n_rows: i64,
+        class_extent: i32,
+        row_stride_input: i64,
+        reduction_mode: i32,
+        input: *const c_void,
+        target: *const c_void,
+        out: *const c_void,
+    ) -> i32;
     /// NLL FW, f16.
     pub fn baracuda_kernels_loss_nll_f16_run(
         n_rows: i64,
@@ -8923,6 +9638,16 @@ unsafe extern "C" {
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,
+    ) -> i32;
+    /// NLL FW `_can_implement`, f16.
+    pub fn baracuda_kernels_loss_nll_f16_can_implement(
+        n_rows: i64,
+        class_extent: i32,
+        row_stride_input: i64,
+        reduction_mode: i32,
+        input: *const c_void,
+        target: *const c_void,
+        out: *const c_void,
     ) -> i32;
     /// NLL FW, bf16.
     pub fn baracuda_kernels_loss_nll_bf16_run(
@@ -8937,6 +9662,16 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// NLL FW `_can_implement`, bf16.
+    pub fn baracuda_kernels_loss_nll_bf16_can_implement(
+        n_rows: i64,
+        class_extent: i32,
+        row_stride_input: i64,
+        reduction_mode: i32,
+        input: *const c_void,
+        target: *const c_void,
+        out: *const c_void,
+    ) -> i32;
     /// NLL FW, f64.
     pub fn baracuda_kernels_loss_nll_f64_run(
         n_rows: i64,
@@ -8949,6 +9684,16 @@ unsafe extern "C" {
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,
+    ) -> i32;
+    /// NLL FW `_can_implement`, f64.
+    pub fn baracuda_kernels_loss_nll_f64_can_implement(
+        n_rows: i64,
+        class_extent: i32,
+        row_stride_input: i64,
+        reduction_mode: i32,
+        input: *const c_void,
+        target: *const c_void,
+        out: *const c_void,
     ) -> i32;
 
     /// NLL BW, f32. Pre-zeros `dinput` (size `dinput_numel · sizeof(T)`),
@@ -8967,6 +9712,18 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// NLL BW `_can_implement`, f32.
+    pub fn baracuda_kernels_loss_nll_backward_f32_can_implement(
+        n_rows: i64,
+        class_extent: i32,
+        row_stride_input: i64,
+        dinput_numel: i64,
+        reduction_mode: i32,
+        scale_scalar: f32,
+        dy: *const c_void,
+        target: *const c_void,
+        dinput: *const c_void,
+    ) -> i32;
     /// NLL BW, f16.
     pub fn baracuda_kernels_loss_nll_backward_f16_run(
         n_rows: i64,
@@ -8981,6 +9738,18 @@ unsafe extern "C" {
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,
+    ) -> i32;
+    /// NLL BW `_can_implement`, f16.
+    pub fn baracuda_kernels_loss_nll_backward_f16_can_implement(
+        n_rows: i64,
+        class_extent: i32,
+        row_stride_input: i64,
+        dinput_numel: i64,
+        reduction_mode: i32,
+        scale_scalar: f32,
+        dy: *const c_void,
+        target: *const c_void,
+        dinput: *const c_void,
     ) -> i32;
     /// NLL BW, bf16.
     pub fn baracuda_kernels_loss_nll_backward_bf16_run(
@@ -8997,6 +9766,18 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// NLL BW `_can_implement`, bf16.
+    pub fn baracuda_kernels_loss_nll_backward_bf16_can_implement(
+        n_rows: i64,
+        class_extent: i32,
+        row_stride_input: i64,
+        dinput_numel: i64,
+        reduction_mode: i32,
+        scale_scalar: f32,
+        dy: *const c_void,
+        target: *const c_void,
+        dinput: *const c_void,
+    ) -> i32;
     /// NLL BW, f64.
     pub fn baracuda_kernels_loss_nll_backward_f64_run(
         n_rows: i64,
@@ -9011,6 +9792,18 @@ unsafe extern "C" {
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,
+    ) -> i32;
+    /// NLL BW `_can_implement`, f64.
+    pub fn baracuda_kernels_loss_nll_backward_f64_can_implement(
+        n_rows: i64,
+        class_extent: i32,
+        row_stride_input: i64,
+        dinput_numel: i64,
+        reduction_mode: i32,
+        scale_scalar: f32,
+        dy: *const c_void,
+        target: *const c_void,
+        dinput: *const c_void,
     ) -> i32;
 
     /// CrossEntropy FW, f32. Fused LogSoftmax + NLL. Numerically stable
@@ -9027,6 +9820,16 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// CrossEntropy FW `_can_implement`, f32.
+    pub fn baracuda_kernels_loss_cross_entropy_f32_can_implement(
+        n_rows: i64,
+        class_extent: i32,
+        row_stride_input: i64,
+        reduction_mode: i32,
+        input: *const c_void,
+        target: *const c_void,
+        out: *const c_void,
+    ) -> i32;
     /// CrossEntropy FW, f16.
     pub fn baracuda_kernels_loss_cross_entropy_f16_run(
         n_rows: i64,
@@ -9039,6 +9842,16 @@ unsafe extern "C" {
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,
+    ) -> i32;
+    /// CrossEntropy FW `_can_implement`, f16.
+    pub fn baracuda_kernels_loss_cross_entropy_f16_can_implement(
+        n_rows: i64,
+        class_extent: i32,
+        row_stride_input: i64,
+        reduction_mode: i32,
+        input: *const c_void,
+        target: *const c_void,
+        out: *const c_void,
     ) -> i32;
     /// CrossEntropy FW, bf16.
     pub fn baracuda_kernels_loss_cross_entropy_bf16_run(
@@ -9053,6 +9866,16 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// CrossEntropy FW `_can_implement`, bf16.
+    pub fn baracuda_kernels_loss_cross_entropy_bf16_can_implement(
+        n_rows: i64,
+        class_extent: i32,
+        row_stride_input: i64,
+        reduction_mode: i32,
+        input: *const c_void,
+        target: *const c_void,
+        out: *const c_void,
+    ) -> i32;
     /// CrossEntropy FW, f64.
     pub fn baracuda_kernels_loss_cross_entropy_f64_run(
         n_rows: i64,
@@ -9065,6 +9888,16 @@ unsafe extern "C" {
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,
+    ) -> i32;
+    /// CrossEntropy FW `_can_implement`, f64.
+    pub fn baracuda_kernels_loss_cross_entropy_f64_can_implement(
+        n_rows: i64,
+        class_extent: i32,
+        row_stride_input: i64,
+        reduction_mode: i32,
+        input: *const c_void,
+        target: *const c_void,
+        out: *const c_void,
     ) -> i32;
 
     /// CrossEntropy BW, f32. `dinput[i, c] = (softmax(input)[i, c] - 1{c==t[i]}) · scale`.
@@ -9081,6 +9914,18 @@ unsafe extern "C" {
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,
+    ) -> i32;
+    /// CrossEntropy BW `_can_implement`, f32.
+    pub fn baracuda_kernels_loss_cross_entropy_backward_f32_can_implement(
+        n_rows: i64,
+        class_extent: i32,
+        row_stride_input: i64,
+        reduction_mode: i32,
+        scale_scalar: f32,
+        input: *const c_void,
+        target: *const c_void,
+        dy: *const c_void,
+        dinput: *const c_void,
     ) -> i32;
     /// CrossEntropy BW, f16.
     pub fn baracuda_kernels_loss_cross_entropy_backward_f16_run(
@@ -9251,6 +10096,14 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// L1 FW `_can_implement`, f32.
+    pub fn baracuda_kernels_loss_l1_f32_can_implement(
+        numel: i64,
+        reduction_mode: i32,
+        pred: *const c_void,
+        target: *const c_void,
+        out: *const c_void,
+    ) -> i32;
     /// L1 FW, f16.
     pub fn baracuda_kernels_loss_l1_f16_run(
         numel: i64,
@@ -9261,6 +10114,14 @@ unsafe extern "C" {
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,
+    ) -> i32;
+    /// L1 FW `_can_implement`, f16.
+    pub fn baracuda_kernels_loss_l1_f16_can_implement(
+        numel: i64,
+        reduction_mode: i32,
+        pred: *const c_void,
+        target: *const c_void,
+        out: *const c_void,
     ) -> i32;
     /// L1 FW, bf16.
     pub fn baracuda_kernels_loss_l1_bf16_run(
@@ -9273,6 +10134,14 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// L1 FW `_can_implement`, bf16.
+    pub fn baracuda_kernels_loss_l1_bf16_can_implement(
+        numel: i64,
+        reduction_mode: i32,
+        pred: *const c_void,
+        target: *const c_void,
+        out: *const c_void,
+    ) -> i32;
     /// L1 FW, f64.
     pub fn baracuda_kernels_loss_l1_f64_run(
         numel: i64,
@@ -9283,6 +10152,14 @@ unsafe extern "C" {
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,
+    ) -> i32;
+    /// L1 FW `_can_implement`, f64.
+    pub fn baracuda_kernels_loss_l1_f64_can_implement(
+        numel: i64,
+        reduction_mode: i32,
+        pred: *const c_void,
+        target: *const c_void,
+        out: *const c_void,
     ) -> i32;
 
     /// L1 BW, f32. `dpred = sign(pred - target) · scale`.
@@ -9297,6 +10174,16 @@ unsafe extern "C" {
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,
+    ) -> i32;
+    /// L1 BW `_can_implement`, f32.
+    pub fn baracuda_kernels_loss_l1_backward_f32_can_implement(
+        numel: i64,
+        reduction_mode: i32,
+        scale_scalar: f32,
+        pred: *const c_void,
+        target: *const c_void,
+        dy: *const c_void,
+        dpred: *const c_void,
     ) -> i32;
     /// L1 BW, f16.
     pub fn baracuda_kernels_loss_l1_backward_f16_run(
@@ -10380,6 +11267,15 @@ unsafe extern "C" {
         alpha_ws: *mut c_void, out: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
     ) -> i32;
+    /// CTCLoss FW `_can_implement`, f32. Validates `num_classes <= 32`,
+    /// `max_target_len <= 256`, `blank ∈ [0, num_classes)`, `reduction_mode ∈ [0,2]`.
+    pub fn baracuda_kernels_loss_ctc_f32_can_implement(
+        max_time: i32, batch_size: i32, num_classes: i32, max_target_len: i32,
+        blank: i32, reduction_mode: i32, zero_infinity: i32,
+        log_probs: *const c_void, targets: *const c_void,
+        input_lengths: *const c_void, target_lengths: *const c_void,
+        alpha_ws: *const c_void, out: *const c_void,
+    ) -> i32;
     /// CTCLoss FW, f16.
     pub fn baracuda_kernels_loss_ctc_f16_run(
         max_time: i32, batch_size: i32, num_classes: i32, max_target_len: i32,
@@ -10388,6 +11284,14 @@ unsafe extern "C" {
         input_lengths: *const c_void, target_lengths: *const c_void,
         alpha_ws: *mut c_void, out: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// CTCLoss FW `_can_implement`, f16 (F32_ACC).
+    pub fn baracuda_kernels_loss_ctc_f16_can_implement(
+        max_time: i32, batch_size: i32, num_classes: i32, max_target_len: i32,
+        blank: i32, reduction_mode: i32, zero_infinity: i32,
+        log_probs: *const c_void, targets: *const c_void,
+        input_lengths: *const c_void, target_lengths: *const c_void,
+        alpha_ws: *const c_void, out: *const c_void,
     ) -> i32;
     /// CTCLoss FW, bf16.
     pub fn baracuda_kernels_loss_ctc_bf16_run(
@@ -10398,6 +11302,14 @@ unsafe extern "C" {
         alpha_ws: *mut c_void, out: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
     ) -> i32;
+    /// CTCLoss FW `_can_implement`, bf16 (F32_ACC).
+    pub fn baracuda_kernels_loss_ctc_bf16_can_implement(
+        max_time: i32, batch_size: i32, num_classes: i32, max_target_len: i32,
+        blank: i32, reduction_mode: i32, zero_infinity: i32,
+        log_probs: *const c_void, targets: *const c_void,
+        input_lengths: *const c_void, target_lengths: *const c_void,
+        alpha_ws: *const c_void, out: *const c_void,
+    ) -> i32;
     /// CTCLoss FW, f64.
     pub fn baracuda_kernels_loss_ctc_f64_run(
         max_time: i32, batch_size: i32, num_classes: i32, max_target_len: i32,
@@ -10406,6 +11318,14 @@ unsafe extern "C" {
         input_lengths: *const c_void, target_lengths: *const c_void,
         alpha_ws: *mut c_void, out: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// CTCLoss FW `_can_implement`, f64 (F64_ACC).
+    pub fn baracuda_kernels_loss_ctc_f64_can_implement(
+        max_time: i32, batch_size: i32, num_classes: i32, max_target_len: i32,
+        blank: i32, reduction_mode: i32, zero_infinity: i32,
+        log_probs: *const c_void, targets: *const c_void,
+        input_lengths: *const c_void, target_lengths: *const c_void,
+        alpha_ws: *const c_void, out: *const c_void,
     ) -> i32;
 
     /// CTCLoss BW, f32.
@@ -10418,6 +11338,15 @@ unsafe extern "C" {
         dloss: *const c_void, dlog_probs: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
     ) -> i32;
+    /// CTCLoss BW `_can_implement`, f32.
+    pub fn baracuda_kernels_loss_ctc_backward_f32_can_implement(
+        max_time: i32, batch_size: i32, num_classes: i32, max_target_len: i32,
+        blank: i32, reduction_mode: i32, zero_infinity: i32, inv_denom: f32,
+        log_probs: *const c_void, targets: *const c_void,
+        input_lengths: *const c_void, target_lengths: *const c_void,
+        alpha_ws: *const c_void, per_sample_loss: *const c_void,
+        dloss: *const c_void, dlog_probs: *const c_void,
+    ) -> i32;
     /// CTCLoss BW, f16.
     pub fn baracuda_kernels_loss_ctc_backward_f16_run(
         max_time: i32, batch_size: i32, num_classes: i32, max_target_len: i32,
@@ -10427,6 +11356,15 @@ unsafe extern "C" {
         alpha_ws: *const c_void, per_sample_loss: *const c_void,
         dloss: *const c_void, dlog_probs: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// CTCLoss BW `_can_implement`, f16.
+    pub fn baracuda_kernels_loss_ctc_backward_f16_can_implement(
+        max_time: i32, batch_size: i32, num_classes: i32, max_target_len: i32,
+        blank: i32, reduction_mode: i32, zero_infinity: i32, inv_denom: f32,
+        log_probs: *const c_void, targets: *const c_void,
+        input_lengths: *const c_void, target_lengths: *const c_void,
+        alpha_ws: *const c_void, per_sample_loss: *const c_void,
+        dloss: *const c_void, dlog_probs: *const c_void,
     ) -> i32;
     /// CTCLoss BW, bf16.
     pub fn baracuda_kernels_loss_ctc_backward_bf16_run(
@@ -10438,6 +11376,15 @@ unsafe extern "C" {
         dloss: *const c_void, dlog_probs: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
     ) -> i32;
+    /// CTCLoss BW `_can_implement`, bf16.
+    pub fn baracuda_kernels_loss_ctc_backward_bf16_can_implement(
+        max_time: i32, batch_size: i32, num_classes: i32, max_target_len: i32,
+        blank: i32, reduction_mode: i32, zero_infinity: i32, inv_denom: f32,
+        log_probs: *const c_void, targets: *const c_void,
+        input_lengths: *const c_void, target_lengths: *const c_void,
+        alpha_ws: *const c_void, per_sample_loss: *const c_void,
+        dloss: *const c_void, dlog_probs: *const c_void,
+    ) -> i32;
     /// CTCLoss BW, f64.
     pub fn baracuda_kernels_loss_ctc_backward_f64_run(
         max_time: i32, batch_size: i32, num_classes: i32, max_target_len: i32,
@@ -10447,6 +11394,15 @@ unsafe extern "C" {
         alpha_ws: *const c_void, per_sample_loss: *const c_void,
         dloss: *const c_void, dlog_probs: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// CTCLoss BW `_can_implement`, f64 (F64_ACC).
+    pub fn baracuda_kernels_loss_ctc_backward_f64_can_implement(
+        max_time: i32, batch_size: i32, num_classes: i32, max_target_len: i32,
+        blank: i32, reduction_mode: i32, zero_infinity: i32, inv_denom: f32,
+        log_probs: *const c_void, targets: *const c_void,
+        input_lengths: *const c_void, target_lengths: *const c_void,
+        alpha_ws: *const c_void, per_sample_loss: *const c_void,
+        dloss: *const c_void, dlog_probs: *const c_void,
     ) -> i32;
 
     /// PReLU FW, f32. ABI: `(numel, channel_stride, channel_extent,
@@ -10609,6 +11565,21 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    pub fn baracuda_kernels_rms_norm_f32_can_implement(
+        eps: f32,
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        stride_rms: *const i64,
+        norm_axes_mask: i32,
+        norm_total_extent: i32,
+        x: *const c_void,
+        gamma: *const c_void,
+        y: *const c_void,
+        rms_out: *const c_void,
+    ) -> i32;
 
     /// RMSNorm FW, f16. f32 accumulator inside the kernel.
     pub fn baracuda_kernels_rms_norm_f16_run(
@@ -10628,6 +11599,21 @@ unsafe extern "C" {
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_rms_norm_f16_can_implement(
+        eps: f32,
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        stride_rms: *const i64,
+        norm_axes_mask: i32,
+        norm_total_extent: i32,
+        x: *const c_void,
+        gamma: *const c_void,
+        y: *const c_void,
+        rms_out: *const c_void,
     ) -> i32;
 
     /// RMSNorm FW, bf16. f32 accumulator inside the kernel.
@@ -10649,6 +11635,21 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    pub fn baracuda_kernels_rms_norm_bf16_can_implement(
+        eps: f32,
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        stride_rms: *const i64,
+        norm_axes_mask: i32,
+        norm_total_extent: i32,
+        x: *const c_void,
+        gamma: *const c_void,
+        y: *const c_void,
+        rms_out: *const c_void,
+    ) -> i32;
 
     /// RMSNorm FW, f64.
     pub fn baracuda_kernels_rms_norm_f64_run(
@@ -10668,6 +11669,21 @@ unsafe extern "C" {
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_rms_norm_f64_can_implement(
+        eps: f32,
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        stride_rms: *const i64,
+        norm_axes_mask: i32,
+        norm_total_extent: i32,
+        x: *const c_void,
+        gamma: *const c_void,
+        y: *const c_void,
+        rms_out: *const c_void,
     ) -> i32;
 
     /// RMSNorm BW, f32. Computes `dx` and (when `dgamma != null`)
@@ -10694,6 +11710,23 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    pub fn baracuda_kernels_rms_norm_backward_f32_can_implement(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_dy: *const i64,
+        stride_x: *const i64,
+        stride_rms: *const i64,
+        stride_dx: *const i64,
+        norm_axes_mask: i32,
+        norm_total_extent: i32,
+        dy: *const c_void,
+        x: *const c_void,
+        gamma: *const c_void,
+        rms: *const c_void,
+        dx: *const c_void,
+        dgamma: *const c_void,
+    ) -> i32;
 
     /// RMSNorm BW, f16.
     pub fn baracuda_kernels_rms_norm_backward_f16_run(
@@ -10715,6 +11748,23 @@ unsafe extern "C" {
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_rms_norm_backward_f16_can_implement(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_dy: *const i64,
+        stride_x: *const i64,
+        stride_rms: *const i64,
+        stride_dx: *const i64,
+        norm_axes_mask: i32,
+        norm_total_extent: i32,
+        dy: *const c_void,
+        x: *const c_void,
+        gamma: *const c_void,
+        rms: *const c_void,
+        dx: *const c_void,
+        dgamma: *const c_void,
     ) -> i32;
 
     /// RMSNorm BW, bf16.
@@ -10738,6 +11788,23 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    pub fn baracuda_kernels_rms_norm_backward_bf16_can_implement(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_dy: *const i64,
+        stride_x: *const i64,
+        stride_rms: *const i64,
+        stride_dx: *const i64,
+        norm_axes_mask: i32,
+        norm_total_extent: i32,
+        dy: *const c_void,
+        x: *const c_void,
+        gamma: *const c_void,
+        rms: *const c_void,
+        dx: *const c_void,
+        dgamma: *const c_void,
+    ) -> i32;
 
     /// RMSNorm BW, f64.
     pub fn baracuda_kernels_rms_norm_backward_f64_run(
@@ -10759,6 +11826,23 @@ unsafe extern "C" {
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_rms_norm_backward_f64_can_implement(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_dy: *const i64,
+        stride_x: *const i64,
+        stride_rms: *const i64,
+        stride_dx: *const i64,
+        norm_axes_mask: i32,
+        norm_total_extent: i32,
+        dy: *const c_void,
+        x: *const c_void,
+        gamma: *const c_void,
+        rms: *const c_void,
+        dx: *const c_void,
+        dgamma: *const c_void,
     ) -> i32;
 
     /// LayerNorm FW, f32. `y = (x - mean) / sqrt(var + eps) * gamma + beta`.
@@ -10785,6 +11869,23 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    pub fn baracuda_kernels_layer_norm_f32_can_implement(
+        eps: f32,
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        stride_save: *const i64,
+        norm_axes_mask: i32,
+        norm_total_extent: i32,
+        x: *const c_void,
+        gamma: *const c_void,
+        beta: *const c_void,
+        y: *const c_void,
+        mean_out: *const c_void,
+        inv_std_out: *const c_void,
+    ) -> i32;
 
     /// LayerNorm FW, f16. f32 accumulator inside the kernel.
     pub fn baracuda_kernels_layer_norm_f16_run(
@@ -10806,6 +11907,23 @@ unsafe extern "C" {
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_layer_norm_f16_can_implement(
+        eps: f32,
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        stride_save: *const i64,
+        norm_axes_mask: i32,
+        norm_total_extent: i32,
+        x: *const c_void,
+        gamma: *const c_void,
+        beta: *const c_void,
+        y: *const c_void,
+        mean_out: *const c_void,
+        inv_std_out: *const c_void,
     ) -> i32;
 
     /// LayerNorm FW, bf16. f32 accumulator inside the kernel.
@@ -10829,6 +11947,23 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    pub fn baracuda_kernels_layer_norm_bf16_can_implement(
+        eps: f32,
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        stride_save: *const i64,
+        norm_axes_mask: i32,
+        norm_total_extent: i32,
+        x: *const c_void,
+        gamma: *const c_void,
+        beta: *const c_void,
+        y: *const c_void,
+        mean_out: *const c_void,
+        inv_std_out: *const c_void,
+    ) -> i32;
 
     /// LayerNorm FW, f64.
     pub fn baracuda_kernels_layer_norm_f64_run(
@@ -10850,6 +11985,23 @@ unsafe extern "C" {
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_layer_norm_f64_can_implement(
+        eps: f32,
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        stride_save: *const i64,
+        norm_axes_mask: i32,
+        norm_total_extent: i32,
+        x: *const c_void,
+        gamma: *const c_void,
+        beta: *const c_void,
+        y: *const c_void,
+        mean_out: *const c_void,
+        inv_std_out: *const c_void,
     ) -> i32;
 
     /// LayerNorm BW, f32. Computes `dx` and (when non-null) `dgamma` /
@@ -10876,6 +12028,25 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    pub fn baracuda_kernels_layer_norm_backward_f32_can_implement(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_dy: *const i64,
+        stride_x: *const i64,
+        stride_save: *const i64,
+        stride_dx: *const i64,
+        norm_axes_mask: i32,
+        norm_total_extent: i32,
+        dy: *const c_void,
+        x: *const c_void,
+        gamma: *const c_void,
+        mean_in: *const c_void,
+        inv_std_in: *const c_void,
+        dx: *const c_void,
+        dgamma: *const c_void,
+        dbeta: *const c_void,
+    ) -> i32;
 
     /// LayerNorm BW, f16.
     pub fn baracuda_kernels_layer_norm_backward_f16_run(
@@ -10899,6 +12070,25 @@ unsafe extern "C" {
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_layer_norm_backward_f16_can_implement(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_dy: *const i64,
+        stride_x: *const i64,
+        stride_save: *const i64,
+        stride_dx: *const i64,
+        norm_axes_mask: i32,
+        norm_total_extent: i32,
+        dy: *const c_void,
+        x: *const c_void,
+        gamma: *const c_void,
+        mean_in: *const c_void,
+        inv_std_in: *const c_void,
+        dx: *const c_void,
+        dgamma: *const c_void,
+        dbeta: *const c_void,
     ) -> i32;
 
     /// LayerNorm BW, bf16.
@@ -10924,6 +12114,25 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    pub fn baracuda_kernels_layer_norm_backward_bf16_can_implement(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_dy: *const i64,
+        stride_x: *const i64,
+        stride_save: *const i64,
+        stride_dx: *const i64,
+        norm_axes_mask: i32,
+        norm_total_extent: i32,
+        dy: *const c_void,
+        x: *const c_void,
+        gamma: *const c_void,
+        mean_in: *const c_void,
+        inv_std_in: *const c_void,
+        dx: *const c_void,
+        dgamma: *const c_void,
+        dbeta: *const c_void,
+    ) -> i32;
 
     /// LayerNorm BW, f64.
     pub fn baracuda_kernels_layer_norm_backward_f64_run(
@@ -10947,6 +12156,25 @@ unsafe extern "C" {
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_layer_norm_backward_f64_can_implement(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_dy: *const i64,
+        stride_x: *const i64,
+        stride_save: *const i64,
+        stride_dx: *const i64,
+        norm_axes_mask: i32,
+        norm_total_extent: i32,
+        dy: *const c_void,
+        x: *const c_void,
+        gamma: *const c_void,
+        mean_in: *const c_void,
+        inv_std_in: *const c_void,
+        dx: *const c_void,
+        dgamma: *const c_void,
+        dbeta: *const c_void,
     ) -> i32;
 }
 
@@ -10998,6 +12226,20 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    pub fn baracuda_kernels_batch_norm_f32_can_implement(
+        n_extent: i32,
+        c_extent: i32,
+        spatial_extent: i32,
+        num_groups: i32,
+        group_kind: i32,
+        eps: f32,
+        x: *const c_void,
+        gamma: *const c_void,
+        beta: *const c_void,
+        y: *const c_void,
+        saved_mean: *const c_void,
+        saved_rstd: *const c_void,
+    ) -> i32;
 
     /// BatchNorm FW, f16.
     pub fn baracuda_kernels_batch_norm_f16_run(
@@ -11016,6 +12258,20 @@ unsafe extern "C" {
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_batch_norm_f16_can_implement(
+        n_extent: i32,
+        c_extent: i32,
+        spatial_extent: i32,
+        num_groups: i32,
+        group_kind: i32,
+        eps: f32,
+        x: *const c_void,
+        gamma: *const c_void,
+        beta: *const c_void,
+        y: *const c_void,
+        saved_mean: *const c_void,
+        saved_rstd: *const c_void,
     ) -> i32;
 
     /// BatchNorm FW, bf16.
@@ -11036,6 +12292,20 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    pub fn baracuda_kernels_batch_norm_bf16_can_implement(
+        n_extent: i32,
+        c_extent: i32,
+        spatial_extent: i32,
+        num_groups: i32,
+        group_kind: i32,
+        eps: f32,
+        x: *const c_void,
+        gamma: *const c_void,
+        beta: *const c_void,
+        y: *const c_void,
+        saved_mean: *const c_void,
+        saved_rstd: *const c_void,
+    ) -> i32;
 
     /// BatchNorm FW, f64.
     pub fn baracuda_kernels_batch_norm_f64_run(
@@ -11054,6 +12324,20 @@ unsafe extern "C" {
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_batch_norm_f64_can_implement(
+        n_extent: i32,
+        c_extent: i32,
+        spatial_extent: i32,
+        num_groups: i32,
+        group_kind: i32,
+        eps: f32,
+        x: *const c_void,
+        gamma: *const c_void,
+        beta: *const c_void,
+        y: *const c_void,
+        saved_mean: *const c_void,
+        saved_rstd: *const c_void,
     ) -> i32;
 
     /// BatchNorm BW, f32. Three-stage: per-group sum_dxh / sum_dxhxh,
@@ -11078,6 +12362,21 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    pub fn baracuda_kernels_batch_norm_backward_f32_can_implement(
+        n_extent: i32,
+        c_extent: i32,
+        spatial_extent: i32,
+        num_groups: i32,
+        group_kind: i32,
+        dy: *const c_void,
+        x: *const c_void,
+        gamma: *const c_void,
+        saved_mean: *const c_void,
+        saved_rstd: *const c_void,
+        dx: *const c_void,
+        dgamma: *const c_void,
+        dbeta: *const c_void,
+    ) -> i32;
 
     /// BatchNorm BW, f16.
     pub fn baracuda_kernels_batch_norm_backward_f16_run(
@@ -11097,6 +12396,21 @@ unsafe extern "C" {
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_batch_norm_backward_f16_can_implement(
+        n_extent: i32,
+        c_extent: i32,
+        spatial_extent: i32,
+        num_groups: i32,
+        group_kind: i32,
+        dy: *const c_void,
+        x: *const c_void,
+        gamma: *const c_void,
+        saved_mean: *const c_void,
+        saved_rstd: *const c_void,
+        dx: *const c_void,
+        dgamma: *const c_void,
+        dbeta: *const c_void,
     ) -> i32;
 
     /// BatchNorm BW, bf16.
@@ -11118,6 +12432,21 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    pub fn baracuda_kernels_batch_norm_backward_bf16_can_implement(
+        n_extent: i32,
+        c_extent: i32,
+        spatial_extent: i32,
+        num_groups: i32,
+        group_kind: i32,
+        dy: *const c_void,
+        x: *const c_void,
+        gamma: *const c_void,
+        saved_mean: *const c_void,
+        saved_rstd: *const c_void,
+        dx: *const c_void,
+        dgamma: *const c_void,
+        dbeta: *const c_void,
+    ) -> i32;
 
     /// BatchNorm BW, f64.
     pub fn baracuda_kernels_batch_norm_backward_f64_run(
@@ -11137,6 +12466,21 @@ unsafe extern "C" {
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_batch_norm_backward_f64_can_implement(
+        n_extent: i32,
+        c_extent: i32,
+        spatial_extent: i32,
+        num_groups: i32,
+        group_kind: i32,
+        dy: *const c_void,
+        x: *const c_void,
+        gamma: *const c_void,
+        saved_mean: *const c_void,
+        saved_rstd: *const c_void,
+        dx: *const c_void,
+        dgamma: *const c_void,
+        dbeta: *const c_void,
     ) -> i32;
 
     /// GroupNorm FW, f32. Per `(sample, group)` mean / inv_std,
@@ -11166,6 +12510,20 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    pub fn baracuda_kernels_group_norm_f32_can_implement(
+        n_extent: i32,
+        c_extent: i32,
+        spatial_extent: i32,
+        num_groups: i32,
+        group_kind: i32,
+        eps: f32,
+        x: *const c_void,
+        gamma: *const c_void,
+        beta: *const c_void,
+        y: *const c_void,
+        saved_mean: *const c_void,
+        saved_rstd: *const c_void,
+    ) -> i32;
 
     /// GroupNorm FW, f16.
     pub fn baracuda_kernels_group_norm_f16_run(
@@ -11184,6 +12542,20 @@ unsafe extern "C" {
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_group_norm_f16_can_implement(
+        n_extent: i32,
+        c_extent: i32,
+        spatial_extent: i32,
+        num_groups: i32,
+        group_kind: i32,
+        eps: f32,
+        x: *const c_void,
+        gamma: *const c_void,
+        beta: *const c_void,
+        y: *const c_void,
+        saved_mean: *const c_void,
+        saved_rstd: *const c_void,
     ) -> i32;
 
     /// GroupNorm FW, bf16.
@@ -11204,6 +12576,20 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    pub fn baracuda_kernels_group_norm_bf16_can_implement(
+        n_extent: i32,
+        c_extent: i32,
+        spatial_extent: i32,
+        num_groups: i32,
+        group_kind: i32,
+        eps: f32,
+        x: *const c_void,
+        gamma: *const c_void,
+        beta: *const c_void,
+        y: *const c_void,
+        saved_mean: *const c_void,
+        saved_rstd: *const c_void,
+    ) -> i32;
 
     /// GroupNorm FW, f64.
     pub fn baracuda_kernels_group_norm_f64_run(
@@ -11222,6 +12608,20 @@ unsafe extern "C" {
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_group_norm_f64_can_implement(
+        n_extent: i32,
+        c_extent: i32,
+        spatial_extent: i32,
+        num_groups: i32,
+        group_kind: i32,
+        eps: f32,
+        x: *const c_void,
+        gamma: *const c_void,
+        beta: *const c_void,
+        y: *const c_void,
+        saved_mean: *const c_void,
+        saved_rstd: *const c_void,
     ) -> i32;
 
     /// GroupNorm BW, f32. Workspace size: `2 * (n_extent * num_groups) *
@@ -11244,6 +12644,21 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    pub fn baracuda_kernels_group_norm_backward_f32_can_implement(
+        n_extent: i32,
+        c_extent: i32,
+        spatial_extent: i32,
+        num_groups: i32,
+        group_kind: i32,
+        dy: *const c_void,
+        x: *const c_void,
+        gamma: *const c_void,
+        saved_mean: *const c_void,
+        saved_rstd: *const c_void,
+        dx: *const c_void,
+        dgamma: *const c_void,
+        dbeta: *const c_void,
+    ) -> i32;
 
     /// GroupNorm BW, f16.
     pub fn baracuda_kernels_group_norm_backward_f16_run(
@@ -11263,6 +12678,21 @@ unsafe extern "C" {
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_group_norm_backward_f16_can_implement(
+        n_extent: i32,
+        c_extent: i32,
+        spatial_extent: i32,
+        num_groups: i32,
+        group_kind: i32,
+        dy: *const c_void,
+        x: *const c_void,
+        gamma: *const c_void,
+        saved_mean: *const c_void,
+        saved_rstd: *const c_void,
+        dx: *const c_void,
+        dgamma: *const c_void,
+        dbeta: *const c_void,
     ) -> i32;
 
     /// GroupNorm BW, bf16.
@@ -11284,6 +12714,21 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    pub fn baracuda_kernels_group_norm_backward_bf16_can_implement(
+        n_extent: i32,
+        c_extent: i32,
+        spatial_extent: i32,
+        num_groups: i32,
+        group_kind: i32,
+        dy: *const c_void,
+        x: *const c_void,
+        gamma: *const c_void,
+        saved_mean: *const c_void,
+        saved_rstd: *const c_void,
+        dx: *const c_void,
+        dgamma: *const c_void,
+        dbeta: *const c_void,
+    ) -> i32;
 
     /// GroupNorm BW, f64.
     pub fn baracuda_kernels_group_norm_backward_f64_run(
@@ -11303,6 +12748,21 @@ unsafe extern "C" {
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_group_norm_backward_f64_can_implement(
+        n_extent: i32,
+        c_extent: i32,
+        spatial_extent: i32,
+        num_groups: i32,
+        group_kind: i32,
+        dy: *const c_void,
+        x: *const c_void,
+        gamma: *const c_void,
+        saved_mean: *const c_void,
+        saved_rstd: *const c_void,
+        dx: *const c_void,
+        dgamma: *const c_void,
+        dbeta: *const c_void,
     ) -> i32;
 }
 
@@ -11734,6 +13194,14 @@ unsafe extern "C" {
         diagonal: i32,
         stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `triu_f16`.
+    pub fn baracuda_kernels_triu_f16_can_implement(
+        input: *const c_void,
+        output: *const c_void,
+        shape: *const i32,
+        rank: i32,
+        diagonal: i32,
+    ) -> i32;
 
     /// Triu, bf16.
     pub fn baracuda_kernels_triu_bf16_run(
@@ -11743,6 +13211,14 @@ unsafe extern "C" {
         rank: i32,
         diagonal: i32,
         stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `triu_bf16`.
+    pub fn baracuda_kernels_triu_bf16_can_implement(
+        input: *const c_void,
+        output: *const c_void,
+        shape: *const i32,
+        rank: i32,
+        diagonal: i32,
     ) -> i32;
 
     /// Triu, f32. This is the triu trailblazer — its aliasing contract
@@ -11769,6 +13245,14 @@ unsafe extern "C" {
         diagonal: i32,
         stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `triu_f32`.
+    pub fn baracuda_kernels_triu_f32_can_implement(
+        input: *const c_void,
+        output: *const c_void,
+        shape: *const i32,
+        rank: i32,
+        diagonal: i32,
+    ) -> i32;
 
     /// Triu, f64.
     pub fn baracuda_kernels_triu_f64_run(
@@ -11778,6 +13262,14 @@ unsafe extern "C" {
         rank: i32,
         diagonal: i32,
         stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `triu_f64`.
+    pub fn baracuda_kernels_triu_f64_can_implement(
+        input: *const c_void,
+        output: *const c_void,
+        shape: *const i32,
+        rank: i32,
+        diagonal: i32,
     ) -> i32;
 
     /// Triu, i32.
@@ -11789,6 +13281,14 @@ unsafe extern "C" {
         diagonal: i32,
         stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `triu_i32`.
+    pub fn baracuda_kernels_triu_i32_can_implement(
+        input: *const c_void,
+        output: *const c_void,
+        shape: *const i32,
+        rank: i32,
+        diagonal: i32,
+    ) -> i32;
 
     /// Triu, i64.
     pub fn baracuda_kernels_triu_i64_run(
@@ -11798,6 +13298,14 @@ unsafe extern "C" {
         rank: i32,
         diagonal: i32,
         stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `triu_i64`.
+    pub fn baracuda_kernels_triu_i64_can_implement(
+        input: *const c_void,
+        output: *const c_void,
+        shape: *const i32,
+        rank: i32,
+        diagonal: i32,
     ) -> i32;
 
     /// Triu, Bool (storage = u8).
@@ -11809,6 +13317,14 @@ unsafe extern "C" {
         diagonal: i32,
         stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `triu_bool`.
+    pub fn baracuda_kernels_triu_bool_can_implement(
+        input: *const c_void,
+        output: *const c_void,
+        shape: *const i32,
+        rank: i32,
+        diagonal: i32,
+    ) -> i32;
 
     /// Tril, f16.
     pub fn baracuda_kernels_tril_f16_run(
@@ -11818,6 +13334,14 @@ unsafe extern "C" {
         rank: i32,
         diagonal: i32,
         stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `tril_f16`.
+    pub fn baracuda_kernels_tril_f16_can_implement(
+        input: *const c_void,
+        output: *const c_void,
+        shape: *const i32,
+        rank: i32,
+        diagonal: i32,
     ) -> i32;
 
     /// Tril, bf16.
@@ -11829,6 +13353,14 @@ unsafe extern "C" {
         diagonal: i32,
         stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `tril_bf16`.
+    pub fn baracuda_kernels_tril_bf16_can_implement(
+        input: *const c_void,
+        output: *const c_void,
+        shape: *const i32,
+        rank: i32,
+        diagonal: i32,
+    ) -> i32;
 
     /// Tril, f32.
     pub fn baracuda_kernels_tril_f32_run(
@@ -11838,6 +13370,14 @@ unsafe extern "C" {
         rank: i32,
         diagonal: i32,
         stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `tril_f32`.
+    pub fn baracuda_kernels_tril_f32_can_implement(
+        input: *const c_void,
+        output: *const c_void,
+        shape: *const i32,
+        rank: i32,
+        diagonal: i32,
     ) -> i32;
 
     /// Tril, f64.
@@ -11849,6 +13389,14 @@ unsafe extern "C" {
         diagonal: i32,
         stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `tril_f64`.
+    pub fn baracuda_kernels_tril_f64_can_implement(
+        input: *const c_void,
+        output: *const c_void,
+        shape: *const i32,
+        rank: i32,
+        diagonal: i32,
+    ) -> i32;
 
     /// Tril, i32.
     pub fn baracuda_kernels_tril_i32_run(
@@ -11858,6 +13406,14 @@ unsafe extern "C" {
         rank: i32,
         diagonal: i32,
         stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `tril_i32`.
+    pub fn baracuda_kernels_tril_i32_can_implement(
+        input: *const c_void,
+        output: *const c_void,
+        shape: *const i32,
+        rank: i32,
+        diagonal: i32,
     ) -> i32;
 
     /// Tril, i64.
@@ -11869,6 +13425,14 @@ unsafe extern "C" {
         diagonal: i32,
         stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `tril_i64`.
+    pub fn baracuda_kernels_tril_i64_can_implement(
+        input: *const c_void,
+        output: *const c_void,
+        shape: *const i32,
+        rank: i32,
+        diagonal: i32,
+    ) -> i32;
 
     /// Tril, Bool (storage = u8).
     pub fn baracuda_kernels_tril_bool_run(
@@ -11878,6 +13442,14 @@ unsafe extern "C" {
         rank: i32,
         diagonal: i32,
         stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `tril_bool`.
+    pub fn baracuda_kernels_tril_bool_can_implement(
+        input: *const c_void,
+        output: *const c_void,
+        shape: *const i32,
+        rank: i32,
+        diagonal: i32,
     ) -> i32;
 }
 
@@ -11920,6 +13492,16 @@ unsafe extern "C" {
         diagonal: i32,
         stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `triu_f16_strided`.
+    pub fn baracuda_kernels_triu_f16_strided_can_implement(
+        input: *const c_void,
+        output: *const c_void,
+        shape: *const i32,
+        rank: i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        diagonal: i32,
+    ) -> i32;
 
     /// Triu strided, bf16.
     pub fn baracuda_kernels_triu_bf16_strided_run(
@@ -11931,6 +13513,16 @@ unsafe extern "C" {
         stride_y: *const i64,
         diagonal: i32,
         stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `triu_bf16_strided`.
+    pub fn baracuda_kernels_triu_bf16_strided_can_implement(
+        input: *const c_void,
+        output: *const c_void,
+        shape: *const i32,
+        rank: i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        diagonal: i32,
     ) -> i32;
 
     /// Triu strided, f32.
@@ -11944,6 +13536,16 @@ unsafe extern "C" {
         diagonal: i32,
         stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `triu_f32_strided`.
+    pub fn baracuda_kernels_triu_f32_strided_can_implement(
+        input: *const c_void,
+        output: *const c_void,
+        shape: *const i32,
+        rank: i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        diagonal: i32,
+    ) -> i32;
 
     /// Triu strided, f64.
     pub fn baracuda_kernels_triu_f64_strided_run(
@@ -11955,6 +13557,16 @@ unsafe extern "C" {
         stride_y: *const i64,
         diagonal: i32,
         stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `triu_f64_strided`.
+    pub fn baracuda_kernels_triu_f64_strided_can_implement(
+        input: *const c_void,
+        output: *const c_void,
+        shape: *const i32,
+        rank: i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        diagonal: i32,
     ) -> i32;
 
     /// Triu strided, i32.
@@ -11968,6 +13580,16 @@ unsafe extern "C" {
         diagonal: i32,
         stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `triu_i32_strided`.
+    pub fn baracuda_kernels_triu_i32_strided_can_implement(
+        input: *const c_void,
+        output: *const c_void,
+        shape: *const i32,
+        rank: i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        diagonal: i32,
+    ) -> i32;
 
     /// Triu strided, i64.
     pub fn baracuda_kernels_triu_i64_strided_run(
@@ -11979,6 +13601,16 @@ unsafe extern "C" {
         stride_y: *const i64,
         diagonal: i32,
         stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `triu_i64_strided`.
+    pub fn baracuda_kernels_triu_i64_strided_can_implement(
+        input: *const c_void,
+        output: *const c_void,
+        shape: *const i32,
+        rank: i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        diagonal: i32,
     ) -> i32;
 
     /// Triu strided, Bool (storage = u8).
@@ -11992,6 +13624,16 @@ unsafe extern "C" {
         diagonal: i32,
         stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `triu_bool_strided`.
+    pub fn baracuda_kernels_triu_bool_strided_can_implement(
+        input: *const c_void,
+        output: *const c_void,
+        shape: *const i32,
+        rank: i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        diagonal: i32,
+    ) -> i32;
 
     /// Tril strided, f16.
     pub fn baracuda_kernels_tril_f16_strided_run(
@@ -12003,6 +13645,16 @@ unsafe extern "C" {
         stride_y: *const i64,
         diagonal: i32,
         stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `tril_f16_strided`.
+    pub fn baracuda_kernels_tril_f16_strided_can_implement(
+        input: *const c_void,
+        output: *const c_void,
+        shape: *const i32,
+        rank: i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        diagonal: i32,
     ) -> i32;
 
     /// Tril strided, bf16.
@@ -12016,6 +13668,16 @@ unsafe extern "C" {
         diagonal: i32,
         stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `tril_bf16_strided`.
+    pub fn baracuda_kernels_tril_bf16_strided_can_implement(
+        input: *const c_void,
+        output: *const c_void,
+        shape: *const i32,
+        rank: i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        diagonal: i32,
+    ) -> i32;
 
     /// Tril strided, f32.
     pub fn baracuda_kernels_tril_f32_strided_run(
@@ -12027,6 +13689,16 @@ unsafe extern "C" {
         stride_y: *const i64,
         diagonal: i32,
         stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `tril_f32_strided`.
+    pub fn baracuda_kernels_tril_f32_strided_can_implement(
+        input: *const c_void,
+        output: *const c_void,
+        shape: *const i32,
+        rank: i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        diagonal: i32,
     ) -> i32;
 
     /// Tril strided, f64.
@@ -12040,6 +13712,16 @@ unsafe extern "C" {
         diagonal: i32,
         stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `tril_f64_strided`.
+    pub fn baracuda_kernels_tril_f64_strided_can_implement(
+        input: *const c_void,
+        output: *const c_void,
+        shape: *const i32,
+        rank: i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        diagonal: i32,
+    ) -> i32;
 
     /// Tril strided, i32.
     pub fn baracuda_kernels_tril_i32_strided_run(
@@ -12051,6 +13733,16 @@ unsafe extern "C" {
         stride_y: *const i64,
         diagonal: i32,
         stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `tril_i32_strided`.
+    pub fn baracuda_kernels_tril_i32_strided_can_implement(
+        input: *const c_void,
+        output: *const c_void,
+        shape: *const i32,
+        rank: i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        diagonal: i32,
     ) -> i32;
 
     /// Tril strided, i64.
@@ -12064,6 +13756,16 @@ unsafe extern "C" {
         diagonal: i32,
         stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `tril_i64_strided`.
+    pub fn baracuda_kernels_tril_i64_strided_can_implement(
+        input: *const c_void,
+        output: *const c_void,
+        shape: *const i32,
+        rank: i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        diagonal: i32,
+    ) -> i32;
 
     /// Tril strided, Bool (storage = u8).
     pub fn baracuda_kernels_tril_bool_strided_run(
@@ -12075,6 +13777,16 @@ unsafe extern "C" {
         stride_y: *const i64,
         diagonal: i32,
         stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `tril_bool_strided`.
+    pub fn baracuda_kernels_tril_bool_strided_can_implement(
+        input: *const c_void,
+        output: *const c_void,
+        shape: *const i32,
+        rank: i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        diagonal: i32,
     ) -> i32;
 }
 
@@ -37604,6 +39316,18 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `rope_f32`. Host-side only.
+    pub fn baracuda_kernels_rope_f32_can_implement(
+        batch: i32,
+        heads: i32,
+        seq: i32,
+        head_dim: i32,
+        base: f32,
+        pos_default_flag: i32,
+        x: *const c_void,
+        positions: *const c_void,
+        y: *const c_void,
+    ) -> i32;
     /// RoPE FW, f16 (f32 trig detour internally).
     pub fn baracuda_kernels_rope_f16_run(
         batch: i32,
@@ -37618,6 +39342,18 @@ unsafe extern "C" {
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `rope_f16`. Host-side only.
+    pub fn baracuda_kernels_rope_f16_can_implement(
+        batch: i32,
+        heads: i32,
+        seq: i32,
+        head_dim: i32,
+        base: f32,
+        pos_default_flag: i32,
+        x: *const c_void,
+        positions: *const c_void,
+        y: *const c_void,
     ) -> i32;
     /// RoPE FW, bf16.
     pub fn baracuda_kernels_rope_bf16_run(
@@ -37634,6 +39370,18 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `rope_bf16`. Host-side only.
+    pub fn baracuda_kernels_rope_bf16_can_implement(
+        batch: i32,
+        heads: i32,
+        seq: i32,
+        head_dim: i32,
+        base: f32,
+        pos_default_flag: i32,
+        x: *const c_void,
+        positions: *const c_void,
+        y: *const c_void,
+    ) -> i32;
     /// RoPE FW, f64.
     pub fn baracuda_kernels_rope_f64_run(
         batch: i32,
@@ -37648,6 +39396,18 @@ unsafe extern "C" {
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `rope_f64`. Host-side only.
+    pub fn baracuda_kernels_rope_f64_can_implement(
+        batch: i32,
+        heads: i32,
+        seq: i32,
+        head_dim: i32,
+        base: f32,
+        pos_default_flag: i32,
+        x: *const c_void,
+        positions: *const c_void,
+        y: *const c_void,
     ) -> i32;
 
     /// RoPE BW, f32. Same shape as FW; computes `dx` from `dy` by
@@ -37666,6 +39426,18 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `rope_backward_f32`. Host-side only.
+    pub fn baracuda_kernels_rope_backward_f32_can_implement(
+        batch: i32,
+        heads: i32,
+        seq: i32,
+        head_dim: i32,
+        base: f32,
+        pos_default_flag: i32,
+        dy: *const c_void,
+        positions: *const c_void,
+        dx: *const c_void,
+    ) -> i32;
     /// RoPE BW, f16.
     pub fn baracuda_kernels_rope_backward_f16_run(
         batch: i32,
@@ -37680,6 +39452,18 @@ unsafe extern "C" {
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `rope_backward_f16`. Host-side only.
+    pub fn baracuda_kernels_rope_backward_f16_can_implement(
+        batch: i32,
+        heads: i32,
+        seq: i32,
+        head_dim: i32,
+        base: f32,
+        pos_default_flag: i32,
+        dy: *const c_void,
+        positions: *const c_void,
+        dx: *const c_void,
     ) -> i32;
     /// RoPE BW, bf16.
     pub fn baracuda_kernels_rope_backward_bf16_run(
@@ -37696,6 +39480,18 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `rope_backward_bf16`. Host-side only.
+    pub fn baracuda_kernels_rope_backward_bf16_can_implement(
+        batch: i32,
+        heads: i32,
+        seq: i32,
+        head_dim: i32,
+        base: f32,
+        pos_default_flag: i32,
+        dy: *const c_void,
+        positions: *const c_void,
+        dx: *const c_void,
+    ) -> i32;
     /// RoPE BW, f64.
     pub fn baracuda_kernels_rope_backward_f64_run(
         batch: i32,
@@ -37710,6 +39506,18 @@ unsafe extern "C" {
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `rope_backward_f64`. Host-side only.
+    pub fn baracuda_kernels_rope_backward_f64_can_implement(
+        batch: i32,
+        heads: i32,
+        seq: i32,
+        head_dim: i32,
+        base: f32,
+        pos_default_flag: i32,
+        dy: *const c_void,
+        positions: *const c_void,
+        dx: *const c_void,
     ) -> i32;
 
     // ---- RoPE strided FW + BW × 4 dtypes — Phase 14.4 ----
@@ -37737,6 +39545,20 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `rope_f32_strided`. Host-side only.
+    pub fn baracuda_kernels_rope_f32_strided_can_implement(
+        batch: i32,
+        heads: i32,
+        seq: i32,
+        head_dim: i32,
+        stride_x_b: i64, stride_x_h: i64, stride_x_s: i64,
+        stride_y_b: i64, stride_y_h: i64, stride_y_s: i64,
+        base: f32,
+        pos_default_flag: i32,
+        x: *const c_void,
+        positions: *const c_void,
+        y: *const c_void,
+    ) -> i32;
     /// RoPE FW strided, f16.
     pub fn baracuda_kernels_rope_f16_strided_run(
         batch: i32,
@@ -37753,6 +39575,20 @@ unsafe extern "C" {
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `rope_f16_strided`. Host-side only.
+    pub fn baracuda_kernels_rope_f16_strided_can_implement(
+        batch: i32,
+        heads: i32,
+        seq: i32,
+        head_dim: i32,
+        stride_x_b: i64, stride_x_h: i64, stride_x_s: i64,
+        stride_y_b: i64, stride_y_h: i64, stride_y_s: i64,
+        base: f32,
+        pos_default_flag: i32,
+        x: *const c_void,
+        positions: *const c_void,
+        y: *const c_void,
     ) -> i32;
     /// RoPE FW strided, bf16.
     pub fn baracuda_kernels_rope_bf16_strided_run(
@@ -37771,6 +39607,20 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `rope_bf16_strided`. Host-side only.
+    pub fn baracuda_kernels_rope_bf16_strided_can_implement(
+        batch: i32,
+        heads: i32,
+        seq: i32,
+        head_dim: i32,
+        stride_x_b: i64, stride_x_h: i64, stride_x_s: i64,
+        stride_y_b: i64, stride_y_h: i64, stride_y_s: i64,
+        base: f32,
+        pos_default_flag: i32,
+        x: *const c_void,
+        positions: *const c_void,
+        y: *const c_void,
+    ) -> i32;
     /// RoPE FW strided, f64.
     pub fn baracuda_kernels_rope_f64_strided_run(
         batch: i32,
@@ -37787,6 +39637,20 @@ unsafe extern "C" {
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `rope_f64_strided`. Host-side only.
+    pub fn baracuda_kernels_rope_f64_strided_can_implement(
+        batch: i32,
+        heads: i32,
+        seq: i32,
+        head_dim: i32,
+        stride_x_b: i64, stride_x_h: i64, stride_x_s: i64,
+        stride_y_b: i64, stride_y_h: i64, stride_y_s: i64,
+        base: f32,
+        pos_default_flag: i32,
+        x: *const c_void,
+        positions: *const c_void,
+        y: *const c_void,
     ) -> i32;
 
     /// RoPE BW strided, f32. Strides apply to `dy` (input) and `dx` (output).
@@ -37806,6 +39670,20 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `rope_backward_f32_strided`. Host-side only.
+    pub fn baracuda_kernels_rope_backward_f32_strided_can_implement(
+        batch: i32,
+        heads: i32,
+        seq: i32,
+        head_dim: i32,
+        stride_dy_b: i64, stride_dy_h: i64, stride_dy_s: i64,
+        stride_dx_b: i64, stride_dx_h: i64, stride_dx_s: i64,
+        base: f32,
+        pos_default_flag: i32,
+        dy: *const c_void,
+        positions: *const c_void,
+        dx: *const c_void,
+    ) -> i32;
     /// RoPE BW strided, f16.
     pub fn baracuda_kernels_rope_backward_f16_strided_run(
         batch: i32,
@@ -37822,6 +39700,20 @@ unsafe extern "C" {
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `rope_backward_f16_strided`. Host-side only.
+    pub fn baracuda_kernels_rope_backward_f16_strided_can_implement(
+        batch: i32,
+        heads: i32,
+        seq: i32,
+        head_dim: i32,
+        stride_dy_b: i64, stride_dy_h: i64, stride_dy_s: i64,
+        stride_dx_b: i64, stride_dx_h: i64, stride_dx_s: i64,
+        base: f32,
+        pos_default_flag: i32,
+        dy: *const c_void,
+        positions: *const c_void,
+        dx: *const c_void,
     ) -> i32;
     /// RoPE BW strided, bf16.
     pub fn baracuda_kernels_rope_backward_bf16_strided_run(
@@ -37840,6 +39732,20 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `rope_backward_bf16_strided`. Host-side only.
+    pub fn baracuda_kernels_rope_backward_bf16_strided_can_implement(
+        batch: i32,
+        heads: i32,
+        seq: i32,
+        head_dim: i32,
+        stride_dy_b: i64, stride_dy_h: i64, stride_dy_s: i64,
+        stride_dx_b: i64, stride_dx_h: i64, stride_dx_s: i64,
+        base: f32,
+        pos_default_flag: i32,
+        dy: *const c_void,
+        positions: *const c_void,
+        dx: *const c_void,
+    ) -> i32;
     /// RoPE BW strided, f64.
     pub fn baracuda_kernels_rope_backward_f64_strided_run(
         batch: i32,
@@ -37856,6 +39762,20 @@ unsafe extern "C" {
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `rope_backward_f64_strided`. Host-side only.
+    pub fn baracuda_kernels_rope_backward_f64_strided_can_implement(
+        batch: i32,
+        heads: i32,
+        seq: i32,
+        head_dim: i32,
+        stride_dy_b: i64, stride_dy_h: i64, stride_dy_s: i64,
+        stride_dx_b: i64, stride_dx_h: i64, stride_dx_s: i64,
+        base: f32,
+        pos_default_flag: i32,
+        dy: *const c_void,
+        positions: *const c_void,
+        dx: *const c_void,
     ) -> i32;
 
     // ---- Phase 36 (Fuel ask Gap 2) — RoPE apply with caller-supplied
@@ -38358,6 +40278,16 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `alibi_f32`. Host-side only.
+    pub fn baracuda_kernels_alibi_f32_can_implement(
+        batch: i32,
+        heads: i32,
+        q_len: i32,
+        k_len: i32,
+        scores: *const c_void,
+        slopes: *const c_void,
+        y: *const c_void,
+    ) -> i32;
     /// ALiBi FW, f16.
     pub fn baracuda_kernels_alibi_f16_run(
         batch: i32,
@@ -38370,6 +40300,16 @@ unsafe extern "C" {
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `alibi_f16`. Host-side only.
+    pub fn baracuda_kernels_alibi_f16_can_implement(
+        batch: i32,
+        heads: i32,
+        q_len: i32,
+        k_len: i32,
+        scores: *const c_void,
+        slopes: *const c_void,
+        y: *const c_void,
     ) -> i32;
     /// ALiBi FW, bf16.
     pub fn baracuda_kernels_alibi_bf16_run(
@@ -38384,6 +40324,16 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `alibi_bf16`. Host-side only.
+    pub fn baracuda_kernels_alibi_bf16_can_implement(
+        batch: i32,
+        heads: i32,
+        q_len: i32,
+        k_len: i32,
+        scores: *const c_void,
+        slopes: *const c_void,
+        y: *const c_void,
+    ) -> i32;
     /// ALiBi FW, f64.
     pub fn baracuda_kernels_alibi_f64_run(
         batch: i32,
@@ -38396,6 +40346,16 @@ unsafe extern "C" {
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `alibi_f64`. Host-side only.
+    pub fn baracuda_kernels_alibi_f64_can_implement(
+        batch: i32,
+        heads: i32,
+        q_len: i32,
+        k_len: i32,
+        scores: *const c_void,
+        slopes: *const c_void,
+        y: *const c_void,
     ) -> i32;
 
     /// ALiBi BW, f32. `da[b, h, i, j] = dy[b, h, i, j]` (pass-through);
@@ -38413,6 +40373,16 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `alibi_backward_f32`. Host-side only.
+    pub fn baracuda_kernels_alibi_backward_f32_can_implement(
+        batch: i32,
+        heads: i32,
+        q_len: i32,
+        k_len: i32,
+        dy: *const c_void,
+        da: *const c_void,
+        dslope: *const c_void,
+    ) -> i32;
     /// ALiBi BW, f16.
     pub fn baracuda_kernels_alibi_backward_f16_run(
         batch: i32,
@@ -38425,6 +40395,16 @@ unsafe extern "C" {
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `alibi_backward_f16`. Host-side only.
+    pub fn baracuda_kernels_alibi_backward_f16_can_implement(
+        batch: i32,
+        heads: i32,
+        q_len: i32,
+        k_len: i32,
+        dy: *const c_void,
+        da: *const c_void,
+        dslope: *const c_void,
     ) -> i32;
     /// ALiBi BW, bf16.
     pub fn baracuda_kernels_alibi_backward_bf16_run(
@@ -38439,6 +40419,16 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `alibi_backward_bf16`. Host-side only.
+    pub fn baracuda_kernels_alibi_backward_bf16_can_implement(
+        batch: i32,
+        heads: i32,
+        q_len: i32,
+        k_len: i32,
+        dy: *const c_void,
+        da: *const c_void,
+        dslope: *const c_void,
+    ) -> i32;
     /// ALiBi BW, f64.
     pub fn baracuda_kernels_alibi_backward_f64_run(
         batch: i32,
@@ -38451,6 +40441,16 @@ unsafe extern "C" {
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `alibi_backward_f64`. Host-side only.
+    pub fn baracuda_kernels_alibi_backward_f64_can_implement(
+        batch: i32,
+        heads: i32,
+        q_len: i32,
+        k_len: i32,
+        dy: *const c_void,
+        da: *const c_void,
+        dslope: *const c_void,
     ) -> i32;
 
     // =========================================================================
@@ -38485,6 +40485,24 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `sdpa_f32`. Host-side only.
+    pub fn baracuda_kernels_sdpa_f32_can_implement(
+        batch: i32,
+        heads: i32,
+        q_len: i32,
+        k_len: i32,
+        d_k: i32,
+        d_v: i32,
+        scale: f32,
+        is_causal: i32,
+        has_mask: i32,
+        q: *const c_void,
+        k: *const c_void,
+        v: *const c_void,
+        mask: *const c_void,
+        attn: *const c_void,
+        y: *const c_void,
+    ) -> i32;
     /// SDPA FW, f16 (f32 accumulators).
     pub fn baracuda_kernels_sdpa_f16_run(
         batch: i32,
@@ -38505,6 +40523,24 @@ unsafe extern "C" {
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `sdpa_f16`. Host-side only.
+    pub fn baracuda_kernels_sdpa_f16_can_implement(
+        batch: i32,
+        heads: i32,
+        q_len: i32,
+        k_len: i32,
+        d_k: i32,
+        d_v: i32,
+        scale: f32,
+        is_causal: i32,
+        has_mask: i32,
+        q: *const c_void,
+        k: *const c_void,
+        v: *const c_void,
+        mask: *const c_void,
+        attn: *const c_void,
+        y: *const c_void,
     ) -> i32;
     /// SDPA FW, bf16 (f32 accumulators).
     pub fn baracuda_kernels_sdpa_bf16_run(
@@ -38527,6 +40563,24 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `sdpa_bf16`. Host-side only.
+    pub fn baracuda_kernels_sdpa_bf16_can_implement(
+        batch: i32,
+        heads: i32,
+        q_len: i32,
+        k_len: i32,
+        d_k: i32,
+        d_v: i32,
+        scale: f32,
+        is_causal: i32,
+        has_mask: i32,
+        q: *const c_void,
+        k: *const c_void,
+        v: *const c_void,
+        mask: *const c_void,
+        attn: *const c_void,
+        y: *const c_void,
+    ) -> i32;
     /// SDPA FW, f64.
     pub fn baracuda_kernels_sdpa_f64_run(
         batch: i32,
@@ -38547,6 +40601,24 @@ unsafe extern "C" {
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `sdpa_f64`. Host-side only.
+    pub fn baracuda_kernels_sdpa_f64_can_implement(
+        batch: i32,
+        heads: i32,
+        q_len: i32,
+        k_len: i32,
+        d_k: i32,
+        d_v: i32,
+        scale: f32,
+        is_causal: i32,
+        has_mask: i32,
+        q: *const c_void,
+        k: *const c_void,
+        v: *const c_void,
+        mask: *const c_void,
+        attn: *const c_void,
+        y: *const c_void,
     ) -> i32;
 
     /// SDPA BW, f32. Given the FW-saved `attn` ([B, H, Q, K]), `Q`, `K`,
@@ -38575,6 +40647,25 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `sdpa_backward_f32`. Host-side only.
+    pub fn baracuda_kernels_sdpa_backward_f32_can_implement(
+        batch: i32,
+        heads: i32,
+        q_len: i32,
+        k_len: i32,
+        d_k: i32,
+        d_v: i32,
+        scale: f32,
+        q: *const c_void,
+        k: *const c_void,
+        v: *const c_void,
+        attn: *const c_void,
+        dy: *const c_void,
+        dscores_ws: *const c_void,
+        dQ: *const c_void,
+        dK: *const c_void,
+        dV: *const c_void,
+    ) -> i32;
     /// SDPA BW, f16.
     pub fn baracuda_kernels_sdpa_backward_f16_run(
         batch: i32,
@@ -38596,6 +40687,25 @@ unsafe extern "C" {
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `sdpa_backward_f16`. Host-side only.
+    pub fn baracuda_kernels_sdpa_backward_f16_can_implement(
+        batch: i32,
+        heads: i32,
+        q_len: i32,
+        k_len: i32,
+        d_k: i32,
+        d_v: i32,
+        scale: f32,
+        q: *const c_void,
+        k: *const c_void,
+        v: *const c_void,
+        attn: *const c_void,
+        dy: *const c_void,
+        dscores_ws: *const c_void,
+        dQ: *const c_void,
+        dK: *const c_void,
+        dV: *const c_void,
     ) -> i32;
     /// SDPA BW, bf16.
     pub fn baracuda_kernels_sdpa_backward_bf16_run(
@@ -38619,6 +40729,25 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `sdpa_backward_bf16`. Host-side only.
+    pub fn baracuda_kernels_sdpa_backward_bf16_can_implement(
+        batch: i32,
+        heads: i32,
+        q_len: i32,
+        k_len: i32,
+        d_k: i32,
+        d_v: i32,
+        scale: f32,
+        q: *const c_void,
+        k: *const c_void,
+        v: *const c_void,
+        attn: *const c_void,
+        dy: *const c_void,
+        dscores_ws: *const c_void,
+        dQ: *const c_void,
+        dK: *const c_void,
+        dV: *const c_void,
+    ) -> i32;
     /// SDPA BW, f64.
     pub fn baracuda_kernels_sdpa_backward_f64_run(
         batch: i32,
@@ -38640,6 +40769,25 @@ unsafe extern "C" {
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `sdpa_backward_f64`. Host-side only.
+    pub fn baracuda_kernels_sdpa_backward_f64_can_implement(
+        batch: i32,
+        heads: i32,
+        q_len: i32,
+        k_len: i32,
+        d_k: i32,
+        d_v: i32,
+        scale: f32,
+        q: *const c_void,
+        k: *const c_void,
+        v: *const c_void,
+        attn: *const c_void,
+        dy: *const c_void,
+        dscores_ws: *const c_void,
+        dQ: *const c_void,
+        dK: *const c_void,
+        dV: *const c_void,
     ) -> i32;
 
     // ---- SDPA strided FW + BW × 4 dtypes — Phase 14.4 ----
@@ -38683,6 +40831,29 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `sdpa_f32_strided`. Host-side only.
+    pub fn baracuda_kernels_sdpa_f32_strided_can_implement(
+        batch: i32,
+        heads: i32,
+        q_len: i32,
+        k_len: i32,
+        d_k: i32,
+        d_v: i32,
+        stride_q: *const i64,
+        stride_k: *const i64,
+        stride_v: *const i64,
+        stride_mask: *const i64,
+        stride_y: *const i64,
+        scale: f32,
+        is_causal: i32,
+        has_mask: i32,
+        q: *const c_void,
+        k: *const c_void,
+        v: *const c_void,
+        mask: *const c_void,
+        attn: *const c_void,
+        y: *const c_void,
+    ) -> i32;
     /// SDPA FW strided, f16.
     pub fn baracuda_kernels_sdpa_f16_strided_run(
         batch: i32,
@@ -38708,6 +40879,29 @@ unsafe extern "C" {
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `sdpa_f16_strided`. Host-side only.
+    pub fn baracuda_kernels_sdpa_f16_strided_can_implement(
+        batch: i32,
+        heads: i32,
+        q_len: i32,
+        k_len: i32,
+        d_k: i32,
+        d_v: i32,
+        stride_q: *const i64,
+        stride_k: *const i64,
+        stride_v: *const i64,
+        stride_mask: *const i64,
+        stride_y: *const i64,
+        scale: f32,
+        is_causal: i32,
+        has_mask: i32,
+        q: *const c_void,
+        k: *const c_void,
+        v: *const c_void,
+        mask: *const c_void,
+        attn: *const c_void,
+        y: *const c_void,
     ) -> i32;
     /// SDPA FW strided, bf16.
     pub fn baracuda_kernels_sdpa_bf16_strided_run(
@@ -38735,6 +40929,29 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `sdpa_bf16_strided`. Host-side only.
+    pub fn baracuda_kernels_sdpa_bf16_strided_can_implement(
+        batch: i32,
+        heads: i32,
+        q_len: i32,
+        k_len: i32,
+        d_k: i32,
+        d_v: i32,
+        stride_q: *const i64,
+        stride_k: *const i64,
+        stride_v: *const i64,
+        stride_mask: *const i64,
+        stride_y: *const i64,
+        scale: f32,
+        is_causal: i32,
+        has_mask: i32,
+        q: *const c_void,
+        k: *const c_void,
+        v: *const c_void,
+        mask: *const c_void,
+        attn: *const c_void,
+        y: *const c_void,
+    ) -> i32;
     /// SDPA FW strided, f64.
     pub fn baracuda_kernels_sdpa_f64_strided_run(
         batch: i32,
@@ -38760,6 +40977,29 @@ unsafe extern "C" {
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `sdpa_f64_strided`. Host-side only.
+    pub fn baracuda_kernels_sdpa_f64_strided_can_implement(
+        batch: i32,
+        heads: i32,
+        q_len: i32,
+        k_len: i32,
+        d_k: i32,
+        d_v: i32,
+        stride_q: *const i64,
+        stride_k: *const i64,
+        stride_v: *const i64,
+        stride_mask: *const i64,
+        stride_y: *const i64,
+        scale: f32,
+        is_causal: i32,
+        has_mask: i32,
+        q: *const c_void,
+        k: *const c_void,
+        v: *const c_void,
+        mask: *const c_void,
+        attn: *const c_void,
+        y: *const c_void,
     ) -> i32;
 
     /// SDPA BW strided, f32.
@@ -38791,6 +41031,32 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `sdpa_backward_f32_strided`. Host-side only.
+    pub fn baracuda_kernels_sdpa_backward_f32_strided_can_implement(
+        batch: i32,
+        heads: i32,
+        q_len: i32,
+        k_len: i32,
+        d_k: i32,
+        d_v: i32,
+        stride_q: *const i64,
+        stride_k: *const i64,
+        stride_v: *const i64,
+        stride_dy: *const i64,
+        stride_dq: *const i64,
+        stride_dk: *const i64,
+        stride_dv: *const i64,
+        scale: f32,
+        q: *const c_void,
+        k: *const c_void,
+        v: *const c_void,
+        attn: *const c_void,
+        dy: *const c_void,
+        dscores_ws: *const c_void,
+        dQ: *const c_void,
+        dK: *const c_void,
+        dV: *const c_void,
+    ) -> i32;
     /// SDPA BW strided, f16.
     pub fn baracuda_kernels_sdpa_backward_f16_strided_run(
         batch: i32,
@@ -38819,6 +41085,32 @@ unsafe extern "C" {
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `sdpa_backward_f16_strided`. Host-side only.
+    pub fn baracuda_kernels_sdpa_backward_f16_strided_can_implement(
+        batch: i32,
+        heads: i32,
+        q_len: i32,
+        k_len: i32,
+        d_k: i32,
+        d_v: i32,
+        stride_q: *const i64,
+        stride_k: *const i64,
+        stride_v: *const i64,
+        stride_dy: *const i64,
+        stride_dq: *const i64,
+        stride_dk: *const i64,
+        stride_dv: *const i64,
+        scale: f32,
+        q: *const c_void,
+        k: *const c_void,
+        v: *const c_void,
+        attn: *const c_void,
+        dy: *const c_void,
+        dscores_ws: *const c_void,
+        dQ: *const c_void,
+        dK: *const c_void,
+        dV: *const c_void,
     ) -> i32;
     /// SDPA BW strided, bf16.
     pub fn baracuda_kernels_sdpa_backward_bf16_strided_run(
@@ -38849,6 +41141,32 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `sdpa_backward_bf16_strided`. Host-side only.
+    pub fn baracuda_kernels_sdpa_backward_bf16_strided_can_implement(
+        batch: i32,
+        heads: i32,
+        q_len: i32,
+        k_len: i32,
+        d_k: i32,
+        d_v: i32,
+        stride_q: *const i64,
+        stride_k: *const i64,
+        stride_v: *const i64,
+        stride_dy: *const i64,
+        stride_dq: *const i64,
+        stride_dk: *const i64,
+        stride_dv: *const i64,
+        scale: f32,
+        q: *const c_void,
+        k: *const c_void,
+        v: *const c_void,
+        attn: *const c_void,
+        dy: *const c_void,
+        dscores_ws: *const c_void,
+        dQ: *const c_void,
+        dK: *const c_void,
+        dV: *const c_void,
+    ) -> i32;
     /// SDPA BW strided, f64.
     pub fn baracuda_kernels_sdpa_backward_f64_strided_run(
         batch: i32,
@@ -38877,6 +41195,32 @@ unsafe extern "C" {
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `sdpa_backward_f64_strided`. Host-side only.
+    pub fn baracuda_kernels_sdpa_backward_f64_strided_can_implement(
+        batch: i32,
+        heads: i32,
+        q_len: i32,
+        k_len: i32,
+        d_k: i32,
+        d_v: i32,
+        stride_q: *const i64,
+        stride_k: *const i64,
+        stride_v: *const i64,
+        stride_dy: *const i64,
+        stride_dq: *const i64,
+        stride_dk: *const i64,
+        stride_dv: *const i64,
+        scale: f32,
+        q: *const c_void,
+        k: *const c_void,
+        v: *const c_void,
+        attn: *const c_void,
+        dy: *const c_void,
+        dscores_ws: *const c_void,
+        dQ: *const c_void,
+        dK: *const c_void,
+        dV: *const c_void,
     ) -> i32;
 
     // =========================================================================
@@ -38911,6 +41255,20 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `kv_cache_append_f32`. Host-side only.
+    pub fn baracuda_kernels_kv_cache_append_f32_can_implement(
+        batch: i32,
+        heads: i32,
+        new_len: i32,
+        max_cache_len: i32,
+        d_k: i32,
+        d_v: i32,
+        k_new: *const c_void,
+        v_new: *const c_void,
+        cache_offsets: *const c_void,
+        k_cache: *const c_void,
+        v_cache: *const c_void,
+    ) -> i32;
     /// KV-cache append, f16.
     pub fn baracuda_kernels_kv_cache_append_f16_run(
         batch: i32,
@@ -38927,6 +41285,20 @@ unsafe extern "C" {
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `kv_cache_append_f16`. Host-side only.
+    pub fn baracuda_kernels_kv_cache_append_f16_can_implement(
+        batch: i32,
+        heads: i32,
+        new_len: i32,
+        max_cache_len: i32,
+        d_k: i32,
+        d_v: i32,
+        k_new: *const c_void,
+        v_new: *const c_void,
+        cache_offsets: *const c_void,
+        k_cache: *const c_void,
+        v_cache: *const c_void,
     ) -> i32;
     /// KV-cache append, bf16.
     pub fn baracuda_kernels_kv_cache_append_bf16_run(
@@ -38945,6 +41317,20 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `kv_cache_append_bf16`. Host-side only.
+    pub fn baracuda_kernels_kv_cache_append_bf16_can_implement(
+        batch: i32,
+        heads: i32,
+        new_len: i32,
+        max_cache_len: i32,
+        d_k: i32,
+        d_v: i32,
+        k_new: *const c_void,
+        v_new: *const c_void,
+        cache_offsets: *const c_void,
+        k_cache: *const c_void,
+        v_cache: *const c_void,
+    ) -> i32;
     /// KV-cache append, f64.
     pub fn baracuda_kernels_kv_cache_append_f64_run(
         batch: i32,
@@ -38961,6 +41347,20 @@ unsafe extern "C" {
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `kv_cache_append_f64`. Host-side only.
+    pub fn baracuda_kernels_kv_cache_append_f64_can_implement(
+        batch: i32,
+        heads: i32,
+        new_len: i32,
+        max_cache_len: i32,
+        d_k: i32,
+        d_v: i32,
+        k_new: *const c_void,
+        v_new: *const c_void,
+        cache_offsets: *const c_void,
+        k_cache: *const c_void,
+        v_cache: *const c_void,
     ) -> i32;
 
     // =========================================================================
@@ -38997,6 +41397,22 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `flash_sdpa_f32`. Host-side only.
+    pub fn baracuda_kernels_flash_sdpa_f32_can_implement(
+        batch: i32,
+        heads: i32,
+        q_len: i32,
+        k_len: i32,
+        d_k: i32,
+        d_v: i32,
+        scale: f32,
+        is_causal: i32,
+        q: *const c_void,
+        k: *const c_void,
+        v: *const c_void,
+        y: *const c_void,
+        lse: *const c_void,
+    ) -> i32;
     /// Flash SDPA FW, f16 (f32 accumulators).
     pub fn baracuda_kernels_flash_sdpa_f16_run(
         batch: i32,
@@ -39015,6 +41431,22 @@ unsafe extern "C" {
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `flash_sdpa_f16`. Host-side only.
+    pub fn baracuda_kernels_flash_sdpa_f16_can_implement(
+        batch: i32,
+        heads: i32,
+        q_len: i32,
+        k_len: i32,
+        d_k: i32,
+        d_v: i32,
+        scale: f32,
+        is_causal: i32,
+        q: *const c_void,
+        k: *const c_void,
+        v: *const c_void,
+        y: *const c_void,
+        lse: *const c_void,
     ) -> i32;
     /// Flash SDPA FW, bf16 (f32 accumulators).
     pub fn baracuda_kernels_flash_sdpa_bf16_run(
@@ -39035,6 +41467,22 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `flash_sdpa_bf16`. Host-side only.
+    pub fn baracuda_kernels_flash_sdpa_bf16_can_implement(
+        batch: i32,
+        heads: i32,
+        q_len: i32,
+        k_len: i32,
+        d_k: i32,
+        d_v: i32,
+        scale: f32,
+        is_causal: i32,
+        q: *const c_void,
+        k: *const c_void,
+        v: *const c_void,
+        y: *const c_void,
+        lse: *const c_void,
+    ) -> i32;
     /// Flash SDPA FW, f64.
     pub fn baracuda_kernels_flash_sdpa_f64_run(
         batch: i32,
@@ -39053,6 +41501,22 @@ unsafe extern "C" {
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `flash_sdpa_f64`. Host-side only.
+    pub fn baracuda_kernels_flash_sdpa_f64_can_implement(
+        batch: i32,
+        heads: i32,
+        q_len: i32,
+        k_len: i32,
+        d_k: i32,
+        d_v: i32,
+        scale: f32,
+        is_causal: i32,
+        q: *const c_void,
+        k: *const c_void,
+        v: *const c_void,
+        y: *const c_void,
+        lse: *const c_void,
     ) -> i32;
 
     // =========================================================================
@@ -39219,6 +41683,27 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `flash_sdpa_backward_f32`. Host-side only.
+    pub fn baracuda_kernels_flash_sdpa_backward_f32_can_implement(
+        batch: i32,
+        heads: i32,
+        q_len: i32,
+        k_len: i32,
+        d_k: i32,
+        d_v: i32,
+        scale: f32,
+        is_causal: i32,
+        q: *const c_void,
+        k: *const c_void,
+        v: *const c_void,
+        y: *const c_void,
+        lse: *const c_void,
+        dy: *const c_void,
+        d_ws: *const c_void,
+        dQ: *const c_void,
+        dK: *const c_void,
+        dV: *const c_void,
+    ) -> i32;
     /// Flash SDPA BW, f16.
     pub fn baracuda_kernels_flash_sdpa_backward_f16_run(
         batch: i32,
@@ -39242,6 +41727,27 @@ unsafe extern "C" {
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `flash_sdpa_backward_f16`. Host-side only.
+    pub fn baracuda_kernels_flash_sdpa_backward_f16_can_implement(
+        batch: i32,
+        heads: i32,
+        q_len: i32,
+        k_len: i32,
+        d_k: i32,
+        d_v: i32,
+        scale: f32,
+        is_causal: i32,
+        q: *const c_void,
+        k: *const c_void,
+        v: *const c_void,
+        y: *const c_void,
+        lse: *const c_void,
+        dy: *const c_void,
+        d_ws: *const c_void,
+        dQ: *const c_void,
+        dK: *const c_void,
+        dV: *const c_void,
     ) -> i32;
     /// Flash SDPA BW, bf16.
     pub fn baracuda_kernels_flash_sdpa_backward_bf16_run(
@@ -39267,6 +41773,27 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `flash_sdpa_backward_bf16`. Host-side only.
+    pub fn baracuda_kernels_flash_sdpa_backward_bf16_can_implement(
+        batch: i32,
+        heads: i32,
+        q_len: i32,
+        k_len: i32,
+        d_k: i32,
+        d_v: i32,
+        scale: f32,
+        is_causal: i32,
+        q: *const c_void,
+        k: *const c_void,
+        v: *const c_void,
+        y: *const c_void,
+        lse: *const c_void,
+        dy: *const c_void,
+        d_ws: *const c_void,
+        dQ: *const c_void,
+        dK: *const c_void,
+        dV: *const c_void,
+    ) -> i32;
     /// Flash SDPA BW, f64.
     pub fn baracuda_kernels_flash_sdpa_backward_f64_run(
         batch: i32,
@@ -39290,6 +41817,27 @@ unsafe extern "C" {
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `flash_sdpa_backward_f64`. Host-side only.
+    pub fn baracuda_kernels_flash_sdpa_backward_f64_can_implement(
+        batch: i32,
+        heads: i32,
+        q_len: i32,
+        k_len: i32,
+        d_k: i32,
+        d_v: i32,
+        scale: f32,
+        is_causal: i32,
+        q: *const c_void,
+        k: *const c_void,
+        v: *const c_void,
+        y: *const c_void,
+        lse: *const c_void,
+        dy: *const c_void,
+        d_ws: *const c_void,
+        dQ: *const c_void,
+        dK: *const c_void,
+        dV: *const c_void,
     ) -> i32;
 }
 
@@ -39326,6 +41874,22 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `flash_sdpa_sm89_f16`. Host-side only.
+    pub fn baracuda_kernels_flash_sdpa_sm89_f16_can_implement(
+        batch: i32,
+        heads: i32,
+        q_len: i32,
+        k_len: i32,
+        d_k: i32,
+        d_v: i32,
+        scale: f32,
+        is_causal: i32,
+        q: *const c_void,
+        k: *const c_void,
+        v: *const c_void,
+        y: *const c_void,
+        lse: *const c_void,
+    ) -> i32;
 
     /// Flash SDPA FW, bf16 (f32 accumulators), sm_89 specialization with
     /// `cp.async` K/V double-buffer.
@@ -39346,6 +41910,22 @@ unsafe extern "C" {
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `flash_sdpa_sm89_bf16`. Host-side only.
+    pub fn baracuda_kernels_flash_sdpa_sm89_bf16_can_implement(
+        batch: i32,
+        heads: i32,
+        q_len: i32,
+        k_len: i32,
+        d_k: i32,
+        d_v: i32,
+        scale: f32,
+        is_causal: i32,
+        q: *const c_void,
+        k: *const c_void,
+        v: *const c_void,
+        y: *const c_void,
+        lse: *const c_void,
     ) -> i32;
 
     // Phase 17.1 — strided FW siblings.
@@ -39387,6 +41967,26 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `flash_sdpa_sm89_f16_strided`. Host-side only.
+    pub fn baracuda_kernels_flash_sdpa_sm89_f16_strided_can_implement(
+        batch: i32,
+        heads: i32,
+        q_len: i32,
+        k_len: i32,
+        d_k: i32,
+        d_v: i32,
+        stride_q: *const i64,
+        stride_k: *const i64,
+        stride_v: *const i64,
+        stride_y: *const i64,
+        scale: f32,
+        is_causal: i32,
+        q: *const c_void,
+        k: *const c_void,
+        v: *const c_void,
+        y: *const c_void,
+        lse: *const c_void,
+    ) -> i32;
 
     /// Flash SDPA FW, bf16, sm_89 strided sibling.
     pub fn baracuda_kernels_flash_sdpa_sm89_bf16_strided_run(
@@ -39410,6 +42010,26 @@ unsafe extern "C" {
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `flash_sdpa_sm89_bf16_strided`. Host-side only.
+    pub fn baracuda_kernels_flash_sdpa_sm89_bf16_strided_can_implement(
+        batch: i32,
+        heads: i32,
+        q_len: i32,
+        k_len: i32,
+        d_k: i32,
+        d_v: i32,
+        stride_q: *const i64,
+        stride_k: *const i64,
+        stride_v: *const i64,
+        stride_y: *const i64,
+        scale: f32,
+        is_causal: i32,
+        q: *const c_void,
+        k: *const c_void,
+        v: *const c_void,
+        y: *const c_void,
+        lse: *const c_void,
     ) -> i32;
 }
 
@@ -43516,6 +46136,20 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `gather_f32`.
+    pub fn baracuda_kernels_gather_f32_can_implement(
+        out_numel: i64,
+        rank: i32,
+        gather_dim: i32,
+        src_dim_size: i32,
+        out_shape: *const i32,
+        stride_src: *const i64,
+        stride_index: *const i64,
+        stride_out: *const i64,
+        src: *const c_void,
+        index: *const c_void,
+        out: *const c_void,
+    ) -> i32;
 
     /// `gather` along `gather_dim`. f64.
     pub fn baracuda_kernels_gather_f64_run(
@@ -43534,6 +46168,20 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `gather_f64`.
+    pub fn baracuda_kernels_gather_f64_can_implement(
+        out_numel: i64,
+        rank: i32,
+        gather_dim: i32,
+        src_dim_size: i32,
+        out_shape: *const i32,
+        stride_src: *const i64,
+        stride_index: *const i64,
+        stride_out: *const i64,
+        src: *const c_void,
+        index: *const c_void,
+        out: *const c_void,
+    ) -> i32;
 
     /// `gather` along `gather_dim`. i32.
     pub fn baracuda_kernels_gather_i32_run(
@@ -43551,6 +46199,20 @@ unsafe extern "C" {
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `gather_i32`.
+    pub fn baracuda_kernels_gather_i32_can_implement(
+        out_numel: i64,
+        rank: i32,
+        gather_dim: i32,
+        src_dim_size: i32,
+        out_shape: *const i32,
+        stride_src: *const i64,
+        stride_index: *const i64,
+        stride_out: *const i64,
+        src: *const c_void,
+        index: *const c_void,
+        out: *const c_void,
     ) -> i32;
 
     // ---------- gather_backward (scatter-add into dsrc) ----------
@@ -43573,6 +46235,20 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `gather_backward_f32`.
+    pub fn baracuda_kernels_gather_backward_f32_can_implement(
+        out_numel: i64,
+        rank: i32,
+        gather_dim: i32,
+        src_dim_size: i32,
+        out_shape: *const i32,
+        stride_dout: *const i64,
+        stride_index: *const i64,
+        stride_dsrc: *const i64,
+        dout: *const c_void,
+        index: *const c_void,
+        dsrc: *const c_void,
+    ) -> i32;
 
     /// `gather_backward` — f64 (atomicAdd).
     pub fn baracuda_kernels_gather_backward_f64_run(
@@ -43590,6 +46266,20 @@ unsafe extern "C" {
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `gather_backward_f64`.
+    pub fn baracuda_kernels_gather_backward_f64_can_implement(
+        out_numel: i64,
+        rank: i32,
+        gather_dim: i32,
+        src_dim_size: i32,
+        out_shape: *const i32,
+        stride_dout: *const i64,
+        stride_index: *const i64,
+        stride_dsrc: *const i64,
+        dout: *const c_void,
+        index: *const c_void,
+        dsrc: *const c_void,
     ) -> i32;
 
     // ---------- scatter_add ----------
@@ -43612,6 +46302,20 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `scatter_add_f32`.
+    pub fn baracuda_kernels_scatter_add_f32_can_implement(
+        upd_numel: i64,
+        rank: i32,
+        scatter_dim: i32,
+        out_dim_size: i32,
+        upd_shape: *const i32,
+        stride_upd: *const i64,
+        stride_index: *const i64,
+        stride_out: *const i64,
+        updates: *const c_void,
+        index: *const c_void,
+        out: *const c_void,
+    ) -> i32;
 
     /// `scatter_add` — f64 (atomicAdd).
     pub fn baracuda_kernels_scatter_add_f64_run(
@@ -43629,6 +46333,20 @@ unsafe extern "C" {
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `scatter_add_f64`.
+    pub fn baracuda_kernels_scatter_add_f64_can_implement(
+        upd_numel: i64,
+        rank: i32,
+        scatter_dim: i32,
+        out_dim_size: i32,
+        upd_shape: *const i32,
+        stride_upd: *const i64,
+        stride_index: *const i64,
+        stride_out: *const i64,
+        updates: *const c_void,
+        index: *const c_void,
+        out: *const c_void,
     ) -> i32;
 
     // ---------- index_select (FW) ----------
@@ -43650,6 +46368,19 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `index_select_f32`.
+    pub fn baracuda_kernels_index_select_f32_can_implement(
+        out_numel: i64,
+        rank: i32,
+        select_dim: i32,
+        src_dim_size: i32,
+        out_shape: *const i32,
+        stride_src: *const i64,
+        stride_out: *const i64,
+        src: *const c_void,
+        idx: *const c_void,
+        out: *const c_void,
+    ) -> i32;
 
     /// `index_select` — f64.
     pub fn baracuda_kernels_index_select_f64_run(
@@ -43667,6 +46398,19 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `index_select_f64`.
+    pub fn baracuda_kernels_index_select_f64_can_implement(
+        out_numel: i64,
+        rank: i32,
+        select_dim: i32,
+        src_dim_size: i32,
+        out_shape: *const i32,
+        stride_src: *const i64,
+        stride_out: *const i64,
+        src: *const c_void,
+        idx: *const c_void,
+        out: *const c_void,
+    ) -> i32;
 
     /// `index_select` — i32.
     pub fn baracuda_kernels_index_select_i32_run(
@@ -43683,6 +46427,19 @@ unsafe extern "C" {
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `index_select_i32`.
+    pub fn baracuda_kernels_index_select_i32_can_implement(
+        out_numel: i64,
+        rank: i32,
+        select_dim: i32,
+        src_dim_size: i32,
+        out_shape: *const i32,
+        stride_src: *const i64,
+        stride_out: *const i64,
+        src: *const c_void,
+        idx: *const c_void,
+        out: *const c_void,
     ) -> i32;
 
     // ---------- index_select_backward (scatter-add into dsrc) ----------
@@ -43704,6 +46461,19 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `index_select_backward_f32`.
+    pub fn baracuda_kernels_index_select_backward_f32_can_implement(
+        out_numel: i64,
+        rank: i32,
+        select_dim: i32,
+        src_dim_size: i32,
+        out_shape: *const i32,
+        stride_dout: *const i64,
+        stride_dsrc: *const i64,
+        dout: *const c_void,
+        idx: *const c_void,
+        dsrc: *const c_void,
+    ) -> i32;
 
     /// `index_select_backward` — f64 (atomicAdd).
     pub fn baracuda_kernels_index_select_backward_f64_run(
@@ -43720,6 +46490,19 @@ unsafe extern "C" {
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `index_select_backward_f64`.
+    pub fn baracuda_kernels_index_select_backward_f64_can_implement(
+        out_numel: i64,
+        rank: i32,
+        select_dim: i32,
+        src_dim_size: i32,
+        out_shape: *const i32,
+        stride_dout: *const i64,
+        stride_dsrc: *const i64,
+        dout: *const c_void,
+        idx: *const c_void,
+        dsrc: *const c_void,
     ) -> i32;
 
     // ---------- masked_fill (FW) ----------
@@ -43740,6 +46523,14 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `masked_fill_f32`.
+    pub fn baracuda_kernels_masked_fill_f32_can_implement(
+        numel: i64,
+        src: *const c_void,
+        mask: *const c_void,
+        out: *const c_void,
+        fill_bits: i64,
+    ) -> i32;
 
     /// `masked_fill` — f64.
     pub fn baracuda_kernels_masked_fill_f64_run(
@@ -43751,6 +46542,14 @@ unsafe extern "C" {
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `masked_fill_f64`.
+    pub fn baracuda_kernels_masked_fill_f64_can_implement(
+        numel: i64,
+        src: *const c_void,
+        mask: *const c_void,
+        out: *const c_void,
+        fill_bits: i64,
     ) -> i32;
 
     /// `masked_fill` — i32.
@@ -43764,6 +46563,14 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `masked_fill_i32`.
+    pub fn baracuda_kernels_masked_fill_i32_can_implement(
+        numel: i64,
+        src: *const c_void,
+        mask: *const c_void,
+        out: *const c_void,
+        fill_bits: i64,
+    ) -> i32;
 
     /// `masked_fill` — bool (u8 storage).
     pub fn baracuda_kernels_masked_fill_bool_run(
@@ -43775,6 +46582,14 @@ unsafe extern "C" {
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `masked_fill_bool`.
+    pub fn baracuda_kernels_masked_fill_bool_can_implement(
+        numel: i64,
+        src: *const c_void,
+        mask: *const c_void,
+        out: *const c_void,
+        fill_bits: i64,
     ) -> i32;
 
     // ---------- masked_fill_backward ----------
@@ -43789,6 +46604,13 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `masked_fill_backward_f32`.
+    pub fn baracuda_kernels_masked_fill_backward_f32_can_implement(
+        numel: i64,
+        dout: *const c_void,
+        mask: *const c_void,
+        dsrc: *const c_void,
+    ) -> i32;
 
     /// `masked_fill_backward` — f64.
     pub fn baracuda_kernels_masked_fill_backward_f64_run(
@@ -43799,6 +46621,13 @@ unsafe extern "C" {
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `masked_fill_backward_f64`.
+    pub fn baracuda_kernels_masked_fill_backward_f64_can_implement(
+        numel: i64,
+        dout: *const c_void,
+        mask: *const c_void,
+        dsrc: *const c_void,
     ) -> i32;
 
     /// `masked_fill_backward` — i32.
@@ -43811,6 +46640,13 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `masked_fill_backward_i32`.
+    pub fn baracuda_kernels_masked_fill_backward_i32_can_implement(
+        numel: i64,
+        dout: *const c_void,
+        mask: *const c_void,
+        dsrc: *const c_void,
+    ) -> i32;
 
     /// `masked_fill_backward` — bool (u8 storage).
     pub fn baracuda_kernels_masked_fill_backward_bool_run(
@@ -43821,6 +46657,13 @@ unsafe extern "C" {
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `masked_fill_backward_bool`.
+    pub fn baracuda_kernels_masked_fill_backward_bool_can_implement(
+        numel: i64,
+        dout: *const c_void,
+        mask: *const c_void,
+        dsrc: *const c_void,
     ) -> i32;
 
     // ---------- one_hot (FW) ----------
@@ -43836,6 +46679,13 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `one_hot_f32`.
+    pub fn baracuda_kernels_one_hot_f32_can_implement(
+        out_numel: i64,
+        num_classes: i32,
+        src: *const c_void,
+        out: *const c_void,
+    ) -> i32;
 
     /// `one_hot` — f64 output.
     pub fn baracuda_kernels_one_hot_f64_run(
@@ -43846,6 +46696,13 @@ unsafe extern "C" {
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `one_hot_f64`.
+    pub fn baracuda_kernels_one_hot_f64_can_implement(
+        out_numel: i64,
+        num_classes: i32,
+        src: *const c_void,
+        out: *const c_void,
     ) -> i32;
 
     /// `one_hot` — i32 output.
@@ -43858,6 +46715,13 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `one_hot_i32`.
+    pub fn baracuda_kernels_one_hot_i32_can_implement(
+        out_numel: i64,
+        num_classes: i32,
+        src: *const c_void,
+        out: *const c_void,
+    ) -> i32;
 
     /// `one_hot` — bool output (u8 storage).
     pub fn baracuda_kernels_one_hot_bool_run(
@@ -43868,6 +46732,13 @@ unsafe extern "C" {
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `one_hot_bool`.
+    pub fn baracuda_kernels_one_hot_bool_can_implement(
+        out_numel: i64,
+        num_classes: i32,
+        src: *const c_void,
+        out: *const c_void,
     ) -> i32;
 
     // ---------- nonzero (FW) ----------
@@ -43892,6 +46763,17 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `nonzero_f32`.
+    pub fn baracuda_kernels_nonzero_f32_can_implement(
+        numel: i64,
+        rank: i32,
+        max_nz: i32,
+        shape: *const i32,
+        stride_x: *const i64,
+        x: *const c_void,
+        out_coords: *const c_void,
+        counter: *const c_void,
+    ) -> i32;
 
     /// `nonzero` — f64 input.
     pub fn baracuda_kernels_nonzero_f64_run(
@@ -43906,6 +46788,17 @@ unsafe extern "C" {
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `nonzero_f64`.
+    pub fn baracuda_kernels_nonzero_f64_can_implement(
+        numel: i64,
+        rank: i32,
+        max_nz: i32,
+        shape: *const i32,
+        stride_x: *const i64,
+        x: *const c_void,
+        out_coords: *const c_void,
+        counter: *const c_void,
     ) -> i32;
 
     /// `nonzero` — i32 input.
@@ -43922,6 +46815,17 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `nonzero_i32`.
+    pub fn baracuda_kernels_nonzero_i32_can_implement(
+        numel: i64,
+        rank: i32,
+        max_nz: i32,
+        shape: *const i32,
+        stride_x: *const i64,
+        x: *const c_void,
+        out_coords: *const c_void,
+        counter: *const c_void,
+    ) -> i32;
 
     /// `nonzero` — bool (u8) input.
     pub fn baracuda_kernels_nonzero_bool_run(
@@ -43936,6 +46840,17 @@ unsafe extern "C" {
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `nonzero_bool`.
+    pub fn baracuda_kernels_nonzero_bool_can_implement(
+        numel: i64,
+        rank: i32,
+        max_nz: i32,
+        shape: *const i32,
+        stride_x: *const i64,
+        x: *const c_void,
+        out_coords: *const c_void,
+        counter: *const c_void,
     ) -> i32;
 
     // ---------- i64-index variants (Phase 11.5 / Fuel team feedback #7) ----------
@@ -43964,6 +46879,20 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `gather_i64idx_f32`.
+    pub fn baracuda_kernels_gather_i64idx_f32_can_implement(
+        out_numel: i64,
+        rank: i32,
+        gather_dim: i32,
+        src_dim_size: i32,
+        out_shape: *const i32,
+        stride_src: *const i64,
+        stride_index: *const i64,
+        stride_out: *const i64,
+        src: *const c_void,
+        index: *const c_void,
+        out: *const c_void,
+    ) -> i32;
 
     /// `gather` FW — f64, i64 indices.
     pub fn baracuda_kernels_gather_i64idx_f64_run(
@@ -43981,6 +46910,20 @@ unsafe extern "C" {
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `gather_i64idx_f64`.
+    pub fn baracuda_kernels_gather_i64idx_f64_can_implement(
+        out_numel: i64,
+        rank: i32,
+        gather_dim: i32,
+        src_dim_size: i32,
+        out_shape: *const i32,
+        stride_src: *const i64,
+        stride_index: *const i64,
+        stride_out: *const i64,
+        src: *const c_void,
+        index: *const c_void,
+        out: *const c_void,
     ) -> i32;
 
     /// `gather` FW — i32 values, i64 indices.
@@ -44000,6 +46943,20 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `gather_i64idx_i32`.
+    pub fn baracuda_kernels_gather_i64idx_i32_can_implement(
+        out_numel: i64,
+        rank: i32,
+        gather_dim: i32,
+        src_dim_size: i32,
+        out_shape: *const i32,
+        stride_src: *const i64,
+        stride_index: *const i64,
+        stride_out: *const i64,
+        src: *const c_void,
+        index: *const c_void,
+        out: *const c_void,
+    ) -> i32;
 
     /// `gather` BW — f32, i64 indices (atomicAdd).
     pub fn baracuda_kernels_gather_backward_i64idx_f32_run(
@@ -44017,6 +46974,20 @@ unsafe extern "C" {
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `gather_backward_i64idx_f32`.
+    pub fn baracuda_kernels_gather_backward_i64idx_f32_can_implement(
+        out_numel: i64,
+        rank: i32,
+        gather_dim: i32,
+        src_dim_size: i32,
+        out_shape: *const i32,
+        stride_dout: *const i64,
+        stride_index: *const i64,
+        stride_dsrc: *const i64,
+        dout: *const c_void,
+        index: *const c_void,
+        dsrc: *const c_void,
     ) -> i32;
 
     /// `gather` BW — f64, i64 indices (atomicAdd).
@@ -44036,6 +47007,20 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `gather_backward_i64idx_f64`.
+    pub fn baracuda_kernels_gather_backward_i64idx_f64_can_implement(
+        out_numel: i64,
+        rank: i32,
+        gather_dim: i32,
+        src_dim_size: i32,
+        out_shape: *const i32,
+        stride_dout: *const i64,
+        stride_index: *const i64,
+        stride_dsrc: *const i64,
+        dout: *const c_void,
+        index: *const c_void,
+        dsrc: *const c_void,
+    ) -> i32;
 
     /// `scatter_add` — f32, i64 indices (atomicAdd).
     pub fn baracuda_kernels_scatter_add_i64idx_f32_run(
@@ -44053,6 +47038,20 @@ unsafe extern "C" {
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `scatter_add_i64idx_f32`.
+    pub fn baracuda_kernels_scatter_add_i64idx_f32_can_implement(
+        upd_numel: i64,
+        rank: i32,
+        scatter_dim: i32,
+        out_dim_size: i32,
+        upd_shape: *const i32,
+        stride_upd: *const i64,
+        stride_index: *const i64,
+        stride_out: *const i64,
+        updates: *const c_void,
+        index: *const c_void,
+        out: *const c_void,
     ) -> i32;
 
     /// `scatter_add` — f64, i64 indices.
@@ -44072,6 +47071,20 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `scatter_add_i64idx_f64`.
+    pub fn baracuda_kernels_scatter_add_i64idx_f64_can_implement(
+        upd_numel: i64,
+        rank: i32,
+        scatter_dim: i32,
+        out_dim_size: i32,
+        upd_shape: *const i32,
+        stride_upd: *const i64,
+        stride_index: *const i64,
+        stride_out: *const i64,
+        updates: *const c_void,
+        index: *const c_void,
+        out: *const c_void,
+    ) -> i32;
 
     /// `index_select` — f32, i64 indices.
     pub fn baracuda_kernels_index_select_i64idx_f32_run(
@@ -44088,6 +47101,19 @@ unsafe extern "C" {
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `index_select_i64idx_f32`.
+    pub fn baracuda_kernels_index_select_i64idx_f32_can_implement(
+        out_numel: i64,
+        rank: i32,
+        select_dim: i32,
+        src_dim_size: i32,
+        out_shape: *const i32,
+        stride_src: *const i64,
+        stride_out: *const i64,
+        src: *const c_void,
+        idx: *const c_void,
+        out: *const c_void,
     ) -> i32;
 
     /// `index_select` — f64, i64 indices.
@@ -44106,6 +47132,19 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `index_select_i64idx_f64`.
+    pub fn baracuda_kernels_index_select_i64idx_f64_can_implement(
+        out_numel: i64,
+        rank: i32,
+        select_dim: i32,
+        src_dim_size: i32,
+        out_shape: *const i32,
+        stride_src: *const i64,
+        stride_out: *const i64,
+        src: *const c_void,
+        idx: *const c_void,
+        out: *const c_void,
+    ) -> i32;
 
     /// `index_select` — i32 values, i64 indices.
     pub fn baracuda_kernels_index_select_i64idx_i32_run(
@@ -44122,6 +47161,19 @@ unsafe extern "C" {
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `index_select_i64idx_i32`.
+    pub fn baracuda_kernels_index_select_i64idx_i32_can_implement(
+        out_numel: i64,
+        rank: i32,
+        select_dim: i32,
+        src_dim_size: i32,
+        out_shape: *const i32,
+        stride_src: *const i64,
+        stride_out: *const i64,
+        src: *const c_void,
+        idx: *const c_void,
+        out: *const c_void,
     ) -> i32;
 
     /// `index_select` BW — f32, i64 indices.
@@ -44140,6 +47192,19 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `index_select_backward_i64idx_f32`.
+    pub fn baracuda_kernels_index_select_backward_i64idx_f32_can_implement(
+        out_numel: i64,
+        rank: i32,
+        select_dim: i32,
+        src_dim_size: i32,
+        out_shape: *const i32,
+        stride_dout: *const i64,
+        stride_dsrc: *const i64,
+        dout: *const c_void,
+        idx: *const c_void,
+        dsrc: *const c_void,
+    ) -> i32;
 
     /// `index_select` BW — f64, i64 indices.
     pub fn baracuda_kernels_index_select_backward_i64idx_f64_run(
@@ -44157,6 +47222,19 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `index_select_backward_i64idx_f64`.
+    pub fn baracuda_kernels_index_select_backward_i64idx_f64_can_implement(
+        out_numel: i64,
+        rank: i32,
+        select_dim: i32,
+        src_dim_size: i32,
+        out_shape: *const i32,
+        stride_dout: *const i64,
+        stride_dsrc: *const i64,
+        dout: *const c_void,
+        idx: *const c_void,
+        dsrc: *const c_void,
+    ) -> i32;
 
     /// `one_hot` — f32 output, i64 input class indices.
     pub fn baracuda_kernels_one_hot_i64idx_f32_run(
@@ -44167,6 +47245,13 @@ unsafe extern "C" {
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `one_hot_i64idx_f32`.
+    pub fn baracuda_kernels_one_hot_i64idx_f32_can_implement(
+        out_numel: i64,
+        num_classes: i32,
+        src: *const c_void,
+        out: *const c_void,
     ) -> i32;
 
     /// `one_hot` — f64 output, i64 indices.
@@ -44179,6 +47264,13 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `one_hot_i64idx_f64`.
+    pub fn baracuda_kernels_one_hot_i64idx_f64_can_implement(
+        out_numel: i64,
+        num_classes: i32,
+        src: *const c_void,
+        out: *const c_void,
+    ) -> i32;
 
     /// `one_hot` — i32 output, i64 indices.
     pub fn baracuda_kernels_one_hot_i64idx_i32_run(
@@ -44190,6 +47282,13 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `one_hot_i64idx_i32`.
+    pub fn baracuda_kernels_one_hot_i64idx_i32_can_implement(
+        out_numel: i64,
+        num_classes: i32,
+        src: *const c_void,
+        out: *const c_void,
+    ) -> i32;
 
     /// `one_hot` — bool output, i64 indices.
     pub fn baracuda_kernels_one_hot_i64idx_bool_run(
@@ -44200,6 +47299,13 @@ unsafe extern "C" {
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `one_hot_i64idx_bool`.
+    pub fn baracuda_kernels_one_hot_i64idx_bool_can_implement(
+        out_numel: i64,
+        num_classes: i32,
+        src: *const c_void,
+        out: *const c_void,
     ) -> i32;
 
     /// `nonzero` — f32 input, i64 output coords.
@@ -44216,6 +47322,17 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `nonzero_i64idx_f32`.
+    pub fn baracuda_kernels_nonzero_i64idx_f32_can_implement(
+        numel: i64,
+        rank: i32,
+        max_nz: i32,
+        shape: *const i32,
+        stride_x: *const i64,
+        x: *const c_void,
+        out_coords: *const c_void,
+        counter: *const c_void,
+    ) -> i32;
 
     /// `nonzero` — f64 input, i64 output coords.
     pub fn baracuda_kernels_nonzero_i64idx_f64_run(
@@ -44230,6 +47347,17 @@ unsafe extern "C" {
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `nonzero_i64idx_f64`.
+    pub fn baracuda_kernels_nonzero_i64idx_f64_can_implement(
+        numel: i64,
+        rank: i32,
+        max_nz: i32,
+        shape: *const i32,
+        stride_x: *const i64,
+        x: *const c_void,
+        out_coords: *const c_void,
+        counter: *const c_void,
     ) -> i32;
 
     /// `nonzero` — i32 input, i64 output coords.
@@ -44246,6 +47374,17 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `nonzero_i64idx_i32`.
+    pub fn baracuda_kernels_nonzero_i64idx_i32_can_implement(
+        numel: i64,
+        rank: i32,
+        max_nz: i32,
+        shape: *const i32,
+        stride_x: *const i64,
+        x: *const c_void,
+        out_coords: *const c_void,
+        counter: *const c_void,
+    ) -> i32;
 
     /// `nonzero` — bool input, i64 output coords.
     pub fn baracuda_kernels_nonzero_i64idx_bool_run(
@@ -44260,6 +47399,17 @@ unsafe extern "C" {
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `nonzero_i64idx_bool`.
+    pub fn baracuda_kernels_nonzero_i64idx_bool_can_implement(
+        numel: i64,
+        rank: i32,
+        max_nz: i32,
+        shape: *const i32,
+        stride_x: *const i64,
+        x: *const c_void,
+        out_coords: *const c_void,
+        counter: *const c_void,
     ) -> i32;
 
     // ---------- Phase 39 (Fuel 6c.4 Gap 5) — scatter (pure assign) + index_add ----------
@@ -44295,6 +47445,20 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `scatter_f32`.
+    pub fn baracuda_kernels_scatter_f32_can_implement(
+        upd_numel: i64,
+        rank: i32,
+        scatter_dim: i32,
+        out_dim_size: i32,
+        upd_shape: *const i32,
+        stride_upd: *const i64,
+        stride_index: *const i64,
+        stride_out: *const i64,
+        updates: *const c_void,
+        index: *const c_void,
+        out: *const c_void,
+    ) -> i32;
 
     /// `scatter` — f64, i32 idx.
     pub fn baracuda_kernels_scatter_f64_run(
@@ -44312,6 +47476,20 @@ unsafe extern "C" {
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `scatter_f64`.
+    pub fn baracuda_kernels_scatter_f64_can_implement(
+        upd_numel: i64,
+        rank: i32,
+        scatter_dim: i32,
+        out_dim_size: i32,
+        upd_shape: *const i32,
+        stride_upd: *const i64,
+        stride_index: *const i64,
+        stride_out: *const i64,
+        updates: *const c_void,
+        index: *const c_void,
+        out: *const c_void,
     ) -> i32;
 
     /// `scatter` — f16, i32 idx.
@@ -44331,6 +47509,20 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `scatter_f16`.
+    pub fn baracuda_kernels_scatter_f16_can_implement(
+        upd_numel: i64,
+        rank: i32,
+        scatter_dim: i32,
+        out_dim_size: i32,
+        upd_shape: *const i32,
+        stride_upd: *const i64,
+        stride_index: *const i64,
+        stride_out: *const i64,
+        updates: *const c_void,
+        index: *const c_void,
+        out: *const c_void,
+    ) -> i32;
 
     /// `scatter` — bf16, i32 idx.
     pub fn baracuda_kernels_scatter_bf16_run(
@@ -44348,6 +47540,20 @@ unsafe extern "C" {
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `scatter_bf16`.
+    pub fn baracuda_kernels_scatter_bf16_can_implement(
+        upd_numel: i64,
+        rank: i32,
+        scatter_dim: i32,
+        out_dim_size: i32,
+        upd_shape: *const i32,
+        stride_upd: *const i64,
+        stride_index: *const i64,
+        stride_out: *const i64,
+        updates: *const c_void,
+        index: *const c_void,
+        out: *const c_void,
     ) -> i32;
 
     /// `scatter` — f32, i64 idx.
@@ -44367,6 +47573,20 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `scatter_i64idx_f32`.
+    pub fn baracuda_kernels_scatter_i64idx_f32_can_implement(
+        upd_numel: i64,
+        rank: i32,
+        scatter_dim: i32,
+        out_dim_size: i32,
+        upd_shape: *const i32,
+        stride_upd: *const i64,
+        stride_index: *const i64,
+        stride_out: *const i64,
+        updates: *const c_void,
+        index: *const c_void,
+        out: *const c_void,
+    ) -> i32;
 
     /// `scatter` — f64, i64 idx.
     pub fn baracuda_kernels_scatter_i64idx_f64_run(
@@ -44384,6 +47604,20 @@ unsafe extern "C" {
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `scatter_i64idx_f64`.
+    pub fn baracuda_kernels_scatter_i64idx_f64_can_implement(
+        upd_numel: i64,
+        rank: i32,
+        scatter_dim: i32,
+        out_dim_size: i32,
+        upd_shape: *const i32,
+        stride_upd: *const i64,
+        stride_index: *const i64,
+        stride_out: *const i64,
+        updates: *const c_void,
+        index: *const c_void,
+        out: *const c_void,
     ) -> i32;
 
     /// `scatter` — f16, i64 idx.
@@ -44403,6 +47637,20 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `scatter_i64idx_f16`.
+    pub fn baracuda_kernels_scatter_i64idx_f16_can_implement(
+        upd_numel: i64,
+        rank: i32,
+        scatter_dim: i32,
+        out_dim_size: i32,
+        upd_shape: *const i32,
+        stride_upd: *const i64,
+        stride_index: *const i64,
+        stride_out: *const i64,
+        updates: *const c_void,
+        index: *const c_void,
+        out: *const c_void,
+    ) -> i32;
 
     /// `scatter` — bf16, i64 idx.
     pub fn baracuda_kernels_scatter_i64idx_bf16_run(
@@ -44420,6 +47668,20 @@ unsafe extern "C" {
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `scatter_i64idx_bf16`.
+    pub fn baracuda_kernels_scatter_i64idx_bf16_can_implement(
+        upd_numel: i64,
+        rank: i32,
+        scatter_dim: i32,
+        out_dim_size: i32,
+        upd_shape: *const i32,
+        stride_upd: *const i64,
+        stride_index: *const i64,
+        stride_out: *const i64,
+        updates: *const c_void,
+        index: *const c_void,
+        out: *const c_void,
     ) -> i32;
 
     // -- index_add FW --
@@ -44440,6 +47702,19 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `index_add_f32`.
+    pub fn baracuda_kernels_index_add_f32_can_implement(
+        src_numel: i64,
+        rank: i32,
+        add_dim: i32,
+        dst_dim_size: i32,
+        src_shape: *const i32,
+        stride_src: *const i64,
+        stride_dst: *const i64,
+        src: *const c_void,
+        idx: *const c_void,
+        dst: *const c_void,
+    ) -> i32;
 
     /// `index_add` — f64, i32 idx.
     pub fn baracuda_kernels_index_add_f64_run(
@@ -44456,6 +47731,19 @@ unsafe extern "C" {
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `index_add_f64`.
+    pub fn baracuda_kernels_index_add_f64_can_implement(
+        src_numel: i64,
+        rank: i32,
+        add_dim: i32,
+        dst_dim_size: i32,
+        src_shape: *const i32,
+        stride_src: *const i64,
+        stride_dst: *const i64,
+        src: *const c_void,
+        idx: *const c_void,
+        dst: *const c_void,
     ) -> i32;
 
     /// `index_add` — f16, i32 idx. Uses `atomicCAS`-via-
@@ -44476,6 +47764,19 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `index_add_f16`.
+    pub fn baracuda_kernels_index_add_f16_can_implement(
+        src_numel: i64,
+        rank: i32,
+        add_dim: i32,
+        dst_dim_size: i32,
+        src_shape: *const i32,
+        stride_src: *const i64,
+        stride_dst: *const i64,
+        src: *const c_void,
+        idx: *const c_void,
+        dst: *const c_void,
+    ) -> i32;
 
     /// `index_add` — bf16, i32 idx. `atomicCAS`-via-
     /// `baracuda::atomic::add<__nv_bfloat16>` (same caveats as f16).
@@ -44494,6 +47795,19 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `index_add_bf16`.
+    pub fn baracuda_kernels_index_add_bf16_can_implement(
+        src_numel: i64,
+        rank: i32,
+        add_dim: i32,
+        dst_dim_size: i32,
+        src_shape: *const i32,
+        stride_src: *const i64,
+        stride_dst: *const i64,
+        src: *const c_void,
+        idx: *const c_void,
+        dst: *const c_void,
+    ) -> i32;
 
     /// `index_add` — f32, i64 idx.
     pub fn baracuda_kernels_index_add_i64idx_f32_run(
@@ -44510,6 +47824,19 @@ unsafe extern "C" {
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `index_add_i64idx_f32`.
+    pub fn baracuda_kernels_index_add_i64idx_f32_can_implement(
+        src_numel: i64,
+        rank: i32,
+        add_dim: i32,
+        dst_dim_size: i32,
+        src_shape: *const i32,
+        stride_src: *const i64,
+        stride_dst: *const i64,
+        src: *const c_void,
+        idx: *const c_void,
+        dst: *const c_void,
     ) -> i32;
 
     /// `index_add` — f64, i64 idx.
@@ -44528,6 +47855,19 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `index_add_i64idx_f64`.
+    pub fn baracuda_kernels_index_add_i64idx_f64_can_implement(
+        src_numel: i64,
+        rank: i32,
+        add_dim: i32,
+        dst_dim_size: i32,
+        src_shape: *const i32,
+        stride_src: *const i64,
+        stride_dst: *const i64,
+        src: *const c_void,
+        idx: *const c_void,
+        dst: *const c_void,
+    ) -> i32;
 
     /// `index_add` — f16, i64 idx.
     pub fn baracuda_kernels_index_add_i64idx_f16_run(
@@ -44545,6 +47885,19 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `index_add_i64idx_f16`.
+    pub fn baracuda_kernels_index_add_i64idx_f16_can_implement(
+        src_numel: i64,
+        rank: i32,
+        add_dim: i32,
+        dst_dim_size: i32,
+        src_shape: *const i32,
+        stride_src: *const i64,
+        stride_dst: *const i64,
+        src: *const c_void,
+        idx: *const c_void,
+        dst: *const c_void,
+    ) -> i32;
 
     /// `index_add` — bf16, i64 idx.
     pub fn baracuda_kernels_index_add_i64idx_bf16_run(
@@ -44561,6 +47914,19 @@ unsafe extern "C" {
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `index_add_i64idx_bf16`.
+    pub fn baracuda_kernels_index_add_i64idx_bf16_can_implement(
+        src_numel: i64,
+        rank: i32,
+        add_dim: i32,
+        dst_dim_size: i32,
+        src_shape: *const i32,
+        stride_src: *const i64,
+        stride_dst: *const i64,
+        src: *const c_void,
+        idx: *const c_void,
+        dst: *const c_void,
     ) -> i32;
 
     // -- gather (u8 idx extras) --
@@ -44587,6 +47953,20 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `gather_u8idx_f32`.
+    pub fn baracuda_kernels_gather_u8idx_f32_can_implement(
+        out_numel: i64,
+        rank: i32,
+        gather_dim: i32,
+        src_dim_size: i32,
+        out_shape: *const i32,
+        stride_src: *const i64,
+        stride_index: *const i64,
+        stride_out: *const i64,
+        src: *const c_void,
+        index: *const c_void,
+        out: *const c_void,
+    ) -> i32;
 
     /// `gather` FW — f64, u8 idx.
     pub fn baracuda_kernels_gather_u8idx_f64_run(
@@ -44604,6 +47984,20 @@ unsafe extern "C" {
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `gather_u8idx_f64`.
+    pub fn baracuda_kernels_gather_u8idx_f64_can_implement(
+        out_numel: i64,
+        rank: i32,
+        gather_dim: i32,
+        src_dim_size: i32,
+        out_shape: *const i32,
+        stride_src: *const i64,
+        stride_index: *const i64,
+        stride_out: *const i64,
+        src: *const c_void,
+        index: *const c_void,
+        out: *const c_void,
     ) -> i32;
 
     // ---------- Phase 40 (Fuel 6c.4 Gap 6b spillover) ----------
@@ -44629,12 +48023,24 @@ unsafe extern "C" {
         src: *const c_void, index: *const c_void, out: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
     ) -> i32;
+    pub fn baracuda_kernels_gather_u8_can_implement(
+        out_numel: i64, rank: i32, gather_dim: i32, src_dim_size: i32,
+        out_shape: *const i32, stride_src: *const i64,
+        stride_index: *const i64, stride_out: *const i64,
+        src: *const c_void, index: *const c_void, out: *const c_void,
+    ) -> i32;
     pub fn baracuda_kernels_gather_i8_run(
         out_numel: i64, rank: i32, gather_dim: i32, src_dim_size: i32,
         out_shape: *const i32, stride_src: *const i64,
         stride_index: *const i64, stride_out: *const i64,
         src: *const c_void, index: *const c_void, out: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_gather_i8_can_implement(
+        out_numel: i64, rank: i32, gather_dim: i32, src_dim_size: i32,
+        out_shape: *const i32, stride_src: *const i64,
+        stride_index: *const i64, stride_out: *const i64,
+        src: *const c_void, index: *const c_void, out: *const c_void,
     ) -> i32;
     pub fn baracuda_kernels_gather_u16_run(
         out_numel: i64, rank: i32, gather_dim: i32, src_dim_size: i32,
@@ -44643,12 +48049,24 @@ unsafe extern "C" {
         src: *const c_void, index: *const c_void, out: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
     ) -> i32;
+    pub fn baracuda_kernels_gather_u16_can_implement(
+        out_numel: i64, rank: i32, gather_dim: i32, src_dim_size: i32,
+        out_shape: *const i32, stride_src: *const i64,
+        stride_index: *const i64, stride_out: *const i64,
+        src: *const c_void, index: *const c_void, out: *const c_void,
+    ) -> i32;
     pub fn baracuda_kernels_gather_i16_run(
         out_numel: i64, rank: i32, gather_dim: i32, src_dim_size: i32,
         out_shape: *const i32, stride_src: *const i64,
         stride_index: *const i64, stride_out: *const i64,
         src: *const c_void, index: *const c_void, out: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_gather_i16_can_implement(
+        out_numel: i64, rank: i32, gather_dim: i32, src_dim_size: i32,
+        out_shape: *const i32, stride_src: *const i64,
+        stride_index: *const i64, stride_out: *const i64,
+        src: *const c_void, index: *const c_void, out: *const c_void,
     ) -> i32;
     pub fn baracuda_kernels_gather_u32_run(
         out_numel: i64, rank: i32, gather_dim: i32, src_dim_size: i32,
@@ -44657,12 +48075,24 @@ unsafe extern "C" {
         src: *const c_void, index: *const c_void, out: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
     ) -> i32;
+    pub fn baracuda_kernels_gather_u32_can_implement(
+        out_numel: i64, rank: i32, gather_dim: i32, src_dim_size: i32,
+        out_shape: *const i32, stride_src: *const i64,
+        stride_index: *const i64, stride_out: *const i64,
+        src: *const c_void, index: *const c_void, out: *const c_void,
+    ) -> i32;
     pub fn baracuda_kernels_gather_i64_run(
         out_numel: i64, rank: i32, gather_dim: i32, src_dim_size: i32,
         out_shape: *const i32, stride_src: *const i64,
         stride_index: *const i64, stride_out: *const i64,
         src: *const c_void, index: *const c_void, out: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_gather_i64_can_implement(
+        out_numel: i64, rank: i32, gather_dim: i32, src_dim_size: i32,
+        out_shape: *const i32, stride_src: *const i64,
+        stride_index: *const i64, stride_out: *const i64,
+        src: *const c_void, index: *const c_void, out: *const c_void,
     ) -> i32;
 
     pub fn baracuda_kernels_gather_i64idx_u8_run(
@@ -44672,12 +48102,24 @@ unsafe extern "C" {
         src: *const c_void, index: *const c_void, out: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
     ) -> i32;
+    pub fn baracuda_kernels_gather_i64idx_u8_can_implement(
+        out_numel: i64, rank: i32, gather_dim: i32, src_dim_size: i32,
+        out_shape: *const i32, stride_src: *const i64,
+        stride_index: *const i64, stride_out: *const i64,
+        src: *const c_void, index: *const c_void, out: *const c_void,
+    ) -> i32;
     pub fn baracuda_kernels_gather_i64idx_i8_run(
         out_numel: i64, rank: i32, gather_dim: i32, src_dim_size: i32,
         out_shape: *const i32, stride_src: *const i64,
         stride_index: *const i64, stride_out: *const i64,
         src: *const c_void, index: *const c_void, out: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_gather_i64idx_i8_can_implement(
+        out_numel: i64, rank: i32, gather_dim: i32, src_dim_size: i32,
+        out_shape: *const i32, stride_src: *const i64,
+        stride_index: *const i64, stride_out: *const i64,
+        src: *const c_void, index: *const c_void, out: *const c_void,
     ) -> i32;
     pub fn baracuda_kernels_gather_i64idx_u16_run(
         out_numel: i64, rank: i32, gather_dim: i32, src_dim_size: i32,
@@ -44686,12 +48128,24 @@ unsafe extern "C" {
         src: *const c_void, index: *const c_void, out: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
     ) -> i32;
+    pub fn baracuda_kernels_gather_i64idx_u16_can_implement(
+        out_numel: i64, rank: i32, gather_dim: i32, src_dim_size: i32,
+        out_shape: *const i32, stride_src: *const i64,
+        stride_index: *const i64, stride_out: *const i64,
+        src: *const c_void, index: *const c_void, out: *const c_void,
+    ) -> i32;
     pub fn baracuda_kernels_gather_i64idx_i16_run(
         out_numel: i64, rank: i32, gather_dim: i32, src_dim_size: i32,
         out_shape: *const i32, stride_src: *const i64,
         stride_index: *const i64, stride_out: *const i64,
         src: *const c_void, index: *const c_void, out: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_gather_i64idx_i16_can_implement(
+        out_numel: i64, rank: i32, gather_dim: i32, src_dim_size: i32,
+        out_shape: *const i32, stride_src: *const i64,
+        stride_index: *const i64, stride_out: *const i64,
+        src: *const c_void, index: *const c_void, out: *const c_void,
     ) -> i32;
     pub fn baracuda_kernels_gather_i64idx_u32_run(
         out_numel: i64, rank: i32, gather_dim: i32, src_dim_size: i32,
@@ -44700,12 +48154,24 @@ unsafe extern "C" {
         src: *const c_void, index: *const c_void, out: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
     ) -> i32;
+    pub fn baracuda_kernels_gather_i64idx_u32_can_implement(
+        out_numel: i64, rank: i32, gather_dim: i32, src_dim_size: i32,
+        out_shape: *const i32, stride_src: *const i64,
+        stride_index: *const i64, stride_out: *const i64,
+        src: *const c_void, index: *const c_void, out: *const c_void,
+    ) -> i32;
     pub fn baracuda_kernels_gather_i64idx_i64_run(
         out_numel: i64, rank: i32, gather_dim: i32, src_dim_size: i32,
         out_shape: *const i32, stride_src: *const i64,
         stride_index: *const i64, stride_out: *const i64,
         src: *const c_void, index: *const c_void, out: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_gather_i64idx_i64_can_implement(
+        out_numel: i64, rank: i32, gather_dim: i32, src_dim_size: i32,
+        out_shape: *const i32, stride_src: *const i64,
+        stride_index: *const i64, stride_out: *const i64,
+        src: *const c_void, index: *const c_void, out: *const c_void,
     ) -> i32;
 
     // -- index_select FW (integer value-dtype) --
@@ -44716,11 +48182,21 @@ unsafe extern "C" {
         src: *const c_void, idx: *const c_void, out: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
     ) -> i32;
+    pub fn baracuda_kernels_index_select_u8_can_implement(
+        out_numel: i64, rank: i32, select_dim: i32, src_dim_size: i32,
+        out_shape: *const i32, stride_src: *const i64, stride_out: *const i64,
+        src: *const c_void, idx: *const c_void, out: *const c_void,
+    ) -> i32;
     pub fn baracuda_kernels_index_select_i8_run(
         out_numel: i64, rank: i32, select_dim: i32, src_dim_size: i32,
         out_shape: *const i32, stride_src: *const i64, stride_out: *const i64,
         src: *const c_void, idx: *const c_void, out: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_index_select_i8_can_implement(
+        out_numel: i64, rank: i32, select_dim: i32, src_dim_size: i32,
+        out_shape: *const i32, stride_src: *const i64, stride_out: *const i64,
+        src: *const c_void, idx: *const c_void, out: *const c_void,
     ) -> i32;
     pub fn baracuda_kernels_index_select_u16_run(
         out_numel: i64, rank: i32, select_dim: i32, src_dim_size: i32,
@@ -44728,11 +48204,21 @@ unsafe extern "C" {
         src: *const c_void, idx: *const c_void, out: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
     ) -> i32;
+    pub fn baracuda_kernels_index_select_u16_can_implement(
+        out_numel: i64, rank: i32, select_dim: i32, src_dim_size: i32,
+        out_shape: *const i32, stride_src: *const i64, stride_out: *const i64,
+        src: *const c_void, idx: *const c_void, out: *const c_void,
+    ) -> i32;
     pub fn baracuda_kernels_index_select_i16_run(
         out_numel: i64, rank: i32, select_dim: i32, src_dim_size: i32,
         out_shape: *const i32, stride_src: *const i64, stride_out: *const i64,
         src: *const c_void, idx: *const c_void, out: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_index_select_i16_can_implement(
+        out_numel: i64, rank: i32, select_dim: i32, src_dim_size: i32,
+        out_shape: *const i32, stride_src: *const i64, stride_out: *const i64,
+        src: *const c_void, idx: *const c_void, out: *const c_void,
     ) -> i32;
     pub fn baracuda_kernels_index_select_u32_run(
         out_numel: i64, rank: i32, select_dim: i32, src_dim_size: i32,
@@ -44740,11 +48226,21 @@ unsafe extern "C" {
         src: *const c_void, idx: *const c_void, out: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
     ) -> i32;
+    pub fn baracuda_kernels_index_select_u32_can_implement(
+        out_numel: i64, rank: i32, select_dim: i32, src_dim_size: i32,
+        out_shape: *const i32, stride_src: *const i64, stride_out: *const i64,
+        src: *const c_void, idx: *const c_void, out: *const c_void,
+    ) -> i32;
     pub fn baracuda_kernels_index_select_i64_run(
         out_numel: i64, rank: i32, select_dim: i32, src_dim_size: i32,
         out_shape: *const i32, stride_src: *const i64, stride_out: *const i64,
         src: *const c_void, idx: *const c_void, out: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_index_select_i64_can_implement(
+        out_numel: i64, rank: i32, select_dim: i32, src_dim_size: i32,
+        out_shape: *const i32, stride_src: *const i64, stride_out: *const i64,
+        src: *const c_void, idx: *const c_void, out: *const c_void,
     ) -> i32;
 
     pub fn baracuda_kernels_index_select_i64idx_u8_run(
@@ -44753,11 +48249,21 @@ unsafe extern "C" {
         src: *const c_void, idx: *const c_void, out: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
     ) -> i32;
+    pub fn baracuda_kernels_index_select_i64idx_u8_can_implement(
+        out_numel: i64, rank: i32, select_dim: i32, src_dim_size: i32,
+        out_shape: *const i32, stride_src: *const i64, stride_out: *const i64,
+        src: *const c_void, idx: *const c_void, out: *const c_void,
+    ) -> i32;
     pub fn baracuda_kernels_index_select_i64idx_i8_run(
         out_numel: i64, rank: i32, select_dim: i32, src_dim_size: i32,
         out_shape: *const i32, stride_src: *const i64, stride_out: *const i64,
         src: *const c_void, idx: *const c_void, out: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_index_select_i64idx_i8_can_implement(
+        out_numel: i64, rank: i32, select_dim: i32, src_dim_size: i32,
+        out_shape: *const i32, stride_src: *const i64, stride_out: *const i64,
+        src: *const c_void, idx: *const c_void, out: *const c_void,
     ) -> i32;
     pub fn baracuda_kernels_index_select_i64idx_u16_run(
         out_numel: i64, rank: i32, select_dim: i32, src_dim_size: i32,
@@ -44765,11 +48271,21 @@ unsafe extern "C" {
         src: *const c_void, idx: *const c_void, out: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
     ) -> i32;
+    pub fn baracuda_kernels_index_select_i64idx_u16_can_implement(
+        out_numel: i64, rank: i32, select_dim: i32, src_dim_size: i32,
+        out_shape: *const i32, stride_src: *const i64, stride_out: *const i64,
+        src: *const c_void, idx: *const c_void, out: *const c_void,
+    ) -> i32;
     pub fn baracuda_kernels_index_select_i64idx_i16_run(
         out_numel: i64, rank: i32, select_dim: i32, src_dim_size: i32,
         out_shape: *const i32, stride_src: *const i64, stride_out: *const i64,
         src: *const c_void, idx: *const c_void, out: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_index_select_i64idx_i16_can_implement(
+        out_numel: i64, rank: i32, select_dim: i32, src_dim_size: i32,
+        out_shape: *const i32, stride_src: *const i64, stride_out: *const i64,
+        src: *const c_void, idx: *const c_void, out: *const c_void,
     ) -> i32;
     pub fn baracuda_kernels_index_select_i64idx_u32_run(
         out_numel: i64, rank: i32, select_dim: i32, src_dim_size: i32,
@@ -44777,11 +48293,21 @@ unsafe extern "C" {
         src: *const c_void, idx: *const c_void, out: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
     ) -> i32;
+    pub fn baracuda_kernels_index_select_i64idx_u32_can_implement(
+        out_numel: i64, rank: i32, select_dim: i32, src_dim_size: i32,
+        out_shape: *const i32, stride_src: *const i64, stride_out: *const i64,
+        src: *const c_void, idx: *const c_void, out: *const c_void,
+    ) -> i32;
     pub fn baracuda_kernels_index_select_i64idx_i64_run(
         out_numel: i64, rank: i32, select_dim: i32, src_dim_size: i32,
         out_shape: *const i32, stride_src: *const i64, stride_out: *const i64,
         src: *const c_void, idx: *const c_void, out: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_index_select_i64idx_i64_can_implement(
+        out_numel: i64, rank: i32, select_dim: i32, src_dim_size: i32,
+        out_shape: *const i32, stride_src: *const i64, stride_out: *const i64,
+        src: *const c_void, idx: *const c_void, out: *const c_void,
     ) -> i32;
 
     // -- scatter (pure-assign; integer value-dtype) --
@@ -44793,12 +48319,24 @@ unsafe extern "C" {
         updates: *const c_void, index: *const c_void, out: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
     ) -> i32;
+    pub fn baracuda_kernels_scatter_u8_can_implement(
+        upd_numel: i64, rank: i32, scatter_dim: i32, out_dim_size: i32,
+        upd_shape: *const i32, stride_upd: *const i64,
+        stride_index: *const i64, stride_out: *const i64,
+        updates: *const c_void, index: *const c_void, out: *const c_void,
+    ) -> i32;
     pub fn baracuda_kernels_scatter_i8_run(
         upd_numel: i64, rank: i32, scatter_dim: i32, out_dim_size: i32,
         upd_shape: *const i32, stride_upd: *const i64,
         stride_index: *const i64, stride_out: *const i64,
         updates: *const c_void, index: *const c_void, out: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_scatter_i8_can_implement(
+        upd_numel: i64, rank: i32, scatter_dim: i32, out_dim_size: i32,
+        upd_shape: *const i32, stride_upd: *const i64,
+        stride_index: *const i64, stride_out: *const i64,
+        updates: *const c_void, index: *const c_void, out: *const c_void,
     ) -> i32;
     pub fn baracuda_kernels_scatter_u16_run(
         upd_numel: i64, rank: i32, scatter_dim: i32, out_dim_size: i32,
@@ -44807,12 +48345,24 @@ unsafe extern "C" {
         updates: *const c_void, index: *const c_void, out: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
     ) -> i32;
+    pub fn baracuda_kernels_scatter_u16_can_implement(
+        upd_numel: i64, rank: i32, scatter_dim: i32, out_dim_size: i32,
+        upd_shape: *const i32, stride_upd: *const i64,
+        stride_index: *const i64, stride_out: *const i64,
+        updates: *const c_void, index: *const c_void, out: *const c_void,
+    ) -> i32;
     pub fn baracuda_kernels_scatter_i16_run(
         upd_numel: i64, rank: i32, scatter_dim: i32, out_dim_size: i32,
         upd_shape: *const i32, stride_upd: *const i64,
         stride_index: *const i64, stride_out: *const i64,
         updates: *const c_void, index: *const c_void, out: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_scatter_i16_can_implement(
+        upd_numel: i64, rank: i32, scatter_dim: i32, out_dim_size: i32,
+        upd_shape: *const i32, stride_upd: *const i64,
+        stride_index: *const i64, stride_out: *const i64,
+        updates: *const c_void, index: *const c_void, out: *const c_void,
     ) -> i32;
     pub fn baracuda_kernels_scatter_u32_run(
         upd_numel: i64, rank: i32, scatter_dim: i32, out_dim_size: i32,
@@ -44821,6 +48371,12 @@ unsafe extern "C" {
         updates: *const c_void, index: *const c_void, out: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
     ) -> i32;
+    pub fn baracuda_kernels_scatter_u32_can_implement(
+        upd_numel: i64, rank: i32, scatter_dim: i32, out_dim_size: i32,
+        upd_shape: *const i32, stride_upd: *const i64,
+        stride_index: *const i64, stride_out: *const i64,
+        updates: *const c_void, index: *const c_void, out: *const c_void,
+    ) -> i32;
     pub fn baracuda_kernels_scatter_i32_run(
         upd_numel: i64, rank: i32, scatter_dim: i32, out_dim_size: i32,
         upd_shape: *const i32, stride_upd: *const i64,
@@ -44828,12 +48384,24 @@ unsafe extern "C" {
         updates: *const c_void, index: *const c_void, out: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
     ) -> i32;
+    pub fn baracuda_kernels_scatter_i32_can_implement(
+        upd_numel: i64, rank: i32, scatter_dim: i32, out_dim_size: i32,
+        upd_shape: *const i32, stride_upd: *const i64,
+        stride_index: *const i64, stride_out: *const i64,
+        updates: *const c_void, index: *const c_void, out: *const c_void,
+    ) -> i32;
     pub fn baracuda_kernels_scatter_i64_run(
         upd_numel: i64, rank: i32, scatter_dim: i32, out_dim_size: i32,
         upd_shape: *const i32, stride_upd: *const i64,
         stride_index: *const i64, stride_out: *const i64,
         updates: *const c_void, index: *const c_void, out: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_scatter_i64_can_implement(
+        upd_numel: i64, rank: i32, scatter_dim: i32, out_dim_size: i32,
+        upd_shape: *const i32, stride_upd: *const i64,
+        stride_index: *const i64, stride_out: *const i64,
+        updates: *const c_void, index: *const c_void, out: *const c_void,
     ) -> i32;
 
     pub fn baracuda_kernels_scatter_i64idx_u8_run(
@@ -44843,12 +48411,24 @@ unsafe extern "C" {
         updates: *const c_void, index: *const c_void, out: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
     ) -> i32;
+    pub fn baracuda_kernels_scatter_i64idx_u8_can_implement(
+        upd_numel: i64, rank: i32, scatter_dim: i32, out_dim_size: i32,
+        upd_shape: *const i32, stride_upd: *const i64,
+        stride_index: *const i64, stride_out: *const i64,
+        updates: *const c_void, index: *const c_void, out: *const c_void,
+    ) -> i32;
     pub fn baracuda_kernels_scatter_i64idx_i8_run(
         upd_numel: i64, rank: i32, scatter_dim: i32, out_dim_size: i32,
         upd_shape: *const i32, stride_upd: *const i64,
         stride_index: *const i64, stride_out: *const i64,
         updates: *const c_void, index: *const c_void, out: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_scatter_i64idx_i8_can_implement(
+        upd_numel: i64, rank: i32, scatter_dim: i32, out_dim_size: i32,
+        upd_shape: *const i32, stride_upd: *const i64,
+        stride_index: *const i64, stride_out: *const i64,
+        updates: *const c_void, index: *const c_void, out: *const c_void,
     ) -> i32;
     pub fn baracuda_kernels_scatter_i64idx_u16_run(
         upd_numel: i64, rank: i32, scatter_dim: i32, out_dim_size: i32,
@@ -44857,12 +48437,24 @@ unsafe extern "C" {
         updates: *const c_void, index: *const c_void, out: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
     ) -> i32;
+    pub fn baracuda_kernels_scatter_i64idx_u16_can_implement(
+        upd_numel: i64, rank: i32, scatter_dim: i32, out_dim_size: i32,
+        upd_shape: *const i32, stride_upd: *const i64,
+        stride_index: *const i64, stride_out: *const i64,
+        updates: *const c_void, index: *const c_void, out: *const c_void,
+    ) -> i32;
     pub fn baracuda_kernels_scatter_i64idx_i16_run(
         upd_numel: i64, rank: i32, scatter_dim: i32, out_dim_size: i32,
         upd_shape: *const i32, stride_upd: *const i64,
         stride_index: *const i64, stride_out: *const i64,
         updates: *const c_void, index: *const c_void, out: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_scatter_i64idx_i16_can_implement(
+        upd_numel: i64, rank: i32, scatter_dim: i32, out_dim_size: i32,
+        upd_shape: *const i32, stride_upd: *const i64,
+        stride_index: *const i64, stride_out: *const i64,
+        updates: *const c_void, index: *const c_void, out: *const c_void,
     ) -> i32;
     pub fn baracuda_kernels_scatter_i64idx_u32_run(
         upd_numel: i64, rank: i32, scatter_dim: i32, out_dim_size: i32,
@@ -44871,6 +48463,12 @@ unsafe extern "C" {
         updates: *const c_void, index: *const c_void, out: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
     ) -> i32;
+    pub fn baracuda_kernels_scatter_i64idx_u32_can_implement(
+        upd_numel: i64, rank: i32, scatter_dim: i32, out_dim_size: i32,
+        upd_shape: *const i32, stride_upd: *const i64,
+        stride_index: *const i64, stride_out: *const i64,
+        updates: *const c_void, index: *const c_void, out: *const c_void,
+    ) -> i32;
     pub fn baracuda_kernels_scatter_i64idx_i32_run(
         upd_numel: i64, rank: i32, scatter_dim: i32, out_dim_size: i32,
         upd_shape: *const i32, stride_upd: *const i64,
@@ -44878,12 +48476,24 @@ unsafe extern "C" {
         updates: *const c_void, index: *const c_void, out: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
     ) -> i32;
+    pub fn baracuda_kernels_scatter_i64idx_i32_can_implement(
+        upd_numel: i64, rank: i32, scatter_dim: i32, out_dim_size: i32,
+        upd_shape: *const i32, stride_upd: *const i64,
+        stride_index: *const i64, stride_out: *const i64,
+        updates: *const c_void, index: *const c_void, out: *const c_void,
+    ) -> i32;
     pub fn baracuda_kernels_scatter_i64idx_i64_run(
         upd_numel: i64, rank: i32, scatter_dim: i32, out_dim_size: i32,
         upd_shape: *const i32, stride_upd: *const i64,
         stride_index: *const i64, stride_out: *const i64,
         updates: *const c_void, index: *const c_void, out: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_scatter_i64idx_i64_can_implement(
+        upd_numel: i64, rank: i32, scatter_dim: i32, out_dim_size: i32,
+        upd_shape: *const i32, stride_upd: *const i64,
+        stride_index: *const i64, stride_out: *const i64,
+        updates: *const c_void, index: *const c_void, out: *const c_void,
     ) -> i32;
 
     // -- index_add (atomicAdd-Σ; native-atomic-only ints) --
@@ -44894,11 +48504,21 @@ unsafe extern "C" {
         src: *const c_void, idx: *const c_void, dst: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
     ) -> i32;
+    pub fn baracuda_kernels_index_add_i32_can_implement(
+        src_numel: i64, rank: i32, add_dim: i32, dst_dim_size: i32,
+        src_shape: *const i32, stride_src: *const i64, stride_dst: *const i64,
+        src: *const c_void, idx: *const c_void, dst: *const c_void,
+    ) -> i32;
     pub fn baracuda_kernels_index_add_u32_run(
         src_numel: i64, rank: i32, add_dim: i32, dst_dim_size: i32,
         src_shape: *const i32, stride_src: *const i64, stride_dst: *const i64,
         src: *const c_void, idx: *const c_void, dst: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_index_add_u32_can_implement(
+        src_numel: i64, rank: i32, add_dim: i32, dst_dim_size: i32,
+        src_shape: *const i32, stride_src: *const i64, stride_dst: *const i64,
+        src: *const c_void, idx: *const c_void, dst: *const c_void,
     ) -> i32;
     pub fn baracuda_kernels_index_add_i64_run(
         src_numel: i64, rank: i32, add_dim: i32, dst_dim_size: i32,
@@ -44906,11 +48526,21 @@ unsafe extern "C" {
         src: *const c_void, idx: *const c_void, dst: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
     ) -> i32;
+    pub fn baracuda_kernels_index_add_i64_can_implement(
+        src_numel: i64, rank: i32, add_dim: i32, dst_dim_size: i32,
+        src_shape: *const i32, stride_src: *const i64, stride_dst: *const i64,
+        src: *const c_void, idx: *const c_void, dst: *const c_void,
+    ) -> i32;
     pub fn baracuda_kernels_index_add_i64idx_i32_run(
         src_numel: i64, rank: i32, add_dim: i32, dst_dim_size: i32,
         src_shape: *const i32, stride_src: *const i64, stride_dst: *const i64,
         src: *const c_void, idx: *const c_void, dst: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_index_add_i64idx_i32_can_implement(
+        src_numel: i64, rank: i32, add_dim: i32, dst_dim_size: i32,
+        src_shape: *const i32, stride_src: *const i64, stride_dst: *const i64,
+        src: *const c_void, idx: *const c_void, dst: *const c_void,
     ) -> i32;
     pub fn baracuda_kernels_index_add_i64idx_u32_run(
         src_numel: i64, rank: i32, add_dim: i32, dst_dim_size: i32,
@@ -44918,11 +48548,21 @@ unsafe extern "C" {
         src: *const c_void, idx: *const c_void, dst: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
     ) -> i32;
+    pub fn baracuda_kernels_index_add_i64idx_u32_can_implement(
+        src_numel: i64, rank: i32, add_dim: i32, dst_dim_size: i32,
+        src_shape: *const i32, stride_src: *const i64, stride_dst: *const i64,
+        src: *const c_void, idx: *const c_void, dst: *const c_void,
+    ) -> i32;
     pub fn baracuda_kernels_index_add_i64idx_i64_run(
         src_numel: i64, rank: i32, add_dim: i32, dst_dim_size: i32,
         src_shape: *const i32, stride_src: *const i64, stride_dst: *const i64,
         src: *const c_void, idx: *const c_void, dst: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    pub fn baracuda_kernels_index_add_i64idx_i64_can_implement(
+        src_numel: i64, rank: i32, add_dim: i32, dst_dim_size: i32,
+        src_shape: *const i32, stride_src: *const i64, stride_dst: *const i64,
+        src: *const c_void, idx: *const c_void, dst: *const c_void,
     ) -> i32;
 
     // ---------- embedding (Phase 7 Milestone 7.5) ----------
@@ -44947,6 +48587,16 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `embedding_f32`.
+    pub fn baracuda_kernels_embedding_f32_can_implement(
+        num_indices: i64,
+        num_embeddings: i32,
+        embedding_dim: i32,
+        padding_idx: i64,
+        weight: *const c_void,
+        indices: *const c_void,
+        out: *const c_void,
+    ) -> i32;
 
     /// `embedding` FW — f64.
     pub fn baracuda_kernels_embedding_f64_run(
@@ -44960,6 +48610,16 @@ unsafe extern "C" {
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `embedding_f64`.
+    pub fn baracuda_kernels_embedding_f64_can_implement(
+        num_indices: i64,
+        num_embeddings: i32,
+        embedding_dim: i32,
+        padding_idx: i64,
+        weight: *const c_void,
+        indices: *const c_void,
+        out: *const c_void,
     ) -> i32;
 
     /// `embedding` FW — f16.
@@ -44975,6 +48635,16 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `embedding_f16`.
+    pub fn baracuda_kernels_embedding_f16_can_implement(
+        num_indices: i64,
+        num_embeddings: i32,
+        embedding_dim: i32,
+        padding_idx: i64,
+        weight: *const c_void,
+        indices: *const c_void,
+        out: *const c_void,
+    ) -> i32;
 
     /// `embedding` FW — bf16.
     pub fn baracuda_kernels_embedding_bf16_run(
@@ -44988,6 +48658,16 @@ unsafe extern "C" {
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `embedding_bf16`.
+    pub fn baracuda_kernels_embedding_bf16_can_implement(
+        num_indices: i64,
+        num_embeddings: i32,
+        embedding_dim: i32,
+        padding_idx: i64,
+        weight: *const c_void,
+        indices: *const c_void,
+        out: *const c_void,
     ) -> i32;
 
     /// `embedding` BW — `dweight[indices[n], :] += dout[n, :]` (atomicAdd),
@@ -45004,6 +48684,16 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `embedding_backward_f32`.
+    pub fn baracuda_kernels_embedding_backward_f32_can_implement(
+        num_indices: i64,
+        num_embeddings: i32,
+        embedding_dim: i32,
+        padding_idx: i64,
+        dout: *const c_void,
+        indices: *const c_void,
+        dweight: *const c_void,
+    ) -> i32;
 
     /// `embedding` BW — f64.
     pub fn baracuda_kernels_embedding_backward_f64_run(
@@ -45017,6 +48707,16 @@ unsafe extern "C" {
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `embedding_backward_f64`.
+    pub fn baracuda_kernels_embedding_backward_f64_can_implement(
+        num_indices: i64,
+        num_embeddings: i32,
+        embedding_dim: i32,
+        padding_idx: i64,
+        dout: *const c_void,
+        indices: *const c_void,
+        dweight: *const c_void,
     ) -> i32;
 
     // ---------- embedding_bag (Phase 7 Milestone 7.5) ----------
@@ -45042,6 +48742,19 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `embedding_bag_f32`.
+    pub fn baracuda_kernels_embedding_bag_f32_can_implement(
+        total_indices: i32,
+        num_embeddings: i32,
+        embedding_dim: i32,
+        num_bags: i32,
+        mode: i32,
+        padding_idx: i64,
+        weight: *const c_void,
+        indices: *const c_void,
+        offsets: *const c_void,
+        out: *const c_void,
+    ) -> i32;
 
     /// `embedding_bag` FW — f64.
     pub fn baracuda_kernels_embedding_bag_f64_run(
@@ -45058,6 +48771,19 @@ unsafe extern "C" {
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `embedding_bag_f64`.
+    pub fn baracuda_kernels_embedding_bag_f64_can_implement(
+        total_indices: i32,
+        num_embeddings: i32,
+        embedding_dim: i32,
+        num_bags: i32,
+        mode: i32,
+        padding_idx: i64,
+        weight: *const c_void,
+        indices: *const c_void,
+        offsets: *const c_void,
+        out: *const c_void,
     ) -> i32;
 
     /// `embedding_bag` FW — f16.
@@ -45076,6 +48802,19 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `embedding_bag_f16`.
+    pub fn baracuda_kernels_embedding_bag_f16_can_implement(
+        total_indices: i32,
+        num_embeddings: i32,
+        embedding_dim: i32,
+        num_bags: i32,
+        mode: i32,
+        padding_idx: i64,
+        weight: *const c_void,
+        indices: *const c_void,
+        offsets: *const c_void,
+        out: *const c_void,
+    ) -> i32;
 
     /// `embedding_bag` FW — bf16.
     pub fn baracuda_kernels_embedding_bag_bf16_run(
@@ -45092,6 +48831,19 @@ unsafe extern "C" {
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `embedding_bag_bf16`.
+    pub fn baracuda_kernels_embedding_bag_bf16_can_implement(
+        total_indices: i32,
+        num_embeddings: i32,
+        embedding_dim: i32,
+        num_bags: i32,
+        mode: i32,
+        padding_idx: i64,
+        weight: *const c_void,
+        indices: *const c_void,
+        offsets: *const c_void,
+        out: *const c_void,
     ) -> i32;
 
     /// `embedding_bag` BW — atomicAdd into `dweight`. f32.
@@ -45110,6 +48862,19 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `embedding_bag_backward_f32`.
+    pub fn baracuda_kernels_embedding_bag_backward_f32_can_implement(
+        total_indices: i32,
+        num_embeddings: i32,
+        embedding_dim: i32,
+        num_bags: i32,
+        mode: i32,
+        padding_idx: i64,
+        dout: *const c_void,
+        indices: *const c_void,
+        offsets: *const c_void,
+        dweight: *const c_void,
+    ) -> i32;
 
     /// `embedding_bag` BW — f64.
     pub fn baracuda_kernels_embedding_bag_backward_f64_run(
@@ -45126,6 +48891,19 @@ unsafe extern "C" {
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `embedding_bag_backward_f64`.
+    pub fn baracuda_kernels_embedding_bag_backward_f64_can_implement(
+        total_indices: i32,
+        num_embeddings: i32,
+        embedding_dim: i32,
+        num_bags: i32,
+        mode: i32,
+        padding_idx: i64,
+        dout: *const c_void,
+        indices: *const c_void,
+        offsets: *const c_void,
+        dweight: *const c_void,
     ) -> i32;
 
     // ---------- i64-index variants (Phase 11.5 / Fuel team feedback #7) ----------
@@ -45151,6 +48929,16 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `embedding_i64idx_f32`.
+    pub fn baracuda_kernels_embedding_i64idx_f32_can_implement(
+        num_indices: i64,
+        num_embeddings: i32,
+        embedding_dim: i32,
+        padding_idx: i64,
+        weight: *const c_void,
+        indices: *const c_void,
+        out: *const c_void,
+    ) -> i32;
 
     /// `embedding` FW — f64, i64 indices.
     pub fn baracuda_kernels_embedding_i64idx_f64_run(
@@ -45164,6 +48952,16 @@ unsafe extern "C" {
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `embedding_i64idx_f64`.
+    pub fn baracuda_kernels_embedding_i64idx_f64_can_implement(
+        num_indices: i64,
+        num_embeddings: i32,
+        embedding_dim: i32,
+        padding_idx: i64,
+        weight: *const c_void,
+        indices: *const c_void,
+        out: *const c_void,
     ) -> i32;
 
     /// `embedding` FW — f16, i64 indices.
@@ -45179,6 +48977,16 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `embedding_i64idx_f16`.
+    pub fn baracuda_kernels_embedding_i64idx_f16_can_implement(
+        num_indices: i64,
+        num_embeddings: i32,
+        embedding_dim: i32,
+        padding_idx: i64,
+        weight: *const c_void,
+        indices: *const c_void,
+        out: *const c_void,
+    ) -> i32;
 
     /// `embedding` FW — bf16, i64 indices.
     pub fn baracuda_kernels_embedding_i64idx_bf16_run(
@@ -45192,6 +49000,16 @@ unsafe extern "C" {
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `embedding_i64idx_bf16`.
+    pub fn baracuda_kernels_embedding_i64idx_bf16_can_implement(
+        num_indices: i64,
+        num_embeddings: i32,
+        embedding_dim: i32,
+        padding_idx: i64,
+        weight: *const c_void,
+        indices: *const c_void,
+        out: *const c_void,
     ) -> i32;
 
     /// `embedding` BW — f32, i64 indices.
@@ -45207,6 +49025,16 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `embedding_backward_i64idx_f32`.
+    pub fn baracuda_kernels_embedding_backward_i64idx_f32_can_implement(
+        num_indices: i64,
+        num_embeddings: i32,
+        embedding_dim: i32,
+        padding_idx: i64,
+        dout: *const c_void,
+        indices: *const c_void,
+        dweight: *const c_void,
+    ) -> i32;
 
     /// `embedding` BW — f64, i64 indices.
     pub fn baracuda_kernels_embedding_backward_i64idx_f64_run(
@@ -45220,6 +49048,16 @@ unsafe extern "C" {
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `embedding_backward_i64idx_f64`.
+    pub fn baracuda_kernels_embedding_backward_i64idx_f64_can_implement(
+        num_indices: i64,
+        num_embeddings: i32,
+        embedding_dim: i32,
+        padding_idx: i64,
+        dout: *const c_void,
+        indices: *const c_void,
+        dweight: *const c_void,
     ) -> i32;
 
     /// `embedding_bag` FW — f32, i64 indices.
@@ -45238,6 +49076,19 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `embedding_bag_i64idx_f32`.
+    pub fn baracuda_kernels_embedding_bag_i64idx_f32_can_implement(
+        total_indices: i32,
+        num_embeddings: i32,
+        embedding_dim: i32,
+        num_bags: i32,
+        mode: i32,
+        padding_idx: i64,
+        weight: *const c_void,
+        indices: *const c_void,
+        offsets: *const c_void,
+        out: *const c_void,
+    ) -> i32;
 
     /// `embedding_bag` FW — f64, i64 indices.
     pub fn baracuda_kernels_embedding_bag_i64idx_f64_run(
@@ -45254,6 +49105,19 @@ unsafe extern "C" {
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `embedding_bag_i64idx_f64`.
+    pub fn baracuda_kernels_embedding_bag_i64idx_f64_can_implement(
+        total_indices: i32,
+        num_embeddings: i32,
+        embedding_dim: i32,
+        num_bags: i32,
+        mode: i32,
+        padding_idx: i64,
+        weight: *const c_void,
+        indices: *const c_void,
+        offsets: *const c_void,
+        out: *const c_void,
     ) -> i32;
 
     /// `embedding_bag` FW — f16, i64 indices.
@@ -45272,6 +49136,19 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `embedding_bag_i64idx_f16`.
+    pub fn baracuda_kernels_embedding_bag_i64idx_f16_can_implement(
+        total_indices: i32,
+        num_embeddings: i32,
+        embedding_dim: i32,
+        num_bags: i32,
+        mode: i32,
+        padding_idx: i64,
+        weight: *const c_void,
+        indices: *const c_void,
+        offsets: *const c_void,
+        out: *const c_void,
+    ) -> i32;
 
     /// `embedding_bag` FW — bf16, i64 indices.
     pub fn baracuda_kernels_embedding_bag_i64idx_bf16_run(
@@ -45288,6 +49165,19 @@ unsafe extern "C" {
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `embedding_bag_i64idx_bf16`.
+    pub fn baracuda_kernels_embedding_bag_i64idx_bf16_can_implement(
+        total_indices: i32,
+        num_embeddings: i32,
+        embedding_dim: i32,
+        num_bags: i32,
+        mode: i32,
+        padding_idx: i64,
+        weight: *const c_void,
+        indices: *const c_void,
+        offsets: *const c_void,
+        out: *const c_void,
     ) -> i32;
 
     /// `embedding_bag` BW — f32, i64 indices.
@@ -45306,6 +49196,19 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `embedding_bag_backward_i64idx_f32`.
+    pub fn baracuda_kernels_embedding_bag_backward_i64idx_f32_can_implement(
+        total_indices: i32,
+        num_embeddings: i32,
+        embedding_dim: i32,
+        num_bags: i32,
+        mode: i32,
+        padding_idx: i64,
+        dout: *const c_void,
+        indices: *const c_void,
+        offsets: *const c_void,
+        dweight: *const c_void,
+    ) -> i32;
 
     /// `embedding_bag` BW — f64, i64 indices.
     pub fn baracuda_kernels_embedding_bag_backward_i64idx_f64_run(
@@ -45322,6 +49225,19 @@ unsafe extern "C" {
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `embedding_bag_backward_i64idx_f64`.
+    pub fn baracuda_kernels_embedding_bag_backward_i64idx_f64_can_implement(
+        total_indices: i32,
+        num_embeddings: i32,
+        embedding_dim: i32,
+        num_bags: i32,
+        mode: i32,
+        padding_idx: i64,
+        dout: *const c_void,
+        indices: *const c_void,
+        offsets: *const c_void,
+        dweight: *const c_void,
     ) -> i32;
 
     // ---------- Phase 25: embedding_bag Max mode (FW + BW) ----------
@@ -45349,6 +49265,19 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `embedding_bag_max_f32`.
+    pub fn baracuda_kernels_embedding_bag_max_f32_can_implement(
+        total_indices: i32,
+        num_embeddings: i32,
+        embedding_dim: i32,
+        num_bags: i32,
+        padding_idx: i64,
+        weight: *const c_void,
+        indices: *const c_void,
+        offsets: *const c_void,
+        out: *const c_void,
+        out_index: *const c_void,
+    ) -> i32;
 
     /// `embedding_bag_max` FW — f64.
     pub fn baracuda_kernels_embedding_bag_max_f64_run(
@@ -45366,6 +49295,19 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `embedding_bag_max_f64`.
+    pub fn baracuda_kernels_embedding_bag_max_f64_can_implement(
+        total_indices: i32,
+        num_embeddings: i32,
+        embedding_dim: i32,
+        num_bags: i32,
+        padding_idx: i64,
+        weight: *const c_void,
+        indices: *const c_void,
+        offsets: *const c_void,
+        out: *const c_void,
+        out_index: *const c_void,
+    ) -> i32;
 
     /// `embedding_bag_max` FW — f16.
     pub fn baracuda_kernels_embedding_bag_max_f16_run(
@@ -45374,6 +49316,13 @@ unsafe extern "C" {
         weight: *const c_void, indices: *const c_void, offsets: *const c_void,
         out: *mut c_void, out_index: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `embedding_bag_max_f16`.
+    pub fn baracuda_kernels_embedding_bag_max_f16_can_implement(
+        total_indices: i32, num_embeddings: i32, embedding_dim: i32,
+        num_bags: i32, padding_idx: i64,
+        weight: *const c_void, indices: *const c_void, offsets: *const c_void,
+        out: *const c_void, out_index: *const c_void,
     ) -> i32;
 
     /// `embedding_bag_max` FW — bf16.
@@ -45384,6 +49333,13 @@ unsafe extern "C" {
         out: *mut c_void, out_index: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `embedding_bag_max_bf16`.
+    pub fn baracuda_kernels_embedding_bag_max_bf16_can_implement(
+        total_indices: i32, num_embeddings: i32, embedding_dim: i32,
+        num_bags: i32, padding_idx: i64,
+        weight: *const c_void, indices: *const c_void, offsets: *const c_void,
+        out: *const c_void, out_index: *const c_void,
+    ) -> i32;
 
     /// `embedding_bag_max` FW — f32, i64 indices.
     pub fn baracuda_kernels_embedding_bag_max_i64idx_f32_run(
@@ -45392,6 +49348,13 @@ unsafe extern "C" {
         weight: *const c_void, indices: *const c_void, offsets: *const c_void,
         out: *mut c_void, out_index: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `embedding_bag_max_i64idx_f32`.
+    pub fn baracuda_kernels_embedding_bag_max_i64idx_f32_can_implement(
+        total_indices: i32, num_embeddings: i32, embedding_dim: i32,
+        num_bags: i32, padding_idx: i64,
+        weight: *const c_void, indices: *const c_void, offsets: *const c_void,
+        out: *const c_void, out_index: *const c_void,
     ) -> i32;
 
     /// `embedding_bag_max` FW — f64, i64 indices.
@@ -45402,6 +49365,13 @@ unsafe extern "C" {
         out: *mut c_void, out_index: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `embedding_bag_max_i64idx_f64`.
+    pub fn baracuda_kernels_embedding_bag_max_i64idx_f64_can_implement(
+        total_indices: i32, num_embeddings: i32, embedding_dim: i32,
+        num_bags: i32, padding_idx: i64,
+        weight: *const c_void, indices: *const c_void, offsets: *const c_void,
+        out: *const c_void, out_index: *const c_void,
+    ) -> i32;
 
     /// `embedding_bag_max` FW — f16, i64 indices.
     pub fn baracuda_kernels_embedding_bag_max_i64idx_f16_run(
@@ -45411,6 +49381,13 @@ unsafe extern "C" {
         out: *mut c_void, out_index: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `embedding_bag_max_i64idx_f16`.
+    pub fn baracuda_kernels_embedding_bag_max_i64idx_f16_can_implement(
+        total_indices: i32, num_embeddings: i32, embedding_dim: i32,
+        num_bags: i32, padding_idx: i64,
+        weight: *const c_void, indices: *const c_void, offsets: *const c_void,
+        out: *const c_void, out_index: *const c_void,
+    ) -> i32;
 
     /// `embedding_bag_max` FW — bf16, i64 indices.
     pub fn baracuda_kernels_embedding_bag_max_i64idx_bf16_run(
@@ -45419,6 +49396,13 @@ unsafe extern "C" {
         weight: *const c_void, indices: *const c_void, offsets: *const c_void,
         out: *mut c_void, out_index: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `embedding_bag_max_i64idx_bf16`.
+    pub fn baracuda_kernels_embedding_bag_max_i64idx_bf16_can_implement(
+        total_indices: i32, num_embeddings: i32, embedding_dim: i32,
+        num_bags: i32, padding_idx: i64,
+        weight: *const c_void, indices: *const c_void, offsets: *const c_void,
+        out: *const c_void, out_index: *const c_void,
     ) -> i32;
 
     /// `embedding_bag_max` BW — f32. Index dtype is fixed at i32
@@ -45434,6 +49418,15 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `embedding_bag_max_backward_f32`.
+    pub fn baracuda_kernels_embedding_bag_max_backward_f32_can_implement(
+        num_embeddings: i32,
+        embedding_dim: i32,
+        num_bags: i32,
+        dout: *const c_void,
+        out_index: *const c_void,
+        dweight: *const c_void,
+    ) -> i32;
 
     /// `embedding_bag_max` BW — f64.
     pub fn baracuda_kernels_embedding_bag_max_backward_f64_run(
@@ -45446,6 +49439,15 @@ unsafe extern "C" {
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `embedding_bag_max_backward_f64`.
+    pub fn baracuda_kernels_embedding_bag_max_backward_f64_can_implement(
+        num_embeddings: i32,
+        embedding_dim: i32,
+        num_bags: i32,
+        dout: *const c_void,
+        out_index: *const c_void,
+        dweight: *const c_void,
     ) -> i32;
 }
 
@@ -45498,6 +49500,11 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `segment_sum_f32`.
+    pub fn baracuda_kernels_segment_sum_f32_can_implement(
+        n: i32, d: i32, num_segments: i32,
+        input: *const c_void, segment_ids: *const c_void, output: *const c_void,
+    ) -> i32;
 
     /// `segment_sum` — f64.
     pub fn baracuda_kernels_segment_sum_f64_run(
@@ -45510,6 +49517,11 @@ unsafe extern "C" {
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `segment_sum_f64`.
+    pub fn baracuda_kernels_segment_sum_f64_can_implement(
+        n: i32, d: i32, num_segments: i32,
+        input: *const c_void, segment_ids: *const c_void, output: *const c_void,
     ) -> i32;
 
     /// `out[s, d] = mean_{n : seg[n] == s} input[n, d]` — sorted. f32.
@@ -45524,6 +49536,11 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `segment_mean_f32`.
+    pub fn baracuda_kernels_segment_mean_f32_can_implement(
+        n: i32, d: i32, num_segments: i32,
+        input: *const c_void, segment_ids: *const c_void, output: *const c_void,
+    ) -> i32;
 
     /// `segment_mean` — f64.
     pub fn baracuda_kernels_segment_mean_f64_run(
@@ -45536,6 +49553,11 @@ unsafe extern "C" {
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `segment_mean_f64`.
+    pub fn baracuda_kernels_segment_mean_f64_can_implement(
+        n: i32, d: i32, num_segments: i32,
+        input: *const c_void, segment_ids: *const c_void, output: *const c_void,
     ) -> i32;
 
     /// `out[s, d] = max_{n : seg[n] == s} input[n, d]` — sorted. f32.
@@ -45550,6 +49572,11 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `segment_max_f32`.
+    pub fn baracuda_kernels_segment_max_f32_can_implement(
+        n: i32, d: i32, num_segments: i32,
+        input: *const c_void, segment_ids: *const c_void, output: *const c_void,
+    ) -> i32;
 
     /// `segment_max` — f64.
     pub fn baracuda_kernels_segment_max_f64_run(
@@ -45562,6 +49589,11 @@ unsafe extern "C" {
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `segment_max_f64`.
+    pub fn baracuda_kernels_segment_max_f64_can_implement(
+        n: i32, d: i32, num_segments: i32,
+        input: *const c_void, segment_ids: *const c_void, output: *const c_void,
     ) -> i32;
 
     /// `out[s, d] = min_{n : seg[n] == s} input[n, d]` — sorted. f32.
@@ -45576,6 +49608,11 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `segment_min_f32`.
+    pub fn baracuda_kernels_segment_min_f32_can_implement(
+        n: i32, d: i32, num_segments: i32,
+        input: *const c_void, segment_ids: *const c_void, output: *const c_void,
+    ) -> i32;
 
     /// `segment_min` — f64.
     pub fn baracuda_kernels_segment_min_f64_run(
@@ -45588,6 +49625,11 @@ unsafe extern "C" {
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `segment_min_f64`.
+    pub fn baracuda_kernels_segment_min_f64_can_implement(
+        n: i32, d: i32, num_segments: i32,
+        input: *const c_void, segment_ids: *const c_void, output: *const c_void,
     ) -> i32;
 
     /// `out[s, d] = prod_{n : seg[n] == s} input[n, d]` — sorted. f32.
@@ -45602,6 +49644,11 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `segment_prod_f32`.
+    pub fn baracuda_kernels_segment_prod_f32_can_implement(
+        n: i32, d: i32, num_segments: i32,
+        input: *const c_void, segment_ids: *const c_void, output: *const c_void,
+    ) -> i32;
 
     /// `segment_prod` — f64.
     pub fn baracuda_kernels_segment_prod_f64_run(
@@ -45614,6 +49661,11 @@ unsafe extern "C" {
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `segment_prod_f64`.
+    pub fn baracuda_kernels_segment_prod_f64_can_implement(
+        n: i32, d: i32, num_segments: i32,
+        input: *const c_void, segment_ids: *const c_void, output: *const c_void,
     ) -> i32;
 
     // ---------- Unsorted FW ----------
@@ -45632,6 +49684,11 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `unsorted_segment_sum_f32`.
+    pub fn baracuda_kernels_unsorted_segment_sum_f32_can_implement(
+        n: i32, d: i32, num_segments: i32,
+        input: *const c_void, segment_ids: *const c_void, output: *const c_void,
+    ) -> i32;
 
     /// `unsorted_segment_sum` — f64.
     pub fn baracuda_kernels_unsorted_segment_sum_f64_run(
@@ -45644,6 +49701,11 @@ unsafe extern "C" {
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `unsorted_segment_sum_f64`.
+    pub fn baracuda_kernels_unsorted_segment_sum_f64_can_implement(
+        n: i32, d: i32, num_segments: i32,
+        input: *const c_void, segment_ids: *const c_void, output: *const c_void,
     ) -> i32;
 
     /// `out[s, d] = mean_{n : seg[n] == s} input[n, d]` — unsorted.
@@ -45660,6 +49722,11 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `unsorted_segment_mean_f32`.
+    pub fn baracuda_kernels_unsorted_segment_mean_f32_can_implement(
+        n: i32, d: i32, num_segments: i32,
+        input: *const c_void, segment_ids: *const c_void, output: *const c_void,
+    ) -> i32;
 
     /// `unsorted_segment_mean` — f64.
     pub fn baracuda_kernels_unsorted_segment_mean_f64_run(
@@ -45672,6 +49739,11 @@ unsafe extern "C" {
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `unsorted_segment_mean_f64`.
+    pub fn baracuda_kernels_unsorted_segment_mean_f64_can_implement(
+        n: i32, d: i32, num_segments: i32,
+        input: *const c_void, segment_ids: *const c_void, output: *const c_void,
     ) -> i32;
 
     /// `out[s, d] = max_{n : seg[n] == s} input[n, d]` — unsorted;
@@ -45688,6 +49760,11 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `unsorted_segment_max_f32`.
+    pub fn baracuda_kernels_unsorted_segment_max_f32_can_implement(
+        n: i32, d: i32, num_segments: i32,
+        input: *const c_void, segment_ids: *const c_void, output: *const c_void,
+    ) -> i32;
 
     /// `unsorted_segment_max` — f64.
     pub fn baracuda_kernels_unsorted_segment_max_f64_run(
@@ -45700,6 +49777,11 @@ unsafe extern "C" {
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `unsorted_segment_max_f64`.
+    pub fn baracuda_kernels_unsorted_segment_max_f64_can_implement(
+        n: i32, d: i32, num_segments: i32,
+        input: *const c_void, segment_ids: *const c_void, output: *const c_void,
     ) -> i32;
 
     /// `out[s, d] = min_{n : seg[n] == s} input[n, d]` — unsorted. f32.
@@ -45714,6 +49796,11 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `unsorted_segment_min_f32`.
+    pub fn baracuda_kernels_unsorted_segment_min_f32_can_implement(
+        n: i32, d: i32, num_segments: i32,
+        input: *const c_void, segment_ids: *const c_void, output: *const c_void,
+    ) -> i32;
 
     /// `unsorted_segment_min` — f64.
     pub fn baracuda_kernels_unsorted_segment_min_f64_run(
@@ -45726,6 +49813,11 @@ unsafe extern "C" {
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `unsorted_segment_min_f64`.
+    pub fn baracuda_kernels_unsorted_segment_min_f64_can_implement(
+        n: i32, d: i32, num_segments: i32,
+        input: *const c_void, segment_ids: *const c_void, output: *const c_void,
     ) -> i32;
 
     // ---------- BW (sum / mean) ----------
@@ -45747,6 +49839,11 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `segment_sum_backward_f32`.
+    pub fn baracuda_kernels_segment_sum_backward_f32_can_implement(
+        n: i32, d: i32, num_segments: i32,
+        d_output: *const c_void, segment_ids: *const c_void, d_input: *const c_void,
+    ) -> i32;
 
     /// `segment_sum_backward` — f64.
     pub fn baracuda_kernels_segment_sum_backward_f64_run(
@@ -45759,6 +49856,11 @@ unsafe extern "C" {
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `segment_sum_backward_f64`.
+    pub fn baracuda_kernels_segment_sum_backward_f64_can_implement(
+        n: i32, d: i32, num_segments: i32,
+        d_output: *const c_void, segment_ids: *const c_void, d_input: *const c_void,
     ) -> i32;
 
     /// Same kernel as `segment_sum_backward_f32`; distinct symbol for
@@ -45774,6 +49876,11 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `unsorted_segment_sum_backward_f32`.
+    pub fn baracuda_kernels_unsorted_segment_sum_backward_f32_can_implement(
+        n: i32, d: i32, num_segments: i32,
+        d_output: *const c_void, segment_ids: *const c_void, d_input: *const c_void,
+    ) -> i32;
 
     /// `unsorted_segment_sum_backward` — f64.
     pub fn baracuda_kernels_unsorted_segment_sum_backward_f64_run(
@@ -45786,6 +49893,11 @@ unsafe extern "C" {
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `unsorted_segment_sum_backward_f64`.
+    pub fn baracuda_kernels_unsorted_segment_sum_backward_f64_can_implement(
+        n: i32, d: i32, num_segments: i32,
+        d_output: *const c_void, segment_ids: *const c_void, d_input: *const c_void,
     ) -> i32;
 
     /// `d_input[n, d] = d_output[seg[n], d] / count[seg[n]]`.
@@ -45801,6 +49913,11 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `segment_mean_backward_f32`.
+    pub fn baracuda_kernels_segment_mean_backward_f32_can_implement(
+        n: i32, d: i32, num_segments: i32,
+        d_output: *const c_void, segment_ids: *const c_void, d_input: *const c_void,
+    ) -> i32;
 
     /// `segment_mean_backward` — f64.
     pub fn baracuda_kernels_segment_mean_backward_f64_run(
@@ -45813,6 +49930,11 @@ unsafe extern "C" {
         workspace: *mut c_void,
         workspace_bytes: usize,
         stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `segment_mean_backward_f64`.
+    pub fn baracuda_kernels_segment_mean_backward_f64_can_implement(
+        n: i32, d: i32, num_segments: i32,
+        d_output: *const c_void, segment_ids: *const c_void, d_input: *const c_void,
     ) -> i32;
 
     /// `unsorted_segment_mean_backward` — f32.
@@ -45827,6 +49949,11 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `unsorted_segment_mean_backward_f32`.
+    pub fn baracuda_kernels_unsorted_segment_mean_backward_f32_can_implement(
+        n: i32, d: i32, num_segments: i32,
+        d_output: *const c_void, segment_ids: *const c_void, d_input: *const c_void,
+    ) -> i32;
 
     /// `unsorted_segment_mean_backward` — f64.
     pub fn baracuda_kernels_unsorted_segment_mean_backward_f64_run(
@@ -45840,6 +49967,11 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `unsorted_segment_mean_backward_f64`.
+    pub fn baracuda_kernels_unsorted_segment_mean_backward_f64_can_implement(
+        n: i32, d: i32, num_segments: i32,
+        d_output: *const c_void, segment_ids: *const c_void, d_input: *const c_void,
+    ) -> i32;
 
     // ---------- segment / scatter-reduce i64 variants (Phase 11.5) ----------
     //
@@ -45848,33 +49980,59 @@ unsafe extern "C" {
     // differing only in the dereferenced type of the `segment_ids`
     // buffer.
     pub fn baracuda_kernels_segment_sum_i64idx_f32_run(n: i32, d: i32, num_segments: i32, input: *const c_void, segment_ids: *const c_void, output: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    pub fn baracuda_kernels_segment_sum_i64idx_f32_can_implement(n: i32, d: i32, num_segments: i32, input: *const c_void, segment_ids: *const c_void, output: *const c_void) -> i32;
     pub fn baracuda_kernels_segment_sum_i64idx_f64_run(n: i32, d: i32, num_segments: i32, input: *const c_void, segment_ids: *const c_void, output: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    pub fn baracuda_kernels_segment_sum_i64idx_f64_can_implement(n: i32, d: i32, num_segments: i32, input: *const c_void, segment_ids: *const c_void, output: *const c_void) -> i32;
     pub fn baracuda_kernels_segment_mean_i64idx_f32_run(n: i32, d: i32, num_segments: i32, input: *const c_void, segment_ids: *const c_void, output: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    pub fn baracuda_kernels_segment_mean_i64idx_f32_can_implement(n: i32, d: i32, num_segments: i32, input: *const c_void, segment_ids: *const c_void, output: *const c_void) -> i32;
     pub fn baracuda_kernels_segment_mean_i64idx_f64_run(n: i32, d: i32, num_segments: i32, input: *const c_void, segment_ids: *const c_void, output: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    pub fn baracuda_kernels_segment_mean_i64idx_f64_can_implement(n: i32, d: i32, num_segments: i32, input: *const c_void, segment_ids: *const c_void, output: *const c_void) -> i32;
     pub fn baracuda_kernels_segment_max_i64idx_f32_run(n: i32, d: i32, num_segments: i32, input: *const c_void, segment_ids: *const c_void, output: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    pub fn baracuda_kernels_segment_max_i64idx_f32_can_implement(n: i32, d: i32, num_segments: i32, input: *const c_void, segment_ids: *const c_void, output: *const c_void) -> i32;
     pub fn baracuda_kernels_segment_max_i64idx_f64_run(n: i32, d: i32, num_segments: i32, input: *const c_void, segment_ids: *const c_void, output: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    pub fn baracuda_kernels_segment_max_i64idx_f64_can_implement(n: i32, d: i32, num_segments: i32, input: *const c_void, segment_ids: *const c_void, output: *const c_void) -> i32;
     pub fn baracuda_kernels_segment_min_i64idx_f32_run(n: i32, d: i32, num_segments: i32, input: *const c_void, segment_ids: *const c_void, output: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    pub fn baracuda_kernels_segment_min_i64idx_f32_can_implement(n: i32, d: i32, num_segments: i32, input: *const c_void, segment_ids: *const c_void, output: *const c_void) -> i32;
     pub fn baracuda_kernels_segment_min_i64idx_f64_run(n: i32, d: i32, num_segments: i32, input: *const c_void, segment_ids: *const c_void, output: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    pub fn baracuda_kernels_segment_min_i64idx_f64_can_implement(n: i32, d: i32, num_segments: i32, input: *const c_void, segment_ids: *const c_void, output: *const c_void) -> i32;
     pub fn baracuda_kernels_segment_prod_i64idx_f32_run(n: i32, d: i32, num_segments: i32, input: *const c_void, segment_ids: *const c_void, output: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    pub fn baracuda_kernels_segment_prod_i64idx_f32_can_implement(n: i32, d: i32, num_segments: i32, input: *const c_void, segment_ids: *const c_void, output: *const c_void) -> i32;
     pub fn baracuda_kernels_segment_prod_i64idx_f64_run(n: i32, d: i32, num_segments: i32, input: *const c_void, segment_ids: *const c_void, output: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    pub fn baracuda_kernels_segment_prod_i64idx_f64_can_implement(n: i32, d: i32, num_segments: i32, input: *const c_void, segment_ids: *const c_void, output: *const c_void) -> i32;
 
     pub fn baracuda_kernels_unsorted_segment_sum_i64idx_f32_run(n: i32, d: i32, num_segments: i32, input: *const c_void, segment_ids: *const c_void, output: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    pub fn baracuda_kernels_unsorted_segment_sum_i64idx_f32_can_implement(n: i32, d: i32, num_segments: i32, input: *const c_void, segment_ids: *const c_void, output: *const c_void) -> i32;
     pub fn baracuda_kernels_unsorted_segment_sum_i64idx_f64_run(n: i32, d: i32, num_segments: i32, input: *const c_void, segment_ids: *const c_void, output: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    pub fn baracuda_kernels_unsorted_segment_sum_i64idx_f64_can_implement(n: i32, d: i32, num_segments: i32, input: *const c_void, segment_ids: *const c_void, output: *const c_void) -> i32;
     pub fn baracuda_kernels_unsorted_segment_mean_i64idx_f32_run(n: i32, d: i32, num_segments: i32, input: *const c_void, segment_ids: *const c_void, output: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    pub fn baracuda_kernels_unsorted_segment_mean_i64idx_f32_can_implement(n: i32, d: i32, num_segments: i32, input: *const c_void, segment_ids: *const c_void, output: *const c_void) -> i32;
     pub fn baracuda_kernels_unsorted_segment_mean_i64idx_f64_run(n: i32, d: i32, num_segments: i32, input: *const c_void, segment_ids: *const c_void, output: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    pub fn baracuda_kernels_unsorted_segment_mean_i64idx_f64_can_implement(n: i32, d: i32, num_segments: i32, input: *const c_void, segment_ids: *const c_void, output: *const c_void) -> i32;
     pub fn baracuda_kernels_unsorted_segment_max_i64idx_f32_run(n: i32, d: i32, num_segments: i32, input: *const c_void, segment_ids: *const c_void, output: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    pub fn baracuda_kernels_unsorted_segment_max_i64idx_f32_can_implement(n: i32, d: i32, num_segments: i32, input: *const c_void, segment_ids: *const c_void, output: *const c_void) -> i32;
     pub fn baracuda_kernels_unsorted_segment_max_i64idx_f64_run(n: i32, d: i32, num_segments: i32, input: *const c_void, segment_ids: *const c_void, output: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    pub fn baracuda_kernels_unsorted_segment_max_i64idx_f64_can_implement(n: i32, d: i32, num_segments: i32, input: *const c_void, segment_ids: *const c_void, output: *const c_void) -> i32;
     pub fn baracuda_kernels_unsorted_segment_min_i64idx_f32_run(n: i32, d: i32, num_segments: i32, input: *const c_void, segment_ids: *const c_void, output: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    pub fn baracuda_kernels_unsorted_segment_min_i64idx_f32_can_implement(n: i32, d: i32, num_segments: i32, input: *const c_void, segment_ids: *const c_void, output: *const c_void) -> i32;
     pub fn baracuda_kernels_unsorted_segment_min_i64idx_f64_run(n: i32, d: i32, num_segments: i32, input: *const c_void, segment_ids: *const c_void, output: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    pub fn baracuda_kernels_unsorted_segment_min_i64idx_f64_can_implement(n: i32, d: i32, num_segments: i32, input: *const c_void, segment_ids: *const c_void, output: *const c_void) -> i32;
 
     pub fn baracuda_kernels_segment_sum_backward_i64idx_f32_run(n: i32, d: i32, num_segments: i32, d_output: *const c_void, segment_ids: *const c_void, d_input: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    pub fn baracuda_kernels_segment_sum_backward_i64idx_f32_can_implement(n: i32, d: i32, num_segments: i32, d_output: *const c_void, segment_ids: *const c_void, d_input: *const c_void) -> i32;
     pub fn baracuda_kernels_segment_sum_backward_i64idx_f64_run(n: i32, d: i32, num_segments: i32, d_output: *const c_void, segment_ids: *const c_void, d_input: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    pub fn baracuda_kernels_segment_sum_backward_i64idx_f64_can_implement(n: i32, d: i32, num_segments: i32, d_output: *const c_void, segment_ids: *const c_void, d_input: *const c_void) -> i32;
     pub fn baracuda_kernels_unsorted_segment_sum_backward_i64idx_f32_run(n: i32, d: i32, num_segments: i32, d_output: *const c_void, segment_ids: *const c_void, d_input: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    pub fn baracuda_kernels_unsorted_segment_sum_backward_i64idx_f32_can_implement(n: i32, d: i32, num_segments: i32, d_output: *const c_void, segment_ids: *const c_void, d_input: *const c_void) -> i32;
     pub fn baracuda_kernels_unsorted_segment_sum_backward_i64idx_f64_run(n: i32, d: i32, num_segments: i32, d_output: *const c_void, segment_ids: *const c_void, d_input: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    pub fn baracuda_kernels_unsorted_segment_sum_backward_i64idx_f64_can_implement(n: i32, d: i32, num_segments: i32, d_output: *const c_void, segment_ids: *const c_void, d_input: *const c_void) -> i32;
     pub fn baracuda_kernels_segment_mean_backward_i64idx_f32_run(n: i32, d: i32, num_segments: i32, d_output: *const c_void, segment_ids: *const c_void, d_input: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    pub fn baracuda_kernels_segment_mean_backward_i64idx_f32_can_implement(n: i32, d: i32, num_segments: i32, d_output: *const c_void, segment_ids: *const c_void, d_input: *const c_void) -> i32;
     pub fn baracuda_kernels_segment_mean_backward_i64idx_f64_run(n: i32, d: i32, num_segments: i32, d_output: *const c_void, segment_ids: *const c_void, d_input: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    pub fn baracuda_kernels_segment_mean_backward_i64idx_f64_can_implement(n: i32, d: i32, num_segments: i32, d_output: *const c_void, segment_ids: *const c_void, d_input: *const c_void) -> i32;
     pub fn baracuda_kernels_unsorted_segment_mean_backward_i64idx_f32_run(n: i32, d: i32, num_segments: i32, d_output: *const c_void, segment_ids: *const c_void, d_input: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    pub fn baracuda_kernels_unsorted_segment_mean_backward_i64idx_f32_can_implement(n: i32, d: i32, num_segments: i32, d_output: *const c_void, segment_ids: *const c_void, d_input: *const c_void) -> i32;
     pub fn baracuda_kernels_unsorted_segment_mean_backward_i64idx_f64_run(n: i32, d: i32, num_segments: i32, d_output: *const c_void, segment_ids: *const c_void, d_input: *mut c_void, workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void) -> i32;
+    pub fn baracuda_kernels_unsorted_segment_mean_backward_i64idx_f64_can_implement(n: i32, d: i32, num_segments: i32, d_output: *const c_void, segment_ids: *const c_void, d_input: *const c_void) -> i32;
 
     // ---------- Phase 25: Max / Min BW (sorted + unsorted) ----------
     //
@@ -45893,6 +50051,14 @@ unsafe extern "C" {
         d_input: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `segment_max_backward_f32`.
+    pub fn baracuda_kernels_segment_max_backward_f32_can_implement(
+        n: i32, d: i32, num_segments: i32,
+        d_output: *const c_void,
+        input: *const c_void,
+        segment_ids: *const c_void,
+        d_input: *const c_void,
+    ) -> i32;
 
     /// `segment_max_backward` — f64.
     pub fn baracuda_kernels_segment_max_backward_f64_run(
@@ -45902,6 +50068,14 @@ unsafe extern "C" {
         segment_ids: *const c_void,
         d_input: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `segment_max_backward_f64`.
+    pub fn baracuda_kernels_segment_max_backward_f64_can_implement(
+        n: i32, d: i32, num_segments: i32,
+        d_output: *const c_void,
+        input: *const c_void,
+        segment_ids: *const c_void,
+        d_input: *const c_void,
     ) -> i32;
 
     /// `segment_min_backward` — f32.
@@ -45913,6 +50087,14 @@ unsafe extern "C" {
         d_input: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `segment_min_backward_f32`.
+    pub fn baracuda_kernels_segment_min_backward_f32_can_implement(
+        n: i32, d: i32, num_segments: i32,
+        d_output: *const c_void,
+        input: *const c_void,
+        segment_ids: *const c_void,
+        d_input: *const c_void,
+    ) -> i32;
 
     /// `segment_min_backward` — f64.
     pub fn baracuda_kernels_segment_min_backward_f64_run(
@@ -45922,6 +50104,14 @@ unsafe extern "C" {
         segment_ids: *const c_void,
         d_input: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `segment_min_backward_f64`.
+    pub fn baracuda_kernels_segment_min_backward_f64_can_implement(
+        n: i32, d: i32, num_segments: i32,
+        d_output: *const c_void,
+        input: *const c_void,
+        segment_ids: *const c_void,
+        d_input: *const c_void,
     ) -> i32;
 
     /// `unsorted_segment_max_backward` — f32.
@@ -45933,6 +50123,14 @@ unsafe extern "C" {
         d_input: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `unsorted_segment_max_backward_f32`.
+    pub fn baracuda_kernels_unsorted_segment_max_backward_f32_can_implement(
+        n: i32, d: i32, num_segments: i32,
+        d_output: *const c_void,
+        input: *const c_void,
+        segment_ids: *const c_void,
+        d_input: *const c_void,
+    ) -> i32;
 
     /// `unsorted_segment_max_backward` — f64.
     pub fn baracuda_kernels_unsorted_segment_max_backward_f64_run(
@@ -45942,6 +50140,14 @@ unsafe extern "C" {
         segment_ids: *const c_void,
         d_input: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `unsorted_segment_max_backward_f64`.
+    pub fn baracuda_kernels_unsorted_segment_max_backward_f64_can_implement(
+        n: i32, d: i32, num_segments: i32,
+        d_output: *const c_void,
+        input: *const c_void,
+        segment_ids: *const c_void,
+        d_input: *const c_void,
     ) -> i32;
 
     /// `unsorted_segment_min_backward` — f32.
@@ -45953,6 +50159,14 @@ unsafe extern "C" {
         d_input: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `unsorted_segment_min_backward_f32`.
+    pub fn baracuda_kernels_unsorted_segment_min_backward_f32_can_implement(
+        n: i32, d: i32, num_segments: i32,
+        d_output: *const c_void,
+        input: *const c_void,
+        segment_ids: *const c_void,
+        d_input: *const c_void,
+    ) -> i32;
 
     /// `unsorted_segment_min_backward` — f64.
     pub fn baracuda_kernels_unsorted_segment_min_backward_f64_run(
@@ -45962,6 +50176,14 @@ unsafe extern "C" {
         segment_ids: *const c_void,
         d_input: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `unsorted_segment_min_backward_f64`.
+    pub fn baracuda_kernels_unsorted_segment_min_backward_f64_can_implement(
+        n: i32, d: i32, num_segments: i32,
+        d_output: *const c_void,
+        input: *const c_void,
+        segment_ids: *const c_void,
+        d_input: *const c_void,
     ) -> i32;
 
     // ---------- Phase 25: Prod BW (sorted + unsorted share the kernel) ----------
@@ -45981,6 +50203,15 @@ unsafe extern "C" {
         d_input: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `segment_prod_backward_f32`.
+    pub fn baracuda_kernels_segment_prod_backward_f32_can_implement(
+        n: i32, d: i32, num_segments: i32,
+        d_output: *const c_void,
+        input: *const c_void,
+        output: *const c_void,
+        segment_ids: *const c_void,
+        d_input: *const c_void,
+    ) -> i32;
 
     /// `segment_prod_backward` — f64.
     pub fn baracuda_kernels_segment_prod_backward_f64_run(
@@ -45991,6 +50222,15 @@ unsafe extern "C" {
         segment_ids: *const c_void,
         d_input: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `segment_prod_backward_f64`.
+    pub fn baracuda_kernels_segment_prod_backward_f64_can_implement(
+        n: i32, d: i32, num_segments: i32,
+        d_output: *const c_void,
+        input: *const c_void,
+        output: *const c_void,
+        segment_ids: *const c_void,
+        d_input: *const c_void,
     ) -> i32;
 
     /// `unsorted_segment_prod_backward` — f32. Shares the kernel with
@@ -46004,6 +50244,15 @@ unsafe extern "C" {
         d_input: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `unsorted_segment_prod_backward_f32`.
+    pub fn baracuda_kernels_unsorted_segment_prod_backward_f32_can_implement(
+        n: i32, d: i32, num_segments: i32,
+        d_output: *const c_void,
+        input: *const c_void,
+        output: *const c_void,
+        segment_ids: *const c_void,
+        d_input: *const c_void,
+    ) -> i32;
 
     /// `unsorted_segment_prod_backward` — f64.
     pub fn baracuda_kernels_unsorted_segment_prod_backward_f64_run(
@@ -46014,6 +50263,15 @@ unsafe extern "C" {
         segment_ids: *const c_void,
         d_input: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `unsorted_segment_prod_backward_f64`.
+    pub fn baracuda_kernels_unsorted_segment_prod_backward_f64_can_implement(
+        n: i32, d: i32, num_segments: i32,
+        d_output: *const c_void,
+        input: *const c_void,
+        output: *const c_void,
+        segment_ids: *const c_void,
+        d_input: *const c_void,
     ) -> i32;
 
     // ---------- Phase 25: Unsorted Prod FW (atomicCAS retry loop) ----------
@@ -46030,6 +50288,13 @@ unsafe extern "C" {
         output: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `unsorted_segment_prod_f32`.
+    pub fn baracuda_kernels_unsorted_segment_prod_f32_can_implement(
+        n: i32, d: i32, num_segments: i32,
+        input: *const c_void,
+        segment_ids: *const c_void,
+        output: *const c_void,
+    ) -> i32;
 
     /// `unsorted_segment_prod` FW — f64.
     pub fn baracuda_kernels_unsorted_segment_prod_f64_run(
@@ -46038,6 +50303,13 @@ unsafe extern "C" {
         segment_ids: *const c_void,
         output: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `unsorted_segment_prod_f64`.
+    pub fn baracuda_kernels_unsorted_segment_prod_f64_can_implement(
+        n: i32, d: i32, num_segments: i32,
+        input: *const c_void,
+        segment_ids: *const c_void,
+        output: *const c_void,
     ) -> i32;
 }
 
@@ -46083,12 +50355,22 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `quantize_per_tensor_f32_s8`.
+    pub fn baracuda_kernels_quantize_per_tensor_f32_s8_can_implement(
+        numel: i64, scale: f32, zero_point: i32, q_min: i32, q_max: i32,
+        x: *const c_void, q: *const c_void,
+    ) -> i32;
 
     /// `quantize_per_tensor` — f32 → u8.
     pub fn baracuda_kernels_quantize_per_tensor_f32_u8_run(
         numel: i64, scale: f32, zero_point: i32, q_min: i32, q_max: i32,
         x: *const c_void, q: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `quantize_per_tensor_f32_u8`.
+    pub fn baracuda_kernels_quantize_per_tensor_f32_u8_can_implement(
+        numel: i64, scale: f32, zero_point: i32, q_min: i32, q_max: i32,
+        x: *const c_void, q: *const c_void,
     ) -> i32;
 
     /// `quantize_per_tensor` — f16 → s8.
@@ -46097,12 +50379,22 @@ unsafe extern "C" {
         x: *const c_void, q: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `quantize_per_tensor_f16_s8`.
+    pub fn baracuda_kernels_quantize_per_tensor_f16_s8_can_implement(
+        numel: i64, scale: f32, zero_point: i32, q_min: i32, q_max: i32,
+        x: *const c_void, q: *const c_void,
+    ) -> i32;
 
     /// `quantize_per_tensor` — f16 → u8.
     pub fn baracuda_kernels_quantize_per_tensor_f16_u8_run(
         numel: i64, scale: f32, zero_point: i32, q_min: i32, q_max: i32,
         x: *const c_void, q: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `quantize_per_tensor_f16_u8`.
+    pub fn baracuda_kernels_quantize_per_tensor_f16_u8_can_implement(
+        numel: i64, scale: f32, zero_point: i32, q_min: i32, q_max: i32,
+        x: *const c_void, q: *const c_void,
     ) -> i32;
 
     /// `quantize_per_tensor` — bf16 → s8.
@@ -46111,12 +50403,22 @@ unsafe extern "C" {
         x: *const c_void, q: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `quantize_per_tensor_bf16_s8`.
+    pub fn baracuda_kernels_quantize_per_tensor_bf16_s8_can_implement(
+        numel: i64, scale: f32, zero_point: i32, q_min: i32, q_max: i32,
+        x: *const c_void, q: *const c_void,
+    ) -> i32;
 
     /// `quantize_per_tensor` — bf16 → u8.
     pub fn baracuda_kernels_quantize_per_tensor_bf16_u8_run(
         numel: i64, scale: f32, zero_point: i32, q_min: i32, q_max: i32,
         x: *const c_void, q: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `quantize_per_tensor_bf16_u8`.
+    pub fn baracuda_kernels_quantize_per_tensor_bf16_u8_can_implement(
+        numel: i64, scale: f32, zero_point: i32, q_min: i32, q_max: i32,
+        x: *const c_void, q: *const c_void,
     ) -> i32;
 
     /// `quantize_per_tensor` — f64 → s8 (f64 scale).
@@ -46125,12 +50427,22 @@ unsafe extern "C" {
         x: *const c_void, q: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `quantize_per_tensor_f64_s8`.
+    pub fn baracuda_kernels_quantize_per_tensor_f64_s8_can_implement(
+        numel: i64, scale: f64, zero_point: i32, q_min: i32, q_max: i32,
+        x: *const c_void, q: *const c_void,
+    ) -> i32;
 
     /// `quantize_per_tensor` — f64 → u8 (f64 scale).
     pub fn baracuda_kernels_quantize_per_tensor_f64_u8_run(
         numel: i64, scale: f64, zero_point: i32, q_min: i32, q_max: i32,
         x: *const c_void, q: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `quantize_per_tensor_f64_u8`.
+    pub fn baracuda_kernels_quantize_per_tensor_f64_u8_can_implement(
+        numel: i64, scale: f64, zero_point: i32, q_min: i32, q_max: i32,
+        x: *const c_void, q: *const c_void,
     ) -> i32;
 
     // ---------- quantize_per_tensor BW (STE; 4 SKUs, FP-typed) ----------
@@ -46141,12 +50453,22 @@ unsafe extern "C" {
         x: *const c_void, dy: *const c_void, dx: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `quantize_per_tensor_backward_f32`.
+    pub fn baracuda_kernels_quantize_per_tensor_backward_f32_can_implement(
+        numel: i64, scale: f32, zero_point: i32, q_min: i32, q_max: i32,
+        x: *const c_void, dy: *const c_void, dx: *const c_void,
+    ) -> i32;
 
     /// `quantize_per_tensor_backward` — f16.
     pub fn baracuda_kernels_quantize_per_tensor_backward_f16_run(
         numel: i64, scale: f32, zero_point: i32, q_min: i32, q_max: i32,
         x: *const c_void, dy: *const c_void, dx: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `quantize_per_tensor_backward_f16`.
+    pub fn baracuda_kernels_quantize_per_tensor_backward_f16_can_implement(
+        numel: i64, scale: f32, zero_point: i32, q_min: i32, q_max: i32,
+        x: *const c_void, dy: *const c_void, dx: *const c_void,
     ) -> i32;
 
     /// `quantize_per_tensor_backward` — bf16.
@@ -46155,12 +50477,22 @@ unsafe extern "C" {
         x: *const c_void, dy: *const c_void, dx: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `quantize_per_tensor_backward_bf16`.
+    pub fn baracuda_kernels_quantize_per_tensor_backward_bf16_can_implement(
+        numel: i64, scale: f32, zero_point: i32, q_min: i32, q_max: i32,
+        x: *const c_void, dy: *const c_void, dx: *const c_void,
+    ) -> i32;
 
     /// `quantize_per_tensor_backward` — f64 (f64 scale).
     pub fn baracuda_kernels_quantize_per_tensor_backward_f64_run(
         numel: i64, scale: f64, zero_point: i32, q_min: i32, q_max: i32,
         x: *const c_void, dy: *const c_void, dx: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `quantize_per_tensor_backward_f64`.
+    pub fn baracuda_kernels_quantize_per_tensor_backward_f64_can_implement(
+        numel: i64, scale: f64, zero_point: i32, q_min: i32, q_max: i32,
+        x: *const c_void, dy: *const c_void, dx: *const c_void,
     ) -> i32;
 
     // ---------- dequantize_per_tensor FW (8 SKUs) ----------
@@ -46171,12 +50503,22 @@ unsafe extern "C" {
         q: *const c_void, x: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `dequantize_per_tensor_f32_s8`.
+    pub fn baracuda_kernels_dequantize_per_tensor_f32_s8_can_implement(
+        numel: i64, scale: f32, zero_point: i32,
+        q: *const c_void, x: *const c_void,
+    ) -> i32;
 
     /// `dequantize_per_tensor` — u8 → f32.
     pub fn baracuda_kernels_dequantize_per_tensor_f32_u8_run(
         numel: i64, scale: f32, zero_point: i32,
         q: *const c_void, x: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `dequantize_per_tensor_f32_u8`.
+    pub fn baracuda_kernels_dequantize_per_tensor_f32_u8_can_implement(
+        numel: i64, scale: f32, zero_point: i32,
+        q: *const c_void, x: *const c_void,
     ) -> i32;
 
     /// `dequantize_per_tensor` — s8 → f16.
@@ -46185,12 +50527,22 @@ unsafe extern "C" {
         q: *const c_void, x: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `dequantize_per_tensor_f16_s8`.
+    pub fn baracuda_kernels_dequantize_per_tensor_f16_s8_can_implement(
+        numel: i64, scale: f32, zero_point: i32,
+        q: *const c_void, x: *const c_void,
+    ) -> i32;
 
     /// `dequantize_per_tensor` — u8 → f16.
     pub fn baracuda_kernels_dequantize_per_tensor_f16_u8_run(
         numel: i64, scale: f32, zero_point: i32,
         q: *const c_void, x: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `dequantize_per_tensor_f16_u8`.
+    pub fn baracuda_kernels_dequantize_per_tensor_f16_u8_can_implement(
+        numel: i64, scale: f32, zero_point: i32,
+        q: *const c_void, x: *const c_void,
     ) -> i32;
 
     /// `dequantize_per_tensor` — s8 → bf16.
@@ -46199,12 +50551,22 @@ unsafe extern "C" {
         q: *const c_void, x: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `dequantize_per_tensor_bf16_s8`.
+    pub fn baracuda_kernels_dequantize_per_tensor_bf16_s8_can_implement(
+        numel: i64, scale: f32, zero_point: i32,
+        q: *const c_void, x: *const c_void,
+    ) -> i32;
 
     /// `dequantize_per_tensor` — u8 → bf16.
     pub fn baracuda_kernels_dequantize_per_tensor_bf16_u8_run(
         numel: i64, scale: f32, zero_point: i32,
         q: *const c_void, x: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `dequantize_per_tensor_bf16_u8`.
+    pub fn baracuda_kernels_dequantize_per_tensor_bf16_u8_can_implement(
+        numel: i64, scale: f32, zero_point: i32,
+        q: *const c_void, x: *const c_void,
     ) -> i32;
 
     /// `dequantize_per_tensor` — s8 → f64.
@@ -46213,12 +50575,22 @@ unsafe extern "C" {
         q: *const c_void, x: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `dequantize_per_tensor_f64_s8`.
+    pub fn baracuda_kernels_dequantize_per_tensor_f64_s8_can_implement(
+        numel: i64, scale: f64, zero_point: i32,
+        q: *const c_void, x: *const c_void,
+    ) -> i32;
 
     /// `dequantize_per_tensor` — u8 → f64.
     pub fn baracuda_kernels_dequantize_per_tensor_f64_u8_run(
         numel: i64, scale: f64, zero_point: i32,
         q: *const c_void, x: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `dequantize_per_tensor_f64_u8`.
+    pub fn baracuda_kernels_dequantize_per_tensor_f64_u8_can_implement(
+        numel: i64, scale: f64, zero_point: i32,
+        q: *const c_void, x: *const c_void,
     ) -> i32;
 
     // ---------- dequantize_per_tensor BW (4 SKUs, FP-typed) ----------
@@ -46229,12 +50601,22 @@ unsafe extern "C" {
         dy: *const c_void, dq: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `dequantize_per_tensor_backward_f32`.
+    pub fn baracuda_kernels_dequantize_per_tensor_backward_f32_can_implement(
+        numel: i64, scale: f32,
+        dy: *const c_void, dq: *const c_void,
+    ) -> i32;
 
     /// `dequantize_per_tensor_backward` — f16.
     pub fn baracuda_kernels_dequantize_per_tensor_backward_f16_run(
         numel: i64, scale: f32,
         dy: *const c_void, dq: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `dequantize_per_tensor_backward_f16`.
+    pub fn baracuda_kernels_dequantize_per_tensor_backward_f16_can_implement(
+        numel: i64, scale: f32,
+        dy: *const c_void, dq: *const c_void,
     ) -> i32;
 
     /// `dequantize_per_tensor_backward` — bf16.
@@ -46243,12 +50625,22 @@ unsafe extern "C" {
         dy: *const c_void, dq: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `dequantize_per_tensor_backward_bf16`.
+    pub fn baracuda_kernels_dequantize_per_tensor_backward_bf16_can_implement(
+        numel: i64, scale: f32,
+        dy: *const c_void, dq: *const c_void,
+    ) -> i32;
 
     /// `dequantize_per_tensor_backward` — f64.
     pub fn baracuda_kernels_dequantize_per_tensor_backward_f64_run(
         numel: i64, scale: f64,
         dy: *const c_void, dq: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `dequantize_per_tensor_backward_f64`.
+    pub fn baracuda_kernels_dequantize_per_tensor_backward_f64_can_implement(
+        numel: i64, scale: f64,
+        dy: *const c_void, dq: *const c_void,
     ) -> i32;
 
     // ---------- fake_quantize FW + BW (4 + 4 SKUs) ----------
@@ -46259,12 +50651,22 @@ unsafe extern "C" {
         x: *const c_void, y: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `fake_quantize_f32`.
+    pub fn baracuda_kernels_fake_quantize_f32_can_implement(
+        numel: i64, scale: f32, zero_point: i32, q_min: i32, q_max: i32,
+        x: *const c_void, y: *const c_void,
+    ) -> i32;
 
     /// `fake_quantize` — f16.
     pub fn baracuda_kernels_fake_quantize_f16_run(
         numel: i64, scale: f32, zero_point: i32, q_min: i32, q_max: i32,
         x: *const c_void, y: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `fake_quantize_f16`.
+    pub fn baracuda_kernels_fake_quantize_f16_can_implement(
+        numel: i64, scale: f32, zero_point: i32, q_min: i32, q_max: i32,
+        x: *const c_void, y: *const c_void,
     ) -> i32;
 
     /// `fake_quantize` — bf16.
@@ -46273,12 +50675,22 @@ unsafe extern "C" {
         x: *const c_void, y: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `fake_quantize_bf16`.
+    pub fn baracuda_kernels_fake_quantize_bf16_can_implement(
+        numel: i64, scale: f32, zero_point: i32, q_min: i32, q_max: i32,
+        x: *const c_void, y: *const c_void,
+    ) -> i32;
 
     /// `fake_quantize` — f64 (f64 scale).
     pub fn baracuda_kernels_fake_quantize_f64_run(
         numel: i64, scale: f64, zero_point: i32, q_min: i32, q_max: i32,
         x: *const c_void, y: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `fake_quantize_f64`.
+    pub fn baracuda_kernels_fake_quantize_f64_can_implement(
+        numel: i64, scale: f64, zero_point: i32, q_min: i32, q_max: i32,
+        x: *const c_void, y: *const c_void,
     ) -> i32;
 
     /// `dx = dy * in_range_mask(x)`. STE, no 1/scale factor. f32.
@@ -46287,12 +50699,22 @@ unsafe extern "C" {
         x: *const c_void, dy: *const c_void, dx: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `fake_quantize_backward_f32`.
+    pub fn baracuda_kernels_fake_quantize_backward_f32_can_implement(
+        numel: i64, scale: f32, zero_point: i32, q_min: i32, q_max: i32,
+        x: *const c_void, dy: *const c_void, dx: *const c_void,
+    ) -> i32;
 
     /// `fake_quantize_backward` — f16.
     pub fn baracuda_kernels_fake_quantize_backward_f16_run(
         numel: i64, scale: f32, zero_point: i32, q_min: i32, q_max: i32,
         x: *const c_void, dy: *const c_void, dx: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `fake_quantize_backward_f16`.
+    pub fn baracuda_kernels_fake_quantize_backward_f16_can_implement(
+        numel: i64, scale: f32, zero_point: i32, q_min: i32, q_max: i32,
+        x: *const c_void, dy: *const c_void, dx: *const c_void,
     ) -> i32;
 
     /// `fake_quantize_backward` — bf16.
@@ -46301,12 +50723,22 @@ unsafe extern "C" {
         x: *const c_void, dy: *const c_void, dx: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `fake_quantize_backward_bf16`.
+    pub fn baracuda_kernels_fake_quantize_backward_bf16_can_implement(
+        numel: i64, scale: f32, zero_point: i32, q_min: i32, q_max: i32,
+        x: *const c_void, dy: *const c_void, dx: *const c_void,
+    ) -> i32;
 
     /// `fake_quantize_backward` — f64.
     pub fn baracuda_kernels_fake_quantize_backward_f64_run(
         numel: i64, scale: f64, zero_point: i32, q_min: i32, q_max: i32,
         x: *const c_void, dy: *const c_void, dx: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `fake_quantize_backward_f64`.
+    pub fn baracuda_kernels_fake_quantize_backward_f64_can_implement(
+        numel: i64, scale: f64, zero_point: i32, q_min: i32, q_max: i32,
+        x: *const c_void, dy: *const c_void, dx: *const c_void,
     ) -> i32;
 
     // ---------- quantize_per_channel FW (8 SKUs) ----------
@@ -46322,6 +50754,12 @@ unsafe extern "C" {
         q: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `quantize_per_channel_f32_s8`.
+    pub fn baracuda_kernels_quantize_per_channel_f32_s8_can_implement(
+        numel: i64, shape4: *const i32, axis: i32, q_min: i32, q_max: i32,
+        x: *const c_void, scale: *const c_void, zero_point: *const c_void,
+        q: *const c_void,
+    ) -> i32;
 
     /// `quantize_per_channel` — f32 → u8.
     pub fn baracuda_kernels_quantize_per_channel_f32_u8_run(
@@ -46329,6 +50767,12 @@ unsafe extern "C" {
         x: *const c_void, scale: *const c_void, zero_point: *const c_void,
         q: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `quantize_per_channel_f32_u8`.
+    pub fn baracuda_kernels_quantize_per_channel_f32_u8_can_implement(
+        numel: i64, shape4: *const i32, axis: i32, q_min: i32, q_max: i32,
+        x: *const c_void, scale: *const c_void, zero_point: *const c_void,
+        q: *const c_void,
     ) -> i32;
 
     /// `quantize_per_channel` — f16 → s8.
@@ -46338,6 +50782,12 @@ unsafe extern "C" {
         q: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `quantize_per_channel_f16_s8`.
+    pub fn baracuda_kernels_quantize_per_channel_f16_s8_can_implement(
+        numel: i64, shape4: *const i32, axis: i32, q_min: i32, q_max: i32,
+        x: *const c_void, scale: *const c_void, zero_point: *const c_void,
+        q: *const c_void,
+    ) -> i32;
 
     /// `quantize_per_channel` — f16 → u8.
     pub fn baracuda_kernels_quantize_per_channel_f16_u8_run(
@@ -46345,6 +50795,12 @@ unsafe extern "C" {
         x: *const c_void, scale: *const c_void, zero_point: *const c_void,
         q: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `quantize_per_channel_f16_u8`.
+    pub fn baracuda_kernels_quantize_per_channel_f16_u8_can_implement(
+        numel: i64, shape4: *const i32, axis: i32, q_min: i32, q_max: i32,
+        x: *const c_void, scale: *const c_void, zero_point: *const c_void,
+        q: *const c_void,
     ) -> i32;
 
     /// `quantize_per_channel` — bf16 → s8.
@@ -46354,6 +50810,12 @@ unsafe extern "C" {
         q: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `quantize_per_channel_bf16_s8`.
+    pub fn baracuda_kernels_quantize_per_channel_bf16_s8_can_implement(
+        numel: i64, shape4: *const i32, axis: i32, q_min: i32, q_max: i32,
+        x: *const c_void, scale: *const c_void, zero_point: *const c_void,
+        q: *const c_void,
+    ) -> i32;
 
     /// `quantize_per_channel` — bf16 → u8.
     pub fn baracuda_kernels_quantize_per_channel_bf16_u8_run(
@@ -46361,6 +50823,12 @@ unsafe extern "C" {
         x: *const c_void, scale: *const c_void, zero_point: *const c_void,
         q: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `quantize_per_channel_bf16_u8`.
+    pub fn baracuda_kernels_quantize_per_channel_bf16_u8_can_implement(
+        numel: i64, shape4: *const i32, axis: i32, q_min: i32, q_max: i32,
+        x: *const c_void, scale: *const c_void, zero_point: *const c_void,
+        q: *const c_void,
     ) -> i32;
 
     /// `quantize_per_channel` — f64 → s8.
@@ -46370,6 +50838,12 @@ unsafe extern "C" {
         q: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `quantize_per_channel_f64_s8`.
+    pub fn baracuda_kernels_quantize_per_channel_f64_s8_can_implement(
+        numel: i64, shape4: *const i32, axis: i32, q_min: i32, q_max: i32,
+        x: *const c_void, scale: *const c_void, zero_point: *const c_void,
+        q: *const c_void,
+    ) -> i32;
 
     /// `quantize_per_channel` — f64 → u8.
     pub fn baracuda_kernels_quantize_per_channel_f64_u8_run(
@@ -46377,6 +50851,12 @@ unsafe extern "C" {
         x: *const c_void, scale: *const c_void, zero_point: *const c_void,
         q: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `quantize_per_channel_f64_u8`.
+    pub fn baracuda_kernels_quantize_per_channel_f64_u8_can_implement(
+        numel: i64, shape4: *const i32, axis: i32, q_min: i32, q_max: i32,
+        x: *const c_void, scale: *const c_void, zero_point: *const c_void,
+        q: *const c_void,
     ) -> i32;
 
     // ---------- quantize_per_channel BW (4 SKUs, STE) ----------
@@ -46388,6 +50868,12 @@ unsafe extern "C" {
         dy: *const c_void, dx: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `quantize_per_channel_backward_f32`.
+    pub fn baracuda_kernels_quantize_per_channel_backward_f32_can_implement(
+        numel: i64, shape4: *const i32, axis: i32, q_min: i32, q_max: i32,
+        x: *const c_void, scale: *const c_void, zero_point: *const c_void,
+        dy: *const c_void, dx: *const c_void,
+    ) -> i32;
 
     /// `quantize_per_channel_backward` — f16.
     pub fn baracuda_kernels_quantize_per_channel_backward_f16_run(
@@ -46395,6 +50881,12 @@ unsafe extern "C" {
         x: *const c_void, scale: *const c_void, zero_point: *const c_void,
         dy: *const c_void, dx: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `quantize_per_channel_backward_f16`.
+    pub fn baracuda_kernels_quantize_per_channel_backward_f16_can_implement(
+        numel: i64, shape4: *const i32, axis: i32, q_min: i32, q_max: i32,
+        x: *const c_void, scale: *const c_void, zero_point: *const c_void,
+        dy: *const c_void, dx: *const c_void,
     ) -> i32;
 
     /// `quantize_per_channel_backward` — bf16.
@@ -46404,6 +50896,12 @@ unsafe extern "C" {
         dy: *const c_void, dx: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `quantize_per_channel_backward_bf16`.
+    pub fn baracuda_kernels_quantize_per_channel_backward_bf16_can_implement(
+        numel: i64, shape4: *const i32, axis: i32, q_min: i32, q_max: i32,
+        x: *const c_void, scale: *const c_void, zero_point: *const c_void,
+        dy: *const c_void, dx: *const c_void,
+    ) -> i32;
 
     /// `quantize_per_channel_backward` — f64.
     pub fn baracuda_kernels_quantize_per_channel_backward_f64_run(
@@ -46411,6 +50909,12 @@ unsafe extern "C" {
         x: *const c_void, scale: *const c_void, zero_point: *const c_void,
         dy: *const c_void, dx: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `quantize_per_channel_backward_f64`.
+    pub fn baracuda_kernels_quantize_per_channel_backward_f64_can_implement(
+        numel: i64, shape4: *const i32, axis: i32, q_min: i32, q_max: i32,
+        x: *const c_void, scale: *const c_void, zero_point: *const c_void,
+        dy: *const c_void, dx: *const c_void,
     ) -> i32;
 
     // ---------- dequantize_per_channel FW (8 SKUs) ----------
@@ -46422,6 +50926,12 @@ unsafe extern "C" {
         x: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `dequantize_per_channel_f32_s8`.
+    pub fn baracuda_kernels_dequantize_per_channel_f32_s8_can_implement(
+        numel: i64, shape4: *const i32, axis: i32,
+        q: *const c_void, scale: *const c_void, zero_point: *const c_void,
+        x: *const c_void,
+    ) -> i32;
 
     /// `dequantize_per_channel` — u8 → f32.
     pub fn baracuda_kernels_dequantize_per_channel_f32_u8_run(
@@ -46429,6 +50939,12 @@ unsafe extern "C" {
         q: *const c_void, scale: *const c_void, zero_point: *const c_void,
         x: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `dequantize_per_channel_f32_u8`.
+    pub fn baracuda_kernels_dequantize_per_channel_f32_u8_can_implement(
+        numel: i64, shape4: *const i32, axis: i32,
+        q: *const c_void, scale: *const c_void, zero_point: *const c_void,
+        x: *const c_void,
     ) -> i32;
 
     /// `dequantize_per_channel` — s8 → f16.
@@ -46438,6 +50954,12 @@ unsafe extern "C" {
         x: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `dequantize_per_channel_f16_s8`.
+    pub fn baracuda_kernels_dequantize_per_channel_f16_s8_can_implement(
+        numel: i64, shape4: *const i32, axis: i32,
+        q: *const c_void, scale: *const c_void, zero_point: *const c_void,
+        x: *const c_void,
+    ) -> i32;
 
     /// `dequantize_per_channel` — u8 → f16.
     pub fn baracuda_kernels_dequantize_per_channel_f16_u8_run(
@@ -46445,6 +50967,12 @@ unsafe extern "C" {
         q: *const c_void, scale: *const c_void, zero_point: *const c_void,
         x: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `dequantize_per_channel_f16_u8`.
+    pub fn baracuda_kernels_dequantize_per_channel_f16_u8_can_implement(
+        numel: i64, shape4: *const i32, axis: i32,
+        q: *const c_void, scale: *const c_void, zero_point: *const c_void,
+        x: *const c_void,
     ) -> i32;
 
     /// `dequantize_per_channel` — s8 → bf16.
@@ -46454,6 +50982,12 @@ unsafe extern "C" {
         x: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `dequantize_per_channel_bf16_s8`.
+    pub fn baracuda_kernels_dequantize_per_channel_bf16_s8_can_implement(
+        numel: i64, shape4: *const i32, axis: i32,
+        q: *const c_void, scale: *const c_void, zero_point: *const c_void,
+        x: *const c_void,
+    ) -> i32;
 
     /// `dequantize_per_channel` — u8 → bf16.
     pub fn baracuda_kernels_dequantize_per_channel_bf16_u8_run(
@@ -46461,6 +50995,12 @@ unsafe extern "C" {
         q: *const c_void, scale: *const c_void, zero_point: *const c_void,
         x: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `dequantize_per_channel_bf16_u8`.
+    pub fn baracuda_kernels_dequantize_per_channel_bf16_u8_can_implement(
+        numel: i64, shape4: *const i32, axis: i32,
+        q: *const c_void, scale: *const c_void, zero_point: *const c_void,
+        x: *const c_void,
     ) -> i32;
 
     /// `dequantize_per_channel` — s8 → f64.
@@ -46470,6 +51010,12 @@ unsafe extern "C" {
         x: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `dequantize_per_channel_f64_s8`.
+    pub fn baracuda_kernels_dequantize_per_channel_f64_s8_can_implement(
+        numel: i64, shape4: *const i32, axis: i32,
+        q: *const c_void, scale: *const c_void, zero_point: *const c_void,
+        x: *const c_void,
+    ) -> i32;
 
     /// `dequantize_per_channel` — u8 → f64.
     pub fn baracuda_kernels_dequantize_per_channel_f64_u8_run(
@@ -46477,6 +51023,12 @@ unsafe extern "C" {
         q: *const c_void, scale: *const c_void, zero_point: *const c_void,
         x: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `dequantize_per_channel_f64_u8`.
+    pub fn baracuda_kernels_dequantize_per_channel_f64_u8_can_implement(
+        numel: i64, shape4: *const i32, axis: i32,
+        q: *const c_void, scale: *const c_void, zero_point: *const c_void,
+        x: *const c_void,
     ) -> i32;
 
     // ---------- dequantize_per_channel BW (4 SKUs) ----------
@@ -46487,12 +51039,22 @@ unsafe extern "C" {
         scale: *const c_void, dy: *const c_void, dq: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `dequantize_per_channel_backward_f32`.
+    pub fn baracuda_kernels_dequantize_per_channel_backward_f32_can_implement(
+        numel: i64, shape4: *const i32, axis: i32,
+        scale: *const c_void, dy: *const c_void, dq: *const c_void,
+    ) -> i32;
 
     /// `dequantize_per_channel_backward` — f16.
     pub fn baracuda_kernels_dequantize_per_channel_backward_f16_run(
         numel: i64, shape4: *const i32, axis: i32,
         scale: *const c_void, dy: *const c_void, dq: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `dequantize_per_channel_backward_f16`.
+    pub fn baracuda_kernels_dequantize_per_channel_backward_f16_can_implement(
+        numel: i64, shape4: *const i32, axis: i32,
+        scale: *const c_void, dy: *const c_void, dq: *const c_void,
     ) -> i32;
 
     /// `dequantize_per_channel_backward` — bf16.
@@ -46501,12 +51063,22 @@ unsafe extern "C" {
         scale: *const c_void, dy: *const c_void, dq: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `dequantize_per_channel_backward_bf16`.
+    pub fn baracuda_kernels_dequantize_per_channel_backward_bf16_can_implement(
+        numel: i64, shape4: *const i32, axis: i32,
+        scale: *const c_void, dy: *const c_void, dq: *const c_void,
+    ) -> i32;
 
     /// `dequantize_per_channel_backward` — f64.
     pub fn baracuda_kernels_dequantize_per_channel_backward_f64_run(
         numel: i64, shape4: *const i32, axis: i32,
         scale: *const c_void, dy: *const c_void, dq: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `dequantize_per_channel_backward_f64`.
+    pub fn baracuda_kernels_dequantize_per_channel_backward_f64_can_implement(
+        numel: i64, shape4: *const i32, axis: i32,
+        scale: *const c_void, dy: *const c_void, dq: *const c_void,
     ) -> i32;
 }
 
@@ -46544,6 +51116,12 @@ unsafe extern "C" {
         workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `quantize_per_token_f32_s8`.
+    pub fn baracuda_kernels_quantize_per_token_f32_s8_can_implement(
+        n: i32, d: i32, qmin: i32, qmax: i32,
+        input: *const c_void, scale: *const c_void, zero_point: *const c_void,
+        output: *const c_void,
+    ) -> i32;
 
     /// `quantize_per_token` — f32 → u8.
     pub fn baracuda_kernels_quantize_per_token_f32_u8_run(
@@ -46551,6 +51129,12 @@ unsafe extern "C" {
         input: *const c_void, scale: *const c_void, zero_point: *const c_void,
         output: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `quantize_per_token_f32_u8`.
+    pub fn baracuda_kernels_quantize_per_token_f32_u8_can_implement(
+        n: i32, d: i32, qmin: i32, qmax: i32,
+        input: *const c_void, scale: *const c_void, zero_point: *const c_void,
+        output: *const c_void,
     ) -> i32;
 
     /// `quantize_per_token` — f64 → s8.
@@ -46560,6 +51144,12 @@ unsafe extern "C" {
         output: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `quantize_per_token_f64_s8`.
+    pub fn baracuda_kernels_quantize_per_token_f64_s8_can_implement(
+        n: i32, d: i32, qmin: i32, qmax: i32,
+        input: *const c_void, scale: *const c_void, zero_point: *const c_void,
+        output: *const c_void,
+    ) -> i32;
 
     /// `quantize_per_token` — f64 → u8.
     pub fn baracuda_kernels_quantize_per_token_f64_u8_run(
@@ -46567,6 +51157,12 @@ unsafe extern "C" {
         input: *const c_void, scale: *const c_void, zero_point: *const c_void,
         output: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `quantize_per_token_f64_u8`.
+    pub fn baracuda_kernels_quantize_per_token_f64_u8_can_implement(
+        n: i32, d: i32, qmin: i32, qmax: i32,
+        input: *const c_void, scale: *const c_void, zero_point: *const c_void,
+        output: *const c_void,
     ) -> i32;
 
     /// `quantize_per_token` — f16 → s8.
@@ -46576,6 +51172,12 @@ unsafe extern "C" {
         output: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `quantize_per_token_f16_s8`.
+    pub fn baracuda_kernels_quantize_per_token_f16_s8_can_implement(
+        n: i32, d: i32, qmin: i32, qmax: i32,
+        input: *const c_void, scale: *const c_void, zero_point: *const c_void,
+        output: *const c_void,
+    ) -> i32;
 
     /// `quantize_per_token` — f16 → u8.
     pub fn baracuda_kernels_quantize_per_token_f16_u8_run(
@@ -46583,6 +51185,12 @@ unsafe extern "C" {
         input: *const c_void, scale: *const c_void, zero_point: *const c_void,
         output: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `quantize_per_token_f16_u8`.
+    pub fn baracuda_kernels_quantize_per_token_f16_u8_can_implement(
+        n: i32, d: i32, qmin: i32, qmax: i32,
+        input: *const c_void, scale: *const c_void, zero_point: *const c_void,
+        output: *const c_void,
     ) -> i32;
 
     /// `quantize_per_token` — bf16 → s8.
@@ -46592,6 +51200,12 @@ unsafe extern "C" {
         output: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `quantize_per_token_bf16_s8`.
+    pub fn baracuda_kernels_quantize_per_token_bf16_s8_can_implement(
+        n: i32, d: i32, qmin: i32, qmax: i32,
+        input: *const c_void, scale: *const c_void, zero_point: *const c_void,
+        output: *const c_void,
+    ) -> i32;
 
     /// `quantize_per_token` — bf16 → u8.
     pub fn baracuda_kernels_quantize_per_token_bf16_u8_run(
@@ -46599,6 +51213,12 @@ unsafe extern "C" {
         input: *const c_void, scale: *const c_void, zero_point: *const c_void,
         output: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `quantize_per_token_bf16_u8`.
+    pub fn baracuda_kernels_quantize_per_token_bf16_u8_can_implement(
+        n: i32, d: i32, qmin: i32, qmax: i32,
+        input: *const c_void, scale: *const c_void, zero_point: *const c_void,
+        output: *const c_void,
     ) -> i32;
 
     // ---------- quantize_per_token backward × 4 (STE) ----------
@@ -46612,6 +51232,13 @@ unsafe extern "C" {
         d_input: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `quantize_per_token_backward_f32`.
+    pub fn baracuda_kernels_quantize_per_token_backward_f32_can_implement(
+        n: i32, d: i32, qmin: i32, qmax: i32,
+        d_output: *const c_void, input: *const c_void,
+        scale: *const c_void, zero_point: *const c_void,
+        d_input: *const c_void,
+    ) -> i32;
 
     /// STE backward — f64.
     pub fn baracuda_kernels_quantize_per_token_backward_f64_run(
@@ -46620,6 +51247,13 @@ unsafe extern "C" {
         scale: *const c_void, zero_point: *const c_void,
         d_input: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `quantize_per_token_backward_f64`.
+    pub fn baracuda_kernels_quantize_per_token_backward_f64_can_implement(
+        n: i32, d: i32, qmin: i32, qmax: i32,
+        d_output: *const c_void, input: *const c_void,
+        scale: *const c_void, zero_point: *const c_void,
+        d_input: *const c_void,
     ) -> i32;
 
     /// STE backward — f16.
@@ -46630,6 +51264,13 @@ unsafe extern "C" {
         d_input: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `quantize_per_token_backward_f16`.
+    pub fn baracuda_kernels_quantize_per_token_backward_f16_can_implement(
+        n: i32, d: i32, qmin: i32, qmax: i32,
+        d_output: *const c_void, input: *const c_void,
+        scale: *const c_void, zero_point: *const c_void,
+        d_input: *const c_void,
+    ) -> i32;
 
     /// STE backward — bf16.
     pub fn baracuda_kernels_quantize_per_token_backward_bf16_run(
@@ -46638,6 +51279,13 @@ unsafe extern "C" {
         scale: *const c_void, zero_point: *const c_void,
         d_input: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `quantize_per_token_backward_bf16`.
+    pub fn baracuda_kernels_quantize_per_token_backward_bf16_can_implement(
+        n: i32, d: i32, qmin: i32, qmax: i32,
+        d_output: *const c_void, input: *const c_void,
+        scale: *const c_void, zero_point: *const c_void,
+        d_input: *const c_void,
     ) -> i32;
 
     // ---------- dequantize_per_token forward × 8 ----------
@@ -46648,12 +51296,24 @@ unsafe extern "C" {
         output: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `dequantize_per_token_f32_s8`.
+    pub fn baracuda_kernels_dequantize_per_token_f32_s8_can_implement(
+        n: i32, d: i32,
+        input: *const c_void, scale: *const c_void, zero_point: *const c_void,
+        output: *const c_void,
+    ) -> i32;
     /// `dequantize_per_token` — q u8 → y f32.
     pub fn baracuda_kernels_dequantize_per_token_f32_u8_run(
         n: i32, d: i32,
         input: *const c_void, scale: *const c_void, zero_point: *const c_void,
         output: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `dequantize_per_token_f32_u8`.
+    pub fn baracuda_kernels_dequantize_per_token_f32_u8_can_implement(
+        n: i32, d: i32,
+        input: *const c_void, scale: *const c_void, zero_point: *const c_void,
+        output: *const c_void,
     ) -> i32;
     /// `dequantize_per_token` — q s8 → y f64.
     pub fn baracuda_kernels_dequantize_per_token_f64_s8_run(
@@ -46662,12 +51322,24 @@ unsafe extern "C" {
         output: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `dequantize_per_token_f64_s8`.
+    pub fn baracuda_kernels_dequantize_per_token_f64_s8_can_implement(
+        n: i32, d: i32,
+        input: *const c_void, scale: *const c_void, zero_point: *const c_void,
+        output: *const c_void,
+    ) -> i32;
     /// `dequantize_per_token` — q u8 → y f64.
     pub fn baracuda_kernels_dequantize_per_token_f64_u8_run(
         n: i32, d: i32,
         input: *const c_void, scale: *const c_void, zero_point: *const c_void,
         output: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `dequantize_per_token_f64_u8`.
+    pub fn baracuda_kernels_dequantize_per_token_f64_u8_can_implement(
+        n: i32, d: i32,
+        input: *const c_void, scale: *const c_void, zero_point: *const c_void,
+        output: *const c_void,
     ) -> i32;
     /// `dequantize_per_token` — q s8 → y f16.
     pub fn baracuda_kernels_dequantize_per_token_f16_s8_run(
@@ -46676,12 +51348,24 @@ unsafe extern "C" {
         output: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `dequantize_per_token_f16_s8`.
+    pub fn baracuda_kernels_dequantize_per_token_f16_s8_can_implement(
+        n: i32, d: i32,
+        input: *const c_void, scale: *const c_void, zero_point: *const c_void,
+        output: *const c_void,
+    ) -> i32;
     /// `dequantize_per_token` — q u8 → y f16.
     pub fn baracuda_kernels_dequantize_per_token_f16_u8_run(
         n: i32, d: i32,
         input: *const c_void, scale: *const c_void, zero_point: *const c_void,
         output: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `dequantize_per_token_f16_u8`.
+    pub fn baracuda_kernels_dequantize_per_token_f16_u8_can_implement(
+        n: i32, d: i32,
+        input: *const c_void, scale: *const c_void, zero_point: *const c_void,
+        output: *const c_void,
     ) -> i32;
     /// `dequantize_per_token` — q s8 → y bf16.
     pub fn baracuda_kernels_dequantize_per_token_bf16_s8_run(
@@ -46690,12 +51374,24 @@ unsafe extern "C" {
         output: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `dequantize_per_token_bf16_s8`.
+    pub fn baracuda_kernels_dequantize_per_token_bf16_s8_can_implement(
+        n: i32, d: i32,
+        input: *const c_void, scale: *const c_void, zero_point: *const c_void,
+        output: *const c_void,
+    ) -> i32;
     /// `dequantize_per_token` — q u8 → y bf16.
     pub fn baracuda_kernels_dequantize_per_token_bf16_u8_run(
         n: i32, d: i32,
         input: *const c_void, scale: *const c_void, zero_point: *const c_void,
         output: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `dequantize_per_token_bf16_u8`.
+    pub fn baracuda_kernels_dequantize_per_token_bf16_u8_can_implement(
+        n: i32, d: i32,
+        input: *const c_void, scale: *const c_void, zero_point: *const c_void,
+        output: *const c_void,
     ) -> i32;
 
     // ---------- dequantize_per_token backward × 4 (straight-through) ----------
@@ -46706,12 +51402,24 @@ unsafe extern "C" {
         d_input: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `dequantize_per_token_backward_f32`.
+    pub fn baracuda_kernels_dequantize_per_token_backward_f32_can_implement(
+        n: i32, d: i32,
+        d_output: *const c_void, scale: *const c_void,
+        d_input: *const c_void,
+    ) -> i32;
     /// Dequant BW — f64.
     pub fn baracuda_kernels_dequantize_per_token_backward_f64_run(
         n: i32, d: i32,
         d_output: *const c_void, scale: *const c_void,
         d_input: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `dequantize_per_token_backward_f64`.
+    pub fn baracuda_kernels_dequantize_per_token_backward_f64_can_implement(
+        n: i32, d: i32,
+        d_output: *const c_void, scale: *const c_void,
+        d_input: *const c_void,
     ) -> i32;
     /// Dequant BW — f16.
     pub fn baracuda_kernels_dequantize_per_token_backward_f16_run(
@@ -46720,12 +51428,24 @@ unsafe extern "C" {
         d_input: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `dequantize_per_token_backward_f16`.
+    pub fn baracuda_kernels_dequantize_per_token_backward_f16_can_implement(
+        n: i32, d: i32,
+        d_output: *const c_void, scale: *const c_void,
+        d_input: *const c_void,
+    ) -> i32;
     /// Dequant BW — bf16.
     pub fn baracuda_kernels_dequantize_per_token_backward_bf16_run(
         n: i32, d: i32,
         d_output: *const c_void, scale: *const c_void,
         d_input: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `dequantize_per_token_backward_bf16`.
+    pub fn baracuda_kernels_dequantize_per_token_backward_bf16_can_implement(
+        n: i32, d: i32,
+        d_output: *const c_void, scale: *const c_void,
+        d_input: *const c_void,
     ) -> i32;
 
     // ---------- quantize_per_group forward × 8 ----------
@@ -46737,12 +51457,24 @@ unsafe extern "C" {
         output: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `quantize_per_group_f32_s8`.
+    pub fn baracuda_kernels_quantize_per_group_f32_s8_can_implement(
+        outer: i32, axis_size: i32, group_size: i32, qmin: i32, qmax: i32,
+        input: *const c_void, scale: *const c_void, zero_point: *const c_void,
+        output: *const c_void,
+    ) -> i32;
     /// `quantize_per_group` — f32 → u8.
     pub fn baracuda_kernels_quantize_per_group_f32_u8_run(
         outer: i32, axis_size: i32, group_size: i32, qmin: i32, qmax: i32,
         input: *const c_void, scale: *const c_void, zero_point: *const c_void,
         output: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `quantize_per_group_f32_u8`.
+    pub fn baracuda_kernels_quantize_per_group_f32_u8_can_implement(
+        outer: i32, axis_size: i32, group_size: i32, qmin: i32, qmax: i32,
+        input: *const c_void, scale: *const c_void, zero_point: *const c_void,
+        output: *const c_void,
     ) -> i32;
     /// `quantize_per_group` — f64 → s8.
     pub fn baracuda_kernels_quantize_per_group_f64_s8_run(
@@ -46751,12 +51483,24 @@ unsafe extern "C" {
         output: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `quantize_per_group_f64_s8`.
+    pub fn baracuda_kernels_quantize_per_group_f64_s8_can_implement(
+        outer: i32, axis_size: i32, group_size: i32, qmin: i32, qmax: i32,
+        input: *const c_void, scale: *const c_void, zero_point: *const c_void,
+        output: *const c_void,
+    ) -> i32;
     /// `quantize_per_group` — f64 → u8.
     pub fn baracuda_kernels_quantize_per_group_f64_u8_run(
         outer: i32, axis_size: i32, group_size: i32, qmin: i32, qmax: i32,
         input: *const c_void, scale: *const c_void, zero_point: *const c_void,
         output: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `quantize_per_group_f64_u8`.
+    pub fn baracuda_kernels_quantize_per_group_f64_u8_can_implement(
+        outer: i32, axis_size: i32, group_size: i32, qmin: i32, qmax: i32,
+        input: *const c_void, scale: *const c_void, zero_point: *const c_void,
+        output: *const c_void,
     ) -> i32;
     /// `quantize_per_group` — f16 → s8.
     pub fn baracuda_kernels_quantize_per_group_f16_s8_run(
@@ -46765,12 +51509,24 @@ unsafe extern "C" {
         output: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `quantize_per_group_f16_s8`.
+    pub fn baracuda_kernels_quantize_per_group_f16_s8_can_implement(
+        outer: i32, axis_size: i32, group_size: i32, qmin: i32, qmax: i32,
+        input: *const c_void, scale: *const c_void, zero_point: *const c_void,
+        output: *const c_void,
+    ) -> i32;
     /// `quantize_per_group` — f16 → u8.
     pub fn baracuda_kernels_quantize_per_group_f16_u8_run(
         outer: i32, axis_size: i32, group_size: i32, qmin: i32, qmax: i32,
         input: *const c_void, scale: *const c_void, zero_point: *const c_void,
         output: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `quantize_per_group_f16_u8`.
+    pub fn baracuda_kernels_quantize_per_group_f16_u8_can_implement(
+        outer: i32, axis_size: i32, group_size: i32, qmin: i32, qmax: i32,
+        input: *const c_void, scale: *const c_void, zero_point: *const c_void,
+        output: *const c_void,
     ) -> i32;
     /// `quantize_per_group` — bf16 → s8.
     pub fn baracuda_kernels_quantize_per_group_bf16_s8_run(
@@ -46779,12 +51535,24 @@ unsafe extern "C" {
         output: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `quantize_per_group_bf16_s8`.
+    pub fn baracuda_kernels_quantize_per_group_bf16_s8_can_implement(
+        outer: i32, axis_size: i32, group_size: i32, qmin: i32, qmax: i32,
+        input: *const c_void, scale: *const c_void, zero_point: *const c_void,
+        output: *const c_void,
+    ) -> i32;
     /// `quantize_per_group` — bf16 → u8.
     pub fn baracuda_kernels_quantize_per_group_bf16_u8_run(
         outer: i32, axis_size: i32, group_size: i32, qmin: i32, qmax: i32,
         input: *const c_void, scale: *const c_void, zero_point: *const c_void,
         output: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `quantize_per_group_bf16_u8`.
+    pub fn baracuda_kernels_quantize_per_group_bf16_u8_can_implement(
+        outer: i32, axis_size: i32, group_size: i32, qmin: i32, qmax: i32,
+        input: *const c_void, scale: *const c_void, zero_point: *const c_void,
+        output: *const c_void,
     ) -> i32;
 
     // ---------- quantize_per_group backward × 4 (STE) ----------
@@ -46796,6 +51564,13 @@ unsafe extern "C" {
         d_input: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `quantize_per_group_backward_f32`.
+    pub fn baracuda_kernels_quantize_per_group_backward_f32_can_implement(
+        outer: i32, axis_size: i32, group_size: i32, qmin: i32, qmax: i32,
+        d_output: *const c_void, input: *const c_void,
+        scale: *const c_void, zero_point: *const c_void,
+        d_input: *const c_void,
+    ) -> i32;
     /// STE BW — f64.
     pub fn baracuda_kernels_quantize_per_group_backward_f64_run(
         outer: i32, axis_size: i32, group_size: i32, qmin: i32, qmax: i32,
@@ -46803,6 +51578,13 @@ unsafe extern "C" {
         scale: *const c_void, zero_point: *const c_void,
         d_input: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `quantize_per_group_backward_f64`.
+    pub fn baracuda_kernels_quantize_per_group_backward_f64_can_implement(
+        outer: i32, axis_size: i32, group_size: i32, qmin: i32, qmax: i32,
+        d_output: *const c_void, input: *const c_void,
+        scale: *const c_void, zero_point: *const c_void,
+        d_input: *const c_void,
     ) -> i32;
     /// STE BW — f16.
     pub fn baracuda_kernels_quantize_per_group_backward_f16_run(
@@ -46812,6 +51594,13 @@ unsafe extern "C" {
         d_input: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `quantize_per_group_backward_f16`.
+    pub fn baracuda_kernels_quantize_per_group_backward_f16_can_implement(
+        outer: i32, axis_size: i32, group_size: i32, qmin: i32, qmax: i32,
+        d_output: *const c_void, input: *const c_void,
+        scale: *const c_void, zero_point: *const c_void,
+        d_input: *const c_void,
+    ) -> i32;
     /// STE BW — bf16.
     pub fn baracuda_kernels_quantize_per_group_backward_bf16_run(
         outer: i32, axis_size: i32, group_size: i32, qmin: i32, qmax: i32,
@@ -46819,6 +51608,13 @@ unsafe extern "C" {
         scale: *const c_void, zero_point: *const c_void,
         d_input: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `quantize_per_group_backward_bf16`.
+    pub fn baracuda_kernels_quantize_per_group_backward_bf16_can_implement(
+        outer: i32, axis_size: i32, group_size: i32, qmin: i32, qmax: i32,
+        d_output: *const c_void, input: *const c_void,
+        scale: *const c_void, zero_point: *const c_void,
+        d_input: *const c_void,
     ) -> i32;
 
     // ---------- dequantize_per_group forward × 8 ----------
@@ -46829,12 +51625,24 @@ unsafe extern "C" {
         output: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `dequantize_per_group_f32_s8`.
+    pub fn baracuda_kernels_dequantize_per_group_f32_s8_can_implement(
+        outer: i32, axis_size: i32, group_size: i32,
+        input: *const c_void, scale: *const c_void, zero_point: *const c_void,
+        output: *const c_void,
+    ) -> i32;
     /// Dequant — f32, u8.
     pub fn baracuda_kernels_dequantize_per_group_f32_u8_run(
         outer: i32, axis_size: i32, group_size: i32,
         input: *const c_void, scale: *const c_void, zero_point: *const c_void,
         output: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `dequantize_per_group_f32_u8`.
+    pub fn baracuda_kernels_dequantize_per_group_f32_u8_can_implement(
+        outer: i32, axis_size: i32, group_size: i32,
+        input: *const c_void, scale: *const c_void, zero_point: *const c_void,
+        output: *const c_void,
     ) -> i32;
     /// Dequant — f64, s8.
     pub fn baracuda_kernels_dequantize_per_group_f64_s8_run(
@@ -46843,12 +51651,24 @@ unsafe extern "C" {
         output: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `dequantize_per_group_f64_s8`.
+    pub fn baracuda_kernels_dequantize_per_group_f64_s8_can_implement(
+        outer: i32, axis_size: i32, group_size: i32,
+        input: *const c_void, scale: *const c_void, zero_point: *const c_void,
+        output: *const c_void,
+    ) -> i32;
     /// Dequant — f64, u8.
     pub fn baracuda_kernels_dequantize_per_group_f64_u8_run(
         outer: i32, axis_size: i32, group_size: i32,
         input: *const c_void, scale: *const c_void, zero_point: *const c_void,
         output: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `dequantize_per_group_f64_u8`.
+    pub fn baracuda_kernels_dequantize_per_group_f64_u8_can_implement(
+        outer: i32, axis_size: i32, group_size: i32,
+        input: *const c_void, scale: *const c_void, zero_point: *const c_void,
+        output: *const c_void,
     ) -> i32;
     /// Dequant — f16, s8.
     pub fn baracuda_kernels_dequantize_per_group_f16_s8_run(
@@ -46857,12 +51677,24 @@ unsafe extern "C" {
         output: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `dequantize_per_group_f16_s8`.
+    pub fn baracuda_kernels_dequantize_per_group_f16_s8_can_implement(
+        outer: i32, axis_size: i32, group_size: i32,
+        input: *const c_void, scale: *const c_void, zero_point: *const c_void,
+        output: *const c_void,
+    ) -> i32;
     /// Dequant — f16, u8.
     pub fn baracuda_kernels_dequantize_per_group_f16_u8_run(
         outer: i32, axis_size: i32, group_size: i32,
         input: *const c_void, scale: *const c_void, zero_point: *const c_void,
         output: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `dequantize_per_group_f16_u8`.
+    pub fn baracuda_kernels_dequantize_per_group_f16_u8_can_implement(
+        outer: i32, axis_size: i32, group_size: i32,
+        input: *const c_void, scale: *const c_void, zero_point: *const c_void,
+        output: *const c_void,
     ) -> i32;
     /// Dequant — bf16, s8.
     pub fn baracuda_kernels_dequantize_per_group_bf16_s8_run(
@@ -46871,12 +51703,24 @@ unsafe extern "C" {
         output: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `dequantize_per_group_bf16_s8`.
+    pub fn baracuda_kernels_dequantize_per_group_bf16_s8_can_implement(
+        outer: i32, axis_size: i32, group_size: i32,
+        input: *const c_void, scale: *const c_void, zero_point: *const c_void,
+        output: *const c_void,
+    ) -> i32;
     /// Dequant — bf16, u8.
     pub fn baracuda_kernels_dequantize_per_group_bf16_u8_run(
         outer: i32, axis_size: i32, group_size: i32,
         input: *const c_void, scale: *const c_void, zero_point: *const c_void,
         output: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `dequantize_per_group_bf16_u8`.
+    pub fn baracuda_kernels_dequantize_per_group_bf16_u8_can_implement(
+        outer: i32, axis_size: i32, group_size: i32,
+        input: *const c_void, scale: *const c_void, zero_point: *const c_void,
+        output: *const c_void,
     ) -> i32;
 
     // ---------- dequantize_per_group backward × 4 (straight-through) ----------
@@ -46887,12 +51731,24 @@ unsafe extern "C" {
         d_input: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `dequantize_per_group_backward_f32`.
+    pub fn baracuda_kernels_dequantize_per_group_backward_f32_can_implement(
+        outer: i32, axis_size: i32, group_size: i32,
+        d_output: *const c_void, scale: *const c_void,
+        d_input: *const c_void,
+    ) -> i32;
     /// Dequant BW — f64.
     pub fn baracuda_kernels_dequantize_per_group_backward_f64_run(
         outer: i32, axis_size: i32, group_size: i32,
         d_output: *const c_void, scale: *const c_void,
         d_input: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `dequantize_per_group_backward_f64`.
+    pub fn baracuda_kernels_dequantize_per_group_backward_f64_can_implement(
+        outer: i32, axis_size: i32, group_size: i32,
+        d_output: *const c_void, scale: *const c_void,
+        d_input: *const c_void,
     ) -> i32;
     /// Dequant BW — f16.
     pub fn baracuda_kernels_dequantize_per_group_backward_f16_run(
@@ -46901,12 +51757,24 @@ unsafe extern "C" {
         d_input: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `dequantize_per_group_backward_f16`.
+    pub fn baracuda_kernels_dequantize_per_group_backward_f16_can_implement(
+        outer: i32, axis_size: i32, group_size: i32,
+        d_output: *const c_void, scale: *const c_void,
+        d_input: *const c_void,
+    ) -> i32;
     /// Dequant BW — bf16.
     pub fn baracuda_kernels_dequantize_per_group_backward_bf16_run(
         outer: i32, axis_size: i32, group_size: i32,
         d_output: *const c_void, scale: *const c_void,
         d_input: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `dequantize_per_group_backward_bf16`.
+    pub fn baracuda_kernels_dequantize_per_group_backward_bf16_can_implement(
+        outer: i32, axis_size: i32, group_size: i32,
+        d_output: *const c_void, scale: *const c_void,
+        d_input: *const c_void,
     ) -> i32;
 
     // ---------- Milestone 8.3 — composing quantization ops ----------
@@ -46932,6 +51800,13 @@ unsafe extern "C" {
         output: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `dynamic_range_quantize_per_token_sym_f32_s8`.
+    pub fn baracuda_kernels_dynamic_range_quantize_per_token_sym_f32_s8_can_implement(
+        n: i32, d: i32, qmin: i32, qmax: i32,
+        input: *const c_void,
+        scale: *const c_void,
+        output: *const c_void,
+    ) -> i32;
 
     /// `dynamic_range_quantize_per_token_sym` — f64 → s8.
     pub fn baracuda_kernels_dynamic_range_quantize_per_token_sym_f64_s8_run(
@@ -46940,6 +51815,13 @@ unsafe extern "C" {
         scale: *mut c_void,
         output: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `dynamic_range_quantize_per_token_sym_f64_s8`.
+    pub fn baracuda_kernels_dynamic_range_quantize_per_token_sym_f64_s8_can_implement(
+        n: i32, d: i32, qmin: i32, qmax: i32,
+        input: *const c_void,
+        scale: *const c_void,
+        output: *const c_void,
     ) -> i32;
 
     /// `quantized_linear_w8a8` — TIn = f32.
@@ -46952,6 +51834,15 @@ unsafe extern "C" {
         output: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
     ) -> i32;
+    /// Implementability check for `quantized_linear_w8a8_f32`.
+    pub fn baracuda_kernels_quantized_linear_w8a8_f32_can_implement(
+        m: i32, c_out: i32, k: i32,
+        weight_q: *const c_void,
+        act_q: *const c_void,
+        scale_a: *const c_void,
+        scale_w: *const c_void,
+        output: *const c_void,
+    ) -> i32;
 
     /// `quantized_linear_w8a8` — TIn = f64.
     pub fn baracuda_kernels_quantized_linear_w8a8_f64_run(
@@ -46962,6 +51853,15 @@ unsafe extern "C" {
         scale_w: *const c_void,
         output: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `quantized_linear_w8a8_f64`.
+    pub fn baracuda_kernels_quantized_linear_w8a8_f64_can_implement(
+        m: i32, c_out: i32, k: i32,
+        weight_q: *const c_void,
+        act_q: *const c_void,
+        scale_a: *const c_void,
+        scale_w: *const c_void,
+        output: *const c_void,
     ) -> i32;
 }
 
