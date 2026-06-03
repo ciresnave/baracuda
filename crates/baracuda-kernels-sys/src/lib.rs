@@ -65008,3 +65008,1566 @@ unsafe extern "C" {
         head_dim: i32,
     ) -> usize;
 }
+
+// =============================================================================
+// Phase 72 strided-sibling FFI exports for the normalizer + shape ops.
+//
+// Each `_strided_run` / `_strided_can_implement` symbol has the same signature
+// as its non-strided sibling and routes to the same underlying CUDA launcher
+// — the existing `_run` already accepts stride arrays and the C kernel
+// honors them. The strided sibling exists so callers building explicit
+// dispatch tables can pick the strided path by name (matches the
+// Phase 14/18 convention for binary / unary-param ops).
+//
+// Covers: rms_norm (FW + BW), layer_norm (FW + BW), softmax (FW + BW),
+// log_softmax (FW + BW), flip, roll, permute. 4 dtypes (f32/f16/bf16/f64)
+// per family. 88 new FFI symbols total (44 `_strided_run` + 44
+// `_strided_can_implement`).
+// =============================================================================
+
+#[cfg(any(feature = "sm80", feature = "sm89", feature = "sm90a"))]
+unsafe extern "C" {
+    // ---- RMSNorm FW strided siblings ----
+    /// RMSNorm FW strided sibling, f32. Same contract as
+    /// `baracuda_kernels_rms_norm_f32_run`; identical underlying launcher.
+    pub fn baracuda_kernels_rms_norm_f32_strided_run(
+        eps: f32,
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        stride_rms: *const i64,
+        norm_axes_mask: i32,
+        norm_total_extent: i32,
+        x: *const c_void,
+        gamma: *const c_void,
+        y: *mut c_void,
+        rms_out: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    /// `rms_norm_f32_strided_can_implement` companion.
+    pub fn baracuda_kernels_rms_norm_f32_strided_can_implement(
+        eps: f32,
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        stride_rms: *const i64,
+        norm_axes_mask: i32,
+        norm_total_extent: i32,
+        x: *const c_void,
+        gamma: *const c_void,
+        y: *const c_void,
+        rms_out: *const c_void,
+    ) -> i32;
+
+    /// RMSNorm FW strided sibling, f16. See `rms_norm_f32_strided_run`.
+    pub fn baracuda_kernels_rms_norm_f16_strided_run(
+        eps: f32,
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        stride_rms: *const i64,
+        norm_axes_mask: i32,
+        norm_total_extent: i32,
+        x: *const c_void,
+        gamma: *const c_void,
+        y: *mut c_void,
+        rms_out: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    /// `rms_norm_f16_strided_can_implement` companion.
+    pub fn baracuda_kernels_rms_norm_f16_strided_can_implement(
+        eps: f32,
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        stride_rms: *const i64,
+        norm_axes_mask: i32,
+        norm_total_extent: i32,
+        x: *const c_void,
+        gamma: *const c_void,
+        y: *const c_void,
+        rms_out: *const c_void,
+    ) -> i32;
+
+    /// RMSNorm FW strided sibling, bf16. See `rms_norm_f32_strided_run`.
+    pub fn baracuda_kernels_rms_norm_bf16_strided_run(
+        eps: f32,
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        stride_rms: *const i64,
+        norm_axes_mask: i32,
+        norm_total_extent: i32,
+        x: *const c_void,
+        gamma: *const c_void,
+        y: *mut c_void,
+        rms_out: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    /// `rms_norm_bf16_strided_can_implement` companion.
+    pub fn baracuda_kernels_rms_norm_bf16_strided_can_implement(
+        eps: f32,
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        stride_rms: *const i64,
+        norm_axes_mask: i32,
+        norm_total_extent: i32,
+        x: *const c_void,
+        gamma: *const c_void,
+        y: *const c_void,
+        rms_out: *const c_void,
+    ) -> i32;
+
+    /// RMSNorm FW strided sibling, f64. See `rms_norm_f32_strided_run`.
+    pub fn baracuda_kernels_rms_norm_f64_strided_run(
+        eps: f32,
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        stride_rms: *const i64,
+        norm_axes_mask: i32,
+        norm_total_extent: i32,
+        x: *const c_void,
+        gamma: *const c_void,
+        y: *mut c_void,
+        rms_out: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    /// `rms_norm_f64_strided_can_implement` companion.
+    pub fn baracuda_kernels_rms_norm_f64_strided_can_implement(
+        eps: f32,
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        stride_rms: *const i64,
+        norm_axes_mask: i32,
+        norm_total_extent: i32,
+        x: *const c_void,
+        gamma: *const c_void,
+        y: *const c_void,
+        rms_out: *const c_void,
+    ) -> i32;
+}
+
+#[cfg(any(feature = "sm80", feature = "sm89", feature = "sm90a"))]
+unsafe extern "C" {
+    // ---- RMSNorm BW strided siblings ----
+    /// RMSNorm BW strided sibling, f32. Same contract as
+    /// `baracuda_kernels_rms_norm_backward_f32_run`; identical underlying launcher.
+    pub fn baracuda_kernels_rms_norm_backward_f32_strided_run(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_dy: *const i64,
+        stride_x: *const i64,
+        stride_rms: *const i64,
+        stride_dx: *const i64,
+        norm_axes_mask: i32,
+        norm_total_extent: i32,
+        dy: *const c_void,
+        x: *const c_void,
+        gamma: *const c_void,
+        rms: *const c_void,
+        dx: *mut c_void,
+        dgamma: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    /// `rms_norm_backward_f32_strided_can_implement` companion.
+    pub fn baracuda_kernels_rms_norm_backward_f32_strided_can_implement(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_dy: *const i64,
+        stride_x: *const i64,
+        stride_rms: *const i64,
+        stride_dx: *const i64,
+        norm_axes_mask: i32,
+        norm_total_extent: i32,
+        dy: *const c_void,
+        x: *const c_void,
+        gamma: *const c_void,
+        rms: *const c_void,
+        dx: *const c_void,
+        dgamma: *const c_void,
+    ) -> i32;
+
+    /// RMSNorm BW strided sibling, f16.
+    pub fn baracuda_kernels_rms_norm_backward_f16_strided_run(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_dy: *const i64,
+        stride_x: *const i64,
+        stride_rms: *const i64,
+        stride_dx: *const i64,
+        norm_axes_mask: i32,
+        norm_total_extent: i32,
+        dy: *const c_void,
+        x: *const c_void,
+        gamma: *const c_void,
+        rms: *const c_void,
+        dx: *mut c_void,
+        dgamma: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    /// `rms_norm_backward_f16_strided_can_implement` companion.
+    pub fn baracuda_kernels_rms_norm_backward_f16_strided_can_implement(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_dy: *const i64,
+        stride_x: *const i64,
+        stride_rms: *const i64,
+        stride_dx: *const i64,
+        norm_axes_mask: i32,
+        norm_total_extent: i32,
+        dy: *const c_void,
+        x: *const c_void,
+        gamma: *const c_void,
+        rms: *const c_void,
+        dx: *const c_void,
+        dgamma: *const c_void,
+    ) -> i32;
+
+    /// RMSNorm BW strided sibling, bf16.
+    pub fn baracuda_kernels_rms_norm_backward_bf16_strided_run(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_dy: *const i64,
+        stride_x: *const i64,
+        stride_rms: *const i64,
+        stride_dx: *const i64,
+        norm_axes_mask: i32,
+        norm_total_extent: i32,
+        dy: *const c_void,
+        x: *const c_void,
+        gamma: *const c_void,
+        rms: *const c_void,
+        dx: *mut c_void,
+        dgamma: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    /// `rms_norm_backward_bf16_strided_can_implement` companion.
+    pub fn baracuda_kernels_rms_norm_backward_bf16_strided_can_implement(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_dy: *const i64,
+        stride_x: *const i64,
+        stride_rms: *const i64,
+        stride_dx: *const i64,
+        norm_axes_mask: i32,
+        norm_total_extent: i32,
+        dy: *const c_void,
+        x: *const c_void,
+        gamma: *const c_void,
+        rms: *const c_void,
+        dx: *const c_void,
+        dgamma: *const c_void,
+    ) -> i32;
+
+    /// RMSNorm BW strided sibling, f64.
+    pub fn baracuda_kernels_rms_norm_backward_f64_strided_run(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_dy: *const i64,
+        stride_x: *const i64,
+        stride_rms: *const i64,
+        stride_dx: *const i64,
+        norm_axes_mask: i32,
+        norm_total_extent: i32,
+        dy: *const c_void,
+        x: *const c_void,
+        gamma: *const c_void,
+        rms: *const c_void,
+        dx: *mut c_void,
+        dgamma: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    /// `rms_norm_backward_f64_strided_can_implement` companion.
+    pub fn baracuda_kernels_rms_norm_backward_f64_strided_can_implement(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_dy: *const i64,
+        stride_x: *const i64,
+        stride_rms: *const i64,
+        stride_dx: *const i64,
+        norm_axes_mask: i32,
+        norm_total_extent: i32,
+        dy: *const c_void,
+        x: *const c_void,
+        gamma: *const c_void,
+        rms: *const c_void,
+        dx: *const c_void,
+        dgamma: *const c_void,
+    ) -> i32;
+}
+
+#[cfg(any(feature = "sm80", feature = "sm89", feature = "sm90a"))]
+unsafe extern "C" {
+    // ---- LayerNorm FW strided siblings ----
+    /// LayerNorm FW strided sibling, f32. Same contract as
+    /// `baracuda_kernels_layer_norm_f32_run`; identical underlying launcher.
+    pub fn baracuda_kernels_layer_norm_f32_strided_run(
+        eps: f32,
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        stride_save: *const i64,
+        norm_axes_mask: i32,
+        norm_total_extent: i32,
+        x: *const c_void,
+        gamma: *const c_void,
+        beta: *const c_void,
+        y: *mut c_void,
+        mean_out: *mut c_void,
+        inv_std_out: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    /// `layer_norm_f32_strided_can_implement` companion.
+    pub fn baracuda_kernels_layer_norm_f32_strided_can_implement(
+        eps: f32,
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        stride_save: *const i64,
+        norm_axes_mask: i32,
+        norm_total_extent: i32,
+        x: *const c_void,
+        gamma: *const c_void,
+        beta: *const c_void,
+        y: *const c_void,
+        mean_out: *const c_void,
+        inv_std_out: *const c_void,
+    ) -> i32;
+
+    /// LayerNorm FW strided sibling, f16.
+    pub fn baracuda_kernels_layer_norm_f16_strided_run(
+        eps: f32,
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        stride_save: *const i64,
+        norm_axes_mask: i32,
+        norm_total_extent: i32,
+        x: *const c_void,
+        gamma: *const c_void,
+        beta: *const c_void,
+        y: *mut c_void,
+        mean_out: *mut c_void,
+        inv_std_out: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    /// `layer_norm_f16_strided_can_implement` companion.
+    pub fn baracuda_kernels_layer_norm_f16_strided_can_implement(
+        eps: f32,
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        stride_save: *const i64,
+        norm_axes_mask: i32,
+        norm_total_extent: i32,
+        x: *const c_void,
+        gamma: *const c_void,
+        beta: *const c_void,
+        y: *const c_void,
+        mean_out: *const c_void,
+        inv_std_out: *const c_void,
+    ) -> i32;
+
+    /// LayerNorm FW strided sibling, bf16.
+    pub fn baracuda_kernels_layer_norm_bf16_strided_run(
+        eps: f32,
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        stride_save: *const i64,
+        norm_axes_mask: i32,
+        norm_total_extent: i32,
+        x: *const c_void,
+        gamma: *const c_void,
+        beta: *const c_void,
+        y: *mut c_void,
+        mean_out: *mut c_void,
+        inv_std_out: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    /// `layer_norm_bf16_strided_can_implement` companion.
+    pub fn baracuda_kernels_layer_norm_bf16_strided_can_implement(
+        eps: f32,
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        stride_save: *const i64,
+        norm_axes_mask: i32,
+        norm_total_extent: i32,
+        x: *const c_void,
+        gamma: *const c_void,
+        beta: *const c_void,
+        y: *const c_void,
+        mean_out: *const c_void,
+        inv_std_out: *const c_void,
+    ) -> i32;
+
+    /// LayerNorm FW strided sibling, f64.
+    pub fn baracuda_kernels_layer_norm_f64_strided_run(
+        eps: f32,
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        stride_save: *const i64,
+        norm_axes_mask: i32,
+        norm_total_extent: i32,
+        x: *const c_void,
+        gamma: *const c_void,
+        beta: *const c_void,
+        y: *mut c_void,
+        mean_out: *mut c_void,
+        inv_std_out: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    /// `layer_norm_f64_strided_can_implement` companion.
+    pub fn baracuda_kernels_layer_norm_f64_strided_can_implement(
+        eps: f32,
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        stride_save: *const i64,
+        norm_axes_mask: i32,
+        norm_total_extent: i32,
+        x: *const c_void,
+        gamma: *const c_void,
+        beta: *const c_void,
+        y: *const c_void,
+        mean_out: *const c_void,
+        inv_std_out: *const c_void,
+    ) -> i32;
+}
+
+#[cfg(any(feature = "sm80", feature = "sm89", feature = "sm90a"))]
+unsafe extern "C" {
+    // ---- LayerNorm BW strided siblings ----
+    /// LayerNorm BW strided sibling, f32. Same contract as
+    /// `baracuda_kernels_layer_norm_backward_f32_run`; identical launcher.
+    pub fn baracuda_kernels_layer_norm_backward_f32_strided_run(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_dy: *const i64,
+        stride_x: *const i64,
+        stride_save: *const i64,
+        stride_dx: *const i64,
+        norm_axes_mask: i32,
+        norm_total_extent: i32,
+        dy: *const c_void,
+        x: *const c_void,
+        gamma: *const c_void,
+        mean_in: *const c_void,
+        inv_std_in: *const c_void,
+        dx: *mut c_void,
+        dgamma: *mut c_void,
+        dbeta: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    /// `layer_norm_backward_f32_strided_can_implement` companion.
+    pub fn baracuda_kernels_layer_norm_backward_f32_strided_can_implement(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_dy: *const i64,
+        stride_x: *const i64,
+        stride_save: *const i64,
+        stride_dx: *const i64,
+        norm_axes_mask: i32,
+        norm_total_extent: i32,
+        dy: *const c_void,
+        x: *const c_void,
+        gamma: *const c_void,
+        mean_in: *const c_void,
+        inv_std_in: *const c_void,
+        dx: *const c_void,
+        dgamma: *const c_void,
+        dbeta: *const c_void,
+    ) -> i32;
+
+    /// LayerNorm BW strided sibling, f16.
+    pub fn baracuda_kernels_layer_norm_backward_f16_strided_run(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_dy: *const i64,
+        stride_x: *const i64,
+        stride_save: *const i64,
+        stride_dx: *const i64,
+        norm_axes_mask: i32,
+        norm_total_extent: i32,
+        dy: *const c_void,
+        x: *const c_void,
+        gamma: *const c_void,
+        mean_in: *const c_void,
+        inv_std_in: *const c_void,
+        dx: *mut c_void,
+        dgamma: *mut c_void,
+        dbeta: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    /// `layer_norm_backward_f16_strided_can_implement` companion.
+    pub fn baracuda_kernels_layer_norm_backward_f16_strided_can_implement(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_dy: *const i64,
+        stride_x: *const i64,
+        stride_save: *const i64,
+        stride_dx: *const i64,
+        norm_axes_mask: i32,
+        norm_total_extent: i32,
+        dy: *const c_void,
+        x: *const c_void,
+        gamma: *const c_void,
+        mean_in: *const c_void,
+        inv_std_in: *const c_void,
+        dx: *const c_void,
+        dgamma: *const c_void,
+        dbeta: *const c_void,
+    ) -> i32;
+
+    /// LayerNorm BW strided sibling, bf16.
+    pub fn baracuda_kernels_layer_norm_backward_bf16_strided_run(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_dy: *const i64,
+        stride_x: *const i64,
+        stride_save: *const i64,
+        stride_dx: *const i64,
+        norm_axes_mask: i32,
+        norm_total_extent: i32,
+        dy: *const c_void,
+        x: *const c_void,
+        gamma: *const c_void,
+        mean_in: *const c_void,
+        inv_std_in: *const c_void,
+        dx: *mut c_void,
+        dgamma: *mut c_void,
+        dbeta: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    /// `layer_norm_backward_bf16_strided_can_implement` companion.
+    pub fn baracuda_kernels_layer_norm_backward_bf16_strided_can_implement(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_dy: *const i64,
+        stride_x: *const i64,
+        stride_save: *const i64,
+        stride_dx: *const i64,
+        norm_axes_mask: i32,
+        norm_total_extent: i32,
+        dy: *const c_void,
+        x: *const c_void,
+        gamma: *const c_void,
+        mean_in: *const c_void,
+        inv_std_in: *const c_void,
+        dx: *const c_void,
+        dgamma: *const c_void,
+        dbeta: *const c_void,
+    ) -> i32;
+
+    /// LayerNorm BW strided sibling, f64.
+    pub fn baracuda_kernels_layer_norm_backward_f64_strided_run(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_dy: *const i64,
+        stride_x: *const i64,
+        stride_save: *const i64,
+        stride_dx: *const i64,
+        norm_axes_mask: i32,
+        norm_total_extent: i32,
+        dy: *const c_void,
+        x: *const c_void,
+        gamma: *const c_void,
+        mean_in: *const c_void,
+        inv_std_in: *const c_void,
+        dx: *mut c_void,
+        dgamma: *mut c_void,
+        dbeta: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    /// `layer_norm_backward_f64_strided_can_implement` companion.
+    pub fn baracuda_kernels_layer_norm_backward_f64_strided_can_implement(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_dy: *const i64,
+        stride_x: *const i64,
+        stride_save: *const i64,
+        stride_dx: *const i64,
+        norm_axes_mask: i32,
+        norm_total_extent: i32,
+        dy: *const c_void,
+        x: *const c_void,
+        gamma: *const c_void,
+        mean_in: *const c_void,
+        inv_std_in: *const c_void,
+        dx: *const c_void,
+        dgamma: *const c_void,
+        dbeta: *const c_void,
+    ) -> i32;
+}
+
+// Softmax + LogSoftmax FW/BW signatures all share this shape.
+// Each macro emits 4 dtype rows below.
+#[cfg(any(feature = "sm80", feature = "sm89", feature = "sm90a"))]
+unsafe extern "C" {
+    // ---- Softmax FW strided siblings ----
+    /// Softmax FW strided sibling, f32. Same contract as
+    /// `baracuda_kernels_softmax_f32_run`; identical underlying launcher.
+    pub fn baracuda_kernels_softmax_f32_strided_run(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        softmax_axis: i32,
+        softmax_extent: i32,
+        softmax_stride_x: i64,
+        softmax_stride_y: i64,
+        x: *const c_void,
+        y: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    /// `softmax_f32_strided_can_implement` companion.
+    pub fn baracuda_kernels_softmax_f32_strided_can_implement(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        softmax_axis: i32,
+        softmax_extent: i32,
+        softmax_stride_x: i64,
+        softmax_stride_y: i64,
+        x: *const c_void,
+        y: *const c_void,
+    ) -> i32;
+
+    /// Softmax FW strided sibling, f16.
+    pub fn baracuda_kernels_softmax_f16_strided_run(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        softmax_axis: i32,
+        softmax_extent: i32,
+        softmax_stride_x: i64,
+        softmax_stride_y: i64,
+        x: *const c_void,
+        y: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    /// `softmax_f16_strided_can_implement` companion.
+    pub fn baracuda_kernels_softmax_f16_strided_can_implement(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        softmax_axis: i32,
+        softmax_extent: i32,
+        softmax_stride_x: i64,
+        softmax_stride_y: i64,
+        x: *const c_void,
+        y: *const c_void,
+    ) -> i32;
+
+    /// Softmax FW strided sibling, bf16.
+    pub fn baracuda_kernels_softmax_bf16_strided_run(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        softmax_axis: i32,
+        softmax_extent: i32,
+        softmax_stride_x: i64,
+        softmax_stride_y: i64,
+        x: *const c_void,
+        y: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    /// `softmax_bf16_strided_can_implement` companion.
+    pub fn baracuda_kernels_softmax_bf16_strided_can_implement(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        softmax_axis: i32,
+        softmax_extent: i32,
+        softmax_stride_x: i64,
+        softmax_stride_y: i64,
+        x: *const c_void,
+        y: *const c_void,
+    ) -> i32;
+
+    /// Softmax FW strided sibling, f64.
+    pub fn baracuda_kernels_softmax_f64_strided_run(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        softmax_axis: i32,
+        softmax_extent: i32,
+        softmax_stride_x: i64,
+        softmax_stride_y: i64,
+        x: *const c_void,
+        y: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    /// `softmax_f64_strided_can_implement` companion.
+    pub fn baracuda_kernels_softmax_f64_strided_can_implement(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        softmax_axis: i32,
+        softmax_extent: i32,
+        softmax_stride_x: i64,
+        softmax_stride_y: i64,
+        x: *const c_void,
+        y: *const c_void,
+    ) -> i32;
+}
+
+#[cfg(any(feature = "sm80", feature = "sm89", feature = "sm90a"))]
+unsafe extern "C" {
+    // ---- Softmax BW strided siblings ----
+    /// Softmax BW strided sibling, f32.
+    pub fn baracuda_kernels_softmax_backward_f32_strided_run(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_dy: *const i64,
+        stride_y: *const i64,
+        stride_dx: *const i64,
+        softmax_axis: i32,
+        softmax_extent: i32,
+        softmax_stride_dy: i64,
+        softmax_stride_y: i64,
+        dy: *const c_void,
+        y: *const c_void,
+        dx: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    /// `softmax_backward_f32_strided_can_implement` companion.
+    pub fn baracuda_kernels_softmax_backward_f32_strided_can_implement(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_dy: *const i64,
+        stride_y: *const i64,
+        stride_dx: *const i64,
+        softmax_axis: i32,
+        softmax_extent: i32,
+        softmax_stride_dy: i64,
+        softmax_stride_y: i64,
+        dy: *const c_void,
+        y: *const c_void,
+        dx: *const c_void,
+    ) -> i32;
+
+    /// Softmax BW strided sibling, f16.
+    pub fn baracuda_kernels_softmax_backward_f16_strided_run(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_dy: *const i64,
+        stride_y: *const i64,
+        stride_dx: *const i64,
+        softmax_axis: i32,
+        softmax_extent: i32,
+        softmax_stride_dy: i64,
+        softmax_stride_y: i64,
+        dy: *const c_void,
+        y: *const c_void,
+        dx: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    /// `softmax_backward_f16_strided_can_implement` companion.
+    pub fn baracuda_kernels_softmax_backward_f16_strided_can_implement(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_dy: *const i64,
+        stride_y: *const i64,
+        stride_dx: *const i64,
+        softmax_axis: i32,
+        softmax_extent: i32,
+        softmax_stride_dy: i64,
+        softmax_stride_y: i64,
+        dy: *const c_void,
+        y: *const c_void,
+        dx: *const c_void,
+    ) -> i32;
+
+    /// Softmax BW strided sibling, bf16.
+    pub fn baracuda_kernels_softmax_backward_bf16_strided_run(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_dy: *const i64,
+        stride_y: *const i64,
+        stride_dx: *const i64,
+        softmax_axis: i32,
+        softmax_extent: i32,
+        softmax_stride_dy: i64,
+        softmax_stride_y: i64,
+        dy: *const c_void,
+        y: *const c_void,
+        dx: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    /// `softmax_backward_bf16_strided_can_implement` companion.
+    pub fn baracuda_kernels_softmax_backward_bf16_strided_can_implement(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_dy: *const i64,
+        stride_y: *const i64,
+        stride_dx: *const i64,
+        softmax_axis: i32,
+        softmax_extent: i32,
+        softmax_stride_dy: i64,
+        softmax_stride_y: i64,
+        dy: *const c_void,
+        y: *const c_void,
+        dx: *const c_void,
+    ) -> i32;
+
+    /// Softmax BW strided sibling, f64.
+    pub fn baracuda_kernels_softmax_backward_f64_strided_run(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_dy: *const i64,
+        stride_y: *const i64,
+        stride_dx: *const i64,
+        softmax_axis: i32,
+        softmax_extent: i32,
+        softmax_stride_dy: i64,
+        softmax_stride_y: i64,
+        dy: *const c_void,
+        y: *const c_void,
+        dx: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    /// `softmax_backward_f64_strided_can_implement` companion.
+    pub fn baracuda_kernels_softmax_backward_f64_strided_can_implement(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_dy: *const i64,
+        stride_y: *const i64,
+        stride_dx: *const i64,
+        softmax_axis: i32,
+        softmax_extent: i32,
+        softmax_stride_dy: i64,
+        softmax_stride_y: i64,
+        dy: *const c_void,
+        y: *const c_void,
+        dx: *const c_void,
+    ) -> i32;
+}
+
+#[cfg(any(feature = "sm80", feature = "sm89", feature = "sm90a"))]
+unsafe extern "C" {
+    // ---- LogSoftmax FW strided siblings ----
+    /// LogSoftmax FW strided sibling, f32. ABI identical to softmax FW.
+    pub fn baracuda_kernels_log_softmax_f32_strided_run(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        softmax_axis: i32,
+        softmax_extent: i32,
+        softmax_stride_x: i64,
+        softmax_stride_y: i64,
+        x: *const c_void,
+        y: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    /// `log_softmax_f32_strided_can_implement` companion.
+    pub fn baracuda_kernels_log_softmax_f32_strided_can_implement(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        softmax_axis: i32,
+        softmax_extent: i32,
+        softmax_stride_x: i64,
+        softmax_stride_y: i64,
+        x: *const c_void,
+        y: *const c_void,
+    ) -> i32;
+
+    /// LogSoftmax FW strided sibling, f16.
+    pub fn baracuda_kernels_log_softmax_f16_strided_run(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        softmax_axis: i32,
+        softmax_extent: i32,
+        softmax_stride_x: i64,
+        softmax_stride_y: i64,
+        x: *const c_void,
+        y: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    /// `log_softmax_f16_strided_can_implement` companion.
+    pub fn baracuda_kernels_log_softmax_f16_strided_can_implement(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        softmax_axis: i32,
+        softmax_extent: i32,
+        softmax_stride_x: i64,
+        softmax_stride_y: i64,
+        x: *const c_void,
+        y: *const c_void,
+    ) -> i32;
+
+    /// LogSoftmax FW strided sibling, bf16.
+    pub fn baracuda_kernels_log_softmax_bf16_strided_run(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        softmax_axis: i32,
+        softmax_extent: i32,
+        softmax_stride_x: i64,
+        softmax_stride_y: i64,
+        x: *const c_void,
+        y: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    /// `log_softmax_bf16_strided_can_implement` companion.
+    pub fn baracuda_kernels_log_softmax_bf16_strided_can_implement(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        softmax_axis: i32,
+        softmax_extent: i32,
+        softmax_stride_x: i64,
+        softmax_stride_y: i64,
+        x: *const c_void,
+        y: *const c_void,
+    ) -> i32;
+
+    /// LogSoftmax FW strided sibling, f64.
+    pub fn baracuda_kernels_log_softmax_f64_strided_run(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        softmax_axis: i32,
+        softmax_extent: i32,
+        softmax_stride_x: i64,
+        softmax_stride_y: i64,
+        x: *const c_void,
+        y: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    /// `log_softmax_f64_strided_can_implement` companion.
+    pub fn baracuda_kernels_log_softmax_f64_strided_can_implement(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        softmax_axis: i32,
+        softmax_extent: i32,
+        softmax_stride_x: i64,
+        softmax_stride_y: i64,
+        x: *const c_void,
+        y: *const c_void,
+    ) -> i32;
+}
+
+#[cfg(any(feature = "sm80", feature = "sm89", feature = "sm90a"))]
+unsafe extern "C" {
+    // ---- LogSoftmax BW strided siblings ----
+    /// LogSoftmax BW strided sibling, f32. ABI identical to softmax BW.
+    pub fn baracuda_kernels_log_softmax_backward_f32_strided_run(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_dy: *const i64,
+        stride_y: *const i64,
+        stride_dx: *const i64,
+        softmax_axis: i32,
+        softmax_extent: i32,
+        softmax_stride_dy: i64,
+        softmax_stride_y: i64,
+        dy: *const c_void,
+        y: *const c_void,
+        dx: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    /// `log_softmax_backward_f32_strided_can_implement` companion.
+    pub fn baracuda_kernels_log_softmax_backward_f32_strided_can_implement(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_dy: *const i64,
+        stride_y: *const i64,
+        stride_dx: *const i64,
+        softmax_axis: i32,
+        softmax_extent: i32,
+        softmax_stride_dy: i64,
+        softmax_stride_y: i64,
+        dy: *const c_void,
+        y: *const c_void,
+        dx: *const c_void,
+    ) -> i32;
+
+    /// LogSoftmax BW strided sibling, f16.
+    pub fn baracuda_kernels_log_softmax_backward_f16_strided_run(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_dy: *const i64,
+        stride_y: *const i64,
+        stride_dx: *const i64,
+        softmax_axis: i32,
+        softmax_extent: i32,
+        softmax_stride_dy: i64,
+        softmax_stride_y: i64,
+        dy: *const c_void,
+        y: *const c_void,
+        dx: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    /// `log_softmax_backward_f16_strided_can_implement` companion.
+    pub fn baracuda_kernels_log_softmax_backward_f16_strided_can_implement(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_dy: *const i64,
+        stride_y: *const i64,
+        stride_dx: *const i64,
+        softmax_axis: i32,
+        softmax_extent: i32,
+        softmax_stride_dy: i64,
+        softmax_stride_y: i64,
+        dy: *const c_void,
+        y: *const c_void,
+        dx: *const c_void,
+    ) -> i32;
+
+    /// LogSoftmax BW strided sibling, bf16.
+    pub fn baracuda_kernels_log_softmax_backward_bf16_strided_run(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_dy: *const i64,
+        stride_y: *const i64,
+        stride_dx: *const i64,
+        softmax_axis: i32,
+        softmax_extent: i32,
+        softmax_stride_dy: i64,
+        softmax_stride_y: i64,
+        dy: *const c_void,
+        y: *const c_void,
+        dx: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    /// `log_softmax_backward_bf16_strided_can_implement` companion.
+    pub fn baracuda_kernels_log_softmax_backward_bf16_strided_can_implement(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_dy: *const i64,
+        stride_y: *const i64,
+        stride_dx: *const i64,
+        softmax_axis: i32,
+        softmax_extent: i32,
+        softmax_stride_dy: i64,
+        softmax_stride_y: i64,
+        dy: *const c_void,
+        y: *const c_void,
+        dx: *const c_void,
+    ) -> i32;
+
+    /// LogSoftmax BW strided sibling, f64.
+    pub fn baracuda_kernels_log_softmax_backward_f64_strided_run(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_dy: *const i64,
+        stride_y: *const i64,
+        stride_dx: *const i64,
+        softmax_axis: i32,
+        softmax_extent: i32,
+        softmax_stride_dy: i64,
+        softmax_stride_y: i64,
+        dy: *const c_void,
+        y: *const c_void,
+        dx: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    /// `log_softmax_backward_f64_strided_can_implement` companion.
+    pub fn baracuda_kernels_log_softmax_backward_f64_strided_can_implement(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        stride_dy: *const i64,
+        stride_y: *const i64,
+        stride_dx: *const i64,
+        softmax_axis: i32,
+        softmax_extent: i32,
+        softmax_stride_dy: i64,
+        softmax_stride_y: i64,
+        dy: *const c_void,
+        y: *const c_void,
+        dx: *const c_void,
+    ) -> i32;
+}
+
+#[cfg(any(feature = "sm80", feature = "sm89", feature = "sm90a"))]
+unsafe extern "C" {
+    // ---- Flip strided siblings ----
+    /// Flip strided sibling, f32.
+    pub fn baracuda_kernels_flip_f32_strided_run(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        flip_axes: *const i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        x: *const c_void,
+        y: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    /// `flip_f32_strided_can_implement` companion.
+    pub fn baracuda_kernels_flip_f32_strided_can_implement(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        flip_axes: *const i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        x: *const c_void,
+        y: *const c_void,
+    ) -> i32;
+
+    /// Flip strided sibling, f16.
+    pub fn baracuda_kernels_flip_f16_strided_run(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        flip_axes: *const i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        x: *const c_void,
+        y: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    /// `flip_f16_strided_can_implement` companion.
+    pub fn baracuda_kernels_flip_f16_strided_can_implement(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        flip_axes: *const i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        x: *const c_void,
+        y: *const c_void,
+    ) -> i32;
+
+    /// Flip strided sibling, bf16.
+    pub fn baracuda_kernels_flip_bf16_strided_run(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        flip_axes: *const i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        x: *const c_void,
+        y: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    /// `flip_bf16_strided_can_implement` companion.
+    pub fn baracuda_kernels_flip_bf16_strided_can_implement(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        flip_axes: *const i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        x: *const c_void,
+        y: *const c_void,
+    ) -> i32;
+
+    /// Flip strided sibling, f64.
+    pub fn baracuda_kernels_flip_f64_strided_run(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        flip_axes: *const i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        x: *const c_void,
+        y: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    /// `flip_f64_strided_can_implement` companion.
+    pub fn baracuda_kernels_flip_f64_strided_can_implement(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        flip_axes: *const i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        x: *const c_void,
+        y: *const c_void,
+    ) -> i32;
+}
+
+#[cfg(any(feature = "sm80", feature = "sm89", feature = "sm90a"))]
+unsafe extern "C" {
+    // ---- Roll strided siblings ----
+    /// Roll strided sibling, f32.
+    pub fn baracuda_kernels_roll_f32_strided_run(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        shifts: *const i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        x: *const c_void,
+        y: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    /// `roll_f32_strided_can_implement` companion.
+    pub fn baracuda_kernels_roll_f32_strided_can_implement(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        shifts: *const i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        x: *const c_void,
+        y: *const c_void,
+    ) -> i32;
+
+    /// Roll strided sibling, f16.
+    pub fn baracuda_kernels_roll_f16_strided_run(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        shifts: *const i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        x: *const c_void,
+        y: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    /// `roll_f16_strided_can_implement` companion.
+    pub fn baracuda_kernels_roll_f16_strided_can_implement(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        shifts: *const i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        x: *const c_void,
+        y: *const c_void,
+    ) -> i32;
+
+    /// Roll strided sibling, bf16.
+    pub fn baracuda_kernels_roll_bf16_strided_run(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        shifts: *const i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        x: *const c_void,
+        y: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    /// `roll_bf16_strided_can_implement` companion.
+    pub fn baracuda_kernels_roll_bf16_strided_can_implement(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        shifts: *const i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        x: *const c_void,
+        y: *const c_void,
+    ) -> i32;
+
+    /// Roll strided sibling, f64.
+    pub fn baracuda_kernels_roll_f64_strided_run(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        shifts: *const i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        x: *const c_void,
+        y: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    /// `roll_f64_strided_can_implement` companion.
+    pub fn baracuda_kernels_roll_f64_strided_can_implement(
+        numel: i64,
+        rank: i32,
+        shape: *const i32,
+        shifts: *const i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        x: *const c_void,
+        y: *const c_void,
+    ) -> i32;
+}
+
+#[cfg(any(feature = "sm80", feature = "sm89", feature = "sm90a"))]
+unsafe extern "C" {
+    // ---- Permute strided siblings ----
+    /// Permute strided sibling, f32.
+    pub fn baracuda_kernels_permute_f32_strided_run(
+        input_numel: i64,
+        rank: i32,
+        input_shape: *const i32,
+        dims: *const i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        x: *const c_void,
+        y: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    /// `permute_f32_strided_can_implement` companion.
+    pub fn baracuda_kernels_permute_f32_strided_can_implement(
+        input_numel: i64,
+        rank: i32,
+        input_shape: *const i32,
+        dims: *const i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        x: *const c_void,
+        y: *const c_void,
+    ) -> i32;
+
+    /// Permute strided sibling, f16.
+    pub fn baracuda_kernels_permute_f16_strided_run(
+        input_numel: i64,
+        rank: i32,
+        input_shape: *const i32,
+        dims: *const i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        x: *const c_void,
+        y: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    /// `permute_f16_strided_can_implement` companion.
+    pub fn baracuda_kernels_permute_f16_strided_can_implement(
+        input_numel: i64,
+        rank: i32,
+        input_shape: *const i32,
+        dims: *const i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        x: *const c_void,
+        y: *const c_void,
+    ) -> i32;
+
+    /// Permute strided sibling, bf16.
+    pub fn baracuda_kernels_permute_bf16_strided_run(
+        input_numel: i64,
+        rank: i32,
+        input_shape: *const i32,
+        dims: *const i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        x: *const c_void,
+        y: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    /// `permute_bf16_strided_can_implement` companion.
+    pub fn baracuda_kernels_permute_bf16_strided_can_implement(
+        input_numel: i64,
+        rank: i32,
+        input_shape: *const i32,
+        dims: *const i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        x: *const c_void,
+        y: *const c_void,
+    ) -> i32;
+
+    /// Permute strided sibling, f64.
+    pub fn baracuda_kernels_permute_f64_strided_run(
+        input_numel: i64,
+        rank: i32,
+        input_shape: *const i32,
+        dims: *const i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        x: *const c_void,
+        y: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        stream: *mut c_void,
+    ) -> i32;
+    /// `permute_f64_strided_can_implement` companion.
+    pub fn baracuda_kernels_permute_f64_strided_can_implement(
+        input_numel: i64,
+        rank: i32,
+        input_shape: *const i32,
+        dims: *const i32,
+        stride_x: *const i64,
+        stride_y: *const i64,
+        x: *const c_void,
+        y: *const c_void,
+    ) -> i32;
+}

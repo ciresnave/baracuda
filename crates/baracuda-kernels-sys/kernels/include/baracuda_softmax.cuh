@@ -1843,6 +1843,201 @@ __host__ inline int32_t launch_sparsemax_backward_fp(
         return 0;                                                                                 \
     }
 
+// =============================================================================
+// Phase 72 strided-sibling FFI exports for Softmax + LogSoftmax FW + BW.
+//
+// Each macro emits `baracuda_kernels_<NAME>_strided_run` +
+// `_strided_can_implement` that route to the same underlying launcher as the
+// non-strided `_run`. The existing `_run` already accepts stride arrays and
+// the C kernel honors them; the strided sibling exists so callers building
+// explicit dispatch tables can pick the strided path by name (matches the
+// Phase 14/18 convention for binary / unary-param ops).
+// =============================================================================
+
+#define BARACUDA_KERNELS_SOFTMAX_INSTANTIATE_STRIDED(NAME, T)                                     \
+    extern "C" int32_t baracuda_kernels_##NAME##_strided_run(                                     \
+        int64_t numel,                                                                             \
+        int32_t rank,                                                                              \
+        const int32_t* shape,                                                                     \
+        const int64_t* stride_x,                                                                  \
+        const int64_t* stride_y,                                                                  \
+        int32_t softmax_axis,                                                                     \
+        int32_t softmax_extent,                                                                   \
+        int64_t softmax_stride_x,                                                                 \
+        int64_t softmax_stride_y,                                                                 \
+        const void* x, void* y,                                                                   \
+        void* /*workspace*/, size_t /*workspace_bytes*/,                                          \
+        void* stream_ptr)                                                                          \
+    {                                                                                              \
+        if (numel < 0) return 2;                                                                  \
+        if (numel == 0) return 0;                                                                 \
+        if (x == nullptr || y == nullptr) return 2;                                               \
+        if (shape == nullptr || stride_x == nullptr || stride_y == nullptr) return 2;             \
+        cudaStream_t stream = static_cast<cudaStream_t>(stream_ptr);                              \
+        return baracuda::softmax::launch_softmax_fp<T>(                                           \
+            static_cast<const T*>(x), static_cast<T*>(y), numel, rank,                            \
+            shape, stride_x, stride_y,                                                            \
+            softmax_axis, softmax_extent, softmax_stride_x, softmax_stride_y,                     \
+            stream);                                                                              \
+    }                                                                                              \
+    extern "C" int32_t baracuda_kernels_##NAME##_strided_can_implement(                           \
+        int64_t numel,                                                                             \
+        int32_t rank,                                                                              \
+        const int32_t* shape,                                                                     \
+        const int64_t* stride_x,                                                                  \
+        const int64_t* stride_y,                                                                  \
+        int32_t /*softmax_axis*/,                                                                 \
+        int32_t /*softmax_extent*/,                                                               \
+        int64_t /*softmax_stride_x*/,                                                             \
+        int64_t /*softmax_stride_y*/,                                                             \
+        const void* /*x*/, const void* /*y*/)                                                     \
+    {                                                                                              \
+        if (numel < 0) return 2;                                                                  \
+        if (rank < 0) return 2;                                                                   \
+        if (numel > 0 && (shape == nullptr || stride_x == nullptr || stride_y == nullptr)) return 2; \
+        return 0;                                                                                 \
+    }
+
+#define BARACUDA_KERNELS_SOFTMAX_BACKWARD_INSTANTIATE_STRIDED(NAME, T)                            \
+    extern "C" int32_t baracuda_kernels_##NAME##_strided_run(                                     \
+        int64_t numel,                                                                             \
+        int32_t rank,                                                                              \
+        const int32_t* shape,                                                                     \
+        const int64_t* stride_dy,                                                                 \
+        const int64_t* stride_y,                                                                  \
+        const int64_t* stride_dx,                                                                 \
+        int32_t softmax_axis,                                                                     \
+        int32_t softmax_extent,                                                                   \
+        int64_t softmax_stride_dy,                                                                \
+        int64_t softmax_stride_y,                                                                 \
+        const void* dy, const void* y, void* dx,                                                  \
+        void* /*workspace*/, size_t /*workspace_bytes*/,                                          \
+        void* stream_ptr)                                                                          \
+    {                                                                                              \
+        if (numel < 0) return 2;                                                                  \
+        if (numel == 0) return 0;                                                                 \
+        if (dy == nullptr || y == nullptr || dx == nullptr) return 2;                             \
+        if (shape == nullptr || stride_dy == nullptr || stride_y == nullptr ||                    \
+            stride_dx == nullptr) return 2;                                                       \
+        cudaStream_t stream = static_cast<cudaStream_t>(stream_ptr);                              \
+        return baracuda::softmax::launch_softmax_backward_fp<T>(                                  \
+            static_cast<const T*>(dy), static_cast<const T*>(y), static_cast<T*>(dx),             \
+            numel, rank, shape, stride_dy, stride_y, stride_dx,                                   \
+            softmax_axis, softmax_extent, softmax_stride_dy, softmax_stride_y,                    \
+            stream);                                                                              \
+    }                                                                                              \
+    extern "C" int32_t baracuda_kernels_##NAME##_strided_can_implement(                           \
+        int64_t numel,                                                                             \
+        int32_t rank,                                                                              \
+        const int32_t* shape,                                                                     \
+        const int64_t* stride_dy,                                                                 \
+        const int64_t* stride_y,                                                                  \
+        const int64_t* stride_dx,                                                                 \
+        int32_t /*softmax_axis*/,                                                                 \
+        int32_t /*softmax_extent*/,                                                               \
+        int64_t /*softmax_stride_dy*/,                                                            \
+        int64_t /*softmax_stride_y*/,                                                             \
+        const void* /*dy*/, const void* /*y*/, const void* /*dx*/)                                \
+    {                                                                                              \
+        if (numel < 0) return 2;                                                                  \
+        if (rank < 0) return 2;                                                                   \
+        if (numel > 0 && (shape == nullptr || stride_dy == nullptr || stride_y == nullptr ||     \
+                           stride_dx == nullptr)) return 2;                                       \
+        return 0;                                                                                 \
+    }
+
+#define BARACUDA_KERNELS_LOG_SOFTMAX_INSTANTIATE_STRIDED(NAME, T)                                 \
+    extern "C" int32_t baracuda_kernels_##NAME##_strided_run(                                     \
+        int64_t numel,                                                                             \
+        int32_t rank,                                                                              \
+        const int32_t* shape,                                                                     \
+        const int64_t* stride_x,                                                                  \
+        const int64_t* stride_y,                                                                  \
+        int32_t softmax_axis,                                                                     \
+        int32_t softmax_extent,                                                                   \
+        int64_t softmax_stride_x,                                                                 \
+        int64_t softmax_stride_y,                                                                 \
+        const void* x, void* y,                                                                   \
+        void* /*workspace*/, size_t /*workspace_bytes*/,                                          \
+        void* stream_ptr)                                                                          \
+    {                                                                                              \
+        if (numel < 0) return 2;                                                                  \
+        if (numel == 0) return 0;                                                                 \
+        if (x == nullptr || y == nullptr) return 2;                                               \
+        if (shape == nullptr || stride_x == nullptr || stride_y == nullptr) return 2;             \
+        cudaStream_t stream = static_cast<cudaStream_t>(stream_ptr);                              \
+        return baracuda::softmax::launch_log_softmax_fp<T>(                                       \
+            static_cast<const T*>(x), static_cast<T*>(y), numel, rank,                            \
+            shape, stride_x, stride_y,                                                            \
+            softmax_axis, softmax_extent, softmax_stride_x, softmax_stride_y,                     \
+            stream);                                                                              \
+    }                                                                                              \
+    extern "C" int32_t baracuda_kernels_##NAME##_strided_can_implement(                           \
+        int64_t numel,                                                                             \
+        int32_t rank,                                                                              \
+        const int32_t* shape,                                                                     \
+        const int64_t* stride_x,                                                                  \
+        const int64_t* stride_y,                                                                  \
+        int32_t /*softmax_axis*/,                                                                 \
+        int32_t /*softmax_extent*/,                                                               \
+        int64_t /*softmax_stride_x*/,                                                             \
+        int64_t /*softmax_stride_y*/,                                                             \
+        const void* /*x*/, const void* /*y*/)                                                     \
+    {                                                                                              \
+        if (numel < 0) return 2;                                                                  \
+        if (rank < 0) return 2;                                                                   \
+        if (numel > 0 && (shape == nullptr || stride_x == nullptr || stride_y == nullptr)) return 2; \
+        return 0;                                                                                 \
+    }
+
+#define BARACUDA_KERNELS_LOG_SOFTMAX_BACKWARD_INSTANTIATE_STRIDED(NAME, T)                        \
+    extern "C" int32_t baracuda_kernels_##NAME##_strided_run(                                     \
+        int64_t numel,                                                                             \
+        int32_t rank,                                                                              \
+        const int32_t* shape,                                                                     \
+        const int64_t* stride_dy,                                                                 \
+        const int64_t* stride_y,                                                                  \
+        const int64_t* stride_dx,                                                                 \
+        int32_t softmax_axis,                                                                     \
+        int32_t softmax_extent,                                                                   \
+        int64_t softmax_stride_dy,                                                                \
+        int64_t softmax_stride_y,                                                                 \
+        const void* dy, const void* y, void* dx,                                                  \
+        void* /*workspace*/, size_t /*workspace_bytes*/,                                          \
+        void* stream_ptr)                                                                          \
+    {                                                                                              \
+        if (numel < 0) return 2;                                                                  \
+        if (numel == 0) return 0;                                                                 \
+        if (dy == nullptr || y == nullptr || dx == nullptr) return 2;                             \
+        if (shape == nullptr || stride_dy == nullptr || stride_y == nullptr ||                    \
+            stride_dx == nullptr) return 2;                                                       \
+        cudaStream_t stream = static_cast<cudaStream_t>(stream_ptr);                              \
+        return baracuda::softmax::launch_log_softmax_backward_fp<T>(                              \
+            static_cast<const T*>(dy), static_cast<const T*>(y), static_cast<T*>(dx),             \
+            numel, rank, shape, stride_dy, stride_y, stride_dx,                                   \
+            softmax_axis, softmax_extent, softmax_stride_dy, softmax_stride_y,                    \
+            stream);                                                                              \
+    }                                                                                              \
+    extern "C" int32_t baracuda_kernels_##NAME##_strided_can_implement(                           \
+        int64_t numel,                                                                             \
+        int32_t rank,                                                                              \
+        const int32_t* shape,                                                                     \
+        const int64_t* stride_dy,                                                                 \
+        const int64_t* stride_y,                                                                  \
+        const int64_t* stride_dx,                                                                 \
+        int32_t /*softmax_axis*/,                                                                 \
+        int32_t /*softmax_extent*/,                                                               \
+        int64_t /*softmax_stride_dy*/,                                                            \
+        int64_t /*softmax_stride_y*/,                                                             \
+        const void* /*dy*/, const void* /*y*/, const void* /*dx*/)                                \
+    {                                                                                              \
+        if (numel < 0) return 2;                                                                  \
+        if (rank < 0) return 2;                                                                   \
+        if (numel > 0 && (shape == nullptr || stride_dy == nullptr || stride_y == nullptr ||     \
+                           stride_dx == nullptr)) return 2;                                       \
+        return 0;                                                                                 \
+    }
+
 // Emit one gumbel-softmax FW launcher. Reads `x` (T) + `u_rand` (f32)
 // + writes `y` (T). ABI is softmax FW + (u_rand, inv_tau, hard).
 #define BARACUDA_KERNELS_GUMBEL_SOFTMAX_INSTANTIATE(NAME, T)                                       \

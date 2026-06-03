@@ -1396,27 +1396,26 @@ checks internally before launch and returns the right status code on
 failure. The standalone `_can_implement` is a UX convenience for
 callers building dispatch tables; nothing breaks without it.
 
-### Strided FFI siblings for normalizer + shape ops
+### Strided FFI siblings for normalizer + shape ops — Phase 72 ✓ CLOSED (next release)
 
-Phase 14/18 established the strided-sibling convention but a handful
-of op families never got it. Each ships 4 contig dtypes with zero
-strided variants:
+**Status:** Done in Phase 72 (not yet released; will ship in alpha.65).
 
-- `rms_norm` / `layer_norm` / `softmax` / `log_softmax`
-- `flip` / `roll` / `permute`
+Authored explicit `_strided_run` / `_strided_can_implement` siblings for
+all 7 op families per Phase 14/18 convention: `rms_norm`,
+`layer_norm`, `softmax`, `log_softmax` (FW + BW × 4 dtypes each) +
+`flip`, `roll`, `permute` (FW × 4 dtypes each). 88 new FFI symbols
+total (44 `_strided_run` + 44 `_strided_can_implement`). Each sibling
+routes to the same underlying launcher as the non-strided `_run` —
+the existing exports already accepted stride arrays and the C kernels
+already honored them; the sibling exists so callers building explicit
+dispatch tables can pick the strided path by name.
 
-**Scope:** for each op, one new `_strided_<dtype>_run` FFI symbol per
-dtype (~4 each) + its `_can_implement` companion. ~56 new FFI symbols
-in total + matching plan-layer dispatcher updates so callers see one
-plan whether they hit the contig fast path or the strided fallback.
-
-**Why deferred:** the Conv / Pool / cuDNN-backed families also lack
-strided FFI but route through safe wrappers that may make that moot.
-For the bespoke normalizers above, the safe wrapper at the
-`baracuda-kernels` layer does the strided/contig branching today via
-`Contiguize`; making the FFI strided would let callers skip that
-copy. Priority is bench-driven (Phase 29+ benches haven't yet
-isolated this as a hot path).
+Test investment: 7 new direct-FFI smoke tests in
+`crates/baracuda-kernels/tests/strided_siblings_ffi_smoke.rs` proving
+each family's strided sibling resolves at link time + produces correct
+results on non-contig fixtures (stride-2 over 2x-padded buffer for the
+norm / softmax / roll ops; transposed view for flip + permute). All
+7/7 pass on RTX 4070.
 
 ### f64 in-place dispatch for SMEM-staged normalizers
 

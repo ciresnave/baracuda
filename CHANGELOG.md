@@ -8,6 +8,26 @@ alpha represents one or more completed phases.
 The phase numbering is Fuel-driven (Fuel is baracuda's primary downstream
 consumer); see `ROADMAP.md` for the active phase board.
 
+## Unreleased
+
+### Added — kernels
+
+- **Phase 72 — Strided FFI siblings for normalizer + shape ops**: closes
+  the long-standing ROADMAP item. Authored explicit `_strided_run` /
+  `_strided_can_implement` siblings for 7 op families:
+  `rms_norm`/`layer_norm`/`softmax`/`log_softmax` (FW + BW × 4 dtypes
+  each) + `flip`/`roll`/`permute` (FW × 4 dtypes each). **88 new FFI
+  symbols** (44 `_strided_run` + 44 `_strided_can_implement`). Each
+  sibling routes to the same underlying launcher as the non-strided
+  `_run` — the existing exports already accepted stride arrays and the
+  C kernels already honored them; the sibling exists so callers
+  building explicit dispatch tables can pick the strided path by name
+  (matches the Phase 14/18 convention for binary / unary-param ops).
+  Test investment: 7 new direct-FFI smoke tests in
+  `tests/strided_siblings_ffi_smoke.rs`, all 7/7 pass on RTX 4070 with
+  non-contig fixtures (stride-2 over 2x-padded buffer for the
+  norm/softmax/roll ops; transposed view for flip + permute).
+
 ## 0.0.1-alpha.64 — 2026-06-03 (Phases 64 + 65 + 66-prep + Tier-2 docs sweep)
 
 The biggest single release in the alpha series — closes Phases 64–71

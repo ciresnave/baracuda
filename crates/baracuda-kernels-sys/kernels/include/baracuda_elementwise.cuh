@@ -5448,6 +5448,120 @@ __host__ inline int32_t launch_gated_activation_backward_contig(
         return 0;                                                                                  \
     }
 
+// =============================================================================
+// Phase 72 strided-sibling FFI exports for Flip / Roll / Permute.
+//
+// The existing `_run` symbols for these ops already accept stride arrays and
+// the C kernels honor them (fully stride-aware unravel). The strided sibling
+// exists so callers building explicit dispatch tables can pick the strided
+// path by name (matches the Phase 14/18 convention).
+// =============================================================================
+
+#define BARACUDA_KERNELS_FLIP_INSTANTIATE_STRIDED(NAME, T)                                        \
+    extern "C" int32_t baracuda_kernels_##NAME##_strided_run(                                     \
+        int64_t numel,                                                                             \
+        int32_t rank,                                                                              \
+        const int32_t* shape,                                                                     \
+        const int32_t* flip_axes,                                                                 \
+        const int64_t* stride_x,                                                                  \
+        const int64_t* stride_y,                                                                  \
+        const void* x, void* y,                                                                   \
+        void* /*workspace*/, size_t /*workspace_bytes*/,                                          \
+        void* stream_ptr)                                                                          \
+    {                                                                                              \
+        if (numel < 0) return 2;                                                                  \
+        if (numel == 0) return 0;                                                                 \
+        if (x == nullptr || y == nullptr) return 2;                                               \
+        if (shape == nullptr || flip_axes == nullptr ||                                           \
+            stride_x == nullptr || stride_y == nullptr) return 2;                                 \
+        cudaStream_t stream = static_cast<cudaStream_t>(stream_ptr);                              \
+        return baracuda::elementwise::launch_flip<T>(                                             \
+            static_cast<const T*>(x), static_cast<T*>(y), numel, rank,                            \
+            shape, flip_axes, stride_x, stride_y, stream);                                        \
+    }                                                                                              \
+    extern "C" int32_t baracuda_kernels_##NAME##_strided_can_implement(                           \
+        int64_t numel, int32_t rank,                                                              \
+        const int32_t* shape, const int32_t* flip_axes,                                           \
+        const int64_t* stride_x, const int64_t* stride_y,                                         \
+        const void* /*x*/, const void* /*y*/)                                                     \
+    {                                                                                              \
+        if (numel < 0) return 2;                                                                  \
+        if (rank < 0) return 2;                                                                   \
+        if (numel > 0 && (shape == nullptr || flip_axes == nullptr ||                             \
+                           stride_x == nullptr || stride_y == nullptr)) return 2;                 \
+        return 0;                                                                                  \
+    }
+
+#define BARACUDA_KERNELS_ROLL_INSTANTIATE_STRIDED(NAME, T)                                        \
+    extern "C" int32_t baracuda_kernels_##NAME##_strided_run(                                     \
+        int64_t numel,                                                                             \
+        int32_t rank,                                                                              \
+        const int32_t* shape,                                                                     \
+        const int32_t* shifts,                                                                    \
+        const int64_t* stride_x,                                                                  \
+        const int64_t* stride_y,                                                                  \
+        const void* x, void* y,                                                                   \
+        void* /*workspace*/, size_t /*workspace_bytes*/,                                          \
+        void* stream_ptr)                                                                          \
+    {                                                                                              \
+        if (numel < 0) return 2;                                                                  \
+        if (numel == 0) return 0;                                                                 \
+        if (x == nullptr || y == nullptr) return 2;                                               \
+        if (shape == nullptr || shifts == nullptr ||                                              \
+            stride_x == nullptr || stride_y == nullptr) return 2;                                 \
+        cudaStream_t stream = static_cast<cudaStream_t>(stream_ptr);                              \
+        return baracuda::elementwise::launch_roll<T>(                                             \
+            static_cast<const T*>(x), static_cast<T*>(y), numel, rank,                            \
+            shape, shifts, stride_x, stride_y, stream);                                           \
+    }                                                                                              \
+    extern "C" int32_t baracuda_kernels_##NAME##_strided_can_implement(                           \
+        int64_t numel, int32_t rank,                                                              \
+        const int32_t* shape, const int32_t* shifts,                                              \
+        const int64_t* stride_x, const int64_t* stride_y,                                         \
+        const void* /*x*/, const void* /*y*/)                                                     \
+    {                                                                                              \
+        if (numel < 0) return 2;                                                                  \
+        if (rank < 0) return 2;                                                                   \
+        if (numel > 0 && (shape == nullptr || shifts == nullptr ||                                \
+                           stride_x == nullptr || stride_y == nullptr)) return 2;                 \
+        return 0;                                                                                  \
+    }
+
+#define BARACUDA_KERNELS_PERMUTE_INSTANTIATE_STRIDED(NAME, T)                                     \
+    extern "C" int32_t baracuda_kernels_##NAME##_strided_run(                                     \
+        int64_t input_numel,                                                                       \
+        int32_t rank,                                                                              \
+        const int32_t* input_shape,                                                               \
+        const int32_t* dims,                                                                      \
+        const int64_t* stride_x,                                                                  \
+        const int64_t* stride_y,                                                                  \
+        const void* x, void* y,                                                                   \
+        void* /*workspace*/, size_t /*workspace_bytes*/,                                          \
+        void* stream_ptr)                                                                          \
+    {                                                                                              \
+        if (input_numel < 0) return 2;                                                            \
+        if (input_numel == 0) return 0;                                                           \
+        if (x == nullptr || y == nullptr) return 2;                                               \
+        if (input_shape == nullptr || dims == nullptr || stride_x == nullptr ||                   \
+            stride_y == nullptr) return 2;                                                        \
+        cudaStream_t stream = static_cast<cudaStream_t>(stream_ptr);                              \
+        return baracuda::elementwise::launch_permute<T>(                                          \
+            static_cast<const T*>(x), static_cast<T*>(y), input_numel, rank,                      \
+            input_shape, dims, stride_x, stride_y, stream);                                       \
+    }                                                                                              \
+    extern "C" int32_t baracuda_kernels_##NAME##_strided_can_implement(                           \
+        int64_t input_numel, int32_t rank,                                                        \
+        const int32_t* input_shape, const int32_t* dims,                                          \
+        const int64_t* stride_x, const int64_t* stride_y,                                         \
+        const void* /*x*/, const void* /*y*/)                                                     \
+    {                                                                                              \
+        if (input_numel < 0) return 2;                                                            \
+        if (rank < 0) return 2;                                                                   \
+        if (input_numel > 0 && (input_shape == nullptr || dims == nullptr ||                      \
+                                  stride_x == nullptr || stride_y == nullptr)) return 2;          \
+        return 0;                                                                                  \
+    }
+
 // Emit one Concat-2-input launcher.
 //
 // NAME : symbol body — e.g. `concat2_f32`.

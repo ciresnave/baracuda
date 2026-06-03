@@ -2535,6 +2535,60 @@ __host__ inline int32_t launch_bn_gn_backward_fp(
         return 0;                                                                                   \
     }
 
+// Phase 72 strided-sibling: emits `baracuda_kernels_<NAME>_strided_run` +
+// `_strided_can_implement` that route to the same underlying launcher as the
+// non-strided `_run`. The existing `_run` already accepts stride arrays and
+// the C kernel honors them (SMEM fast path for contig-last-axis layouts +
+// stride-walk legacy fallback otherwise). The strided sibling exists so
+// callers building explicit dispatch tables can pick the strided path by
+// name (matches the Phase 14/18 convention for binary / unary-param ops).
+#define BARACUDA_KERNELS_RMS_NORM_INSTANTIATE_STRIDED(NAME, T)                                      \
+    extern "C" int32_t baracuda_kernels_##NAME##_strided_run(                                       \
+        float eps,                                                                                  \
+        int64_t numel,                                                                              \
+        int32_t rank,                                                                               \
+        const int32_t* shape,                                                                       \
+        const int64_t* stride_x,                                                                    \
+        const int64_t* stride_y,                                                                    \
+        const int64_t* stride_rms,                                                                  \
+        int32_t norm_axes_mask,                                                                     \
+        int32_t norm_total_extent,                                                                  \
+        const void* x, const void* gamma, void* y, void* rms_out,                                   \
+        void* /*workspace*/, size_t /*workspace_bytes*/,                                            \
+        void* stream_ptr)                                                                           \
+    {                                                                                                \
+        if (numel < 0) return 2;                                                                    \
+        if (numel == 0) return 0;                                                                   \
+        if (x == nullptr || y == nullptr) return 2;                                                 \
+        if (shape == nullptr || stride_x == nullptr || stride_y == nullptr) return 2;               \
+        cudaStream_t stream = static_cast<cudaStream_t>(stream_ptr);                                \
+        return baracuda::norm::launch_rms_norm_fp<T>(                                               \
+            static_cast<const T*>(x),                                                               \
+            static_cast<const T*>(gamma),                                                           \
+            static_cast<T*>(y),                                                                     \
+            static_cast<T*>(rms_out),                                                               \
+            eps, numel, rank, shape, stride_x, stride_y, stride_rms,                                \
+            norm_axes_mask, norm_total_extent,                                                      \
+            stream);                                                                                \
+    }                                                                                                \
+    extern "C" int32_t baracuda_kernels_##NAME##_strided_can_implement(                             \
+        float /*eps*/,                                                                              \
+        int64_t numel,                                                                              \
+        int32_t rank,                                                                               \
+        const int32_t* shape,                                                                       \
+        const int64_t* stride_x,                                                                    \
+        const int64_t* stride_y,                                                                    \
+        const int64_t* /*stride_rms*/,                                                              \
+        int32_t /*norm_axes_mask*/,                                                                 \
+        int32_t /*norm_total_extent*/,                                                              \
+        const void* /*x*/, const void* /*gamma*/, const void* /*y*/, const void* /*rms_out*/)      \
+    {                                                                                                \
+        if (numel < 0) return 2;                                                                    \
+        if (rank < 0) return 2;                                                                     \
+        if (numel > 0 && (shape == nullptr || stride_x == nullptr || stride_y == nullptr)) return 2;\
+        return 0;                                                                                   \
+    }
+
 #define BARACUDA_KERNELS_RMS_NORM_BACKWARD_INSTANTIATE(NAME, T)                                     \
     extern "C" int32_t baracuda_kernels_##NAME##_run(                                               \
         int64_t numel,                                                                              \
@@ -2569,6 +2623,61 @@ __host__ inline int32_t launch_bn_gn_backward_fp(
             stream);                                                                                \
     }                                                                                                \
     extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                     \
+        int64_t numel,                                                                              \
+        int32_t rank,                                                                               \
+        const int32_t* shape,                                                                       \
+        const int64_t* stride_dy,                                                                   \
+        const int64_t* stride_x,                                                                    \
+        const int64_t* stride_rms,                                                                  \
+        const int64_t* stride_dx,                                                                   \
+        int32_t /*norm_axes_mask*/,                                                                 \
+        int32_t /*norm_total_extent*/,                                                              \
+        const void* /*dy*/, const void* /*x*/, const void* /*gamma*/, const void* /*rms*/,         \
+        const void* /*dx*/, const void* /*dgamma*/)                                                 \
+    {                                                                                                \
+        if (numel < 0) return 2;                                                                    \
+        if (rank < 0) return 2;                                                                     \
+        if (numel > 0 && (shape == nullptr || stride_dy == nullptr || stride_x == nullptr ||       \
+                           stride_rms == nullptr || stride_dx == nullptr)) return 2;                \
+        return 0;                                                                                   \
+    }
+
+// Phase 72 strided-sibling for RmsNormBackward — see comment above
+// BARACUDA_KERNELS_RMS_NORM_INSTANTIATE_STRIDED.
+#define BARACUDA_KERNELS_RMS_NORM_BACKWARD_INSTANTIATE_STRIDED(NAME, T)                             \
+    extern "C" int32_t baracuda_kernels_##NAME##_strided_run(                                       \
+        int64_t numel,                                                                              \
+        int32_t rank,                                                                               \
+        const int32_t* shape,                                                                       \
+        const int64_t* stride_dy,                                                                   \
+        const int64_t* stride_x,                                                                    \
+        const int64_t* stride_rms,                                                                  \
+        const int64_t* stride_dx,                                                                   \
+        int32_t norm_axes_mask,                                                                     \
+        int32_t norm_total_extent,                                                                  \
+        const void* dy, const void* x, const void* gamma, const void* rms,                          \
+        void* dx, void* dgamma,                                                                     \
+        void* /*workspace*/, size_t /*workspace_bytes*/,                                            \
+        void* stream_ptr)                                                                           \
+    {                                                                                                \
+        if (numel < 0) return 2;                                                                    \
+        if (numel == 0) return 0;                                                                   \
+        if (dy == nullptr || x == nullptr || rms == nullptr || dx == nullptr) return 2;             \
+        if (shape == nullptr || stride_dy == nullptr || stride_x == nullptr ||                      \
+            stride_rms == nullptr || stride_dx == nullptr) return 2;                                \
+        cudaStream_t stream = static_cast<cudaStream_t>(stream_ptr);                                \
+        return baracuda::norm::launch_rms_norm_backward_fp<T>(                                      \
+            static_cast<const T*>(dy),                                                              \
+            static_cast<const T*>(x),                                                               \
+            static_cast<const T*>(gamma),                                                           \
+            static_cast<const T*>(rms),                                                             \
+            static_cast<T*>(dx),                                                                    \
+            static_cast<T*>(dgamma),                                                                \
+            numel, rank, shape, stride_dy, stride_x, stride_rms, stride_dx,                         \
+            norm_axes_mask, norm_total_extent,                                                      \
+            stream);                                                                                \
+    }                                                                                                \
+    extern "C" int32_t baracuda_kernels_##NAME##_strided_can_implement(                             \
         int64_t numel,                                                                              \
         int32_t rank,                                                                               \
         const int32_t* shape,                                                                       \
@@ -2677,6 +2786,119 @@ __host__ inline int32_t launch_bn_gn_backward_fp(
             stream);                                                                                \
     }                                                                                                \
     extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                     \
+        int64_t numel,                                                                              \
+        int32_t rank,                                                                               \
+        const int32_t* shape,                                                                       \
+        const int64_t* stride_dy,                                                                   \
+        const int64_t* stride_x,                                                                    \
+        const int64_t* stride_save,                                                                 \
+        const int64_t* stride_dx,                                                                   \
+        int32_t /*norm_axes_mask*/,                                                                 \
+        int32_t /*norm_total_extent*/,                                                              \
+        const void* /*dy*/, const void* /*x*/, const void* /*gamma*/,                               \
+        const void* /*mean_in*/, const void* /*inv_std_in*/,                                        \
+        const void* /*dx*/, const void* /*dgamma*/, const void* /*dbeta*/)                          \
+    {                                                                                                \
+        if (numel < 0) return 2;                                                                    \
+        if (rank < 0) return 2;                                                                     \
+        if (numel > 0 && (shape == nullptr || stride_dy == nullptr || stride_x == nullptr ||       \
+                           stride_save == nullptr || stride_dx == nullptr)) return 2;               \
+        return 0;                                                                                   \
+    }
+
+// Phase 72 strided-sibling for LayerNorm FW — see comment above
+// BARACUDA_KERNELS_RMS_NORM_INSTANTIATE_STRIDED.
+#define BARACUDA_KERNELS_LAYER_NORM_INSTANTIATE_STRIDED(NAME, T)                                    \
+    extern "C" int32_t baracuda_kernels_##NAME##_strided_run(                                       \
+        float eps,                                                                                  \
+        int64_t numel,                                                                              \
+        int32_t rank,                                                                               \
+        const int32_t* shape,                                                                       \
+        const int64_t* stride_x,                                                                    \
+        const int64_t* stride_y,                                                                    \
+        const int64_t* stride_save,                                                                 \
+        int32_t norm_axes_mask,                                                                     \
+        int32_t norm_total_extent,                                                                  \
+        const void* x, const void* gamma, const void* beta,                                         \
+        void* y, void* mean_out, void* inv_std_out,                                                 \
+        void* /*workspace*/, size_t /*workspace_bytes*/,                                            \
+        void* stream_ptr)                                                                           \
+    {                                                                                                \
+        if (numel < 0) return 2;                                                                    \
+        if (numel == 0) return 0;                                                                   \
+        if (x == nullptr || y == nullptr) return 2;                                                 \
+        if (shape == nullptr || stride_x == nullptr || stride_y == nullptr) return 2;               \
+        cudaStream_t stream = static_cast<cudaStream_t>(stream_ptr);                                \
+        return baracuda::norm::launch_layer_norm_fp<T>(                                             \
+            static_cast<const T*>(x),                                                               \
+            static_cast<const T*>(gamma),                                                           \
+            static_cast<const T*>(beta),                                                            \
+            static_cast<T*>(y),                                                                     \
+            static_cast<T*>(mean_out),                                                              \
+            static_cast<T*>(inv_std_out),                                                           \
+            eps, numel, rank, shape, stride_x, stride_y, stride_save,                               \
+            norm_axes_mask, norm_total_extent,                                                      \
+            stream);                                                                                \
+    }                                                                                                \
+    extern "C" int32_t baracuda_kernels_##NAME##_strided_can_implement(                             \
+        float /*eps*/,                                                                              \
+        int64_t numel,                                                                              \
+        int32_t rank,                                                                               \
+        const int32_t* shape,                                                                       \
+        const int64_t* stride_x,                                                                    \
+        const int64_t* stride_y,                                                                    \
+        const int64_t* /*stride_save*/,                                                             \
+        int32_t /*norm_axes_mask*/,                                                                 \
+        int32_t /*norm_total_extent*/,                                                              \
+        const void* /*x*/, const void* /*gamma*/, const void* /*beta*/,                             \
+        const void* /*y*/, const void* /*mean_out*/, const void* /*inv_std_out*/)                   \
+    {                                                                                                \
+        if (numel < 0) return 2;                                                                    \
+        if (rank < 0) return 2;                                                                     \
+        if (numel > 0 && (shape == nullptr || stride_x == nullptr || stride_y == nullptr)) return 2;\
+        return 0;                                                                                   \
+    }
+
+// Phase 72 strided-sibling for LayerNorm BW — see comment above
+// BARACUDA_KERNELS_RMS_NORM_INSTANTIATE_STRIDED.
+#define BARACUDA_KERNELS_LAYER_NORM_BACKWARD_INSTANTIATE_STRIDED(NAME, T)                           \
+    extern "C" int32_t baracuda_kernels_##NAME##_strided_run(                                       \
+        int64_t numel,                                                                              \
+        int32_t rank,                                                                               \
+        const int32_t* shape,                                                                       \
+        const int64_t* stride_dy,                                                                   \
+        const int64_t* stride_x,                                                                    \
+        const int64_t* stride_save,                                                                 \
+        const int64_t* stride_dx,                                                                   \
+        int32_t norm_axes_mask,                                                                     \
+        int32_t norm_total_extent,                                                                  \
+        const void* dy, const void* x, const void* gamma,                                           \
+        const void* mean_in, const void* inv_std_in,                                                \
+        void* dx, void* dgamma, void* dbeta,                                                        \
+        void* /*workspace*/, size_t /*workspace_bytes*/,                                            \
+        void* stream_ptr)                                                                           \
+    {                                                                                                \
+        if (numel < 0) return 2;                                                                    \
+        if (numel == 0) return 0;                                                                   \
+        if (dy == nullptr || x == nullptr || mean_in == nullptr ||                                  \
+            inv_std_in == nullptr || dx == nullptr) return 2;                                       \
+        if (shape == nullptr || stride_dy == nullptr || stride_x == nullptr ||                      \
+            stride_save == nullptr || stride_dx == nullptr) return 2;                               \
+        cudaStream_t stream = static_cast<cudaStream_t>(stream_ptr);                                \
+        return baracuda::norm::launch_layer_norm_backward_fp<T>(                                    \
+            static_cast<const T*>(dy),                                                              \
+            static_cast<const T*>(x),                                                               \
+            static_cast<const T*>(gamma),                                                           \
+            static_cast<const T*>(mean_in),                                                         \
+            static_cast<const T*>(inv_std_in),                                                      \
+            static_cast<T*>(dx),                                                                    \
+            static_cast<T*>(dgamma),                                                                \
+            static_cast<T*>(dbeta),                                                                 \
+            numel, rank, shape, stride_dy, stride_x, stride_save, stride_dx,                        \
+            norm_axes_mask, norm_total_extent,                                                      \
+            stream);                                                                                \
+    }                                                                                                \
+    extern "C" int32_t baracuda_kernels_##NAME##_strided_can_implement(                             \
         int64_t numel,                                                                              \
         int32_t rank,                                                                               \
         const int32_t* shape,                                                                       \
