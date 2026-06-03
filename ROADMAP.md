@@ -1309,113 +1309,101 @@ Out of scope for Phase 49 (future):
 - **LAMB f16/bf16** — Phase 49 ships f32-only LAMB; mixed-precision
   LAMB is a follow-up.
 
-## Future-phase candidates (release-readiness audit, 2026-06-02)
+## Pre-1.0 must-haves
 
-These items surfaced during the pre-release audit that prepared the
-Phase 64+65 rollup. Each is independently doable in its own phase;
-priority is set by Fuel ask and release-line ergonomics, not
-intrinsic technical urgency.
+Work that needs to land before the `0.1.0-beta.0` cut. Ordered by
+priority within the section.
 
-**Status update (2026-06-03):**
-- `_can_implement` companion fanout — **CLOSED**. All 2026 missing
-  symbols added across Rounds 1-4. Every `_run` FFI symbol in
-  `baracuda-kernels-sys` + `baracuda-transformer-engine-sys` now
-  has a `_can_implement` validator.
-- Tier-2 cross-crate docs/tests polish — **CLOSED**. Doctests +
-  examples + READMEs + workspace lints + ~440 missing_docs fixes
-  shipped in commit `928d385`.
-- `-sys` crate `missing_docs` sweep — **CLOSED** (commits `6af9533`
-  + `757c9f4`). ~6900 one-line `///` docs authored across 13 `-sys`
-  crates. **Zero `missing_docs` warnings workspace-wide.** Workspace
-  lints clause promoted from `warn` → `deny` so the docs can't
-  regress as new symbols land.
+### Cross-implementation benchmark suite vs PyTorch / cuDNN / cuBLAS
 
-### `-sys` crate `missing_docs` follow-up (~5400 warnings) — CLOSED
+The current Phase 29 bench harness in `crates/baracuda-kernels-bench/`
+covers ~10 ops with cuBLAS / cuDNN reference comparisons (no PyTorch —
+the Phase 29 subprocess-shim attempt was rejected as too slow). For
+1.0 we want a perf-vs-baseline table per release across the full op
+matrix, with both NVIDIA-library references AND a viable PyTorch
+comparison strategy.
 
-The workspace now has `[workspace.lints.rust] missing_docs = "warn"`
-which surfaces every undocumented public item. Safe-wrapper crates
-were brought to zero warnings in commit `928d385`. The remaining
-**~5400 warnings live entirely in the `-sys` bindgen-generated FFI
-shells**, distributed roughly as:
+**Scope:**
 
-- `baracuda-cuda-sys`: 1468 (Driver + Runtime API bindgen)
-- `baracuda-kernels-sys`: 1026 (mostly macro-emitted FFI symbol stubs)
-- `baracuda-cudnn-sys`: 410
-- `baracuda-cublas-sys`: 256
-- `baracuda-cusolver-sys`: 227
-- `baracuda-nvimagecodec-sys`: 174
-- `baracuda-cvcuda-sys`: 153
-- `baracuda-cupti-sys`: 144
-- `baracuda-nvml-sys`: 140
-- `baracuda-cusparse-sys`: 136
-- `baracuda-nvcomp-sys`: 132
-- Other `-sys` crates: <100 each.
+- Extend the criterion + CUDA-event harness from ~10 ops to the full
+  op matrix (~120 ops in `OP-MATRIX.md`).
+- Land a viable PyTorch comparison path. Open design question — three
+  candidates:
+  1. **In-process via `tch-rs`** (LibTorch bindings) — fast, but adds
+     a heavy build-time dep + LibTorch artifact distribution problem.
+  2. **Frozen reference values on disk** — run PyTorch once per op,
+     dump numerical reference + timing baseline to JSON, check
+     baracuda's output against the frozen values in-process. No
+     runtime PyTorch dep. Trades fidelity (frozen baseline ages) for
+     simplicity.
+  3. **Out-of-process Python harness wrapping bench binaries** —
+     Python script invokes baracuda's bench binary, parses CSV, runs
+     PyTorch for the same shapes, emits side-by-side report. No
+     in-process coupling but loses the per-op criterion ergonomics.
+- Publish per-release perf-vs-baseline rollup in `BENCHMARKS.md`
+  (today only the Phase 29 results are there).
 
-**Two-pronged remediation strategy:**
+**Why pre-1.0:** 1.0 needs a credible perf story. "Faster than X /
+within Y of Z" claims belong in the release announcement, and the
+bench infrastructure is what backs them.
 
-1. **bindgen-generated symbols**: most large `-sys` crates have FFI
-   types/functions whose names mirror upstream NVIDIA C identifiers
-   (`cublasHandle_t`, `cudnnSetTensorNdDescriptor`, etc.). The
-   bindgen-friendly fix is to add a workspace-level
-   `#[allow(missing_docs)]` on the FFI module via the build.rs that
-   emits the bindings, OR to author one-line `///` summaries
-   referencing the upstream documentation URL.
+### API freeze + 1.0 stability review
 
-2. **macro-emitted symbols in `baracuda-kernels-sys`**: the ~1026
-   warnings are concentrated in the BARACUDA_KERNELS_* macros that
-   emit `_run` and `_can_implement` symbols. A single macro-side
-   edit can document all of them at once.
+**Scope:**
 
-Effort estimate: 1-2 days for the macro edit (kernels-sys), plus
-2-3 days to author per-function docs in the bindgen crates (or just
-add the blanket `#[allow]` and move on). Not blocking for any release.
+- Review every `pub` surface across the workspace; categorize each
+  item as stable / `#[doc(hidden)]` / candidate-for-removal.
+- Document the breaking-change policy (semver discipline for 1.x,
+  what counts as a breaking change at the FFI layer, etc.).
+- Resolve the `T: Element` vs `T: DeviceRepr + Copy` trait-bound
+  split. Today split by whether sub-byte dtypes need to participate
+  (see Phase 13 pragma). Either unify under a new umbrella trait or
+  document the split as intentional.
+- Cut `0.1.0-beta.0` once the surface settles, then `0.1.0` after a
+  stabilization window.
 
-### `_can_implement` companion fanout (~2032 symbols)
+**Why pre-1.0:** the version cut.
 
-baracuda's stated FFI convention is **one `_can_implement` validator
-per `_run` symbol**, so callers can probe support without launching
-a kernel. The release-readiness audit measured:
+### Conv / pool strided siblings via cuDNN (NHWC fast path)
 
-- ~2683 `_run` FFI symbols across `crates/baracuda-kernels-sys/src/lib.rs`
-- ~657 `_can_implement` symbols
-- **~2032 `_run` symbols without their `_can_implement` companion**
+`cudnnSetTensorNdDescriptor` natively takes per-axis strides, and
+**channels-last (NHWC) is often *faster* than NCHW on tensor cores** —
+so this isn't a rare-fallback convenience, it's a real perf layout
+the bespoke families already support. Plumbing strides from
+`TensorRef` into the cuDNN descriptor rather than a new kernel.
 
-The gap is worst on the strided fanout (Phase 14/18 strided siblings):
-434 `_strided_*_run` vs only 11 `_strided_*_can_implement`. Specific
-hotspot: `where_strided` has 33 `_run` symbols and zero strided
-validators.
+**Scope:** strided sibling for each Conv / Pool family that today
+forces `Contiguize` at the plan layer. Most of the work is in the
+descriptor-builder layer; the kernels themselves don't change.
 
-**Scope:** mechanical sweep across the FFI surface. Each missing
-companion is a thin re-implementation of the host-side preconditions
-(shape rank, dtype, alignment, workspace-bytes calc) factored out of
-the matching `_run` symbol. Effort is in the symbol count, not per-
-symbol complexity — likely 3-5 days of mechanical fanout.
+**Why pre-1.0:** the bench suite will measure this and the gap will
+be obvious in any NHWC-preferring downstream (vision models, Triton
+backends, etc.). Better to land before publishing comparison tables.
 
-**Why deferred:** non-blocking — every `_run` already does the same
-checks internally before launch and returns the right status code on
-failure. The standalone `_can_implement` is a UX convenience for
-callers building dispatch tables; nothing breaks without it.
+### cuFFT advanced data layout (strided sibling)
 
-### Strided FFI siblings for normalizer + shape ops — Phase 72 ✓ CLOSED (next release)
+cuFFT's "advanced data layout" (`istride` / `idist` / `ostride` /
+`odist`) is native; lets callers FFT a non-contiguous slice without
+packing. Cheap plumbing.
 
-**Status:** Done in Phase 72 (not yet released; will ship in alpha.65).
+**Scope:** strided sibling for the FFT families. Same descriptor-
+plumbing pattern as the cuDNN work above.
 
-Authored explicit `_strided_run` / `_strided_can_implement` siblings for
-all 7 op families per Phase 14/18 convention: `rms_norm`,
-`layer_norm`, `softmax`, `log_softmax` (FW + BW × 4 dtypes each) +
-`flip`, `roll`, `permute` (FW × 4 dtypes each). 88 new FFI symbols
-total (44 `_strided_run` + 44 `_strided_can_implement`). Each sibling
-routes to the same underlying launcher as the non-strided `_run` —
-the existing exports already accepted stride arrays and the C kernels
-already honored them; the sibling exists so callers building explicit
-dispatch tables can pick the strided path by name.
+**Why pre-1.0:** small marginal cost once the cuDNN pattern is
+established, and rounds out the "no `Contiguize` copies on library-
+backed paths" 1.0 story.
 
-Test investment: 7 new direct-FFI smoke tests in
-`crates/baracuda-kernels/tests/strided_siblings_ffi_smoke.rs` proving
-each family's strided sibling resolves at link time + produces correct
-results on non-contig fixtures (stride-2 over 2x-padded buffer for the
-norm / softmax / roll ops; transposed view for flip + permute). All
-7/7 pass on RTX 4070.
+## Pre-1.0 nice-to-haves
+
+These would tighten the 1.0 surface but aren't blockers.
+
+### FlashInfer direct-FFI smoke tests
+
+Phase 46/66 ship 8 safe-wrapper test files
+(`crates/baracuda-flashinfer/tests/`) but zero direct-FFI tests.
+The safe-wrapper tests exercise the FFI symbols indirectly; direct-
+FFI tests would only catch marshalling bugs (wrong pointer types,
+wrong cardinality). **Marginal value** — listed for completeness.
 
 ### f64 in-place dispatch for SMEM-staged normalizers
 
@@ -1433,17 +1421,83 @@ ever needs f64 in-place for these ops.
 in-place by construction (Phase 65d) so the f64 SMEM gap is only on
 the row-shape normalizers.
 
-### Test gaps surfaced by the audit
+### Automatic layout planner (layout-for-next-op)
 
-- `bincount` (`crates/baracuda-kernels/src/sort/bincount.rs`) ships
-  2 FFI `_run` symbols with zero smoke tests in
-  `crates/baracuda-kernels/tests/`.
-- `HyperConnectionPlan` (mHC, Phase 43) has bench coverage but no
-  `tests/` smoke. Production gating for the `mhc` feature.
-- FlashInfer paged-decode / prefill / ragged / append family
-  (Phase 46+66) has no `tests/` smoke at the FFI direct-call layer.
-  Safe-wrapper layer tests exist; the FFI surface itself is
-  unexercised.
+baracuda today is layout *mechanism* (strided kernels + caller-
+specified `PermutePlan` / `ContiguizePlan`), with *policy* pushed
+downstream to the Fuel autotuner. A planner that inspects the next
+op's preferred layout and emits either a zero-copy logical reorder
+(rewrite the `TensorRef` `shape` / `stride` arrays — no kernel) or a
+physical `PermutePlan` copy when the downstream kernel can't consume
+that stride pattern would close the "ideal layout for the next
+kernel" gap. Prereq: each `Plan` would need to expose a layout-
+requirement / preferred-layout hint plus a rough strided-vs-(copy+
+contig) cost. Natural home is the autotuner layer (downstream Fuel,
+or a new `baracuda-plan` crate sitting on top of the kernels crate).
+Pairs with the cuDNN strided siblings item above.
+
+**Why nice-to-have:** unblocks downstream perf work but isn't
+load-bearing for 1.0 if downstream is willing to make layout
+decisions itself.
+
+## Post-1.0 (hardware-gated or follow-on)
+
+Items that need hardware we don't have, or are natural 1.x follow-on
+work. **Will not block the 1.0 cut.**
+
+### sm_90a (Hopper async) specialization
+
+Sibling plans for Hopper's WGMMA + async tensor cores + cluster-
+launch. The sibling-plan + arch-dispatcher pattern Phase 10
+established for sm_89 generalizes here.
+
+**Why post-1.0:** no Hopper hardware on the dev box. Land once a
+Hopper test machine is available.
+
+### Blackwell forward-compat
+
+Verify the kernel set compiles + runs on sm_100+.
+
+**Why post-1.0:** no Blackwell hardware on the dev box.
+
+### Sparsemax for extents > 1024
+
+Phase 11.6 lifted the cap from 64 → 1024 via `cub::BlockRadixSort` +
+`BlockScan`. Larger rows would need a multi-block / global sort
+pipeline. **Low priority** unless a use case shows up.
+
+### CTC bespoke flake under parallel test execution
+
+`cudnn_ctc_f32_uniform_t2_c2` intermittently fails when the full
+test suite runs in parallel; passes deterministically in isolation.
+Likely cuDNN handle contention. **Not a correctness issue** — pure
+test infrastructure flake.
+
+### Documentation lifecycle hooks
+
+The `feedback_readme_badges_on_publish` memory entry captures the
+"bump README badges on release" gotcha. A pre-commit hook or release
+script could automate this rather than relying on memory.
+
+## Audit-surfaced items already closed
+
+Recorded here so future audits don't re-discover them as gaps.
+
+- **`_can_implement` companion fanout** — CLOSED in the alpha.64
+  prep cycle. Today: 2727 `_run` ↔ 2733 `_can_implement` in
+  `baracuda-kernels-sys`; 4 ↔ 4 in `baracuda-transformer-engine-sys`.
+- **`-sys` crate `missing_docs` sweep** — CLOSED (commits `6af9533`
+  + `757c9f4`). Zero `missing_docs` warnings workspace-wide;
+  workspace lints promoted to `deny`.
+- **Tier-2 cross-crate docs/tests polish** — CLOSED (`928d385`).
+- **Strided FFI siblings for normalizer + shape ops** — CLOSED in
+  Phase 72 (`e4afc03`, will ship alpha.65). 88 new FFI symbols
+  across `rms_norm` / `layer_norm` / `softmax` / `log_softmax` (FW +
+  BW × 4 dtypes) + `flip` / `roll` / `permute` (FW × 4 dtypes).
+- **`bincount` smoke tests** — exist in
+  `crates/baracuda-kernels/tests/bincount_smoke.rs` (4 tests).
+- **`HyperConnectionPlan` smoke tests** — exist in
+  `crates/baracuda-kernels/tests/hyper_connection_smoke.rs` (2 tests).
 
 ## How this file gets updated
 
