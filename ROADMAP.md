@@ -1316,6 +1316,55 @@ Phase 64+65 rollup. Each is independently doable in its own phase;
 priority is set by Fuel ask and release-line ergonomics, not
 intrinsic technical urgency.
 
+**Status update (2026-06-03):**
+- `_can_implement` companion fanout — **CLOSED**. All 2026 missing
+  symbols added across Rounds 1-4. Every `_run` FFI symbol in
+  `baracuda-kernels-sys` + `baracuda-transformer-engine-sys` now
+  has a `_can_implement` validator.
+- Tier-2 cross-crate docs/tests polish — **CLOSED**. Doctests +
+  examples + READMEs + workspace lints + ~440 missing_docs fixes
+  shipped in commit `928d385`.
+
+### `-sys` crate `missing_docs` follow-up (~5400 warnings)
+
+The workspace now has `[workspace.lints.rust] missing_docs = "warn"`
+which surfaces every undocumented public item. Safe-wrapper crates
+were brought to zero warnings in commit `928d385`. The remaining
+**~5400 warnings live entirely in the `-sys` bindgen-generated FFI
+shells**, distributed roughly as:
+
+- `baracuda-cuda-sys`: 1468 (Driver + Runtime API bindgen)
+- `baracuda-kernels-sys`: 1026 (mostly macro-emitted FFI symbol stubs)
+- `baracuda-cudnn-sys`: 410
+- `baracuda-cublas-sys`: 256
+- `baracuda-cusolver-sys`: 227
+- `baracuda-nvimagecodec-sys`: 174
+- `baracuda-cvcuda-sys`: 153
+- `baracuda-cupti-sys`: 144
+- `baracuda-nvml-sys`: 140
+- `baracuda-cusparse-sys`: 136
+- `baracuda-nvcomp-sys`: 132
+- Other `-sys` crates: <100 each.
+
+**Two-pronged remediation strategy:**
+
+1. **bindgen-generated symbols**: most large `-sys` crates have FFI
+   types/functions whose names mirror upstream NVIDIA C identifiers
+   (`cublasHandle_t`, `cudnnSetTensorNdDescriptor`, etc.). The
+   bindgen-friendly fix is to add a workspace-level
+   `#[allow(missing_docs)]` on the FFI module via the build.rs that
+   emits the bindings, OR to author one-line `///` summaries
+   referencing the upstream documentation URL.
+
+2. **macro-emitted symbols in `baracuda-kernels-sys`**: the ~1026
+   warnings are concentrated in the BARACUDA_KERNELS_* macros that
+   emit `_run` and `_can_implement` symbols. A single macro-side
+   edit can document all of them at once.
+
+Effort estimate: 1-2 days for the macro edit (kernels-sys), plus
+2-3 days to author per-function docs in the bindgen crates (or just
+add the blanket `#[allow]` and move on). Not blocking for any release.
+
 ### `_can_implement` companion fanout (~2032 symbols)
 
 baracuda's stated FFI convention is **one `_can_implement` validator
