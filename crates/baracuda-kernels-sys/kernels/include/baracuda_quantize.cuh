@@ -1042,6 +1042,19 @@ __host__ inline int32_t launch_dequantize_per_channel_backward_f64(
             static_cast<const TIN*>(x),                                                 \
             static_cast<TOUT*>(q),                                                      \
             numel, scale, zero_point, q_min, q_max, stream);                            \
+    }                                                                                   \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                         \
+        int64_t numel,                                                                  \
+        float /*scale*/,                                                                \
+        int32_t /*zero_point*/,                                                         \
+        int32_t q_min,                                                                  \
+        int32_t q_max,                                                                  \
+        const void* /*x*/,                                                              \
+        const void* /*q*/)                                                              \
+    {                                                                                   \
+        if (numel < 0) return 2;                                                        \
+        if (q_min > q_max) return 2;                                                    \
+        return 0;                                                                       \
     }
 
 // quantize_per_tensor — f64 variant (carries f64 scale).
@@ -1063,6 +1076,19 @@ __host__ inline int32_t launch_dequantize_per_channel_backward_f64(
             static_cast<const double*>(x),                                               \
             static_cast<TOUT*>(q),                                                       \
             numel, scale, zero_point, q_min, q_max, stream);                             \
+    }                                                                                    \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                          \
+        int64_t numel,                                                                   \
+        double /*scale*/,                                                                \
+        int32_t /*zero_point*/,                                                          \
+        int32_t q_min,                                                                   \
+        int32_t q_max,                                                                   \
+        const void* /*x*/,                                                               \
+        const void* /*q*/)                                                               \
+    {                                                                                    \
+        if (numel < 0) return 2;                                                         \
+        if (q_min > q_max) return 2;                                                     \
+        return 0;                                                                        \
     }
 
 // quantize_per_tensor BW — f32-scale variant.
@@ -1086,6 +1112,20 @@ __host__ inline int32_t launch_dequantize_per_channel_backward_f64(
             static_cast<const TIN*>(dy),                                                  \
             static_cast<TIN*>(dx),                                                        \
             numel, scale, zero_point, q_min, q_max, stream);                              \
+    }                                                                                     \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                           \
+        int64_t numel,                                                                    \
+        float /*scale*/,                                                                  \
+        int32_t /*zero_point*/,                                                           \
+        int32_t q_min,                                                                    \
+        int32_t q_max,                                                                    \
+        const void* /*x*/,                                                                \
+        const void* /*dy*/,                                                               \
+        const void* /*dx*/)                                                               \
+    {                                                                                     \
+        if (numel < 0) return 2;                                                          \
+        if (q_min > q_max) return 2;                                                      \
+        return 0;                                                                         \
     }
 
 // quantize_per_tensor BW — f64 variant.
@@ -1109,6 +1149,20 @@ __host__ inline int32_t launch_dequantize_per_channel_backward_f64(
             static_cast<const double*>(dy),                                                \
             static_cast<double*>(dx),                                                      \
             numel, scale, zero_point, q_min, q_max, stream);                               \
+    }                                                                                      \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                            \
+        int64_t numel,                                                                     \
+        double /*scale*/,                                                                  \
+        int32_t /*zero_point*/,                                                            \
+        int32_t q_min,                                                                     \
+        int32_t q_max,                                                                     \
+        const void* /*x*/,                                                                 \
+        const void* /*dy*/,                                                                \
+        const void* /*dx*/)                                                                \
+    {                                                                                      \
+        if (numel < 0) return 2;                                                           \
+        if (q_min > q_max) return 2;                                                       \
+        return 0;                                                                          \
     }
 
 // dequantize_per_tensor — f32-scale variant.
@@ -1128,6 +1182,16 @@ __host__ inline int32_t launch_dequantize_per_channel_backward_f64(
             static_cast<const TOUT*>(q),                                                   \
             static_cast<TIN*>(x),                                                          \
             numel, scale, zero_point, stream);                                             \
+    }                                                                                      \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                            \
+        int64_t numel,                                                                     \
+        float /*scale*/,                                                                   \
+        int32_t /*zero_point*/,                                                            \
+        const void* /*q*/,                                                                 \
+        const void* /*x*/)                                                                 \
+    {                                                                                      \
+        if (numel < 0) return 2;                                                           \
+        return 0;                                                                          \
     }
 
 #define BARACUDA_KERNELS_DEQUANTIZE_PER_TENSOR_F64_INSTANTIATE(NAME, TOUT)                \
@@ -1146,6 +1210,16 @@ __host__ inline int32_t launch_dequantize_per_channel_backward_f64(
             static_cast<const TOUT*>(q),                                                    \
             static_cast<double*>(x),                                                        \
             numel, scale, zero_point, stream);                                              \
+    }                                                                                       \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                             \
+        int64_t numel,                                                                      \
+        double /*scale*/,                                                                   \
+        int32_t /*zero_point*/,                                                             \
+        const void* /*q*/,                                                                  \
+        const void* /*x*/)                                                                  \
+    {                                                                                       \
+        if (numel < 0) return 2;                                                            \
+        return 0;                                                                           \
     }
 
 // dequantize_per_tensor BW — dq = dy * scale. f32-scale variant.
@@ -1164,6 +1238,15 @@ __host__ inline int32_t launch_dequantize_per_channel_backward_f64(
             static_cast<const TIN*>(dy),                                                    \
             static_cast<TIN*>(dq),                                                          \
             numel, scale, stream);                                                          \
+    }                                                                                       \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                             \
+        int64_t numel,                                                                      \
+        float /*scale*/,                                                                    \
+        const void* /*dy*/,                                                                 \
+        const void* /*dq*/)                                                                 \
+    {                                                                                       \
+        if (numel < 0) return 2;                                                            \
+        return 0;                                                                           \
     }
 
 #define BARACUDA_KERNELS_DEQUANTIZE_PER_TENSOR_BW_F64_INSTANTIATE(NAME)                    \
@@ -1181,6 +1264,15 @@ __host__ inline int32_t launch_dequantize_per_channel_backward_f64(
             static_cast<const double*>(dy),                                                  \
             static_cast<double*>(dq),                                                        \
             numel, scale, stream);                                                           \
+    }                                                                                        \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                              \
+        int64_t numel,                                                                       \
+        double /*scale*/,                                                                    \
+        const void* /*dy*/,                                                                  \
+        const void* /*dq*/)                                                                  \
+    {                                                                                        \
+        if (numel < 0) return 2;                                                             \
+        return 0;                                                                            \
     }
 
 // fake_quantize FW — f32-scale.
@@ -1202,6 +1294,19 @@ __host__ inline int32_t launch_dequantize_per_channel_backward_f64(
             static_cast<const TIN*>(x),                                                      \
             static_cast<TIN*>(y),                                                            \
             numel, scale, zero_point, q_min, q_max, stream);                                 \
+    }                                                                                        \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                              \
+        int64_t numel,                                                                       \
+        float /*scale*/,                                                                     \
+        int32_t /*zero_point*/,                                                              \
+        int32_t q_min,                                                                       \
+        int32_t q_max,                                                                       \
+        const void* /*x*/,                                                                   \
+        const void* /*y*/)                                                                   \
+    {                                                                                        \
+        if (numel < 0) return 2;                                                             \
+        if (q_min > q_max) return 2;                                                         \
+        return 0;                                                                            \
     }
 
 // fake_quantize FW — f64.
@@ -1223,6 +1328,19 @@ __host__ inline int32_t launch_dequantize_per_channel_backward_f64(
             static_cast<const double*>(x),                                                    \
             static_cast<double*>(y),                                                          \
             numel, scale, zero_point, q_min, q_max, stream);                                  \
+    }                                                                                         \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                               \
+        int64_t numel,                                                                        \
+        double /*scale*/,                                                                     \
+        int32_t /*zero_point*/,                                                               \
+        int32_t q_min,                                                                        \
+        int32_t q_max,                                                                        \
+        const void* /*x*/,                                                                    \
+        const void* /*y*/)                                                                    \
+    {                                                                                         \
+        if (numel < 0) return 2;                                                              \
+        if (q_min > q_max) return 2;                                                          \
+        return 0;                                                                             \
     }
 
 // fake_quantize BW.
@@ -1246,6 +1364,20 @@ __host__ inline int32_t launch_dequantize_per_channel_backward_f64(
             static_cast<const TIN*>(dy),                                                        \
             static_cast<TIN*>(dx),                                                              \
             numel, scale, zero_point, q_min, q_max, stream);                                    \
+    }                                                                                           \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                 \
+        int64_t numel,                                                                          \
+        float /*scale*/,                                                                        \
+        int32_t /*zero_point*/,                                                                 \
+        int32_t q_min,                                                                          \
+        int32_t q_max,                                                                          \
+        const void* /*x*/,                                                                      \
+        const void* /*dy*/,                                                                     \
+        const void* /*dx*/)                                                                     \
+    {                                                                                           \
+        if (numel < 0) return 2;                                                                \
+        if (q_min > q_max) return 2;                                                            \
+        return 0;                                                                               \
     }
 
 #define BARACUDA_KERNELS_FAKE_QUANTIZE_BW_F64_INSTANTIATE(NAME)                                  \
@@ -1268,6 +1400,20 @@ __host__ inline int32_t launch_dequantize_per_channel_backward_f64(
             static_cast<const double*>(dy),                                                        \
             static_cast<double*>(dx),                                                              \
             numel, scale, zero_point, q_min, q_max, stream);                                       \
+    }                                                                                              \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                    \
+        int64_t numel,                                                                             \
+        double /*scale*/,                                                                          \
+        int32_t /*zero_point*/,                                                                    \
+        int32_t q_min,                                                                             \
+        int32_t q_max,                                                                             \
+        const void* /*x*/,                                                                         \
+        const void* /*dy*/,                                                                        \
+        const void* /*dx*/)                                                                        \
+    {                                                                                              \
+        if (numel < 0) return 2;                                                                   \
+        if (q_min > q_max) return 2;                                                               \
+        return 0;                                                                                  \
     }
 
 // Per-channel quantize FW.
@@ -1294,6 +1440,23 @@ __host__ inline int32_t launch_dequantize_per_channel_backward_f64(
             static_cast<const int32_t*>(zero_point),                                                \
             static_cast<TOUT*>(q),                                                                  \
             numel, shape4, axis, q_min, q_max, stream);                                             \
+    }                                                                                               \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                     \
+        int64_t numel,                                                                              \
+        const int32_t* shape4,                                                                      \
+        int32_t axis,                                                                               \
+        int32_t q_min,                                                                              \
+        int32_t q_max,                                                                              \
+        const void* /*x*/,                                                                          \
+        const void* /*scale*/,                                                                      \
+        const void* /*zero_point*/,                                                                 \
+        const void* /*q*/)                                                                          \
+    {                                                                                               \
+        if (numel < 0) return 2;                                                                    \
+        if (q_min > q_max) return 2;                                                                \
+        if (axis < 0 || axis >= baracuda::quantize::MAX_RANK) return 2;                             \
+        if (numel > 0 && shape4 == nullptr) return 2;                                               \
+        return 0;                                                                                   \
     }
 
 #define BARACUDA_KERNELS_QUANTIZE_PER_CHANNEL_F64_INSTANTIATE(NAME, TOUT)                           \
@@ -1319,6 +1482,23 @@ __host__ inline int32_t launch_dequantize_per_channel_backward_f64(
             static_cast<const int32_t*>(zero_point),                                                  \
             static_cast<TOUT*>(q),                                                                    \
             numel, shape4, axis, q_min, q_max, stream);                                               \
+    }                                                                                                 \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                       \
+        int64_t numel,                                                                                \
+        const int32_t* shape4,                                                                        \
+        int32_t axis,                                                                                 \
+        int32_t q_min,                                                                                \
+        int32_t q_max,                                                                                \
+        const void* /*x*/,                                                                            \
+        const void* /*scale*/,                                                                        \
+        const void* /*zero_point*/,                                                                   \
+        const void* /*q*/)                                                                            \
+    {                                                                                                 \
+        if (numel < 0) return 2;                                                                      \
+        if (q_min > q_max) return 2;                                                                  \
+        if (axis < 0 || axis >= baracuda::quantize::MAX_RANK) return 2;                               \
+        if (numel > 0 && shape4 == nullptr) return 2;                                                 \
+        return 0;                                                                                     \
     }
 
 // Per-channel quantize BW (STE).
@@ -1347,6 +1527,24 @@ __host__ inline int32_t launch_dequantize_per_channel_backward_f64(
             static_cast<const TIN*>(dy),                                                               \
             static_cast<TIN*>(dx),                                                                     \
             numel, shape4, axis, q_min, q_max, stream);                                                \
+    }                                                                                                  \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                        \
+        int64_t numel,                                                                                 \
+        const int32_t* shape4,                                                                         \
+        int32_t axis,                                                                                  \
+        int32_t q_min,                                                                                 \
+        int32_t q_max,                                                                                 \
+        const void* /*x*/,                                                                             \
+        const void* /*scale*/,                                                                         \
+        const void* /*zero_point*/,                                                                    \
+        const void* /*dy*/,                                                                            \
+        const void* /*dx*/)                                                                            \
+    {                                                                                                  \
+        if (numel < 0) return 2;                                                                       \
+        if (q_min > q_max) return 2;                                                                   \
+        if (axis < 0 || axis >= baracuda::quantize::MAX_RANK) return 2;                                \
+        if (numel > 0 && shape4 == nullptr) return 2;                                                  \
+        return 0;                                                                                      \
     }
 
 #define BARACUDA_KERNELS_QUANTIZE_PER_CHANNEL_BW_F64_INSTANTIATE(NAME)                                 \
@@ -1374,6 +1572,24 @@ __host__ inline int32_t launch_dequantize_per_channel_backward_f64(
             static_cast<const double*>(dy),                                                              \
             static_cast<double*>(dx),                                                                    \
             numel, shape4, axis, q_min, q_max, stream);                                                  \
+    }                                                                                                    \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                          \
+        int64_t numel,                                                                                   \
+        const int32_t* shape4,                                                                           \
+        int32_t axis,                                                                                    \
+        int32_t q_min,                                                                                   \
+        int32_t q_max,                                                                                   \
+        const void* /*x*/,                                                                               \
+        const void* /*scale*/,                                                                           \
+        const void* /*zero_point*/,                                                                      \
+        const void* /*dy*/,                                                                              \
+        const void* /*dx*/)                                                                              \
+    {                                                                                                    \
+        if (numel < 0) return 2;                                                                         \
+        if (q_min > q_max) return 2;                                                                     \
+        if (axis < 0 || axis >= baracuda::quantize::MAX_RANK) return 2;                                  \
+        if (numel > 0 && shape4 == nullptr) return 2;                                                    \
+        return 0;                                                                                        \
     }
 
 // Per-channel dequantize FW.
@@ -1398,6 +1614,20 @@ __host__ inline int32_t launch_dequantize_per_channel_backward_f64(
             static_cast<const int32_t*>(zero_point),                                                      \
             static_cast<TIN*>(x),                                                                         \
             numel, shape4, axis, stream);                                                                 \
+    }                                                                                                     \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                           \
+        int64_t numel,                                                                                    \
+        const int32_t* shape4,                                                                            \
+        int32_t axis,                                                                                     \
+        const void* /*q*/,                                                                                \
+        const void* /*scale*/,                                                                            \
+        const void* /*zero_point*/,                                                                       \
+        const void* /*x*/)                                                                                \
+    {                                                                                                     \
+        if (numel < 0) return 2;                                                                          \
+        if (axis < 0 || axis >= baracuda::quantize::MAX_RANK) return 2;                                   \
+        if (numel > 0 && shape4 == nullptr) return 2;                                                     \
+        return 0;                                                                                         \
     }
 
 #define BARACUDA_KERNELS_DEQUANTIZE_PER_CHANNEL_F64_INSTANTIATE(NAME, TOUT)                              \
@@ -1421,6 +1651,20 @@ __host__ inline int32_t launch_dequantize_per_channel_backward_f64(
             static_cast<const int32_t*>(zero_point),                                                       \
             static_cast<double*>(x),                                                                       \
             numel, shape4, axis, stream);                                                                  \
+    }                                                                                                      \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                            \
+        int64_t numel,                                                                                     \
+        const int32_t* shape4,                                                                             \
+        int32_t axis,                                                                                      \
+        const void* /*q*/,                                                                                 \
+        const void* /*scale*/,                                                                             \
+        const void* /*zero_point*/,                                                                        \
+        const void* /*x*/)                                                                                 \
+    {                                                                                                      \
+        if (numel < 0) return 2;                                                                           \
+        if (axis < 0 || axis >= baracuda::quantize::MAX_RANK) return 2;                                    \
+        if (numel > 0 && shape4 == nullptr) return 2;                                                      \
+        return 0;                                                                                          \
     }
 
 // Per-channel dequantize BW — dq[i] = dy[i] * scale[c].
@@ -1442,6 +1686,19 @@ __host__ inline int32_t launch_dequantize_per_channel_backward_f64(
             static_cast<const TIN*>(dy),                                                                    \
             static_cast<TIN*>(dq),                                                                          \
             numel, shape4, axis, stream);                                                                   \
+    }                                                                                                       \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                             \
+        int64_t numel,                                                                                      \
+        const int32_t* shape4,                                                                              \
+        int32_t axis,                                                                                       \
+        const void* /*scale*/,                                                                              \
+        const void* /*dy*/,                                                                                 \
+        const void* /*dq*/)                                                                                 \
+    {                                                                                                       \
+        if (numel < 0) return 2;                                                                            \
+        if (axis < 0 || axis >= baracuda::quantize::MAX_RANK) return 2;                                     \
+        if (numel > 0 && shape4 == nullptr) return 2;                                                       \
+        return 0;                                                                                           \
     }
 
 #define BARACUDA_KERNELS_DEQUANTIZE_PER_CHANNEL_BW_F64_INSTANTIATE(NAME)                                   \
@@ -1462,6 +1719,19 @@ __host__ inline int32_t launch_dequantize_per_channel_backward_f64(
             static_cast<const double*>(dy),                                                                  \
             static_cast<double*>(dq),                                                                        \
             numel, shape4, axis, stream);                                                                    \
+    }                                                                                                        \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                              \
+        int64_t numel,                                                                                       \
+        const int32_t* shape4,                                                                               \
+        int32_t axis,                                                                                        \
+        const void* /*scale*/,                                                                               \
+        const void* /*dy*/,                                                                                  \
+        const void* /*dq*/)                                                                                  \
+    {                                                                                                        \
+        if (numel < 0) return 2;                                                                             \
+        if (axis < 0 || axis >= baracuda::quantize::MAX_RANK) return 2;                                      \
+        if (numel > 0 && shape4 == nullptr) return 2;                                                        \
+        return 0;                                                                                            \
     }
 
 #endif // BARACUDA_QUANTIZE_CUH

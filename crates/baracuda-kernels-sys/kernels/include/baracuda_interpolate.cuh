@@ -321,6 +321,16 @@ __host__ inline int32_t launch_interpolate_bilinear_2d_backward(
             static_cast<T*>(output),                                                           \
             N, C, IH, IW, OH, OW,                                                              \
             align_corners, scale_h_factor, scale_w_factor, stream);                            \
+    }                                                                                          \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                \
+        int32_t N, int32_t C, int32_t IH, int32_t IW, int32_t OH, int32_t OW,                  \
+        const void* /*input*/,                                                                 \
+        const void* /*output*/,                                                                \
+        int32_t /*align_corners*/,                                                             \
+        double /*scale_h_factor*/, double /*scale_w_factor*/)                                  \
+    {                                                                                          \
+        if (N < 0 || C < 0 || IH < 0 || IW < 0 || OH < 0 || OW < 0) return 2;                  \
+        return 0;                                                                              \
     }
 
 #define BARACUDA_KERNELS_INTERPOLATE_BILINEAR_2D_BACKWARD_INSTANTIATE(NAME, T)                 \
@@ -340,6 +350,16 @@ __host__ inline int32_t launch_interpolate_bilinear_2d_backward(
             static_cast<T*>(dinput),                                                            \
             N, C, IH, IW, OH, OW,                                                              \
             align_corners, scale_h_factor, scale_w_factor, stream);                            \
+    }                                                                                          \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                \
+        int32_t N, int32_t C, int32_t IH, int32_t IW, int32_t OH, int32_t OW,                  \
+        const void* /*dout*/,                                                                  \
+        const void* /*dinput*/,                                                                \
+        int32_t /*align_corners*/,                                                             \
+        double /*scale_h_factor*/, double /*scale_w_factor*/)                                  \
+    {                                                                                          \
+        if (N < 0 || C < 0 || IH < 0 || IW < 0 || OH < 0 || OW < 0) return 2;                  \
+        return 0;                                                                              \
     }
 
 #endif // BARACUDA_INTERPOLATE_CUH

@@ -947,6 +947,25 @@ __host__ inline int32_t launch_nonzero(
             static_cast<T*>(out),                                                                  \
             out_numel, rank, gather_dim, src_dim_size,                                            \
             out_shape, stride_src, stride_index, stride_out, stream);                             \
+    }                                                                                              \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                   \
+        int64_t out_numel,                                                                         \
+        int32_t rank,                                                                              \
+        int32_t gather_dim,                                                                        \
+        int32_t src_dim_size,                                                                      \
+        const int32_t* /*out_shape*/,                                                              \
+        const int64_t* /*stride_src*/,                                                             \
+        const int64_t* /*stride_index*/,                                                           \
+        const int64_t* /*stride_out*/,                                                             \
+        const void* /*src*/,                                                                       \
+        const void* /*index*/,                                                                     \
+        const void* /*out*/)                                                                       \
+    {                                                                                              \
+        if (out_numel < 0) return 2;                                                              \
+        if (rank < 0 || rank > baracuda::indexing::MAX_RANK) return 2;                            \
+        if (gather_dim < 0 || gather_dim >= rank) return 2;                                       \
+        if (src_dim_size < 0) return 2;                                                            \
+        return 0;                                                                                  \
     }
 
 #define BARACUDA_KERNELS_GATHER_BACKWARD_INSTANTIATE(NAME, T, INDEX_T)                            \
@@ -977,6 +996,25 @@ __host__ inline int32_t launch_nonzero(
             static_cast<T*>(dsrc),                                                                 \
             out_numel, rank, gather_dim, src_dim_size,                                            \
             out_shape, stride_dout, stride_index, stride_dsrc, stream);                           \
+    }                                                                                              \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                   \
+        int64_t out_numel,                                                                         \
+        int32_t rank,                                                                              \
+        int32_t gather_dim,                                                                        \
+        int32_t src_dim_size,                                                                      \
+        const int32_t* /*out_shape*/,                                                              \
+        const int64_t* /*stride_dout*/,                                                            \
+        const int64_t* /*stride_index*/,                                                           \
+        const int64_t* /*stride_dsrc*/,                                                            \
+        const void* /*dout*/,                                                                      \
+        const void* /*index*/,                                                                     \
+        const void* /*dsrc*/)                                                                      \
+    {                                                                                              \
+        if (out_numel < 0) return 2;                                                              \
+        if (rank < 0 || rank > baracuda::indexing::MAX_RANK) return 2;                            \
+        if (gather_dim < 0 || gather_dim >= rank) return 2;                                       \
+        if (src_dim_size < 0) return 2;                                                            \
+        return 0;                                                                                  \
     }
 
 #define BARACUDA_KERNELS_SCATTER_ADD_INSTANTIATE(NAME, T, INDEX_T)                                \
@@ -1007,6 +1045,25 @@ __host__ inline int32_t launch_nonzero(
             static_cast<T*>(out),                                                                  \
             upd_numel, rank, scatter_dim, out_dim_size,                                           \
             upd_shape, stride_upd, stride_index, stride_out, stream);                             \
+    }                                                                                              \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                   \
+        int64_t upd_numel,                                                                         \
+        int32_t rank,                                                                              \
+        int32_t scatter_dim,                                                                       \
+        int32_t out_dim_size,                                                                      \
+        const int32_t* /*upd_shape*/,                                                              \
+        const int64_t* /*stride_upd*/,                                                             \
+        const int64_t* /*stride_index*/,                                                           \
+        const int64_t* /*stride_out*/,                                                             \
+        const void* /*updates*/,                                                                   \
+        const void* /*index*/,                                                                     \
+        const void* /*out*/)                                                                       \
+    {                                                                                              \
+        if (upd_numel < 0) return 2;                                                              \
+        if (rank < 0 || rank > baracuda::indexing::MAX_RANK) return 2;                            \
+        if (scatter_dim < 0 || scatter_dim >= rank) return 2;                                     \
+        if (out_dim_size < 0) return 2;                                                            \
+        return 0;                                                                                  \
     }
 
 // Phase 39 (Fuel 6c.4 Gap 5). Pure-assign scatter — last writer wins on
@@ -1039,6 +1096,25 @@ __host__ inline int32_t launch_nonzero(
             static_cast<T*>(out),                                                                  \
             upd_numel, rank, scatter_dim, out_dim_size,                                           \
             upd_shape, stride_upd, stride_index, stride_out, stream);                             \
+    }                                                                                              \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                   \
+        int64_t upd_numel,                                                                         \
+        int32_t rank,                                                                              \
+        int32_t scatter_dim,                                                                       \
+        int32_t out_dim_size,                                                                      \
+        const int32_t* /*upd_shape*/,                                                              \
+        const int64_t* /*stride_upd*/,                                                             \
+        const int64_t* /*stride_index*/,                                                           \
+        const int64_t* /*stride_out*/,                                                             \
+        const void* /*updates*/,                                                                   \
+        const void* /*index*/,                                                                     \
+        const void* /*out*/)                                                                       \
+    {                                                                                              \
+        if (upd_numel < 0) return 2;                                                              \
+        if (rank < 0 || rank > baracuda::indexing::MAX_RANK) return 2;                            \
+        if (scatter_dim < 0 || scatter_dim >= rank) return 2;                                     \
+        if (out_dim_size < 0) return 2;                                                            \
+        return 0;                                                                                  \
     }
 
 // Phase 39 (Fuel 6c.4 Gap 5). `index_add` — accumulating sibling of
@@ -1072,6 +1148,24 @@ __host__ inline int32_t launch_nonzero(
             static_cast<T*>(dst),                                                                  \
             src_numel, rank, add_dim, dst_dim_size,                                               \
             src_shape, stride_src, stride_dst, stream);                                           \
+    }                                                                                              \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                   \
+        int64_t src_numel,                                                                         \
+        int32_t rank,                                                                              \
+        int32_t add_dim,                                                                           \
+        int32_t dst_dim_size,                                                                      \
+        const int32_t* /*src_shape*/,                                                              \
+        const int64_t* /*stride_src*/,                                                             \
+        const int64_t* /*stride_dst*/,                                                             \
+        const void* /*src*/,                                                                       \
+        const void* /*idx*/,                                                                       \
+        const void* /*dst*/)                                                                       \
+    {                                                                                              \
+        if (src_numel < 0) return 2;                                                              \
+        if (rank < 0 || rank > baracuda::indexing::MAX_RANK) return 2;                            \
+        if (add_dim < 0 || add_dim >= rank) return 2;                                             \
+        if (dst_dim_size < 0) return 2;                                                            \
+        return 0;                                                                                  \
     }
 
 #define BARACUDA_KERNELS_INDEX_SELECT_INSTANTIATE(NAME, T, INDEX_T)                               \
@@ -1100,6 +1194,24 @@ __host__ inline int32_t launch_nonzero(
             static_cast<T*>(out),                                                                  \
             out_numel, rank, select_dim, src_dim_size,                                            \
             out_shape, stride_src, stride_out, stream);                                           \
+    }                                                                                              \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                   \
+        int64_t out_numel,                                                                         \
+        int32_t rank,                                                                              \
+        int32_t select_dim,                                                                        \
+        int32_t src_dim_size,                                                                      \
+        const int32_t* /*out_shape*/,                                                              \
+        const int64_t* /*stride_src*/,                                                             \
+        const int64_t* /*stride_out*/,                                                             \
+        const void* /*src*/,                                                                       \
+        const void* /*idx*/,                                                                       \
+        const void* /*out*/)                                                                       \
+    {                                                                                              \
+        if (out_numel < 0) return 2;                                                              \
+        if (rank < 0 || rank > baracuda::indexing::MAX_RANK) return 2;                            \
+        if (select_dim < 0 || select_dim >= rank) return 2;                                       \
+        if (src_dim_size < 0) return 2;                                                            \
+        return 0;                                                                                  \
     }
 
 #define BARACUDA_KERNELS_INDEX_SELECT_BACKWARD_INSTANTIATE(NAME, T, INDEX_T)                      \
@@ -1128,6 +1240,24 @@ __host__ inline int32_t launch_nonzero(
             static_cast<T*>(dsrc),                                                                 \
             out_numel, rank, select_dim, src_dim_size,                                            \
             out_shape, stride_dout, stride_dsrc, stream);                                         \
+    }                                                                                              \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                   \
+        int64_t out_numel,                                                                         \
+        int32_t rank,                                                                              \
+        int32_t select_dim,                                                                        \
+        int32_t src_dim_size,                                                                      \
+        const int32_t* /*out_shape*/,                                                              \
+        const int64_t* /*stride_dout*/,                                                            \
+        const int64_t* /*stride_dsrc*/,                                                            \
+        const void* /*dout*/,                                                                      \
+        const void* /*idx*/,                                                                       \
+        const void* /*dsrc*/)                                                                      \
+    {                                                                                              \
+        if (out_numel < 0) return 2;                                                              \
+        if (rank < 0 || rank > baracuda::indexing::MAX_RANK) return 2;                            \
+        if (select_dim < 0 || select_dim >= rank) return 2;                                       \
+        if (src_dim_size < 0) return 2;                                                            \
+        return 0;                                                                                  \
     }
 
 // For masked_fill we receive the fill value as raw bits (host->device via
@@ -1159,6 +1289,16 @@ __host__ inline int32_t launch_nonzero(
             static_cast<const uint8_t*>(mask),                                                     \
             static_cast<T*>(out),                                                                  \
             numel, fill_value, stream);                                                            \
+    }                                                                                              \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                   \
+        int64_t numel,                                                                             \
+        const void* /*src*/,                                                                       \
+        const void* /*mask*/,                                                                      \
+        const void* /*out*/,                                                                       \
+        BITS_T /*fill_bits*/)                                                                      \
+    {                                                                                              \
+        if (numel < 0) return 2;                                                                  \
+        return 0;                                                                                  \
     }
 
 #define BARACUDA_KERNELS_MASKED_FILL_BACKWARD_INSTANTIATE(NAME, T)                                \
@@ -1181,6 +1321,15 @@ __host__ inline int32_t launch_nonzero(
             static_cast<const uint8_t*>(mask),                                                     \
             static_cast<T*>(dsrc),                                                                 \
             numel, zero_val, stream);                                                              \
+    }                                                                                              \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                   \
+        int64_t numel,                                                                             \
+        const void* /*dout*/,                                                                      \
+        const void* /*mask*/,                                                                      \
+        const void* /*dsrc*/)                                                                      \
+    {                                                                                              \
+        if (numel < 0) return 2;                                                                  \
+        return 0;                                                                                  \
     }
 
 #define BARACUDA_KERNELS_ONE_HOT_INSTANTIATE(NAME, T, INDEX_T, ONE_EXPR, ZERO_EXPR)                \
@@ -1202,6 +1351,16 @@ __host__ inline int32_t launch_nonzero(
             static_cast<const INDEX_T*>(src),                                                      \
             static_cast<T*>(out),                                                                  \
             out_numel, num_classes, one_val, zero_val, stream);                                    \
+    }                                                                                              \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                   \
+        int64_t out_numel,                                                                         \
+        int32_t num_classes,                                                                       \
+        const void* /*src*/,                                                                       \
+        const void* /*out*/)                                                                       \
+    {                                                                                              \
+        if (out_numel < 0) return 2;                                                              \
+        if (num_classes <= 0) return 2;                                                            \
+        return 0;                                                                                  \
     }
 
 // Phase 11.5: `INDEX_T` parameter selects the output / counter dtype
@@ -1230,6 +1389,21 @@ __host__ inline int32_t launch_nonzero(
             static_cast<INDEX_T*>(out_coords),                                                     \
             static_cast<INDEX_T*>(counter),                                                        \
             numel, rank, (int64_t)max_nz, shape, stride_x, stream);                               \
+    }                                                                                              \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                   \
+        int64_t numel,                                                                             \
+        int32_t rank,                                                                              \
+        int32_t max_nz,                                                                            \
+        const int32_t* /*shape*/,                                                                  \
+        const int64_t* /*stride_x*/,                                                               \
+        const void* /*x*/,                                                                         \
+        const void* /*out_coords*/,                                                                \
+        const void* /*counter*/)                                                                   \
+    {                                                                                              \
+        if (numel < 0) return 2;                                                                  \
+        if (rank < 0 || rank > baracuda::indexing::MAX_RANK) return 2;                            \
+        if (max_nz < 0) return 2;                                                                  \
+        return 0;                                                                                  \
     }
 
 #endif // BARACUDA_INDEXING_CUH

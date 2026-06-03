@@ -531,6 +531,19 @@ __host__ inline int32_t launch_embedding_bag_max_backward(
             static_cast<const INDEX_T*>(indices),                                                  \
             static_cast<T*>(out),                                                                  \
             num_indices, num_embeddings, embedding_dim, padding_idx, stream);                      \
+    }                                                                                              \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                    \
+        int64_t num_indices,                                                                       \
+        int32_t num_embeddings,                                                                    \
+        int32_t embedding_dim,                                                                     \
+        int64_t /*padding_idx*/,                                                                   \
+        const void* /*weight*/,                                                                    \
+        const void* /*indices*/,                                                                   \
+        const void* /*out*/)                                                                       \
+    {                                                                                              \
+        if (num_indices < 0) return 2;                                                             \
+        if (num_embeddings < 0 || embedding_dim < 0) return 2;                                     \
+        return 0;                                                                                  \
     }
 
 #define BARACUDA_KERNELS_EMBEDDING_BACKWARD_INSTANTIATE(NAME, T, INDEX_T)                          \
@@ -554,6 +567,19 @@ __host__ inline int32_t launch_embedding_bag_max_backward(
             static_cast<const INDEX_T*>(indices),                                                  \
             static_cast<T*>(dweight),                                                              \
             num_indices, num_embeddings, embedding_dim, padding_idx, stream);                      \
+    }                                                                                              \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                    \
+        int64_t num_indices,                                                                       \
+        int32_t num_embeddings,                                                                    \
+        int32_t embedding_dim,                                                                     \
+        int64_t /*padding_idx*/,                                                                   \
+        const void* /*dout*/,                                                                      \
+        const void* /*indices*/,                                                                   \
+        const void* /*dweight*/)                                                                   \
+    {                                                                                              \
+        if (num_indices < 0) return 2;                                                             \
+        if (num_embeddings < 0 || embedding_dim < 0) return 2;                                     \
+        return 0;                                                                                  \
     }
 
 #define BARACUDA_KERNELS_EMBEDDING_BAG_INSTANTIATE(NAME, T, INDEX_T)                               \
@@ -582,6 +608,26 @@ __host__ inline int32_t launch_embedding_bag_max_backward(
             static_cast<const int32_t*>(offsets),                                                  \
             static_cast<T*>(out),                                                                  \
             total_indices, num_embeddings, embedding_dim, num_bags, mode, padding_idx, stream);   \
+    }                                                                                              \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                    \
+        int32_t total_indices,                                                                     \
+        int32_t num_embeddings,                                                                    \
+        int32_t embedding_dim,                                                                     \
+        int32_t num_bags,                                                                          \
+        int32_t mode,                                                                              \
+        int64_t /*padding_idx*/,                                                                   \
+        const void* /*weight*/,                                                                    \
+        const void* /*indices*/,                                                                   \
+        const void* /*offsets*/,                                                                   \
+        const void* /*out*/)                                                                       \
+    {                                                                                              \
+        if (total_indices < 0) return 2;                                                           \
+        if (num_embeddings < 0 || embedding_dim < 0) return 2;                                     \
+        if (num_bags < 0) return 2;                                                                \
+        /* mode: 0=Sum, 1=Mean — kernel returns 3 (unsupported) for other values */               \
+        if (mode != baracuda::embedding::kModeSum &&                                               \
+            mode != baracuda::embedding::kModeMean) return 3;                                      \
+        return 0;                                                                                  \
     }
 
 #define BARACUDA_KERNELS_EMBEDDING_BAG_BACKWARD_INSTANTIATE(NAME, T, INDEX_T)                      \
@@ -610,6 +656,25 @@ __host__ inline int32_t launch_embedding_bag_max_backward(
             static_cast<const int32_t*>(offsets),                                                  \
             static_cast<T*>(dweight),                                                              \
             total_indices, num_embeddings, embedding_dim, num_bags, mode, padding_idx, stream);   \
+    }                                                                                              \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                    \
+        int32_t total_indices,                                                                     \
+        int32_t num_embeddings,                                                                    \
+        int32_t embedding_dim,                                                                     \
+        int32_t num_bags,                                                                          \
+        int32_t mode,                                                                              \
+        int64_t /*padding_idx*/,                                                                   \
+        const void* /*dout*/,                                                                      \
+        const void* /*indices*/,                                                                   \
+        const void* /*offsets*/,                                                                   \
+        const void* /*dweight*/)                                                                   \
+    {                                                                                              \
+        if (total_indices < 0) return 2;                                                           \
+        if (num_embeddings < 0 || embedding_dim < 0) return 2;                                     \
+        if (num_bags < 0) return 2;                                                                \
+        if (mode != baracuda::embedding::kModeSum &&                                               \
+            mode != baracuda::embedding::kModeMean) return 3;                                      \
+        return 0;                                                                                  \
     }
 
 // =============================================================================
@@ -653,6 +718,23 @@ __host__ inline int32_t launch_embedding_bag_max_backward(
             static_cast<T*>(out),                                                                 \
             static_cast<int32_t*>(out_index),                                                     \
             total_indices, num_embeddings, embedding_dim, num_bags, padding_idx, stream);        \
+    }                                                                                              \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                    \
+        int32_t total_indices,                                                                     \
+        int32_t num_embeddings,                                                                    \
+        int32_t embedding_dim,                                                                     \
+        int32_t num_bags,                                                                          \
+        int64_t /*padding_idx*/,                                                                   \
+        const void* /*weight*/,                                                                    \
+        const void* /*indices*/,                                                                   \
+        const void* /*offsets*/,                                                                   \
+        const void* /*out*/,                                                                       \
+        const void* /*out_index*/)                                                                 \
+    {                                                                                              \
+        if (total_indices < 0) return 2;                                                           \
+        if (num_embeddings < 0 || embedding_dim < 0) return 2;                                     \
+        if (num_bags < 0) return 2;                                                                \
+        return 0;                                                                                  \
     }
 
 #define BARACUDA_KERNELS_EMBEDDING_BAG_MAX_BACKWARD_INSTANTIATE(NAME, T)                          \
@@ -675,6 +757,18 @@ __host__ inline int32_t launch_embedding_bag_max_backward(
             static_cast<const int32_t*>(out_index),                                               \
             static_cast<T*>(dweight),                                                             \
             num_embeddings, embedding_dim, num_bags, stream);                                     \
+    }                                                                                              \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                    \
+        int32_t num_embeddings,                                                                    \
+        int32_t embedding_dim,                                                                     \
+        int32_t num_bags,                                                                          \
+        const void* /*dout*/,                                                                      \
+        const void* /*out_index*/,                                                                 \
+        const void* /*dweight*/)                                                                   \
+    {                                                                                              \
+        if (num_embeddings < 0 || embedding_dim < 0) return 2;                                     \
+        if (num_bags < 0) return 2;                                                                \
+        return 0;                                                                                  \
     }
 
 #endif // BARACUDA_EMBEDDING_CUH

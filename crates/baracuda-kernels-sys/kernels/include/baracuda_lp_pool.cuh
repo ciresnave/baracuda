@@ -481,6 +481,17 @@ __host__ inline int32_t launch_lp_pool2d_bw(
         cudaStream_t stream = static_cast<cudaStream_t>(stream_ptr);                                  \
         return baracuda::lp_pool::launch_lp_pool1d_fw<T>(                                             \
             x, y, batch, channels, l_in, kernel, stride, l_out, norm_p, stream);                      \
+    }                                                                                                  \
+    extern "C" int32_t baracuda_kernels_lp_pool_1d_##NAME##_can_implement(                            \
+        const void* /*x*/, const void* /*y*/,                                                         \
+        int32_t batch, int32_t channels, int32_t l_in,                                                \
+        int32_t kernel, int32_t stride, int32_t l_out,                                                \
+        float /*norm_p*/,                                                                             \
+        int32_t /*ceil_mode_unused*/)                                                                 \
+    {                                                                                                  \
+        if (batch < 0 || channels < 0 || l_in < 0 || l_out < 0) return 2;                             \
+        if (kernel <= 0 || stride <= 0) return 2;                                                     \
+        return 0;                                                                                      \
     }
 
 #define BARACUDA_KERNELS_LP_POOL_1D_BW_INSTANTIATE(NAME, T)                                          \
@@ -495,6 +506,17 @@ __host__ inline int32_t launch_lp_pool2d_bw(
         cudaStream_t stream = static_cast<cudaStream_t>(stream_ptr);                                  \
         return baracuda::lp_pool::launch_lp_pool1d_bw<T>(                                             \
             x, y, dy, dx, batch, channels, l_in, kernel, stride, l_out, norm_p, stream);              \
+    }                                                                                                  \
+    extern "C" int32_t baracuda_kernels_lp_pool_1d_##NAME##_backward_can_implement(                   \
+        const void* /*x*/, const void* /*y*/, const void* /*dy*/, const void* /*dx*/,                 \
+        int32_t batch, int32_t channels, int32_t l_in,                                                \
+        int32_t kernel, int32_t stride, int32_t l_out,                                                \
+        float /*norm_p*/,                                                                             \
+        int32_t /*ceil_mode_unused*/)                                                                 \
+    {                                                                                                  \
+        if (batch < 0 || channels < 0 || l_in < 0 || l_out < 0) return 2;                             \
+        if (kernel <= 0 || stride <= 0) return 2;                                                     \
+        return 0;                                                                                      \
     }
 
 #define BARACUDA_KERNELS_LP_POOL_2D_FW_INSTANTIATE(NAME, T)                                          \
@@ -510,6 +532,18 @@ __host__ inline int32_t launch_lp_pool2d_bw(
         cudaStream_t stream = static_cast<cudaStream_t>(stream_ptr);                                  \
         return baracuda::lp_pool::launch_lp_pool2d_fw<T>(                                             \
             x, y, batch, channels, h_in, w_in, kh, kw, sh, sw, h_out, w_out, norm_p, stream);         \
+    }                                                                                                  \
+    extern "C" int32_t baracuda_kernels_lp_pool_2d_##NAME##_can_implement(                            \
+        const void* /*x*/, const void* /*y*/,                                                         \
+        int32_t batch, int32_t channels, int32_t h_in, int32_t w_in,                                  \
+        int32_t kh, int32_t kw, int32_t sh, int32_t sw,                                               \
+        int32_t h_out, int32_t w_out,                                                                 \
+        float /*norm_p*/,                                                                             \
+        int32_t /*ceil_mode_unused*/)                                                                 \
+    {                                                                                                  \
+        if (batch < 0 || channels < 0 || h_in < 0 || w_in < 0 || h_out < 0 || w_out < 0) return 2;   \
+        if (kh <= 0 || kw <= 0 || sh <= 0 || sw <= 0) return 2;                                       \
+        return 0;                                                                                      \
     }
 
 #define BARACUDA_KERNELS_LP_POOL_2D_BW_INSTANTIATE(NAME, T)                                          \
@@ -525,6 +559,18 @@ __host__ inline int32_t launch_lp_pool2d_bw(
         cudaStream_t stream = static_cast<cudaStream_t>(stream_ptr);                                  \
         return baracuda::lp_pool::launch_lp_pool2d_bw<T>(                                             \
             x, y, dy, dx, batch, channels, h_in, w_in, kh, kw, sh, sw, h_out, w_out, norm_p, stream); \
+    }                                                                                                  \
+    extern "C" int32_t baracuda_kernels_lp_pool_2d_##NAME##_backward_can_implement(                   \
+        const void* /*x*/, const void* /*y*/, const void* /*dy*/, const void* /*dx*/,                 \
+        int32_t batch, int32_t channels, int32_t h_in, int32_t w_in,                                  \
+        int32_t kh, int32_t kw, int32_t sh, int32_t sw,                                               \
+        int32_t h_out, int32_t w_out,                                                                 \
+        float /*norm_p*/,                                                                             \
+        int32_t /*ceil_mode_unused*/)                                                                 \
+    {                                                                                                  \
+        if (batch < 0 || channels < 0 || h_in < 0 || w_in < 0 || h_out < 0 || w_out < 0) return 2;   \
+        if (kh <= 0 || kw <= 0 || sh <= 0 || sw <= 0) return 2;                                       \
+        return 0;                                                                                      \
     }
 
 #endif // BARACUDA_LP_POOL_CUH

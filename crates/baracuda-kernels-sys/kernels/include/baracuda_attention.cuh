@@ -1516,6 +1516,21 @@ __host__ inline int32_t launch_rope_apply_thd_backward_fp(
             static_cast<T*>(y),                                                                 \
             batch, heads, seq, head_dim, base, pos_default_flag,                                \
             stream);                                                                            \
+    }                                                                                            \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                 \
+        int32_t batch,                                                                          \
+        int32_t heads,                                                                          \
+        int32_t seq,                                                                            \
+        int32_t head_dim,                                                                       \
+        float /*base*/,                                                                         \
+        int32_t /*pos_default_flag*/,                                                           \
+        const void* /*x*/,                                                                      \
+        const void* /*positions*/,                                                              \
+        const void* /*y*/)                                                                      \
+    {                                                                                            \
+        if (batch < 0 || heads < 0 || seq < 0 || head_dim < 0) return 2;                        \
+        if (head_dim % 2 != 0) return 2;                                                        \
+        return 0;                                                                               \
     }
 
 #define BARACUDA_KERNELS_ROPE_BACKWARD_INSTANTIATE(NAME, T)                                     \
@@ -1545,6 +1560,21 @@ __host__ inline int32_t launch_rope_apply_thd_backward_fp(
             static_cast<T*>(dx),                                                                \
             batch, heads, seq, head_dim, base, pos_default_flag,                                \
             stream);                                                                            \
+    }                                                                                            \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                 \
+        int32_t batch,                                                                          \
+        int32_t heads,                                                                          \
+        int32_t seq,                                                                            \
+        int32_t head_dim,                                                                       \
+        float /*base*/,                                                                         \
+        int32_t /*pos_default_flag*/,                                                           \
+        const void* /*dy*/,                                                                     \
+        const void* /*positions*/,                                                              \
+        const void* /*dx*/)                                                                     \
+    {                                                                                            \
+        if (batch < 0 || heads < 0 || seq < 0 || head_dim < 0) return 2;                        \
+        if (head_dim % 2 != 0) return 2;                                                        \
+        return 0;                                                                               \
     }
 
 // Strided sibling INSTANTIATEs — Phase 14.4. One symbol per dtype:
@@ -1584,6 +1614,23 @@ __host__ inline int32_t launch_rope_apply_thd_backward_fp(
             stride_y_b, stride_y_h, stride_y_s,                                                 \
             base, pos_default_flag,                                                             \
             stream);                                                                            \
+    }                                                                                            \
+    extern "C" int32_t baracuda_kernels_##NAME##_strided_can_implement(                         \
+        int32_t batch,                                                                          \
+        int32_t heads,                                                                          \
+        int32_t seq,                                                                            \
+        int32_t head_dim,                                                                       \
+        int64_t /*stride_x_b*/, int64_t /*stride_x_h*/, int64_t /*stride_x_s*/,                 \
+        int64_t /*stride_y_b*/, int64_t /*stride_y_h*/, int64_t /*stride_y_s*/,                 \
+        float /*base*/,                                                                         \
+        int32_t /*pos_default_flag*/,                                                           \
+        const void* /*x*/,                                                                      \
+        const void* /*positions*/,                                                              \
+        const void* /*y*/)                                                                      \
+    {                                                                                            \
+        if (batch < 0 || heads < 0 || seq < 0 || head_dim < 0) return 2;                        \
+        if (head_dim % 2 != 0) return 2;                                                        \
+        return 0;                                                                               \
     }
 
 #define BARACUDA_KERNELS_ROPE_BACKWARD_STRIDED_INSTANTIATE(NAME, T)                             \
@@ -1618,6 +1665,23 @@ __host__ inline int32_t launch_rope_apply_thd_backward_fp(
             stride_dx_b, stride_dx_h, stride_dx_s,                                              \
             base, pos_default_flag,                                                             \
             stream);                                                                            \
+    }                                                                                            \
+    extern "C" int32_t baracuda_kernels_##NAME##_strided_can_implement(                         \
+        int32_t batch,                                                                          \
+        int32_t heads,                                                                          \
+        int32_t seq,                                                                            \
+        int32_t head_dim,                                                                       \
+        int64_t /*stride_dy_b*/, int64_t /*stride_dy_h*/, int64_t /*stride_dy_s*/,              \
+        int64_t /*stride_dx_b*/, int64_t /*stride_dx_h*/, int64_t /*stride_dx_s*/,              \
+        float /*base*/,                                                                         \
+        int32_t /*pos_default_flag*/,                                                           \
+        const void* /*dy*/,                                                                     \
+        const void* /*positions*/,                                                              \
+        const void* /*dx*/)                                                                     \
+    {                                                                                            \
+        if (batch < 0 || heads < 0 || seq < 0 || head_dim < 0) return 2;                        \
+        if (head_dim % 2 != 0) return 2;                                                        \
+        return 0;                                                                               \
     }
 
 // RoPE apply INSTANTIATE — Phase 36 (Fuel ask Gap 2). Coexists with the
@@ -1902,6 +1966,18 @@ __host__ inline int32_t launch_rope_apply_thd_backward_fp(
             static_cast<T*>(y),                                                                 \
             batch, heads, q_len, k_len,                                                         \
             stream);                                                                            \
+    }                                                                                            \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                 \
+        int32_t batch,                                                                          \
+        int32_t heads,                                                                          \
+        int32_t q_len,                                                                          \
+        int32_t k_len,                                                                          \
+        const void* /*scores*/,                                                                 \
+        const void* /*slopes*/,                                                                 \
+        const void* /*y*/)                                                                      \
+    {                                                                                            \
+        if (batch < 0 || heads < 0 || q_len < 0 || k_len < 0) return 2;                         \
+        return 0;                                                                               \
     }
 
 #define BARACUDA_KERNELS_ALIBI_BACKWARD_INSTANTIATE(NAME, T)                                    \
@@ -1928,6 +2004,18 @@ __host__ inline int32_t launch_rope_apply_thd_backward_fp(
             static_cast<T*>(dslope),                                                            \
             batch, heads, q_len, k_len,                                                         \
             stream);                                                                            \
+    }                                                                                            \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                 \
+        int32_t batch,                                                                          \
+        int32_t heads,                                                                          \
+        int32_t q_len,                                                                          \
+        int32_t k_len,                                                                          \
+        const void* /*dy*/,                                                                     \
+        const void* /*da*/,                                                                     \
+        const void* /*dslope*/)                                                                 \
+    {                                                                                            \
+        if (batch < 0 || heads < 0 || q_len < 0 || k_len < 0) return 2;                         \
+        return 0;                                                                               \
     }
 
 #define BARACUDA_KERNELS_KV_CACHE_APPEND_INSTANTIATE(NAME, T)                                   \
@@ -1960,6 +2048,23 @@ __host__ inline int32_t launch_rope_apply_thd_backward_fp(
             static_cast<T*>(v_cache),                                                           \
             batch, heads, new_len, max_cache_len, d_k, d_v,                                     \
             stream);                                                                            \
+    }                                                                                            \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                 \
+        int32_t batch,                                                                          \
+        int32_t heads,                                                                          \
+        int32_t new_len,                                                                        \
+        int32_t max_cache_len,                                                                  \
+        int32_t d_k,                                                                            \
+        int32_t d_v,                                                                            \
+        const void* /*k_new*/,                                                                  \
+        const void* /*v_new*/,                                                                  \
+        const void* /*cache_offsets*/,                                                          \
+        const void* /*k_cache*/,                                                                \
+        const void* /*v_cache*/)                                                                \
+    {                                                                                            \
+        if (batch < 0 || heads < 0 || new_len < 0 || max_cache_len < 0 ||                       \
+            d_k < 0 || d_v < 0) return 2;                                                       \
+        return 0;                                                                               \
     }
 
 #endif // BARACUDA_ATTENTION_CUH

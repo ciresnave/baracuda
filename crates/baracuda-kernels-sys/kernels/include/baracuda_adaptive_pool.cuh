@@ -599,6 +599,17 @@ __host__ inline int32_t launch_max_pool_bw(
         return baracuda::adaptive_pool::launch_avg_pool_fw<T>(                                       \
             x, y, nc, spatial_rank,                                                                  \
             in_d, in_h, in_w, out_d, out_h, out_w, stream);                                          \
+    }                                                                                                \
+    extern "C" int32_t baracuda_kernels_adaptive_avg_pool_##NAME##_fw_can_implement(                \
+        const void* /*x*/, const void* /*y*/,                                                       \
+        int32_t nc, int32_t spatial_rank,                                                           \
+        int32_t in_d, int32_t in_h, int32_t in_w,                                                   \
+        int32_t out_d, int32_t out_h, int32_t out_w)                                                \
+    {                                                                                                \
+        if (nc < 0 || spatial_rank < 1 || spatial_rank > 3) return 2;                               \
+        if (in_d < 0 || in_h < 0 || in_w < 0) return 2;                                              \
+        if (out_d < 0 || out_h < 0 || out_w < 0) return 2;                                          \
+        return 0;                                                                                    \
     }
 
 // AvgPool BW.
@@ -614,6 +625,17 @@ __host__ inline int32_t launch_max_pool_bw(
         return baracuda::adaptive_pool::launch_avg_pool_bw<T>(                                       \
             dy, dx, nc, spatial_rank,                                                                \
             in_d, in_h, in_w, out_d, out_h, out_w, stream);                                          \
+    }                                                                                                \
+    extern "C" int32_t baracuda_kernels_adaptive_avg_pool_##NAME##_bw_can_implement(                \
+        const void* /*dy*/, const void* /*dx*/,                                                     \
+        int32_t nc, int32_t spatial_rank,                                                           \
+        int32_t in_d, int32_t in_h, int32_t in_w,                                                   \
+        int32_t out_d, int32_t out_h, int32_t out_w)                                                \
+    {                                                                                                \
+        if (nc < 0 || spatial_rank < 1 || spatial_rank > 3) return 2;                               \
+        if (in_d < 0 || in_h < 0 || in_w < 0) return 2;                                              \
+        if (out_d < 0 || out_h < 0 || out_w < 0) return 2;                                          \
+        return 0;                                                                                    \
     }
 
 // MaxPool FW (writes y only — argmax is recomputed inside BW from
@@ -630,6 +652,17 @@ __host__ inline int32_t launch_max_pool_bw(
         return baracuda::adaptive_pool::launch_max_pool_fw<T>(                                       \
             x, y, nc, spatial_rank,                                                                  \
             in_d, in_h, in_w, out_d, out_h, out_w, stream);                                          \
+    }                                                                                                \
+    extern "C" int32_t baracuda_kernels_adaptive_max_pool_##NAME##_fw_can_implement(                \
+        const void* /*x*/, const void* /*y*/,                                                       \
+        int32_t nc, int32_t spatial_rank,                                                           \
+        int32_t in_d, int32_t in_h, int32_t in_w,                                                   \
+        int32_t out_d, int32_t out_h, int32_t out_w)                                                \
+    {                                                                                                \
+        if (nc < 0 || spatial_rank < 1 || spatial_rank > 3) return 2;                               \
+        if (in_d < 0 || in_h < 0 || in_w < 0) return 2;                                              \
+        if (out_d < 0 || out_h < 0 || out_w < 0) return 2;                                          \
+        return 0;                                                                                    \
     }
 
 // MaxPool BW (consumes saved x; recomputes argmax internally).
@@ -645,6 +678,17 @@ __host__ inline int32_t launch_max_pool_bw(
         return baracuda::adaptive_pool::launch_max_pool_bw<T>(                                       \
             x, dy, dx, nc, spatial_rank,                                                             \
             in_d, in_h, in_w, out_d, out_h, out_w, stream);                                          \
+    }                                                                                                \
+    extern "C" int32_t baracuda_kernels_adaptive_max_pool_##NAME##_bw_can_implement(                \
+        const void* /*x*/, const void* /*dy*/, const void* /*dx*/,                                  \
+        int32_t nc, int32_t spatial_rank,                                                           \
+        int32_t in_d, int32_t in_h, int32_t in_w,                                                   \
+        int32_t out_d, int32_t out_h, int32_t out_w)                                                \
+    {                                                                                                \
+        if (nc < 0 || spatial_rank < 1 || spatial_rank > 3) return 2;                               \
+        if (in_d < 0 || in_h < 0 || in_w < 0) return 2;                                              \
+        if (out_d < 0 || out_h < 0 || out_w < 0) return 2;                                          \
+        return 0;                                                                                    \
     }
 
 #endif // BARACUDA_ADAPTIVE_POOL_CUH

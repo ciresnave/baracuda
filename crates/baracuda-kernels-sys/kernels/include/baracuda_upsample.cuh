@@ -181,6 +181,14 @@ __host__ inline int32_t launch_upsample_nearest_2d_backward(
             static_cast<const T*>(input),                                                        \
             static_cast<T*>(output),                                                             \
             N, C, IH, IW, OH, OW, stream);                                                       \
+    }                                                                                            \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                  \
+        int32_t N, int32_t C, int32_t IH, int32_t IW, int32_t OH, int32_t OW,                    \
+        const void* /*input*/,                                                                   \
+        const void* /*output*/)                                                                  \
+    {                                                                                            \
+        if (N < 0 || C < 0 || IH < 0 || IW < 0 || OH < 0 || OW < 0) return 2;                    \
+        return 0;                                                                                \
     }
 
 #define BARACUDA_KERNELS_UPSAMPLE_NEAREST_2D_BW_INSTANTIATE(NAME, T)                            \
@@ -197,6 +205,14 @@ __host__ inline int32_t launch_upsample_nearest_2d_backward(
             static_cast<const T*>(dout),                                                         \
             static_cast<T*>(dinput),                                                             \
             N, C, IH, IW, OH, OW, stream);                                                       \
+    }                                                                                            \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                  \
+        int32_t N, int32_t C, int32_t IH, int32_t IW, int32_t OH, int32_t OW,                    \
+        const void* /*dout*/,                                                                    \
+        const void* /*dinput*/)                                                                  \
+    {                                                                                            \
+        if (N < 0 || C < 0 || IH < 0 || IW < 0 || OH < 0 || OW < 0) return 2;                    \
+        return 0;                                                                                \
     }
 
 #endif // BARACUDA_UPSAMPLE_CUH

@@ -1158,6 +1158,24 @@ __host__ inline int32_t launch_flash_sdpa_backward_fp(
             batch, heads, q_len, k_len, d_k, d_v,                                                   \
             scale, is_causal,                                                                       \
             stream);                                                                                \
+    }                                                                                                \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                     \
+        int32_t batch,                                                                              \
+        int32_t heads,                                                                              \
+        int32_t q_len,                                                                              \
+        int32_t k_len,                                                                              \
+        int32_t d_k,                                                                                \
+        int32_t d_v,                                                                                \
+        float /*scale*/,                                                                            \
+        int32_t /*is_causal*/,                                                                      \
+        const void* /*q*/,                                                                          \
+        const void* /*k*/,                                                                          \
+        const void* /*v*/,                                                                          \
+        const void* /*y*/,                                                                          \
+        const void* /*lse*/)                                                                        \
+    {                                                                                                \
+        if (batch < 0 || heads < 0 || q_len < 0 || k_len < 0 || d_k < 0 || d_v < 0) return 2;       \
+        return 0;                                                                                   \
     }
 
 #define BARACUDA_KERNELS_FLASH_SDPA_BACKWARD_INSTANTIATE(NAME, T)                                   \
@@ -1205,6 +1223,29 @@ __host__ inline int32_t launch_flash_sdpa_backward_fp(
             batch, heads, q_len, k_len, d_k, d_v,                                                   \
             scale, is_causal,                                                                       \
             stream);                                                                                \
+    }                                                                                                \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                     \
+        int32_t batch,                                                                              \
+        int32_t heads,                                                                              \
+        int32_t q_len,                                                                              \
+        int32_t k_len,                                                                              \
+        int32_t d_k,                                                                                \
+        int32_t d_v,                                                                                \
+        float /*scale*/,                                                                            \
+        int32_t /*is_causal*/,                                                                      \
+        const void* /*q*/,                                                                          \
+        const void* /*k*/,                                                                          \
+        const void* /*v*/,                                                                          \
+        const void* /*y*/,                                                                          \
+        const void* /*lse*/,                                                                        \
+        const void* /*dy*/,                                                                         \
+        const void* /*d_ws*/,                                                                       \
+        const void* /*dQ*/,                                                                         \
+        const void* /*dK*/,                                                                         \
+        const void* /*dV*/)                                                                         \
+    {                                                                                                \
+        if (batch < 0 || heads < 0 || q_len < 0 || k_len < 0 || d_k < 0 || d_v < 0) return 2;       \
+        return 0;                                                                                   \
     }
 
 #endif // BARACUDA_FLASH_SDPA_CUH

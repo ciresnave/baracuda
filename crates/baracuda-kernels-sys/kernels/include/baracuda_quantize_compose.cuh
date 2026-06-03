@@ -323,6 +323,18 @@ __host__ inline int32_t launch_quantized_linear_w8a8(
                 static_cast<TIN*>(scale),                                               \
                 static_cast<TOUT*>(output),                                             \
                 N, D, qmin, qmax, stream);                                              \
+    }                                                                                   \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                         \
+        int32_t N, int32_t D, int32_t qmin, int32_t qmax,                               \
+        const void* /*input*/,                                                          \
+        const void* /*scale*/,                                                          \
+        const void* /*output*/)                                                         \
+    {                                                                                   \
+        if (N < 0 || D < 0) return 2;                                                   \
+        if (qmin > qmax) return 2;                                                      \
+        if (qmax <= 0) return 2;                                                        \
+        if (N > 65535) return 2;                                                        \
+        return 0;                                                                       \
     }
 
 #define BARACUDA_KERNELS_QUANTIZED_LINEAR_W8A8_INSTANTIATE(NAME, TIN)                 \
@@ -344,6 +356,17 @@ __host__ inline int32_t launch_quantized_linear_w8a8(
             static_cast<const TIN*>(scale_w),                                           \
             static_cast<TIN*>(output),                                                  \
             M, C_out, K, stream);                                                       \
+    }                                                                                   \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                         \
+        int32_t M, int32_t C_out, int32_t K,                                            \
+        const void* /*weight_q*/,                                                       \
+        const void* /*act_q*/,                                                          \
+        const void* /*scale_a*/,                                                        \
+        const void* /*scale_w*/,                                                        \
+        const void* /*output*/)                                                         \
+    {                                                                                   \
+        if (M < 0 || C_out < 0 || K < 0) return 2;                                      \
+        return 0;                                                                       \
     }
 
 #endif // BARACUDA_QUANTIZE_COMPOSE_CUH

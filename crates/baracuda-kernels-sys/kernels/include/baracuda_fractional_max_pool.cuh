@@ -445,6 +445,20 @@ __host__ inline int32_t launch_fractional_max_pool_3d_bw(
             static_cast<int64_t*>(indices),                                                        \
             random_samples,                                                                        \
             batch, channels, h_in, w_in, h_out, w_out, kh, kw, stream);                            \
+    }                                                                                              \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                    \
+        const void* /*x*/, const void* /*y*/,                                                      \
+        const void* /*indices*/,                                                                   \
+        const float* /*random_samples*/,                                                           \
+        int32_t batch, int32_t channels,                                                           \
+        int32_t h_in, int32_t w_in,                                                                \
+        int32_t h_out, int32_t w_out,                                                              \
+        int32_t kh, int32_t kw)                                                                    \
+    {                                                                                              \
+        if (batch < 0 || channels < 0) return 2;                                                   \
+        if (h_in < 0 || w_in < 0 || h_out < 0 || w_out < 0) return 2;                              \
+        if (kh <= 0 || kw <= 0) return 2;                                                          \
+        return 0;                                                                                  \
     }
 
 #define BARACUDA_KERNELS_FRACTIONAL_MAX_POOL_2D_BW_INSTANTIATE(NAME, T)                           \
@@ -464,6 +478,18 @@ __host__ inline int32_t launch_fractional_max_pool_3d_bw(
             static_cast<const int64_t*>(indices),                                                  \
             static_cast<T*>(dx),                                                                   \
             batch, channels, h_in, w_in, h_out, w_out, stream);                                    \
+    }                                                                                              \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                    \
+        const void* /*dy*/,                                                                        \
+        const void* /*indices*/,                                                                   \
+        const void* /*dx*/,                                                                        \
+        int32_t batch, int32_t channels,                                                           \
+        int32_t h_in, int32_t w_in,                                                                \
+        int32_t h_out, int32_t w_out)                                                              \
+    {                                                                                              \
+        if (batch < 0 || channels < 0) return 2;                                                   \
+        if (h_in < 0 || w_in < 0 || h_out < 0 || w_out < 0) return 2;                              \
+        return 0;                                                                                  \
     }
 
 #define BARACUDA_KERNELS_FRACTIONAL_MAX_POOL_3D_FW_INSTANTIATE(NAME, T)                           \
@@ -487,6 +513,20 @@ __host__ inline int32_t launch_fractional_max_pool_3d_bw(
             random_samples,                                                                        \
             batch, channels,                                                                       \
             d_in, h_in, w_in, d_out, h_out, w_out, kd, kh, kw, stream);                            \
+    }                                                                                              \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                    \
+        const void* /*x*/, const void* /*y*/,                                                      \
+        const void* /*indices*/,                                                                   \
+        const float* /*random_samples*/,                                                           \
+        int32_t batch, int32_t channels,                                                           \
+        int32_t d_in, int32_t h_in, int32_t w_in,                                                  \
+        int32_t d_out, int32_t h_out, int32_t w_out,                                               \
+        int32_t kd, int32_t kh, int32_t kw)                                                        \
+    {                                                                                              \
+        if (batch < 0 || channels < 0) return 2;                                                   \
+        if (d_in < 0 || h_in < 0 || w_in < 0 || d_out < 0 || h_out < 0 || w_out < 0) return 2;     \
+        if (kd <= 0 || kh <= 0 || kw <= 0) return 2;                                               \
+        return 0;                                                                                  \
     }
 
 #define BARACUDA_KERNELS_FRACTIONAL_MAX_POOL_3D_BW_INSTANTIATE(NAME, T)                           \
@@ -507,6 +547,18 @@ __host__ inline int32_t launch_fractional_max_pool_3d_bw(
             static_cast<T*>(dx),                                                                   \
             batch, channels,                                                                       \
             d_in, h_in, w_in, d_out, h_out, w_out, stream);                                        \
+    }                                                                                              \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                    \
+        const void* /*dy*/,                                                                        \
+        const void* /*indices*/,                                                                   \
+        const void* /*dx*/,                                                                        \
+        int32_t batch, int32_t channels,                                                           \
+        int32_t d_in, int32_t h_in, int32_t w_in,                                                  \
+        int32_t d_out, int32_t h_out, int32_t w_out)                                               \
+    {                                                                                              \
+        if (batch < 0 || channels < 0) return 2;                                                   \
+        if (d_in < 0 || h_in < 0 || w_in < 0 || d_out < 0 || h_out < 0 || w_out < 0) return 2;     \
+        return 0;                                                                                  \
     }
 
 #endif // BARACUDA_FRACTIONAL_MAX_POOL_CUH

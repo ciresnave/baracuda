@@ -2516,6 +2516,23 @@ __host__ inline int32_t launch_bn_gn_backward_fp(
             eps, numel, rank, shape, stride_x, stride_y, stride_rms,                                \
             norm_axes_mask, norm_total_extent,                                                      \
             stream);                                                                                \
+    }                                                                                                \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                     \
+        float /*eps*/,                                                                              \
+        int64_t numel,                                                                              \
+        int32_t rank,                                                                               \
+        const int32_t* shape,                                                                       \
+        const int64_t* stride_x,                                                                    \
+        const int64_t* stride_y,                                                                    \
+        const int64_t* /*stride_rms*/,                                                              \
+        int32_t /*norm_axes_mask*/,                                                                 \
+        int32_t /*norm_total_extent*/,                                                              \
+        const void* /*x*/, const void* /*gamma*/, const void* /*y*/, const void* /*rms_out*/)      \
+    {                                                                                                \
+        if (numel < 0) return 2;                                                                    \
+        if (rank < 0) return 2;                                                                     \
+        if (numel > 0 && (shape == nullptr || stride_x == nullptr || stride_y == nullptr)) return 2;\
+        return 0;                                                                                   \
     }
 
 #define BARACUDA_KERNELS_RMS_NORM_BACKWARD_INSTANTIATE(NAME, T)                                     \
@@ -2550,6 +2567,25 @@ __host__ inline int32_t launch_bn_gn_backward_fp(
             numel, rank, shape, stride_dy, stride_x, stride_rms, stride_dx,                         \
             norm_axes_mask, norm_total_extent,                                                      \
             stream);                                                                                \
+    }                                                                                                \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                     \
+        int64_t numel,                                                                              \
+        int32_t rank,                                                                               \
+        const int32_t* shape,                                                                       \
+        const int64_t* stride_dy,                                                                   \
+        const int64_t* stride_x,                                                                    \
+        const int64_t* stride_rms,                                                                  \
+        const int64_t* stride_dx,                                                                   \
+        int32_t /*norm_axes_mask*/,                                                                 \
+        int32_t /*norm_total_extent*/,                                                              \
+        const void* /*dy*/, const void* /*x*/, const void* /*gamma*/, const void* /*rms*/,         \
+        const void* /*dx*/, const void* /*dgamma*/)                                                 \
+    {                                                                                                \
+        if (numel < 0) return 2;                                                                    \
+        if (rank < 0) return 2;                                                                     \
+        if (numel > 0 && (shape == nullptr || stride_dy == nullptr || stride_x == nullptr ||       \
+                           stride_rms == nullptr || stride_dx == nullptr)) return 2;                \
+        return 0;                                                                                   \
     }
 
 #define BARACUDA_KERNELS_LAYER_NORM_INSTANTIATE(NAME, T)                                            \
@@ -2583,6 +2619,24 @@ __host__ inline int32_t launch_bn_gn_backward_fp(
             eps, numel, rank, shape, stride_x, stride_y, stride_save,                               \
             norm_axes_mask, norm_total_extent,                                                      \
             stream);                                                                                \
+    }                                                                                                \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                     \
+        float /*eps*/,                                                                              \
+        int64_t numel,                                                                              \
+        int32_t rank,                                                                               \
+        const int32_t* shape,                                                                       \
+        const int64_t* stride_x,                                                                    \
+        const int64_t* stride_y,                                                                    \
+        const int64_t* /*stride_save*/,                                                             \
+        int32_t /*norm_axes_mask*/,                                                                 \
+        int32_t /*norm_total_extent*/,                                                              \
+        const void* /*x*/, const void* /*gamma*/, const void* /*beta*/,                             \
+        const void* /*y*/, const void* /*mean_out*/, const void* /*inv_std_out*/)                   \
+    {                                                                                                \
+        if (numel < 0) return 2;                                                                    \
+        if (rank < 0) return 2;                                                                     \
+        if (numel > 0 && (shape == nullptr || stride_x == nullptr || stride_y == nullptr)) return 2;\
+        return 0;                                                                                   \
     }
 
 #define BARACUDA_KERNELS_LAYER_NORM_BACKWARD_INSTANTIATE(NAME, T)                                   \
@@ -2621,6 +2675,26 @@ __host__ inline int32_t launch_bn_gn_backward_fp(
             numel, rank, shape, stride_dy, stride_x, stride_save, stride_dx,                        \
             norm_axes_mask, norm_total_extent,                                                      \
             stream);                                                                                \
+    }                                                                                                \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                     \
+        int64_t numel,                                                                              \
+        int32_t rank,                                                                               \
+        const int32_t* shape,                                                                       \
+        const int64_t* stride_dy,                                                                   \
+        const int64_t* stride_x,                                                                    \
+        const int64_t* stride_save,                                                                 \
+        const int64_t* stride_dx,                                                                   \
+        int32_t /*norm_axes_mask*/,                                                                 \
+        int32_t /*norm_total_extent*/,                                                              \
+        const void* /*dy*/, const void* /*x*/, const void* /*gamma*/,                               \
+        const void* /*mean_in*/, const void* /*inv_std_in*/,                                        \
+        const void* /*dx*/, const void* /*dgamma*/, const void* /*dbeta*/)                          \
+    {                                                                                                \
+        if (numel < 0) return 2;                                                                    \
+        if (rank < 0) return 2;                                                                     \
+        if (numel > 0 && (shape == nullptr || stride_dy == nullptr || stride_x == nullptr ||       \
+                           stride_save == nullptr || stride_dx == nullptr)) return 2;               \
+        return 0;                                                                                   \
     }
 
 // =============================================================================
@@ -2664,6 +2738,19 @@ __host__ inline int32_t launch_bn_gn_backward_fp(
             n_extent, c_extent, spatial_extent,                                                      \
             num_groups, group_kind, eps,                                                             \
             stream);                                                                                 \
+    }                                                                                                 \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                      \
+        int32_t n_extent,                                                                            \
+        int32_t c_extent,                                                                            \
+        int32_t spatial_extent,                                                                      \
+        int32_t /*num_groups*/,                                                                      \
+        int32_t /*group_kind*/,                                                                      \
+        float /*eps*/,                                                                               \
+        const void* /*x*/, const void* /*gamma*/, const void* /*beta*/,                              \
+        const void* /*y*/, const void* /*saved_mean*/, const void* /*saved_rstd*/)                   \
+    {                                                                                                 \
+        if (n_extent < 0 || c_extent < 0 || spatial_extent < 0) return 2;                            \
+        return 0;                                                                                    \
     }
 
 #define BARACUDA_KERNELS_BN_GN_BACKWARD_INSTANTIATE(NAME, T)                                         \
@@ -2700,6 +2787,21 @@ __host__ inline int32_t launch_bn_gn_backward_fp(
             n_extent, c_extent, spatial_extent,                                                      \
             num_groups, group_kind,                                                                  \
             stream);                                                                                 \
+    }                                                                                                 \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                      \
+        int32_t n_extent,                                                                            \
+        int32_t c_extent,                                                                            \
+        int32_t spatial_extent,                                                                      \
+        int32_t num_groups,                                                                          \
+        int32_t group_kind,                                                                          \
+        const void* /*dy*/, const void* /*x*/, const void* /*gamma*/,                                \
+        const void* /*saved_mean*/, const void* /*saved_rstd*/,                                      \
+        const void* /*dx*/, const void* /*dgamma*/, const void* /*dbeta*/,                           \
+        const void* /*workspace*/, size_t /*workspace_bytes*/)                                       \
+    {                                                                                                 \
+        if (n_extent < 0 || c_extent < 0 || spatial_extent < 0) return 2;                            \
+        (void)num_groups; (void)group_kind;                                                          \
+        return 0;                                                                                    \
     }
 
 #endif // BARACUDA_NORM_CUH

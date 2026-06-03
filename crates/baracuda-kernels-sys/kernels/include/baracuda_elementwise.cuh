@@ -6140,6 +6140,23 @@ __host__ inline int32_t launch_gated_activation_backward_contig(
             shape, stride_x, stride_y,                                                            \
             scan_axis, scan_extent, scan_stride_x, reverse,                                       \
             stream);                                                                              \
+    }                                                                                              \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                   \
+        int64_t numel,                                                                             \
+        int32_t rank,                                                                              \
+        const int32_t* shape,                                                                     \
+        const int64_t* stride_x,                                                                  \
+        const int64_t* stride_y,                                                                  \
+        int32_t /*scan_axis*/,                                                                    \
+        int32_t /*scan_extent*/,                                                                  \
+        int64_t /*scan_stride_x*/,                                                                \
+        int32_t /*reverse*/,                                                                      \
+        const void* /*x*/, const void* /*y*/)                                                     \
+    {                                                                                              \
+        if (numel < 0) return 2;                                                                  \
+        if (rank < 0) return 2;                                                                   \
+        if (numel > 0 && (shape == nullptr || stride_x == nullptr || stride_y == nullptr)) return 2; \
+        return 0;                                                                                 \
     }
 
 // Emit one log-cumsum-exp BW launcher. ABI mirrors
@@ -6175,6 +6192,25 @@ __host__ inline int32_t launch_gated_activation_backward_contig(
             static_cast<const T*>(y), static_cast<T*>(dx),                                        \
             numel, rank, shape, stride_dy, stride_x, stride_y, stride_dx,                         \
             scan_axis, scan_extent, reverse, stream);                                             \
+    }                                                                                              \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                   \
+        int64_t numel,                                                                             \
+        int32_t rank,                                                                              \
+        const int32_t* shape,                                                                     \
+        const int64_t* stride_dy,                                                                 \
+        const int64_t* stride_x,                                                                  \
+        const int64_t* stride_y,                                                                  \
+        const int64_t* stride_dx,                                                                 \
+        int32_t /*scan_axis*/,                                                                    \
+        int32_t /*scan_extent*/,                                                                  \
+        int32_t /*reverse*/,                                                                      \
+        const void* /*dy*/, const void* /*x*/, const void* /*y*/, const void* /*dx*/)             \
+    {                                                                                              \
+        if (numel < 0) return 2;                                                                  \
+        if (rank < 0) return 2;                                                                   \
+        if (numel > 0 && (shape == nullptr || stride_dy == nullptr || stride_x == nullptr ||     \
+                           stride_y == nullptr || stride_dx == nullptr)) return 2;                \
+        return 0;                                                                                 \
     }
 
 // Emit one scaled ternary pointwise contig launcher pair.

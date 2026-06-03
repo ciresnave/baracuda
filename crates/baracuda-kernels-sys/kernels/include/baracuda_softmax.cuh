@@ -1681,6 +1681,23 @@ __host__ inline int32_t launch_sparsemax_backward_fp(
             shape, stride_x, stride_y,                                                            \
             softmax_axis, softmax_extent, softmax_stride_x, softmax_stride_y,                     \
             stream);                                                                              \
+    }                                                                                              \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                   \
+        int64_t numel,                                                                             \
+        int32_t rank,                                                                              \
+        const int32_t* shape,                                                                     \
+        const int64_t* stride_x,                                                                  \
+        const int64_t* stride_y,                                                                  \
+        int32_t /*softmax_axis*/,                                                                 \
+        int32_t /*softmax_extent*/,                                                               \
+        int64_t /*softmax_stride_x*/,                                                             \
+        int64_t /*softmax_stride_y*/,                                                             \
+        const void* /*x*/, const void* /*y*/)                                                     \
+    {                                                                                              \
+        if (numel < 0) return 2;                                                                  \
+        if (rank < 0) return 2;                                                                   \
+        if (numel > 0 && (shape == nullptr || stride_x == nullptr || stride_y == nullptr)) return 2; \
+        return 0;                                                                                 \
     }
 
 // Emit one softmax BW launcher. Needs saved forward output `y`.
@@ -1711,6 +1728,25 @@ __host__ inline int32_t launch_sparsemax_backward_fp(
             numel, rank, shape, stride_dy, stride_y, stride_dx,                                   \
             softmax_axis, softmax_extent, softmax_stride_dy, softmax_stride_y,                    \
             stream);                                                                              \
+    }                                                                                              \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                   \
+        int64_t numel,                                                                             \
+        int32_t rank,                                                                              \
+        const int32_t* shape,                                                                     \
+        const int64_t* stride_dy,                                                                 \
+        const int64_t* stride_y,                                                                  \
+        const int64_t* stride_dx,                                                                 \
+        int32_t /*softmax_axis*/,                                                                 \
+        int32_t /*softmax_extent*/,                                                               \
+        int64_t /*softmax_stride_dy*/,                                                            \
+        int64_t /*softmax_stride_y*/,                                                             \
+        const void* /*dy*/, const void* /*y*/, const void* /*dx*/)                                \
+    {                                                                                              \
+        if (numel < 0) return 2;                                                                  \
+        if (rank < 0) return 2;                                                                   \
+        if (numel > 0 && (shape == nullptr || stride_dy == nullptr || stride_y == nullptr ||     \
+                           stride_dx == nullptr)) return 2;                                       \
+        return 0;                                                                                 \
     }
 
 // Emit one log-softmax FW launcher. ABI identical to softmax FW.
@@ -1739,6 +1775,23 @@ __host__ inline int32_t launch_sparsemax_backward_fp(
             shape, stride_x, stride_y,                                                            \
             softmax_axis, softmax_extent, softmax_stride_x, softmax_stride_y,                     \
             stream);                                                                              \
+    }                                                                                              \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                   \
+        int64_t numel,                                                                             \
+        int32_t rank,                                                                              \
+        const int32_t* shape,                                                                     \
+        const int64_t* stride_x,                                                                  \
+        const int64_t* stride_y,                                                                  \
+        int32_t /*softmax_axis*/,                                                                 \
+        int32_t /*softmax_extent*/,                                                               \
+        int64_t /*softmax_stride_x*/,                                                             \
+        int64_t /*softmax_stride_y*/,                                                             \
+        const void* /*x*/, const void* /*y*/)                                                     \
+    {                                                                                              \
+        if (numel < 0) return 2;                                                                  \
+        if (rank < 0) return 2;                                                                   \
+        if (numel > 0 && (shape == nullptr || stride_x == nullptr || stride_y == nullptr)) return 2; \
+        return 0;                                                                                 \
     }
 
 // Emit one log-softmax BW launcher. ABI identical to softmax BW.
@@ -1769,6 +1822,25 @@ __host__ inline int32_t launch_sparsemax_backward_fp(
             numel, rank, shape, stride_dy, stride_y, stride_dx,                                   \
             softmax_axis, softmax_extent, softmax_stride_dy, softmax_stride_y,                    \
             stream);                                                                              \
+    }                                                                                              \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                   \
+        int64_t numel,                                                                             \
+        int32_t rank,                                                                              \
+        const int32_t* shape,                                                                     \
+        const int64_t* stride_dy,                                                                 \
+        const int64_t* stride_y,                                                                  \
+        const int64_t* stride_dx,                                                                 \
+        int32_t /*softmax_axis*/,                                                                 \
+        int32_t /*softmax_extent*/,                                                               \
+        int64_t /*softmax_stride_dy*/,                                                            \
+        int64_t /*softmax_stride_y*/,                                                             \
+        const void* /*dy*/, const void* /*y*/, const void* /*dx*/)                                \
+    {                                                                                              \
+        if (numel < 0) return 2;                                                                  \
+        if (rank < 0) return 2;                                                                   \
+        if (numel > 0 && (shape == nullptr || stride_dy == nullptr || stride_y == nullptr ||     \
+                           stride_dx == nullptr)) return 2;                                       \
+        return 0;                                                                                 \
     }
 
 // Emit one gumbel-softmax FW launcher. Reads `x` (T) + `u_rand` (f32)
@@ -1801,6 +1873,25 @@ __host__ inline int32_t launch_sparsemax_backward_fp(
             shape, stride_x, stride_y,                                                              \
             softmax_axis, softmax_extent, softmax_stride_x, softmax_stride_y,                       \
             inv_tau, hard, stream);                                                                 \
+    }                                                                                               \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                    \
+        int64_t numel,                                                                              \
+        int32_t rank,                                                                               \
+        const int32_t* shape,                                                                       \
+        const int64_t* stride_x,                                                                    \
+        const int64_t* stride_y,                                                                    \
+        int32_t /*softmax_axis*/,                                                                   \
+        int32_t /*softmax_extent*/,                                                                 \
+        int64_t /*softmax_stride_x*/,                                                               \
+        int64_t /*softmax_stride_y*/,                                                               \
+        float /*inv_tau*/,                                                                          \
+        int32_t /*hard*/,                                                                           \
+        const void* /*x*/, const void* /*u_rand*/, const void* /*y*/)                               \
+    {                                                                                               \
+        if (numel < 0) return 2;                                                                   \
+        if (rank < 0) return 2;                                                                    \
+        if (numel > 0 && (shape == nullptr || stride_x == nullptr || stride_y == nullptr)) return 2; \
+        return 0;                                                                                  \
     }
 
 // Emit one sparsemax FW launcher. ABI identical to softmax FW.
@@ -1829,6 +1920,23 @@ __host__ inline int32_t launch_sparsemax_backward_fp(
             shape, stride_x, stride_y,                                                              \
             softmax_axis, softmax_extent, softmax_stride_x, softmax_stride_y,                       \
             stream);                                                                                \
+    }                                                                                                \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                     \
+        int64_t numel,                                                                              \
+        int32_t rank,                                                                               \
+        const int32_t* shape,                                                                       \
+        const int64_t* stride_x,                                                                    \
+        const int64_t* stride_y,                                                                    \
+        int32_t /*softmax_axis*/,                                                                   \
+        int32_t /*softmax_extent*/,                                                                 \
+        int64_t /*softmax_stride_x*/,                                                               \
+        int64_t /*softmax_stride_y*/,                                                               \
+        const void* /*x*/, const void* /*y*/)                                                       \
+    {                                                                                                \
+        if (numel < 0) return 2;                                                                   \
+        if (rank < 0) return 2;                                                                    \
+        if (numel > 0 && (shape == nullptr || stride_x == nullptr || stride_y == nullptr)) return 2; \
+        return 0;                                                                                  \
     }
 
 // Emit one sparsemax BW launcher. ABI identical to softmax BW.
@@ -1859,6 +1967,25 @@ __host__ inline int32_t launch_sparsemax_backward_fp(
             numel, rank, shape, stride_dy, stride_y, stride_dx,                                     \
             softmax_axis, softmax_extent, softmax_stride_dy, softmax_stride_y,                      \
             stream);                                                                                \
+    }                                                                                                \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                     \
+        int64_t numel,                                                                              \
+        int32_t rank,                                                                               \
+        const int32_t* shape,                                                                       \
+        const int64_t* stride_dy,                                                                   \
+        const int64_t* stride_y,                                                                    \
+        const int64_t* stride_dx,                                                                   \
+        int32_t /*softmax_axis*/,                                                                   \
+        int32_t /*softmax_extent*/,                                                                 \
+        int64_t /*softmax_stride_dy*/,                                                              \
+        int64_t /*softmax_stride_y*/,                                                               \
+        const void* /*dy*/, const void* /*y*/, const void* /*dx*/)                                  \
+    {                                                                                                \
+        if (numel < 0) return 2;                                                                   \
+        if (rank < 0) return 2;                                                                    \
+        if (numel > 0 && (shape == nullptr || stride_dy == nullptr || stride_y == nullptr ||       \
+                           stride_dx == nullptr)) return 2;                                         \
+        return 0;                                                                                  \
     }
 
 #endif // BARACUDA_SOFTMAX_CUH

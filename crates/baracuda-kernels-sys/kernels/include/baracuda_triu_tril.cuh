@@ -264,6 +264,15 @@ __host__ inline int32_t launch_triu_tril_strided(
         cudaStream_t stream = static_cast<cudaStream_t>(stream_ptr);                                 \
         return baracuda::triu_tril::launch_triu_tril<T, baracuda::triu_tril::TriuPredicate>(         \
             input, output, shape, rank, diagonal, stream);                                           \
+    }                                                                                                \
+    extern "C" int32_t baracuda_kernels_triu_##NAME##_can_implement(                                 \
+        const void* /*input*/, const void* /*output*/,                                               \
+        const int32_t* shape, int32_t rank,                                                          \
+        int32_t /*diagonal*/)                                                                        \
+    {                                                                                                \
+        if (rank < 0) return 2;                                                                      \
+        if (rank > 0 && shape == nullptr) return 2;                                                  \
+        return 0;                                                                                    \
     }
 
 // Emit one Tril launcher (per-dtype).
@@ -278,6 +287,15 @@ __host__ inline int32_t launch_triu_tril_strided(
         cudaStream_t stream = static_cast<cudaStream_t>(stream_ptr);                                 \
         return baracuda::triu_tril::launch_triu_tril<T, baracuda::triu_tril::TrilPredicate>(         \
             input, output, shape, rank, diagonal, stream);                                           \
+    }                                                                                                \
+    extern "C" int32_t baracuda_kernels_tril_##NAME##_can_implement(                                 \
+        const void* /*input*/, const void* /*output*/,                                               \
+        const int32_t* shape, int32_t rank,                                                          \
+        int32_t /*diagonal*/)                                                                        \
+    {                                                                                                \
+        if (rank < 0) return 2;                                                                      \
+        if (rank > 0 && shape == nullptr) return 2;                                                  \
+        return 0;                                                                                    \
     }
 
 // Emit one strided Triu launcher (per-dtype) — Phase 14.3.
@@ -296,6 +314,17 @@ __host__ inline int32_t launch_triu_tril_strided(
         cudaStream_t stream = static_cast<cudaStream_t>(stream_ptr);                                 \
         return baracuda::triu_tril::launch_triu_tril_strided<T, baracuda::triu_tril::TriuPredicate>(\
             input, output, shape, rank, stride_x, stride_y, diagonal, stream);                      \
+    }                                                                                                \
+    extern "C" int32_t baracuda_kernels_triu_##NAME##_strided_can_implement(                        \
+        const void* /*input*/, const void* /*output*/,                                               \
+        const int32_t* shape, int32_t rank,                                                          \
+        const int64_t* stride_x, const int64_t* stride_y,                                            \
+        int32_t /*diagonal*/)                                                                        \
+    {                                                                                                \
+        if (rank < 0) return 2;                                                                      \
+        if (rank > 0 && (shape == nullptr ||                                                         \
+                          stride_x == nullptr || stride_y == nullptr)) return 2;                    \
+        return 0;                                                                                    \
     }
 
 // Emit one strided Tril launcher (per-dtype) — Phase 14.3.
@@ -312,6 +341,17 @@ __host__ inline int32_t launch_triu_tril_strided(
         cudaStream_t stream = static_cast<cudaStream_t>(stream_ptr);                                 \
         return baracuda::triu_tril::launch_triu_tril_strided<T, baracuda::triu_tril::TrilPredicate>(\
             input, output, shape, rank, stride_x, stride_y, diagonal, stream);                      \
+    }                                                                                                \
+    extern "C" int32_t baracuda_kernels_tril_##NAME##_strided_can_implement(                        \
+        const void* /*input*/, const void* /*output*/,                                               \
+        const int32_t* shape, int32_t rank,                                                          \
+        const int64_t* stride_x, const int64_t* stride_y,                                            \
+        int32_t /*diagonal*/)                                                                        \
+    {                                                                                                \
+        if (rank < 0) return 2;                                                                      \
+        if (rank > 0 && (shape == nullptr ||                                                         \
+                          stride_x == nullptr || stride_y == nullptr)) return 2;                    \
+        return 0;                                                                                    \
     }
 
 #endif // BARACUDA_TRIU_TRIL_CUH

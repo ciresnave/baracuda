@@ -1563,6 +1563,15 @@ __host__ inline int32_t launch_elementwise_loss_fw(
             baracuda::loss::KFN<T>,                                                                 \
             static_cast<const T*>(pred), static_cast<const T*>(target),                             \
             static_cast<T*>(out), numel, reduction_mode, workspace, workspace_bytes, stream);       \
+    }                                                                                               \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                     \
+        int64_t numel,                                                                              \
+        int32_t reduction_mode,                                                                     \
+        const void* /*pred*/, const void* /*target*/, const void* /*out*/)                          \
+    {                                                                                               \
+        if (numel < 0) return 2;                                                                    \
+        if (reduction_mode < 0 || reduction_mode > 2) return 2;                                     \
+        return 0;                                                                                   \
     }
 
 // Elementwise-loss BW ABI (pred, target, dy, dpred, numel, reduction_mode,
@@ -1591,6 +1600,16 @@ __host__ inline int32_t launch_elementwise_loss_fw(
             static_cast<const T*>(dy), static_cast<T*>(dpred),                                      \
             numel, reduction_mode, scale_scalar);                                                   \
         return (cudaGetLastError() == cudaSuccess) ? 0 : 5;                                         \
+    }                                                                                               \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                     \
+        int64_t numel,                                                                              \
+        int32_t reduction_mode,                                                                     \
+        float /*scale_scalar*/,                                                                     \
+        const void* /*pred*/, const void* /*target*/, const void* /*dy*/, const void* /*dpred*/)   \
+    {                                                                                               \
+        if (numel < 0) return 2;                                                                    \
+        if (reduction_mode < 0 || reduction_mode > 2) return 2;                                     \
+        return 0;                                                                                   \
     }
 
 // KLDiv BW ABI (target, dy, dinput, numel, reduction_mode, scale_scalar, stream).
@@ -1617,6 +1636,16 @@ __host__ inline int32_t launch_elementwise_loss_fw(
             static_cast<const T*>(target), static_cast<const T*>(dy),                               \
             static_cast<T*>(dinput), numel, reduction_mode, scale_scalar);                          \
         return (cudaGetLastError() == cudaSuccess) ? 0 : 5;                                         \
+    }                                                                                               \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                     \
+        int64_t numel,                                                                              \
+        int32_t reduction_mode,                                                                     \
+        float /*scale_scalar*/,                                                                     \
+        const void* /*target*/, const void* /*dy*/, const void* /*dinput*/)                         \
+    {                                                                                               \
+        if (numel < 0) return 2;                                                                    \
+        if (reduction_mode < 0 || reduction_mode > 2) return 2;                                     \
+        return 0;                                                                                   \
     }
 
 // NLL FW launcher — input [n_rows, class_extent], target i64[n_rows], output
@@ -1661,6 +1690,17 @@ __host__ inline int32_t launch_elementwise_loss_fw(
         baracuda::loss::loss_reduce_finalize_kernel<T><<<1, baracuda::loss::kBlockReduce, 0,        \
             stream>>>(term, static_cast<T*>(out), n_rows, denom_inv);                               \
         return (cudaGetLastError() == cudaSuccess) ? 0 : 5;                                         \
+    }                                                                                               \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                     \
+        int64_t n_rows,                                                                             \
+        int32_t class_extent,                                                                       \
+        int64_t /*row_stride_input*/,                                                               \
+        int32_t reduction_mode,                                                                     \
+        const void* /*input*/, const void* /*target*/, const void* /*out*/)                         \
+    {                                                                                               \
+        if (n_rows < 0 || class_extent < 0) return 2;                                               \
+        if (reduction_mode < 0 || reduction_mode > 2) return 2;                                     \
+        return 0;                                                                                   \
     }
 
 // NLL BW launcher — pre-zero dinput then write the active cells.
@@ -1694,6 +1734,19 @@ __host__ inline int32_t launch_elementwise_loss_fw(
             static_cast<T*>(dinput),                                                                \
             n_rows, class_extent, row_stride_input, reduction_mode, scale_scalar);                  \
         return (cudaGetLastError() == cudaSuccess) ? 0 : 5;                                         \
+    }                                                                                               \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                     \
+        int64_t n_rows,                                                                             \
+        int32_t class_extent,                                                                       \
+        int64_t /*row_stride_input*/,                                                               \
+        int64_t dinput_numel,                                                                       \
+        int32_t reduction_mode,                                                                     \
+        float /*scale_scalar*/,                                                                     \
+        const void* /*dy*/, const void* /*target*/, const void* /*dinput*/)                         \
+    {                                                                                               \
+        if (n_rows < 0 || class_extent < 0 || dinput_numel < 0) return 2;                           \
+        if (reduction_mode < 0 || reduction_mode > 2) return 2;                                     \
+        return 0;                                                                                   \
     }
 
 // CrossEntropy FW launcher.
@@ -1736,6 +1789,17 @@ __host__ inline int32_t launch_elementwise_loss_fw(
         baracuda::loss::loss_reduce_finalize_kernel<T><<<1, baracuda::loss::kBlockReduce, 0,        \
             stream>>>(term, static_cast<T*>(out), n_rows, denom_inv);                               \
         return (cudaGetLastError() == cudaSuccess) ? 0 : 5;                                         \
+    }                                                                                               \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                     \
+        int64_t n_rows,                                                                             \
+        int32_t class_extent,                                                                       \
+        int64_t /*row_stride_input*/,                                                               \
+        int32_t reduction_mode,                                                                     \
+        const void* /*input*/, const void* /*target*/, const void* /*out*/)                         \
+    {                                                                                               \
+        if (n_rows < 0 || class_extent < 0) return 2;                                               \
+        if (reduction_mode < 0 || reduction_mode > 2) return 2;                                     \
+        return 0;                                                                                   \
     }
 
 // CrossEntropy BW launcher.
@@ -1767,6 +1831,18 @@ __host__ inline int32_t launch_elementwise_loss_fw(
             static_cast<T*>(dinput),                                                                \
             n_rows, class_extent, row_stride_input, reduction_mode, scale_scalar);                  \
         return (cudaGetLastError() == cudaSuccess) ? 0 : 5;                                         \
+    }                                                                                               \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                     \
+        int64_t n_rows,                                                                             \
+        int32_t class_extent,                                                                       \
+        int64_t /*row_stride_input*/,                                                               \
+        int32_t reduction_mode,                                                                     \
+        float /*scale_scalar*/,                                                                     \
+        const void* /*input*/, const void* /*target*/, const void* /*dy*/, const void* /*dinput*/) \
+    {                                                                                               \
+        if (n_rows < 0 || class_extent < 0) return 2;                                               \
+        if (reduction_mode < 0 || reduction_mode > 2) return 2;                                     \
+        return 0;                                                                                   \
     }
 
 // =============================================================================
@@ -1812,6 +1888,16 @@ __host__ inline int32_t launch_elementwise_loss_fw(
         baracuda::loss::loss_reduce_finalize_kernel<T><<<1, baracuda::loss::kBlockReduce, 0,        \
             stream>>>(term, static_cast<T*>(out), numel, denom_inv);                                \
         return (cudaGetLastError() == cudaSuccess) ? 0 : 5;                                         \
+    }                                                                                               \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                     \
+        int64_t numel,                                                                              \
+        int32_t reduction_mode,                                                                     \
+        float /*param*/,                                                                            \
+        const void* /*pred*/, const void* /*target*/, const void* /*out*/)                          \
+    {                                                                                               \
+        if (numel < 0) return 2;                                                                    \
+        if (reduction_mode < 0 || reduction_mode > 2) return 2;                                     \
+        return 0;                                                                                   \
     }
 
 // Parameterized elementwise-loss BW ABI: same shape as
@@ -1841,6 +1927,17 @@ __host__ inline int32_t launch_elementwise_loss_fw(
             static_cast<const T*>(dy), static_cast<T*>(dpred),                                      \
             numel, reduction_mode, scale_scalar, param);                                            \
         return (cudaGetLastError() == cudaSuccess) ? 0 : 5;                                         \
+    }                                                                                               \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                     \
+        int64_t numel,                                                                              \
+        int32_t reduction_mode,                                                                     \
+        float /*scale_scalar*/,                                                                     \
+        float /*param*/,                                                                            \
+        const void* /*pred*/, const void* /*target*/, const void* /*dy*/, const void* /*dpred*/)   \
+    {                                                                                               \
+        if (numel < 0) return 2;                                                                    \
+        if (reduction_mode < 0 || reduction_mode > 2) return 2;                                     \
+        return 0;                                                                                   \
     }
 
 // PoissonNLL FW: threads an `int32_t log_input_flag` instead of a float param.
@@ -1880,6 +1977,16 @@ __host__ inline int32_t launch_elementwise_loss_fw(
         baracuda::loss::loss_reduce_finalize_kernel<T><<<1, baracuda::loss::kBlockReduce, 0,        \
             stream>>>(term, static_cast<T*>(out), numel, denom_inv);                                \
         return (cudaGetLastError() == cudaSuccess) ? 0 : 5;                                         \
+    }                                                                                               \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                     \
+        int64_t numel,                                                                              \
+        int32_t reduction_mode,                                                                     \
+        int32_t /*log_input_flag*/,                                                                 \
+        const void* /*input*/, const void* /*target*/, const void* /*out*/)                         \
+    {                                                                                               \
+        if (numel < 0) return 2;                                                                    \
+        if (reduction_mode < 0 || reduction_mode > 2) return 2;                                     \
+        return 0;                                                                                   \
     }
 
 // PoissonNLL BW.
@@ -1908,6 +2015,17 @@ __host__ inline int32_t launch_elementwise_loss_fw(
             static_cast<const T*>(dy), static_cast<T*>(dinput),                                     \
             numel, reduction_mode, scale_scalar, log_input_flag);                                   \
         return (cudaGetLastError() == cudaSuccess) ? 0 : 5;                                         \
+    }                                                                                               \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                     \
+        int64_t numel,                                                                              \
+        int32_t reduction_mode,                                                                     \
+        float /*scale_scalar*/,                                                                     \
+        int32_t /*log_input_flag*/,                                                                 \
+        const void* /*input*/, const void* /*target*/, const void* /*dy*/, const void* /*dinput*/) \
+    {                                                                                               \
+        if (numel < 0) return 2;                                                                    \
+        if (reduction_mode < 0 || reduction_mode > 2) return 2;                                     \
+        return 0;                                                                                   \
     }
 
 // GaussianNLL FW (3-tensor input: input, target, var; carries `eps`).
@@ -1948,6 +2066,16 @@ __host__ inline int32_t launch_elementwise_loss_fw(
         baracuda::loss::loss_reduce_finalize_kernel<T><<<1, baracuda::loss::kBlockReduce, 0,        \
             stream>>>(term, static_cast<T*>(out), numel, denom_inv);                                \
         return (cudaGetLastError() == cudaSuccess) ? 0 : 5;                                         \
+    }                                                                                               \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                     \
+        int64_t numel,                                                                              \
+        int32_t reduction_mode,                                                                     \
+        float /*eps*/,                                                                              \
+        const void* /*input*/, const void* /*target*/, const void* /*var*/, const void* /*out*/)   \
+    {                                                                                               \
+        if (numel < 0) return 2;                                                                    \
+        if (reduction_mode < 0 || reduction_mode > 2) return 2;                                     \
+        return 0;                                                                                   \
     }
 
 // GaussianNLL BW.
@@ -1978,6 +2106,18 @@ __host__ inline int32_t launch_elementwise_loss_fw(
             static_cast<const T*>(dy), static_cast<T*>(dinput),                                     \
             numel, reduction_mode, scale_scalar, eps);                                              \
         return (cudaGetLastError() == cudaSuccess) ? 0 : 5;                                         \
+    }                                                                                               \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                     \
+        int64_t numel,                                                                              \
+        int32_t reduction_mode,                                                                     \
+        float /*scale_scalar*/,                                                                     \
+        float /*eps*/,                                                                              \
+        const void* /*input*/, const void* /*target*/, const void* /*var*/,                         \
+        const void* /*dy*/, const void* /*dinput*/)                                                 \
+    {                                                                                               \
+        if (numel < 0) return 2;                                                                    \
+        if (reduction_mode < 0 || reduction_mode > 2) return 2;                                     \
+        return 0;                                                                                   \
     }
 
 // Soft-target CrossEntropy FW (target is `T` of shape [n_rows, class_extent]).
@@ -2020,6 +2160,18 @@ __host__ inline int32_t launch_elementwise_loss_fw(
         baracuda::loss::loss_reduce_finalize_kernel<T><<<1, baracuda::loss::kBlockReduce, 0,        \
             stream>>>(term, static_cast<T*>(out), n_rows, denom_inv);                               \
         return (cudaGetLastError() == cudaSuccess) ? 0 : 5;                                         \
+    }                                                                                               \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                     \
+        int64_t n_rows,                                                                             \
+        int32_t class_extent,                                                                       \
+        int64_t /*row_stride_input*/,                                                               \
+        int64_t /*row_stride_target*/,                                                              \
+        int32_t reduction_mode,                                                                     \
+        const void* /*input*/, const void* /*target*/, const void* /*out*/)                         \
+    {                                                                                               \
+        if (n_rows < 0 || class_extent < 0) return 2;                                               \
+        if (reduction_mode < 0 || reduction_mode > 2) return 2;                                     \
+        return 0;                                                                                   \
     }
 
 // Soft-target CrossEntropy BW.
@@ -2051,6 +2203,19 @@ __host__ inline int32_t launch_elementwise_loss_fw(
             n_rows, class_extent, row_stride_input, row_stride_target,                              \
             reduction_mode, scale_scalar);                                                          \
         return (cudaGetLastError() == cudaSuccess) ? 0 : 5;                                         \
+    }                                                                                               \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                     \
+        int64_t n_rows,                                                                             \
+        int32_t class_extent,                                                                       \
+        int64_t /*row_stride_input*/,                                                               \
+        int64_t /*row_stride_target*/,                                                              \
+        int32_t reduction_mode,                                                                     \
+        float /*scale_scalar*/,                                                                     \
+        const void* /*input*/, const void* /*target*/, const void* /*dy*/, const void* /*dinput*/) \
+    {                                                                                               \
+        if (n_rows < 0 || class_extent < 0) return 2;                                               \
+        if (reduction_mode < 0 || reduction_mode > 2) return 2;                                     \
+        return 0;                                                                                   \
     }
 
 // =============================================================================
@@ -3036,6 +3201,16 @@ __global__ void multilabel_soft_margin_backward_kernel<double>(
                 stream>>>(term_buf, static_cast<T*>(out), numel, denom_inv);                        \
         }                                                                                           \
         return (cudaGetLastError() == cudaSuccess) ? 0 : 5;                                         \
+    }                                                                                               \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                     \
+        int64_t numel,                                                                              \
+        int32_t reduction_mode,                                                                     \
+        float /*margin*/,                                                                           \
+        const void* /*x1*/, const void* /*x2*/, const void* /*t*/, const void* /*out*/)             \
+    {                                                                                               \
+        if (numel < 0) return 2;                                                                    \
+        if (reduction_mode < 0 || reduction_mode > 2) return 2;                                     \
+        return 0;                                                                                   \
     }
 
 // MarginRanking BW.
@@ -3061,6 +3236,16 @@ __global__ void multilabel_soft_margin_backward_kernel<double>(
             static_cast<const T*>(dy), static_cast<T*>(dx1), static_cast<T*>(dx2),                  \
             numel, reduction_mode, scale_scalar, margin);                                           \
         return (cudaGetLastError() == cudaSuccess) ? 0 : 5;                                         \
+    }                                                                                               \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                     \
+        int64_t numel, int32_t reduction_mode,                                                      \
+        float /*scale_scalar*/, float /*margin*/,                                                   \
+        const void* /*x1*/, const void* /*x2*/, const void* /*t*/, const void* /*dy*/,              \
+        const void* /*dx1*/, const void* /*dx2*/)                                                   \
+    {                                                                                               \
+        if (numel < 0) return 2;                                                                    \
+        if (reduction_mode < 0 || reduction_mode > 2) return 2;                                     \
+        return 0;                                                                                   \
     }
 
 // HingeEmbedding FW: heterogeneous-dtype (input T, target i64), elementwise per-cell.
@@ -3097,6 +3282,14 @@ __global__ void multilabel_soft_margin_backward_kernel<double>(
                 stream>>>(term_buf, static_cast<T*>(out), numel, denom_inv);                        \
         }                                                                                           \
         return (cudaGetLastError() == cudaSuccess) ? 0 : 5;                                         \
+    }                                                                                               \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                     \
+        int64_t numel, int32_t reduction_mode, float /*margin*/,                                    \
+        const void* /*input*/, const void* /*target*/, const void* /*out*/)                         \
+    {                                                                                               \
+        if (numel < 0) return 2;                                                                    \
+        if (reduction_mode < 0 || reduction_mode > 2) return 2;                                     \
+        return 0;                                                                                   \
     }
 
 // HingeEmbedding BW.
@@ -3121,6 +3314,15 @@ __global__ void multilabel_soft_margin_backward_kernel<double>(
             static_cast<const T*>(dy), static_cast<T*>(dinput),                                     \
             numel, reduction_mode, scale_scalar, margin);                                           \
         return (cudaGetLastError() == cudaSuccess) ? 0 : 5;                                         \
+    }                                                                                               \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                     \
+        int64_t numel, int32_t reduction_mode,                                                      \
+        float /*scale_scalar*/, float /*margin*/,                                                   \
+        const void* /*input*/, const void* /*target*/, const void* /*dy*/, const void* /*dinput*/) \
+    {                                                                                               \
+        if (numel < 0) return 2;                                                                    \
+        if (reduction_mode < 0 || reduction_mode > 2) return 2;                                     \
+        return 0;                                                                                   \
     }
 
 // CosineEmbedding FW (per-row, [N, D]).
@@ -3157,6 +3359,15 @@ __global__ void multilabel_soft_margin_backward_kernel<double>(
                 stream>>>(term_buf, static_cast<T*>(out), n_rows, denom_inv);                       \
         }                                                                                           \
         return (cudaGetLastError() == cudaSuccess) ? 0 : 5;                                         \
+    }                                                                                               \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                     \
+        int64_t n_rows, int32_t d_extent, int64_t /*row_stride_x*/,                                 \
+        int32_t reduction_mode, float /*margin*/,                                                   \
+        const void* /*x1*/, const void* /*x2*/, const void* /*t*/, const void* /*out*/)             \
+    {                                                                                               \
+        if (n_rows < 0 || d_extent < 0) return 2;                                                   \
+        if (reduction_mode < 0 || reduction_mode > 2) return 2;                                     \
+        return 0;                                                                                   \
     }
 
 // CosineEmbedding BW.
@@ -3182,6 +3393,16 @@ __global__ void multilabel_soft_margin_backward_kernel<double>(
             static_cast<const T*>(dy), static_cast<T*>(dx1), static_cast<T*>(dx2),                  \
             n_rows, d_extent, row_stride_x, reduction_mode, scale_scalar, margin);                  \
         return (cudaGetLastError() == cudaSuccess) ? 0 : 5;                                         \
+    }                                                                                               \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                     \
+        int64_t n_rows, int32_t d_extent, int64_t /*row_stride_x*/,                                 \
+        int32_t reduction_mode, float /*scale_scalar*/, float /*margin*/,                           \
+        const void* /*x1*/, const void* /*x2*/, const void* /*t*/, const void* /*dy*/,              \
+        const void* /*dx1*/, const void* /*dx2*/)                                                   \
+    {                                                                                               \
+        if (n_rows < 0 || d_extent < 0) return 2;                                                   \
+        if (reduction_mode < 0 || reduction_mode > 2) return 2;                                     \
+        return 0;                                                                                   \
     }
 
 // TripletMargin FW (per-row, [N, D]).
@@ -3219,6 +3440,15 @@ __global__ void multilabel_soft_margin_backward_kernel<double>(
                 stream>>>(term_buf, static_cast<T*>(out), n_rows, denom_inv);                       \
         }                                                                                           \
         return (cudaGetLastError() == cudaSuccess) ? 0 : 5;                                         \
+    }                                                                                               \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                     \
+        int64_t n_rows, int32_t d_extent, int64_t /*row_stride*/,                                   \
+        int32_t reduction_mode, float /*margin*/, float /*p_norm*/,                                 \
+        const void* /*a*/, const void* /*p_tensor*/, const void* /*n_tensor*/, const void* /*out*/)\
+    {                                                                                               \
+        if (n_rows < 0 || d_extent < 0) return 2;                                                   \
+        if (reduction_mode < 0 || reduction_mode > 2) return 2;                                     \
+        return 0;                                                                                   \
     }
 
 // TripletMargin BW.
@@ -3245,6 +3475,16 @@ __global__ void multilabel_soft_margin_backward_kernel<double>(
             static_cast<T*>(da), static_cast<T*>(dp), static_cast<T*>(dn),                          \
             n_rows, d_extent, row_stride, reduction_mode, scale_scalar, margin, p_norm);            \
         return (cudaGetLastError() == cudaSuccess) ? 0 : 5;                                         \
+    }                                                                                               \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                     \
+        int64_t n_rows, int32_t d_extent, int64_t /*row_stride*/,                                   \
+        int32_t reduction_mode, float /*scale_scalar*/, float /*margin*/, float /*p_norm*/,        \
+        const void* /*a*/, const void* /*p_tensor*/, const void* /*n_tensor*/, const void* /*dy*/, \
+        const void* /*da*/, const void* /*dp*/, const void* /*dn*/)                                 \
+    {                                                                                               \
+        if (n_rows < 0 || d_extent < 0) return 2;                                                   \
+        if (reduction_mode < 0 || reduction_mode > 2) return 2;                                     \
+        return 0;                                                                                   \
     }
 
 // MultiMargin FW (per-row, [N, C], target i64[N]).
@@ -3281,6 +3521,15 @@ __global__ void multilabel_soft_margin_backward_kernel<double>(
                 stream>>>(term_buf, static_cast<T*>(out), n_rows, denom_inv);                       \
         }                                                                                           \
         return (cudaGetLastError() == cudaSuccess) ? 0 : 5;                                         \
+    }                                                                                               \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                     \
+        int64_t n_rows, int32_t class_extent, int64_t /*row_stride*/,                               \
+        int32_t reduction_mode, float /*margin*/, float /*p_norm*/,                                 \
+        const void* /*input*/, const void* /*target*/, const void* /*out*/)                         \
+    {                                                                                               \
+        if (n_rows < 0 || class_extent < 0) return 2;                                               \
+        if (reduction_mode < 0 || reduction_mode > 2) return 2;                                     \
+        return 0;                                                                                   \
     }
 
 // MultiMargin BW.
@@ -3305,6 +3554,15 @@ __global__ void multilabel_soft_margin_backward_kernel<double>(
             static_cast<const T*>(dy), static_cast<T*>(dinput),                                     \
             n_rows, class_extent, row_stride, reduction_mode, scale_scalar, margin, p_norm);        \
         return (cudaGetLastError() == cudaSuccess) ? 0 : 5;                                         \
+    }                                                                                               \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                     \
+        int64_t n_rows, int32_t class_extent, int64_t /*row_stride*/,                               \
+        int32_t reduction_mode, float /*scale_scalar*/, float /*margin*/, float /*p_norm*/,        \
+        const void* /*input*/, const void* /*target*/, const void* /*dy*/, const void* /*dinput*/) \
+    {                                                                                               \
+        if (n_rows < 0 || class_extent < 0) return 2;                                               \
+        if (reduction_mode < 0 || reduction_mode > 2) return 2;                                     \
+        return 0;                                                                                   \
     }
 
 // MultilabelMargin FW (per-row, [N, C], target i64[N, C]).
@@ -3342,6 +3600,16 @@ __global__ void multilabel_soft_margin_backward_kernel<double>(
                 stream>>>(term_buf, static_cast<T*>(out), n_rows, denom_inv);                       \
         }                                                                                           \
         return (cudaGetLastError() == cudaSuccess) ? 0 : 5;                                         \
+    }                                                                                               \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                     \
+        int64_t n_rows, int32_t class_extent,                                                       \
+        int64_t /*row_stride_in*/, int64_t /*row_stride_tgt*/,                                      \
+        int32_t reduction_mode,                                                                     \
+        const void* /*input*/, const void* /*target*/, const void* /*out*/)                         \
+    {                                                                                               \
+        if (n_rows < 0 || class_extent < 0) return 2;                                               \
+        if (reduction_mode < 0 || reduction_mode > 2) return 2;                                     \
+        return 0;                                                                                   \
     }
 
 // MultilabelMargin BW.
@@ -3368,6 +3636,16 @@ __global__ void multilabel_soft_margin_backward_kernel<double>(
             n_rows, class_extent, row_stride_in, row_stride_tgt,                                    \
             reduction_mode, scale_scalar);                                                          \
         return (cudaGetLastError() == cudaSuccess) ? 0 : 5;                                         \
+    }                                                                                               \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                     \
+        int64_t n_rows, int32_t class_extent,                                                       \
+        int64_t /*row_stride_in*/, int64_t /*row_stride_tgt*/,                                      \
+        int32_t reduction_mode, float /*scale_scalar*/,                                             \
+        const void* /*input*/, const void* /*target*/, const void* /*dy*/, const void* /*dinput*/) \
+    {                                                                                               \
+        if (n_rows < 0 || class_extent < 0) return 2;                                               \
+        if (reduction_mode < 0 || reduction_mode > 2) return 2;                                     \
+        return 0;                                                                                   \
     }
 
 // MultilabelSoftMargin FW.
@@ -3405,6 +3683,16 @@ __global__ void multilabel_soft_margin_backward_kernel<double>(
                 stream>>>(term_buf, static_cast<T*>(out), n_rows, denom_inv);                       \
         }                                                                                           \
         return (cudaGetLastError() == cudaSuccess) ? 0 : 5;                                         \
+    }                                                                                               \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                     \
+        int64_t n_rows, int32_t class_extent,                                                       \
+        int64_t /*row_stride_in*/, int64_t /*row_stride_tgt*/,                                      \
+        int32_t reduction_mode,                                                                     \
+        const void* /*input*/, const void* /*target*/, const void* /*out*/)                         \
+    {                                                                                               \
+        if (n_rows < 0 || class_extent < 0) return 2;                                               \
+        if (reduction_mode < 0 || reduction_mode > 2) return 2;                                     \
+        return 0;                                                                                   \
     }
 
 // MultilabelSoftMargin BW.
@@ -3431,6 +3719,16 @@ __global__ void multilabel_soft_margin_backward_kernel<double>(
             n_rows, class_extent, row_stride_in, row_stride_tgt,                                    \
             reduction_mode, scale_scalar);                                                          \
         return (cudaGetLastError() == cudaSuccess) ? 0 : 5;                                         \
+    }                                                                                               \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                     \
+        int64_t n_rows, int32_t class_extent,                                                       \
+        int64_t /*row_stride_in*/, int64_t /*row_stride_tgt*/,                                      \
+        int32_t reduction_mode, float /*scale_scalar*/,                                             \
+        const void* /*input*/, const void* /*target*/, const void* /*dy*/, const void* /*dinput*/) \
+    {                                                                                               \
+        if (n_rows < 0 || class_extent < 0) return 2;                                               \
+        if (reduction_mode < 0 || reduction_mode > 2) return 2;                                     \
+        return 0;                                                                                   \
     }
 
 #endif // BARACUDA_LOSS_CUH

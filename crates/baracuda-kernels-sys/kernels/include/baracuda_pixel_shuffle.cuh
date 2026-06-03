@@ -151,6 +151,15 @@ __host__ inline int32_t launch_pixel_unshuffle(
             static_cast<const T*>(input),                                                      \
             static_cast<T*>(output),                                                           \
             N, C, H, W, r, stream);                                                            \
+    }                                                                                          \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                \
+        int32_t N, int32_t C, int32_t H, int32_t W, int32_t r,                                  \
+        const void* /*input*/,                                                                 \
+        const void* /*output*/)                                                                \
+    {                                                                                          \
+        if (N < 0 || C < 0 || H < 0 || W < 0) return 2;                                        \
+        if (r <= 0) return 2;                                                                  \
+        return 0;                                                                              \
     }
 
 #define BARACUDA_KERNELS_PIXEL_UNSHUFFLE_INSTANTIATE(NAME, T)                                  \
@@ -167,6 +176,15 @@ __host__ inline int32_t launch_pixel_unshuffle(
             static_cast<const T*>(input),                                                      \
             static_cast<T*>(output),                                                           \
             N, C, H, W, r, stream);                                                            \
+    }                                                                                          \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                \
+        int32_t N, int32_t C, int32_t H, int32_t W, int32_t r,                                  \
+        const void* /*input*/,                                                                 \
+        const void* /*output*/)                                                                \
+    {                                                                                          \
+        if (N < 0 || C < 0 || H < 0 || W < 0) return 2;                                        \
+        if (r <= 0) return 2;                                                                  \
+        return 0;                                                                              \
     }
 
 #endif // BARACUDA_PIXEL_SHUFFLE_CUH

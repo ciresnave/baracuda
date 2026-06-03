@@ -411,6 +411,18 @@ __host__ inline int32_t launch_roi_pool_backward(
             static_cast<T*>(output),                                                           \
             N, C, H, W, num_rois, pooled_h, pooled_w,                                          \
             spatial_scale, sampling_ratio, aligned, stream);                                   \
+    }                                                                                          \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                \
+        int32_t N, int32_t C, int32_t H, int32_t W,                                            \
+        int32_t num_rois, int32_t pooled_h, int32_t pooled_w,                                  \
+        float /*spatial_scale*/, int32_t /*sampling_ratio*/, int32_t /*aligned*/,              \
+        const void* /*input*/,                                                                 \
+        const void* /*rois*/,                                                                  \
+        const void* /*output*/)                                                                \
+    {                                                                                          \
+        if (N < 0 || C < 0 || H < 0 || W < 0) return 2;                                        \
+        if (num_rois < 0 || pooled_h <= 0 || pooled_w <= 0) return 2;                          \
+        return 0;                                                                              \
     }
 
 #define BARACUDA_KERNELS_ROI_ALIGN_BACKWARD_INSTANTIATE(NAME, T)                               \
@@ -432,6 +444,18 @@ __host__ inline int32_t launch_roi_pool_backward(
             static_cast<T*>(dinput),                                                           \
             N, C, H, W, num_rois, pooled_h, pooled_w,                                          \
             spatial_scale, sampling_ratio, aligned, stream);                                   \
+    }                                                                                          \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                \
+        int32_t N, int32_t C, int32_t H, int32_t W,                                            \
+        int32_t num_rois, int32_t pooled_h, int32_t pooled_w,                                  \
+        float /*spatial_scale*/, int32_t /*sampling_ratio*/, int32_t /*aligned*/,              \
+        const void* /*dout*/,                                                                  \
+        const void* /*rois*/,                                                                  \
+        const void* /*dinput*/)                                                                \
+    {                                                                                          \
+        if (N < 0 || C < 0 || H < 0 || W < 0) return 2;                                        \
+        if (num_rois < 0 || pooled_h <= 0 || pooled_w <= 0) return 2;                          \
+        return 0;                                                                              \
     }
 
 #define BARACUDA_KERNELS_ROI_POOL_INSTANTIATE(NAME, T)                                         \
@@ -456,6 +480,19 @@ __host__ inline int32_t launch_roi_pool_backward(
             static_cast<int32_t*>(argmax),                                                     \
             N, C, H, W, num_rois, pooled_h, pooled_w,                                          \
             spatial_scale, stream);                                                            \
+    }                                                                                          \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                \
+        int32_t N, int32_t C, int32_t H, int32_t W,                                            \
+        int32_t num_rois, int32_t pooled_h, int32_t pooled_w,                                  \
+        float /*spatial_scale*/,                                                               \
+        const void* /*input*/,                                                                 \
+        const void* /*rois*/,                                                                  \
+        const void* /*output*/,                                                                \
+        const void* /*argmax*/)                                                                \
+    {                                                                                          \
+        if (N < 0 || C < 0 || H < 0 || W < 0) return 2;                                        \
+        if (num_rois < 0 || pooled_h <= 0 || pooled_w <= 0) return 2;                          \
+        return 0;                                                                              \
     }
 
 #define BARACUDA_KERNELS_ROI_POOL_BACKWARD_INSTANTIATE(NAME, T)                                \
@@ -478,6 +515,18 @@ __host__ inline int32_t launch_roi_pool_backward(
             static_cast<const int32_t*>(argmax),                                               \
             static_cast<T*>(dinput),                                                           \
             N, C, H, W, num_rois, pooled_h, pooled_w, stream);                                 \
+    }                                                                                          \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                \
+        int32_t N, int32_t C, int32_t H, int32_t W,                                            \
+        int32_t num_rois, int32_t pooled_h, int32_t pooled_w,                                  \
+        const void* /*dout*/,                                                                  \
+        const void* /*rois*/,                                                                  \
+        const void* /*argmax*/,                                                                \
+        const void* /*dinput*/)                                                                \
+    {                                                                                          \
+        if (N < 0 || C < 0 || H < 0 || W < 0) return 2;                                        \
+        if (num_rois < 0 || pooled_h <= 0 || pooled_w <= 0) return 2;                          \
+        return 0;                                                                              \
     }
 
 #endif // BARACUDA_ROI_CUH

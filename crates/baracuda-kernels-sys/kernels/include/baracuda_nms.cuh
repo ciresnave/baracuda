@@ -123,6 +123,16 @@ __host__ inline int32_t launch_nms(
             static_cast<uint8_t*>(keep_mask),                                                  \
             static_cast<int32_t*>(count_out),                                                  \
             num_boxes, iou_thresh, stream);                                                    \
+    }                                                                                          \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                \
+        int32_t num_boxes,                                                                     \
+        float /*iou_thresh*/,                                                                  \
+        const void* /*boxes*/,                                                                 \
+        const void* /*keep_mask*/,                                                             \
+        const void* /*count_out*/)                                                             \
+    {                                                                                          \
+        if (num_boxes < 0) return 2;                                                           \
+        return 0;                                                                              \
     }
 
 #endif // BARACUDA_NMS_CUH

@@ -333,6 +333,25 @@ __host__ inline int32_t launch_col2im_1d(
             batch, channels, h_in, w_in, h_out, w_out,                                   \
             kh, kw, stride_h, stride_w, pad_h, pad_w, dilation_h, dilation_w,            \
             input, output, stream);                                                      \
+    }                                                                                    \
+    extern "C" int32_t baracuda_kernels_im2col_2d_##NAME##_can_implement(                \
+        int32_t batch, int32_t channels,                                                 \
+        int32_t h_in, int32_t w_in,                                                      \
+        int32_t h_out, int32_t w_out,                                                    \
+        int32_t kh, int32_t kw,                                                          \
+        int32_t stride_h, int32_t stride_w,                                              \
+        int32_t pad_h, int32_t pad_w,                                                    \
+        int32_t dilation_h, int32_t dilation_w,                                          \
+        const void* /*input*/,                                                           \
+        const void* /*output*/)                                                          \
+    {                                                                                    \
+        if (batch < 0 || channels < 0) return 2;                                         \
+        if (h_in < 0 || w_in < 0 || h_out < 0 || w_out < 0) return 2;                    \
+        if (kh <= 0 || kw <= 0) return 2;                                                \
+        if (stride_h <= 0 || stride_w <= 0) return 2;                                    \
+        if (pad_h < 0 || pad_w < 0) return 2;                                            \
+        if (dilation_h <= 0 || dilation_w <= 0) return 2;                                \
+        return 0;                                                                        \
     }
 
 #define BARACUDA_KERNELS_IM2COL_1D_INSTANTIATE(NAME, T)                                  \
@@ -349,6 +368,19 @@ __host__ inline int32_t launch_col2im_1d(
             batch, channels, l_in, l_out,                                                \
             kl, stride_l, pad_l, dilation_l,                                             \
             input, output, stream);                                                      \
+    }                                                                                    \
+    extern "C" int32_t baracuda_kernels_im2col_1d_##NAME##_can_implement(                \
+        int32_t batch, int32_t channels,                                                 \
+        int32_t l_in, int32_t l_out,                                                     \
+        int32_t kl, int32_t stride_l, int32_t pad_l, int32_t dilation_l,                 \
+        const void* /*input*/,                                                           \
+        const void* /*output*/)                                                          \
+    {                                                                                    \
+        if (batch < 0 || channels < 0) return 2;                                         \
+        if (l_in < 0 || l_out < 0) return 2;                                             \
+        if (kl <= 0 || stride_l <= 0 || dilation_l <= 0) return 2;                       \
+        if (pad_l < 0) return 2;                                                         \
+        return 0;                                                                        \
     }
 
 #define BARACUDA_KERNELS_COL2IM_1D_INSTANTIATE(NAME, T)                                  \
@@ -365,6 +397,19 @@ __host__ inline int32_t launch_col2im_1d(
             batch, channels, l_in, l_out,                                                \
             kl, stride_l, pad_l, dilation_l,                                             \
             input, output, stream);                                                      \
+    }                                                                                    \
+    extern "C" int32_t baracuda_kernels_col2im_1d_##NAME##_can_implement(                \
+        int32_t batch, int32_t channels,                                                 \
+        int32_t l_in, int32_t l_out,                                                     \
+        int32_t kl, int32_t stride_l, int32_t pad_l, int32_t dilation_l,                 \
+        const void* /*input*/,                                                           \
+        const void* /*output*/)                                                          \
+    {                                                                                    \
+        if (batch < 0 || channels < 0) return 2;                                         \
+        if (l_in < 0 || l_out < 0) return 2;                                             \
+        if (kl <= 0 || stride_l <= 0 || dilation_l <= 0) return 2;                       \
+        if (pad_l < 0) return 2;                                                         \
+        return 0;                                                                        \
     }
 
 #endif // BARACUDA_IM2COL_CUH

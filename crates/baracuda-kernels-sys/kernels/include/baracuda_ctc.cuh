@@ -971,6 +971,28 @@ __global__ void ctc_backward_kernel_f64(
                     static_cast<T*>(out), batch_size, reduction_mode);                              \
         }                                                                                           \
         return (cudaGetLastError() == cudaSuccess) ? 0 : 5;                                         \
+    }                                                                                               \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                     \
+        int32_t max_time,                                                                           \
+        int32_t batch_size,                                                                         \
+        int32_t num_classes,                                                                        \
+        int32_t max_target_len,                                                                     \
+        int32_t blank,                                                                              \
+        int32_t reduction_mode,                                                                     \
+        int32_t /*zero_infinity*/,                                                                  \
+        const void* /*log_probs*/,                                                                  \
+        const void* /*targets*/,                                                                    \
+        const void* /*input_lengths*/,                                                              \
+        const void* /*target_lengths*/,                                                             \
+        const void* /*alpha_ws*/,                                                                   \
+        const void* /*out*/)                                                                        \
+    {                                                                                               \
+        if (max_time < 0 || batch_size < 0 || num_classes < 0 || max_target_len < 0) return 2;     \
+        if (blank < 0 || blank >= num_classes) return 2;                                            \
+        if (reduction_mode < 0 || reduction_mode > 2) return 2;                                     \
+        if (num_classes > 32) return 3;                                                             \
+        if (max_target_len > 256) return 3;                                                         \
+        return 0;                                                                                   \
     }
 
 #define BARACUDA_KERNELS_LOSS_CTC_FW_INSTANTIATE_F64_ACC(NAME, T)                                   \
@@ -1032,6 +1054,28 @@ __global__ void ctc_backward_kernel_f64(
                     static_cast<T*>(out), batch_size, reduction_mode);                              \
         }                                                                                           \
         return (cudaGetLastError() == cudaSuccess) ? 0 : 5;                                         \
+    }                                                                                               \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                     \
+        int32_t max_time,                                                                           \
+        int32_t batch_size,                                                                         \
+        int32_t num_classes,                                                                        \
+        int32_t max_target_len,                                                                     \
+        int32_t blank,                                                                              \
+        int32_t reduction_mode,                                                                     \
+        int32_t /*zero_infinity*/,                                                                  \
+        const void* /*log_probs*/,                                                                  \
+        const void* /*targets*/,                                                                    \
+        const void* /*input_lengths*/,                                                              \
+        const void* /*target_lengths*/,                                                             \
+        const void* /*alpha_ws*/,                                                                   \
+        const void* /*out*/)                                                                        \
+    {                                                                                               \
+        if (max_time < 0 || batch_size < 0 || num_classes < 0 || max_target_len < 0) return 2;     \
+        if (blank < 0 || blank >= num_classes) return 2;                                            \
+        if (reduction_mode < 0 || reduction_mode > 2) return 2;                                     \
+        if (num_classes > 32) return 3;                                                             \
+        if (max_target_len > 256) return 3;                                                         \
+        return 0;                                                                                   \
     }
 
 // BW launcher ABI:
@@ -1102,6 +1146,31 @@ __global__ void ctc_backward_kernel_f64(
             max_time, batch_size, num_classes, max_target_len, blank,                               \
             reduction_mode, inv_denom, zero_infinity);                                              \
         return (cudaGetLastError() == cudaSuccess) ? 0 : 5;                                         \
+    }                                                                                               \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                     \
+        int32_t max_time,                                                                           \
+        int32_t batch_size,                                                                         \
+        int32_t num_classes,                                                                        \
+        int32_t max_target_len,                                                                     \
+        int32_t blank,                                                                              \
+        int32_t reduction_mode,                                                                     \
+        int32_t /*zero_infinity*/,                                                                  \
+        float /*inv_denom*/,                                                                        \
+        const void* /*log_probs*/,                                                                  \
+        const void* /*targets*/,                                                                    \
+        const void* /*input_lengths*/,                                                              \
+        const void* /*target_lengths*/,                                                             \
+        const void* /*alpha_ws*/,                                                                   \
+        const void* /*per_sample_loss*/,                                                            \
+        const void* /*dloss*/,                                                                      \
+        const void* /*dlog_probs*/)                                                                 \
+    {                                                                                               \
+        if (max_time < 0 || batch_size < 0 || num_classes < 0 || max_target_len < 0) return 2;     \
+        if (blank < 0 || blank >= num_classes) return 2;                                            \
+        if (reduction_mode < 0 || reduction_mode > 2) return 2;                                     \
+        if (num_classes > 32) return 3;                                                             \
+        if (max_target_len > 256) return 3;                                                         \
+        return 0;                                                                                   \
     }
 
 #define BARACUDA_KERNELS_LOSS_CTC_BW_INSTANTIATE_F64_ACC(NAME, T)                                   \
@@ -1161,6 +1230,31 @@ __global__ void ctc_backward_kernel_f64(
             max_time, batch_size, num_classes, max_target_len, blank,                               \
             reduction_mode, (double)inv_denom, zero_infinity);                                      \
         return (cudaGetLastError() == cudaSuccess) ? 0 : 5;                                         \
+    }                                                                                               \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                     \
+        int32_t max_time,                                                                           \
+        int32_t batch_size,                                                                         \
+        int32_t num_classes,                                                                        \
+        int32_t max_target_len,                                                                     \
+        int32_t blank,                                                                              \
+        int32_t reduction_mode,                                                                     \
+        int32_t /*zero_infinity*/,                                                                  \
+        float /*inv_denom*/,                                                                        \
+        const void* /*log_probs*/,                                                                  \
+        const void* /*targets*/,                                                                    \
+        const void* /*input_lengths*/,                                                              \
+        const void* /*target_lengths*/,                                                             \
+        const void* /*alpha_ws*/,                                                                   \
+        const void* /*per_sample_loss*/,                                                            \
+        const void* /*dloss*/,                                                                      \
+        const void* /*dlog_probs*/)                                                                 \
+    {                                                                                               \
+        if (max_time < 0 || batch_size < 0 || num_classes < 0 || max_target_len < 0) return 2;     \
+        if (blank < 0 || blank >= num_classes) return 2;                                            \
+        if (reduction_mode < 0 || reduction_mode > 2) return 2;                                     \
+        if (num_classes > 32) return 3;                                                             \
+        if (max_target_len > 256) return 3;                                                         \
+        return 0;                                                                                   \
     }
 
 #endif // BARACUDA_CTC_CUH

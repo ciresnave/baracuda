@@ -1028,6 +1028,15 @@ __host__ inline int32_t launch_unsorted_segment_prod(
             static_cast<const INDEX_T*>(segment_ids),                                             \
             static_cast<T*>(output),                                                              \
             N, D, num_segments, stream);                                                          \
+    }                                                                                              \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                   \
+        int32_t N, int32_t D, int32_t num_segments,                                               \
+        const void* /*input*/,                                                                    \
+        const void* /*segment_ids*/,                                                              \
+        const void* /*output*/)                                                                   \
+    {                                                                                              \
+        if (N < 0 || D < 0 || num_segments < 0) return 2;                                         \
+        return 0;                                                                                  \
     }
 
 #define BARACUDA_KERNELS_UNSORTED_SEGMENT_SUM_INSTANTIATE(NAME, T, INDEX_T)                       \
@@ -1045,6 +1054,15 @@ __host__ inline int32_t launch_unsorted_segment_prod(
             static_cast<const INDEX_T*>(segment_ids),                                             \
             static_cast<T*>(output),                                                              \
             N, D, num_segments, stream);                                                          \
+    }                                                                                              \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                   \
+        int32_t N, int32_t D, int32_t num_segments,                                               \
+        const void* /*input*/,                                                                    \
+        const void* /*segment_ids*/,                                                              \
+        const void* /*output*/)                                                                   \
+    {                                                                                              \
+        if (N < 0 || D < 0 || num_segments < 0) return 2;                                         \
+        return 0;                                                                                  \
     }
 
 #define BARACUDA_KERNELS_UNSORTED_SEGMENT_MAX_INSTANTIATE(NAME, T, INDEX_T)                       \
@@ -1062,6 +1080,15 @@ __host__ inline int32_t launch_unsorted_segment_prod(
             static_cast<const INDEX_T*>(segment_ids),                                             \
             static_cast<T*>(output),                                                              \
             N, D, num_segments, stream);                                                          \
+    }                                                                                              \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                   \
+        int32_t N, int32_t D, int32_t num_segments,                                               \
+        const void* /*input*/,                                                                    \
+        const void* /*segment_ids*/,                                                              \
+        const void* /*output*/)                                                                   \
+    {                                                                                              \
+        if (N < 0 || D < 0 || num_segments < 0) return 2;                                         \
+        return 0;                                                                                  \
     }
 
 #define BARACUDA_KERNELS_UNSORTED_SEGMENT_MIN_INSTANTIATE(NAME, T, INDEX_T)                       \
@@ -1079,6 +1106,15 @@ __host__ inline int32_t launch_unsorted_segment_prod(
             static_cast<const INDEX_T*>(segment_ids),                                             \
             static_cast<T*>(output),                                                              \
             N, D, num_segments, stream);                                                          \
+    }                                                                                              \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                   \
+        int32_t N, int32_t D, int32_t num_segments,                                               \
+        const void* /*input*/,                                                                    \
+        const void* /*segment_ids*/,                                                              \
+        const void* /*output*/)                                                                   \
+    {                                                                                              \
+        if (N < 0 || D < 0 || num_segments < 0) return 2;                                         \
+        return 0;                                                                                  \
     }
 
 #define BARACUDA_KERNELS_UNSORTED_SEGMENT_MEAN_INSTANTIATE(NAME, T, INDEX_T)                      \
@@ -1101,6 +1137,15 @@ __host__ inline int32_t launch_unsorted_segment_prod(
             static_cast<T*>(output),                                                              \
             static_cast<int32_t*>(workspace),                                                     \
             N, D, num_segments, stream);                                                          \
+    }                                                                                              \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                   \
+        int32_t N, int32_t D, int32_t num_segments,                                               \
+        const void* /*input*/,                                                                    \
+        const void* /*segment_ids*/,                                                              \
+        const void* /*output*/)                                                                   \
+    {                                                                                              \
+        if (N < 0 || D < 0 || num_segments < 0) return 2;                                         \
+        return 0;                                                                                  \
     }
 
 #define BARACUDA_KERNELS_SEGMENT_SUM_BACKWARD_INSTANTIATE(NAME, T, INDEX_T)                       \
@@ -1118,6 +1163,15 @@ __host__ inline int32_t launch_unsorted_segment_prod(
             static_cast<const INDEX_T*>(segment_ids),                                             \
             static_cast<T*>(d_input),                                                             \
             N, D, num_segments, stream);                                                          \
+    }                                                                                              \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                   \
+        int32_t N, int32_t D, int32_t num_segments,                                               \
+        const void* /*d_output*/,                                                                 \
+        const void* /*segment_ids*/,                                                              \
+        const void* /*d_input*/)                                                                  \
+    {                                                                                              \
+        if (N < 0 || D < 0 || num_segments < 0) return 2;                                         \
+        return 0;                                                                                  \
     }
 
 #define BARACUDA_KERNELS_SEGMENT_MEAN_BACKWARD_INSTANTIATE(NAME, T, INDEX_T)                      \
@@ -1140,6 +1194,15 @@ __host__ inline int32_t launch_unsorted_segment_prod(
             static_cast<T*>(d_input),                                                             \
             static_cast<int32_t*>(workspace),                                                     \
             N, D, num_segments, stream);                                                          \
+    }                                                                                              \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                   \
+        int32_t N, int32_t D, int32_t num_segments,                                               \
+        const void* /*d_output*/,                                                                 \
+        const void* /*segment_ids*/,                                                              \
+        const void* /*d_input*/)                                                                  \
+    {                                                                                              \
+        if (N < 0 || D < 0 || num_segments < 0) return 2;                                         \
+        return 0;                                                                                  \
     }
 
 // =============================================================================
@@ -1180,6 +1243,16 @@ __host__ inline int32_t launch_unsorted_segment_prod(
             static_cast<const INDEX_T*>(segment_ids),                                             \
             static_cast<T*>(d_input),                                                             \
             N, D, num_segments, stream);                                                          \
+    }                                                                                              \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                   \
+        int32_t N, int32_t D, int32_t num_segments,                                               \
+        const void* /*d_output*/,                                                                 \
+        const void* /*input*/,                                                                    \
+        const void* /*segment_ids*/,                                                              \
+        const void* /*d_input*/)                                                                  \
+    {                                                                                              \
+        if (N < 0 || D < 0 || num_segments < 0) return 2;                                         \
+        return 0;                                                                                  \
     }
 
 #define BARACUDA_KERNELS_UNSORTED_SEGMENT_ARG_BACKWARD_INSTANTIATE(NAME, T, OP, INDEX_T)          \
@@ -1199,6 +1272,16 @@ __host__ inline int32_t launch_unsorted_segment_prod(
             static_cast<const INDEX_T*>(segment_ids),                                             \
             static_cast<T*>(d_input),                                                             \
             N, D, num_segments, stream);                                                          \
+    }                                                                                              \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                   \
+        int32_t N, int32_t D, int32_t num_segments,                                               \
+        const void* /*d_output*/,                                                                 \
+        const void* /*input*/,                                                                    \
+        const void* /*segment_ids*/,                                                              \
+        const void* /*d_input*/)                                                                  \
+    {                                                                                              \
+        if (N < 0 || D < 0 || num_segments < 0) return 2;                                         \
+        return 0;                                                                                  \
     }
 
 #define BARACUDA_KERNELS_SEGMENT_PROD_BACKWARD_INSTANTIATE(NAME, T, INDEX_T)                      \
@@ -1220,6 +1303,17 @@ __host__ inline int32_t launch_unsorted_segment_prod(
             static_cast<const INDEX_T*>(segment_ids),                                             \
             static_cast<T*>(d_input),                                                             \
             N, D, num_segments, stream);                                                          \
+    }                                                                                              \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                   \
+        int32_t N, int32_t D, int32_t num_segments,                                               \
+        const void* /*d_output*/,                                                                 \
+        const void* /*input*/,                                                                    \
+        const void* /*output*/,                                                                   \
+        const void* /*segment_ids*/,                                                              \
+        const void* /*d_input*/)                                                                  \
+    {                                                                                              \
+        if (N < 0 || D < 0 || num_segments < 0) return 2;                                         \
+        return 0;                                                                                  \
     }
 
 #define BARACUDA_KERNELS_UNSORTED_SEGMENT_PROD_INSTANTIATE(NAME, T, INDEX_T)                      \
@@ -1237,6 +1331,15 @@ __host__ inline int32_t launch_unsorted_segment_prod(
             static_cast<const INDEX_T*>(segment_ids),                                             \
             static_cast<T*>(output),                                                              \
             N, D, num_segments, stream);                                                          \
+    }                                                                                              \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                   \
+        int32_t N, int32_t D, int32_t num_segments,                                               \
+        const void* /*input*/,                                                                    \
+        const void* /*segment_ids*/,                                                              \
+        const void* /*output*/)                                                                   \
+    {                                                                                              \
+        if (N < 0 || D < 0 || num_segments < 0) return 2;                                         \
+        return 0;                                                                                  \
     }
 
 #endif // BARACUDA_SEGMENT_CUH

@@ -595,6 +595,17 @@ __host__ inline int32_t launch_dequantize_per_group_backward(
             static_cast<const int32_t*>(zero_point),                                                \
             static_cast<TOUT*>(output),                                                             \
             N, D, qmin, qmax, stream);                                                              \
+    }                                                                                              \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                    \
+        int32_t N, int32_t D, int32_t qmin, int32_t qmax,                                          \
+        const void* /*input*/,                                                                     \
+        const void* /*scale*/,                                                                     \
+        const void* /*zero_point*/,                                                                \
+        const void* /*output*/)                                                                    \
+    {                                                                                              \
+        if (N < 0 || D < 0) return 2;                                                              \
+        if (qmin > qmax) return 2;                                                                 \
+        return 0;                                                                                  \
     }
 
 #define BARACUDA_KERNELS_QUANTIZE_PER_TOKEN_BACKWARD_INSTANTIATE(NAME, TIN)                       \
@@ -616,6 +627,18 @@ __host__ inline int32_t launch_dequantize_per_group_backward(
             static_cast<const int32_t*>(zero_point),                                                \
             static_cast<TIN*>(d_input),                                                             \
             N, D, qmin, qmax, stream);                                                              \
+    }                                                                                              \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                    \
+        int32_t N, int32_t D, int32_t qmin, int32_t qmax,                                          \
+        const void* /*d_output*/,                                                                  \
+        const void* /*input*/,                                                                     \
+        const void* /*scale*/,                                                                     \
+        const void* /*zero_point*/,                                                                \
+        const void* /*d_input*/)                                                                   \
+    {                                                                                              \
+        if (N < 0 || D < 0) return 2;                                                              \
+        if (qmin > qmax) return 2;                                                                 \
+        return 0;                                                                                  \
     }
 
 #define BARACUDA_KERNELS_DEQUANTIZE_PER_TOKEN_INSTANTIATE(NAME, TIN, TOUT)                        \
@@ -635,6 +658,16 @@ __host__ inline int32_t launch_dequantize_per_group_backward(
             static_cast<const int32_t*>(zero_point),                                                \
             static_cast<TIN*>(output),                                                              \
             N, D, stream);                                                                          \
+    }                                                                                              \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                    \
+        int32_t N, int32_t D,                                                                      \
+        const void* /*input*/,                                                                     \
+        const void* /*scale*/,                                                                     \
+        const void* /*zero_point*/,                                                                \
+        const void* /*output*/)                                                                    \
+    {                                                                                              \
+        if (N < 0 || D < 0) return 2;                                                              \
+        return 0;                                                                                  \
     }
 
 #define BARACUDA_KERNELS_DEQUANTIZE_PER_TOKEN_BACKWARD_INSTANTIATE(NAME, TIN)                     \
@@ -652,6 +685,15 @@ __host__ inline int32_t launch_dequantize_per_group_backward(
             static_cast<const TIN*>(scale),                                                         \
             static_cast<TIN*>(d_input),                                                             \
             N, D, stream);                                                                          \
+    }                                                                                              \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                    \
+        int32_t N, int32_t D,                                                                      \
+        const void* /*d_output*/,                                                                  \
+        const void* /*scale*/,                                                                     \
+        const void* /*d_input*/)                                                                   \
+    {                                                                                              \
+        if (N < 0 || D < 0) return 2;                                                              \
+        return 0;                                                                                  \
     }
 
 #define BARACUDA_KERNELS_QUANTIZE_PER_GROUP_INSTANTIATE(NAME, TIN, TOUT)                          \
@@ -672,6 +714,20 @@ __host__ inline int32_t launch_dequantize_per_group_backward(
             static_cast<const int32_t*>(zero_point),                                                \
             static_cast<TOUT*>(output),                                                             \
             outer, axis_size, group_size, qmin, qmax, stream);                                      \
+    }                                                                                              \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                    \
+        int32_t outer, int32_t axis_size, int32_t group_size,                                      \
+        int32_t qmin, int32_t qmax,                                                                \
+        const void* /*input*/,                                                                     \
+        const void* /*scale*/,                                                                     \
+        const void* /*zero_point*/,                                                                \
+        const void* /*output*/)                                                                    \
+    {                                                                                              \
+        if (outer < 0 || axis_size < 0) return 2;                                                  \
+        if (group_size <= 0) return 2;                                                             \
+        if (axis_size % group_size != 0) return 2;                                                 \
+        if (qmin > qmax) return 2;                                                                 \
+        return 0;                                                                                  \
     }
 
 #define BARACUDA_KERNELS_QUANTIZE_PER_GROUP_BACKWARD_INSTANTIATE(NAME, TIN)                       \
@@ -694,6 +750,21 @@ __host__ inline int32_t launch_dequantize_per_group_backward(
             static_cast<const int32_t*>(zero_point),                                                \
             static_cast<TIN*>(d_input),                                                             \
             outer, axis_size, group_size, qmin, qmax, stream);                                      \
+    }                                                                                              \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                    \
+        int32_t outer, int32_t axis_size, int32_t group_size,                                      \
+        int32_t qmin, int32_t qmax,                                                                \
+        const void* /*d_output*/,                                                                  \
+        const void* /*input*/,                                                                     \
+        const void* /*scale*/,                                                                     \
+        const void* /*zero_point*/,                                                                \
+        const void* /*d_input*/)                                                                   \
+    {                                                                                              \
+        if (outer < 0 || axis_size < 0) return 2;                                                  \
+        if (group_size <= 0) return 2;                                                             \
+        if (axis_size % group_size != 0) return 2;                                                 \
+        if (qmin > qmax) return 2;                                                                 \
+        return 0;                                                                                  \
     }
 
 #define BARACUDA_KERNELS_DEQUANTIZE_PER_GROUP_INSTANTIATE(NAME, TIN, TOUT)                        \
@@ -713,6 +784,18 @@ __host__ inline int32_t launch_dequantize_per_group_backward(
             static_cast<const int32_t*>(zero_point),                                                \
             static_cast<TIN*>(output),                                                              \
             outer, axis_size, group_size, stream);                                                  \
+    }                                                                                              \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                    \
+        int32_t outer, int32_t axis_size, int32_t group_size,                                      \
+        const void* /*input*/,                                                                     \
+        const void* /*scale*/,                                                                     \
+        const void* /*zero_point*/,                                                                \
+        const void* /*output*/)                                                                    \
+    {                                                                                              \
+        if (outer < 0 || axis_size < 0) return 2;                                                  \
+        if (group_size <= 0) return 2;                                                             \
+        if (axis_size % group_size != 0) return 2;                                                 \
+        return 0;                                                                                  \
     }
 
 #define BARACUDA_KERNELS_DEQUANTIZE_PER_GROUP_BACKWARD_INSTANTIATE(NAME, TIN)                     \
@@ -730,6 +813,17 @@ __host__ inline int32_t launch_dequantize_per_group_backward(
             static_cast<const TIN*>(scale),                                                         \
             static_cast<TIN*>(d_input),                                                             \
             outer, axis_size, group_size, stream);                                                  \
+    }                                                                                              \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                    \
+        int32_t outer, int32_t axis_size, int32_t group_size,                                      \
+        const void* /*d_output*/,                                                                  \
+        const void* /*scale*/,                                                                     \
+        const void* /*d_input*/)                                                                   \
+    {                                                                                              \
+        if (outer < 0 || axis_size < 0) return 2;                                                  \
+        if (group_size <= 0) return 2;                                                             \
+        if (axis_size % group_size != 0) return 2;                                                 \
+        return 0;                                                                                  \
     }
 
 #endif // BARACUDA_QUANTIZE_PER_TOKEN_GROUP_CUH

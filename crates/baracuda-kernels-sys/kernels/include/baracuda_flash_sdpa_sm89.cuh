@@ -880,6 +880,24 @@ __host__ inline int32_t launch_flash_sdpa_sm89_fp_strided(
             batch, heads, q_len, k_len, d_k, d_v,                                                   \
             scale, is_causal,                                                                       \
             stream);                                                                                \
+    }                                                                                                \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                     \
+        int32_t batch,                                                                              \
+        int32_t heads,                                                                              \
+        int32_t q_len,                                                                              \
+        int32_t k_len,                                                                              \
+        int32_t d_k,                                                                                \
+        int32_t d_v,                                                                                \
+        float /*scale*/,                                                                            \
+        int32_t /*is_causal*/,                                                                      \
+        const void* /*q*/,                                                                          \
+        const void* /*k*/,                                                                          \
+        const void* /*v*/,                                                                          \
+        const void* /*y*/,                                                                          \
+        const void* /*lse*/)                                                                        \
+    {                                                                                                \
+        if (batch < 0 || heads < 0 || q_len < 0 || k_len < 0 || d_k < 0 || d_v < 0) return 2;       \
+        return 0;                                                                                   \
     }
 
 // Strided FW sibling INSTANTIATE — Phase 17.1.
@@ -934,6 +952,31 @@ __host__ inline int32_t launch_flash_sdpa_sm89_fp_strided(
             stride_y[0], stride_y[1], stride_y[2],                                                  \
             scale, is_causal,                                                                       \
             stream);                                                                                \
+    }                                                                                                \
+    extern "C" int32_t baracuda_kernels_##NAME##_strided_can_implement(                             \
+        int32_t batch,                                                                              \
+        int32_t heads,                                                                              \
+        int32_t q_len,                                                                              \
+        int32_t k_len,                                                                              \
+        int32_t d_k,                                                                                \
+        int32_t d_v,                                                                                \
+        const int64_t* stride_q,                                                                    \
+        const int64_t* stride_k,                                                                    \
+        const int64_t* stride_v,                                                                    \
+        const int64_t* stride_y,                                                                    \
+        float /*scale*/,                                                                            \
+        int32_t /*is_causal*/,                                                                      \
+        const void* /*q*/,                                                                          \
+        const void* /*k*/,                                                                          \
+        const void* /*v*/,                                                                          \
+        const void* /*y*/,                                                                          \
+        const void* /*lse*/)                                                                        \
+    {                                                                                                \
+        if (batch < 0 || heads < 0 || q_len < 0 || k_len < 0 || d_k < 0 || d_v < 0) return 2;       \
+        int64_t total_y = (int64_t)batch * heads * q_len * d_v;                                     \
+        if (total_y > 0 && (stride_q == nullptr || stride_k == nullptr ||                           \
+                            stride_v == nullptr || stride_y == nullptr)) return 2;                  \
+        return 0;                                                                                   \
     }
 
 #endif // BARACUDA_FLASH_SDPA_SM89_CUH

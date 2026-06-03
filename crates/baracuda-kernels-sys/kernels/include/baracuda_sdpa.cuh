@@ -1551,6 +1551,26 @@ __host__ inline int32_t launch_sdpa_backward_strided_fp(
             batch, heads, q_len, k_len, d_k, d_v,                                                   \
             scale, is_causal, has_mask,                                                             \
             stream);                                                                                \
+    }                                                                                                \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                     \
+        int32_t batch,                                                                              \
+        int32_t heads,                                                                              \
+        int32_t q_len,                                                                              \
+        int32_t k_len,                                                                              \
+        int32_t d_k,                                                                                \
+        int32_t d_v,                                                                                \
+        float /*scale*/,                                                                            \
+        int32_t /*is_causal*/,                                                                      \
+        int32_t /*has_mask*/,                                                                       \
+        const void* /*q*/,                                                                          \
+        const void* /*k*/,                                                                          \
+        const void* /*v*/,                                                                          \
+        const void* /*mask*/,                                                                       \
+        const void* /*attn*/,                                                                       \
+        const void* /*y*/)                                                                          \
+    {                                                                                                \
+        if (batch < 0 || heads < 0 || q_len < 0 || k_len < 0 || d_k < 0 || d_v < 0) return 2;       \
+        return 0;                                                                                   \
     }
 
 #define BARACUDA_KERNELS_SDPA_BACKWARD_INSTANTIATE(NAME, T)                                         \
@@ -1595,6 +1615,27 @@ __host__ inline int32_t launch_sdpa_backward_strided_fp(
             batch, heads, q_len, k_len, d_k, d_v,                                                   \
             scale,                                                                                  \
             stream);                                                                                \
+    }                                                                                                \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                     \
+        int32_t batch,                                                                              \
+        int32_t heads,                                                                              \
+        int32_t q_len,                                                                              \
+        int32_t k_len,                                                                              \
+        int32_t d_k,                                                                                \
+        int32_t d_v,                                                                                \
+        float /*scale*/,                                                                            \
+        const void* /*q*/,                                                                          \
+        const void* /*k*/,                                                                          \
+        const void* /*v*/,                                                                          \
+        const void* /*attn*/,                                                                       \
+        const void* /*dy*/,                                                                         \
+        const void* /*dscores_ws*/,                                                                 \
+        const void* /*dQ*/,                                                                         \
+        const void* /*dK*/,                                                                         \
+        const void* /*dV*/)                                                                         \
+    {                                                                                                \
+        if (batch < 0 || heads < 0 || q_len < 0 || k_len < 0 || d_k < 0 || d_v < 0) return 2;       \
+        return 0;                                                                                   \
     }
 
 // Strided FW sibling INSTANTIATE — Phase 14.4.
@@ -1654,6 +1695,34 @@ __host__ inline int32_t launch_sdpa_backward_strided_fp(
             stride_y[0], stride_y[1], stride_y[2],                                                  \
             scale, is_causal, has_mask,                                                             \
             stream);                                                                                \
+    }                                                                                                \
+    extern "C" int32_t baracuda_kernels_##NAME##_strided_can_implement(                             \
+        int32_t batch,                                                                              \
+        int32_t heads,                                                                              \
+        int32_t q_len,                                                                              \
+        int32_t k_len,                                                                              \
+        int32_t d_k,                                                                                \
+        int32_t d_v,                                                                                \
+        const int64_t* stride_q,                                                                    \
+        const int64_t* stride_k,                                                                    \
+        const int64_t* stride_v,                                                                    \
+        const int64_t* /*stride_mask*/,                                                             \
+        const int64_t* stride_y,                                                                    \
+        float /*scale*/,                                                                            \
+        int32_t /*is_causal*/,                                                                      \
+        int32_t /*has_mask*/,                                                                       \
+        const void* /*q*/,                                                                          \
+        const void* /*k*/,                                                                          \
+        const void* /*v*/,                                                                          \
+        const void* /*mask*/,                                                                       \
+        const void* /*attn*/,                                                                       \
+        const void* /*y*/)                                                                          \
+    {                                                                                                \
+        if (batch < 0 || heads < 0 || q_len < 0 || k_len < 0 || d_k < 0 || d_v < 0) return 2;       \
+        int64_t total_y = (int64_t)batch * heads * q_len * d_v;                                     \
+        if (total_y > 0 && (stride_q == nullptr || stride_k == nullptr ||                           \
+                            stride_v == nullptr || stride_y == nullptr)) return 2;                  \
+        return 0;                                                                                   \
     }
 
 // Strided BW sibling INSTANTIATE — Phase 14.4 (+ Phase 17.2 GQA BW).
@@ -1724,6 +1793,39 @@ __host__ inline int32_t launch_sdpa_backward_strided_fp(
             stride_dv[0], stride_dv[1], stride_dv[2],                                               \
             scale,                                                                                  \
             stream);                                                                                \
+    }                                                                                                \
+    extern "C" int32_t baracuda_kernels_##NAME##_strided_can_implement(                             \
+        int32_t batch,                                                                              \
+        int32_t heads,                                                                              \
+        int32_t q_len,                                                                              \
+        int32_t k_len,                                                                              \
+        int32_t d_k,                                                                                \
+        int32_t d_v,                                                                                \
+        const int64_t* stride_q,                                                                    \
+        const int64_t* stride_k,                                                                    \
+        const int64_t* stride_v,                                                                    \
+        const int64_t* stride_dy,                                                                   \
+        const int64_t* stride_dq,                                                                   \
+        const int64_t* stride_dk,                                                                   \
+        const int64_t* stride_dv,                                                                   \
+        float /*scale*/,                                                                            \
+        const void* /*q*/,                                                                          \
+        const void* /*k*/,                                                                          \
+        const void* /*v*/,                                                                          \
+        const void* /*attn*/,                                                                       \
+        const void* /*dy*/,                                                                         \
+        const void* /*dscores_ws*/,                                                                 \
+        const void* /*dQ*/,                                                                         \
+        const void* /*dK*/,                                                                         \
+        const void* /*dV*/)                                                                         \
+    {                                                                                                \
+        if (batch < 0 || heads < 0 || q_len < 0 || k_len < 0 || d_k < 0 || d_v < 0) return 2;       \
+        int64_t total_attn = (int64_t)batch * heads * q_len * k_len;                                \
+        if (total_attn > 0 && (stride_q == nullptr || stride_k == nullptr ||                        \
+                               stride_v == nullptr || stride_dy == nullptr ||                       \
+                               stride_dq == nullptr || stride_dk == nullptr ||                      \
+                               stride_dv == nullptr)) return 2;                                     \
+        return 0;                                                                                   \
     }
 
 #endif // BARACUDA_SDPA_CUH

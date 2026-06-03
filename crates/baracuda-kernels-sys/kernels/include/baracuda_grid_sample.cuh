@@ -284,6 +284,15 @@ __host__ inline int32_t launch_affine_grid_2d(
             static_cast<const T*>(grid),                                                       \
             static_cast<T*>(output),                                                           \
             N, C, IH, IW, OH, OW, stream);                                                     \
+    }                                                                                          \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                \
+        int32_t N, int32_t C, int32_t IH, int32_t IW, int32_t OH, int32_t OW,                  \
+        const void* /*input*/,                                                                 \
+        const void* /*grid*/,                                                                  \
+        const void* /*output*/)                                                                \
+    {                                                                                          \
+        if (N < 0 || C < 0 || IH < 0 || IW < 0 || OH < 0 || OW < 0) return 2;                  \
+        return 0;                                                                              \
     }
 
 #define BARACUDA_KERNELS_GRID_SAMPLE_2D_BACKWARD_INSTANTIATE(NAME, T)                          \
@@ -307,6 +316,17 @@ __host__ inline int32_t launch_affine_grid_2d(
             static_cast<T*>(dinput),                                                           \
             static_cast<T*>(dgrid),                                                            \
             N, C, IH, IW, OH, OW, stream);                                                     \
+    }                                                                                          \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                \
+        int32_t N, int32_t C, int32_t IH, int32_t IW, int32_t OH, int32_t OW,                  \
+        const void* /*dout*/,                                                                  \
+        const void* /*input*/,                                                                 \
+        const void* /*grid*/,                                                                  \
+        const void* /*dinput*/,                                                                \
+        const void* /*dgrid*/)                                                                 \
+    {                                                                                          \
+        if (N < 0 || C < 0 || IH < 0 || IW < 0 || OH < 0 || OW < 0) return 2;                  \
+        return 0;                                                                              \
     }
 
 #define BARACUDA_KERNELS_AFFINE_GRID_2D_INSTANTIATE(NAME, T)                                   \
@@ -323,6 +343,14 @@ __host__ inline int32_t launch_affine_grid_2d(
             static_cast<const T*>(theta),                                                      \
             static_cast<T*>(grid),                                                             \
             N, OH, OW, stream);                                                                \
+    }                                                                                          \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                \
+        int32_t N, int32_t OH, int32_t OW,                                                     \
+        const void* /*theta*/,                                                                 \
+        const void* /*grid*/)                                                                  \
+    {                                                                                          \
+        if (N < 0 || OH < 0 || OW < 0) return 2;                                               \
+        return 0;                                                                              \
     }
 
 #endif // BARACUDA_GRID_SAMPLE_CUH
