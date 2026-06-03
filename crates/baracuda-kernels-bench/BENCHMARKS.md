@@ -67,6 +67,45 @@ the input for updating the tables below.
 `-- --quick` passes criterion's reduced-sample fast path (10 samples vs
 the default 100) — useful while iterating on a perf change.
 
+## PyTorch comparison (Phase 73, optional)
+
+The `pytorch` cargo feature enables a tch-rs (LibTorch) reference arm
+for cross-implementation benches. Off by default — the build doesn't
+require LibTorch unless you flip the feature on.
+
+### Setup (one-time)
+
+The recommended path uses pip-installed PyTorch's bundled libtorch
+(simplest, single dep):
+
+```powershell
+# Install PyTorch with CUDA 12.6 wheels (works on CUDA 13.x driver)
+& "C:\Users\cires\AppData\Local\Programs\Python\Python310\python.exe" `
+  -m pip install torch --index-url https://download.pytorch.org/whl/cu126
+
+# Point tch-rs at the pip-installed libtorch
+$env:LIBTORCH_USE_PYTORCH = "1"
+$env:LIBTORCH_BYPASS_VERSION_CHECK = "1"
+```
+
+The `BYPASS_VERSION_CHECK` is needed because tch-rs pins a specific
+libtorch version; the bypass lets us use whatever the pip install
+provides (PyTorch 2.x).
+
+Alternative: download standalone LibTorch from
+<https://pytorch.org/get-started/locally/>, unzip, set
+`$env:LIBTORCH = "C:\path\to\libtorch"` + add `libtorch\lib` to PATH.
+
+### Running PyTorch benches
+
+```bash
+cargo bench -p baracuda-kernels-bench --bench gemm_vs_pytorch \
+  --features sm89,pytorch
+```
+
+The bench file falls back to a no-op `main` when the `pytorch` feature
+is off — the binary still builds, it just prints a skip message.
+
 ## Sample results — RTX 4070 (representative)
 
 The harness validation run was executed on `gemm_vs_cublas` (the
