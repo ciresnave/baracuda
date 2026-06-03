@@ -13,39 +13,57 @@ use super::types::{cudaEvent_t, cudaKernel_t, cudaLibrary_t, cudaMemcpyKind, cud
 
 // ---- version & error -------------------------------------------------------
 
+/// Function-pointer type for the Runtime API entry-point `cudaRuntimeGetVersion`.
 pub type PFN_cudaRuntimeGetVersion = unsafe extern "C" fn(version: *mut c_int) -> cudaError_t;
+/// Function-pointer type for the Runtime API entry-point `cudaDriverGetVersion`.
 pub type PFN_cudaDriverGetVersion = unsafe extern "C" fn(version: *mut c_int) -> cudaError_t;
+/// Function-pointer type for the Runtime API entry-point `cudaGetLastError`.
 pub type PFN_cudaGetLastError = unsafe extern "C" fn() -> cudaError_t;
+/// Function-pointer type for the Runtime API entry-point `cudaPeekAtLastError`.
 pub type PFN_cudaPeekAtLastError = unsafe extern "C" fn() -> cudaError_t;
+/// Function-pointer type for the Runtime API entry-point `cudaGetErrorName`.
 pub type PFN_cudaGetErrorName = unsafe extern "C" fn(error: cudaError_t) -> *const c_char;
+/// Function-pointer type for the Runtime API entry-point `cudaGetErrorString`.
 pub type PFN_cudaGetErrorString = unsafe extern "C" fn(error: cudaError_t) -> *const c_char;
 
 // ---- device management -----------------------------------------------------
 
+/// Function-pointer type for the Runtime API entry-point `cudaGetDeviceCount`.
 pub type PFN_cudaGetDeviceCount = unsafe extern "C" fn(count: *mut c_int) -> cudaError_t;
+/// Function-pointer type for the Runtime API entry-point `cudaSetDevice`.
 pub type PFN_cudaSetDevice = unsafe extern "C" fn(device: c_int) -> cudaError_t;
+/// Function-pointer type for the Runtime API entry-point `cudaGetDevice`.
 pub type PFN_cudaGetDevice = unsafe extern "C" fn(device: *mut c_int) -> cudaError_t;
+/// Function-pointer type for the Runtime API entry-point `cudaDeviceSynchronize`.
 pub type PFN_cudaDeviceSynchronize = unsafe extern "C" fn() -> cudaError_t;
+/// Function-pointer type for the Runtime API entry-point `cudaDeviceReset`.
 pub type PFN_cudaDeviceReset = unsafe extern "C" fn() -> cudaError_t;
+/// Function-pointer type for the Runtime API entry-point `cudaDeviceGetAttribute`.
 pub type PFN_cudaDeviceGetAttribute =
     unsafe extern "C" fn(value: *mut c_int, attr: c_int, device: c_int) -> cudaError_t;
+/// Function-pointer type for the Runtime API entry-point `cudaInitDevice`.
 pub type PFN_cudaInitDevice =
     unsafe extern "C" fn(device: c_int, device_flags: c_uint, flags: c_uint) -> cudaError_t;
 
 // ---- memory ---------------------------------------------------------------
 
+/// Function-pointer type for the Runtime API entry-point `cudaMalloc`.
 pub type PFN_cudaMalloc =
     unsafe extern "C" fn(dev_ptr: *mut *mut c_void, size: usize) -> cudaError_t;
+/// Function-pointer type for the Runtime API entry-point `cudaFree`.
 pub type PFN_cudaFree = unsafe extern "C" fn(dev_ptr: *mut c_void) -> cudaError_t;
+/// Function-pointer type for the Runtime API entry-point `cudaMallocManaged`.
 pub type PFN_cudaMallocManaged =
     unsafe extern "C" fn(dev_ptr: *mut *mut c_void, size: usize, flags: c_uint) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaMemcpy`.
 pub type PFN_cudaMemcpy = unsafe extern "C" fn(
     dst: *mut c_void,
     src: *const c_void,
     count: usize,
     kind: cudaMemcpyKind,
 ) -> cudaError_t;
+/// Function-pointer type for the Runtime API entry-point `cudaMemcpyAsync`.
 pub type PFN_cudaMemcpyAsync = unsafe extern "C" fn(
     dst: *mut c_void,
     src: *const c_void,
@@ -54,8 +72,10 @@ pub type PFN_cudaMemcpyAsync = unsafe extern "C" fn(
     stream: cudaStream_t,
 ) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaMemset`.
 pub type PFN_cudaMemset =
     unsafe extern "C" fn(dst: *mut c_void, value: c_int, count: usize) -> cudaError_t;
+/// Function-pointer type for the Runtime API entry-point `cudaMemsetAsync`.
 pub type PFN_cudaMemsetAsync = unsafe extern "C" fn(
     dst: *mut c_void,
     value: c_int,
@@ -65,30 +85,44 @@ pub type PFN_cudaMemsetAsync = unsafe extern "C" fn(
 
 // ---- stream ---------------------------------------------------------------
 
+/// Function-pointer type for the Runtime API entry-point `cudaStreamCreate`.
 pub type PFN_cudaStreamCreate = unsafe extern "C" fn(stream: *mut cudaStream_t) -> cudaError_t;
+/// Function-pointer type for the Runtime API entry-point `cudaStreamCreateWithFlags`.
 pub type PFN_cudaStreamCreateWithFlags =
     unsafe extern "C" fn(stream: *mut cudaStream_t, flags: c_uint) -> cudaError_t;
+/// Function-pointer type for the Runtime API entry-point `cudaStreamDestroy`.
 pub type PFN_cudaStreamDestroy = unsafe extern "C" fn(stream: cudaStream_t) -> cudaError_t;
+/// Function-pointer type for the Runtime API entry-point `cudaStreamSynchronize`.
 pub type PFN_cudaStreamSynchronize = unsafe extern "C" fn(stream: cudaStream_t) -> cudaError_t;
+/// Function-pointer type for the Runtime API entry-point `cudaStreamQuery`.
 pub type PFN_cudaStreamQuery = unsafe extern "C" fn(stream: cudaStream_t) -> cudaError_t;
+/// Function-pointer type for the Runtime API entry-point `cudaStreamWaitEvent`.
 pub type PFN_cudaStreamWaitEvent =
     unsafe extern "C" fn(stream: cudaStream_t, event: cudaEvent_t, flags: c_uint) -> cudaError_t;
 
 // ---- event ----------------------------------------------------------------
 
+/// Function-pointer type for the Runtime API entry-point `cudaEventCreate`.
 pub type PFN_cudaEventCreate = unsafe extern "C" fn(event: *mut cudaEvent_t) -> cudaError_t;
+/// Function-pointer type for the Runtime API entry-point `cudaEventCreateWithFlags`.
 pub type PFN_cudaEventCreateWithFlags =
     unsafe extern "C" fn(event: *mut cudaEvent_t, flags: c_uint) -> cudaError_t;
+/// Function-pointer type for the Runtime API entry-point `cudaEventDestroy`.
 pub type PFN_cudaEventDestroy = unsafe extern "C" fn(event: cudaEvent_t) -> cudaError_t;
+/// Function-pointer type for the Runtime API entry-point `cudaEventRecord`.
 pub type PFN_cudaEventRecord =
     unsafe extern "C" fn(event: cudaEvent_t, stream: cudaStream_t) -> cudaError_t;
+/// Function-pointer type for the Runtime API entry-point `cudaEventSynchronize`.
 pub type PFN_cudaEventSynchronize = unsafe extern "C" fn(event: cudaEvent_t) -> cudaError_t;
+/// Function-pointer type for the Runtime API entry-point `cudaEventQuery`.
 pub type PFN_cudaEventQuery = unsafe extern "C" fn(event: cudaEvent_t) -> cudaError_t;
+/// Function-pointer type for the Runtime API entry-point `cudaEventElapsedTime`.
 pub type PFN_cudaEventElapsedTime =
     unsafe extern "C" fn(ms: *mut f32, start: cudaEvent_t, end: cudaEvent_t) -> cudaError_t;
 
 // ---- kernel launch --------------------------------------------------------
 
+/// Function-pointer type for the Runtime API entry-point `cudaLaunchKernel`.
 pub type PFN_cudaLaunchKernel = unsafe extern "C" fn(
     func: *const c_void,
     grid_dim: dim3,
@@ -100,6 +134,7 @@ pub type PFN_cudaLaunchKernel = unsafe extern "C" fn(
 
 // ---- library management (CUDA 12.0+) --------------------------------------
 
+/// Function-pointer type for the Runtime API entry-point `cudaLibraryLoadData`.
 pub type PFN_cudaLibraryLoadData = unsafe extern "C" fn(
     library: *mut cudaLibrary_t,
     code: *const c_void,
@@ -110,7 +145,9 @@ pub type PFN_cudaLibraryLoadData = unsafe extern "C" fn(
     library_option_values: *mut *mut c_void,
     num_library_options: c_uint,
 ) -> cudaError_t;
+/// Function-pointer type for the Runtime API entry-point `cudaLibraryUnload`.
 pub type PFN_cudaLibraryUnload = unsafe extern "C" fn(library: cudaLibrary_t) -> cudaError_t;
+/// Function-pointer type for the Runtime API entry-point `cudaLibraryGetKernel`.
 pub type PFN_cudaLibraryGetKernel = unsafe extern "C" fn(
     kernel: *mut cudaKernel_t,
     library: cudaLibrary_t,
@@ -119,30 +156,38 @@ pub type PFN_cudaLibraryGetKernel = unsafe extern "C" fn(
 
 // ---- Stream extras --------------------------------------------------------
 
+/// Function-pointer type for the Runtime API entry-point `cudaStreamCreateWithPriority`.
 pub type PFN_cudaStreamCreateWithPriority =
     unsafe extern "C" fn(stream: *mut cudaStream_t, flags: c_uint, priority: c_int) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaStreamGetPriority`.
 pub type PFN_cudaStreamGetPriority =
     unsafe extern "C" fn(stream: cudaStream_t, priority: *mut c_int) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaStreamGetFlags`.
 pub type PFN_cudaStreamGetFlags =
     unsafe extern "C" fn(stream: cudaStream_t, flags: *mut c_uint) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaDeviceGetStreamPriorityRange`.
 pub type PFN_cudaDeviceGetStreamPriorityRange =
     unsafe extern "C" fn(least_priority: *mut c_int, greatest_priority: *mut c_int) -> cudaError_t;
 
 // ---- Peer access ----------------------------------------------------------
 
+/// Function-pointer type for the Runtime API entry-point `cudaDeviceCanAccessPeer`.
 pub type PFN_cudaDeviceCanAccessPeer =
     unsafe extern "C" fn(can_access: *mut c_int, device: c_int, peer_device: c_int) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaDeviceEnablePeerAccess`.
 pub type PFN_cudaDeviceEnablePeerAccess =
     unsafe extern "C" fn(peer_device: c_int, flags: c_uint) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaDeviceDisablePeerAccess`.
 pub type PFN_cudaDeviceDisablePeerAccess = unsafe extern "C" fn(peer_device: c_int) -> cudaError_t;
 
 // ---- Mem prefetch / advise -----------------------------------------------
 
+/// Function-pointer type for the Runtime API entry-point `cudaMemPrefetchAsync`.
 pub type PFN_cudaMemPrefetchAsync = unsafe extern "C" fn(
     dev_ptr: *const c_void,
     count: usize,
@@ -150,6 +195,7 @@ pub type PFN_cudaMemPrefetchAsync = unsafe extern "C" fn(
     stream: cudaStream_t,
 ) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaMemAdvise`.
 pub type PFN_cudaMemAdvise = unsafe extern "C" fn(
     dev_ptr: *const c_void,
     count: usize,
@@ -157,41 +203,51 @@ pub type PFN_cudaMemAdvise = unsafe extern "C" fn(
     device: c_int,
 ) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaMemGetInfo`.
 pub type PFN_cudaMemGetInfo =
     unsafe extern "C" fn(free: *mut usize, total: *mut usize) -> cudaError_t;
 
 // ---- Managed + pinned memory ---------------------------------------------
 
+/// Function-pointer type for the Runtime API entry-point `cudaMallocHost`.
 pub type PFN_cudaMallocHost =
     unsafe extern "C" fn(pp: *mut *mut c_void, size: usize) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaFreeHost`.
 pub type PFN_cudaFreeHost = unsafe extern "C" fn(ptr: *mut c_void) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaHostAlloc`.
 pub type PFN_cudaHostAlloc =
     unsafe extern "C" fn(pp: *mut *mut c_void, size: usize, flags: c_uint) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaHostRegister`.
 pub type PFN_cudaHostRegister =
     unsafe extern "C" fn(ptr: *mut c_void, size: usize, flags: c_uint) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaHostUnregister`.
 pub type PFN_cudaHostUnregister = unsafe extern "C" fn(ptr: *mut c_void) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaHostGetDevicePointer`.
 pub type PFN_cudaHostGetDevicePointer = unsafe extern "C" fn(
     dev_ptr: *mut *mut c_void,
     host_ptr: *mut c_void,
     flags: c_uint,
 ) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaHostGetFlags`.
 pub type PFN_cudaHostGetFlags =
     unsafe extern "C" fn(flags: *mut c_uint, host_ptr: *mut c_void) -> cudaError_t;
 
 // ---- Async alloc / free (CUDA 11.2+) --------------------------------------
 
+/// Function-pointer type for the Runtime API entry-point `cudaMallocAsync`.
 pub type PFN_cudaMallocAsync = unsafe extern "C" fn(
     dev_ptr: *mut *mut c_void,
     size: usize,
     stream: cudaStream_t,
 ) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaFreeAsync`.
 pub type PFN_cudaFreeAsync =
     unsafe extern "C" fn(dev_ptr: *mut c_void, stream: cudaStream_t) -> cudaError_t;
 
@@ -199,49 +255,62 @@ pub type PFN_cudaFreeAsync =
 
 use super::types::{cudaGraphExec_t, cudaGraphNode_t, cudaGraph_t};
 
+/// Function-pointer type for the Runtime API entry-point `cudaGraphCreate`.
 pub type PFN_cudaGraphCreate =
     unsafe extern "C" fn(graph: *mut cudaGraph_t, flags: c_uint) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaGraphDestroy`.
 pub type PFN_cudaGraphDestroy = unsafe extern "C" fn(graph: cudaGraph_t) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaGraphInstantiate`.
 pub type PFN_cudaGraphInstantiate = unsafe extern "C" fn(
     graph_exec: *mut cudaGraphExec_t,
     graph: cudaGraph_t,
     flags: u64,
 ) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaGraphLaunch`.
 pub type PFN_cudaGraphLaunch =
     unsafe extern "C" fn(graph_exec: cudaGraphExec_t, stream: cudaStream_t) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaGraphExecDestroy`.
 pub type PFN_cudaGraphExecDestroy =
     unsafe extern "C" fn(graph_exec: cudaGraphExec_t) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaGraphGetNodes`.
 pub type PFN_cudaGraphGetNodes = unsafe extern "C" fn(
     graph: cudaGraph_t,
     nodes: *mut cudaGraphNode_t,
     num_nodes: *mut usize,
 ) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaStreamBeginCapture`.
 pub type PFN_cudaStreamBeginCapture =
     unsafe extern "C" fn(stream: cudaStream_t, mode: c_int) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaStreamEndCapture`.
 pub type PFN_cudaStreamEndCapture =
     unsafe extern "C" fn(stream: cudaStream_t, graph: *mut cudaGraph_t) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaStreamIsCapturing`.
 pub type PFN_cudaStreamIsCapturing =
     unsafe extern "C" fn(stream: cudaStream_t, status: *mut c_int) -> cudaError_t;
 
 // ---- Function-symbol lookup + func attrs + occupancy ----------------------
 
+/// Function-pointer type for the Runtime API entry-point `cudaGetFuncBySymbol`.
 pub type PFN_cudaGetFuncBySymbol =
     unsafe extern "C" fn(func: *mut *mut c_void, symbol: *const c_void) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaFuncGetAttributes`.
 pub type PFN_cudaFuncGetAttributes =
     unsafe extern "C" fn(attr: *mut c_void, func: *const c_void) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaFuncSetAttribute`.
 pub type PFN_cudaFuncSetAttribute =
     unsafe extern "C" fn(func: *const c_void, attr: c_int, value: c_int) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaOccupancyMaxActiveBlocksPerMultiprocessor`.
 pub type PFN_cudaOccupancyMaxActiveBlocksPerMultiprocessor = unsafe extern "C" fn(
     num_blocks: *mut c_int,
     func: *const c_void,
@@ -249,6 +318,7 @@ pub type PFN_cudaOccupancyMaxActiveBlocksPerMultiprocessor = unsafe extern "C" f
     dynamic_smem_bytes: usize,
 ) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaOccupancyMaxPotentialBlockSize`.
 pub type PFN_cudaOccupancyMaxPotentialBlockSize = unsafe extern "C" fn(
     min_grid_size: *mut c_int,
     block_size: *mut c_int,
@@ -260,11 +330,13 @@ pub type PFN_cudaOccupancyMaxPotentialBlockSize = unsafe extern "C" fn(
 
 // ---- Pointer attributes ---------------------------------------------------
 
+/// Function-pointer type for the Runtime API entry-point `cudaPointerGetAttributes`.
 pub type PFN_cudaPointerGetAttributes =
     unsafe extern "C" fn(attrs: *mut c_void, ptr: *const c_void) -> cudaError_t;
 
 // ---- 2-D memcpy + memset variants + async memset -------------------------
 
+/// Function-pointer type for the Runtime API entry-point `cudaMemcpy2D`.
 pub type PFN_cudaMemcpy2D = unsafe extern "C" fn(
     dst: *mut c_void,
     dst_pitch: usize,
@@ -275,6 +347,7 @@ pub type PFN_cudaMemcpy2D = unsafe extern "C" fn(
     kind: cudaMemcpyKind,
 ) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaMemcpy2DAsync`.
 pub type PFN_cudaMemcpy2DAsync = unsafe extern "C" fn(
     dst: *mut c_void,
     dst_pitch: usize,
@@ -286,6 +359,7 @@ pub type PFN_cudaMemcpy2DAsync = unsafe extern "C" fn(
     stream: cudaStream_t,
 ) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaMallocPitch`.
 pub type PFN_cudaMallocPitch = unsafe extern "C" fn(
     dev_ptr: *mut *mut c_void,
     pitch: *mut usize,
@@ -293,6 +367,7 @@ pub type PFN_cudaMallocPitch = unsafe extern "C" fn(
     height: usize,
 ) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaMemset2D`.
 pub type PFN_cudaMemset2D = unsafe extern "C" fn(
     dev_ptr: *mut c_void,
     pitch: usize,
@@ -301,6 +376,7 @@ pub type PFN_cudaMemset2D = unsafe extern "C" fn(
     height: usize,
 ) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaMemset2DAsync`.
 pub type PFN_cudaMemset2DAsync = unsafe extern "C" fn(
     dev_ptr: *mut c_void,
     pitch: usize,
@@ -312,6 +388,7 @@ pub type PFN_cudaMemset2DAsync = unsafe extern "C" fn(
 
 // ---- Peer memcpy ---------------------------------------------------------
 
+/// Function-pointer type for the Runtime API entry-point `cudaMemcpyPeer`.
 pub type PFN_cudaMemcpyPeer = unsafe extern "C" fn(
     dst: *mut c_void,
     dst_device: c_int,
@@ -320,6 +397,7 @@ pub type PFN_cudaMemcpyPeer = unsafe extern "C" fn(
     count: usize,
 ) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaMemcpyPeerAsync`.
 pub type PFN_cudaMemcpyPeerAsync = unsafe extern "C" fn(
     dst: *mut c_void,
     dst_device: c_int,
@@ -348,34 +426,41 @@ pub type PFN_cudaGetDeviceProperties =
 
 use super::types::{cudaExternalMemory_t, cudaExternalSemaphore_t};
 
+/// Function-pointer type for the Runtime API entry-point `cudaImportExternalMemory`.
 pub type PFN_cudaImportExternalMemory = unsafe extern "C" fn(
     mem_out: *mut cudaExternalMemory_t,
     mem_handle_desc: *const crate::types::CUDA_EXTERNAL_MEMORY_HANDLE_DESC,
 ) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaDestroyExternalMemory`.
 pub type PFN_cudaDestroyExternalMemory =
     unsafe extern "C" fn(mem: cudaExternalMemory_t) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaExternalMemoryGetMappedBuffer`.
 pub type PFN_cudaExternalMemoryGetMappedBuffer = unsafe extern "C" fn(
     dev_ptr: *mut *mut c_void,
     mem: cudaExternalMemory_t,
     buf_desc: *const crate::types::CUDA_EXTERNAL_MEMORY_BUFFER_DESC,
 ) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaExternalMemoryGetMappedMipmappedArray`.
 pub type PFN_cudaExternalMemoryGetMappedMipmappedArray = unsafe extern "C" fn(
     mipmap: *mut c_void,
     mem: cudaExternalMemory_t,
     mipmap_desc: *const c_void,
 ) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaImportExternalSemaphore`.
 pub type PFN_cudaImportExternalSemaphore = unsafe extern "C" fn(
     sem_out: *mut cudaExternalSemaphore_t,
     sem_handle_desc: *const crate::types::CUDA_EXTERNAL_SEMAPHORE_HANDLE_DESC,
 ) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaDestroyExternalSemaphore`.
 pub type PFN_cudaDestroyExternalSemaphore =
     unsafe extern "C" fn(sem: cudaExternalSemaphore_t) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaSignalExternalSemaphoresAsync`.
 pub type PFN_cudaSignalExternalSemaphoresAsync = unsafe extern "C" fn(
     ext_sem_array: *const cudaExternalSemaphore_t,
     params_array: *const crate::types::CUDA_EXTERNAL_SEMAPHORE_SIGNAL_PARAMS,
@@ -383,6 +468,7 @@ pub type PFN_cudaSignalExternalSemaphoresAsync = unsafe extern "C" fn(
     stream: cudaStream_t,
 ) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaWaitExternalSemaphoresAsync`.
 pub type PFN_cudaWaitExternalSemaphoresAsync = unsafe extern "C" fn(
     ext_sem_array: *const cudaExternalSemaphore_t,
     params_array: *const crate::types::CUDA_EXTERNAL_SEMAPHORE_WAIT_PARAMS,
@@ -398,12 +484,14 @@ use super::types::{
     cudaMemPool_t, cudaMemsetParams,
 };
 
+/// Function-pointer type for the Runtime API entry-point `cudaLaunchHostFunc`.
 pub type PFN_cudaLaunchHostFunc = unsafe extern "C" fn(
     stream: cudaStream_t,
     fn_ptr: cudaHostFn_t,
     user_data: *mut c_void,
 ) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaStreamWriteValue32`.
 pub type PFN_cudaStreamWriteValue32 = unsafe extern "C" fn(
     stream: cudaStream_t,
     addr: *mut c_void,
@@ -411,6 +499,7 @@ pub type PFN_cudaStreamWriteValue32 = unsafe extern "C" fn(
     flags: c_uint,
 ) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaStreamWriteValue64`.
 pub type PFN_cudaStreamWriteValue64 = unsafe extern "C" fn(
     stream: cudaStream_t,
     addr: *mut c_void,
@@ -418,6 +507,7 @@ pub type PFN_cudaStreamWriteValue64 = unsafe extern "C" fn(
     flags: c_uint,
 ) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaStreamWaitValue32`.
 pub type PFN_cudaStreamWaitValue32 = unsafe extern "C" fn(
     stream: cudaStream_t,
     addr: *mut c_void,
@@ -425,6 +515,7 @@ pub type PFN_cudaStreamWaitValue32 = unsafe extern "C" fn(
     flags: c_uint,
 ) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaStreamWaitValue64`.
 pub type PFN_cudaStreamWaitValue64 = unsafe extern "C" fn(
     stream: cudaStream_t,
     addr: *mut c_void,
@@ -434,32 +525,40 @@ pub type PFN_cudaStreamWaitValue64 = unsafe extern "C" fn(
 
 // ---- Memory pools --------------------------------------------------------
 
+/// Function-pointer type for the Runtime API entry-point `cudaMemPoolCreate`.
 pub type PFN_cudaMemPoolCreate =
     unsafe extern "C" fn(pool: *mut cudaMemPool_t, props: *const cudaMemPoolProps) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaMemPoolDestroy`.
 pub type PFN_cudaMemPoolDestroy = unsafe extern "C" fn(pool: cudaMemPool_t) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaMemPoolSetAttribute`.
 pub type PFN_cudaMemPoolSetAttribute =
     unsafe extern "C" fn(pool: cudaMemPool_t, attr: c_int, value: *mut c_void) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaMemPoolGetAttribute`.
 pub type PFN_cudaMemPoolGetAttribute =
     unsafe extern "C" fn(pool: cudaMemPool_t, attr: c_int, value: *mut c_void) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaMemPoolTrimTo`.
 pub type PFN_cudaMemPoolTrimTo =
     unsafe extern "C" fn(pool: cudaMemPool_t, min_bytes_to_keep: usize) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaMemPoolSetAccess`.
 pub type PFN_cudaMemPoolSetAccess = unsafe extern "C" fn(
     pool: cudaMemPool_t,
     desc_list: *const cudaMemAccessDesc,
     count: usize,
 ) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaMemPoolGetAccess`.
 pub type PFN_cudaMemPoolGetAccess = unsafe extern "C" fn(
     flags: *mut c_int,
     pool: cudaMemPool_t,
     location: *mut cudaMemLocation,
 ) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaMallocFromPoolAsync`.
 pub type PFN_cudaMallocFromPoolAsync = unsafe extern "C" fn(
     dev_ptr: *mut *mut c_void,
     size: usize,
@@ -467,15 +566,19 @@ pub type PFN_cudaMallocFromPoolAsync = unsafe extern "C" fn(
     stream: cudaStream_t,
 ) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaDeviceGetDefaultMemPool`.
 pub type PFN_cudaDeviceGetDefaultMemPool =
     unsafe extern "C" fn(pool: *mut cudaMemPool_t, device: c_int) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaDeviceGetMemPool`.
 pub type PFN_cudaDeviceGetMemPool =
     unsafe extern "C" fn(pool: *mut cudaMemPool_t, device: c_int) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaDeviceSetMemPool`.
 pub type PFN_cudaDeviceSetMemPool =
     unsafe extern "C" fn(device: c_int, pool: cudaMemPool_t) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaMemPoolExportToShareableHandle`.
 pub type PFN_cudaMemPoolExportToShareableHandle = unsafe extern "C" fn(
     shareable: *mut c_void,
     pool: cudaMemPool_t,
@@ -483,6 +586,7 @@ pub type PFN_cudaMemPoolExportToShareableHandle = unsafe extern "C" fn(
     flags: c_uint,
 ) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaMemPoolImportFromShareableHandle`.
 pub type PFN_cudaMemPoolImportFromShareableHandle = unsafe extern "C" fn(
     pool: *mut cudaMemPool_t,
     shareable: *mut c_void,
@@ -490,11 +594,13 @@ pub type PFN_cudaMemPoolImportFromShareableHandle = unsafe extern "C" fn(
     flags: c_uint,
 ) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaMemPoolExportPointer`.
 pub type PFN_cudaMemPoolExportPointer = unsafe extern "C" fn(
     export_data: *mut cudaMemPoolPtrExportData,
     ptr: *mut c_void,
 ) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaMemPoolImportPointer`.
 pub type PFN_cudaMemPoolImportPointer = unsafe extern "C" fn(
     ptr: *mut *mut c_void,
     pool: cudaMemPool_t,
@@ -503,6 +609,7 @@ pub type PFN_cudaMemPoolImportPointer = unsafe extern "C" fn(
 
 // ---- Explicit graph node builders ----------------------------------------
 
+/// Function-pointer type for the Runtime API entry-point `cudaGraphAddKernelNode`.
 pub type PFN_cudaGraphAddKernelNode = unsafe extern "C" fn(
     graph_node: *mut cudaGraphNode_t,
     graph: cudaGraph_t,
@@ -511,6 +618,7 @@ pub type PFN_cudaGraphAddKernelNode = unsafe extern "C" fn(
     node_params: *const cudaKernelNodeParams,
 ) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaGraphAddMemsetNode`.
 pub type PFN_cudaGraphAddMemsetNode = unsafe extern "C" fn(
     graph_node: *mut cudaGraphNode_t,
     graph: cudaGraph_t,
@@ -519,6 +627,7 @@ pub type PFN_cudaGraphAddMemsetNode = unsafe extern "C" fn(
     node_params: *const cudaMemsetParams,
 ) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaGraphAddMemcpyNode`.
 pub type PFN_cudaGraphAddMemcpyNode = unsafe extern "C" fn(
     graph_node: *mut cudaGraphNode_t,
     graph: cudaGraph_t,
@@ -527,6 +636,7 @@ pub type PFN_cudaGraphAddMemcpyNode = unsafe extern "C" fn(
     node_params: *const c_void, // cudaMemcpy3DParms — opaque here
 ) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaGraphAddHostNode`.
 pub type PFN_cudaGraphAddHostNode = unsafe extern "C" fn(
     graph_node: *mut cudaGraphNode_t,
     graph: cudaGraph_t,
@@ -535,6 +645,7 @@ pub type PFN_cudaGraphAddHostNode = unsafe extern "C" fn(
     node_params: *const cudaHostNodeParams,
 ) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaGraphAddEmptyNode`.
 pub type PFN_cudaGraphAddEmptyNode = unsafe extern "C" fn(
     graph_node: *mut cudaGraphNode_t,
     graph: cudaGraph_t,
@@ -542,6 +653,7 @@ pub type PFN_cudaGraphAddEmptyNode = unsafe extern "C" fn(
     num_dependencies: usize,
 ) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaGraphAddChildGraphNode`.
 pub type PFN_cudaGraphAddChildGraphNode = unsafe extern "C" fn(
     graph_node: *mut cudaGraphNode_t,
     graph: cudaGraph_t,
@@ -550,6 +662,7 @@ pub type PFN_cudaGraphAddChildGraphNode = unsafe extern "C" fn(
     child_graph: cudaGraph_t,
 ) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaGraphAddEventRecordNode`.
 pub type PFN_cudaGraphAddEventRecordNode = unsafe extern "C" fn(
     graph_node: *mut cudaGraphNode_t,
     graph: cudaGraph_t,
@@ -558,6 +671,7 @@ pub type PFN_cudaGraphAddEventRecordNode = unsafe extern "C" fn(
     event: cudaEvent_t,
 ) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaGraphAddEventWaitNode`.
 pub type PFN_cudaGraphAddEventWaitNode = unsafe extern "C" fn(
     graph_node: *mut cudaGraphNode_t,
     graph: cudaGraph_t,
@@ -566,6 +680,7 @@ pub type PFN_cudaGraphAddEventWaitNode = unsafe extern "C" fn(
     event: cudaEvent_t,
 ) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaGraphAddMemAllocNode`.
 pub type PFN_cudaGraphAddMemAllocNode = unsafe extern "C" fn(
     graph_node: *mut cudaGraphNode_t,
     graph: cudaGraph_t,
@@ -574,6 +689,7 @@ pub type PFN_cudaGraphAddMemAllocNode = unsafe extern "C" fn(
     node_params: *mut cudaMemAllocNodeParams,
 ) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaGraphAddMemFreeNode`.
 pub type PFN_cudaGraphAddMemFreeNode = unsafe extern "C" fn(
     graph_node: *mut cudaGraphNode_t,
     graph: cudaGraph_t,
@@ -584,6 +700,7 @@ pub type PFN_cudaGraphAddMemFreeNode = unsafe extern "C" fn(
 
 // ---- Graph exec update + dependency helpers -----------------------------
 
+/// Function-pointer type for the Runtime API entry-point `cudaGraphExecUpdate`.
 pub type PFN_cudaGraphExecUpdate = unsafe extern "C" fn(
     graph_exec: cudaGraphExec_t,
     graph: cudaGraph_t,
@@ -591,6 +708,7 @@ pub type PFN_cudaGraphExecUpdate = unsafe extern "C" fn(
     result: *mut c_int,
 ) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaGraphAddDependencies`.
 pub type PFN_cudaGraphAddDependencies = unsafe extern "C" fn(
     graph: cudaGraph_t,
     from: *const cudaGraphNode_t,
@@ -598,9 +716,11 @@ pub type PFN_cudaGraphAddDependencies = unsafe extern "C" fn(
     num_dependencies: usize,
 ) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaGraphMemFreeNodeGetParams`.
 pub type PFN_cudaGraphMemFreeNodeGetParams =
     unsafe extern "C" fn(node: cudaGraphNode_t, dptr_out: *mut *mut c_void) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaGraphNodeGetType`.
 pub type PFN_cudaGraphNodeGetType =
     unsafe extern "C" fn(node: cudaGraphNode_t, type_out: *mut c_int) -> cudaError_t;
 
@@ -608,6 +728,7 @@ pub type PFN_cudaGraphNodeGetType =
 
 use super::types::{cudaArray_t, cudaUserObject_t};
 
+/// Function-pointer type for the Runtime API entry-point `cudaMallocArray`.
 pub type PFN_cudaMallocArray = unsafe extern "C" fn(
     array: *mut cudaArray_t,
     desc: *const c_void, // cudaChannelFormatDesc — 20 bytes
@@ -616,8 +737,10 @@ pub type PFN_cudaMallocArray = unsafe extern "C" fn(
     flags: c_uint,
 ) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaFreeArray`.
 pub type PFN_cudaFreeArray = unsafe extern "C" fn(array: cudaArray_t) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaMemcpy2DToArray`.
 pub type PFN_cudaMemcpy2DToArray = unsafe extern "C" fn(
     dst: cudaArray_t,
     w_offset: usize,
@@ -629,6 +752,7 @@ pub type PFN_cudaMemcpy2DToArray = unsafe extern "C" fn(
     kind: cudaMemcpyKind,
 ) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaMemcpy2DFromArray`.
 pub type PFN_cudaMemcpy2DFromArray = unsafe extern "C" fn(
     dst: *mut c_void,
     dpitch: usize,
@@ -640,6 +764,7 @@ pub type PFN_cudaMemcpy2DFromArray = unsafe extern "C" fn(
     kind: cudaMemcpyKind,
 ) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaCreateTextureObject`.
 pub type PFN_cudaCreateTextureObject = unsafe extern "C" fn(
     tex_out: *mut u64,
     resource_desc: *const c_void,
@@ -647,14 +772,18 @@ pub type PFN_cudaCreateTextureObject = unsafe extern "C" fn(
     resource_view_desc: *const c_void,
 ) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaDestroyTextureObject`.
 pub type PFN_cudaDestroyTextureObject = unsafe extern "C" fn(tex: u64) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaCreateSurfaceObject`.
 pub type PFN_cudaCreateSurfaceObject =
     unsafe extern "C" fn(surf_out: *mut u64, resource_desc: *const c_void) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaDestroySurfaceObject`.
 pub type PFN_cudaDestroySurfaceObject = unsafe extern "C" fn(surf: u64) -> cudaError_t;
 
 // User objects for graphs
+/// Function-pointer type for the Runtime API entry-point `cudaUserObjectCreate`.
 pub type PFN_cudaUserObjectCreate = unsafe extern "C" fn(
     object_out: *mut cudaUserObject_t,
     ptr: *mut c_void,
@@ -663,12 +792,15 @@ pub type PFN_cudaUserObjectCreate = unsafe extern "C" fn(
     flags: c_uint,
 ) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaUserObjectRetain`.
 pub type PFN_cudaUserObjectRetain =
     unsafe extern "C" fn(object: cudaUserObject_t, count: c_uint) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaUserObjectRelease`.
 pub type PFN_cudaUserObjectRelease =
     unsafe extern "C" fn(object: cudaUserObject_t, count: c_uint) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaGraphRetainUserObject`.
 pub type PFN_cudaGraphRetainUserObject = unsafe extern "C" fn(
     graph: cudaGraph_t,
     object: cudaUserObject_t,
@@ -676,6 +808,7 @@ pub type PFN_cudaGraphRetainUserObject = unsafe extern "C" fn(
     flags: c_uint,
 ) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaGraphReleaseUserObject`.
 pub type PFN_cudaGraphReleaseUserObject = unsafe extern "C" fn(
     graph: cudaGraph_t,
     object: cudaUserObject_t,
@@ -683,6 +816,7 @@ pub type PFN_cudaGraphReleaseUserObject = unsafe extern "C" fn(
 ) -> cudaError_t;
 
 // Cooperative launch
+/// Function-pointer type for the Runtime API entry-point `cudaLaunchCooperativeKernel`.
 pub type PFN_cudaLaunchCooperativeKernel = unsafe extern "C" fn(
     func: *const c_void,
     grid_dim: super::types::dim3,
@@ -693,6 +827,7 @@ pub type PFN_cudaLaunchCooperativeKernel = unsafe extern "C" fn(
 ) -> cudaError_t;
 
 // Stream attach
+/// Function-pointer type for the Runtime API entry-point `cudaStreamAttachMemAsync`.
 pub type PFN_cudaStreamAttachMemAsync = unsafe extern "C" fn(
     stream: cudaStream_t,
     dev_ptr: *mut c_void,
@@ -701,45 +836,56 @@ pub type PFN_cudaStreamAttachMemAsync = unsafe extern "C" fn(
 ) -> cudaError_t;
 
 // Stream attrs
+/// Function-pointer type for the Runtime API entry-point `cudaStreamGetAttribute`.
 pub type PFN_cudaStreamGetAttribute =
     unsafe extern "C" fn(stream: cudaStream_t, attr: c_int, value_out: *mut c_void) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaStreamSetAttribute`.
 pub type PFN_cudaStreamSetAttribute =
     unsafe extern "C" fn(stream: cudaStream_t, attr: c_int, value: *const c_void) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaStreamCopyAttributes`.
 pub type PFN_cudaStreamCopyAttributes =
     unsafe extern "C" fn(dst: cudaStream_t, src: cudaStream_t) -> cudaError_t;
 
 // IPC
+/// Function-pointer type for the Runtime API entry-point `cudaIpcGetEventHandle`.
 pub type PFN_cudaIpcGetEventHandle = unsafe extern "C" fn(
     handle_out: *mut crate::types::CUipcEventHandle,
     event: cudaEvent_t,
 ) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaIpcOpenEventHandle`.
 pub type PFN_cudaIpcOpenEventHandle = unsafe extern "C" fn(
     event_out: *mut cudaEvent_t,
     handle: crate::types::CUipcEventHandle,
 ) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaIpcGetMemHandle`.
 pub type PFN_cudaIpcGetMemHandle = unsafe extern "C" fn(
     handle_out: *mut crate::types::CUipcMemHandle,
     dev_ptr: *mut c_void,
 ) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaIpcOpenMemHandle`.
 pub type PFN_cudaIpcOpenMemHandle = unsafe extern "C" fn(
     dev_ptr_out: *mut *mut c_void,
     handle: crate::types::CUipcMemHandle,
     flags: c_uint,
 ) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaIpcCloseMemHandle`.
 pub type PFN_cudaIpcCloseMemHandle = unsafe extern "C" fn(dev_ptr: *mut c_void) -> cudaError_t;
 
 // Device flags
+/// Function-pointer type for the Runtime API entry-point `cudaSetDeviceFlags`.
 pub type PFN_cudaSetDeviceFlags = unsafe extern "C" fn(flags: c_uint) -> cudaError_t;
+/// Function-pointer type for the Runtime API entry-point `cudaGetDeviceFlags`.
 pub type PFN_cudaGetDeviceFlags = unsafe extern "C" fn(flags_out: *mut c_uint) -> cudaError_t;
 
 // ---- Runtime Wave 3: batch mem ops + conditional nodes + driver bridge + occupancy ----
 
+/// Function-pointer type for the Runtime API entry-point `cudaStreamBatchMemOp`.
 pub type PFN_cudaStreamBatchMemOp = unsafe extern "C" fn(
     stream: cudaStream_t,
     count: c_uint,
@@ -747,6 +893,7 @@ pub type PFN_cudaStreamBatchMemOp = unsafe extern "C" fn(
     flags: c_uint,
 ) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaGraphAddNode`.
 pub type PFN_cudaGraphAddNode = unsafe extern "C" fn(
     graph_node: *mut cudaGraphNode_t,
     graph: cudaGraph_t,
@@ -755,6 +902,7 @@ pub type PFN_cudaGraphAddNode = unsafe extern "C" fn(
     node_params: *mut c_void,
 ) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaGraphConditionalHandleCreate`.
 pub type PFN_cudaGraphConditionalHandleCreate = unsafe extern "C" fn(
     handle_out: *mut u64,
     graph: cudaGraph_t,
@@ -762,6 +910,7 @@ pub type PFN_cudaGraphConditionalHandleCreate = unsafe extern "C" fn(
     flags: c_uint,
 ) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaGetDriverEntryPoint`.
 pub type PFN_cudaGetDriverEntryPoint = unsafe extern "C" fn(
     symbol: *const c_char,
     fn_ptr_out: *mut *mut c_void,
@@ -769,6 +918,7 @@ pub type PFN_cudaGetDriverEntryPoint = unsafe extern "C" fn(
     driver_status: *mut c_int,
 ) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaOccupancyMaxActiveBlocksPerMultiprocessorWithFlags`.
 pub type PFN_cudaOccupancyMaxActiveBlocksPerMultiprocessorWithFlags =
     unsafe extern "C" fn(
         num_blocks: *mut c_int,
@@ -778,6 +928,7 @@ pub type PFN_cudaOccupancyMaxActiveBlocksPerMultiprocessorWithFlags =
         flags: c_uint,
     ) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaOccupancyAvailableDynamicSMemPerBlock`.
 pub type PFN_cudaOccupancyAvailableDynamicSMemPerBlock = unsafe extern "C" fn(
     dynamic_smem_size: *mut usize,
     func: *const c_void,
@@ -794,27 +945,32 @@ use crate::CUgraphicsResource as cudaGraphicsResource_t;
 
 // -- Core graphics (shared across GL / D3D / VDPAU / EGL) --
 
+/// Function-pointer type for the Runtime API entry-point `cudaGraphicsUnregisterResource`.
 pub type PFN_cudaGraphicsUnregisterResource =
     unsafe extern "C" fn(resource: cudaGraphicsResource_t) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaGraphicsMapResources`.
 pub type PFN_cudaGraphicsMapResources = unsafe extern "C" fn(
     count: c_int,
     resources: *mut cudaGraphicsResource_t,
     stream: cudaStream_t,
 ) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaGraphicsUnmapResources`.
 pub type PFN_cudaGraphicsUnmapResources = unsafe extern "C" fn(
     count: c_int,
     resources: *mut cudaGraphicsResource_t,
     stream: cudaStream_t,
 ) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaGraphicsResourceGetMappedPointer`.
 pub type PFN_cudaGraphicsResourceGetMappedPointer = unsafe extern "C" fn(
     dev_ptr_out: *mut *mut c_void,
     size_out: *mut usize,
     resource: cudaGraphicsResource_t,
 ) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaGraphicsSubResourceGetMappedArray`.
 pub type PFN_cudaGraphicsSubResourceGetMappedArray = unsafe extern "C" fn(
     array_out: *mut *mut c_void, // cudaArray_t
     resource: cudaGraphicsResource_t,
@@ -822,22 +978,26 @@ pub type PFN_cudaGraphicsSubResourceGetMappedArray = unsafe extern "C" fn(
     mip_level: c_uint,
 ) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaGraphicsResourceGetMappedMipmappedArray`.
 pub type PFN_cudaGraphicsResourceGetMappedMipmappedArray = unsafe extern "C" fn(
     mipmap_out: *mut *mut c_void, // cudaMipmappedArray_t
     resource: cudaGraphicsResource_t,
 ) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaGraphicsResourceSetMapFlags`.
 pub type PFN_cudaGraphicsResourceSetMapFlags =
     unsafe extern "C" fn(resource: cudaGraphicsResource_t, flags: c_uint) -> cudaError_t;
 
 // -- OpenGL --
 
+/// Function-pointer type for the Runtime API entry-point `cudaGraphicsGLRegisterBuffer`.
 pub type PFN_cudaGraphicsGLRegisterBuffer = unsafe extern "C" fn(
     resource_out: *mut cudaGraphicsResource_t,
     buffer: c_uint, // GLuint
     flags: c_uint,
 ) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaGraphicsGLRegisterImage`.
 pub type PFN_cudaGraphicsGLRegisterImage = unsafe extern "C" fn(
     resource_out: *mut cudaGraphicsResource_t,
     image: c_uint,  // GLuint
@@ -845,6 +1005,7 @@ pub type PFN_cudaGraphicsGLRegisterImage = unsafe extern "C" fn(
     flags: c_uint,
 ) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaGLGetDevices`.
 pub type PFN_cudaGLGetDevices = unsafe extern "C" fn(
     cuda_device_count_out: *mut c_uint,
     cuda_devices: *mut c_int,
@@ -854,9 +1015,11 @@ pub type PFN_cudaGLGetDevices = unsafe extern "C" fn(
 
 // -- D3D9 / D3D10 / D3D11 --
 
+/// Function-pointer type for the Runtime API entry-point `cudaD3D9GetDevice`.
 pub type PFN_cudaD3D9GetDevice =
     unsafe extern "C" fn(device_out: *mut c_int, adapter_name: *const c_char) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaD3D9GetDevices`.
 pub type PFN_cudaD3D9GetDevices = unsafe extern "C" fn(
     cuda_device_count_out: *mut c_uint,
     cuda_devices: *mut c_int,
@@ -865,15 +1028,18 @@ pub type PFN_cudaD3D9GetDevices = unsafe extern "C" fn(
     device_list: c_uint,
 ) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaGraphicsD3D9RegisterResource`.
 pub type PFN_cudaGraphicsD3D9RegisterResource = unsafe extern "C" fn(
     resource_out: *mut cudaGraphicsResource_t,
     d3d_resource: *mut c_void,
     flags: c_uint,
 ) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaD3D10GetDevice`.
 pub type PFN_cudaD3D10GetDevice =
     unsafe extern "C" fn(device_out: *mut c_int, adapter: *mut c_void) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaD3D10GetDevices`.
 pub type PFN_cudaD3D10GetDevices = unsafe extern "C" fn(
     cuda_device_count_out: *mut c_uint,
     cuda_devices: *mut c_int,
@@ -882,15 +1048,18 @@ pub type PFN_cudaD3D10GetDevices = unsafe extern "C" fn(
     device_list: c_uint,
 ) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaGraphicsD3D10RegisterResource`.
 pub type PFN_cudaGraphicsD3D10RegisterResource = unsafe extern "C" fn(
     resource_out: *mut cudaGraphicsResource_t,
     d3d_resource: *mut c_void,
     flags: c_uint,
 ) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaD3D11GetDevice`.
 pub type PFN_cudaD3D11GetDevice =
     unsafe extern "C" fn(device_out: *mut c_int, adapter: *mut c_void) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaD3D11GetDevices`.
 pub type PFN_cudaD3D11GetDevices = unsafe extern "C" fn(
     cuda_device_count_out: *mut c_uint,
     cuda_devices: *mut c_int,
@@ -899,6 +1068,7 @@ pub type PFN_cudaD3D11GetDevices = unsafe extern "C" fn(
     device_list: c_uint,
 ) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaGraphicsD3D11RegisterResource`.
 pub type PFN_cudaGraphicsD3D11RegisterResource = unsafe extern "C" fn(
     resource_out: *mut cudaGraphicsResource_t,
     d3d_resource: *mut c_void,
@@ -907,18 +1077,21 @@ pub type PFN_cudaGraphicsD3D11RegisterResource = unsafe extern "C" fn(
 
 // -- VDPAU --
 
+/// Function-pointer type for the Runtime API entry-point `cudaVDPAUGetDevice`.
 pub type PFN_cudaVDPAUGetDevice = unsafe extern "C" fn(
     device_out: *mut c_int,
     vdp_device: *mut c_void,
     vdp_get_proc_address: *mut c_void,
 ) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaGraphicsVDPAURegisterVideoSurface`.
 pub type PFN_cudaGraphicsVDPAURegisterVideoSurface = unsafe extern "C" fn(
     resource_out: *mut cudaGraphicsResource_t,
     vdp_surface: *mut c_void,
     flags: c_uint,
 ) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaGraphicsVDPAURegisterOutputSurface`.
 pub type PFN_cudaGraphicsVDPAURegisterOutputSurface = unsafe extern "C" fn(
     resource_out: *mut cudaGraphicsResource_t,
     vdp_surface: *mut c_void,
@@ -927,12 +1100,14 @@ pub type PFN_cudaGraphicsVDPAURegisterOutputSurface = unsafe extern "C" fn(
 
 // -- EGL --
 
+/// Function-pointer type for the Runtime API entry-point `cudaGraphicsEGLRegisterImage`.
 pub type PFN_cudaGraphicsEGLRegisterImage = unsafe extern "C" fn(
     resource_out: *mut cudaGraphicsResource_t,
     image: *mut c_void, // EGLImageKHR
     flags: c_uint,
 ) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaGraphicsResourceGetMappedEglFrame`.
 pub type PFN_cudaGraphicsResourceGetMappedEglFrame = unsafe extern "C" fn(
     egl_frame_out: *mut c_void, // cudaEglFrame
     resource: cudaGraphicsResource_t,
@@ -940,20 +1115,24 @@ pub type PFN_cudaGraphicsResourceGetMappedEglFrame = unsafe extern "C" fn(
     mip_level: c_uint,
 ) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaEventCreateFromEGLSync`.
 pub type PFN_cudaEventCreateFromEGLSync = unsafe extern "C" fn(
     event_out: *mut cudaEvent_t,
     egl_sync: *mut c_void, // EGLSyncKHR
     flags: c_uint,
 ) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaEGLStreamConsumerConnect`.
 pub type PFN_cudaEGLStreamConsumerConnect = unsafe extern "C" fn(
     connection: *mut c_void, // cudaEglStreamConnection*
     egl_stream: *mut c_void, // EGLStreamKHR
 ) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaEGLStreamConsumerDisconnect`.
 pub type PFN_cudaEGLStreamConsumerDisconnect =
     unsafe extern "C" fn(connection: *mut c_void) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaEGLStreamConsumerAcquireFrame`.
 pub type PFN_cudaEGLStreamConsumerAcquireFrame = unsafe extern "C" fn(
     connection: *mut c_void,
     resource_out: *mut cudaGraphicsResource_t,
@@ -961,12 +1140,14 @@ pub type PFN_cudaEGLStreamConsumerAcquireFrame = unsafe extern "C" fn(
     timeout: c_uint,
 ) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaEGLStreamConsumerReleaseFrame`.
 pub type PFN_cudaEGLStreamConsumerReleaseFrame = unsafe extern "C" fn(
     connection: *mut c_void,
     resource: cudaGraphicsResource_t,
     stream_inout: *mut cudaStream_t,
 ) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaEGLStreamProducerConnect`.
 pub type PFN_cudaEGLStreamProducerConnect = unsafe extern "C" fn(
     connection: *mut c_void,
     egl_stream: *mut c_void,
@@ -974,15 +1155,18 @@ pub type PFN_cudaEGLStreamProducerConnect = unsafe extern "C" fn(
     height: c_int,
 ) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaEGLStreamProducerDisconnect`.
 pub type PFN_cudaEGLStreamProducerDisconnect =
     unsafe extern "C" fn(connection: *mut c_void) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaEGLStreamProducerPresentFrame`.
 pub type PFN_cudaEGLStreamProducerPresentFrame = unsafe extern "C" fn(
     connection: *mut c_void,
     egl_frame: *mut c_void,
     stream_inout: *mut cudaStream_t,
 ) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaEGLStreamProducerReturnFrame`.
 pub type PFN_cudaEGLStreamProducerReturnFrame = unsafe extern "C" fn(
     connection: *mut c_void,
     egl_frame_out: *mut c_void,
@@ -991,6 +1175,7 @@ pub type PFN_cudaEGLStreamProducerReturnFrame = unsafe extern "C" fn(
 
 // -- NvSci --
 
+/// Function-pointer type for the Runtime API entry-point `cudaDeviceGetNvSciSyncAttributes`.
 pub type PFN_cudaDeviceGetNvSciSyncAttributes = unsafe extern "C" fn(
     attr_list: *mut c_void, // NvSciSyncAttrList
     device: c_int,
@@ -1006,6 +1191,7 @@ use super::types::{
 
 // -- Arrays (extra) + tex/surf object descriptors --
 
+/// Function-pointer type for the Runtime API entry-point `cudaMallocMipmappedArray`.
 pub type PFN_cudaMallocMipmappedArray = unsafe extern "C" fn(
     mipmap: *mut cudaMipmappedArray_t,
     desc: *const c_void,   // cudaChannelFormatDesc
@@ -1014,9 +1200,11 @@ pub type PFN_cudaMallocMipmappedArray = unsafe extern "C" fn(
     flags: c_uint,
 ) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaFreeMipmappedArray`.
 pub type PFN_cudaFreeMipmappedArray =
     unsafe extern "C" fn(mipmap: cudaMipmappedArray_t) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaArrayGetInfo`.
 pub type PFN_cudaArrayGetInfo = unsafe extern "C" fn(
     desc_out: *mut c_void,   // cudaChannelFormatDesc
     extent_out: *mut c_void, // cudaExtent
@@ -1024,27 +1212,32 @@ pub type PFN_cudaArrayGetInfo = unsafe extern "C" fn(
     array: cudaArray_t,
 ) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaGetMipmappedArrayLevel`.
 pub type PFN_cudaGetMipmappedArrayLevel = unsafe extern "C" fn(
     level_out: *mut cudaArray_t,
     mipmap: cudaMipmappedArray_t,
     level: c_uint,
 ) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaGetTextureObjectResourceDesc`.
 pub type PFN_cudaGetTextureObjectResourceDesc = unsafe extern "C" fn(
     desc_out: *mut c_void, // cudaResourceDesc
     tex_object: cudaTextureObject_t,
 ) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaGetTextureObjectTextureDesc`.
 pub type PFN_cudaGetTextureObjectTextureDesc = unsafe extern "C" fn(
     desc_out: *mut c_void, // cudaTextureDesc
     tex_object: cudaTextureObject_t,
 ) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaGetTextureObjectResourceViewDesc`.
 pub type PFN_cudaGetTextureObjectResourceViewDesc = unsafe extern "C" fn(
     desc_out: *mut c_void, // cudaResourceViewDesc
     tex_object: cudaTextureObject_t,
 ) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaGetSurfaceObjectResourceDesc`.
 pub type PFN_cudaGetSurfaceObjectResourceDesc = unsafe extern "C" fn(
     desc_out: *mut c_void, // cudaResourceDesc
     surf_object: cudaSurfaceObject_t,
@@ -1055,13 +1248,18 @@ pub type PFN_cudaGetSurfaceObjectResourceDesc = unsafe extern "C" fn(
 
 // -- 3D memcpy --
 
+/// Function-pointer type for the Runtime API entry-point `cudaMemcpy3D`.
 pub type PFN_cudaMemcpy3D = unsafe extern "C" fn(params: *const c_void) -> cudaError_t;
+/// Function-pointer type for the Runtime API entry-point `cudaMemcpy3DAsync`.
 pub type PFN_cudaMemcpy3DAsync =
     unsafe extern "C" fn(params: *const c_void, stream: cudaStream_t) -> cudaError_t;
+/// Function-pointer type for the Runtime API entry-point `cudaMemcpy3DPeer`.
 pub type PFN_cudaMemcpy3DPeer = unsafe extern "C" fn(params: *const c_void) -> cudaError_t;
+/// Function-pointer type for the Runtime API entry-point `cudaMemcpy3DPeerAsync`.
 pub type PFN_cudaMemcpy3DPeerAsync =
     unsafe extern "C" fn(params: *const c_void, stream: cudaStream_t) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaMemset3D`.
 pub type PFN_cudaMemset3D = unsafe extern "C" fn(
     pitched_dev_ptr: *mut c_void, // cudaPitchedPtr (passed by value in C, but CUDA runtime's C ABI
     // copies via pointer on some platforms — we just pass the 32-byte
@@ -1070,11 +1268,13 @@ pub type PFN_cudaMemset3D = unsafe extern "C" fn(
     extent: *const c_void, // cudaExtent
 ) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaMalloc3D`.
 pub type PFN_cudaMalloc3D = unsafe extern "C" fn(
     pitched_dev_ptr: *mut c_void, // out
     extent: *const c_void,        // cudaExtent
 ) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaMalloc3DArray`.
 pub type PFN_cudaMalloc3DArray = unsafe extern "C" fn(
     array: *mut cudaArray_t,
     desc: *const c_void,
@@ -1084,6 +1284,7 @@ pub type PFN_cudaMalloc3DArray = unsafe extern "C" fn(
 
 // -- Launch-ex / cluster --
 
+/// Function-pointer type for the Runtime API entry-point `cudaLaunchKernelEx`.
 pub type PFN_cudaLaunchKernelEx = unsafe extern "C" fn(
     config: *const cudaLaunchConfig_t,
     func: *const c_void,
@@ -1092,7 +1293,9 @@ pub type PFN_cudaLaunchKernelEx = unsafe extern "C" fn(
 
 // -- Profiler --
 
+/// Function-pointer type for the Runtime API entry-point `cudaProfilerStart`.
 pub type PFN_cudaProfilerStart = unsafe extern "C" fn() -> cudaError_t;
+/// Function-pointer type for the Runtime API entry-point `cudaProfilerStop`.
 pub type PFN_cudaProfilerStop = unsafe extern "C" fn() -> cudaError_t;
 
 // -- Tensor maps (Hopper, driver-hosted; runtime doesn't expose dedicated PFNs) --
@@ -1103,6 +1306,7 @@ pub type PFN_cudaProfilerStop = unsafe extern "C" fn() -> cudaError_t;
 
 // -- VMM --
 
+/// Function-pointer type for the Runtime API entry-point `cudaMemAddressReserve`.
 pub type PFN_cudaMemAddressReserve = unsafe extern "C" fn(
     dev_ptr_out: *mut *mut c_void,
     size: usize,
@@ -1111,9 +1315,11 @@ pub type PFN_cudaMemAddressReserve = unsafe extern "C" fn(
     flags: u64,
 ) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaMemAddressFree`.
 pub type PFN_cudaMemAddressFree =
     unsafe extern "C" fn(dev_ptr: *mut c_void, size: usize) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaMemCreate`.
 pub type PFN_cudaMemCreate = unsafe extern "C" fn(
     handle_out: *mut cudaMemGenericAllocationHandle_t,
     size: usize,
@@ -1121,9 +1327,11 @@ pub type PFN_cudaMemCreate = unsafe extern "C" fn(
     flags: u64,
 ) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaMemRelease`.
 pub type PFN_cudaMemRelease =
     unsafe extern "C" fn(handle: cudaMemGenericAllocationHandle_t) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaMemMap`.
 pub type PFN_cudaMemMap = unsafe extern "C" fn(
     ptr: *mut c_void,
     size: usize,
@@ -1132,8 +1340,10 @@ pub type PFN_cudaMemMap = unsafe extern "C" fn(
     flags: u64,
 ) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaMemUnmap`.
 pub type PFN_cudaMemUnmap = unsafe extern "C" fn(ptr: *mut c_void, size: usize) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaMemSetAccess`.
 pub type PFN_cudaMemSetAccess = unsafe extern "C" fn(
     ptr: *mut c_void,
     size: usize,
@@ -1141,23 +1351,27 @@ pub type PFN_cudaMemSetAccess = unsafe extern "C" fn(
     count: usize,
 ) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaMemGetAccess`.
 pub type PFN_cudaMemGetAccess = unsafe extern "C" fn(
     flags_out: *mut u64,
     location: *const c_void, // cudaMemLocation
     ptr: *mut c_void,
 ) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaMemGetAllocationGranularity`.
 pub type PFN_cudaMemGetAllocationGranularity = unsafe extern "C" fn(
     granularity_out: *mut usize,
     prop: *const c_void, // cudaMemAllocationProp
     option: c_int,
 ) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaMemGetAllocationPropertiesFromHandle`.
 pub type PFN_cudaMemGetAllocationPropertiesFromHandle = unsafe extern "C" fn(
     prop_out: *mut c_void, // cudaMemAllocationProp
     handle: cudaMemGenericAllocationHandle_t,
 ) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaMemExportToShareableHandle`.
 pub type PFN_cudaMemExportToShareableHandle = unsafe extern "C" fn(
     shareable_handle_out: *mut c_void,
     handle: cudaMemGenericAllocationHandle_t,
@@ -1165,12 +1379,14 @@ pub type PFN_cudaMemExportToShareableHandle = unsafe extern "C" fn(
     flags: u64,
 ) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaMemImportFromShareableHandle`.
 pub type PFN_cudaMemImportFromShareableHandle = unsafe extern "C" fn(
     handle_out: *mut cudaMemGenericAllocationHandle_t,
     os_handle: *mut c_void,
     shareable_handle_type: c_int,
 ) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaMemRetainAllocationHandle`.
 pub type PFN_cudaMemRetainAllocationHandle = unsafe extern "C" fn(
     handle_out: *mut cudaMemGenericAllocationHandle_t,
     addr: *mut c_void,
@@ -1178,14 +1394,17 @@ pub type PFN_cudaMemRetainAllocationHandle = unsafe extern "C" fn(
 
 // -- Multicast (12.0+) --
 
+/// Function-pointer type for the Runtime API entry-point `cudaMulticastCreate`.
 pub type PFN_cudaMulticastCreate = unsafe extern "C" fn(
     mc_handle_out: *mut cudaMemGenericAllocationHandle_t,
     prop: *const c_void, // cudaMulticastObjectProp
 ) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaMulticastAddDevice`.
 pub type PFN_cudaMulticastAddDevice =
     unsafe extern "C" fn(mc_handle: cudaMemGenericAllocationHandle_t, device: c_int) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaMulticastBindMem`.
 pub type PFN_cudaMulticastBindMem = unsafe extern "C" fn(
     mc_handle: cudaMemGenericAllocationHandle_t,
     mc_offset: usize,
@@ -1195,6 +1414,7 @@ pub type PFN_cudaMulticastBindMem = unsafe extern "C" fn(
     flags: u64,
 ) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaMulticastBindAddr`.
 pub type PFN_cudaMulticastBindAddr = unsafe extern "C" fn(
     mc_handle: cudaMemGenericAllocationHandle_t,
     mc_offset: usize,
@@ -1203,6 +1423,7 @@ pub type PFN_cudaMulticastBindAddr = unsafe extern "C" fn(
     flags: u64,
 ) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaMulticastUnbind`.
 pub type PFN_cudaMulticastUnbind = unsafe extern "C" fn(
     mc_handle: cudaMemGenericAllocationHandle_t,
     device: c_int,
@@ -1210,6 +1431,7 @@ pub type PFN_cudaMulticastUnbind = unsafe extern "C" fn(
     size: usize,
 ) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaMulticastGetGranularity`.
 pub type PFN_cudaMulticastGetGranularity = unsafe extern "C" fn(
     granularity_out: *mut usize,
     prop: *const c_void, // cudaMulticastObjectProp
@@ -1218,20 +1440,25 @@ pub type PFN_cudaMulticastGetGranularity = unsafe extern "C" fn(
 
 // -- Green contexts (Runtime, 13.1+) --
 
+/// Function-pointer type for the Runtime API entry-point `cudaDeviceCreateGreenCtx`.
 pub type PFN_cudaDeviceCreateGreenCtx = unsafe extern "C" fn(
     green_ctx_out: *mut cudaGreenCtx_t,
     desc: *const c_void, // cudaDevResourceDesc
     flags: c_uint,
 ) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaGreenCtxDestroy`.
 pub type PFN_cudaGreenCtxDestroy = unsafe extern "C" fn(green_ctx: cudaGreenCtx_t) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaGreenCtxRecordEvent`.
 pub type PFN_cudaGreenCtxRecordEvent =
     unsafe extern "C" fn(green_ctx: cudaGreenCtx_t, event: cudaEvent_t) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaGreenCtxWaitEvent`.
 pub type PFN_cudaGreenCtxWaitEvent =
     unsafe extern "C" fn(green_ctx: cudaGreenCtx_t, event: cudaEvent_t) -> cudaError_t;
 
+/// Function-pointer type for the Runtime API entry-point `cudaGreenCtxStreamCreate`.
 pub type PFN_cudaGreenCtxStreamCreate = unsafe extern "C" fn(
     stream_out: *mut cudaStream_t,
     green_ctx: cudaGreenCtx_t,

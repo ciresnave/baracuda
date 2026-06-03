@@ -20,12 +20,19 @@ pub type nvJitLinkHandle = *mut c_void;
 #[repr(u32)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum nvJitLinkInputType {
+    /// no input
     None = 0,
+    /// cubin (compiled GPU object)
     Cubin = 1,
+    /// PTX assembly source
     Ptx = 2,
+    /// LTO IR (link-time-optimization intermediate)
     LtoIr = 3,
+    /// fatbinary container
     Fatbin = 4,
+    /// host object file
     Object = 5,
+    /// static library archive
     Library = 6,
 }
 
@@ -35,17 +42,28 @@ pub enum nvJitLinkInputType {
 pub struct nvJitLinkResult(pub i32);
 
 impl nvJitLinkResult {
+    /// success
     pub const SUCCESS: Self = Self(0);
+    /// unrecognized linker option
     pub const ERROR_UNRECOGNIZED_OPTION: Self = Self(1);
+    /// missing required `-arch=` option
     pub const ERROR_MISSING_ARCH: Self = Self(2);
+    /// invalid input blob
     pub const ERROR_INVALID_INPUT: Self = Self(3);
+    /// PTX compilation failed
     pub const ERROR_PTX_COMPILE: Self = Self(4);
+    /// NVVM compilation failed
     pub const ERROR_NVVM_COMPILE: Self = Self(5);
+    /// internal nvJitLink error
     pub const ERROR_INTERNAL: Self = Self(6);
+    /// thread-pool failure
     pub const ERROR_THREADPOOL: Self = Self(7);
+    /// unrecognized input type
     pub const ERROR_UNRECOGNIZED_INPUT: Self = Self(8);
+    /// finalization failed
     pub const ERROR_FINALIZE: Self = Self(9);
 
+    /// returns true when the result code is `NVJITLINK_SUCCESS`
     pub const fn is_success(self) -> bool {
         self.0 == 0
     }
@@ -95,6 +113,7 @@ impl CudaStatus for nvJitLinkResult {
 
 // ---- function-pointer types ----
 
+/// function pointer for `nvJitLinkCreate` — create JIT linker
 pub type PFN_nvJitLinkCreate = unsafe extern "C" fn(
     handle: *mut nvJitLinkHandle,
     num_options: u32,
@@ -104,6 +123,7 @@ pub type PFN_nvJitLinkCreate = unsafe extern "C" fn(
 /// to the handle slot, which it zeroes out), not the handle by value.
 pub type PFN_nvJitLinkDestroy =
     unsafe extern "C" fn(handle: *mut nvJitLinkHandle) -> nvJitLinkResult;
+/// function pointer for `nvJitLinkAddData` — add data input to JIT linker
 pub type PFN_nvJitLinkAddData = unsafe extern "C" fn(
     handle: nvJitLinkHandle,
     input_type: nvJitLinkInputType,
@@ -111,28 +131,39 @@ pub type PFN_nvJitLinkAddData = unsafe extern "C" fn(
     size: usize,
     name: *const c_char,
 ) -> nvJitLinkResult;
+/// function pointer for `nvJitLinkAddFile` — add file input to JIT linker
 pub type PFN_nvJitLinkAddFile = unsafe extern "C" fn(
     handle: nvJitLinkHandle,
     input_type: nvJitLinkInputType,
     file_name: *const c_char,
 ) -> nvJitLinkResult;
+/// function pointer for `nvJitLinkComplete` — finalize the link
 pub type PFN_nvJitLinkComplete = unsafe extern "C" fn(handle: nvJitLinkHandle) -> nvJitLinkResult;
+/// function pointer for `nvJitLinkGetLinkedCubinSize`
 pub type PFN_nvJitLinkGetLinkedCubinSize =
     unsafe extern "C" fn(handle: nvJitLinkHandle, size: *mut usize) -> nvJitLinkResult;
+/// function pointer for `nvJitLinkGetLinkedCubin`
 pub type PFN_nvJitLinkGetLinkedCubin =
     unsafe extern "C" fn(handle: nvJitLinkHandle, cubin: *mut c_void) -> nvJitLinkResult;
+/// function pointer for `nvJitLinkGetLinkedPtxSize`
 pub type PFN_nvJitLinkGetLinkedPtxSize =
     unsafe extern "C" fn(handle: nvJitLinkHandle, size: *mut usize) -> nvJitLinkResult;
+/// function pointer for `nvJitLinkGetLinkedPtx`
 pub type PFN_nvJitLinkGetLinkedPtx =
     unsafe extern "C" fn(handle: nvJitLinkHandle, ptx: *mut c_char) -> nvJitLinkResult;
+/// function pointer for `nvJitLinkGetErrorLogSize`
 pub type PFN_nvJitLinkGetErrorLogSize =
     unsafe extern "C" fn(handle: nvJitLinkHandle, size: *mut usize) -> nvJitLinkResult;
+/// function pointer for `nvJitLinkGetErrorLog`
 pub type PFN_nvJitLinkGetErrorLog =
     unsafe extern "C" fn(handle: nvJitLinkHandle, log: *mut c_char) -> nvJitLinkResult;
+/// function pointer for `nvJitLinkGetInfoLogSize`
 pub type PFN_nvJitLinkGetInfoLogSize =
     unsafe extern "C" fn(handle: nvJitLinkHandle, size: *mut usize) -> nvJitLinkResult;
+/// function pointer for `nvJitLinkGetInfoLog`
 pub type PFN_nvJitLinkGetInfoLog =
     unsafe extern "C" fn(handle: nvJitLinkHandle, log: *mut c_char) -> nvJitLinkResult;
+/// function pointer for `nvJitLinkVersion`
 pub type PFN_nvJitLinkVersion =
     unsafe extern "C" fn(major: *mut c_uint, minor: *mut c_uint) -> nvJitLinkResult;
 
@@ -170,6 +201,7 @@ const fn nvjitlink_candidates() -> &'static [&'static str] {
 
 macro_rules! nvjitlink_fns {
     ($($name:ident as $sym:literal : $pfn:ty);* $(;)?) => {
+        /// Dynamic loader handle for nvJitLink.
         pub struct NvJitLink {
             lib: Library,
             $($name: OnceLock<$pfn>,)*
@@ -220,6 +252,7 @@ nvjitlink_fns! {
     nv_jit_link_version as "nvJitLinkVersion": PFN_nvJitLinkVersion;
 }
 
+/// Open (or return the cached) nvJitLink dynamic library.
 pub fn nvjitlink() -> Result<&'static NvJitLink, LoaderError> {
     static NVJITLINK: OnceLock<NvJitLink> = OnceLock::new();
     if let Some(n) = NVJITLINK.get() {
@@ -228,5 +261,6 @@ pub fn nvjitlink() -> Result<&'static NvJitLink, LoaderError> {
     let lib = Library::open("nvjitlink", nvjitlink_candidates())?;
     let n = NvJitLink::empty(lib);
     let _ = NVJITLINK.set(n);
+    /// ok
     Ok(NVJITLINK.get().expect("OnceLock set or lost race"))
 }

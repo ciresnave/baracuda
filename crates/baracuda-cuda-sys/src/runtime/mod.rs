@@ -8,9 +8,13 @@
 //! `baracuda-runtime` and `baracuda-driver` can freely convert between
 //! the two.
 
+/// `functions` — submodule grouping related items.
 pub mod functions;
+/// `loader` — submodule grouping related items.
 pub mod loader;
+/// `status` — submodule grouping related items.
 pub mod status;
+/// `types` — submodule grouping related items.
 pub mod types;
 
 pub use loader::{runtime, Runtime};

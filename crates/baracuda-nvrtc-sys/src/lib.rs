@@ -22,19 +22,32 @@ pub type nvrtcProgram = *mut c_void;
 pub struct nvrtcResult(pub i32);
 
 impl nvrtcResult {
+    /// success
     pub const SUCCESS: Self = Self(0);
+    /// out of memory
     pub const OUT_OF_MEMORY: Self = Self(1);
+    /// program creation failed
     pub const PROGRAM_CREATION_FAILURE: Self = Self(2);
+    /// invalid input pointer or length
     pub const INVALID_INPUT: Self = Self(3);
+    /// invalid `nvrtcProgram` handle
     pub const INVALID_PROGRAM: Self = Self(4);
+    /// unrecognized or malformed compile option
     pub const INVALID_OPTION: Self = Self(5);
+    /// compilation failed — fetch the program log
     pub const COMPILATION: Self = Self(6);
+    /// an NVRTC builtin operation failed
     pub const BUILTIN_OPERATION_FAILURE: Self = Self(7);
+    /// name expressions added after compilation
     pub const NO_NAME_EXPRESSIONS_AFTER_COMPILATION: Self = Self(8);
+    /// lowered-name lookup attempted before compilation
     pub const NO_LOWERED_NAMES_BEFORE_COMPILATION: Self = Self(9);
+    /// name expression is not valid
     pub const NAME_EXPRESSION_NOT_VALID: Self = Self(10);
+    /// internal NVRTC error
     pub const INTERNAL_ERROR: Self = Self(11);
 
+    /// returns true when the result code is `NVRTC_SUCCESS`
     pub const fn is_success(self) -> bool {
         self.0 == 0
     }
@@ -78,8 +91,10 @@ impl CudaStatus for nvrtcResult {
 
 // ---- function-pointer types ----------------------------------------------
 
+/// function pointer for `nvrtcVersion`
 pub type PFN_nvrtcVersion =
     unsafe extern "C" fn(major: *mut core::ffi::c_int, minor: *mut core::ffi::c_int) -> nvrtcResult;
+/// function pointer for `nvrtcCreateProgram`
 pub type PFN_nvrtcCreateProgram = unsafe extern "C" fn(
     prog: *mut nvrtcProgram,
     src: *const c_char,
@@ -88,20 +103,27 @@ pub type PFN_nvrtcCreateProgram = unsafe extern "C" fn(
     headers: *const *const c_char,
     include_names: *const *const c_char,
 ) -> nvrtcResult;
+/// function pointer for `nvrtcDestroyProgram`
 pub type PFN_nvrtcDestroyProgram = unsafe extern "C" fn(prog: *mut nvrtcProgram) -> nvrtcResult;
+/// function pointer for `nvrtcCompileProgram`
 pub type PFN_nvrtcCompileProgram = unsafe extern "C" fn(
     prog: nvrtcProgram,
     num_options: core::ffi::c_int,
     options: *const *const c_char,
 ) -> nvrtcResult;
+/// function pointer for `nvrtcGetPTXSize`
 pub type PFN_nvrtcGetPTXSize =
     unsafe extern "C" fn(prog: nvrtcProgram, size: *mut usize) -> nvrtcResult;
+/// function pointer for `nvrtcGetPTX`
 pub type PFN_nvrtcGetPTX =
     unsafe extern "C" fn(prog: nvrtcProgram, ptx: *mut c_char) -> nvrtcResult;
+/// function pointer for `nvrtcGetProgramLogSize`
 pub type PFN_nvrtcGetProgramLogSize =
     unsafe extern "C" fn(prog: nvrtcProgram, size: *mut usize) -> nvrtcResult;
+/// function pointer for `nvrtcGetProgramLog`
 pub type PFN_nvrtcGetProgramLog =
     unsafe extern "C" fn(prog: nvrtcProgram, log: *mut c_char) -> nvrtcResult;
+/// function pointer for `nvrtcGetErrorString`
 pub type PFN_nvrtcGetErrorString = unsafe extern "C" fn(result: nvrtcResult) -> *const c_char;
 
 // ---- loader --------------------------------------------------------------
@@ -136,6 +158,7 @@ fn nvrtc_candidates() -> &'static [&'static str] {
 
 macro_rules! nvrtc_fns {
     ($($name:ident as $sym:literal : $pfn:ty);* $(;)?) => {
+        /// Dynamic loader handle for NVRTC.
         pub struct Nvrtc {
             lib: Library,
             $($name: OnceLock<$pfn>,)*
@@ -147,6 +170,7 @@ macro_rules! nvrtc_fns {
         }
         impl Nvrtc {
             $(
+                #[doc = concat!("Resolve `", $sym, "`.")]
                 pub fn $name(&self) -> Result<$pfn, LoaderError> {
                     if let Some(&p) = self.$name.get() { return Ok(p); }
                     let raw: *mut () = unsafe { self.lib.raw_symbol($sym)? };
@@ -174,6 +198,7 @@ nvrtc_fns! {
     nvrtc_get_error_string as "nvrtcGetErrorString": PFN_nvrtcGetErrorString;
 }
 
+/// Open (or return the cached) NVRTC dynamic library.
 pub fn nvrtc() -> Result<&'static Nvrtc, LoaderError> {
     static NVRTC: OnceLock<Nvrtc> = OnceLock::new();
     if let Some(n) = NVRTC.get() {

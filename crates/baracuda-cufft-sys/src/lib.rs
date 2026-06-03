@@ -19,17 +19,24 @@ pub type cufftHandle = c_int;
 
 /// cuFFT transform direction.
 pub const CUFFT_FORWARD: c_int = -1;
+/// Inverse-transform direction flag for `cufftExec*` calls.
 pub const CUFFT_INVERSE: c_int = 1;
 
 /// cuFFT transform type.
 #[repr(i32)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum cufftType {
+    /// real-to-complex (single-precision) transform.
     R2C = 0x2A,
+    /// complex-to-real (single-precision) transform.
     C2R = 0x2C,
+    /// complex-to-complex (single-precision) transform.
     C2C = 0x29,
+    /// real-to-complex (double-precision) transform.
     D2Z = 0x6A,
+    /// complex-to-real (double-precision) transform.
     Z2D = 0x6C,
+    /// complex-to-complex (double-precision) transform.
     Z2Z = 0x69,
 }
 
@@ -42,6 +49,7 @@ pub struct cufftComplex {
     pub y: f32,
 }
 
+/// cuFFT complex (double precision) — layout-compatible with `baracuda_types::Complex64`.
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Default, PartialEq)]
 pub struct cufftDoubleComplex {
@@ -55,20 +63,34 @@ pub struct cufftDoubleComplex {
 pub struct cufftResult(pub i32);
 
 impl cufftResult {
+    /// `CUFFT_SUCCESS` — operation succeeded.
     pub const SUCCESS: Self = Self(0);
+    /// `CUFFT_INVALID_PLAN` — the plan handle is invalid.
     pub const INVALID_PLAN: Self = Self(1);
+    /// `CUFFT_ALLOC_FAILED` — an allocation failed.
     pub const ALLOC_FAILED: Self = Self(2);
+    /// `CUFFT_INVALID_TYPE` — the requested transform type is invalid.
     pub const INVALID_TYPE: Self = Self(3);
+    /// `CUFFT_INVALID_VALUE` — an argument has an invalid value.
     pub const INVALID_VALUE: Self = Self(4);
+    /// `CUFFT_INTERNAL_ERROR` — an internal cuFFT error occurred.
     pub const INTERNAL_ERROR: Self = Self(5);
+    /// `CUFFT_EXEC_FAILED` — transform execution failed.
     pub const EXEC_FAILED: Self = Self(6);
+    /// `CUFFT_SETUP_FAILED` — library setup failed.
     pub const SETUP_FAILED: Self = Self(7);
+    /// `CUFFT_INVALID_SIZE` — the requested transform size is invalid.
     pub const INVALID_SIZE: Self = Self(8);
+    /// `CUFFT_UNALIGNED_DATA` — input/output data is misaligned.
     pub const UNALIGNED_DATA: Self = Self(9);
+    /// `CUFFT_INVALID_DEVICE` — the active CUDA device is invalid for cuFFT.
     pub const INVALID_DEVICE: Self = Self(11);
+    /// `CUFFT_NOT_IMPLEMENTED` — the requested feature is not implemented.
     pub const NOT_IMPLEMENTED: Self = Self(14);
+    /// `CUFFT_NOT_SUPPORTED` — the requested feature is not supported on this device.
     pub const NOT_SUPPORTED: Self = Self(16);
 
+    /// Return `true` if the status code denotes success.
     pub const fn is_success(self) -> bool {
         self.0 == 0
     }
@@ -120,20 +142,25 @@ impl CudaStatus for cufftResult {
 
 // ---- function-pointer types ----
 
+/// Function-pointer type for `cufftCreate` (create cuFFT plan handle). See <https://docs.nvidia.com/cuda/cufft/index.html>.
 pub type PFN_cufftCreate = unsafe extern "C" fn(plan: *mut cufftHandle) -> cufftResult;
+/// Function-pointer type for `cufftDestroy` (destroy cuFFT plan handle). See <https://docs.nvidia.com/cuda/cufft/index.html>.
 pub type PFN_cufftDestroy = unsafe extern "C" fn(plan: cufftHandle) -> cufftResult;
+/// Function-pointer type for `cufftPlan1d` (create 1D FFT plan). See <https://docs.nvidia.com/cuda/cufft/index.html>.
 pub type PFN_cufftPlan1d = unsafe extern "C" fn(
     plan: *mut cufftHandle,
     nx: c_int,
     ty: cufftType,
     batch: c_int,
 ) -> cufftResult;
+/// Function-pointer type for `cufftPlan2d` (create 2D FFT plan). See <https://docs.nvidia.com/cuda/cufft/index.html>.
 pub type PFN_cufftPlan2d = unsafe extern "C" fn(
     plan: *mut cufftHandle,
     nx: c_int,
     ny: c_int,
     ty: cufftType,
 ) -> cufftResult;
+/// Function-pointer type for `cufftPlan3d` (create 3D FFT plan). See <https://docs.nvidia.com/cuda/cufft/index.html>.
 pub type PFN_cufftPlan3d = unsafe extern "C" fn(
     plan: *mut cufftHandle,
     nx: c_int,
@@ -141,20 +168,25 @@ pub type PFN_cufftPlan3d = unsafe extern "C" fn(
     nz: c_int,
     ty: cufftType,
 ) -> cufftResult;
+/// Function-pointer type for `cufftSetStream` (bind a CUDA stream to a cuFFT plan). See <https://docs.nvidia.com/cuda/cufft/index.html>.
 pub type PFN_cufftSetStream =
     unsafe extern "C" fn(plan: cufftHandle, stream: cudaStream_t) -> cufftResult;
+/// Function-pointer type for `cufftGetVersion` (query cuFFT library version). See <https://docs.nvidia.com/cuda/cufft/index.html>.
 pub type PFN_cufftGetVersion = unsafe extern "C" fn(version: *mut c_int) -> cufftResult;
 
+/// Function-pointer type for `cufftExecR2C` (execute real-to-complex (single-precision) FFT). See <https://docs.nvidia.com/cuda/cufft/index.html>.
 pub type PFN_cufftExecR2C = unsafe extern "C" fn(
     plan: cufftHandle,
     input: *mut f32,
     output: *mut cufftComplex,
 ) -> cufftResult;
+/// Function-pointer type for `cufftExecC2R` (execute complex-to-real (single-precision) FFT). See <https://docs.nvidia.com/cuda/cufft/index.html>.
 pub type PFN_cufftExecC2R = unsafe extern "C" fn(
     plan: cufftHandle,
     input: *mut cufftComplex,
     output: *mut f32,
 ) -> cufftResult;
+/// Function-pointer type for `cufftExecC2C` (execute complex-to-complex (single-precision) FFT). See <https://docs.nvidia.com/cuda/cufft/index.html>.
 pub type PFN_cufftExecC2C = unsafe extern "C" fn(
     plan: cufftHandle,
     input: *mut cufftComplex,
@@ -164,18 +196,21 @@ pub type PFN_cufftExecC2C = unsafe extern "C" fn(
 
 // ---- Double-precision exec paths ----
 
+/// Function-pointer type for `cufftExecD2Z` (execute real-to-complex (double-precision) FFT). See <https://docs.nvidia.com/cuda/cufft/index.html>.
 pub type PFN_cufftExecD2Z = unsafe extern "C" fn(
     plan: cufftHandle,
     input: *mut f64,
     output: *mut cufftDoubleComplex,
 ) -> cufftResult;
 
+/// Function-pointer type for `cufftExecZ2D` (execute complex-to-real (double-precision) FFT). See <https://docs.nvidia.com/cuda/cufft/index.html>.
 pub type PFN_cufftExecZ2D = unsafe extern "C" fn(
     plan: cufftHandle,
     input: *mut cufftDoubleComplex,
     output: *mut f64,
 ) -> cufftResult;
 
+/// Function-pointer type for `cufftExecZ2Z` (execute complex-to-complex (double-precision) FFT). See <https://docs.nvidia.com/cuda/cufft/index.html>.
 pub type PFN_cufftExecZ2Z = unsafe extern "C" fn(
     plan: cufftHandle,
     input: *mut cufftDoubleComplex,
@@ -185,6 +220,7 @@ pub type PFN_cufftExecZ2Z = unsafe extern "C" fn(
 
 // ---- Batched / many plans ----
 
+/// Function-pointer type for `cufftPlanMany` (create batched / strided FFT plan). See <https://docs.nvidia.com/cuda/cufft/index.html>.
 pub type PFN_cufftPlanMany = unsafe extern "C" fn(
     plan: *mut cufftHandle,
     rank: c_int,
@@ -199,6 +235,7 @@ pub type PFN_cufftPlanMany = unsafe extern "C" fn(
     batch: c_int,
 ) -> cufftResult;
 
+/// Function-pointer type for `cufftMakePlan1d` (configure an existing handle as a 1D FFT plan). See <https://docs.nvidia.com/cuda/cufft/index.html>.
 pub type PFN_cufftMakePlan1d = unsafe extern "C" fn(
     plan: cufftHandle,
     nx: c_int,
@@ -207,6 +244,7 @@ pub type PFN_cufftMakePlan1d = unsafe extern "C" fn(
     work_size: *mut usize,
 ) -> cufftResult;
 
+/// Function-pointer type for `cufftMakePlan2d` (configure an existing handle as a 2D FFT plan). See <https://docs.nvidia.com/cuda/cufft/index.html>.
 pub type PFN_cufftMakePlan2d = unsafe extern "C" fn(
     plan: cufftHandle,
     nx: c_int,
@@ -215,6 +253,7 @@ pub type PFN_cufftMakePlan2d = unsafe extern "C" fn(
     work_size: *mut usize,
 ) -> cufftResult;
 
+/// Function-pointer type for `cufftMakePlan3d` (configure an existing handle as a 3D FFT plan). See <https://docs.nvidia.com/cuda/cufft/index.html>.
 pub type PFN_cufftMakePlan3d = unsafe extern "C" fn(
     plan: cufftHandle,
     nx: c_int,
@@ -224,6 +263,7 @@ pub type PFN_cufftMakePlan3d = unsafe extern "C" fn(
     work_size: *mut usize,
 ) -> cufftResult;
 
+/// Function-pointer type for `cufftMakePlanMany` (configure an existing handle as a batched/strided FFT plan). See <https://docs.nvidia.com/cuda/cufft/index.html>.
 pub type PFN_cufftMakePlanMany = unsafe extern "C" fn(
     plan: cufftHandle,
     rank: c_int,
@@ -239,6 +279,7 @@ pub type PFN_cufftMakePlanMany = unsafe extern "C" fn(
     work_size: *mut usize,
 ) -> cufftResult;
 
+/// Function-pointer type for `cufftMakePlanMany64` (configure an existing handle as a 64-bit batched/strided FFT plan). See <https://docs.nvidia.com/cuda/cufft/index.html>.
 pub type PFN_cufftMakePlanMany64 = unsafe extern "C" fn(
     plan: cufftHandle,
     rank: c_int,
@@ -254,6 +295,7 @@ pub type PFN_cufftMakePlanMany64 = unsafe extern "C" fn(
     work_size: *mut usize,
 ) -> cufftResult;
 
+/// Function-pointer type for `cufftEstimate1d` (estimate workspace size for a 1D FFT plan). See <https://docs.nvidia.com/cuda/cufft/index.html>.
 pub type PFN_cufftEstimate1d = unsafe extern "C" fn(
     nx: c_int,
     ty: cufftType,
@@ -261,6 +303,7 @@ pub type PFN_cufftEstimate1d = unsafe extern "C" fn(
     work_size: *mut usize,
 ) -> cufftResult;
 
+/// Function-pointer type for `cufftEstimate2d` (estimate workspace size for a 2D FFT plan). See <https://docs.nvidia.com/cuda/cufft/index.html>.
 pub type PFN_cufftEstimate2d = unsafe extern "C" fn(
     nx: c_int,
     ny: c_int,
@@ -268,6 +311,7 @@ pub type PFN_cufftEstimate2d = unsafe extern "C" fn(
     work_size: *mut usize,
 ) -> cufftResult;
 
+/// Function-pointer type for `cufftEstimate3d` (estimate workspace size for a 3D FFT plan). See <https://docs.nvidia.com/cuda/cufft/index.html>.
 pub type PFN_cufftEstimate3d = unsafe extern "C" fn(
     nx: c_int,
     ny: c_int,
@@ -276,6 +320,7 @@ pub type PFN_cufftEstimate3d = unsafe extern "C" fn(
     work_size: *mut usize,
 ) -> cufftResult;
 
+/// Function-pointer type for `cufftEstimateMany` (estimate workspace size for a batched/strided FFT plan). See <https://docs.nvidia.com/cuda/cufft/index.html>.
 pub type PFN_cufftEstimateMany = unsafe extern "C" fn(
     rank: c_int,
     n: *mut c_int,
@@ -290,6 +335,7 @@ pub type PFN_cufftEstimateMany = unsafe extern "C" fn(
     work_size: *mut usize,
 ) -> cufftResult;
 
+/// Function-pointer type for `cufftGetSize1d` (query exact workspace size for a 1D plan). See <https://docs.nvidia.com/cuda/cufft/index.html>.
 pub type PFN_cufftGetSize1d = unsafe extern "C" fn(
     plan: cufftHandle,
     nx: c_int,
@@ -298,28 +344,34 @@ pub type PFN_cufftGetSize1d = unsafe extern "C" fn(
     work_size: *mut usize,
 ) -> cufftResult;
 
+/// Function-pointer type for `cufftGetSize` (query exact workspace size for a configured plan). See <https://docs.nvidia.com/cuda/cufft/index.html>.
 pub type PFN_cufftGetSize = unsafe extern "C" fn(plan: cufftHandle, work_size: *mut usize) -> cufftResult;
 
 // ---- Work-area management ----
 
+/// Function-pointer type for `cufftSetWorkArea` (supply caller-managed work area for a plan). See <https://docs.nvidia.com/cuda/cufft/index.html>.
 pub type PFN_cufftSetWorkArea = unsafe extern "C" fn(
     plan: cufftHandle,
     work_area: *mut core::ffi::c_void,
 ) -> cufftResult;
 
+/// Function-pointer type for `cufftSetAutoAllocation` (toggle automatic workspace allocation). See <https://docs.nvidia.com/cuda/cufft/index.html>.
 pub type PFN_cufftSetAutoAllocation =
     unsafe extern "C" fn(plan: cufftHandle, auto_allocate: c_int) -> cufftResult;
 
 // ---- Properties ----
 
+/// Function-pointer type for `cufftGetProperty` (query a cuFFT property value). See <https://docs.nvidia.com/cuda/cufft/index.html>.
 pub type PFN_cufftGetProperty =
     unsafe extern "C" fn(prop: c_int, value_out: *mut c_int) -> cufftResult;
 
 // ---- Multi-GPU (XT) ----
 
+/// Function-pointer type for `cufftXtSetGPUs` (select GPUs for multi-GPU XT execution). See <https://docs.nvidia.com/cuda/cufft/index.html>.
 pub type PFN_cufftXtSetGPUs =
     unsafe extern "C" fn(plan: cufftHandle, n: c_int, which_gpus: *mut c_int) -> cufftResult;
 
+/// Function-pointer type for `cufftXtMakePlanMany` (configure a multi-GPU XT batched/strided plan). See <https://docs.nvidia.com/cuda/cufft/index.html>.
 pub type PFN_cufftXtMakePlanMany = unsafe extern "C" fn(
     plan: cufftHandle,
     rank: c_int,
@@ -337,14 +389,17 @@ pub type PFN_cufftXtMakePlanMany = unsafe extern "C" fn(
     execution_type: cudaDataType,
 ) -> cufftResult;
 
+/// Function-pointer type for `cufftXtMalloc` (allocate multi-GPU XT descriptor buffer). See <https://docs.nvidia.com/cuda/cufft/index.html>.
 pub type PFN_cufftXtMalloc = unsafe extern "C" fn(
     plan: cufftHandle,
     desc_out: *mut *mut core::ffi::c_void, // cudaLibXtDesc**
     subformat: c_int,
 ) -> cufftResult;
 
+/// Function-pointer type for `cufftXtFree` (free a multi-GPU XT descriptor buffer). See <https://docs.nvidia.com/cuda/cufft/index.html>.
 pub type PFN_cufftXtFree = unsafe extern "C" fn(desc: *mut core::ffi::c_void) -> cufftResult;
 
+/// Function-pointer type for `cufftXtMemcpy` (copy data to/from a multi-GPU XT descriptor). See <https://docs.nvidia.com/cuda/cufft/index.html>.
 pub type PFN_cufftXtMemcpy = unsafe extern "C" fn(
     plan: cufftHandle,
     dst: *mut core::ffi::c_void,
@@ -352,6 +407,7 @@ pub type PFN_cufftXtMemcpy = unsafe extern "C" fn(
     ty: c_int, // cufftXtCopyType
 ) -> cufftResult;
 
+/// Function-pointer type for `cufftXtExec` (execute multi-GPU XT plan). See <https://docs.nvidia.com/cuda/cufft/index.html>.
 pub type PFN_cufftXtExec = unsafe extern "C" fn(
     plan: cufftHandle,
     input: *mut core::ffi::c_void,
@@ -359,6 +415,7 @@ pub type PFN_cufftXtExec = unsafe extern "C" fn(
     direction: c_int,
 ) -> cufftResult;
 
+/// Function-pointer type for `cufftXtExecDescriptor` (execute multi-GPU XT plan over descriptor buffers). See <https://docs.nvidia.com/cuda/cufft/index.html>.
 pub type PFN_cufftXtExecDescriptor = unsafe extern "C" fn(
     plan: cufftHandle,
     input: *mut core::ffi::c_void,
@@ -366,12 +423,14 @@ pub type PFN_cufftXtExecDescriptor = unsafe extern "C" fn(
     direction: c_int,
 ) -> cufftResult;
 
+/// Function-pointer type for `cufftXtQueryPlan` (query multi-GPU XT plan properties). See <https://docs.nvidia.com/cuda/cufft/index.html>.
 pub type PFN_cufftXtQueryPlan = unsafe extern "C" fn(
     plan: cufftHandle,
     query_struct: *mut core::ffi::c_void,
     query_type: c_int,
 ) -> cufftResult;
 
+/// Function-pointer type for `cufftXtSetCallback` (register a load/store callback on an XT plan). See <https://docs.nvidia.com/cuda/cufft/index.html>.
 pub type PFN_cufftXtSetCallback = unsafe extern "C" fn(
     plan: cufftHandle,
     callback_routine: *mut *mut core::ffi::c_void,
@@ -379,9 +438,11 @@ pub type PFN_cufftXtSetCallback = unsafe extern "C" fn(
     caller_info: *mut *mut core::ffi::c_void,
 ) -> cufftResult;
 
+/// Function-pointer type for `cufftXtClearCallback` (clear a load/store callback on an XT plan). See <https://docs.nvidia.com/cuda/cufft/index.html>.
 pub type PFN_cufftXtClearCallback =
     unsafe extern "C" fn(plan: cufftHandle, cb_type: c_int) -> cufftResult;
 
+/// Function-pointer type for `cufftXtSetCallbackSharedSize` (set shared-memory size for a callback). See <https://docs.nvidia.com/cuda/cufft/index.html>.
 pub type PFN_cufftXtSetCallbackSharedSize = unsafe extern "C" fn(
     plan: cufftHandle,
     cb_type: c_int,
@@ -401,6 +462,7 @@ fn cufft_candidates() -> Vec<String> {
 
 macro_rules! cufft_fns {
     ($($name:ident as $sym:literal : $pfn:ty);* $(;)?) => {
+        /// Lazily-resolved cuFFT function-pointer table.
         pub struct Cufft {
             lib: Library,
             $($name: OnceLock<$pfn>,)*
@@ -487,6 +549,7 @@ cufft_fns! {
         PFN_cufftXtSetCallbackSharedSize;
 }
 
+/// Return the lazily-loaded cuFFT library accessor.
 pub fn cufft() -> Result<&'static Cufft, LoaderError> {
     static CUFFT: OnceLock<Cufft> = OnceLock::new();
     if let Some(c) = CUFFT.get() {

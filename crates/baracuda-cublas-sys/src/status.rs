@@ -11,17 +11,28 @@ pub struct cublasStatus_t(pub i32);
 
 #[allow(non_upper_case_globals)]
 impl cublasStatus_t {
+    /// Success.
     pub const SUCCESS: Self = Self(0);
+    /// Not initialized.
     pub const NOT_INITIALIZED: Self = Self(1);
+    /// Alloc failed.
     pub const ALLOC_FAILED: Self = Self(3);
+    /// Invalid value.
     pub const INVALID_VALUE: Self = Self(7);
+    /// Arch mismatch.
     pub const ARCH_MISMATCH: Self = Self(8);
+    /// Mapping error.
     pub const MAPPING_ERROR: Self = Self(11);
+    /// Execution failed.
     pub const EXECUTION_FAILED: Self = Self(13);
+    /// Internal error.
     pub const INTERNAL_ERROR: Self = Self(14);
+    /// Not supported.
     pub const NOT_SUPPORTED: Self = Self(15);
+    /// License error.
     pub const LICENSE_ERROR: Self = Self(16);
 
+    /// Is success.
     pub const fn is_success(self) -> bool {
         self.0 == 0
     }

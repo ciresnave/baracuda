@@ -22,15 +22,22 @@ use baracuda_types::CudaStatus;
 
 // ---- opaque handles ------------------------------------------------------
 
+/// TensorRT IRuntime opaque handle.
 pub type trtIRuntime_t = *mut c_void;
+/// TensorRT ICudaEngine opaque handle.
 pub type trtICudaEngine_t = *mut c_void;
+/// TensorRT IExecutionContext opaque handle.
 pub type trtIExecutionContext_t = *mut c_void;
+/// TensorRT ILogger opaque handle.
 pub type trtILogger_t = *mut c_void;
+/// TensorRT IPluginRegistry opaque handle.
 pub type trtIPluginRegistry_t = *mut c_void;
+/// TensorRT IHostMemory opaque handle.
 pub type trtIHostMemory_t = *mut c_void;
 
 // ---- enums ---------------------------------------------------------------
 
+/// TensorRT tensor element type (mirrors `nvinfer1::DataType`).
 #[repr(i32)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum trtDataType_t {
@@ -47,6 +54,7 @@ pub enum trtDataType_t {
     Fp4 = 10,
 }
 
+/// TensorRT tensor I/O mode (input / output / none).
 #[repr(i32)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum trtTensorIOMode_t {
@@ -55,6 +63,7 @@ pub enum trtTensorIOMode_t {
     Output = 2,
 }
 
+/// TensorRT logger severity level.
 #[repr(i32)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum trtSeverity_t {
@@ -65,6 +74,7 @@ pub enum trtSeverity_t {
     Verbose = 4,
 }
 
+/// TensorRT execution-context allocation strategy.
 #[repr(i32)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum trtExecutionContextAllocationStrategy_t {
@@ -78,6 +88,7 @@ pub enum trtExecutionContextAllocationStrategy_t {
 /// Analog of `nvinfer1::Dims` — up to 8 dimensions.
 pub const TRT_MAX_DIMS: usize = 8;
 
+/// TensorRT dimensions container (analog of `nvinfer1::Dims`).
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
 pub struct trtDims_t {
@@ -95,9 +106,12 @@ pub struct trtDims_t {
 pub struct trtStatus_t(pub i32);
 
 impl trtStatus_t {
+    /// TensorRT status code `SUCCESS`.
     pub const SUCCESS: Self = Self(0);
+    /// TensorRT status code `FAILURE`.
     pub const FAILURE: Self = Self(-1);
 
+    /// `is_success` method on `trtStatus_t`.
     pub const fn is_success(self) -> bool {
         self.0 == 0
     }
@@ -131,6 +145,7 @@ impl CudaStatus for trtStatus_t {
 
 // ---- function-pointer types ----------------------------------------------
 
+/// get TensorRT inference library version.
 pub type PFN_getInferLibVersion = unsafe extern "C" fn() -> i32;
 
 /// Logger callback signature (matches `nvinfer1::ILogger::log`).
@@ -168,66 +183,89 @@ pub const SHIM_BUILT: bool = cfg!(feature = "shim");
 
 #[cfg(feature = "shim")]
 extern "C" {
+    /// TensorRT shim: Runtime Deserialize Cuda Engine.
     pub fn trtRuntimeDeserializeCudaEngine(
         runtime: trtIRuntime_t,
         blob: *const c_void,
         size: usize,
     ) -> trtICudaEngine_t;
+    /// TensorRT shim: Runtime Destroy.
     pub fn trtRuntimeDestroy(runtime: trtIRuntime_t);
 
+    /// TensorRT shim: Cuda Engine Destroy.
     pub fn trtCudaEngineDestroy(engine: trtICudaEngine_t);
+    /// TensorRT shim: Cuda Engine Get Nb I O Tensors.
     pub fn trtCudaEngineGetNbIOTensors(engine: trtICudaEngine_t) -> i32;
+    /// TensorRT shim: Cuda Engine Get I O Tensor Name.
     pub fn trtCudaEngineGetIOTensorName(engine: trtICudaEngine_t, index: i32) -> *const c_char;
+    /// TensorRT shim: Cuda Engine Get Tensor I O Mode.
     pub fn trtCudaEngineGetTensorIOMode(
         engine: trtICudaEngine_t,
         name: *const c_char,
     ) -> trtTensorIOMode_t;
+    /// TensorRT shim: Cuda Engine Get Tensor Data Type.
     pub fn trtCudaEngineGetTensorDataType(
         engine: trtICudaEngine_t,
         name: *const c_char,
     ) -> trtDataType_t;
+    /// TensorRT shim: Cuda Engine Get Tensor Shape.
     pub fn trtCudaEngineGetTensorShape(
         engine: trtICudaEngine_t,
         name: *const c_char,
     ) -> trtDims_t;
+    /// TensorRT shim: Cuda Engine Get Tensor Bytes Per Component.
     pub fn trtCudaEngineGetTensorBytesPerComponent(
         engine: trtICudaEngine_t,
         name: *const c_char,
     ) -> i32;
+    /// TensorRT shim: Cuda Engine Create Execution Context.
     pub fn trtCudaEngineCreateExecutionContext(
         engine: trtICudaEngine_t,
     ) -> trtIExecutionContext_t;
+    /// TensorRT shim: Cuda Engine Create Execution Context With Strategy.
     pub fn trtCudaEngineCreateExecutionContextWithStrategy(
         engine: trtICudaEngine_t,
         strategy: i32,
     ) -> trtIExecutionContext_t;
+    /// TensorRT shim: Cuda Engine Get Name.
     pub fn trtCudaEngineGetName(engine: trtICudaEngine_t) -> *const c_char;
+    /// TensorRT shim: Cuda Engine Get Nb Optimization Profiles.
     pub fn trtCudaEngineGetNbOptimizationProfiles(engine: trtICudaEngine_t) -> i32;
+    /// TensorRT shim: Cuda Engine Serialize.
     pub fn trtCudaEngineSerialize(engine: trtICudaEngine_t) -> trtIHostMemory_t;
 
+    /// TensorRT shim: Execution Context Destroy.
     pub fn trtExecutionContextDestroy(ctx: trtIExecutionContext_t);
+    /// TensorRT shim: Execution Context Set Input Shape.
     pub fn trtExecutionContextSetInputShape(
         ctx: trtIExecutionContext_t,
         name: *const c_char,
         dims: *const trtDims_t,
     ) -> bool;
+    /// TensorRT shim: Execution Context Get Tensor Shape.
     pub fn trtExecutionContextGetTensorShape(
         ctx: trtIExecutionContext_t,
         name: *const c_char,
     ) -> trtDims_t;
+    /// TensorRT shim: Execution Context Set Tensor Address.
     pub fn trtExecutionContextSetTensorAddress(
         ctx: trtIExecutionContext_t,
         name: *const c_char,
         data: *mut c_void,
     ) -> bool;
+    /// TensorRT shim: Execution Context Get Tensor Address.
     pub fn trtExecutionContextGetTensorAddress(
         ctx: trtIExecutionContext_t,
         name: *const c_char,
     ) -> *mut c_void;
+    /// TensorRT shim: Execution Context Enqueue V3.
     pub fn trtExecutionContextEnqueueV3(ctx: trtIExecutionContext_t, stream: cudaStream_t) -> bool;
 
+    /// TensorRT shim: Host Memory Data.
     pub fn trtHostMemoryData(mem: trtIHostMemory_t) -> *mut c_void;
+    /// TensorRT shim: Host Memory Size.
     pub fn trtHostMemorySize(mem: trtIHostMemory_t) -> usize;
+    /// TensorRT shim: Host Memory Destroy.
     pub fn trtHostMemoryDestroy(mem: trtIHostMemory_t);
 }
 
@@ -238,6 +276,7 @@ extern "C" {
 mod shim_stubs {
     use super::*;
 
+    /// TensorRT shim: Runtime Deserialize Cuda Engine.
     #[inline]
     pub unsafe fn trtRuntimeDeserializeCudaEngine(
         _runtime: trtIRuntime_t,
@@ -246,15 +285,19 @@ mod shim_stubs {
     ) -> trtICudaEngine_t {
         core::ptr::null_mut()
     }
+    /// TensorRT shim: Runtime Destroy.
     #[inline]
     pub unsafe fn trtRuntimeDestroy(_runtime: trtIRuntime_t) {}
 
+    /// TensorRT shim: Cuda Engine Destroy.
     #[inline]
     pub unsafe fn trtCudaEngineDestroy(_engine: trtICudaEngine_t) {}
+    /// TensorRT shim: Cuda Engine Get Nb I O Tensors.
     #[inline]
     pub unsafe fn trtCudaEngineGetNbIOTensors(_engine: trtICudaEngine_t) -> i32 {
         0
     }
+    /// TensorRT shim: Cuda Engine Get I O Tensor Name.
     #[inline]
     pub unsafe fn trtCudaEngineGetIOTensorName(
         _engine: trtICudaEngine_t,
@@ -262,6 +305,7 @@ mod shim_stubs {
     ) -> *const c_char {
         core::ptr::null()
     }
+    /// TensorRT shim: Cuda Engine Get Tensor I O Mode.
     #[inline]
     pub unsafe fn trtCudaEngineGetTensorIOMode(
         _engine: trtICudaEngine_t,
@@ -269,6 +313,7 @@ mod shim_stubs {
     ) -> trtTensorIOMode_t {
         trtTensorIOMode_t::None
     }
+    /// TensorRT shim: Cuda Engine Get Tensor Data Type.
     #[inline]
     pub unsafe fn trtCudaEngineGetTensorDataType(
         _engine: trtICudaEngine_t,
@@ -276,6 +321,7 @@ mod shim_stubs {
     ) -> trtDataType_t {
         trtDataType_t::Float
     }
+    /// TensorRT shim: Cuda Engine Get Tensor Shape.
     #[inline]
     pub unsafe fn trtCudaEngineGetTensorShape(
         _engine: trtICudaEngine_t,
@@ -286,6 +332,7 @@ mod shim_stubs {
             d: [0; TRT_MAX_DIMS],
         }
     }
+    /// TensorRT shim: Cuda Engine Get Tensor Bytes Per Component.
     #[inline]
     pub unsafe fn trtCudaEngineGetTensorBytesPerComponent(
         _engine: trtICudaEngine_t,
@@ -293,12 +340,14 @@ mod shim_stubs {
     ) -> i32 {
         0
     }
+    /// TensorRT shim: Cuda Engine Create Execution Context.
     #[inline]
     pub unsafe fn trtCudaEngineCreateExecutionContext(
         _engine: trtICudaEngine_t,
     ) -> trtIExecutionContext_t {
         core::ptr::null_mut()
     }
+    /// TensorRT shim: Cuda Engine Create Execution Context With Strategy.
     #[inline]
     pub unsafe fn trtCudaEngineCreateExecutionContextWithStrategy(
         _engine: trtICudaEngine_t,
@@ -306,21 +355,26 @@ mod shim_stubs {
     ) -> trtIExecutionContext_t {
         core::ptr::null_mut()
     }
+    /// TensorRT shim: Cuda Engine Get Name.
     #[inline]
     pub unsafe fn trtCudaEngineGetName(_engine: trtICudaEngine_t) -> *const c_char {
         core::ptr::null()
     }
+    /// TensorRT shim: Cuda Engine Get Nb Optimization Profiles.
     #[inline]
     pub unsafe fn trtCudaEngineGetNbOptimizationProfiles(_engine: trtICudaEngine_t) -> i32 {
         0
     }
+    /// TensorRT shim: Cuda Engine Serialize.
     #[inline]
     pub unsafe fn trtCudaEngineSerialize(_engine: trtICudaEngine_t) -> trtIHostMemory_t {
         core::ptr::null_mut()
     }
 
+    /// TensorRT shim: Execution Context Destroy.
     #[inline]
     pub unsafe fn trtExecutionContextDestroy(_ctx: trtIExecutionContext_t) {}
+    /// TensorRT shim: Execution Context Set Input Shape.
     #[inline]
     pub unsafe fn trtExecutionContextSetInputShape(
         _ctx: trtIExecutionContext_t,
@@ -329,6 +383,7 @@ mod shim_stubs {
     ) -> bool {
         false
     }
+    /// TensorRT shim: Execution Context Get Tensor Shape.
     #[inline]
     pub unsafe fn trtExecutionContextGetTensorShape(
         _ctx: trtIExecutionContext_t,
@@ -339,6 +394,7 @@ mod shim_stubs {
             d: [0; TRT_MAX_DIMS],
         }
     }
+    /// TensorRT shim: Execution Context Set Tensor Address.
     #[inline]
     pub unsafe fn trtExecutionContextSetTensorAddress(
         _ctx: trtIExecutionContext_t,
@@ -347,6 +403,7 @@ mod shim_stubs {
     ) -> bool {
         false
     }
+    /// TensorRT shim: Execution Context Get Tensor Address.
     #[inline]
     pub unsafe fn trtExecutionContextGetTensorAddress(
         _ctx: trtIExecutionContext_t,
@@ -354,6 +411,7 @@ mod shim_stubs {
     ) -> *mut c_void {
         core::ptr::null_mut()
     }
+    /// TensorRT shim: Execution Context Enqueue V3.
     #[inline]
     pub unsafe fn trtExecutionContextEnqueueV3(
         _ctx: trtIExecutionContext_t,
@@ -362,14 +420,17 @@ mod shim_stubs {
         false
     }
 
+    /// TensorRT shim: Host Memory Data.
     #[inline]
     pub unsafe fn trtHostMemoryData(_mem: trtIHostMemory_t) -> *mut c_void {
         core::ptr::null_mut()
     }
+    /// TensorRT shim: Host Memory Size.
     #[inline]
     pub unsafe fn trtHostMemorySize(_mem: trtIHostMemory_t) -> usize {
         0
     }
+    /// TensorRT shim: Host Memory Destroy.
     #[inline]
     pub unsafe fn trtHostMemoryDestroy(_mem: trtIHostMemory_t) {}
 }
@@ -386,6 +447,7 @@ fn tensorrt_candidates() -> Vec<String> {
 
 macro_rules! trt_fns {
     ($($name:ident as $sym:literal : $pfn:ty);* $(;)?) => {
+        /// TensorRT dynamic-loader handle (libnvinfer).
         pub struct TensorRt {
             lib: Library,
             $($name: OnceLock<$pfn>,)*
@@ -422,6 +484,7 @@ trt_fns! {
     create_infer_runtime as "createInferRuntime_INTERNAL": PFN_createInferRuntime;
 }
 
+/// resolve and return the process-wide TensorRT loader.
 pub fn tensorrt() -> Result<&'static TensorRt, LoaderError> {
     static TRT: OnceLock<TensorRt> = OnceLock::new();
     if let Some(c) = TRT.get() {

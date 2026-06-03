@@ -33,15 +33,22 @@ pub struct NppLibraryVersion {
 pub struct NppStatus(pub i32);
 
 impl NppStatus {
+    /// NPP status code `NPP_SUCCESS`.
     pub const NPP_SUCCESS: Self = Self(0);
+    /// NPP status code `NPP_NULL_POINTER_ERROR`.
     pub const NPP_NULL_POINTER_ERROR: Self = Self(-4);
+    /// NPP status code `NPP_INVALID_ARGUMENT_ERROR`.
     pub const NPP_INVALID_ARGUMENT_ERROR: Self = Self(-14);
+    /// NPP status code `NPP_SIZE_ERROR`.
     pub const NPP_SIZE_ERROR: Self = Self(-21);
+    /// NPP status code `NPP_STEP_ERROR`.
     pub const NPP_STEP_ERROR: Self = Self(-14);
 
+    /// `is_success` method on `NppStatus`.
     pub const fn is_success(self) -> bool {
         self.0 == 0
     }
+    /// `is_error` method on `NppStatus`.
     pub const fn is_error(self) -> bool {
         self.0 < 0
     }
@@ -109,31 +116,45 @@ pub struct NppiPoint {
 /// `NppiInterpolationMode` — resampling kernel for geometric ops.
 #[allow(non_snake_case)]
 pub mod NppiInterpolationMode {
+    /// `NN` interpolation mode of `NppiInterpolationMode`.
     pub const NN: i32 = 1;
+    /// `LINEAR` interpolation mode of `NppiInterpolationMode`.
     pub const LINEAR: i32 = 2;
+    /// `CUBIC` interpolation mode of `NppiInterpolationMode`.
     pub const CUBIC: i32 = 4;
+    /// `CUBIC2P_BSPLINE` interpolation mode of `NppiInterpolationMode`.
     pub const CUBIC2P_BSPLINE: i32 = 5;
+    /// `CUBIC2P_CATMULLROM` interpolation mode of `NppiInterpolationMode`.
     pub const CUBIC2P_CATMULLROM: i32 = 6;
+    /// `CUBIC2P_B05C03` interpolation mode of `NppiInterpolationMode`.
     pub const CUBIC2P_B05C03: i32 = 7;
+    /// `SUPER` interpolation mode of `NppiInterpolationMode`.
     pub const SUPER: i32 = 8;
+    /// `LANCZOS` interpolation mode of `NppiInterpolationMode`.
     pub const LANCZOS: i32 = 16;
+    /// `LANCZOS3_ADVANCED` interpolation mode of `NppiInterpolationMode`.
     pub const LANCZOS3_ADVANCED: i32 = 17;
 }
 
 // ---- function-pointer types ----------------------------------------------
 
+/// get NPP library version.
 pub type PFN_nppGetLibVersion = unsafe extern "C" fn() -> *const NppLibraryVersion;
 
 // --- Signal arithmetic (npps) ---
+/// add 32-bit float in-place signal.
 pub type PFN_nppsAdd_32f_I =
     unsafe extern "C" fn(p_src: *const f32, p_src_dst: *mut f32, n_length: c_int) -> NppStatus;
 
+/// sub 32-bit float in-place signal.
 pub type PFN_nppsSub_32f_I =
     unsafe extern "C" fn(p_src: *const f32, p_src_dst: *mut f32, n_length: c_int) -> NppStatus;
 
+/// mul 32-bit float in-place signal.
 pub type PFN_nppsMul_32f_I =
     unsafe extern "C" fn(p_src: *const f32, p_src_dst: *mut f32, n_length: c_int) -> NppStatus;
 
+/// sum 32-bit float signal.
 pub type PFN_nppsSum_32f = unsafe extern "C" fn(
     p_src: *const f32,
     n_length: c_int,
@@ -141,9 +162,11 @@ pub type PFN_nppsSum_32f = unsafe extern "C" fn(
     p_device_buffer: *mut u8,
 ) -> NppStatus;
 
+/// sum get buffer size 32-bit float signal.
 pub type PFN_nppsSumGetBufferSize_32f =
     unsafe extern "C" fn(n_length: c_int, h_buffer_size: *mut c_int) -> NppStatus;
 
+/// min max 32-bit float signal.
 pub type PFN_nppsMinMax_32f = unsafe extern "C" fn(
     p_src: *const f32,
     n_length: c_int,
@@ -152,10 +175,12 @@ pub type PFN_nppsMinMax_32f = unsafe extern "C" fn(
     p_device_buffer: *mut u8,
 ) -> NppStatus;
 
+/// min max get buffer size 32-bit float signal.
 pub type PFN_nppsMinMaxGetBufferSize_32f =
     unsafe extern "C" fn(n_length: c_int, h_buffer_size: *mut c_int) -> NppStatus;
 
 // --- Image arithmetic (nppial) — single-channel 8u + 32f ---
+/// add 8-bit unsigned single-channel ROI with shift-scale image.
 pub type PFN_nppiAdd_8u_C1RSfs = unsafe extern "C" fn(
     p_src1: *const u8,
     n_src1_step: c_int,
@@ -167,6 +192,7 @@ pub type PFN_nppiAdd_8u_C1RSfs = unsafe extern "C" fn(
     n_scale_factor: c_int,
 ) -> NppStatus;
 
+/// add 32-bit float single-channel ROI image.
 pub type PFN_nppiAdd_32f_C1R = unsafe extern "C" fn(
     p_src1: *const f32,
     n_src1_step: c_int,
@@ -177,6 +203,7 @@ pub type PFN_nppiAdd_32f_C1R = unsafe extern "C" fn(
     size: NppiSize,
 ) -> NppStatus;
 
+/// mul 32-bit float single-channel ROI image.
 pub type PFN_nppiMul_32f_C1R = unsafe extern "C" fn(
     p_src1: *const f32,
     n_src1_step: c_int,
@@ -188,6 +215,7 @@ pub type PFN_nppiMul_32f_C1R = unsafe extern "C" fn(
 ) -> NppStatus;
 
 // --- Image geometry (nppig) — resize ---
+/// resize 8-bit unsigned single-channel ROI image.
 pub type PFN_nppiResize_8u_C1R = unsafe extern "C" fn(
     p_src: *const u8,
     n_src_step: c_int,
@@ -200,6 +228,7 @@ pub type PFN_nppiResize_8u_C1R = unsafe extern "C" fn(
     interpolation: c_int,
 ) -> NppStatus;
 
+/// resize 32-bit float single-channel ROI image.
 pub type PFN_nppiResize_32f_C1R = unsafe extern "C" fn(
     p_src: *const f32,
     n_src_step: c_int,
@@ -213,6 +242,7 @@ pub type PFN_nppiResize_32f_C1R = unsafe extern "C" fn(
 ) -> NppStatus;
 
 // --- Image color conversion (nppicc) — RGB → grayscale ---
+/// r g b to gray 8-bit unsigned 3-channel to single-channel ROI image.
 pub type PFN_nppiRGBToGray_8u_C3C1R = unsafe extern "C" fn(
     p_src: *const u8,
     n_src_step: c_int,
@@ -221,6 +251,7 @@ pub type PFN_nppiRGBToGray_8u_C3C1R = unsafe extern "C" fn(
     size: NppiSize,
 ) -> NppStatus;
 
+/// b g r to gray 8-bit unsigned 3-channel to single-channel ROI image.
 pub type PFN_nppiBGRToGray_8u_C3C1R = unsafe extern "C" fn(
     p_src: *const u8,
     n_src_step: c_int,
@@ -230,6 +261,7 @@ pub type PFN_nppiBGRToGray_8u_C3C1R = unsafe extern "C" fn(
 ) -> NppStatus;
 
 // --- Image filters (nppif) — box + gaussian ---
+/// filter box 8-bit unsigned single-channel ROI image.
 pub type PFN_nppiFilterBox_8u_C1R = unsafe extern "C" fn(
     p_src: *const u8,
     n_src_step: c_int,
@@ -241,6 +273,7 @@ pub type PFN_nppiFilterBox_8u_C1R = unsafe extern "C" fn(
 ) -> NppStatus;
 
 // --- Image statistics (nppist) — sum + min/max ---
+/// sum 32-bit float single-channel ROI image.
 pub type PFN_nppiSum_32f_C1R = unsafe extern "C" fn(
     p_src: *const f32,
     n_src_step: c_int,
@@ -249,6 +282,7 @@ pub type PFN_nppiSum_32f_C1R = unsafe extern "C" fn(
     p_sum: *mut f64,
 ) -> NppStatus;
 
+/// sum get buffer host size 32-bit float single-channel ROI image.
 pub type PFN_nppiSumGetBufferHostSize_32f_C1R =
     unsafe extern "C" fn(roi: NppiSize, h_buffer_size: *mut c_int) -> NppStatus;
 
@@ -361,6 +395,7 @@ npp_fns!(Nppist(nppist_candidates()) {
         PFN_nppiSumGetBufferHostSize_32f_C1R;
 });
 
+/// NPP core helper `nppc`.
 pub fn nppc() -> Result<&'static Nppc, LoaderError> {
     static NPPC: OnceLock<Nppc> = OnceLock::new();
     if let Some(n) = NPPC.get() {
@@ -372,6 +407,7 @@ pub fn nppc() -> Result<&'static Nppc, LoaderError> {
     Ok(NPPC.get().expect("OnceLock set or lost race"))
 }
 
+/// signal.
 pub fn npps() -> Result<&'static Npps, LoaderError> {
     static NPPS: OnceLock<Npps> = OnceLock::new();
     if let Some(n) = NPPS.get() {
@@ -383,6 +419,7 @@ pub fn npps() -> Result<&'static Npps, LoaderError> {
     Ok(NPPS.get().expect("OnceLock set or lost race"))
 }
 
+/// al image.
 pub fn nppial() -> Result<&'static Nppial, LoaderError> {
     static L: OnceLock<Nppial> = OnceLock::new();
     if let Some(n) = L.get() {
@@ -393,6 +430,7 @@ pub fn nppial() -> Result<&'static Nppial, LoaderError> {
     Ok(L.get().expect("OnceLock set or lost race"))
 }
 
+/// g image.
 pub fn nppig() -> Result<&'static Nppig, LoaderError> {
     static L: OnceLock<Nppig> = OnceLock::new();
     if let Some(n) = L.get() {
@@ -403,6 +441,7 @@ pub fn nppig() -> Result<&'static Nppig, LoaderError> {
     Ok(L.get().expect("OnceLock set or lost race"))
 }
 
+/// cc image.
 pub fn nppicc() -> Result<&'static Nppicc, LoaderError> {
     static L: OnceLock<Nppicc> = OnceLock::new();
     if let Some(n) = L.get() {
@@ -413,6 +452,7 @@ pub fn nppicc() -> Result<&'static Nppicc, LoaderError> {
     Ok(L.get().expect("OnceLock set or lost race"))
 }
 
+/// f image.
 pub fn nppif() -> Result<&'static Nppif, LoaderError> {
     static L: OnceLock<Nppif> = OnceLock::new();
     if let Some(n) = L.get() {
@@ -423,6 +463,7 @@ pub fn nppif() -> Result<&'static Nppif, LoaderError> {
     Ok(L.get().expect("OnceLock set or lost race"))
 }
 
+/// st image.
 pub fn nppist() -> Result<&'static Nppist, LoaderError> {
     static L: OnceLock<Nppist> = OnceLock::new();
     if let Some(n) = L.get() {

@@ -19,32 +19,54 @@ use baracuda_core::{Library, LoaderError};
 use baracuda_cuda_sys::runtime::cudaStream_t;
 use baracuda_types::CudaStatus;
 
+/// Opaque handle. Mirrors `cudnnHandle_t`.
 pub type cudnnHandle_t = *mut c_void;
+/// Opaque handle. Mirrors `cudnnTensorDescriptor_t`.
 pub type cudnnTensorDescriptor_t = *mut c_void;
+/// Opaque handle. Mirrors `cudnnActivationDescriptor_t`.
 pub type cudnnActivationDescriptor_t = *mut c_void;
+/// Opaque handle. Mirrors `cudnnFilterDescriptor_t`.
 pub type cudnnFilterDescriptor_t = *mut c_void;
+/// Opaque handle. Mirrors `cudnnConvolutionDescriptor_t`.
 pub type cudnnConvolutionDescriptor_t = *mut c_void;
+/// Opaque handle. Mirrors `cudnnPoolingDescriptor_t`.
 pub type cudnnPoolingDescriptor_t = *mut c_void;
+/// Opaque handle. Mirrors `cudnnLRNDescriptor_t`.
 pub type cudnnLRNDescriptor_t = *mut c_void;
+/// Opaque handle. Mirrors `cudnnOpTensorDescriptor_t`.
 pub type cudnnOpTensorDescriptor_t = *mut c_void;
+/// Opaque handle. Mirrors `cudnnReduceTensorDescriptor_t`.
 pub type cudnnReduceTensorDescriptor_t = *mut c_void;
+/// Opaque handle. Mirrors `cudnnDropoutDescriptor_t`.
 pub type cudnnDropoutDescriptor_t = *mut c_void;
+/// Opaque handle. Mirrors `cudnnCTCLossDescriptor_t`.
 pub type cudnnCTCLossDescriptor_t = *mut c_void;
+/// Opaque handle. Mirrors `cudnnRNNDescriptor_t`.
 pub type cudnnRNNDescriptor_t = *mut c_void;
+/// Opaque handle. Mirrors `cudnnRNNDataDescriptor_t`.
 pub type cudnnRNNDataDescriptor_t = *mut c_void;
+/// Opaque handle. Mirrors `cudnnBackendDescriptor_t`.
 pub type cudnnBackendDescriptor_t = *mut c_void;
 
 /// Forward-convolution algorithm selector.
 #[repr(i32)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum cudnnConvolutionFwdAlgo_t {
+    /// Implicit gemm.
     ImplicitGemm = 0,
+    /// Implicit precomp gemm.
     ImplicitPrecompGemm = 1,
+    /// Gemm.
     Gemm = 2,
+    /// Direct.
     Direct = 3,
+    /// Fft.
     Fft = 4,
+    /// Fft tiling.
     FftTiling = 5,
+    /// Winograd.
     Winograd = 6,
+    /// Winograd nonfused.
     WinogradNonfused = 7,
 }
 
@@ -52,280 +74,466 @@ pub enum cudnnConvolutionFwdAlgo_t {
 #[repr(i32)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum cudnnConvolutionMode_t {
+    /// Convolution.
     Convolution = 0,
+    /// Cross correlation.
     CrossCorrelation = 1,
 }
 
+/// Enum mirroring `cudnnDataType_t`.
 #[repr(i32)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum cudnnDataType_t {
+    /// Float.
     Float = 0,
+    /// Double.
     Double = 1,
+    /// Half.
     Half = 2,
+    /// Int8.
     Int8 = 3,
+    /// Int32.
     Int32 = 4,
+    /// Int8x4.
     Int8x4 = 5,
+    /// Uint8.
     Uint8 = 6,
+    /// Uint8x4.
     Uint8x4 = 7,
+    /// Int8x32.
     Int8x32 = 8,
+    /// B float16.
     BFloat16 = 9,
 }
 
+/// Enum mirroring `cudnnTensorFormat_t`.
 #[repr(i32)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum cudnnTensorFormat_t {
+    /// Nchw.
     Nchw = 0,
+    /// Nhwc.
     Nhwc = 1,
+    /// Nchw vect c.
     NchwVectC = 2,
 }
 
+/// Enum mirroring `cudnnActivationMode_t`.
 #[repr(i32)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum cudnnActivationMode_t {
+    /// Sigmoid.
     Sigmoid = 0,
+    /// Relu.
     Relu = 1,
+    /// Tanh.
     Tanh = 2,
+    /// Clipped relu.
     ClippedRelu = 3,
+    /// Elu.
     Elu = 4,
+    /// Identity.
     Identity = 5,
+    /// Swish.
     Swish = 6,
 }
 
+/// Enum mirroring `cudnnNanPropagation_t`.
 #[repr(i32)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum cudnnNanPropagation_t {
+    /// Not propagate nan.
     NotPropagateNan = 0,
+    /// Propagate nan.
     PropagateNan = 1,
 }
 
+/// Enum mirroring `cudnnPoolingMode_t`.
 #[repr(i32)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum cudnnPoolingMode_t {
+    /// Max.
     Max = 0,
+    /// Average count include padding.
     AverageCountIncludePadding = 1,
+    /// Average count exclude padding.
     AverageCountExcludePadding = 2,
+    /// Max deterministic.
     MaxDeterministic = 3,
 }
 
+/// Enum mirroring `cudnnSoftmaxAlgorithm_t`.
 #[repr(i32)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum cudnnSoftmaxAlgorithm_t {
+    /// Fast.
     Fast = 0,
+    /// Accurate.
     Accurate = 1,
+    /// Log.
     Log = 2,
 }
 
+/// Enum mirroring `cudnnSoftmaxMode_t`.
 #[repr(i32)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum cudnnSoftmaxMode_t {
+    /// Instance.
     Instance = 0,
+    /// Channel.
     Channel = 1,
 }
 
+/// Enum mirroring `cudnnBatchNormMode_t`.
 #[repr(i32)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum cudnnBatchNormMode_t {
+    /// Per activation.
     PerActivation = 0,
+    /// Spatial.
     Spatial = 1,
+    /// Spatial persistent.
     SpatialPersistent = 2,
 }
 
+/// Enum mirroring `cudnnOpTensorOp_t`.
 #[repr(i32)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum cudnnOpTensorOp_t {
+    /// Add.
     Add = 0,
+    /// Mul.
     Mul = 1,
+    /// Min.
     Min = 2,
+    /// Max.
     Max = 3,
+    /// Sqrt.
     Sqrt = 4,
+    /// Not.
     Not = 5,
 }
 
+/// Enum mirroring `cudnnReduceTensorOp_t`.
 #[repr(i32)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum cudnnReduceTensorOp_t {
+    /// Add.
     Add = 0,
+    /// Mul.
     Mul = 1,
+    /// Min.
     Min = 2,
+    /// Max.
     Max = 3,
+    /// Amax.
     Amax = 4,
+    /// Avg.
     Avg = 5,
+    /// Norm1.
     Norm1 = 6,
+    /// Norm2.
     Norm2 = 7,
+    /// Mul no zeros.
     MulNoZeros = 8,
 }
 
+/// Enum mirroring `cudnnReduceTensorIndices_t`.
 #[repr(i32)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum cudnnReduceTensorIndices_t {
+    /// No indices.
     NoIndices = 0,
+    /// Flattened indices.
     FlattenedIndices = 1,
 }
 
+/// Enum mirroring `cudnnIndicesType_t`.
 #[repr(i32)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum cudnnIndicesType_t {
+    /// U32.
     U32 = 0,
+    /// U64.
     U64 = 1,
+    /// U16.
     U16 = 2,
+    /// U8.
     U8 = 3,
 }
 
+/// Enum mirroring `cudnnRNNMode_t`.
 #[repr(i32)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum cudnnRNNMode_t {
+    /// Relu rnn.
     ReluRnn = 0,
+    /// Tanh rnn.
     TanhRnn = 1,
+    /// Lstm.
     Lstm = 2,
+    /// Gru.
     Gru = 3,
 }
 
+/// Enum mirroring `cudnnDirectionMode_t`.
 #[repr(i32)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum cudnnDirectionMode_t {
+    /// Unidirectional.
     Unidirectional = 0,
+    /// Bidirectional.
     Bidirectional = 1,
 }
 
+/// Enum mirroring `cudnnRNNInputMode_t`.
 #[repr(i32)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum cudnnRNNInputMode_t {
+    /// Linear input.
     LinearInput = 0,
+    /// Skip input.
     SkipInput = 1,
 }
 
+/// Enum mirroring `cudnnRNNAlgo_t`.
 #[repr(i32)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum cudnnRNNAlgo_t {
+    /// Standard.
     Standard = 0,
+    /// Persist static.
     PersistStatic = 1,
+    /// Persist dynamic.
     PersistDynamic = 2,
+    /// Persist static small h.
     PersistStaticSmallH = 3,
 }
 
+/// Enum mirroring `cudnnConvolutionBwdDataAlgo_t`.
 #[repr(i32)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum cudnnConvolutionBwdDataAlgo_t {
+    /// Algo0.
     Algo0 = 0,
+    /// Algo1.
     Algo1 = 1,
+    /// Fft.
     Fft = 2,
+    /// Fft tiling.
     FftTiling = 3,
+    /// Winograd.
     Winograd = 4,
+    /// Winograd nonfused.
     WinogradNonfused = 5,
 }
 
+/// Enum mirroring `cudnnConvolutionBwdFilterAlgo_t`.
 #[repr(i32)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum cudnnConvolutionBwdFilterAlgo_t {
+    /// Algo0.
     Algo0 = 0,
+    /// Algo1.
     Algo1 = 1,
+    /// Fft.
     Fft = 2,
+    /// Algo3.
     Algo3 = 3,
+    /// Winograd.
     Winograd = 4,
+    /// Winograd nonfused.
     WinogradNonfused = 5,
+    /// Fft tiling.
     FftTiling = 6,
 }
 
+/// Enum mirroring `cudnnBackendDescriptorType_t`.
 #[repr(i32)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum cudnnBackendDescriptorType_t {
+    /// Pointwise descriptor.
     PointwiseDescriptor = 0,
+    /// Convolution descriptor.
     ConvolutionDescriptor = 1,
+    /// Engine descriptor.
     EngineDescriptor = 2,
+    /// Engine cfg descriptor.
     EngineCfgDescriptor = 3,
+    /// Execution plan descriptor.
     ExecutionPlanDescriptor = 4,
+    /// Intermediate info descriptor.
     IntermediateInfoDescriptor = 5,
+    /// Knob choice descriptor.
     KnobChoiceDescriptor = 6,
+    /// Knob info descriptor.
     KnobInfoDescriptor = 7,
+    /// Layout info descriptor.
     LayoutInfoDescriptor = 8,
+    /// Operation convolution forward descriptor.
     OperationConvolutionForwardDescriptor = 9,
+    /// Operation convolution backward filter descriptor.
     OperationConvolutionBackwardFilterDescriptor = 10,
+    /// Operation convolution backward data descriptor.
     OperationConvolutionBackwardDataDescriptor = 11,
+    /// Operation pointwise descriptor.
     OperationPointwiseDescriptor = 12,
+    /// Operation gen stats descriptor.
     OperationGenStatsDescriptor = 13,
+    /// Operation reduction descriptor.
     OperationReductionDescriptor = 14,
+    /// Operation bn finalize statistics descriptor.
     OperationBnFinalizeStatisticsDescriptor = 15,
+    /// Operation graph descriptor.
     OperationGraphDescriptor = 16,
+    /// Variant pack descriptor.
     VariantPackDescriptor = 17,
+    /// Tensor descriptor.
     TensorDescriptor = 18,
+    /// Matmul descriptor.
     MatmulDescriptor = 19,
+    /// Operation matmul descriptor.
     OperationMatmulDescriptor = 20,
+    /// Operation bn bwd weights descriptor.
     OperationBnBwdWeightsDescriptor = 21,
+    /// Resample descriptor.
     ResampleDescriptor = 22,
+    /// Operation resample fwd descriptor.
     OperationResampleFwdDescriptor = 23,
+    /// Operation resample bwd descriptor.
     OperationResampleBwdDescriptor = 24,
+    /// Operation concat descriptor.
     OperationConcatDescriptor = 25,
+    /// Operation signal descriptor.
     OperationSignalDescriptor = 26,
+    /// Operation norm forward descriptor.
     OperationNormForwardDescriptor = 27,
+    /// Operation norm backward descriptor.
     OperationNormBackwardDescriptor = 28,
+    /// Operation rng descriptor.
     OperationRngDescriptor = 30,
+    /// Rng descriptor.
     RngDescriptor = 31,
 }
 
+/// Enum mirroring `cudnnBackendAttributeName_t`.
 #[repr(i32)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum cudnnBackendAttributeName_t {
     // Just a representative subset — the real enum has ~200 entries.
+    /// Pointwise mode.
     PointwiseMode = 0,
+    /// Pointwise math prec.
     PointwiseMathPrec = 1,
+    /// Pointwise nan propagation.
     PointwiseNanPropagation = 2,
+    /// Pointwise relu lower clip.
     PointwiseReluLowerClip = 3,
+    /// Pointwise relu upper clip.
     PointwiseReluUpperClip = 4,
+    /// Pointwise elu alpha.
     PointwiseEluAlpha = 5,
     // Tensor descriptor
+    /// Tensor unique id.
     TensorUniqueId = 100,
+    /// Tensor data type.
     TensorDataType = 101,
+    /// Tensor byte alignment.
     TensorByteAlignment = 102,
+    /// Tensor dimensions.
     TensorDimensions = 103,
+    /// Tensor strides.
     TensorStrides = 104,
     // Convolution descriptor
+    /// Convolution comp type.
     ConvolutionCompType = 200,
+    /// Convolution conv mode.
     ConvolutionConvMode = 201,
+    /// Convolution dilations.
     ConvolutionDilations = 202,
+    /// Convolution filter strides.
     ConvolutionFilterStrides = 203,
+    /// Convolution pre paddings.
     ConvolutionPrePaddings = 204,
+    /// Convolution post paddings.
     ConvolutionPostPaddings = 205,
+    /// Convolution spatial dims.
     ConvolutionSpatialDims = 206,
     // Operation graph
+    /// Operation graph handle.
     OperationGraphHandle = 500,
+    /// Operation graph ops.
     OperationGraphOps = 501,
     // Execution plan
+    /// Execution plan handle.
     ExecutionPlanHandle = 600,
+    /// Execution plan engine config.
     ExecutionPlanEngineConfig = 601,
+    /// Execution plan workspace size.
     ExecutionPlanWorkspaceSize = 602,
 }
 
+/// Enum mirroring `cudnnBackendAttributeType_t`.
 #[repr(i32)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum cudnnBackendAttributeType_t {
+    /// Handle.
     Handle = 0,
+    /// Data type.
     DataType = 1,
+    /// Boolean.
     Boolean = 2,
+    /// Int64.
     Int64 = 3,
+    /// Float value.
     FloatValue = 4,
+    /// Double value.
     DoubleValue = 5,
+    /// Pointwise mode.
     PointwiseMode = 6,
+    /// Convolution mode.
     ConvolutionMode = 7,
+    /// Heur mode.
     HeurMode = 8,
+    /// Knob type.
     KnobType = 9,
+    /// Nan propagation.
     NanPropagation = 10,
+    /// Numerical note.
     NumericalNote = 11,
+    /// Layout type.
     LayoutType = 12,
+    /// Attrib name.
     AttribName = 13,
+    /// Pointer t.
     PointerT = 14,
+    /// Backend descriptor.
     BackendDescriptor = 15,
+    /// Genstats mode.
     GenstatsMode = 16,
+    /// Bn finalize stats mode.
     BnFinalizeStatsMode = 17,
+    /// Reduction operator type.
     ReductionOperatorType = 18,
+    /// Behavior note.
     BehaviorNote = 19,
+    /// Tensor reordering mode.
     TensorReorderingMode = 20,
+    /// Resample mode.
     ResampleMode = 21,
+    /// Padding mode.
     PaddingMode = 22,
+    /// Int array.
     IntArray = 23,
+    /// Rng distribution.
     RngDistribution = 24,
+    /// Norm mode.
     NormMode = 25,
+    /// Norm fwd phase.
     NormFwdPhase = 26,
+    /// Rng normal.
     RngNormal = 27,
+    /// Rng uniform.
     RngUniform = 28,
 }
 
@@ -335,6 +543,7 @@ pub enum cudnnBackendAttributeType_t {
 #[repr(i32)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum cudnnMathType_t {
+    /// Default math.
     DefaultMath = 0,
     /// Allow tensor-core math (Volta+).
     TensorOpMath = 1,
@@ -348,7 +557,9 @@ pub enum cudnnMathType_t {
 #[repr(i32)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum cudnnReorderType_t {
+    /// Default reorder.
     DefaultReorder = 0,
+    /// No reorder.
     NoReorder = 1,
 }
 
@@ -356,7 +567,9 @@ pub enum cudnnReorderType_t {
 #[repr(i32)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum cudnnNormMode_t {
+    /// Per activation.
     PerActivation = 0,
+    /// Per channel.
     PerChannel = 1,
 }
 
@@ -364,7 +577,9 @@ pub enum cudnnNormMode_t {
 #[repr(i32)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum cudnnNormAlgo_t {
+    /// Standard.
     Standard = 0,
+    /// Persist.
     Persist = 1,
 }
 
@@ -372,8 +587,11 @@ pub enum cudnnNormAlgo_t {
 #[repr(i32)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum cudnnNormOps_t {
+    /// Norm.
     Norm = 0,
+    /// Norm activation.
     NormActivation = 1,
+    /// Norm add activation.
     NormAddActivation = 2,
 }
 
@@ -381,8 +599,11 @@ pub enum cudnnNormOps_t {
 #[repr(i32)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum cudnnBatchNormOps_t {
+    /// Bn.
     Bn = 0,
+    /// Bn activation.
     BnActivation = 1,
+    /// Bn add activation.
     BnAddActivation = 2,
 }
 
@@ -391,7 +612,9 @@ pub enum cudnnBatchNormOps_t {
 #[repr(i32)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum cudnnDeterminism_t {
+    /// Non deterministic.
     NonDeterministic = 0,
+    /// Deterministic.
     Deterministic = 1,
 }
 
@@ -409,6 +632,7 @@ pub struct cudnnConvolutionFwdAlgoPerf_t {
     pub reserved: [c_int; 3],
 }
 
+/// Algorithm-finder performance row. Mirrors `cudnnConvolutionBwdDataAlgoPerf_t`.
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
 pub struct cudnnConvolutionBwdDataAlgoPerf_t {
@@ -421,6 +645,7 @@ pub struct cudnnConvolutionBwdDataAlgoPerf_t {
     pub reserved: [c_int; 3],
 }
 
+/// Algorithm-finder performance row. Mirrors `cudnnConvolutionBwdFilterAlgoPerf_t`.
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
 pub struct cudnnConvolutionBwdFilterAlgoPerf_t {
@@ -435,29 +660,45 @@ pub struct cudnnConvolutionBwdFilterAlgoPerf_t {
 
 // ---- new opaque descriptors --------------------------------------------------
 
+/// Opaque handle. Mirrors `cudnnTensorTransformDescriptor_t`.
 pub type cudnnTensorTransformDescriptor_t = *mut c_void;
+/// Opaque handle. Mirrors `cudnnAttnDescriptor_t`.
 pub type cudnnAttnDescriptor_t = *mut c_void;
+/// Opaque handle. Mirrors `cudnnSeqDataDescriptor_t`.
 pub type cudnnSeqDataDescriptor_t = *mut c_void;
 
 // ---- status ---------------------------------------------------------------
 
+/// Struct mirroring `cudnnStatus_t`.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
 #[repr(transparent)]
 pub struct cudnnStatus_t(pub i32);
 
 impl cudnnStatus_t {
+    /// Success.
     pub const SUCCESS: Self = Self(0);
+    /// Not initialized.
     pub const NOT_INITIALIZED: Self = Self(1);
+    /// Alloc failed.
     pub const ALLOC_FAILED: Self = Self(2);
+    /// Bad param.
     pub const BAD_PARAM: Self = Self(3);
+    /// Internal error.
     pub const INTERNAL_ERROR: Self = Self(4);
+    /// Invalid value.
     pub const INVALID_VALUE: Self = Self(5);
+    /// Arch mismatch.
     pub const ARCH_MISMATCH: Self = Self(6);
+    /// Mapping error.
     pub const MAPPING_ERROR: Self = Self(7);
+    /// Execution failed.
     pub const EXECUTION_FAILED: Self = Self(8);
+    /// Not supported.
     pub const NOT_SUPPORTED: Self = Self(9);
+    /// License error.
     pub const LICENSE_ERROR: Self = Self(10);
 
+    /// Is success.
     pub const fn is_success(self) -> bool {
         self.0 == 0
     }
@@ -500,16 +741,23 @@ impl CudaStatus for cudnnStatus_t {
 
 // ---- function-pointer types ----------------------------------------------
 
+/// cuDNN: create. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnCreate = unsafe extern "C" fn(handle: *mut cudnnHandle_t) -> cudnnStatus_t;
+/// cuDNN: destroy. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnDestroy = unsafe extern "C" fn(handle: cudnnHandle_t) -> cudnnStatus_t;
+/// cuDNN: set stream. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnSetStream =
     unsafe extern "C" fn(handle: cudnnHandle_t, stream: cudaStream_t) -> cudnnStatus_t;
+/// cuDNN: get version. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnGetVersion = unsafe extern "C" fn() -> usize;
 
+/// cuDNN: create tensor descriptor. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnCreateTensorDescriptor =
     unsafe extern "C" fn(desc: *mut cudnnTensorDescriptor_t) -> cudnnStatus_t;
+/// cuDNN: destroy tensor descriptor. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnDestroyTensorDescriptor =
     unsafe extern "C" fn(desc: cudnnTensorDescriptor_t) -> cudnnStatus_t;
+/// cuDNN: set tensor4d descriptor. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnSetTensor4dDescriptor = unsafe extern "C" fn(
     desc: cudnnTensorDescriptor_t,
     format: cudnnTensorFormat_t,
@@ -520,10 +768,13 @@ pub type PFN_cudnnSetTensor4dDescriptor = unsafe extern "C" fn(
     w: c_int,
 ) -> cudnnStatus_t;
 
+/// cuDNN: create activation descriptor. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnCreateActivationDescriptor =
     unsafe extern "C" fn(desc: *mut cudnnActivationDescriptor_t) -> cudnnStatus_t;
+/// cuDNN: destroy activation descriptor. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnDestroyActivationDescriptor =
     unsafe extern "C" fn(desc: cudnnActivationDescriptor_t) -> cudnnStatus_t;
+/// cuDNN: set activation descriptor. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnSetActivationDescriptor = unsafe extern "C" fn(
     desc: cudnnActivationDescriptor_t,
     mode: cudnnActivationMode_t,
@@ -531,6 +782,7 @@ pub type PFN_cudnnSetActivationDescriptor = unsafe extern "C" fn(
     coef: c_double,
 ) -> cudnnStatus_t;
 
+/// cuDNN: activation forward. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnActivationForward = unsafe extern "C" fn(
     handle: cudnnHandle_t,
     activation_desc: cudnnActivationDescriptor_t,
@@ -544,10 +796,13 @@ pub type PFN_cudnnActivationForward = unsafe extern "C" fn(
 
 // ---- convolution ----------------------------------------------------------
 
+/// cuDNN: create filter descriptor. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnCreateFilterDescriptor =
     unsafe extern "C" fn(desc: *mut cudnnFilterDescriptor_t) -> cudnnStatus_t;
+/// cuDNN: destroy filter descriptor. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnDestroyFilterDescriptor =
     unsafe extern "C" fn(desc: cudnnFilterDescriptor_t) -> cudnnStatus_t;
+/// cuDNN: set filter4d descriptor. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnSetFilter4dDescriptor = unsafe extern "C" fn(
     desc: cudnnFilterDescriptor_t,
     data_type: cudnnDataType_t,
@@ -558,10 +813,13 @@ pub type PFN_cudnnSetFilter4dDescriptor = unsafe extern "C" fn(
     w: c_int,
 ) -> cudnnStatus_t;
 
+/// cuDNN: create convolution descriptor. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnCreateConvolutionDescriptor =
     unsafe extern "C" fn(desc: *mut cudnnConvolutionDescriptor_t) -> cudnnStatus_t;
+/// cuDNN: destroy convolution descriptor. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnDestroyConvolutionDescriptor =
     unsafe extern "C" fn(desc: cudnnConvolutionDescriptor_t) -> cudnnStatus_t;
+/// cuDNN: set convolution2d descriptor. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnSetConvolution2dDescriptor = unsafe extern "C" fn(
     desc: cudnnConvolutionDescriptor_t,
     pad_h: c_int,
@@ -574,6 +832,7 @@ pub type PFN_cudnnSetConvolution2dDescriptor = unsafe extern "C" fn(
     compute_type: cudnnDataType_t,
 ) -> cudnnStatus_t;
 
+/// cuDNN: get convolution2d forward output dim. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnGetConvolution2dForwardOutputDim = unsafe extern "C" fn(
     conv_desc: cudnnConvolutionDescriptor_t,
     input_desc: cudnnTensorDescriptor_t,
@@ -584,6 +843,7 @@ pub type PFN_cudnnGetConvolution2dForwardOutputDim = unsafe extern "C" fn(
     w: *mut c_int,
 ) -> cudnnStatus_t;
 
+/// cuDNN: get convolution forward workspace size. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnGetConvolutionForwardWorkspaceSize = unsafe extern "C" fn(
     handle: cudnnHandle_t,
     x_desc: cudnnTensorDescriptor_t,
@@ -594,6 +854,7 @@ pub type PFN_cudnnGetConvolutionForwardWorkspaceSize = unsafe extern "C" fn(
     size_in_bytes: *mut usize,
 ) -> cudnnStatus_t;
 
+/// cuDNN: convolution forward. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnConvolutionForward = unsafe extern "C" fn(
     handle: cudnnHandle_t,
     alpha: *const c_void,
@@ -610,6 +871,7 @@ pub type PFN_cudnnConvolutionForward = unsafe extern "C" fn(
     y: *mut c_void,
 ) -> cudnnStatus_t;
 
+/// cuDNN: convolution backward data. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnConvolutionBackwardData = unsafe extern "C" fn(
     handle: cudnnHandle_t,
     alpha: *const c_void,
@@ -626,6 +888,7 @@ pub type PFN_cudnnConvolutionBackwardData = unsafe extern "C" fn(
     dx: *mut c_void,
 ) -> cudnnStatus_t;
 
+/// cuDNN: convolution backward filter. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnConvolutionBackwardFilter = unsafe extern "C" fn(
     handle: cudnnHandle_t,
     alpha: *const c_void,
@@ -642,6 +905,7 @@ pub type PFN_cudnnConvolutionBackwardFilter = unsafe extern "C" fn(
     dw: *mut c_void,
 ) -> cudnnStatus_t;
 
+/// cuDNN: convolution backward bias. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnConvolutionBackwardBias = unsafe extern "C" fn(
     handle: cudnnHandle_t,
     alpha: *const c_void,
@@ -652,6 +916,7 @@ pub type PFN_cudnnConvolutionBackwardBias = unsafe extern "C" fn(
     db: *mut c_void,
 ) -> cudnnStatus_t;
 
+/// cuDNN: get convolution backward data workspace size. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnGetConvolutionBackwardDataWorkspaceSize = unsafe extern "C" fn(
     handle: cudnnHandle_t,
     w_desc: cudnnFilterDescriptor_t,
@@ -662,6 +927,7 @@ pub type PFN_cudnnGetConvolutionBackwardDataWorkspaceSize = unsafe extern "C" fn
     size_in_bytes: *mut usize,
 ) -> cudnnStatus_t;
 
+/// cuDNN: get convolution backward filter workspace size. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnGetConvolutionBackwardFilterWorkspaceSize = unsafe extern "C" fn(
     handle: cudnnHandle_t,
     x_desc: cudnnTensorDescriptor_t,
@@ -674,10 +940,13 @@ pub type PFN_cudnnGetConvolutionBackwardFilterWorkspaceSize = unsafe extern "C" 
 
 // ---- pooling --------------------------------------------------------------
 
+/// cuDNN: create pooling descriptor. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnCreatePoolingDescriptor =
     unsafe extern "C" fn(desc: *mut cudnnPoolingDescriptor_t) -> cudnnStatus_t;
+/// cuDNN: destroy pooling descriptor. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnDestroyPoolingDescriptor =
     unsafe extern "C" fn(desc: cudnnPoolingDescriptor_t) -> cudnnStatus_t;
+/// cuDNN: set pooling2d descriptor. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnSetPooling2dDescriptor = unsafe extern "C" fn(
     desc: cudnnPoolingDescriptor_t,
     mode: cudnnPoolingMode_t,
@@ -689,6 +958,7 @@ pub type PFN_cudnnSetPooling2dDescriptor = unsafe extern "C" fn(
     vertical_stride: c_int,
     horizontal_stride: c_int,
 ) -> cudnnStatus_t;
+/// cuDNN: pooling forward. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnPoolingForward = unsafe extern "C" fn(
     handle: cudnnHandle_t,
     pool_desc: cudnnPoolingDescriptor_t,
@@ -699,6 +969,7 @@ pub type PFN_cudnnPoolingForward = unsafe extern "C" fn(
     y_desc: cudnnTensorDescriptor_t,
     y: *mut c_void,
 ) -> cudnnStatus_t;
+/// cuDNN: pooling backward. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnPoolingBackward = unsafe extern "C" fn(
     handle: cudnnHandle_t,
     pool_desc: cudnnPoolingDescriptor_t,
@@ -716,6 +987,7 @@ pub type PFN_cudnnPoolingBackward = unsafe extern "C" fn(
 
 // ---- softmax --------------------------------------------------------------
 
+/// cuDNN: softmax forward. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnSoftmaxForward = unsafe extern "C" fn(
     handle: cudnnHandle_t,
     algo: cudnnSoftmaxAlgorithm_t,
@@ -728,6 +1000,7 @@ pub type PFN_cudnnSoftmaxForward = unsafe extern "C" fn(
     y: *mut c_void,
 ) -> cudnnStatus_t;
 
+/// cuDNN: softmax backward. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnSoftmaxBackward = unsafe extern "C" fn(
     handle: cudnnHandle_t,
     algo: cudnnSoftmaxAlgorithm_t,
@@ -744,6 +1017,7 @@ pub type PFN_cudnnSoftmaxBackward = unsafe extern "C" fn(
 
 // ---- batch normalization --------------------------------------------------
 
+/// cuDNN: batch normalization forward inference. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnBatchNormalizationForwardInference = unsafe extern "C" fn(
     handle: cudnnHandle_t,
     mode: cudnnBatchNormMode_t,
@@ -761,6 +1035,7 @@ pub type PFN_cudnnBatchNormalizationForwardInference = unsafe extern "C" fn(
     epsilon: c_double,
 ) -> cudnnStatus_t;
 
+/// cuDNN: batch normalization forward training. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnBatchNormalizationForwardTraining = unsafe extern "C" fn(
     handle: cudnnHandle_t,
     mode: cudnnBatchNormMode_t,
@@ -781,6 +1056,7 @@ pub type PFN_cudnnBatchNormalizationForwardTraining = unsafe extern "C" fn(
     result_save_inv_variance: *mut c_void,
 ) -> cudnnStatus_t;
 
+/// cuDNN: batch normalization backward. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnBatchNormalizationBackward = unsafe extern "C" fn(
     handle: cudnnHandle_t,
     mode: cudnnBatchNormMode_t,
@@ -805,16 +1081,20 @@ pub type PFN_cudnnBatchNormalizationBackward = unsafe extern "C" fn(
 
 // ---- op-tensor / reduce / transform --------------------------------------
 
+/// cuDNN: create op tensor descriptor. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnCreateOpTensorDescriptor =
     unsafe extern "C" fn(desc: *mut cudnnOpTensorDescriptor_t) -> cudnnStatus_t;
+/// cuDNN: destroy op tensor descriptor. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnDestroyOpTensorDescriptor =
     unsafe extern "C" fn(desc: cudnnOpTensorDescriptor_t) -> cudnnStatus_t;
+/// cuDNN: set op tensor descriptor. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnSetOpTensorDescriptor = unsafe extern "C" fn(
     desc: cudnnOpTensorDescriptor_t,
     op: cudnnOpTensorOp_t,
     compute_type: cudnnDataType_t,
     nan_prop: cudnnNanPropagation_t,
 ) -> cudnnStatus_t;
+/// cuDNN: op tensor. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnOpTensor = unsafe extern "C" fn(
     handle: cudnnHandle_t,
     desc: cudnnOpTensorDescriptor_t,
@@ -829,10 +1109,13 @@ pub type PFN_cudnnOpTensor = unsafe extern "C" fn(
     c: *mut c_void,
 ) -> cudnnStatus_t;
 
+/// cuDNN: create reduce tensor descriptor. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnCreateReduceTensorDescriptor =
     unsafe extern "C" fn(desc: *mut cudnnReduceTensorDescriptor_t) -> cudnnStatus_t;
+/// cuDNN: destroy reduce tensor descriptor. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnDestroyReduceTensorDescriptor =
     unsafe extern "C" fn(desc: cudnnReduceTensorDescriptor_t) -> cudnnStatus_t;
+/// cuDNN: set reduce tensor descriptor. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnSetReduceTensorDescriptor = unsafe extern "C" fn(
     desc: cudnnReduceTensorDescriptor_t,
     op: cudnnReduceTensorOp_t,
@@ -841,6 +1124,7 @@ pub type PFN_cudnnSetReduceTensorDescriptor = unsafe extern "C" fn(
     indices: cudnnReduceTensorIndices_t,
     indices_type: cudnnIndicesType_t,
 ) -> cudnnStatus_t;
+/// cuDNN: get reduction workspace size. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnGetReductionWorkspaceSize = unsafe extern "C" fn(
     handle: cudnnHandle_t,
     desc: cudnnReduceTensorDescriptor_t,
@@ -848,6 +1132,7 @@ pub type PFN_cudnnGetReductionWorkspaceSize = unsafe extern "C" fn(
     c_desc: cudnnTensorDescriptor_t,
     workspace_size: *mut usize,
 ) -> cudnnStatus_t;
+/// cuDNN: reduce tensor. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnReduceTensor = unsafe extern "C" fn(
     handle: cudnnHandle_t,
     desc: cudnnReduceTensorDescriptor_t,
@@ -863,6 +1148,7 @@ pub type PFN_cudnnReduceTensor = unsafe extern "C" fn(
     c: *mut c_void,
 ) -> cudnnStatus_t;
 
+/// cuDNN: add tensor. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnAddTensor = unsafe extern "C" fn(
     handle: cudnnHandle_t,
     alpha: *const c_void,
@@ -873,6 +1159,7 @@ pub type PFN_cudnnAddTensor = unsafe extern "C" fn(
     c: *mut c_void,
 ) -> cudnnStatus_t;
 
+/// cuDNN: transform tensor. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnTransformTensor = unsafe extern "C" fn(
     handle: cudnnHandle_t,
     alpha: *const c_void,
@@ -883,6 +1170,7 @@ pub type PFN_cudnnTransformTensor = unsafe extern "C" fn(
     y: *mut c_void,
 ) -> cudnnStatus_t;
 
+/// cuDNN: scale tensor. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnScaleTensor = unsafe extern "C" fn(
     handle: cudnnHandle_t,
     y_desc: cudnnTensorDescriptor_t,
@@ -890,6 +1178,7 @@ pub type PFN_cudnnScaleTensor = unsafe extern "C" fn(
     alpha: *const c_void,
 ) -> cudnnStatus_t;
 
+/// cuDNN: set tensor. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnSetTensor = unsafe extern "C" fn(
     handle: cudnnHandle_t,
     y_desc: cudnnTensorDescriptor_t,
@@ -899,10 +1188,13 @@ pub type PFN_cudnnSetTensor = unsafe extern "C" fn(
 
 // ---- LRN ------------------------------------------------------------------
 
+/// cuDNN: create LRN descriptor. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnCreateLRNDescriptor =
     unsafe extern "C" fn(desc: *mut cudnnLRNDescriptor_t) -> cudnnStatus_t;
+/// cuDNN: destroy LRN descriptor. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnDestroyLRNDescriptor =
     unsafe extern "C" fn(desc: cudnnLRNDescriptor_t) -> cudnnStatus_t;
+/// cuDNN: set LRN descriptor. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnSetLRNDescriptor = unsafe extern "C" fn(
     desc: cudnnLRNDescriptor_t,
     lrn_n: c_int,
@@ -910,6 +1202,7 @@ pub type PFN_cudnnSetLRNDescriptor = unsafe extern "C" fn(
     lrn_beta: c_double,
     lrn_k: c_double,
 ) -> cudnnStatus_t;
+/// cuDNN: LRN cross channel forward. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnLRNCrossChannelForward = unsafe extern "C" fn(
     handle: cudnnHandle_t,
     lrn_desc: cudnnLRNDescriptor_t,
@@ -924,16 +1217,21 @@ pub type PFN_cudnnLRNCrossChannelForward = unsafe extern "C" fn(
 
 // ---- dropout --------------------------------------------------------------
 
+/// cuDNN: create dropout descriptor. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnCreateDropoutDescriptor =
     unsafe extern "C" fn(desc: *mut cudnnDropoutDescriptor_t) -> cudnnStatus_t;
+/// cuDNN: destroy dropout descriptor. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnDestroyDropoutDescriptor =
     unsafe extern "C" fn(desc: cudnnDropoutDescriptor_t) -> cudnnStatus_t;
+/// cuDNN: dropout get states size. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnDropoutGetStatesSize =
     unsafe extern "C" fn(handle: cudnnHandle_t, size_in_bytes: *mut usize) -> cudnnStatus_t;
+/// cuDNN: dropout get reserve space size. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnDropoutGetReserveSpaceSize = unsafe extern "C" fn(
     x_desc: cudnnTensorDescriptor_t,
     size_in_bytes: *mut usize,
 ) -> cudnnStatus_t;
+/// cuDNN: set dropout descriptor. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnSetDropoutDescriptor = unsafe extern "C" fn(
     desc: cudnnDropoutDescriptor_t,
     handle: cudnnHandle_t,
@@ -942,6 +1240,7 @@ pub type PFN_cudnnSetDropoutDescriptor = unsafe extern "C" fn(
     state_size: usize,
     seed: u64,
 ) -> cudnnStatus_t;
+/// cuDNN: dropout forward. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnDropoutForward = unsafe extern "C" fn(
     handle: cudnnHandle_t,
     desc: cudnnDropoutDescriptor_t,
@@ -952,6 +1251,7 @@ pub type PFN_cudnnDropoutForward = unsafe extern "C" fn(
     reserve_space: *mut c_void,
     reserve_space_size: usize,
 ) -> cudnnStatus_t;
+/// cuDNN: dropout backward. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnDropoutBackward = unsafe extern "C" fn(
     handle: cudnnHandle_t,
     desc: cudnnDropoutDescriptor_t,
@@ -965,16 +1265,21 @@ pub type PFN_cudnnDropoutBackward = unsafe extern "C" fn(
 
 // ---- RNN ------------------------------------------------------------------
 
+/// cuDNN: create RNN descriptor. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnCreateRNNDescriptor =
     unsafe extern "C" fn(desc: *mut cudnnRNNDescriptor_t) -> cudnnStatus_t;
+/// cuDNN: destroy RNN descriptor. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnDestroyRNNDescriptor =
     unsafe extern "C" fn(desc: cudnnRNNDescriptor_t) -> cudnnStatus_t;
 
+/// cuDNN: create RNN data descriptor. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnCreateRNNDataDescriptor =
     unsafe extern "C" fn(desc: *mut cudnnRNNDataDescriptor_t) -> cudnnStatus_t;
+/// cuDNN: destroy RNN data descriptor. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnDestroyRNNDataDescriptor =
     unsafe extern "C" fn(desc: cudnnRNNDataDescriptor_t) -> cudnnStatus_t;
 
+/// cuDNN: RNN forward. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnRNNForward = unsafe extern "C" fn(
     handle: cudnnHandle_t,
     rnn_desc: cudnnRNNDescriptor_t,
@@ -1000,16 +1305,21 @@ pub type PFN_cudnnRNNForward = unsafe extern "C" fn(
 
 // ---- cuDNN backend (Graph) API -------------------------------------------
 
+/// cuDNN: backend create descriptor. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnBackendCreateDescriptor = unsafe extern "C" fn(
     descriptor_type: cudnnBackendDescriptorType_t,
     descriptor: *mut cudnnBackendDescriptor_t,
 ) -> cudnnStatus_t;
+/// cuDNN: backend destroy descriptor. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnBackendDestroyDescriptor =
     unsafe extern "C" fn(descriptor: cudnnBackendDescriptor_t) -> cudnnStatus_t;
+/// cuDNN: backend initialize. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnBackendInitialize =
     unsafe extern "C" fn(descriptor: cudnnBackendDescriptor_t) -> cudnnStatus_t;
+/// cuDNN: backend finalize. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnBackendFinalize =
     unsafe extern "C" fn(descriptor: cudnnBackendDescriptor_t) -> cudnnStatus_t;
+/// cuDNN: backend set attribute. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnBackendSetAttribute = unsafe extern "C" fn(
     descriptor: cudnnBackendDescriptor_t,
     attribute_name: cudnnBackendAttributeName_t,
@@ -1017,6 +1327,7 @@ pub type PFN_cudnnBackendSetAttribute = unsafe extern "C" fn(
     element_count: i64,
     array_of_elements: *const c_void,
 ) -> cudnnStatus_t;
+/// cuDNN: backend get attribute. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnBackendGetAttribute = unsafe extern "C" fn(
     descriptor: cudnnBackendDescriptor_t,
     attribute_name: cudnnBackendAttributeName_t,
@@ -1025,6 +1336,7 @@ pub type PFN_cudnnBackendGetAttribute = unsafe extern "C" fn(
     element_count: *mut i64,
     array_of_elements: *mut c_void,
 ) -> cudnnStatus_t;
+/// cuDNN: backend execute. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnBackendExecute = unsafe extern "C" fn(
     handle: cudnnHandle_t,
     execution_plan: cudnnBackendDescriptor_t,
@@ -1033,11 +1345,13 @@ pub type PFN_cudnnBackendExecute = unsafe extern "C" fn(
 
 // ---- error-string helper -------------------------------------------------
 
+/// cuDNN: get error string. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnGetErrorString =
     unsafe extern "C" fn(status: cudnnStatus_t) -> *const core::ffi::c_char;
 
 // ---- N-dimensional tensor / filter descriptors --------------------------
 
+/// cuDNN: set tensor nd descriptor. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnSetTensorNdDescriptor = unsafe extern "C" fn(
     desc: cudnnTensorDescriptor_t,
     data_type: cudnnDataType_t,
@@ -1046,6 +1360,7 @@ pub type PFN_cudnnSetTensorNdDescriptor = unsafe extern "C" fn(
     stride_a: *const c_int,
 ) -> cudnnStatus_t;
 
+/// cuDNN: get tensor nd descriptor. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnGetTensorNdDescriptor = unsafe extern "C" fn(
     desc: cudnnTensorDescriptor_t,
     nb_dims_requested: c_int,
@@ -1055,6 +1370,7 @@ pub type PFN_cudnnGetTensorNdDescriptor = unsafe extern "C" fn(
     stride_a: *mut c_int,
 ) -> cudnnStatus_t;
 
+/// cuDNN: set filter nd descriptor. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnSetFilterNdDescriptor = unsafe extern "C" fn(
     desc: cudnnFilterDescriptor_t,
     data_type: cudnnDataType_t,
@@ -1063,6 +1379,7 @@ pub type PFN_cudnnSetFilterNdDescriptor = unsafe extern "C" fn(
     filter_dim_a: *const c_int,
 ) -> cudnnStatus_t;
 
+/// cuDNN: set convolution nd descriptor. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnSetConvolutionNdDescriptor = unsafe extern "C" fn(
     desc: cudnnConvolutionDescriptor_t,
     array_length: c_int,
@@ -1073,6 +1390,7 @@ pub type PFN_cudnnSetConvolutionNdDescriptor = unsafe extern "C" fn(
     compute_type: cudnnDataType_t,
 ) -> cudnnStatus_t;
 
+/// cuDNN: set pooling nd descriptor. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnSetPoolingNdDescriptor = unsafe extern "C" fn(
     desc: cudnnPoolingDescriptor_t,
     mode: cudnnPoolingMode_t,
@@ -1085,15 +1403,19 @@ pub type PFN_cudnnSetPoolingNdDescriptor = unsafe extern "C" fn(
 
 // ---- CTC loss ------------------------------------------------------------
 
+/// cuDNN: create CTC loss descriptor. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnCreateCTCLossDescriptor =
     unsafe extern "C" fn(desc: *mut cudnnCTCLossDescriptor_t) -> cudnnStatus_t;
+/// cuDNN: destroy CTC loss descriptor. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnDestroyCTCLossDescriptor =
     unsafe extern "C" fn(desc: cudnnCTCLossDescriptor_t) -> cudnnStatus_t;
+/// cuDNN: set CTC loss descriptor. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnSetCTCLossDescriptor = unsafe extern "C" fn(
     desc: cudnnCTCLossDescriptor_t,
     compute_type: cudnnDataType_t,
 ) -> cudnnStatus_t;
 
+/// cuDNN: get CTC loss workspace size. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnGetCTCLossWorkspaceSize = unsafe extern "C" fn(
     handle: cudnnHandle_t,
     probs_desc: cudnnTensorDescriptor_t,
@@ -1106,6 +1428,7 @@ pub type PFN_cudnnGetCTCLossWorkspaceSize = unsafe extern "C" fn(
     size_in_bytes: *mut usize,
 ) -> cudnnStatus_t;
 
+/// cuDNN: CTC loss. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnCTCLoss = unsafe extern "C" fn(
     handle: cudnnHandle_t,
     probs_desc: cudnnTensorDescriptor_t,
@@ -1124,6 +1447,7 @@ pub type PFN_cudnnCTCLoss = unsafe extern "C" fn(
 
 // ---- RNN backward --------------------------------------------------------
 
+/// cuDNN: RNN backward data. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnRNNBackwardData_v8 = unsafe extern "C" fn(
     handle: cudnnHandle_t,
     rnn_desc: cudnnRNNDescriptor_t,
@@ -1149,6 +1473,7 @@ pub type PFN_cudnnRNNBackwardData_v8 = unsafe extern "C" fn(
     reserve_space: *mut c_void,
 ) -> cudnnStatus_t;
 
+/// cuDNN: RNN backward weights. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnRNNBackwardWeights_v8 = unsafe extern "C" fn(
     handle: cudnnHandle_t,
     rnn_desc: cudnnRNNDescriptor_t,
@@ -1170,13 +1495,17 @@ pub type PFN_cudnnRNNBackwardWeights_v8 = unsafe extern "C" fn(
 
 // ---- Spatial transformer --------------------------------------------------
 
+/// Opaque handle. Mirrors `cudnnSpatialTransformerDescriptor_t`.
 pub type cudnnSpatialTransformerDescriptor_t = *mut c_void;
 
+/// cuDNN: create spatial transformer descriptor. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnCreateSpatialTransformerDescriptor =
     unsafe extern "C" fn(desc: *mut cudnnSpatialTransformerDescriptor_t) -> cudnnStatus_t;
+/// cuDNN: destroy spatial transformer descriptor. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnDestroySpatialTransformerDescriptor =
     unsafe extern "C" fn(desc: cudnnSpatialTransformerDescriptor_t) -> cudnnStatus_t;
 
+/// cuDNN: set spatial transformer nd descriptor. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnSetSpatialTransformerNdDescriptor = unsafe extern "C" fn(
     desc: cudnnSpatialTransformerDescriptor_t,
     sampler_type: c_int,
@@ -1185,6 +1514,7 @@ pub type PFN_cudnnSetSpatialTransformerNdDescriptor = unsafe extern "C" fn(
     dim_a: *const c_int,
 ) -> cudnnStatus_t;
 
+/// cuDNN: spatial tf grid generator forward. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnSpatialTfGridGeneratorForward = unsafe extern "C" fn(
     handle: cudnnHandle_t,
     st_desc: cudnnSpatialTransformerDescriptor_t,
@@ -1192,6 +1522,7 @@ pub type PFN_cudnnSpatialTfGridGeneratorForward = unsafe extern "C" fn(
     grid: *mut c_void,
 ) -> cudnnStatus_t;
 
+/// cuDNN: spatial tf sampler forward. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnSpatialTfSamplerForward = unsafe extern "C" fn(
     handle: cudnnHandle_t,
     st_desc: cudnnSpatialTransformerDescriptor_t,
@@ -1208,33 +1539,40 @@ pub type PFN_cudnnSpatialTfSamplerForward = unsafe extern "C" fn(
 // Tier 1 — convolution + activation + reduction misc gaps
 // ==========================================================================
 
+/// cuDNN: set convolution group count. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnSetConvolutionGroupCount = unsafe extern "C" fn(
     desc: cudnnConvolutionDescriptor_t,
     group_count: c_int,
 ) -> cudnnStatus_t;
+/// cuDNN: get convolution group count. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnGetConvolutionGroupCount = unsafe extern "C" fn(
     desc: cudnnConvolutionDescriptor_t,
     group_count: *mut c_int,
 ) -> cudnnStatus_t;
 
+/// cuDNN: set convolution math type. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnSetConvolutionMathType = unsafe extern "C" fn(
     desc: cudnnConvolutionDescriptor_t,
     math_type: cudnnMathType_t,
 ) -> cudnnStatus_t;
+/// cuDNN: get convolution math type. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnGetConvolutionMathType = unsafe extern "C" fn(
     desc: cudnnConvolutionDescriptor_t,
     math_type: *mut cudnnMathType_t,
 ) -> cudnnStatus_t;
 
+/// cuDNN: set convolution reorder type. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnSetConvolutionReorderType = unsafe extern "C" fn(
     desc: cudnnConvolutionDescriptor_t,
     reorder_type: cudnnReorderType_t,
 ) -> cudnnStatus_t;
+/// cuDNN: get convolution reorder type. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnGetConvolutionReorderType = unsafe extern "C" fn(
     desc: cudnnConvolutionDescriptor_t,
     reorder_type: *mut cudnnReorderType_t,
 ) -> cudnnStatus_t;
 
+/// cuDNN: reorder filter and bias. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnReorderFilterAndBias = unsafe extern "C" fn(
     handle: cudnnHandle_t,
     filter_desc: cudnnFilterDescriptor_t,
@@ -1246,6 +1584,7 @@ pub type PFN_cudnnReorderFilterAndBias = unsafe extern "C" fn(
     reordered_bias_data: *mut c_void,
 ) -> cudnnStatus_t;
 
+/// cuDNN: convolution bias activation forward. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnConvolutionBiasActivationForward = unsafe extern "C" fn(
     handle: cudnnHandle_t,
     alpha1: *const c_void,
@@ -1267,6 +1606,7 @@ pub type PFN_cudnnConvolutionBiasActivationForward = unsafe extern "C" fn(
     y: *mut c_void,
 ) -> cudnnStatus_t;
 
+/// cuDNN: activation backward. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnActivationBackward = unsafe extern "C" fn(
     handle: cudnnHandle_t,
     activation_desc: cudnnActivationDescriptor_t,
@@ -1282,15 +1622,18 @@ pub type PFN_cudnnActivationBackward = unsafe extern "C" fn(
     dx: *mut c_void,
 ) -> cudnnStatus_t;
 
+/// cuDNN: set activation descriptor swish beta. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnSetActivationDescriptorSwishBeta = unsafe extern "C" fn(
     desc: cudnnActivationDescriptor_t,
     swish_beta: c_double,
 ) -> cudnnStatus_t;
+/// cuDNN: get activation descriptor swish beta. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnGetActivationDescriptorSwishBeta = unsafe extern "C" fn(
     desc: cudnnActivationDescriptor_t,
     swish_beta: *mut c_double,
 ) -> cudnnStatus_t;
 
+/// cuDNN: LRN cross channel backward. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnLRNCrossChannelBackward = unsafe extern "C" fn(
     handle: cudnnHandle_t,
     norm_desc: cudnnLRNDescriptor_t,
@@ -1307,6 +1650,7 @@ pub type PFN_cudnnLRNCrossChannelBackward = unsafe extern "C" fn(
     dx: *mut c_void,
 ) -> cudnnStatus_t;
 
+/// cuDNN: divisive normalization forward. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnDivisiveNormalizationForward = unsafe extern "C" fn(
     handle: cudnnHandle_t,
     norm_desc: cudnnLRNDescriptor_t,
@@ -1322,6 +1666,7 @@ pub type PFN_cudnnDivisiveNormalizationForward = unsafe extern "C" fn(
     y: *mut c_void,
 ) -> cudnnStatus_t;
 
+/// cuDNN: divisive normalization backward. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnDivisiveNormalizationBackward = unsafe extern "C" fn(
     handle: cudnnHandle_t,
     norm_desc: cudnnLRNDescriptor_t,
@@ -1339,6 +1684,7 @@ pub type PFN_cudnnDivisiveNormalizationBackward = unsafe extern "C" fn(
     d_means: *mut c_void,
 ) -> cudnnStatus_t;
 
+/// cuDNN: get reduction indices size. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnGetReductionIndicesSize = unsafe extern "C" fn(
     handle: cudnnHandle_t,
     desc: cudnnReduceTensorDescriptor_t,
@@ -1349,6 +1695,7 @@ pub type PFN_cudnnGetReductionIndicesSize = unsafe extern "C" fn(
 
 // 4-D tensor / filter readback + strided-Set.
 
+/// cuDNN: set tensor4d descriptor ex. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnSetTensor4dDescriptorEx = unsafe extern "C" fn(
     desc: cudnnTensorDescriptor_t,
     data_type: cudnnDataType_t,
@@ -1362,6 +1709,7 @@ pub type PFN_cudnnSetTensor4dDescriptorEx = unsafe extern "C" fn(
     w_stride: c_int,
 ) -> cudnnStatus_t;
 
+/// cuDNN: get tensor4d descriptor. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnGetTensor4dDescriptor = unsafe extern "C" fn(
     desc: cudnnTensorDescriptor_t,
     data_type: *mut cudnnDataType_t,
@@ -1375,6 +1723,7 @@ pub type PFN_cudnnGetTensor4dDescriptor = unsafe extern "C" fn(
     w_stride: *mut c_int,
 ) -> cudnnStatus_t;
 
+/// cuDNN: get filter4d descriptor. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnGetFilter4dDescriptor = unsafe extern "C" fn(
     desc: cudnnFilterDescriptor_t,
     data_type: *mut cudnnDataType_t,
@@ -1387,6 +1736,7 @@ pub type PFN_cudnnGetFilter4dDescriptor = unsafe extern "C" fn(
 
 // Dropout descriptor save/restore.
 
+/// cuDNN: get dropout descriptor. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnGetDropoutDescriptor = unsafe extern "C" fn(
     desc: cudnnDropoutDescriptor_t,
     handle: cudnnHandle_t,
@@ -1395,6 +1745,7 @@ pub type PFN_cudnnGetDropoutDescriptor = unsafe extern "C" fn(
     seed: *mut u64,
 ) -> cudnnStatus_t;
 
+/// cuDNN: restore dropout descriptor. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnRestoreDropoutDescriptor = unsafe extern "C" fn(
     desc: cudnnDropoutDescriptor_t,
     handle: cudnnHandle_t,
@@ -1408,6 +1759,7 @@ pub type PFN_cudnnRestoreDropoutDescriptor = unsafe extern "C" fn(
 // Tier 2 — algorithm finders / pickers (v7)
 // ==========================================================================
 
+/// cuDNN: get convolution forward algorithm. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnGetConvolutionForwardAlgorithm_v7 = unsafe extern "C" fn(
     handle: cudnnHandle_t,
     src_desc: cudnnTensorDescriptor_t,
@@ -1419,6 +1771,7 @@ pub type PFN_cudnnGetConvolutionForwardAlgorithm_v7 = unsafe extern "C" fn(
     perf_results: *mut cudnnConvolutionFwdAlgoPerf_t,
 ) -> cudnnStatus_t;
 
+/// cuDNN: find convolution forward algorithm. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnFindConvolutionForwardAlgorithm = unsafe extern "C" fn(
     handle: cudnnHandle_t,
     src_desc: cudnnTensorDescriptor_t,
@@ -1430,6 +1783,7 @@ pub type PFN_cudnnFindConvolutionForwardAlgorithm = unsafe extern "C" fn(
     perf_results: *mut cudnnConvolutionFwdAlgoPerf_t,
 ) -> cudnnStatus_t;
 
+/// cuDNN: find convolution forward algorithm ex. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnFindConvolutionForwardAlgorithmEx = unsafe extern "C" fn(
     handle: cudnnHandle_t,
     src_desc: cudnnTensorDescriptor_t,
@@ -1446,6 +1800,7 @@ pub type PFN_cudnnFindConvolutionForwardAlgorithmEx = unsafe extern "C" fn(
     workspace_size: usize,
 ) -> cudnnStatus_t;
 
+/// cuDNN: get convolution backward data algorithm. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnGetConvolutionBackwardDataAlgorithm_v7 = unsafe extern "C" fn(
     handle: cudnnHandle_t,
     filter_desc: cudnnFilterDescriptor_t,
@@ -1457,6 +1812,7 @@ pub type PFN_cudnnGetConvolutionBackwardDataAlgorithm_v7 = unsafe extern "C" fn(
     perf_results: *mut cudnnConvolutionBwdDataAlgoPerf_t,
 ) -> cudnnStatus_t;
 
+/// cuDNN: find convolution backward data algorithm. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnFindConvolutionBackwardDataAlgorithm = unsafe extern "C" fn(
     handle: cudnnHandle_t,
     filter_desc: cudnnFilterDescriptor_t,
@@ -1468,6 +1824,7 @@ pub type PFN_cudnnFindConvolutionBackwardDataAlgorithm = unsafe extern "C" fn(
     perf_results: *mut cudnnConvolutionBwdDataAlgoPerf_t,
 ) -> cudnnStatus_t;
 
+/// cuDNN: get convolution backward filter algorithm. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnGetConvolutionBackwardFilterAlgorithm_v7 = unsafe extern "C" fn(
     handle: cudnnHandle_t,
     src_desc: cudnnTensorDescriptor_t,
@@ -1479,6 +1836,7 @@ pub type PFN_cudnnGetConvolutionBackwardFilterAlgorithm_v7 = unsafe extern "C" f
     perf_results: *mut cudnnConvolutionBwdFilterAlgoPerf_t,
 ) -> cudnnStatus_t;
 
+/// cuDNN: find convolution backward filter algorithm. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnFindConvolutionBackwardFilterAlgorithm = unsafe extern "C" fn(
     handle: cudnnHandle_t,
     src_desc: cudnnTensorDescriptor_t,
@@ -1494,6 +1852,7 @@ pub type PFN_cudnnFindConvolutionBackwardFilterAlgorithm = unsafe extern "C" fn(
 // Tier 3 — BatchNorm "Ex" + generic Normalization API
 // ==========================================================================
 
+/// cuDNN: get batch normalization forward training ex workspace size. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnGetBatchNormalizationForwardTrainingExWorkspaceSize =
     unsafe extern "C" fn(
         handle: cudnnHandle_t,
@@ -1507,6 +1866,7 @@ pub type PFN_cudnnGetBatchNormalizationForwardTrainingExWorkspaceSize =
         size_in_bytes: *mut usize,
     ) -> cudnnStatus_t;
 
+/// cuDNN: get batch normalization backward ex workspace size. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnGetBatchNormalizationBackwardExWorkspaceSize =
     unsafe extern "C" fn(
         handle: cudnnHandle_t,
@@ -1522,6 +1882,7 @@ pub type PFN_cudnnGetBatchNormalizationBackwardExWorkspaceSize =
         size_in_bytes: *mut usize,
     ) -> cudnnStatus_t;
 
+/// cuDNN: get batch normalization training ex reserve space size. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnGetBatchNormalizationTrainingExReserveSpaceSize =
     unsafe extern "C" fn(
         handle: cudnnHandle_t,
@@ -1532,6 +1893,7 @@ pub type PFN_cudnnGetBatchNormalizationTrainingExReserveSpaceSize =
         size_in_bytes: *mut usize,
     ) -> cudnnStatus_t;
 
+/// cuDNN: batch normalization forward training ex. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnBatchNormalizationForwardTrainingEx = unsafe extern "C" fn(
     handle: cudnnHandle_t,
     mode: cudnnBatchNormMode_t,
@@ -1560,6 +1922,7 @@ pub type PFN_cudnnBatchNormalizationForwardTrainingEx = unsafe extern "C" fn(
     reserve_space_size: usize,
 ) -> cudnnStatus_t;
 
+/// cuDNN: batch normalization backward ex. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnBatchNormalizationBackwardEx = unsafe extern "C" fn(
     handle: cudnnHandle_t,
     mode: cudnnBatchNormMode_t,
@@ -1595,6 +1958,7 @@ pub type PFN_cudnnBatchNormalizationBackwardEx = unsafe extern "C" fn(
 
 // Generic Normalization API (cuDNN 8+).
 
+/// cuDNN: normalization forward inference. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnNormalizationForwardInference = unsafe extern "C" fn(
     handle: cudnnHandle_t,
     mode: cudnnNormMode_t,
@@ -1619,6 +1983,7 @@ pub type PFN_cudnnNormalizationForwardInference = unsafe extern "C" fn(
     group_count: c_int,
 ) -> cudnnStatus_t;
 
+/// cuDNN: get normalization forward training workspace size. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnGetNormalizationForwardTrainingWorkspaceSize =
     unsafe extern "C" fn(
         handle: cudnnHandle_t,
@@ -1635,6 +2000,7 @@ pub type PFN_cudnnGetNormalizationForwardTrainingWorkspaceSize =
         group_count: c_int,
     ) -> cudnnStatus_t;
 
+/// cuDNN: get normalization backward workspace size. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnGetNormalizationBackwardWorkspaceSize = unsafe extern "C" fn(
     handle: cudnnHandle_t,
     mode: cudnnNormMode_t,
@@ -1652,6 +2018,7 @@ pub type PFN_cudnnGetNormalizationBackwardWorkspaceSize = unsafe extern "C" fn(
     group_count: c_int,
 ) -> cudnnStatus_t;
 
+/// cuDNN: get normalization training reserve space size. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnGetNormalizationTrainingReserveSpaceSize =
     unsafe extern "C" fn(
         handle: cudnnHandle_t,
@@ -1664,6 +2031,7 @@ pub type PFN_cudnnGetNormalizationTrainingReserveSpaceSize =
         group_count: c_int,
     ) -> cudnnStatus_t;
 
+/// cuDNN: normalization forward training. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnNormalizationForwardTraining = unsafe extern "C" fn(
     handle: cudnnHandle_t,
     mode: cudnnNormMode_t,
@@ -1695,6 +2063,7 @@ pub type PFN_cudnnNormalizationForwardTraining = unsafe extern "C" fn(
     group_count: c_int,
 ) -> cudnnStatus_t;
 
+/// cuDNN: normalization backward. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnNormalizationBackward = unsafe extern "C" fn(
     handle: cudnnHandle_t,
     mode: cudnnNormMode_t,
@@ -1735,6 +2104,7 @@ pub type PFN_cudnnNormalizationBackward = unsafe extern "C" fn(
 // Tier 4 — RNN v8 modernization
 // ==========================================================================
 
+/// cuDNN: set RNN descriptor. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnSetRNNDescriptor_v8 = unsafe extern "C" fn(
     rnn_desc: cudnnRNNDescriptor_t,
     algo: cudnnRNNAlgo_t,
@@ -1753,12 +2123,14 @@ pub type PFN_cudnnSetRNNDescriptor_v8 = unsafe extern "C" fn(
     aux_flags: u32,
 ) -> cudnnStatus_t;
 
+/// cuDNN: build RNN dynamic. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnBuildRNNDynamic = unsafe extern "C" fn(
     handle: cudnnHandle_t,
     rnn_desc: cudnnRNNDescriptor_t,
     mini_batch: c_int,
 ) -> cudnnStatus_t;
 
+/// cuDNN: get RNN temp space sizes. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnGetRNNTempSpaceSizes = unsafe extern "C" fn(
     handle: cudnnHandle_t,
     rnn_desc: cudnnRNNDescriptor_t,
@@ -1768,12 +2140,14 @@ pub type PFN_cudnnGetRNNTempSpaceSizes = unsafe extern "C" fn(
     reserve_space_size: *mut usize,
 ) -> cudnnStatus_t;
 
+/// cuDNN: get RNN weight space size. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnGetRNNWeightSpaceSize = unsafe extern "C" fn(
     handle: cudnnHandle_t,
     rnn_desc: cudnnRNNDescriptor_t,
     weight_space_size: *mut usize,
 ) -> cudnnStatus_t;
 
+/// cuDNN: get RNN weight params. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnGetRNNWeightParams = unsafe extern "C" fn(
     handle: cudnnHandle_t,
     rnn_desc: cudnnRNNDescriptor_t,
@@ -1791,11 +2165,14 @@ pub type PFN_cudnnGetRNNWeightParams = unsafe extern "C" fn(
 // Tier 5 — Multi-head attention
 // ==========================================================================
 
+/// cuDNN: create attn descriptor. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnCreateAttnDescriptor =
     unsafe extern "C" fn(desc: *mut cudnnAttnDescriptor_t) -> cudnnStatus_t;
+/// cuDNN: destroy attn descriptor. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnDestroyAttnDescriptor =
     unsafe extern "C" fn(desc: cudnnAttnDescriptor_t) -> cudnnStatus_t;
 
+/// cuDNN: set attn descriptor. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnSetAttnDescriptor = unsafe extern "C" fn(
     desc: cudnnAttnDescriptor_t,
     attn_mode: u32,
@@ -1819,6 +2196,7 @@ pub type PFN_cudnnSetAttnDescriptor = unsafe extern "C" fn(
     max_beam_size: i32,
 ) -> cudnnStatus_t;
 
+/// cuDNN: get multi head attn buffers. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnGetMultiHeadAttnBuffers = unsafe extern "C" fn(
     handle: cudnnHandle_t,
     attn_desc: cudnnAttnDescriptor_t,
@@ -1827,6 +2205,7 @@ pub type PFN_cudnnGetMultiHeadAttnBuffers = unsafe extern "C" fn(
     reserve_space_size_in_bytes: *mut usize,
 ) -> cudnnStatus_t;
 
+/// cuDNN: get multi head attn weights. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnGetMultiHeadAttnWeights = unsafe extern "C" fn(
     handle: cudnnHandle_t,
     attn_desc: cudnnAttnDescriptor_t,
@@ -1837,6 +2216,7 @@ pub type PFN_cudnnGetMultiHeadAttnWeights = unsafe extern "C" fn(
     w_addr: *mut *mut c_void,
 ) -> cudnnStatus_t;
 
+/// cuDNN: multi head attn forward. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnMultiHeadAttnForward = unsafe extern "C" fn(
     handle: cudnnHandle_t,
     attn_desc: cudnnAttnDescriptor_t,
@@ -1862,6 +2242,7 @@ pub type PFN_cudnnMultiHeadAttnForward = unsafe extern "C" fn(
     reserve_space: *mut c_void,
 ) -> cudnnStatus_t;
 
+/// cuDNN: multi head attn backward data. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnMultiHeadAttnBackwardData = unsafe extern "C" fn(
     handle: cudnnHandle_t,
     attn_desc: cudnnAttnDescriptor_t,
@@ -1888,6 +2269,7 @@ pub type PFN_cudnnMultiHeadAttnBackwardData = unsafe extern "C" fn(
     reserve_space: *mut c_void,
 ) -> cudnnStatus_t;
 
+/// cuDNN: multi head attn backward weights. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnMultiHeadAttnBackwardWeights = unsafe extern "C" fn(
     handle: cudnnHandle_t,
     attn_desc: cudnnAttnDescriptor_t,
@@ -1911,10 +2293,13 @@ pub type PFN_cudnnMultiHeadAttnBackwardWeights = unsafe extern "C" fn(
 
 // SeqDataDescriptor lifetime helpers.
 
+/// cuDNN: create seq data descriptor. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnCreateSeqDataDescriptor =
     unsafe extern "C" fn(desc: *mut cudnnSeqDataDescriptor_t) -> cudnnStatus_t;
+/// cuDNN: destroy seq data descriptor. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnDestroySeqDataDescriptor =
     unsafe extern "C" fn(desc: cudnnSeqDataDescriptor_t) -> cudnnStatus_t;
+/// cuDNN: set seq data descriptor. See <https://docs.nvidia.com/deeplearning/cudnn/api/index.html>.
 pub type PFN_cudnnSetSeqDataDescriptor = unsafe extern "C" fn(
     desc: cudnnSeqDataDescriptor_t,
     data_type: cudnnDataType_t,
@@ -2163,6 +2548,7 @@ fn open_cudnn() -> Result<Library, LoaderError> {
 
 macro_rules! cudnn_fns {
     ($($name:ident as $sym:literal : $pfn:ty);* $(;)?) => {
+        /// Dynamically-loaded cuDNN entry-point table.
         pub struct Cudnn {
             lib: Library,
             $($name: OnceLock<$pfn>,)*
@@ -2174,6 +2560,7 @@ macro_rules! cudnn_fns {
         }
         impl Cudnn {
             $(
+                #[doc = concat!("Resolve `", $sym, "`.")]
                 pub fn $name(&self) -> Result<$pfn, LoaderError> {
                     if let Some(&p) = self.$name.get() { return Ok(p); }
                     let raw: *mut () = unsafe { self.lib.raw_symbol($sym)? };
@@ -2361,6 +2748,7 @@ cudnn_fns! {
     cudnn_set_seq_data_descriptor as "cudnnSetSeqDataDescriptor": PFN_cudnnSetSeqDataDescriptor;
 }
 
+/// Lazily-initialized process-wide cuDNN loader singleton.
 pub fn cudnn() -> Result<&'static Cudnn, LoaderError> {
     static CUDNN: OnceLock<Cudnn> = OnceLock::new();
     if let Some(c) = CUDNN.get() {

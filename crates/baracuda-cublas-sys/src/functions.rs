@@ -11,21 +11,29 @@ use super::types::{cublasHandle_t, cublasMath_t, cublasOperation_t, cublasPointe
 
 // ---- context + version -----------------------------------------------------
 
+/// cuBLAS: create. See <https://docs.nvidia.com/cuda/cublas/index.html>.
 pub type PFN_cublasCreate = unsafe extern "C" fn(handle: *mut cublasHandle_t) -> cublasStatus_t;
+/// cuBLAS: destroy. See <https://docs.nvidia.com/cuda/cublas/index.html>.
 pub type PFN_cublasDestroy = unsafe extern "C" fn(handle: cublasHandle_t) -> cublasStatus_t;
+/// cuBLAS: get version. See <https://docs.nvidia.com/cuda/cublas/index.html>.
 pub type PFN_cublasGetVersion =
     unsafe extern "C" fn(handle: cublasHandle_t, version: *mut c_int) -> cublasStatus_t;
+/// cuBLAS: set stream. See <https://docs.nvidia.com/cuda/cublas/index.html>.
 pub type PFN_cublasSetStream =
     unsafe extern "C" fn(handle: cublasHandle_t, stream: cudaStream_t) -> cublasStatus_t;
+/// cuBLAS: get stream. See <https://docs.nvidia.com/cuda/cublas/index.html>.
 pub type PFN_cublasGetStream =
     unsafe extern "C" fn(handle: cublasHandle_t, stream: *mut cudaStream_t) -> cublasStatus_t;
+/// cuBLAS: set pointer mode. See <https://docs.nvidia.com/cuda/cublas/index.html>.
 pub type PFN_cublasSetPointerMode =
     unsafe extern "C" fn(handle: cublasHandle_t, mode: cublasPointerMode_t) -> cublasStatus_t;
+/// cuBLAS: set math mode. See <https://docs.nvidia.com/cuda/cublas/index.html>.
 pub type PFN_cublasSetMathMode =
     unsafe extern "C" fn(handle: cublasHandle_t, mode: cublasMath_t) -> cublasStatus_t;
 
 // ---- BLAS-3 GEMM (single + double) -----------------------------------------
 
+/// cuBLAS: single-precision GEMM. See <https://docs.nvidia.com/cuda/cublas/index.html>.
 pub type PFN_cublasSgemm = unsafe extern "C" fn(
     handle: cublasHandle_t,
     transa: cublasOperation_t,
@@ -43,6 +51,7 @@ pub type PFN_cublasSgemm = unsafe extern "C" fn(
     ldc: c_int,
 ) -> cublasStatus_t;
 
+/// cuBLAS: double-precision GEMM. See <https://docs.nvidia.com/cuda/cublas/index.html>.
 pub type PFN_cublasDgemm = unsafe extern "C" fn(
     handle: cublasHandle_t,
     transa: cublasOperation_t,
@@ -62,6 +71,7 @@ pub type PFN_cublasDgemm = unsafe extern "C" fn(
 
 // ---- BLAS-3 strided-batched GEMM -------------------------------------------
 
+/// cuBLAS: single-precision GEMM strided-batched. See <https://docs.nvidia.com/cuda/cublas/index.html>.
 pub type PFN_cublasSgemmStridedBatched = unsafe extern "C" fn(
     handle: cublasHandle_t,
     transa: cublasOperation_t,
@@ -83,6 +93,7 @@ pub type PFN_cublasSgemmStridedBatched = unsafe extern "C" fn(
     batch_count: c_int,
 ) -> cublasStatus_t;
 
+/// cuBLAS: double-precision GEMM strided-batched. See <https://docs.nvidia.com/cuda/cublas/index.html>.
 pub type PFN_cublasDgemmStridedBatched = unsafe extern "C" fn(
     handle: cublasHandle_t,
     transa: cublasOperation_t,
@@ -106,6 +117,7 @@ pub type PFN_cublasDgemmStridedBatched = unsafe extern "C" fn(
 
 // ---- BLAS-1 ax + y ---------------------------------------------------------
 
+/// cuBLAS: single-precision AXPY. See <https://docs.nvidia.com/cuda/cublas/index.html>.
 pub type PFN_cublasSaxpy = unsafe extern "C" fn(
     handle: cublasHandle_t,
     n: c_int,
@@ -116,6 +128,7 @@ pub type PFN_cublasSaxpy = unsafe extern "C" fn(
     incy: c_int,
 ) -> cublasStatus_t;
 
+/// cuBLAS: double-precision AXPY. See <https://docs.nvidia.com/cuda/cublas/index.html>.
 pub type PFN_cublasDaxpy = unsafe extern "C" fn(
     handle: cublasHandle_t,
     n: c_int,
@@ -128,6 +141,7 @@ pub type PFN_cublasDaxpy = unsafe extern "C" fn(
 
 // ---- BLAS-1 dot ------------------------------------------------------------
 
+/// cuBLAS: single-precision dot product. See <https://docs.nvidia.com/cuda/cublas/index.html>.
 pub type PFN_cublasSdot = unsafe extern "C" fn(
     handle: cublasHandle_t,
     n: c_int,
@@ -138,6 +152,7 @@ pub type PFN_cublasSdot = unsafe extern "C" fn(
     result: *mut f32,
 ) -> cublasStatus_t;
 
+/// cuBLAS: double-precision dot product. See <https://docs.nvidia.com/cuda/cublas/index.html>.
 pub type PFN_cublasDdot = unsafe extern "C" fn(
     handle: cublasHandle_t,
     n: c_int,
@@ -150,6 +165,7 @@ pub type PFN_cublasDdot = unsafe extern "C" fn(
 
 // ---- L1 scalar ops --------------------------------------------------------
 
+/// cuBLAS: real-scaled scale. See <https://docs.nvidia.com/cuda/cublas/index.html>.
 pub type PFN_cublasSscal = unsafe extern "C" fn(
     handle: cublasHandle_t,
     n: c_int,
@@ -158,6 +174,7 @@ pub type PFN_cublasSscal = unsafe extern "C" fn(
     incx: c_int,
 ) -> cublasStatus_t;
 
+/// cuBLAS: real-scaled scale. See <https://docs.nvidia.com/cuda/cublas/index.html>.
 pub type PFN_cublasDscal = unsafe extern "C" fn(
     handle: cublasHandle_t,
     n: c_int,
@@ -166,6 +183,7 @@ pub type PFN_cublasDscal = unsafe extern "C" fn(
     incx: c_int,
 ) -> cublasStatus_t;
 
+/// cuBLAS: single-precision L2 norm. See <https://docs.nvidia.com/cuda/cublas/index.html>.
 pub type PFN_cublasSnrm2 = unsafe extern "C" fn(
     handle: cublasHandle_t,
     n: c_int,
@@ -174,6 +192,7 @@ pub type PFN_cublasSnrm2 = unsafe extern "C" fn(
     result: *mut f32,
 ) -> cublasStatus_t;
 
+/// cuBLAS: double-precision L2 norm. See <https://docs.nvidia.com/cuda/cublas/index.html>.
 pub type PFN_cublasDnrm2 = unsafe extern "C" fn(
     handle: cublasHandle_t,
     n: c_int,
@@ -182,6 +201,7 @@ pub type PFN_cublasDnrm2 = unsafe extern "C" fn(
     result: *mut f64,
 ) -> cublasStatus_t;
 
+/// cuBLAS: single-precision absolute-sum. See <https://docs.nvidia.com/cuda/cublas/index.html>.
 pub type PFN_cublasSasum = unsafe extern "C" fn(
     handle: cublasHandle_t,
     n: c_int,
@@ -190,6 +210,7 @@ pub type PFN_cublasSasum = unsafe extern "C" fn(
     result: *mut f32,
 ) -> cublasStatus_t;
 
+/// cuBLAS: double-precision absolute-sum. See <https://docs.nvidia.com/cuda/cublas/index.html>.
 pub type PFN_cublasDasum = unsafe extern "C" fn(
     handle: cublasHandle_t,
     n: c_int,
@@ -199,6 +220,7 @@ pub type PFN_cublasDasum = unsafe extern "C" fn(
 ) -> cublasStatus_t;
 
 // Note: cuBLAS `i{s,d}ama{x,n}` return 1-based indices.
+/// cuBLAS: index of maximum absolute for single-precision vector. See <https://docs.nvidia.com/cuda/cublas/index.html>.
 pub type PFN_cublasIsamax = unsafe extern "C" fn(
     handle: cublasHandle_t,
     n: c_int,
@@ -207,6 +229,7 @@ pub type PFN_cublasIsamax = unsafe extern "C" fn(
     result: *mut c_int,
 ) -> cublasStatus_t;
 
+/// cuBLAS: index of maximum absolute for double-precision vector. See <https://docs.nvidia.com/cuda/cublas/index.html>.
 pub type PFN_cublasIdamax = unsafe extern "C" fn(
     handle: cublasHandle_t,
     n: c_int,
@@ -215,6 +238,7 @@ pub type PFN_cublasIdamax = unsafe extern "C" fn(
     result: *mut c_int,
 ) -> cublasStatus_t;
 
+/// cuBLAS: index of minimum absolute for single-precision vector. See <https://docs.nvidia.com/cuda/cublas/index.html>.
 pub type PFN_cublasIsamin = unsafe extern "C" fn(
     handle: cublasHandle_t,
     n: c_int,
@@ -223,6 +247,7 @@ pub type PFN_cublasIsamin = unsafe extern "C" fn(
     result: *mut c_int,
 ) -> cublasStatus_t;
 
+/// cuBLAS: index of minimum absolute for double-precision vector. See <https://docs.nvidia.com/cuda/cublas/index.html>.
 pub type PFN_cublasIdamin = unsafe extern "C" fn(
     handle: cublasHandle_t,
     n: c_int,
@@ -231,6 +256,7 @@ pub type PFN_cublasIdamin = unsafe extern "C" fn(
     result: *mut c_int,
 ) -> cublasStatus_t;
 
+/// cuBLAS: single-precision copy. See <https://docs.nvidia.com/cuda/cublas/index.html>.
 pub type PFN_cublasScopy = unsafe extern "C" fn(
     handle: cublasHandle_t,
     n: c_int,
@@ -240,6 +266,7 @@ pub type PFN_cublasScopy = unsafe extern "C" fn(
     incy: c_int,
 ) -> cublasStatus_t;
 
+/// cuBLAS: double-precision copy. See <https://docs.nvidia.com/cuda/cublas/index.html>.
 pub type PFN_cublasDcopy = unsafe extern "C" fn(
     handle: cublasHandle_t,
     n: c_int,
@@ -251,6 +278,7 @@ pub type PFN_cublasDcopy = unsafe extern "C" fn(
 
 // ---- L2 GEMV --------------------------------------------------------------
 
+/// cuBLAS: single-precision GEMV. See <https://docs.nvidia.com/cuda/cublas/index.html>.
 pub type PFN_cublasSgemv = unsafe extern "C" fn(
     handle: cublasHandle_t,
     trans: cublasOperation_t,
@@ -266,6 +294,7 @@ pub type PFN_cublasSgemv = unsafe extern "C" fn(
     incy: c_int,
 ) -> cublasStatus_t;
 
+/// cuBLAS: double-precision GEMV. See <https://docs.nvidia.com/cuda/cublas/index.html>.
 pub type PFN_cublasDgemv = unsafe extern "C" fn(
     handle: cublasHandle_t,
     trans: cublasOperation_t,
@@ -311,22 +340,31 @@ pub struct cuDoubleComplex {
 #[repr(i32)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum cublasFillMode_t {
+    /// Lower.
     Lower = 0,
+    /// Upper.
     Upper = 1,
+    /// Full.
     Full = 2,
 }
 
+/// Enum mirroring `cublasDiagType_t`.
 #[repr(i32)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum cublasDiagType_t {
+    /// Non unit.
     NonUnit = 0,
+    /// Unit.
     Unit = 1,
 }
 
+/// Enum mirroring `cublasSideMode_t`.
 #[repr(i32)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum cublasSideMode_t {
+    /// Left.
     Left = 0,
+    /// Right.
     Right = 1,
 }
 
@@ -334,16 +372,27 @@ pub enum cublasSideMode_t {
 #[repr(i32)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum cublasComputeType_t {
+    /// Compute16 f.
     Compute16F = 64,
+    /// Compute16 f pedantic.
     Compute16FPedantic = 65,
+    /// Compute32 f.
     Compute32F = 68,
+    /// Compute32 f pedantic.
     Compute32FPedantic = 69,
+    /// Compute32 f fast16 f.
     Compute32FFast16F = 74,
+    /// Compute32 f fast16 bf.
     Compute32FFast16BF = 75,
+    /// Compute32 f fast tf32.
     Compute32FFastTF32 = 77,
+    /// Compute64 f.
     Compute64F = 70,
+    /// Compute64 f pedantic.
     Compute64FPedantic = 71,
+    /// Compute32 i.
     Compute32I = 72,
+    /// Compute32 i pedantic.
     Compute32IPedantic = 73,
 }
 
@@ -351,21 +400,37 @@ pub enum cublasComputeType_t {
 #[repr(i32)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum cudaDataType_t {
+    /// R 16 f.
     R_16F = 2,
+    /// R 16 bf.
     R_16BF = 14,
+    /// R 32 f.
     R_32F = 0,
+    /// R 64 f.
     R_64F = 1,
+    /// R 8 i.
     R_8I = 3,
+    /// R 8 u.
     R_8U = 8,
+    /// R 32 i.
     R_32I = 10,
+    /// R 32 u.
     R_32U = 12,
+    /// C 16 f.
     C_16F = 6,
+    /// C 16 bf.
     C_16BF = 15,
+    /// C 32 f.
     C_32F = 4,
+    /// C 64 f.
     C_64F = 5,
+    /// C 8 i.
     C_8I = 7,
+    /// C 8 u.
     C_8U = 9,
+    /// C 32 i.
     C_32I = 11,
+    /// C 32 u.
     C_32U = 13,
 }
 
@@ -375,6 +440,7 @@ pub enum cudaDataType_t {
 
 macro_rules! l1_axpy_like {
     ($name:ident, $scalar:ty) => {
+        #[doc = concat!("cuBLAS AXPY-shaped L1: `", stringify!($name), "`. See <", "https://docs.nvidia.com/cuda/cublas/index.html", ">.")]
         pub type $name = unsafe extern "C" fn(
             handle: cublasHandle_t,
             n: c_int,
@@ -389,6 +455,7 @@ macro_rules! l1_axpy_like {
 
 macro_rules! l1_scal_like {
     ($name:ident, $scalar:ty) => {
+        #[doc = concat!("cuBLAS SCAL-shaped L1: `", stringify!($name), "`. See <", "https://docs.nvidia.com/cuda/cublas/index.html", ">.")]
         pub type $name = unsafe extern "C" fn(
             handle: cublasHandle_t,
             n: c_int,
@@ -401,6 +468,7 @@ macro_rules! l1_scal_like {
 
 macro_rules! l1_reduce_real {
     ($name:ident, $scalar:ty, $result:ty) => {
+        #[doc = concat!("cuBLAS reduce-to-real L1: `", stringify!($name), "`. See <", "https://docs.nvidia.com/cuda/cublas/index.html", ">.")]
         pub type $name = unsafe extern "C" fn(
             handle: cublasHandle_t,
             n: c_int,
@@ -413,6 +481,7 @@ macro_rules! l1_reduce_real {
 
 macro_rules! l1_dot_like {
     ($name:ident, $scalar:ty) => {
+        #[doc = concat!("cuBLAS DOT-shaped L1: `", stringify!($name), "`. See <", "https://docs.nvidia.com/cuda/cublas/index.html", ">.")]
         pub type $name = unsafe extern "C" fn(
             handle: cublasHandle_t,
             n: c_int,
@@ -427,6 +496,7 @@ macro_rules! l1_dot_like {
 
 macro_rules! l1_swap_like {
     ($name:ident, $scalar:ty) => {
+        #[doc = concat!("cuBLAS SWAP-shaped L1: `", stringify!($name), "`. See <", "https://docs.nvidia.com/cuda/cublas/index.html", ">.")]
         pub type $name = unsafe extern "C" fn(
             handle: cublasHandle_t,
             n: c_int,
@@ -446,6 +516,7 @@ l1_axpy_like!(PFN_cublasZaxpy, cuDoubleComplex);
 l1_scal_like!(PFN_cublasCscal, cuComplex);
 l1_scal_like!(PFN_cublasZscal, cuDoubleComplex);
 
+/// cuBLAS: complex single-precision real-scaled scale. See <https://docs.nvidia.com/cuda/cublas/index.html>.
 pub type PFN_cublasCsscal = unsafe extern "C" fn(
     handle: cublasHandle_t,
     n: c_int,
@@ -454,6 +525,7 @@ pub type PFN_cublasCsscal = unsafe extern "C" fn(
     incx: c_int,
 ) -> cublasStatus_t;
 
+/// cuBLAS: complex double-precision real-scaled scale. See <https://docs.nvidia.com/cuda/cublas/index.html>.
 pub type PFN_cublasZdscal = unsafe extern "C" fn(
     handle: cublasHandle_t,
     n: c_int,
@@ -475,6 +547,7 @@ l1_dot_like!(PFN_cublasZdotu, cuDoubleComplex);
 l1_dot_like!(PFN_cublasZdotc, cuDoubleComplex);
 
 // COPY / SWAP — C / Z
+/// cuBLAS: complex single-precision copy. See <https://docs.nvidia.com/cuda/cublas/index.html>.
 pub type PFN_cublasCcopy = unsafe extern "C" fn(
     handle: cublasHandle_t,
     n: c_int,
@@ -484,6 +557,7 @@ pub type PFN_cublasCcopy = unsafe extern "C" fn(
     incy: c_int,
 ) -> cublasStatus_t;
 
+/// cuBLAS: complex double-precision copy. See <https://docs.nvidia.com/cuda/cublas/index.html>.
 pub type PFN_cublasZcopy = unsafe extern "C" fn(
     handle: cublasHandle_t,
     n: c_int,
@@ -499,6 +573,7 @@ l1_swap_like!(PFN_cublasCswap, cuComplex);
 l1_swap_like!(PFN_cublasZswap, cuDoubleComplex);
 
 // IAMAX / IAMIN — add C / Z
+/// cuBLAS: index of maximum absolute for complex single-precision vector. See <https://docs.nvidia.com/cuda/cublas/index.html>.
 pub type PFN_cublasIcamax = unsafe extern "C" fn(
     handle: cublasHandle_t,
     n: c_int,
@@ -507,6 +582,7 @@ pub type PFN_cublasIcamax = unsafe extern "C" fn(
     result: *mut c_int,
 ) -> cublasStatus_t;
 
+/// cuBLAS: index of maximum absolute for complex double-precision vector. See <https://docs.nvidia.com/cuda/cublas/index.html>.
 pub type PFN_cublasIzamax = unsafe extern "C" fn(
     handle: cublasHandle_t,
     n: c_int,
@@ -515,6 +591,7 @@ pub type PFN_cublasIzamax = unsafe extern "C" fn(
     result: *mut c_int,
 ) -> cublasStatus_t;
 
+/// cuBLAS: index of minimum absolute for complex single-precision vector. See <https://docs.nvidia.com/cuda/cublas/index.html>.
 pub type PFN_cublasIcamin = unsafe extern "C" fn(
     handle: cublasHandle_t,
     n: c_int,
@@ -523,6 +600,7 @@ pub type PFN_cublasIcamin = unsafe extern "C" fn(
     result: *mut c_int,
 ) -> cublasStatus_t;
 
+/// cuBLAS: index of minimum absolute for complex double-precision vector. See <https://docs.nvidia.com/cuda/cublas/index.html>.
 pub type PFN_cublasIzamin = unsafe extern "C" fn(
     handle: cublasHandle_t,
     n: c_int,
@@ -532,6 +610,7 @@ pub type PFN_cublasIzamin = unsafe extern "C" fn(
 ) -> cublasStatus_t;
 
 // ROT / ROTG / ROTM
+/// cuBLAS: single-precision Givens rotation apply. See <https://docs.nvidia.com/cuda/cublas/index.html>.
 pub type PFN_cublasSrot = unsafe extern "C" fn(
     handle: cublasHandle_t,
     n: c_int,
@@ -543,6 +622,7 @@ pub type PFN_cublasSrot = unsafe extern "C" fn(
     s: *const f32,
 ) -> cublasStatus_t;
 
+/// cuBLAS: double-precision Givens rotation apply. See <https://docs.nvidia.com/cuda/cublas/index.html>.
 pub type PFN_cublasDrot = unsafe extern "C" fn(
     handle: cublasHandle_t,
     n: c_int,
@@ -559,6 +639,7 @@ pub type PFN_cublasDrot = unsafe extern "C" fn(
 // (We cover GEMV/SYMV/TRMV/TRSV/GER/SYR × S/D/C/Z as the most-used core.)
 // ==========================================================================
 
+/// cuBLAS: complex single-precision GEMV. See <https://docs.nvidia.com/cuda/cublas/index.html>.
 pub type PFN_cublasCgemv = unsafe extern "C" fn(
     handle: cublasHandle_t,
     trans: cublasOperation_t,
@@ -574,6 +655,7 @@ pub type PFN_cublasCgemv = unsafe extern "C" fn(
     incy: c_int,
 ) -> cublasStatus_t;
 
+/// cuBLAS: complex double-precision GEMV. See <https://docs.nvidia.com/cuda/cublas/index.html>.
 pub type PFN_cublasZgemv = unsafe extern "C" fn(
     handle: cublasHandle_t,
     trans: cublasOperation_t,
@@ -590,6 +672,7 @@ pub type PFN_cublasZgemv = unsafe extern "C" fn(
 ) -> cublasStatus_t;
 
 // Symmetric matrix-vector (SYMV) — S / D; complex uses HEMV (below).
+/// cuBLAS: single-precision SYMV. See <https://docs.nvidia.com/cuda/cublas/index.html>.
 pub type PFN_cublasSsymv = unsafe extern "C" fn(
     handle: cublasHandle_t,
     uplo: cublasFillMode_t,
@@ -604,6 +687,7 @@ pub type PFN_cublasSsymv = unsafe extern "C" fn(
     incy: c_int,
 ) -> cublasStatus_t;
 
+/// cuBLAS: double-precision SYMV. See <https://docs.nvidia.com/cuda/cublas/index.html>.
 pub type PFN_cublasDsymv = unsafe extern "C" fn(
     handle: cublasHandle_t,
     uplo: cublasFillMode_t,
@@ -619,6 +703,7 @@ pub type PFN_cublasDsymv = unsafe extern "C" fn(
 ) -> cublasStatus_t;
 
 // Triangular matrix-vector (TRMV / TRSV) — S / D
+/// cuBLAS: single-precision TRMV. See <https://docs.nvidia.com/cuda/cublas/index.html>.
 pub type PFN_cublasStrmv = unsafe extern "C" fn(
     handle: cublasHandle_t,
     uplo: cublasFillMode_t,
@@ -631,6 +716,7 @@ pub type PFN_cublasStrmv = unsafe extern "C" fn(
     incx: c_int,
 ) -> cublasStatus_t;
 
+/// cuBLAS: double-precision TRMV. See <https://docs.nvidia.com/cuda/cublas/index.html>.
 pub type PFN_cublasDtrmv = unsafe extern "C" fn(
     handle: cublasHandle_t,
     uplo: cublasFillMode_t,
@@ -643,6 +729,7 @@ pub type PFN_cublasDtrmv = unsafe extern "C" fn(
     incx: c_int,
 ) -> cublasStatus_t;
 
+/// cuBLAS: single-precision TRSV. See <https://docs.nvidia.com/cuda/cublas/index.html>.
 pub type PFN_cublasStrsv = unsafe extern "C" fn(
     handle: cublasHandle_t,
     uplo: cublasFillMode_t,
@@ -655,6 +742,7 @@ pub type PFN_cublasStrsv = unsafe extern "C" fn(
     incx: c_int,
 ) -> cublasStatus_t;
 
+/// cuBLAS: double-precision TRSV. See <https://docs.nvidia.com/cuda/cublas/index.html>.
 pub type PFN_cublasDtrsv = unsafe extern "C" fn(
     handle: cublasHandle_t,
     uplo: cublasFillMode_t,
@@ -668,6 +756,7 @@ pub type PFN_cublasDtrsv = unsafe extern "C" fn(
 ) -> cublasStatus_t;
 
 // GER — rank-1 update: A += α·x·yᵀ
+/// cuBLAS: single-precision rank-1 update. See <https://docs.nvidia.com/cuda/cublas/index.html>.
 pub type PFN_cublasSger = unsafe extern "C" fn(
     handle: cublasHandle_t,
     m: c_int,
@@ -681,6 +770,7 @@ pub type PFN_cublasSger = unsafe extern "C" fn(
     lda: c_int,
 ) -> cublasStatus_t;
 
+/// cuBLAS: double-precision rank-1 update. See <https://docs.nvidia.com/cuda/cublas/index.html>.
 pub type PFN_cublasDger = unsafe extern "C" fn(
     handle: cublasHandle_t,
     m: c_int,
@@ -695,6 +785,7 @@ pub type PFN_cublasDger = unsafe extern "C" fn(
 ) -> cublasStatus_t;
 
 // SYR — symmetric rank-1 update
+/// cuBLAS: single-precision symmetric rank-1 update. See <https://docs.nvidia.com/cuda/cublas/index.html>.
 pub type PFN_cublasSsyr = unsafe extern "C" fn(
     handle: cublasHandle_t,
     uplo: cublasFillMode_t,
@@ -706,6 +797,7 @@ pub type PFN_cublasSsyr = unsafe extern "C" fn(
     lda: c_int,
 ) -> cublasStatus_t;
 
+/// cuBLAS: double-precision symmetric rank-1 update. See <https://docs.nvidia.com/cuda/cublas/index.html>.
 pub type PFN_cublasDsyr = unsafe extern "C" fn(
     handle: cublasHandle_t,
     uplo: cublasFillMode_t,
@@ -722,6 +814,7 @@ pub type PFN_cublasDsyr = unsafe extern "C" fn(
 // ==========================================================================
 
 // GEMM C / Z (S / D already exist in the crate)
+/// cuBLAS: complex single-precision GEMM. See <https://docs.nvidia.com/cuda/cublas/index.html>.
 pub type PFN_cublasCgemm = unsafe extern "C" fn(
     handle: cublasHandle_t,
     transa: cublasOperation_t,
@@ -739,6 +832,7 @@ pub type PFN_cublasCgemm = unsafe extern "C" fn(
     ldc: c_int,
 ) -> cublasStatus_t;
 
+/// cuBLAS: complex double-precision GEMM. See <https://docs.nvidia.com/cuda/cublas/index.html>.
 pub type PFN_cublasZgemm = unsafe extern "C" fn(
     handle: cublasHandle_t,
     transa: cublasOperation_t,
@@ -757,6 +851,7 @@ pub type PFN_cublasZgemm = unsafe extern "C" fn(
 ) -> cublasStatus_t;
 
 // cublasGemmEx — the generic mixed-precision path.
+/// cuBLAS: mixed-precision gemm (Ex variant). See <https://docs.nvidia.com/cuda/cublas/index.html>.
 pub type PFN_cublasGemmEx = unsafe extern "C" fn(
     handle: cublasHandle_t,
     transa: cublasOperation_t,
@@ -779,6 +874,7 @@ pub type PFN_cublasGemmEx = unsafe extern "C" fn(
     algo: c_int,
 ) -> cublasStatus_t;
 
+/// cuBLAS: mixed-precision gemm strided batched (Ex variant). See <https://docs.nvidia.com/cuda/cublas/index.html>.
 pub type PFN_cublasGemmStridedBatchedEx = unsafe extern "C" fn(
     handle: cublasHandle_t,
     transa: cublasOperation_t,
@@ -808,6 +904,7 @@ pub type PFN_cublasGemmStridedBatchedEx = unsafe extern "C" fn(
 // SYMM / HEMM / SYRK / HERK / SYR2K / HER2K — single- and double-precision real + Hermitian complex
 macro_rules! l3_triangular {
     ($name:ident, $scalar:ty) => {
+        #[doc = concat!("cuBLAS L3 SYMM/HEMM-shaped: `", stringify!($name), "`. See <", "https://docs.nvidia.com/cuda/cublas/index.html", ">.")]
         pub type $name = unsafe extern "C" fn(
             handle: cublasHandle_t,
             side: cublasSideMode_t,
@@ -835,6 +932,7 @@ l3_triangular!(PFN_cublasZhemm, cuDoubleComplex);
 
 macro_rules! l3_syrk {
     ($name:ident, $scalar:ty) => {
+        #[doc = concat!("cuBLAS L3 SYRK-shaped: `", stringify!($name), "`. See <", "https://docs.nvidia.com/cuda/cublas/index.html", ">.")]
         pub type $name = unsafe extern "C" fn(
             handle: cublasHandle_t,
             uplo: cublasFillMode_t,
@@ -857,6 +955,7 @@ l3_syrk!(PFN_cublasCsyrk, cuComplex);
 l3_syrk!(PFN_cublasZsyrk, cuDoubleComplex);
 
 // HERK scalars are real even though the matrix is complex.
+/// cuBLAS: complex single-precision HERK. See <https://docs.nvidia.com/cuda/cublas/index.html>.
 pub type PFN_cublasCherk = unsafe extern "C" fn(
     handle: cublasHandle_t,
     uplo: cublasFillMode_t,
@@ -871,6 +970,7 @@ pub type PFN_cublasCherk = unsafe extern "C" fn(
     ldc: c_int,
 ) -> cublasStatus_t;
 
+/// cuBLAS: complex double-precision HERK. See <https://docs.nvidia.com/cuda/cublas/index.html>.
 pub type PFN_cublasZherk = unsafe extern "C" fn(
     handle: cublasHandle_t,
     uplo: cublasFillMode_t,
@@ -887,6 +987,7 @@ pub type PFN_cublasZherk = unsafe extern "C" fn(
 
 macro_rules! l3_trmm_trsm {
     ($name:ident, $scalar:ty) => {
+        #[doc = concat!("cuBLAS L3 TRSM-shaped (in-place B): `", stringify!($name), "`. See <", "https://docs.nvidia.com/cuda/cublas/index.html", ">.")]
         pub type $name = unsafe extern "C" fn(
             handle: cublasHandle_t,
             side: cublasSideMode_t,
@@ -912,6 +1013,7 @@ l3_trmm_trsm!(PFN_cublasZtrsm, cuDoubleComplex);
 // TRMM_v2: separate input/output operands — A triangular, B read, C written.
 macro_rules! l3_trmm_v2 {
     ($name:ident, $scalar:ty) => {
+        #[doc = concat!("cuBLAS L3 TRMM v2 (separate input/output B/C): `", stringify!($name), "`. See <", "https://docs.nvidia.com/cuda/cublas/index.html", ">.")]
         pub type $name = unsafe extern "C" fn(
             handle: cublasHandle_t,
             side: cublasSideMode_t,
@@ -940,6 +1042,7 @@ l3_trmm_v2!(PFN_cublasZtrmm, cuDoubleComplex);
 // Batched GEMM
 // ==========================================================================
 
+/// cuBLAS: single-precision GEMM batched. See <https://docs.nvidia.com/cuda/cublas/index.html>.
 pub type PFN_cublasSgemmBatched = unsafe extern "C" fn(
     handle: cublasHandle_t,
     transa: cublasOperation_t,
@@ -958,6 +1061,7 @@ pub type PFN_cublasSgemmBatched = unsafe extern "C" fn(
     batch_count: c_int,
 ) -> cublasStatus_t;
 
+/// cuBLAS: double-precision GEMM batched. See <https://docs.nvidia.com/cuda/cublas/index.html>.
 pub type PFN_cublasDgemmBatched = unsafe extern "C" fn(
     handle: cublasHandle_t,
     transa: cublasOperation_t,
@@ -976,6 +1080,7 @@ pub type PFN_cublasDgemmBatched = unsafe extern "C" fn(
     batch_count: c_int,
 ) -> cublasStatus_t;
 
+/// cuBLAS: complex single-precision GEMM batched. See <https://docs.nvidia.com/cuda/cublas/index.html>.
 pub type PFN_cublasCgemmBatched = unsafe extern "C" fn(
     handle: cublasHandle_t,
     transa: cublasOperation_t,
@@ -994,6 +1099,7 @@ pub type PFN_cublasCgemmBatched = unsafe extern "C" fn(
     batch_count: c_int,
 ) -> cublasStatus_t;
 
+/// cuBLAS: complex double-precision GEMM batched. See <https://docs.nvidia.com/cuda/cublas/index.html>.
 pub type PFN_cublasZgemmBatched = unsafe extern "C" fn(
     handle: cublasHandle_t,
     transa: cublasOperation_t,
@@ -1012,6 +1118,7 @@ pub type PFN_cublasZgemmBatched = unsafe extern "C" fn(
     batch_count: c_int,
 ) -> cublasStatus_t;
 
+/// cuBLAS: complex single-precision GEMM strided-batched. See <https://docs.nvidia.com/cuda/cublas/index.html>.
 pub type PFN_cublasCgemmStridedBatched = unsafe extern "C" fn(
     handle: cublasHandle_t,
     transa: cublasOperation_t,
@@ -1033,6 +1140,7 @@ pub type PFN_cublasCgemmStridedBatched = unsafe extern "C" fn(
     batch_count: c_int,
 ) -> cublasStatus_t;
 
+/// cuBLAS: complex double-precision GEMM strided-batched. See <https://docs.nvidia.com/cuda/cublas/index.html>.
 pub type PFN_cublasZgemmStridedBatched = unsafe extern "C" fn(
     handle: cublasHandle_t,
     transa: cublasOperation_t,
@@ -1058,6 +1166,7 @@ pub type PFN_cublasZgemmStridedBatched = unsafe extern "C" fn(
 // Mixed-precision Ex variants for BLAS-1
 // ==========================================================================
 
+/// cuBLAS: mixed-precision axpy (Ex variant). See <https://docs.nvidia.com/cuda/cublas/index.html>.
 pub type PFN_cublasAxpyEx = unsafe extern "C" fn(
     handle: cublasHandle_t,
     n: c_int,
@@ -1072,6 +1181,7 @@ pub type PFN_cublasAxpyEx = unsafe extern "C" fn(
     execution_type: cudaDataType_t,
 ) -> cublasStatus_t;
 
+/// cuBLAS: dot product ex. See <https://docs.nvidia.com/cuda/cublas/index.html>.
 pub type PFN_cublasDotEx = unsafe extern "C" fn(
     handle: cublasHandle_t,
     n: c_int,
@@ -1086,8 +1196,10 @@ pub type PFN_cublasDotEx = unsafe extern "C" fn(
     execution_type: cudaDataType_t,
 ) -> cublasStatus_t;
 
+/// cuBLAS: conjugated dot product ex. See <https://docs.nvidia.com/cuda/cublas/index.html>.
 pub type PFN_cublasDotcEx = PFN_cublasDotEx;
 
+/// cuBLAS: nrm2 ex. See <https://docs.nvidia.com/cuda/cublas/index.html>.
 pub type PFN_cublasNrm2Ex = unsafe extern "C" fn(
     handle: cublasHandle_t,
     n: c_int,
@@ -1099,6 +1211,7 @@ pub type PFN_cublasNrm2Ex = unsafe extern "C" fn(
     execution_type: cudaDataType_t,
 ) -> cublasStatus_t;
 
+/// cuBLAS: scale ex. See <https://docs.nvidia.com/cuda/cublas/index.html>.
 pub type PFN_cublasScalEx = unsafe extern "C" fn(
     handle: cublasHandle_t,
     n: c_int,
@@ -1110,6 +1223,7 @@ pub type PFN_cublasScalEx = unsafe extern "C" fn(
     execution_type: cudaDataType_t,
 ) -> cublasStatus_t;
 
+/// cuBLAS: mixed-precision rot (Ex variant). See <https://docs.nvidia.com/cuda/cublas/index.html>.
 pub type PFN_cublasRotEx = unsafe extern "C" fn(
     handle: cublasHandle_t,
     n: c_int,
@@ -1131,6 +1245,7 @@ pub type PFN_cublasRotEx = unsafe extern "C" fn(
 
 macro_rules! batched_getrf {
     ($name:ident, $scalar:ty) => {
+        #[doc = concat!("cuBLAS batched LU factorization: `", stringify!($name), "`. See <", "https://docs.nvidia.com/cuda/cublas/index.html", ">.")]
         pub type $name = unsafe extern "C" fn(
             handle: cublasHandle_t,
             n: c_int,
@@ -1149,6 +1264,7 @@ batched_getrf!(PFN_cublasZgetrfBatched, cuDoubleComplex);
 
 macro_rules! batched_getri {
     ($name:ident, $scalar:ty) => {
+        #[doc = concat!("cuBLAS batched inverse-from-LU: `", stringify!($name), "`. See <", "https://docs.nvidia.com/cuda/cublas/index.html", ">.")]
         pub type $name = unsafe extern "C" fn(
             handle: cublasHandle_t,
             n: c_int,
@@ -1169,6 +1285,7 @@ batched_getri!(PFN_cublasZgetriBatched, cuDoubleComplex);
 
 macro_rules! batched_matinv {
     ($name:ident, $scalar:ty) => {
+        #[doc = concat!("cuBLAS batched matrix inverse: `", stringify!($name), "`. See <", "https://docs.nvidia.com/cuda/cublas/index.html", ">.")]
         pub type $name = unsafe extern "C" fn(
             handle: cublasHandle_t,
             n: c_int,
@@ -1189,6 +1306,7 @@ batched_matinv!(PFN_cublasZmatinvBatched, cuDoubleComplex);
 /// Batched getrs (solve after batched getrf).
 macro_rules! batched_getrs {
     ($name:ident, $scalar:ty) => {
+        #[doc = concat!("cuBLAS batched solve-from-LU: `", stringify!($name), "`. See <", "https://docs.nvidia.com/cuda/cublas/index.html", ">.")]
         pub type $name = unsafe extern "C" fn(
             handle: cublasHandle_t,
             trans: cublasOperation_t,
@@ -1213,21 +1331,27 @@ batched_getrs!(PFN_cublasZgetrsBatched, cuDoubleComplex);
 // cuBLASXt — multi-GPU GEMM-family routines
 // ==========================================================================
 
+/// Opaque handle. Mirrors `cublasXtHandle_t`.
 pub type cublasXtHandle_t = *mut c_void;
 
+/// cuBLAS: Xt create. See <https://docs.nvidia.com/cuda/cublas/index.html>.
 pub type PFN_cublasXtCreate =
     unsafe extern "C" fn(handle: *mut cublasXtHandle_t) -> cublasStatus_t;
+/// cuBLAS: Xt destroy. See <https://docs.nvidia.com/cuda/cublas/index.html>.
 pub type PFN_cublasXtDestroy =
     unsafe extern "C" fn(handle: cublasXtHandle_t) -> cublasStatus_t;
+/// cuBLAS: Xt device select. See <https://docs.nvidia.com/cuda/cublas/index.html>.
 pub type PFN_cublasXtDeviceSelect = unsafe extern "C" fn(
     handle: cublasXtHandle_t,
     n_devices: c_int,
     device_id: *const c_int,
 ) -> cublasStatus_t;
+/// cuBLAS: Xt set block dim. See <https://docs.nvidia.com/cuda/cublas/index.html>.
 pub type PFN_cublasXtSetBlockDim = unsafe extern "C" fn(
     handle: cublasXtHandle_t,
     block_dim: c_int,
 ) -> cublasStatus_t;
+/// cuBLAS: Xt get block dim. See <https://docs.nvidia.com/cuda/cublas/index.html>.
 pub type PFN_cublasXtGetBlockDim = unsafe extern "C" fn(
     handle: cublasXtHandle_t,
     block_dim: *mut c_int,
@@ -1235,6 +1359,7 @@ pub type PFN_cublasXtGetBlockDim = unsafe extern "C" fn(
 
 macro_rules! xt_gemm {
     ($name:ident, $scalar:ty) => {
+        #[doc = concat!("cuBLASXt multi-GPU GEMM: `", stringify!($name), "`. See <", "https://docs.nvidia.com/cuda/cublas/index.html", ">.")]
         pub type $name = unsafe extern "C" fn(
             handle: cublasXtHandle_t,
             transa: cublasOperation_t,
@@ -1262,9 +1387,13 @@ xt_gemm!(PFN_cublasXtZgemm, cuDoubleComplex);
 // cuBLASLt — modern matmul with explicit layout/preference descriptors
 // ==========================================================================
 
+/// Opaque handle. Mirrors `cublasLtHandle_t`.
 pub type cublasLtHandle_t = *mut c_void;
+/// Opaque handle. Mirrors `cublasLtMatmulDesc_t`.
 pub type cublasLtMatmulDesc_t = *mut c_void;
+/// Opaque handle. Mirrors `cublasLtMatrixLayout_t`.
 pub type cublasLtMatrixLayout_t = *mut c_void;
+/// Opaque handle. Mirrors `cublasLtMatmulPreference_t`.
 pub type cublasLtMatmulPreference_t = *mut c_void;
 
 /// Opaque algorithm descriptor. 8 u64 words of cuBLASLt-internal state.
@@ -1290,21 +1419,37 @@ pub struct cublasLtMatmulHeuristicResult_t {
 #[repr(i32)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum cublasLtMatmulDescAttributes_t {
+    /// Compute type.
     ComputeType = 0,
+    /// Scale type.
     ScaleType = 1,
+    /// Pointer mode.
     PointerMode = 2,
+    /// Transa.
     Transa = 3,
+    /// Transb.
     Transb = 4,
+    /// Trans c.
     TransC = 5,
+    /// Fill mode.
     FillMode = 6,
+    /// Epilogue.
     Epilogue = 7,
+    /// Bias pointer.
     BiasPointer = 8,
+    /// Bias data type.
     BiasDataType = 9,
+    /// Epilogue aux pointer.
     EpilogueAuxPointer = 10,
+    /// Epilogue aux ld.
     EpilogueAuxLd = 11,
+    /// Epilogue aux batch stride.
     EpilogueAuxBatchStride = 12,
+    /// Alpha vector batch stride.
     AlphaVectorBatchStride = 13,
+    /// Sm count target.
     SmCountTarget = 14,
+    /// A max output pointer.
     AMax_Output_Pointer = 15,
 }
 
@@ -1312,13 +1457,21 @@ pub enum cublasLtMatmulDescAttributes_t {
 #[repr(i32)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum cublasLtMatrixLayoutAttribute_t {
+    /// Type.
     Type = 0,
+    /// Order.
     Order = 1,
+    /// Rows.
     Rows = 2,
+    /// Cols.
     Cols = 3,
+    /// Ld.
     Ld = 4,
+    /// Batch count.
     BatchCount = 5,
+    /// Strided batch offset.
     StridedBatchOffset = 6,
+    /// Plane offset.
     PlaneOffset = 7,
 }
 
@@ -1326,34 +1479,51 @@ pub enum cublasLtMatrixLayoutAttribute_t {
 #[repr(i32)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum cublasLtMatmulPreferenceAttributes_t {
+    /// Search mode.
     SearchMode = 0,
+    /// Max workspace bytes.
     MaxWorkspaceBytes = 1,
+    /// Reduction scheme.
     ReductionScheme = 2,
+    /// Min alignment a bytes.
     MinAlignmentABytes = 3,
+    /// Min alignment b bytes.
     MinAlignmentBBytes = 4,
+    /// Min alignment c bytes.
     MinAlignmentCBytes = 5,
+    /// Min alignment d bytes.
     MinAlignmentDBytes = 6,
+    /// Max waves count.
     MaxWavesCount = 7,
+    /// Impl mask.
     ImplMask = 8,
+    /// Pointer mode mask.
     PointerModeMask = 9,
+    /// Epilogue mask.
     EpilogueMask = 10,
+    /// Sm count target.
     SmCountTarget = 11,
 }
 
+/// cuBLAS: Lt create. See <https://docs.nvidia.com/cuda/cublas/index.html>.
 pub type PFN_cublasLtCreate =
     unsafe extern "C" fn(handle: *mut cublasLtHandle_t) -> cublasStatus_t;
 
+/// cuBLAS: Lt destroy. See <https://docs.nvidia.com/cuda/cublas/index.html>.
 pub type PFN_cublasLtDestroy = unsafe extern "C" fn(handle: cublasLtHandle_t) -> cublasStatus_t;
 
+/// cuBLAS: Lt matmul desc create. See <https://docs.nvidia.com/cuda/cublas/index.html>.
 pub type PFN_cublasLtMatmulDescCreate = unsafe extern "C" fn(
     desc_out: *mut cublasLtMatmulDesc_t,
     compute_type: cublasComputeType_t,
     scale_type: cudaDataType_t,
 ) -> cublasStatus_t;
 
+/// cuBLAS: Lt matmul desc destroy. See <https://docs.nvidia.com/cuda/cublas/index.html>.
 pub type PFN_cublasLtMatmulDescDestroy =
     unsafe extern "C" fn(desc: cublasLtMatmulDesc_t) -> cublasStatus_t;
 
+/// cuBLAS: Lt matmul desc set attribute. See <https://docs.nvidia.com/cuda/cublas/index.html>.
 pub type PFN_cublasLtMatmulDescSetAttribute = unsafe extern "C" fn(
     desc: cublasLtMatmulDesc_t,
     attr: cublasLtMatmulDescAttributes_t,
@@ -1361,6 +1531,7 @@ pub type PFN_cublasLtMatmulDescSetAttribute = unsafe extern "C" fn(
     size: usize,
 ) -> cublasStatus_t;
 
+/// cuBLAS: Lt matmul desc get attribute. See <https://docs.nvidia.com/cuda/cublas/index.html>.
 pub type PFN_cublasLtMatmulDescGetAttribute = unsafe extern "C" fn(
     desc: cublasLtMatmulDesc_t,
     attr: cublasLtMatmulDescAttributes_t,
@@ -1369,6 +1540,7 @@ pub type PFN_cublasLtMatmulDescGetAttribute = unsafe extern "C" fn(
     size_out: *mut usize,
 ) -> cublasStatus_t;
 
+/// cuBLAS: Lt matrix layout create. See <https://docs.nvidia.com/cuda/cublas/index.html>.
 pub type PFN_cublasLtMatrixLayoutCreate = unsafe extern "C" fn(
     layout_out: *mut cublasLtMatrixLayout_t,
     ty: cudaDataType_t,
@@ -1377,9 +1549,11 @@ pub type PFN_cublasLtMatrixLayoutCreate = unsafe extern "C" fn(
     ld: i64,
 ) -> cublasStatus_t;
 
+/// cuBLAS: Lt matrix layout destroy. See <https://docs.nvidia.com/cuda/cublas/index.html>.
 pub type PFN_cublasLtMatrixLayoutDestroy =
     unsafe extern "C" fn(layout: cublasLtMatrixLayout_t) -> cublasStatus_t;
 
+/// cuBLAS: Lt matrix layout set attribute. See <https://docs.nvidia.com/cuda/cublas/index.html>.
 pub type PFN_cublasLtMatrixLayoutSetAttribute = unsafe extern "C" fn(
     layout: cublasLtMatrixLayout_t,
     attr: cublasLtMatrixLayoutAttribute_t,
@@ -1387,12 +1561,15 @@ pub type PFN_cublasLtMatrixLayoutSetAttribute = unsafe extern "C" fn(
     size: usize,
 ) -> cublasStatus_t;
 
+/// cuBLAS: Lt matmul preference create. See <https://docs.nvidia.com/cuda/cublas/index.html>.
 pub type PFN_cublasLtMatmulPreferenceCreate =
     unsafe extern "C" fn(pref_out: *mut cublasLtMatmulPreference_t) -> cublasStatus_t;
 
+/// cuBLAS: Lt matmul preference destroy. See <https://docs.nvidia.com/cuda/cublas/index.html>.
 pub type PFN_cublasLtMatmulPreferenceDestroy =
     unsafe extern "C" fn(pref: cublasLtMatmulPreference_t) -> cublasStatus_t;
 
+/// cuBLAS: Lt matmul preference set attribute. See <https://docs.nvidia.com/cuda/cublas/index.html>.
 pub type PFN_cublasLtMatmulPreferenceSetAttribute = unsafe extern "C" fn(
     pref: cublasLtMatmulPreference_t,
     attr: cublasLtMatmulPreferenceAttributes_t,
@@ -1400,6 +1577,7 @@ pub type PFN_cublasLtMatmulPreferenceSetAttribute = unsafe extern "C" fn(
     size: usize,
 ) -> cublasStatus_t;
 
+/// cuBLAS: Lt matmul algo get heuristic. See <https://docs.nvidia.com/cuda/cublas/index.html>.
 pub type PFN_cublasLtMatmulAlgoGetHeuristic = unsafe extern "C" fn(
     lthandle: cublasLtHandle_t,
     op_desc: cublasLtMatmulDesc_t,
@@ -1413,6 +1591,7 @@ pub type PFN_cublasLtMatmulAlgoGetHeuristic = unsafe extern "C" fn(
     returned_algo_count: *mut c_int,
 ) -> cublasStatus_t;
 
+/// cuBLAS: Lt matmul. See <https://docs.nvidia.com/cuda/cublas/index.html>.
 pub type PFN_cublasLtMatmul = unsafe extern "C" fn(
     lthandle: cublasLtHandle_t,
     op_desc: cublasLtMatmulDesc_t,
@@ -1432,5 +1611,7 @@ pub type PFN_cublasLtMatmul = unsafe extern "C" fn(
     stream: cudaStream_t,
 ) -> cublasStatus_t;
 
+/// cuBLAS: Lt get version. See <https://docs.nvidia.com/cuda/cublas/index.html>.
 pub type PFN_cublasLtGetVersion = unsafe extern "C" fn() -> usize;
+/// cuBLAS: Lt get cudart version. See <https://docs.nvidia.com/cuda/cublas/index.html>.
 pub type PFN_cublasLtGetCudartVersion = unsafe extern "C" fn() -> usize;

@@ -26,8 +26,11 @@ use baracuda_types::CudaStatus;
 
 // ---- opaque handles -----------------------------------------------------
 
+/// opaque handle for a libcudf column.
 pub type cudfColumn_t = *mut c_void;
+/// opaque handle for a libcudf table.
 pub type cudfTable_t = *mut c_void;
+/// opaque handle for a libcudf scalar.
 pub type cudfScalar_t = *mut c_void;
 
 // ---- enums --------------------------------------------------------------
@@ -69,17 +72,24 @@ pub enum cudfTypeId_t {
 
 // ---- status -------------------------------------------------------------
 
+/// libcudf status code.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
 #[repr(transparent)]
 pub struct cudfStatus_t(pub i32);
 
 impl cudfStatus_t {
+    /// libcudf status code `SUCCESS`.
     pub const SUCCESS: Self = Self(0);
+    /// libcudf status code `LOGIC_ERROR`.
     pub const LOGIC_ERROR: Self = Self(1);
+    /// libcudf status code `CUDA_ERROR`.
     pub const CUDA_ERROR: Self = Self(2);
+    /// libcudf status code `OUT_OF_MEMORY`.
     pub const OUT_OF_MEMORY: Self = Self(3);
+    /// libcudf status code `NOT_IMPLEMENTED`.
     pub const NOT_IMPLEMENTED: Self = Self(4);
 
+    /// `is_success` method on `cudfStatus_t`.
     pub const fn is_success(self) -> bool {
         self.0 == 0
     }
@@ -119,52 +129,65 @@ impl CudaStatus for cudfStatus_t {
 
 // ---- function-pointer types ----------------------------------------------
 
+/// get the loaded libcudf version.
 pub type PFN_cudfGetVersion = unsafe extern "C" fn(version: *mut c_int) -> cudfStatus_t;
 
+/// create an empty libcudf column.
 pub type PFN_cudfColumnCreateEmpty = unsafe extern "C" fn(
     out: *mut cudfColumn_t,
     type_id: cudfTypeId_t,
     size: usize,
 ) -> cudfStatus_t;
 
+/// destroy a libcudf column.
 pub type PFN_cudfColumnDestroy = unsafe extern "C" fn(column: cudfColumn_t) -> cudfStatus_t;
 
+/// get the element type of a libcudf column.
 pub type PFN_cudfColumnGetType =
     unsafe extern "C" fn(column: cudfColumn_t, type_id: *mut cudfTypeId_t) -> cudfStatus_t;
 
+/// get the row count of a libcudf column.
 pub type PFN_cudfColumnGetSize =
     unsafe extern "C" fn(column: cudfColumn_t, size: *mut usize) -> cudfStatus_t;
 
+/// create a libcudf table from owned columns.
 pub type PFN_cudfTableCreate = unsafe extern "C" fn(
     out: *mut cudfTable_t,
     columns: *const cudfColumn_t,
     n_columns: usize,
 ) -> cudfStatus_t;
 
+/// destroy a libcudf table.
 pub type PFN_cudfTableDestroy = unsafe extern "C" fn(table: cudfTable_t) -> cudfStatus_t;
 
+/// get the column count of a libcudf table.
 pub type PFN_cudfTableGetNumColumns =
     unsafe extern "C" fn(table: cudfTable_t, n: *mut usize) -> cudfStatus_t;
 
+/// get the row count of a libcudf table.
 pub type PFN_cudfTableGetNumRows =
     unsafe extern "C" fn(table: cudfTable_t, n: *mut usize) -> cudfStatus_t;
 
+/// get an indexed column from a libcudf table.
 pub type PFN_cudfTableGetColumn = unsafe extern "C" fn(
     table: cudfTable_t,
     index: usize,
     column: *mut cudfColumn_t,
 ) -> cudfStatus_t;
 
+/// read CSV into a GPU dataframe.
 pub type PFN_cudfReadCsv = unsafe extern "C" fn(
     filepath: *const c_char,
     out_table: *mut cudfTable_t,
 ) -> cudfStatus_t;
 
+/// read PARQUET into a GPU dataframe.
 pub type PFN_cudfReadParquet = unsafe extern "C" fn(
     filepath: *const c_char,
     out_table: *mut cudfTable_t,
 ) -> cudfStatus_t;
 
+/// write a GPU dataframe to PARQUET.
 pub type PFN_cudfWriteParquet = unsafe extern "C" fn(
     filepath: *const c_char,
     table: cudfTable_t,
@@ -192,6 +215,7 @@ fn cudf_candidates() -> Vec<String> {
 
 macro_rules! cudf_fns {
     ($($name:ident as $sym:literal : $pfn:ty);* $(;)?) => {
+        /// libcudf dynamic-loader handle (one per process).
         pub struct Cudf {
             lib: Library,
             $($name: OnceLock<$pfn>,)*
@@ -234,6 +258,7 @@ cudf_fns! {
     cudf_write_parquet as "cudfWriteParquet": PFN_cudfWriteParquet;
 }
 
+/// resolve and return the process-wide libcudf loader.
 pub fn cudf() -> Result<&'static Cudf, LoaderError> {
     static CUDF: OnceLock<Cudf> = OnceLock::new();
     if let Some(c) = CUDF.get() {

@@ -32,9 +32,13 @@ pub const NVML_TEMPERATURE_GPU: c_uint = 0;
 #[repr(u32)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum nvmlClockType_t {
+    /// graphics clock
     Graphics = 0,
+    /// streaming-multiprocessor clock
     Sm = 1,
+    /// memory clock
     Mem = 2,
+    /// video clock
     Video = 3,
 }
 
@@ -44,6 +48,7 @@ pub enum nvmlClockType_t {
 pub enum nvmlPstates_t {
     P0 = 0, P1 = 1, P2 = 2, P3 = 3, P4 = 4, P5 = 5, P6 = 6, P7 = 7,
     P8 = 8, P9 = 9, P10 = 10, P11 = 11, P12 = 12, P13 = 13, P14 = 14, P15 = 15,
+    /// unknown
     Unknown = 32,
 }
 
@@ -51,7 +56,9 @@ pub enum nvmlPstates_t {
 #[repr(u32)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum nvmlEccCounterType_t {
+    /// volatile (since-boot) ECC counter
     Volatile = 0,
+    /// aggregate (persistent) ECC counter
     Aggregate = 1,
 }
 
@@ -59,7 +66,9 @@ pub enum nvmlEccCounterType_t {
 #[repr(u32)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum nvmlMemoryErrorType_t {
+    /// single-bit (corrected) memory error
     Corrected = 0,
+    /// double-bit (uncorrected) memory error
     Uncorrected = 1,
 }
 
@@ -67,13 +76,21 @@ pub enum nvmlMemoryErrorType_t {
 #[repr(u32)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum nvmlMemoryLocation_t {
+    /// L1 cache
     L1Cache = 0,
+    /// L2 cache
     L2Cache = 1,
+    /// device (DRAM) memory
     DeviceMemory = 2,
+    /// register file
     RegisterFile = 3,
+    /// texture memory
     TextureMemory = 4,
+    /// shared memory
     SharedMemory = 5,
+    /// constant buffer unit
     Cbu = 6,
+    /// on-die SRAM
     Sram = 7,
 }
 
@@ -81,9 +98,13 @@ pub enum nvmlMemoryLocation_t {
 #[repr(u32)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum nvmlComputeMode_t {
+    /// default compute mode (any context may use the device)
     Default = 0,
+    /// exclusive-thread compute mode (deprecated)
     ExclusiveThread = 1,
+    /// compute prohibited
     Prohibited = 2,
+    /// exclusive-process compute mode
     ExclusiveProcess = 3,
 }
 
@@ -91,10 +112,15 @@ pub enum nvmlComputeMode_t {
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Default)]
 pub struct nvmlMemory_v2_t {
+    /// structure version sentinel
     pub version: c_uint,
+    /// total memory in bytes
     pub total: u64,
+    /// reserved-by-system memory in bytes
     pub reserved: u64,
+    /// free memory in bytes
     pub free: u64,
+    /// used memory in bytes
     pub used: u64,
 }
 
@@ -102,12 +128,19 @@ pub struct nvmlMemory_v2_t {
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Default)]
 pub struct nvmlPciInfo_t {
+    /// legacy 16-byte bus ID (driver fallback)
     pub bus_id_legacy: [c_char; 16],
+    /// PCI domain number
     pub domain: c_uint,
+    /// PCI bus number
     pub bus: c_uint,
+    /// PCI device number
     pub device: c_uint,
+    /// PCI vendor:device ID combined value
     pub pci_device_id: c_uint,
+    /// PCI subsystem ID
     pub pci_subsystem_id: c_uint,
+    /// full PCI bus ID string (`domain:bus:device.function`)
     pub bus_id: [c_char; 32],
 }
 
@@ -115,9 +148,13 @@ pub struct nvmlPciInfo_t {
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Default)]
 pub struct nvmlProcessInfo_t {
+    /// process ID
     pub pid: c_uint,
+    /// GPU memory used by this process (bytes)
     pub used_gpu_memory: u64,
+    /// MIG GPU-instance ID (or `0xFFFFFFFF` if not MIG)
     pub gpu_instance_id: c_uint,
+    /// MIG compute-instance ID (or `0xFFFFFFFF` if not MIG)
     pub compute_instance_id: c_uint,
 }
 
@@ -125,12 +162,19 @@ pub struct nvmlProcessInfo_t {
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
 pub struct nvmlFieldValue_t {
+    /// field identifier (`NVML_FI_*`)
     pub field_id: c_uint,
+    /// scope of the field value
     pub scope_id: c_uint,
+    /// timestamp at which the value was sampled (µs since epoch)
     pub timestamp: i64,
+    /// time NVML spent retrieving the value (µs)
     pub latency_usec: i64,
+    /// discriminant for the `value` union
     pub value_type: c_uint,
+    /// per-field status code
     pub nvml_return: nvmlReturn_t,
+    /// value (interpret as one of the `value_type` variants)
     pub value: [u64; 2],
 }
 
@@ -152,8 +196,11 @@ impl Default for nvmlFieldValue_t {
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Default)]
 pub struct nvmlMemory_t {
+    /// total memory in bytes
     pub total: u64,
+    /// free memory in bytes
     pub free: u64,
+    /// used memory in bytes
     pub used: u64,
 }
 
@@ -161,32 +208,50 @@ pub struct nvmlMemory_t {
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Default)]
 pub struct nvmlUtilization_t {
+    /// GPU compute utilization percent (0–100)
     pub gpu: c_uint,
+    /// memory-controller utilization percent (0–100)
     pub memory: c_uint,
 }
 
 // ---- status ---------------------------------------------------------------
 
+/// Return code from an NVML call.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
 #[repr(transparent)]
 pub struct nvmlReturn_t(pub i32);
 
 impl nvmlReturn_t {
+    /// success
     pub const SUCCESS: Self = Self(0);
+    /// NVML not initialized — call `nvmlInit` first
     pub const UNINITIALIZED: Self = Self(1);
+    /// invalid argument passed to the call
     pub const INVALID_ARGUMENT: Self = Self(2);
+    /// operation not supported on this device
     pub const NOT_SUPPORTED: Self = Self(3);
+    /// insufficient permission for the requested operation
     pub const NO_PERMISSION: Self = Self(4);
+    /// NVML already initialized
     pub const ALREADY_INITIALIZED: Self = Self(5);
+    /// requested item not found
     pub const NOT_FOUND: Self = Self(6);
+    /// supplied buffer is too small
     pub const INSUFFICIENT_SIZE: Self = Self(7);
+    /// device has insufficient power
     pub const INSUFFICIENT_POWER: Self = Self(8);
+    /// NVIDIA driver is not loaded
     pub const DRIVER_NOT_LOADED: Self = Self(9);
+    /// operation timed out
     pub const TIMEOUT: Self = Self(10);
+    /// GPU is lost (unresponsive)
     pub const GPU_IS_LOST: Self = Self(15);
+    /// GPU requires a reset
     pub const RESET_REQUIRED: Self = Self(16);
+    /// unknown NVML error
     pub const UNKNOWN: Self = Self(999);
 
+    /// returns true when the result code is `NVML_SUCCESS`
     pub const fn is_success(self) -> bool {
         self.0 == 0
     }
@@ -232,89 +297,112 @@ impl CudaStatus for nvmlReturn_t {
 
 // ---- function-pointer types ----------------------------------------------
 
+/// function pointer for `nvmlInit_v2`
 pub type PFN_nvmlInit = unsafe extern "C" fn() -> nvmlReturn_t;
+/// function pointer for `nvmlShutdown`
 pub type PFN_nvmlShutdown = unsafe extern "C" fn() -> nvmlReturn_t;
+/// function pointer for `nvmlSystemGetDriverVersion`
 pub type PFN_nvmlSystemGetDriverVersion =
     unsafe extern "C" fn(version: *mut c_char, length: c_uint) -> nvmlReturn_t;
+/// function pointer for `nvmlSystemGetCudaDriverVersion`
 pub type PFN_nvmlSystemGetCudaDriverVersion =
     unsafe extern "C" fn(cuda_driver_version: *mut core::ffi::c_int) -> nvmlReturn_t;
+/// function pointer for `nvmlDeviceGetCount_v2` — get number of NVIDIA devices
 pub type PFN_nvmlDeviceGetCount = unsafe extern "C" fn(count: *mut c_uint) -> nvmlReturn_t;
+/// function pointer for `nvmlDeviceGetHandleByIndex_v2`
 pub type PFN_nvmlDeviceGetHandleByIndex =
     unsafe extern "C" fn(index: c_uint, device: *mut nvmlDevice_t) -> nvmlReturn_t;
+/// function pointer for `nvmlDeviceGetName`
 pub type PFN_nvmlDeviceGetName =
     unsafe extern "C" fn(device: nvmlDevice_t, name: *mut c_char, length: c_uint) -> nvmlReturn_t;
+/// function pointer for `nvmlDeviceGetMemoryInfo`
 pub type PFN_nvmlDeviceGetMemoryInfo =
     unsafe extern "C" fn(device: nvmlDevice_t, memory: *mut nvmlMemory_t) -> nvmlReturn_t;
+/// function pointer for `nvmlDeviceGetTemperature` — get device temperature
 pub type PFN_nvmlDeviceGetTemperature = unsafe extern "C" fn(
     device: nvmlDevice_t,
     sensor_type: c_uint,
     temp: *mut c_uint,
 ) -> nvmlReturn_t;
+/// function pointer for `nvmlDeviceGetPowerUsage`
 pub type PFN_nvmlDeviceGetPowerUsage =
     unsafe extern "C" fn(device: nvmlDevice_t, power: *mut c_uint) -> nvmlReturn_t;
+/// function pointer for `nvmlDeviceGetFanSpeed`
 pub type PFN_nvmlDeviceGetFanSpeed =
     unsafe extern "C" fn(device: nvmlDevice_t, speed: *mut c_uint) -> nvmlReturn_t;
+/// function pointer for `nvmlDeviceGetUtilizationRates`
 pub type PFN_nvmlDeviceGetUtilizationRates =
     unsafe extern "C" fn(device: nvmlDevice_t, util: *mut nvmlUtilization_t) -> nvmlReturn_t;
 
 // ---- Clocks / power / performance ---------------------------------------
 
+/// function pointer for `nvmlDeviceGetClockInfo`
 pub type PFN_nvmlDeviceGetClockInfo = unsafe extern "C" fn(
     device: nvmlDevice_t,
     ty: nvmlClockType_t,
     clock_mhz: *mut c_uint,
 ) -> nvmlReturn_t;
 
+/// function pointer for `nvmlDeviceGetMaxClockInfo`
 pub type PFN_nvmlDeviceGetMaxClockInfo = unsafe extern "C" fn(
     device: nvmlDevice_t,
     ty: nvmlClockType_t,
     clock_mhz: *mut c_uint,
 ) -> nvmlReturn_t;
 
+/// function pointer for `nvmlDeviceGetApplicationsClock`
 pub type PFN_nvmlDeviceGetApplicationsClock = unsafe extern "C" fn(
     device: nvmlDevice_t,
     ty: nvmlClockType_t,
     clock_mhz: *mut c_uint,
 ) -> nvmlReturn_t;
 
+/// function pointer for `nvmlDeviceGetDefaultApplicationsClock`
 pub type PFN_nvmlDeviceGetDefaultApplicationsClock = unsafe extern "C" fn(
     device: nvmlDevice_t,
     ty: nvmlClockType_t,
     clock_mhz: *mut c_uint,
 ) -> nvmlReturn_t;
 
+/// function pointer for `nvmlDeviceSetApplicationsClocks`
 pub type PFN_nvmlDeviceSetApplicationsClocks = unsafe extern "C" fn(
     device: nvmlDevice_t,
     mem_mhz: c_uint,
     graphics_mhz: c_uint,
 ) -> nvmlReturn_t;
 
+/// function pointer for `nvmlDeviceGetPowerManagementLimit`
 pub type PFN_nvmlDeviceGetPowerManagementLimit = unsafe extern "C" fn(
     device: nvmlDevice_t,
     limit: *mut c_uint,
 ) -> nvmlReturn_t;
 
+/// function pointer for `nvmlDeviceGetPowerManagementLimitConstraints`
 pub type PFN_nvmlDeviceGetPowerManagementLimitConstraints = unsafe extern "C" fn(
     device: nvmlDevice_t,
     min_limit: *mut c_uint,
     max_limit: *mut c_uint,
 ) -> nvmlReturn_t;
 
+/// function pointer for `nvmlDeviceSetPowerManagementLimit`
 pub type PFN_nvmlDeviceSetPowerManagementLimit = unsafe extern "C" fn(
     device: nvmlDevice_t,
     limit: c_uint,
 ) -> nvmlReturn_t;
 
+/// function pointer for `nvmlDeviceGetPowerState`
 pub type PFN_nvmlDeviceGetPowerState = unsafe extern "C" fn(
     device: nvmlDevice_t,
     p_state: *mut nvmlPstates_t,
 ) -> nvmlReturn_t;
 
+/// function pointer for `nvmlDeviceGetPerformanceState`
 pub type PFN_nvmlDeviceGetPerformanceState = unsafe extern "C" fn(
     device: nvmlDevice_t,
     p_state: *mut nvmlPstates_t,
 ) -> nvmlReturn_t;
 
+/// function pointer for `nvmlDeviceGetTemperatureThreshold`
 pub type PFN_nvmlDeviceGetTemperatureThreshold = unsafe extern "C" fn(
     device: nvmlDevice_t,
     threshold_type: c_uint,
@@ -323,6 +411,7 @@ pub type PFN_nvmlDeviceGetTemperatureThreshold = unsafe extern "C" fn(
 
 // ---- ECC -----------------------------------------------------------------
 
+/// function pointer for `nvmlDeviceGetMemoryErrorCounter`
 pub type PFN_nvmlDeviceGetMemoryErrorCounter = unsafe extern "C" fn(
     device: nvmlDevice_t,
     error_type: nvmlMemoryErrorType_t,
@@ -331,6 +420,7 @@ pub type PFN_nvmlDeviceGetMemoryErrorCounter = unsafe extern "C" fn(
     count: *mut u64,
 ) -> nvmlReturn_t;
 
+/// function pointer for `nvmlDeviceGetTotalEccErrors`
 pub type PFN_nvmlDeviceGetTotalEccErrors = unsafe extern "C" fn(
     device: nvmlDevice_t,
     error_type: nvmlMemoryErrorType_t,
@@ -338,50 +428,59 @@ pub type PFN_nvmlDeviceGetTotalEccErrors = unsafe extern "C" fn(
     count: *mut u64,
 ) -> nvmlReturn_t;
 
+/// function pointer for `nvmlDeviceGetEccMode`
 pub type PFN_nvmlDeviceGetEccMode = unsafe extern "C" fn(
     device: nvmlDevice_t,
     current: *mut c_uint,
     pending: *mut c_uint,
 ) -> nvmlReturn_t;
 
+/// function pointer for `nvmlDeviceSetEccMode`
 pub type PFN_nvmlDeviceSetEccMode =
     unsafe extern "C" fn(device: nvmlDevice_t, ecc: c_uint) -> nvmlReturn_t;
 
 // ---- PCIe / NVLink -------------------------------------------------------
 
+/// function pointer for `nvmlDeviceGetPciInfo_v3`
 pub type PFN_nvmlDeviceGetPciInfo_v3 = unsafe extern "C" fn(
     device: nvmlDevice_t,
     pci: *mut nvmlPciInfo_t,
 ) -> nvmlReturn_t;
 
+/// function pointer for `nvmlDeviceGetCurrPcieLinkGeneration`
 pub type PFN_nvmlDeviceGetCurrPcieLinkGeneration = unsafe extern "C" fn(
     device: nvmlDevice_t,
     generation: *mut c_uint,
 ) -> nvmlReturn_t;
 
+/// function pointer for `nvmlDeviceGetCurrPcieLinkWidth`
 pub type PFN_nvmlDeviceGetCurrPcieLinkWidth = unsafe extern "C" fn(
     device: nvmlDevice_t,
     width: *mut c_uint,
 ) -> nvmlReturn_t;
 
+/// function pointer for `nvmlDeviceGetPcieThroughput`
 pub type PFN_nvmlDeviceGetPcieThroughput = unsafe extern "C" fn(
     device: nvmlDevice_t,
     counter: c_uint,
     value: *mut c_uint,
 ) -> nvmlReturn_t;
 
+/// function pointer for `nvmlDeviceGetNvLinkState`
 pub type PFN_nvmlDeviceGetNvLinkState = unsafe extern "C" fn(
     device: nvmlDevice_t,
     link: c_uint,
     is_active: *mut c_uint,
 ) -> nvmlReturn_t;
 
+/// function pointer for `nvmlDeviceGetNvLinkVersion`
 pub type PFN_nvmlDeviceGetNvLinkVersion = unsafe extern "C" fn(
     device: nvmlDevice_t,
     link: c_uint,
     version: *mut c_uint,
 ) -> nvmlReturn_t;
 
+/// function pointer for `nvmlDeviceGetNvLinkCapability`
 pub type PFN_nvmlDeviceGetNvLinkCapability = unsafe extern "C" fn(
     device: nvmlDevice_t,
     link: c_uint,
@@ -391,12 +490,14 @@ pub type PFN_nvmlDeviceGetNvLinkCapability = unsafe extern "C" fn(
 
 // ---- Processes -----------------------------------------------------------
 
+/// function pointer for `nvmlDeviceGetComputeRunningProcesses_v3`
 pub type PFN_nvmlDeviceGetComputeRunningProcesses_v3 = unsafe extern "C" fn(
     device: nvmlDevice_t,
     info_count: *mut c_uint,
     infos: *mut nvmlProcessInfo_t,
 ) -> nvmlReturn_t;
 
+/// function pointer for `nvmlDeviceGetGraphicsRunningProcesses_v3`
 pub type PFN_nvmlDeviceGetGraphicsRunningProcesses_v3 = unsafe extern "C" fn(
     device: nvmlDevice_t,
     info_count: *mut c_uint,
@@ -405,11 +506,13 @@ pub type PFN_nvmlDeviceGetGraphicsRunningProcesses_v3 = unsafe extern "C" fn(
 
 // ---- Compute mode --------------------------------------------------------
 
+/// function pointer for `nvmlDeviceGetComputeMode`
 pub type PFN_nvmlDeviceGetComputeMode = unsafe extern "C" fn(
     device: nvmlDevice_t,
     mode: *mut nvmlComputeMode_t,
 ) -> nvmlReturn_t;
 
+/// function pointer for `nvmlDeviceSetComputeMode`
 pub type PFN_nvmlDeviceSetComputeMode = unsafe extern "C" fn(
     device: nvmlDevice_t,
     mode: nvmlComputeMode_t,
@@ -417,23 +520,29 @@ pub type PFN_nvmlDeviceSetComputeMode = unsafe extern "C" fn(
 
 // ---- Identity / UUID / serial --------------------------------------------
 
+/// function pointer for `nvmlDeviceGetUUID`
 pub type PFN_nvmlDeviceGetUUID =
     unsafe extern "C" fn(device: nvmlDevice_t, uuid: *mut c_char, length: c_uint) -> nvmlReturn_t;
 
+/// function pointer for `nvmlDeviceGetSerial`
 pub type PFN_nvmlDeviceGetSerial =
     unsafe extern "C" fn(device: nvmlDevice_t, serial: *mut c_char, length: c_uint) -> nvmlReturn_t;
 
+/// function pointer for `nvmlDeviceGetIndex`
 pub type PFN_nvmlDeviceGetIndex =
     unsafe extern "C" fn(device: nvmlDevice_t, index: *mut c_uint) -> nvmlReturn_t;
 
+/// function pointer for `nvmlDeviceGetMinorNumber`
 pub type PFN_nvmlDeviceGetMinorNumber =
     unsafe extern "C" fn(device: nvmlDevice_t, minor: *mut c_uint) -> nvmlReturn_t;
 
+/// function pointer for `nvmlDeviceGetHandleByUUID`
 pub type PFN_nvmlDeviceGetHandleByUUID = unsafe extern "C" fn(
     uuid: *const c_char,
     device: *mut nvmlDevice_t,
 ) -> nvmlReturn_t;
 
+/// function pointer for `nvmlDeviceGetHandleByPciBusId_v2`
 pub type PFN_nvmlDeviceGetHandleByPciBusId_v2 = unsafe extern "C" fn(
     pci_bus_id: *const c_char,
     device: *mut nvmlDevice_t,
@@ -441,24 +550,34 @@ pub type PFN_nvmlDeviceGetHandleByPciBusId_v2 = unsafe extern "C" fn(
 
 // ---- Event set -----------------------------------------------------------
 
+/// function pointer for `nvmlEventSetCreate`
 pub type PFN_nvmlEventSetCreate = unsafe extern "C" fn(set: *mut nvmlEventSet_t) -> nvmlReturn_t;
+/// function pointer for `nvmlEventSetFree`
 pub type PFN_nvmlEventSetFree = unsafe extern "C" fn(set: nvmlEventSet_t) -> nvmlReturn_t;
+/// function pointer for `nvmlDeviceRegisterEvents`
 pub type PFN_nvmlDeviceRegisterEvents = unsafe extern "C" fn(
     device: nvmlDevice_t,
     event_types: u64,
     set: nvmlEventSet_t,
 ) -> nvmlReturn_t;
 
+/// nvmleventdata t
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Default)]
 pub struct nvmlEventData_t {
+    /// PCI device number
     pub device: nvmlDevice_t,
+    /// bitmask of fired event types
     pub event_type: u64,
+    /// auxiliary event-specific data
     pub event_data: u64,
+    /// MIG GPU-instance ID (or `0xFFFFFFFF` if not MIG)
     pub gpu_instance_id: c_uint,
+    /// MIG compute-instance ID (or `0xFFFFFFFF` if not MIG)
     pub compute_instance_id: c_uint,
 }
 
+/// function pointer for `nvmlEventSetWait_v2`
 pub type PFN_nvmlEventSetWait_v2 = unsafe extern "C" fn(
     set: nvmlEventSet_t,
     data: *mut nvmlEventData_t,
@@ -467,6 +586,7 @@ pub type PFN_nvmlEventSetWait_v2 = unsafe extern "C" fn(
 
 // ---- Field values --------------------------------------------------------
 
+/// function pointer for `nvmlDeviceGetFieldValues`
 pub type PFN_nvmlDeviceGetFieldValues = unsafe extern "C" fn(
     device: nvmlDevice_t,
     values_count: core::ffi::c_int,
@@ -505,6 +625,7 @@ fn nvml_extra_search_dirs() -> Vec<PathBuf> {
 
 macro_rules! nvml_fns {
     ($($name:ident as $sym:literal : $pfn:ty);* $(;)?) => {
+        /// Dynamic loader handle for NVML.
         pub struct Nvml {
             lib: Library,
             $($name: OnceLock<$pfn>,)*
@@ -516,6 +637,7 @@ macro_rules! nvml_fns {
         }
         impl Nvml {
             $(
+                #[doc = concat!("Resolve `", $sym, "`.")]
                 pub fn $name(&self) -> Result<$pfn, LoaderError> {
                     if let Some(&p) = self.$name.get() { return Ok(p); }
                     let raw: *mut () = unsafe { self.lib.raw_symbol($sym)? };
@@ -601,13 +723,16 @@ nvml_fns! {
     nvml_device_get_field_values as "nvmlDeviceGetFieldValues": PFN_nvmlDeviceGetFieldValues;
 }
 
+/// Open (or return the cached) NVML dynamic library.
 pub fn nvml() -> Result<&'static Nvml, LoaderError> {
     static NVML: OnceLock<Nvml> = OnceLock::new();
     if let Some(n) = NVML.get() {
         return Ok(n);
     }
     let lib = match Library::open("nvml", nvml_candidates()) {
+        /// ok
         Ok(l) => l,
+        /// err
         Err(_) => {
             // Fall back to explicit NVSMI path on Windows.
             let mut found: Option<Library> = None;
@@ -630,5 +755,6 @@ pub fn nvml() -> Result<&'static Nvml, LoaderError> {
     };
     let n = Nvml::empty(lib);
     let _ = NVML.set(n);
+    /// ok
     Ok(NVML.get().expect("OnceLock set or lost race"))
 }

@@ -133,8 +133,10 @@ impl Default for nvshmemx_uniqueid_t {
 pub struct nvshmemResult_t(pub i32);
 
 impl nvshmemResult_t {
+    /// NVSHMEM result code `Success`.
     pub const Success: Self = Self(0);
 
+    /// `is_success` method on `nvshmemResult_t`.
     #[inline]
     pub const fn is_success(self) -> bool {
         self.0 == 0
@@ -317,6 +319,7 @@ fn nvshmem_candidates() -> &'static [&'static str] {
 
 macro_rules! nvshmem_fns {
     ($($name:ident as $sym:literal : $pfn:ty);* $(;)?) => {
+        /// NVSHMEM host-library dynamic-loader handle.
         pub struct Nvshmem {
             lib: Library,
             $($name: OnceLock<$pfn>,)*

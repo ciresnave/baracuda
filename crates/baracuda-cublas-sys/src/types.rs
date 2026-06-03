@@ -23,7 +23,9 @@ pub enum cublasOperation_t {
 #[repr(i32)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum cublasPointerMode_t {
+    /// Host.
     Host = 0,
+    /// Device.
     Device = 1,
 }
 
@@ -31,7 +33,9 @@ pub enum cublasPointerMode_t {
 #[repr(i32)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum cublasAtomicsMode_t {
+    /// Not allowed.
     NotAllowed = 0,
+    /// Allowed.
     Allowed = 1,
 }
 
@@ -39,9 +43,14 @@ pub enum cublasAtomicsMode_t {
 #[repr(i32)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum cublasMath_t {
+    /// Default.
     Default = 0,
+    /// Tensor op math.
     TensorOpMath = 1,
+    /// Pedantic.
     Pedantic = 2,
+    /// Tf32 tensor op.
     Tf32TensorOp = 3,
+    /// Disallow reduced precision reduction.
     DisallowReducedPrecisionReduction = 16,
 }

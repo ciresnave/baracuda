@@ -15,6 +15,7 @@ fn cublas_candidates() -> Vec<String> {
 
 macro_rules! cublas_fns {
     ($($(#[$attr:meta])* fn $name:ident as $sym:literal : $pfn:ty;)*) => {
+        /// Dynamically-loaded cuBLAS entry-point table.
         pub struct Cublas {
             lib: Library,
             $(
@@ -229,6 +230,7 @@ fn cublaslt_candidates() -> Vec<String> {
 
 macro_rules! cublaslt_fns {
     ($($(#[$attr:meta])* fn $name:ident as $sym:literal : $pfn:ty;)*) => {
+        /// Dynamically-loaded cuBLASLt entry-point table.
         pub struct CublasLt {
             lib: Library,
             $($name: OnceLock<$pfn>,)*
@@ -242,6 +244,7 @@ macro_rules! cublaslt_fns {
             fn empty(lib: Library) -> Self { Self { lib, $($name: OnceLock::new(),)* } }
             $(
                 $(#[$attr])*
+                #[doc = concat!("Resolve `", $sym, "`.")]
                 pub fn $name(&self) -> Result<$pfn, LoaderError> {
                     if let Some(&p) = self.$name.get() { return Ok(p); }
                     let raw: *mut () = unsafe { self.lib.raw_symbol($sym)? };
@@ -285,6 +288,7 @@ cublaslt_fns! {
         PFN_cublasLtGetCudartVersion;
 }
 
+/// Lazily-initialized process-wide cuBLASLt loader singleton.
 pub fn cublas_lt() -> Result<&'static CublasLt, LoaderError> {
     static LT: OnceLock<CublasLt> = OnceLock::new();
     if let Some(c) = LT.get() {

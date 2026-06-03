@@ -23,10 +23,15 @@
 
 #![warn(missing_debug_implementations)]
 
+/// `driver` — submodule grouping related items.
 pub mod driver;
+/// `functions` — submodule grouping related items.
 pub mod functions;
+/// `runtime` — submodule grouping related items.
 pub mod runtime;
+/// `status` — submodule grouping related items.
 pub mod status;
+/// `types` — submodule grouping related items.
 pub mod types;
 
 pub use driver::{driver, Driver};

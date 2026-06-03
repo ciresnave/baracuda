@@ -45,15 +45,25 @@ impl Default for ncclUniqueId {
 #[repr(i32)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum ncclDataType_t {
+    /// 8-bit signed integer element.
     Int8 = 0,
+    /// 8-bit unsigned integer element.
     Uint8 = 1,
+    /// 32-bit signed integer element.
     Int32 = 2,
+    /// 32-bit unsigned integer element.
     Uint32 = 3,
+    /// 64-bit signed integer element.
     Int64 = 4,
+    /// 64-bit unsigned integer element.
     Uint64 = 5,
+    /// IEEE-754 binary16 (fp16) element.
     Float16 = 6,
+    /// IEEE-754 binary32 (fp32) element.
     Float32 = 7,
+    /// IEEE-754 binary64 (fp64) element.
     Float64 = 8,
+    /// bfloat16 element.
     BFloat16 = 9,
 }
 
@@ -67,29 +77,44 @@ pub struct ncclRedOp_t(pub i32);
 
 #[allow(non_upper_case_globals)]
 impl ncclRedOp_t {
+    /// `ncclSum` — element-wise sum reduction.
     pub const Sum: Self = Self(0);
+    /// `ncclProd` — element-wise product reduction.
     pub const Prod: Self = Self(1);
+    /// `ncclMax` — element-wise max reduction.
     pub const Max: Self = Self(2);
+    /// `ncclMin` — element-wise min reduction.
     pub const Min: Self = Self(3);
+    /// `ncclAvg` — element-wise average reduction (NCCL 2.10+).
     pub const Avg: Self = Self(4);
 }
 
 // ---- status ---------------------------------------------------------------
 
+/// Return code from an NCCL call.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
 #[repr(transparent)]
 pub struct ncclResult_t(pub i32);
 
 impl ncclResult_t {
+    /// `ncclSuccess` — operation succeeded.
     pub const Success: Self = Self(0);
+    /// `ncclUnhandledCudaError` — an underlying CUDA call failed.
     pub const UnhandledCudaError: Self = Self(1);
+    /// `ncclSystemError` — a system-level error occurred (sockets, files, ...).
     pub const SystemError: Self = Self(2);
+    /// `ncclInternalError` — an internal NCCL error occurred.
     pub const InternalError: Self = Self(3);
+    /// `ncclInvalidArgument` — an argument was invalid.
     pub const InvalidArgument: Self = Self(4);
+    /// `ncclInvalidUsage` — the call is invalid in the current state.
     pub const InvalidUsage: Self = Self(5);
+    /// `ncclRemoteError` — another rank in the communicator failed.
     pub const RemoteError: Self = Self(6);
+    /// `ncclInProgress` — non-blocking operation still in progress.
     pub const InProgress: Self = Self(7);
 
+    /// Return `true` if the status code denotes success.
     pub const fn is_success(self) -> bool {
         self.0 == 0
     }
@@ -135,25 +160,33 @@ impl CudaStatus for ncclResult_t {
 
 // ---- function-pointer types ----------------------------------------------
 
+/// Function-pointer type for `ncclGetVersion` (query NCCL library version). See <https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/api.html>.
 pub type PFN_ncclGetVersion = unsafe extern "C" fn(version: *mut c_int) -> ncclResult_t;
+/// Function-pointer type for `ncclGetUniqueId` (generate a unique multi-rank initialization ID). See <https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/api.html>.
 pub type PFN_ncclGetUniqueId = unsafe extern "C" fn(id: *mut ncclUniqueId) -> ncclResult_t;
+/// Function-pointer type for `ncclCommInitRank` (initialize a communicator rank). See <https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/api.html>.
 pub type PFN_ncclCommInitRank = unsafe extern "C" fn(
     comm: *mut ncclComm_t,
     nranks: c_int,
     comm_id: ncclUniqueId,
     rank: c_int,
 ) -> ncclResult_t;
+/// Function-pointer type for `ncclCommInitAll` (initialize all-local-GPU communicators in one call). See <https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/api.html>.
 pub type PFN_ncclCommInitAll = unsafe extern "C" fn(
     comms: *mut ncclComm_t,
     ndev: c_int,
     dev_list: *const c_int,
 ) -> ncclResult_t;
+/// Function-pointer type for `ncclCommDestroy` (destroy a communicator). See <https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/api.html>.
 pub type PFN_ncclCommDestroy = unsafe extern "C" fn(comm: ncclComm_t) -> ncclResult_t;
+/// Function-pointer type for `ncclCommCount` (query rank count on a communicator). See <https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/api.html>.
 pub type PFN_ncclCommCount =
     unsafe extern "C" fn(comm: ncclComm_t, count: *mut c_int) -> ncclResult_t;
+/// Function-pointer type for `ncclCommUserRank` (query this rank's index on a communicator). See <https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/api.html>.
 pub type PFN_ncclCommUserRank =
     unsafe extern "C" fn(comm: ncclComm_t, rank: *mut c_int) -> ncclResult_t;
 
+/// Function-pointer type for `ncclAllReduce` (all-reduce collective). See <https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/api.html>.
 pub type PFN_ncclAllReduce = unsafe extern "C" fn(
     sendbuff: *const c_void,
     recvbuff: *mut c_void,
@@ -164,6 +197,7 @@ pub type PFN_ncclAllReduce = unsafe extern "C" fn(
     stream: cudaStream_t,
 ) -> ncclResult_t;
 
+/// Function-pointer type for `ncclBroadcast` (broadcast-from-root collective). See <https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/api.html>.
 pub type PFN_ncclBroadcast = unsafe extern "C" fn(
     sendbuff: *const c_void,
     recvbuff: *mut c_void,
@@ -174,11 +208,14 @@ pub type PFN_ncclBroadcast = unsafe extern "C" fn(
     stream: cudaStream_t,
 ) -> ncclResult_t;
 
+/// Function-pointer type for `ncclGroupStart` (start grouped collective ops). See <https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/api.html>.
 pub type PFN_ncclGroupStart = unsafe extern "C" fn() -> ncclResult_t;
+/// Function-pointer type for `ncclGroupEnd` (end grouped collective ops and commit them). See <https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/api.html>.
 pub type PFN_ncclGroupEnd = unsafe extern "C" fn() -> ncclResult_t;
 
 // ---- Full collective surface ----
 
+/// Function-pointer type for `ncclReduce` (reduce-to-root collective). See <https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/api.html>.
 pub type PFN_ncclReduce = unsafe extern "C" fn(
     sendbuff: *const c_void,
     recvbuff: *mut c_void,
@@ -190,6 +227,7 @@ pub type PFN_ncclReduce = unsafe extern "C" fn(
     stream: cudaStream_t,
 ) -> ncclResult_t;
 
+/// Function-pointer type for `ncclAllGather` (all-gather collective). See <https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/api.html>.
 pub type PFN_ncclAllGather = unsafe extern "C" fn(
     sendbuff: *const c_void,
     recvbuff: *mut c_void,
@@ -199,6 +237,7 @@ pub type PFN_ncclAllGather = unsafe extern "C" fn(
     stream: cudaStream_t,
 ) -> ncclResult_t;
 
+/// Function-pointer type for `ncclReduceScatter` (reduce-scatter collective). See <https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/api.html>.
 pub type PFN_ncclReduceScatter = unsafe extern "C" fn(
     sendbuff: *const c_void,
     recvbuff: *mut c_void,
@@ -209,6 +248,7 @@ pub type PFN_ncclReduceScatter = unsafe extern "C" fn(
     stream: cudaStream_t,
 ) -> ncclResult_t;
 
+/// Function-pointer type for `ncclSend` (point-to-point send). See <https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/api.html>.
 pub type PFN_ncclSend = unsafe extern "C" fn(
     sendbuff: *const c_void,
     count: usize,
@@ -218,6 +258,7 @@ pub type PFN_ncclSend = unsafe extern "C" fn(
     stream: cudaStream_t,
 ) -> ncclResult_t;
 
+/// Function-pointer type for `ncclRecv` (point-to-point receive). See <https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/api.html>.
 pub type PFN_ncclRecv = unsafe extern "C" fn(
     recvbuff: *mut c_void,
     count: usize,
@@ -229,12 +270,17 @@ pub type PFN_ncclRecv = unsafe extern "C" fn(
 
 // ---- Communicator lifecycle extras ----
 
+/// Function-pointer type for `ncclCommAbort` (abort outstanding ops on a communicator). See <https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/api.html>.
 pub type PFN_ncclCommAbort = unsafe extern "C" fn(comm: ncclComm_t) -> ncclResult_t;
+/// Function-pointer type for `ncclCommFinalize` (finalize a non-blocking communicator). See <https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/api.html>.
 pub type PFN_ncclCommFinalize = unsafe extern "C" fn(comm: ncclComm_t) -> ncclResult_t;
+/// Function-pointer type for `ncclCommGetAsyncError` (fetch a communicator's last async error). See <https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/api.html>.
 pub type PFN_ncclCommGetAsyncError =
     unsafe extern "C" fn(comm: ncclComm_t, async_error: *mut ncclResult_t) -> ncclResult_t;
+/// Function-pointer type for `ncclCommCuDevice` (query CUDA device backing a communicator rank). See <https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/api.html>.
 pub type PFN_ncclCommCuDevice =
     unsafe extern "C" fn(comm: ncclComm_t, device: *mut c_int) -> ncclResult_t;
+/// Function-pointer type for `ncclCommSplit` (split a communicator by color/key). See <https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/api.html>.
 pub type PFN_ncclCommSplit = unsafe extern "C" fn(
     comm: ncclComm_t,
     color: c_int,
@@ -243,6 +289,7 @@ pub type PFN_ncclCommSplit = unsafe extern "C" fn(
     config: *mut c_void, // ncclConfig_t
 ) -> ncclResult_t;
 
+/// Function-pointer type for `ncclCommInitRankConfig` (initialize a communicator rank with config). See <https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/api.html>.
 pub type PFN_ncclCommInitRankConfig = unsafe extern "C" fn(
     comm: *mut ncclComm_t,
     nranks: c_int,
@@ -253,10 +300,13 @@ pub type PFN_ncclCommInitRankConfig = unsafe extern "C" fn(
 
 // ---- Memory helpers (NCCL 2.19+) ----
 
+/// Function-pointer type for `ncclMemAlloc` (allocate NCCL-registered device memory). See <https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/api.html>.
 pub type PFN_ncclMemAlloc =
     unsafe extern "C" fn(ptr: *mut *mut c_void, size: usize) -> ncclResult_t;
+/// Function-pointer type for `ncclMemFree` (free NCCL-registered device memory). See <https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/api.html>.
 pub type PFN_ncclMemFree = unsafe extern "C" fn(ptr: *mut c_void) -> ncclResult_t;
 
+/// Function-pointer type for `ncclCommRegister` (register a user buffer with a communicator). See <https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/api.html>.
 pub type PFN_ncclCommRegister = unsafe extern "C" fn(
     comm: ncclComm_t,
     buff: *mut c_void,
@@ -264,11 +314,13 @@ pub type PFN_ncclCommRegister = unsafe extern "C" fn(
     handle: *mut *mut c_void,
 ) -> ncclResult_t;
 
+/// Function-pointer type for `ncclCommDeregister` (deregister a user buffer from a communicator). See <https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/api.html>.
 pub type PFN_ncclCommDeregister =
     unsafe extern "C" fn(comm: ncclComm_t, handle: *mut c_void) -> ncclResult_t;
 
 // ---- Custom reduction ops ----
 
+/// Function-pointer type for `ncclRedOpCreatePreMulSum` (create a custom pre-multiplied-sum reduction op). See <https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/api.html>.
 pub type PFN_ncclRedOpCreatePreMulSum = unsafe extern "C" fn(
     op: *mut ncclRedOp_t,
     scalar: *mut c_void,
@@ -277,13 +329,16 @@ pub type PFN_ncclRedOpCreatePreMulSum = unsafe extern "C" fn(
     comm: ncclComm_t,
 ) -> ncclResult_t;
 
+/// Function-pointer type for `ncclRedOpDestroy` (destroy a custom reduction op). See <https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/api.html>.
 pub type PFN_ncclRedOpDestroy =
     unsafe extern "C" fn(op: ncclRedOp_t, comm: ncclComm_t) -> ncclResult_t;
 
 // ---- Error strings ----
 
+/// Function-pointer type for `ncclGetErrorString` (decode an ncclResult_t into a static C string). See <https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/api.html>.
 pub type PFN_ncclGetErrorString =
     unsafe extern "C" fn(result: ncclResult_t) -> *const core::ffi::c_char;
+/// Function-pointer type for `ncclGetLastError` (fetch the last error string on a communicator). See <https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/api.html>.
 pub type PFN_ncclGetLastError =
     unsafe extern "C" fn(comm: ncclComm_t) -> *const core::ffi::c_char;
 
@@ -306,6 +361,7 @@ fn nccl_candidates() -> &'static [&'static str] {
 
 macro_rules! nccl_fns {
     ($($name:ident as $sym:literal : $pfn:ty);* $(;)?) => {
+        /// Lazily-resolved NCCL function-pointer table.
         pub struct Nccl {
             lib: Library,
             $($name: OnceLock<$pfn>,)*
@@ -365,6 +421,7 @@ nccl_fns! {
     nccl_get_last_error as "ncclGetLastError": PFN_ncclGetLastError;
 }
 
+/// Return the lazily-loaded NCCL library accessor.
 pub fn nccl() -> Result<&'static Nccl, LoaderError> {
     static NCCL: OnceLock<Nccl> = OnceLock::new();
     if let Some(n) = NCCL.get() {

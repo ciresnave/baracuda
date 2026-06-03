@@ -24,16 +24,26 @@ pub type curandGenerator_t = *mut c_void;
 pub enum curandRngType_t {
     /// Default pseudo-random: XORWOW.
     PSEUDO_DEFAULT = 100,
+    /// XORWOW pseudo-random (Marsaglia).
     PSEUDO_XORWOW = 101,
+    /// MRG32k3a pseudo-random (L'Ecuyer).
     PSEUDO_MRG32K3A = 121,
+    /// Mersenne-Twister GP-32 pseudo-random.
     PSEUDO_MTGP32 = 141,
+    /// Mersenne-Twister 19937 pseudo-random.
     PSEUDO_MT19937 = 142,
+    /// Philox 4x32-10 counter-based pseudo-random.
     PSEUDO_PHILOX4_32_10 = 161,
     // Quasi-random (low-discrepancy) generators.
+    /// Default quasi-random (low-discrepancy) generator.
     QUASI_DEFAULT = 200,
+    /// 32-bit Sobol quasi-random.
     QUASI_SOBOL32 = 201,
+    /// 32-bit scrambled Sobol quasi-random.
     QUASI_SCRAMBLED_SOBOL32 = 202,
+    /// 64-bit Sobol quasi-random.
     QUASI_SOBOL64 = 203,
+    /// 64-bit scrambled Sobol quasi-random.
     QUASI_SCRAMBLED_SOBOL64 = 204,
 }
 
@@ -42,11 +52,17 @@ pub enum curandRngType_t {
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 #[allow(non_camel_case_types)]
 pub enum curandOrdering_t {
+    /// Library-chosen best ordering for pseudo-random.
     PSEUDO_BEST = 100,
+    /// Default pseudo-random ordering.
     PSEUDO_DEFAULT = 101,
+    /// Seeded pseudo-random ordering.
     PSEUDO_SEEDED = 102,
+    /// Legacy pseudo-random ordering (pre-9.0 compatibility).
     PSEUDO_LEGACY = 103,
+    /// Dynamic pseudo-random ordering (auto-tuned).
     PSEUDO_DYNAMIC = 104,
+    /// Default quasi-random ordering.
     QUASI_DEFAULT = 201,
 }
 
@@ -59,20 +75,34 @@ pub type curandDirectionVectorSet_t = i32;
 pub struct curandStatus_t(pub i32);
 
 impl curandStatus_t {
+    /// `CURAND_STATUS_SUCCESS` — operation succeeded.
     pub const SUCCESS: Self = Self(0);
+    /// `CURAND_STATUS_VERSION_MISMATCH` — header/library version mismatch.
     pub const VERSION_MISMATCH: Self = Self(100);
+    /// `CURAND_STATUS_NOT_INITIALIZED` — the generator is not initialized.
     pub const NOT_INITIALIZED: Self = Self(101);
+    /// `CURAND_STATUS_ALLOCATION_FAILED` — an allocation failed.
     pub const ALLOCATION_FAILED: Self = Self(102);
+    /// `CURAND_STATUS_TYPE_ERROR` — an argument has an invalid type.
     pub const TYPE_ERROR: Self = Self(103);
+    /// `CURAND_STATUS_OUT_OF_RANGE` — an argument is out of range.
     pub const OUT_OF_RANGE: Self = Self(104);
+    /// `CURAND_STATUS_LENGTH_NOT_MULTIPLE` — length must be a multiple of the generator's period.
     pub const LENGTH_NOT_MULTIPLE: Self = Self(105);
+    /// `CURAND_STATUS_DOUBLE_PRECISION_REQUIRED` — double-precision required but not supported on device.
     pub const DOUBLE_PRECISION_REQUIRED: Self = Self(106);
+    /// `CURAND_STATUS_LAUNCH_FAILURE` — a GPU kernel launch failed.
     pub const LAUNCH_FAILURE: Self = Self(201);
+    /// `CURAND_STATUS_PREEXISTING_FAILURE` — a prior call failed and the handle is poisoned.
     pub const PREEXISTING_FAILURE: Self = Self(202);
+    /// `CURAND_STATUS_INITIALIZATION_FAILED` — initialization failed.
     pub const INITIALIZATION_FAILED: Self = Self(203);
+    /// `CURAND_STATUS_ARCH_MISMATCH` — the device architecture is unsupported.
     pub const ARCH_MISMATCH: Self = Self(204);
+    /// `CURAND_STATUS_INTERNAL_ERROR` — an internal cuRAND error occurred.
     pub const INTERNAL_ERROR: Self = Self(999);
 
+    /// Return `true` if the status code denotes success.
     pub const fn is_success(self) -> bool {
         self.0 == 0
     }
@@ -128,18 +158,25 @@ impl CudaStatus for curandStatus_t {
 
 // ---- function-pointer types ----
 
+/// Function-pointer type for `curandCreateGenerator` (create a device RNG). See <https://docs.nvidia.com/cuda/curand/index.html>.
 pub type PFN_curandCreateGenerator =
     unsafe extern "C" fn(generator: *mut curandGenerator_t, ty: curandRngType_t) -> curandStatus_t;
+/// Function-pointer type for `curandDestroyGenerator` (destroy an RNG). See <https://docs.nvidia.com/cuda/curand/index.html>.
 pub type PFN_curandDestroyGenerator =
     unsafe extern "C" fn(generator: curandGenerator_t) -> curandStatus_t;
+/// Function-pointer type for `curandSetStream` (bind a CUDA stream to an RNG). See <https://docs.nvidia.com/cuda/curand/index.html>.
 pub type PFN_curandSetStream =
     unsafe extern "C" fn(generator: curandGenerator_t, stream: cudaStream_t) -> curandStatus_t;
+/// Function-pointer type for `curandSetPseudoRandomGeneratorSeed` (set RNG seed). See <https://docs.nvidia.com/cuda/curand/index.html>.
 pub type PFN_curandSetPseudoRandomGeneratorSeed =
     unsafe extern "C" fn(generator: curandGenerator_t, seed: u64) -> curandStatus_t;
+/// Function-pointer type for `curandGenerateUniform` (generate uniform-distributed f32). See <https://docs.nvidia.com/cuda/curand/index.html>.
 pub type PFN_curandGenerateUniform =
     unsafe extern "C" fn(generator: curandGenerator_t, out: *mut f32, n: usize) -> curandStatus_t;
+/// Function-pointer type for `curandGenerateUniformDouble` (generate uniform-distributed f64). See <https://docs.nvidia.com/cuda/curand/index.html>.
 pub type PFN_curandGenerateUniformDouble =
     unsafe extern "C" fn(generator: curandGenerator_t, out: *mut f64, n: usize) -> curandStatus_t;
+/// Function-pointer type for `curandGenerateNormal` (generate normal-distributed f32). See <https://docs.nvidia.com/cuda/curand/index.html>.
 pub type PFN_curandGenerateNormal = unsafe extern "C" fn(
     generator: curandGenerator_t,
     out: *mut f32,
@@ -147,6 +184,7 @@ pub type PFN_curandGenerateNormal = unsafe extern "C" fn(
     mean: f32,
     stddev: f32,
 ) -> curandStatus_t;
+/// Function-pointer type for `curandGenerateNormalDouble` (generate normal-distributed f64). See <https://docs.nvidia.com/cuda/curand/index.html>.
 pub type PFN_curandGenerateNormalDouble = unsafe extern "C" fn(
     generator: curandGenerator_t,
     out: *mut f64,
@@ -154,55 +192,68 @@ pub type PFN_curandGenerateNormalDouble = unsafe extern "C" fn(
     mean: f64,
     stddev: f64,
 ) -> curandStatus_t;
+/// Function-pointer type for `curandGetVersion` (query cuRAND library version). See <https://docs.nvidia.com/cuda/curand/index.html>.
 pub type PFN_curandGetVersion = unsafe extern "C" fn(version: *mut c_int) -> curandStatus_t;
 
 // ---- Additional generator configuration ----
 
+/// Function-pointer type for `curandCreateGeneratorHost` (create a host RNG). See <https://docs.nvidia.com/cuda/curand/index.html>.
 pub type PFN_curandCreateGeneratorHost = unsafe extern "C" fn(
     generator: *mut curandGenerator_t,
     ty: curandRngType_t,
 ) -> curandStatus_t;
 
+/// Function-pointer type for `curandSetGeneratorOffset` (set generator offset). See <https://docs.nvidia.com/cuda/curand/index.html>.
 pub type PFN_curandSetGeneratorOffset =
     unsafe extern "C" fn(generator: curandGenerator_t, offset: u64) -> curandStatus_t;
 
+/// Function-pointer type for `curandSetGeneratorOrdering` (set generator ordering). See <https://docs.nvidia.com/cuda/curand/index.html>.
 pub type PFN_curandSetGeneratorOrdering = unsafe extern "C" fn(
     generator: curandGenerator_t,
     order: curandOrdering_t,
 ) -> curandStatus_t;
 
+/// Function-pointer type for `curandSetQuasiRandomGeneratorDimensions` (set dimensions for quasi-random generator). See <https://docs.nvidia.com/cuda/curand/index.html>.
 pub type PFN_curandSetQuasiRandomGeneratorDimensions = unsafe extern "C" fn(
     generator: curandGenerator_t,
     num_dimensions: u32,
 ) -> curandStatus_t;
 
+/// Function-pointer type for `curandGetDirectionVectors32` (fetch 32-bit Sobol direction vectors). See <https://docs.nvidia.com/cuda/curand/index.html>.
 pub type PFN_curandGetDirectionVectors32 = unsafe extern "C" fn(
     vectors_out: *mut *mut u32,
     set: curandDirectionVectorSet_t,
 ) -> curandStatus_t;
 
+/// Function-pointer type for `curandGetDirectionVectors64` (fetch 64-bit Sobol direction vectors). See <https://docs.nvidia.com/cuda/curand/index.html>.
 pub type PFN_curandGetDirectionVectors64 = unsafe extern "C" fn(
     vectors_out: *mut *mut u64,
     set: curandDirectionVectorSet_t,
 ) -> curandStatus_t;
 
+/// Function-pointer type for `curandGetScrambleConstants32` (fetch 32-bit scramble constants). See <https://docs.nvidia.com/cuda/curand/index.html>.
 pub type PFN_curandGetScrambleConstants32 =
     unsafe extern "C" fn(constants_out: *mut *const u32) -> curandStatus_t;
 
+/// Function-pointer type for `curandGetScrambleConstants64` (fetch 64-bit scramble constants). See <https://docs.nvidia.com/cuda/curand/index.html>.
 pub type PFN_curandGetScrambleConstants64 =
     unsafe extern "C" fn(constants_out: *mut *const u64) -> curandStatus_t;
 
+/// Function-pointer type for `curandGetProperty` (query a cuRAND property value). See <https://docs.nvidia.com/cuda/curand/index.html>.
 pub type PFN_curandGetProperty =
     unsafe extern "C" fn(prop: c_int, value_out: *mut c_int) -> curandStatus_t;
 
 // ---- Additional integer / uint / float distributions ----
 
+/// Function-pointer type for `curandGenerate` (generate uniform-distributed u32). See <https://docs.nvidia.com/cuda/curand/index.html>.
 pub type PFN_curandGenerate =
     unsafe extern "C" fn(generator: curandGenerator_t, out: *mut u32, n: usize) -> curandStatus_t;
 
+/// Function-pointer type for `curandGenerateLongLong` (generate uniform-distributed u64). See <https://docs.nvidia.com/cuda/curand/index.html>.
 pub type PFN_curandGenerateLongLong =
     unsafe extern "C" fn(generator: curandGenerator_t, out: *mut u64, n: usize) -> curandStatus_t;
 
+/// Function-pointer type for `curandGenerateLogNormal` (generate log-normal-distributed f32). See <https://docs.nvidia.com/cuda/curand/index.html>.
 pub type PFN_curandGenerateLogNormal = unsafe extern "C" fn(
     generator: curandGenerator_t,
     out: *mut f32,
@@ -211,6 +262,7 @@ pub type PFN_curandGenerateLogNormal = unsafe extern "C" fn(
     stddev: f32,
 ) -> curandStatus_t;
 
+/// Function-pointer type for `curandGenerateLogNormalDouble` (generate log-normal-distributed f64). See <https://docs.nvidia.com/cuda/curand/index.html>.
 pub type PFN_curandGenerateLogNormalDouble = unsafe extern "C" fn(
     generator: curandGenerator_t,
     out: *mut f64,
@@ -219,6 +271,7 @@ pub type PFN_curandGenerateLogNormalDouble = unsafe extern "C" fn(
     stddev: f64,
 ) -> curandStatus_t;
 
+/// Function-pointer type for `curandGeneratePoisson` (generate Poisson-distributed u32). See <https://docs.nvidia.com/cuda/curand/index.html>.
 pub type PFN_curandGeneratePoisson = unsafe extern "C" fn(
     generator: curandGenerator_t,
     out: *mut u32,
@@ -226,6 +279,7 @@ pub type PFN_curandGeneratePoisson = unsafe extern "C" fn(
     lambda: f64,
 ) -> curandStatus_t;
 
+/// Function-pointer type for `curandGenerateBinomial` (generate binomial-distributed u32). See <https://docs.nvidia.com/cuda/curand/index.html>.
 pub type PFN_curandGenerateBinomial = unsafe extern "C" fn(
     generator: curandGenerator_t,
     out: *mut u32,
@@ -236,6 +290,7 @@ pub type PFN_curandGenerateBinomial = unsafe extern "C" fn(
 
 // ---- Seed generation for pseudo-random generators ----
 
+/// Function-pointer type for `curandGenerateSeeds` (force generation of seeds (pseudo-random)). See <https://docs.nvidia.com/cuda/curand/index.html>.
 pub type PFN_curandGenerateSeeds = unsafe extern "C" fn(generator: curandGenerator_t) -> curandStatus_t;
 
 // ---- loader ----
@@ -248,6 +303,7 @@ fn curand_candidates() -> Vec<String> {
 
 macro_rules! curand_fns {
     ($($name:ident as $sym:literal : $pfn:ty);* $(;)?) => {
+        /// Lazily-resolved cuRAND function-pointer table.
         pub struct Curand {
             lib: Library,
             $($name: OnceLock<$pfn>,)*
@@ -318,6 +374,7 @@ curand_fns! {
     curand_get_version as "curandGetVersion": PFN_curandGetVersion;
 }
 
+/// Return the lazily-loaded cuRAND library accessor.
 pub fn curand() -> Result<&'static Curand, LoaderError> {
     static CURAND: OnceLock<Curand> = OnceLock::new();
     if let Some(c) = CURAND.get() {

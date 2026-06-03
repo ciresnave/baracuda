@@ -87,48 +87,71 @@ pub const CU_STREAM_PER_THREAD: CUstream = 0x2 as CUstream;
 /// Event flags (OR-able into `cuEventCreate`).
 #[allow(non_snake_case)]
 pub mod CUevent_flags {
+    /// `CUevent_flags::DEFAULT` — default.
     pub const DEFAULT: u32 = 0x0;
+    /// `CUevent_flags::BLOCKING_SYNC` — blocking sync.
     pub const BLOCKING_SYNC: u32 = 0x1;
+    /// `CUevent_flags::DISABLE_TIMING` — disable timing.
     pub const DISABLE_TIMING: u32 = 0x2;
+    /// `CUevent_flags::INTERPROCESS` — interprocess.
     pub const INTERPROCESS: u32 = 0x4;
 }
 
 /// Stream flags (OR-able into `cuStreamCreate`).
 #[allow(non_snake_case)]
 pub mod CUstream_flags {
+    /// `CUstream_flags::DEFAULT` — default.
     pub const DEFAULT: u32 = 0x0;
+    /// `CUstream_flags::NON_BLOCKING` — non blocking.
     pub const NON_BLOCKING: u32 = 0x1;
 }
 
 /// Context flags (OR-able into `cuCtxCreate`).
 #[allow(non_snake_case)]
 pub mod CUcontext_flags {
+    /// `CUcontext_flags::SCHED_AUTO` — sched auto.
     pub const SCHED_AUTO: u32 = 0x0;
+    /// `CUcontext_flags::SCHED_SPIN` — sched spin.
     pub const SCHED_SPIN: u32 = 0x1;
+    /// `CUcontext_flags::SCHED_YIELD` — sched yield.
     pub const SCHED_YIELD: u32 = 0x2;
+    /// `CUcontext_flags::SCHED_BLOCKING_SYNC` — sched blocking sync.
     pub const SCHED_BLOCKING_SYNC: u32 = 0x4;
+    /// `CUcontext_flags::MAP_HOST` — map host.
     pub const MAP_HOST: u32 = 0x8;
+    /// `CUcontext_flags::LMEM_RESIZE_TO_MAX` — lmem resize to max.
     pub const LMEM_RESIZE_TO_MAX: u32 = 0x10;
 }
 
 /// `CUlimit` — selector for `cuCtxGetLimit` / `cuCtxSetLimit`.
 #[allow(non_snake_case)]
 pub mod CUlimit {
+    /// `CUlimit::STACK_SIZE` — stack size.
     pub const STACK_SIZE: u32 = 0x00;
+    /// `CUlimit::PRINTF_FIFO_SIZE` — printf fifo size.
     pub const PRINTF_FIFO_SIZE: u32 = 0x01;
+    /// `CUlimit::MALLOC_HEAP_SIZE` — malloc heap size.
     pub const MALLOC_HEAP_SIZE: u32 = 0x02;
+    /// `CUlimit::DEV_RUNTIME_SYNC_DEPTH` — dev runtime sync depth.
     pub const DEV_RUNTIME_SYNC_DEPTH: u32 = 0x03;
+    /// `CUlimit::DEV_RUNTIME_PENDING_LAUNCH_COUNT` — dev runtime pending launch count.
     pub const DEV_RUNTIME_PENDING_LAUNCH_COUNT: u32 = 0x04;
+    /// `CUlimit::MAX_L2_FETCH_GRANULARITY` — max l2 fetch granularity.
     pub const MAX_L2_FETCH_GRANULARITY: u32 = 0x05;
+    /// `CUlimit::PERSISTING_L2_CACHE_SIZE` — persisting l2 cache size.
     pub const PERSISTING_L2_CACHE_SIZE: u32 = 0x06;
 }
 
 /// `CUfunc_cache` — L1-vs-shared carveout preference.
 #[allow(non_snake_case)]
 pub mod CUfunc_cache {
+    /// `CUfunc_cache::PREFER_NONE` — prefer none.
     pub const PREFER_NONE: u32 = 0x00;
+    /// `CUfunc_cache::PREFER_SHARED` — prefer shared.
     pub const PREFER_SHARED: u32 = 0x01;
+    /// `CUfunc_cache::PREFER_L1` — prefer l1.
     pub const PREFER_L1: u32 = 0x02;
+    /// `CUfunc_cache::PREFER_EQUAL` — prefer equal.
     pub const PREFER_EQUAL: u32 = 0x03;
 }
 
@@ -146,17 +169,24 @@ pub mod CUmemAttach_flags {
 /// `CUmem_advise` — hints for `cuMemAdvise`.
 #[allow(non_snake_case)]
 pub mod CUmem_advise {
+    /// `CUmem_advise::SET_READ_MOSTLY` — set read mostly.
     pub const SET_READ_MOSTLY: i32 = 1;
+    /// `CUmem_advise::UNSET_READ_MOSTLY` — unset read mostly.
     pub const UNSET_READ_MOSTLY: i32 = 2;
+    /// `CUmem_advise::SET_PREFERRED_LOCATION` — set preferred location.
     pub const SET_PREFERRED_LOCATION: i32 = 3;
+    /// `CUmem_advise::UNSET_PREFERRED_LOCATION` — unset preferred location.
     pub const UNSET_PREFERRED_LOCATION: i32 = 4;
+    /// `CUmem_advise::SET_ACCESSED_BY` — set accessed by.
     pub const SET_ACCESSED_BY: i32 = 5;
+    /// `CUmem_advise::UNSET_ACCESSED_BY` — unset accessed by.
     pub const UNSET_ACCESSED_BY: i32 = 6;
 }
 
 /// `CUmemRangeHandleType` — for `cuMemGetHandleForAddressRange`.
 #[allow(non_snake_case)]
 pub mod CUmemRangeHandleType {
+    /// `CUmemRangeHandleType::DMA_BUF_FD` — dma buf fd.
     pub const DMA_BUF_FD: i32 = 1;
 }
 
@@ -174,7 +204,9 @@ pub mod CUarraySparseSubresourceType {
 /// or an unmap operation.
 #[allow(non_snake_case)]
 pub mod CUmemOperationType {
+    /// `CUmemOperationType::MAP` — map.
     pub const MAP: i32 = 1;
+    /// `CUmemOperationType::UNMAP` — unmap.
     pub const UNMAP: i32 = 2;
 }
 
@@ -182,6 +214,7 @@ pub mod CUmemOperationType {
 /// [`CUarrayMapInfo`].
 #[allow(non_snake_case)]
 pub mod CUmemHandleType {
+    /// `CUmemHandleType::GENERIC` — generic.
     pub const GENERIC: i32 = 0;
 }
 
@@ -216,21 +249,30 @@ pub mod CUmemHandleType {
 #[derive(Copy, Clone)]
 #[allow(non_camel_case_types)]
 pub struct CUarrayMapInfo {
+    /// `resource_type` field.
     pub resource_type: core::ffi::c_int,
     _pad0: u32,
     /// Union payload: `CUarray` or `CUmipmappedArray` (both pointer-sized).
     pub resource_raw: u64,
+    /// `subresource_type` field.
     pub subresource_type: core::ffi::c_int,
     _pad1: u32,
     /// Union payload for the subresource (32 bytes, enough for
     /// `sparseLevel`'s 8 u32s or `miptail`'s 3-field struct).
     pub subresource_raw: [u64; 4],
+    /// `mem_operation_type` field.
     pub mem_operation_type: core::ffi::c_int,
+    /// `mem_handle_type` field.
     pub mem_handle_type: core::ffi::c_int,
+    /// `mem_handle_raw` field.
     pub mem_handle_raw: u64,
+    /// `offset` field.
     pub offset: u64,
+    /// `device_bit_mask` field.
     pub device_bit_mask: core::ffi::c_uint,
+    /// `flags` field.
     pub flags: core::ffi::c_uint,
+    /// `reserved` field.
     pub reserved: [core::ffi::c_uint; 2],
 }
 
@@ -377,40 +419,55 @@ impl CUarrayMapInfo {
 /// `CUexecAffinityType` — kind of per-context execution affinity.
 #[allow(non_snake_case)]
 pub mod CUexecAffinityType {
+    /// `CUexecAffinityType::SM_COUNT` — sm count.
     pub const SM_COUNT: i32 = 0;
 }
 
 /// `CUdevice_P2PAttribute` — passed to `cuDeviceGetP2PAttribute`.
 #[allow(non_snake_case)]
 pub mod CUdevice_P2PAttribute {
+    /// `CUdevice_P2PAttribute::PERFORMANCE_RANK` — performance rank.
     pub const PERFORMANCE_RANK: i32 = 1;
+    /// `CUdevice_P2PAttribute::ACCESS_SUPPORTED` — access supported.
     pub const ACCESS_SUPPORTED: i32 = 2;
+    /// `CUdevice_P2PAttribute::NATIVE_ATOMIC_SUPPORTED` — native atomic supported.
     pub const NATIVE_ATOMIC_SUPPORTED: i32 = 3;
+    /// `CUdevice_P2PAttribute::CUDA_ARRAY_ACCESS_SUPPORTED` — cuda array access supported.
     pub const CUDA_ARRAY_ACCESS_SUPPORTED: i32 = 4;
 }
 
 /// `CUflushGPUDirectRDMAWritesTarget`.
 #[allow(non_snake_case)]
 pub mod CUflushGPUDirectRDMAWritesTarget {
+    /// `CUflushGPUDirectRDMAWritesTarget::CURRENT_CTX` — current ctx.
     pub const CURRENT_CTX: i32 = 0;
 }
 
 /// `CUflushGPUDirectRDMAWritesScope`.
 #[allow(non_snake_case)]
 pub mod CUflushGPUDirectRDMAWritesScope {
+    /// `CUflushGPUDirectRDMAWritesScope::TO_OWNER` — to owner.
     pub const TO_OWNER: i32 = 100;
+    /// `CUflushGPUDirectRDMAWritesScope::TO_ALL_DEVICES` — to all devices.
     pub const TO_ALL_DEVICES: i32 = 200;
 }
 
 /// `CUcoredumpSettings` — attribute selectors for `cuCoredumpGet/SetAttribute`.
 #[allow(non_snake_case)]
 pub mod CUcoredumpSettings {
+    /// `CUcoredumpSettings::ENABLE_ON_EXCEPTION` — enable on exception.
     pub const ENABLE_ON_EXCEPTION: i32 = 1;
+    /// `CUcoredumpSettings::TRIGGER_HOST` — trigger host.
     pub const TRIGGER_HOST: i32 = 2;
+    /// `CUcoredumpSettings::LIGHTWEIGHT` — lightweight.
     pub const LIGHTWEIGHT: i32 = 3;
+    /// `CUcoredumpSettings::ENABLE_USER_TRIGGER` — enable user trigger.
     pub const ENABLE_USER_TRIGGER: i32 = 4;
+    /// `CUcoredumpSettings::FILE` — file.
     pub const FILE: i32 = 5;
+    /// `CUcoredumpSettings::PIPE` — pipe.
     pub const PIPE: i32 = 6;
+    /// `CUcoredumpSettings::GENERATION_FLAGS` — generation flags.
     pub const GENERATION_FLAGS: i32 = 7;
 }
 
@@ -419,12 +476,19 @@ pub mod CUcoredumpSettings {
 #[derive(Copy, Clone, Debug, Default)]
 #[allow(non_camel_case_types)]
 pub struct CUDA_ARRAY_SPARSE_PROPERTIES {
+    /// `tile_extent_width` field.
     pub tile_extent_width: core::ffi::c_uint,
+    /// `tile_extent_height` field.
     pub tile_extent_height: core::ffi::c_uint,
+    /// `tile_extent_depth` field.
     pub tile_extent_depth: core::ffi::c_uint,
+    /// `miptail_first_level` field.
     pub miptail_first_level: core::ffi::c_uint,
+    /// `miptail_size` field.
     pub miptail_size: u64,
+    /// `flags` field.
     pub flags: core::ffi::c_uint,
+    /// `reserved` field.
     pub reserved: [core::ffi::c_uint; 4],
 }
 
@@ -434,8 +498,11 @@ pub struct CUDA_ARRAY_SPARSE_PROPERTIES {
 #[derive(Copy, Clone, Debug, Default)]
 #[allow(non_camel_case_types)]
 pub struct CUDA_ARRAY_MEMORY_REQUIREMENTS {
+    /// `size` field.
     pub size: usize,
+    /// `alignment` field.
     pub alignment: usize,
+    /// `reserved` field.
     pub reserved: [core::ffi::c_uint; 4],
 }
 
@@ -444,8 +511,11 @@ pub struct CUDA_ARRAY_MEMORY_REQUIREMENTS {
 /// `CUgraphicsMapResourceFlags` — map-time access hints.
 #[allow(non_snake_case)]
 pub mod CUgraphicsMapResourceFlags {
+    /// `CUgraphicsMapResourceFlags::NONE` — none.
     pub const NONE: u32 = 0;
+    /// `CUgraphicsMapResourceFlags::READ_ONLY` — read only.
     pub const READ_ONLY: u32 = 1;
+    /// `CUgraphicsMapResourceFlags::WRITE_DISCARD` — write discard.
     pub const WRITE_DISCARD: u32 = 2;
 }
 
@@ -453,18 +523,26 @@ pub mod CUgraphicsMapResourceFlags {
 /// D3D / VDPAU / EGL.
 #[allow(non_snake_case)]
 pub mod CUgraphicsRegisterFlags {
+    /// `CUgraphicsRegisterFlags::NONE` — none.
     pub const NONE: u32 = 0;
+    /// `CUgraphicsRegisterFlags::READ_ONLY` — read only.
     pub const READ_ONLY: u32 = 1;
+    /// `CUgraphicsRegisterFlags::WRITE_DISCARD` — write discard.
     pub const WRITE_DISCARD: u32 = 2;
+    /// `CUgraphicsRegisterFlags::SURFACE_LDST` — surface ldst.
     pub const SURFACE_LDST: u32 = 4;
+    /// `CUgraphicsRegisterFlags::TEXTURE_GATHER` — texture gather.
     pub const TEXTURE_GATHER: u32 = 8;
 }
 
 /// Selector for `cuGLGetDevices_v2` / `cu<API>GetDevices`.
 #[allow(non_snake_case)]
 pub mod CUGLDeviceList {
+    /// `CUGLDeviceList::ALL` — all.
     pub const ALL: u32 = 0x01;
+    /// `CUGLDeviceList::CURRENT_FRAME` — current frame.
     pub const CURRENT_FRAME: u32 = 0x02;
+    /// `CUGLDeviceList::NEXT_FRAME` — next frame.
     pub const NEXT_FRAME: u32 = 0x03;
 }
 
@@ -473,25 +551,36 @@ pub use CUGLDeviceList as CUd3dXDeviceList;
 
 // --- OpenGL handle types ---
 // GL types live in `gl.h`; we use minimum-compatible Rust types.
+/// `GLuint` — CUDA type alias.
 pub type GLuint = core::ffi::c_uint;
+/// `GLenum` — CUDA type alias.
 pub type GLenum = core::ffi::c_uint;
 
 // --- Direct3D handle types ---
 // All D3D* device / resource pointers are opaque from CUDA's POV.
+/// `ID3DDevice` — opaque CUDA handle (pointer-sized).
 pub type ID3DDevice = *mut c_void;
+/// `ID3DResource` — opaque CUDA handle (pointer-sized).
 pub type ID3DResource = *mut c_void;
 
 // --- VDPAU handle types ---
 // `VdpDevice`, `VdpGetProcAddress`, `VdpVideoSurface`, `VdpOutputSurface`
 // are all 32-bit unsigned handles in libvdpau.
+/// `VdpDevice` — CUDA type alias.
 pub type VdpDevice = core::ffi::c_uint;
+/// `VdpGetProcAddress` — opaque CUDA handle (pointer-sized).
 pub type VdpGetProcAddress = *mut c_void;
+/// `VdpVideoSurface` — CUDA type alias.
 pub type VdpVideoSurface = core::ffi::c_uint;
+/// `VdpOutputSurface` — CUDA type alias.
 pub type VdpOutputSurface = core::ffi::c_uint;
 
 // --- EGL handle types ---
+/// `EGLImageKHR` — opaque CUDA handle (pointer-sized).
 pub type EGLImageKHR = *mut c_void;
+/// `EGLStreamKHR` — opaque CUDA handle (pointer-sized).
 pub type EGLStreamKHR = *mut c_void;
+/// `EGLSyncKHR` — opaque CUDA handle (pointer-sized).
 pub type EGLSyncKHR = *mut c_void;
 
 /// `CUeglFrame` — YUV / RGB frame layout used by EGL stream interop
@@ -501,6 +590,7 @@ pub type EGLSyncKHR = *mut c_void;
 #[derive(Copy, Clone)]
 #[allow(non_camel_case_types)]
 pub struct CUeglFrame {
+    /// `raw` field.
     pub raw: [u64; 10],
 }
 
@@ -521,50 +611,80 @@ impl core::fmt::Debug for CUeglFrame {
 // `NvSciSyncAttrList` and `NvSciBufObj` are opaque pointers from
 // NVIDIA's NvSci libraries. Users working with NvSci pass in pointers
 // obtained from libnvsciSync / libnvsciBuf.
+/// `NvSciSyncAttrList` — opaque CUDA handle (pointer-sized).
 pub type NvSciSyncAttrList = *mut c_void;
+/// `NvSciSyncObj` — opaque CUDA handle (pointer-sized).
 pub type NvSciSyncObj = *mut c_void;
+/// `NvSciSyncFence` — opaque CUDA handle (pointer-sized).
 pub type NvSciSyncFence = *mut c_void;
+/// `NvSciBufObj` — opaque CUDA handle (pointer-sized).
 pub type NvSciBufObj = *mut c_void;
 
 /// `CUnvSciSyncAttr` — direction flags for
 /// `cuDeviceGetNvSciSyncAttributes`.
 #[allow(non_snake_case)]
 pub mod CUnvSciSyncAttr {
+    /// `CUnvSciSyncAttr::SIGNAL` — signal.
     pub const SIGNAL: i32 = 1;
+    /// `CUnvSciSyncAttr::WAIT` — wait.
     pub const WAIT: i32 = 2;
 }
 
 /// `CUpointer_attribute` — selector for `cuPointerGetAttribute`.
 #[allow(non_snake_case)]
 pub mod CUpointer_attribute {
+    /// `CUpointer_attribute::CONTEXT` — context.
     pub const CONTEXT: i32 = 1;
+    /// `CUpointer_attribute::MEMORY_TYPE` — memory type.
     pub const MEMORY_TYPE: i32 = 2;
+    /// `CUpointer_attribute::DEVICE_POINTER` — device pointer.
     pub const DEVICE_POINTER: i32 = 3;
+    /// `CUpointer_attribute::HOST_POINTER` — host pointer.
     pub const HOST_POINTER: i32 = 4;
+    /// `CUpointer_attribute::P2P_TOKENS` — p2 p tokens.
     pub const P2P_TOKENS: i32 = 5;
+    /// `CUpointer_attribute::SYNC_MEMOPS` — sync memops.
     pub const SYNC_MEMOPS: i32 = 6;
+    /// `CUpointer_attribute::BUFFER_ID` — buffer id.
     pub const BUFFER_ID: i32 = 7;
+    /// `CUpointer_attribute::IS_MANAGED` — is managed.
     pub const IS_MANAGED: i32 = 8;
+    /// `CUpointer_attribute::DEVICE_ORDINAL` — device ordinal.
     pub const DEVICE_ORDINAL: i32 = 9;
+    /// `CUpointer_attribute::IS_LEGACY_CUDA_IPC_CAPABLE` — is legacy cuda ipc capable.
     pub const IS_LEGACY_CUDA_IPC_CAPABLE: i32 = 10;
+    /// `CUpointer_attribute::RANGE_START_ADDR` — range start addr.
     pub const RANGE_START_ADDR: i32 = 11;
+    /// `CUpointer_attribute::RANGE_SIZE` — range size.
     pub const RANGE_SIZE: i32 = 12;
+    /// `CUpointer_attribute::MAPPED` — mapped.
     pub const MAPPED: i32 = 13;
+    /// `CUpointer_attribute::ALLOWED_HANDLE_TYPES` — allowed handle types.
     pub const ALLOWED_HANDLE_TYPES: i32 = 14;
+    /// `CUpointer_attribute::IS_GPU_DIRECT_RDMA_CAPABLE` — is gpu direct rdma capable.
     pub const IS_GPU_DIRECT_RDMA_CAPABLE: i32 = 15;
+    /// `CUpointer_attribute::ACCESS_FLAGS` — access flags.
     pub const ACCESS_FLAGS: i32 = 16;
+    /// `CUpointer_attribute::MEMPOOL_HANDLE` — mempool handle.
     pub const MEMPOOL_HANDLE: i32 = 17;
+    /// `CUpointer_attribute::MAPPING_SIZE` — mapping size.
     pub const MAPPING_SIZE: i32 = 18;
+    /// `CUpointer_attribute::MAPPING_BASE_ADDR` — mapping base addr.
     pub const MAPPING_BASE_ADDR: i32 = 19;
+    /// `CUpointer_attribute::MEMORY_BLOCK_ID` — memory block id.
     pub const MEMORY_BLOCK_ID: i32 = 20;
 }
 
 /// `CUmemorytype` — values returned via `CUpointer_attribute::MEMORY_TYPE`.
 #[allow(non_snake_case)]
 pub mod CUmemorytype {
+    /// `CUmemorytype::HOST` — host.
     pub const HOST: u32 = 0x01;
+    /// `CUmemorytype::DEVICE` — device.
     pub const DEVICE: u32 = 0x02;
+    /// `CUmemorytype::ARRAY` — array.
     pub const ARRAY: u32 = 0x03;
+    /// `CUmemorytype::UNIFIED` — unified.
     pub const UNIFIED: u32 = 0x04;
 }
 
@@ -572,18 +692,31 @@ pub mod CUmemorytype {
 /// attribute array (passed to `cuLaunchKernelEx`, CUDA 12.0+).
 #[allow(non_snake_case)]
 pub mod CUlaunchAttributeID {
+    /// `CUlaunchAttributeID::IGNORE` — ignore.
     pub const IGNORE: u32 = 0;
+    /// `CUlaunchAttributeID::ACCESS_POLICY_WINDOW` — access policy window.
     pub const ACCESS_POLICY_WINDOW: u32 = 1;
+    /// `CUlaunchAttributeID::COOPERATIVE` — cooperative.
     pub const COOPERATIVE: u32 = 2;
+    /// `CUlaunchAttributeID::SYNCHRONIZATION_POLICY` — synchronization policy.
     pub const SYNCHRONIZATION_POLICY: u32 = 3;
+    /// `CUlaunchAttributeID::CLUSTER_DIMENSION` — cluster dimension.
     pub const CLUSTER_DIMENSION: u32 = 4;
+    /// `CUlaunchAttributeID::CLUSTER_SCHEDULING_POLICY_PREFERENCE` — cluster scheduling policy preference.
     pub const CLUSTER_SCHEDULING_POLICY_PREFERENCE: u32 = 5;
+    /// `CUlaunchAttributeID::PROGRAMMATIC_STREAM_SERIALIZATION` — programmatic stream serialization.
     pub const PROGRAMMATIC_STREAM_SERIALIZATION: u32 = 6;
+    /// `CUlaunchAttributeID::PROGRAMMATIC_EVENT` — programmatic event.
     pub const PROGRAMMATIC_EVENT: u32 = 7;
+    /// `CUlaunchAttributeID::PRIORITY` — priority.
     pub const PRIORITY: u32 = 8;
+    /// `CUlaunchAttributeID::MEM_SYNC_DOMAIN_MAP` — mem sync domain map.
     pub const MEM_SYNC_DOMAIN_MAP: u32 = 9;
+    /// `CUlaunchAttributeID::MEM_SYNC_DOMAIN` — mem sync domain.
     pub const MEM_SYNC_DOMAIN: u32 = 10;
+    /// `CUlaunchAttributeID::LAUNCH_COMPLETION_EVENT` — launch completion event.
     pub const LAUNCH_COMPLETION_EVENT: u32 = 12;
+    /// `CUlaunchAttributeID::DEVICE_UPDATABLE_KERNEL_NODE` — device updatable kernel node.
     pub const DEVICE_UPDATABLE_KERNEL_NODE: u32 = 13;
 }
 
@@ -605,8 +738,11 @@ impl Default for CUlaunchAttributeValue {
 /// [`CUaccessPolicyWindow`].
 #[allow(non_snake_case)]
 pub mod CUaccessProperty {
+    /// `CUaccessProperty::NORMAL` — normal.
     pub const NORMAL: i32 = 0;
+    /// `CUaccessProperty::STREAMING` — streaming.
     pub const STREAMING: i32 = 1;
+    /// `CUaccessProperty::PERSISTING` — persisting.
     pub const PERSISTING: i32 = 2;
 }
 
@@ -616,10 +752,15 @@ pub mod CUaccessProperty {
 #[derive(Copy, Clone, Debug)]
 #[allow(non_camel_case_types)]
 pub struct CUaccessPolicyWindow {
+    /// `base_ptr` field.
     pub base_ptr: *mut c_void,
+    /// `num_bytes` field.
     pub num_bytes: usize,
+    /// `hit_ratio` field.
     pub hit_ratio: f32,
+    /// `hit_prop` field.
     pub hit_prop: core::ffi::c_int,
+    /// `miss_prop` field.
     pub miss_prop: core::ffi::c_int,
 }
 
@@ -640,9 +781,11 @@ impl Default for CUaccessPolicyWindow {
 #[derive(Copy, Clone, Debug, Default)]
 #[allow(non_camel_case_types)]
 pub struct CUlaunchAttribute {
+    /// `id` field.
     pub id: core::ffi::c_uint,
     /// `cuda.h` inserts 4 bytes of padding before the union.
     pub pad: [u8; 4],
+    /// `value` field.
     pub value: CUlaunchAttributeValue,
 }
 
@@ -651,15 +794,25 @@ pub struct CUlaunchAttribute {
 #[derive(Copy, Clone, Debug)]
 #[allow(non_camel_case_types)]
 pub struct CUlaunchConfig {
+    /// `grid_dim_x` field.
     pub grid_dim_x: core::ffi::c_uint,
+    /// `grid_dim_y` field.
     pub grid_dim_y: core::ffi::c_uint,
+    /// `grid_dim_z` field.
     pub grid_dim_z: core::ffi::c_uint,
+    /// `block_dim_x` field.
     pub block_dim_x: core::ffi::c_uint,
+    /// `block_dim_y` field.
     pub block_dim_y: core::ffi::c_uint,
+    /// `block_dim_z` field.
     pub block_dim_z: core::ffi::c_uint,
+    /// `shared_mem_bytes` field.
     pub shared_mem_bytes: core::ffi::c_uint,
+    /// `stream` field.
     pub stream: CUstream,
+    /// `attrs` field.
     pub attrs: *mut CUlaunchAttribute,
+    /// `num_attrs` field.
     pub num_attrs: core::ffi::c_uint,
 }
 
@@ -684,21 +837,37 @@ impl Default for CUlaunchConfig {
 /// `CUfunction_attribute` — selector for `cuFuncGetAttribute` / `cuFuncSetAttribute`.
 #[allow(non_snake_case)]
 pub mod CUfunction_attribute {
+    /// `CUfunction_attribute::MAX_THREADS_PER_BLOCK` — max threads per block.
     pub const MAX_THREADS_PER_BLOCK: i32 = 0;
+    /// `CUfunction_attribute::SHARED_SIZE_BYTES` — shared size bytes.
     pub const SHARED_SIZE_BYTES: i32 = 1;
+    /// `CUfunction_attribute::CONST_SIZE_BYTES` — const size bytes.
     pub const CONST_SIZE_BYTES: i32 = 2;
+    /// `CUfunction_attribute::LOCAL_SIZE_BYTES` — local size bytes.
     pub const LOCAL_SIZE_BYTES: i32 = 3;
+    /// `CUfunction_attribute::NUM_REGS` — num regs.
     pub const NUM_REGS: i32 = 4;
+    /// `CUfunction_attribute::PTX_VERSION` — ptx version.
     pub const PTX_VERSION: i32 = 5;
+    /// `CUfunction_attribute::BINARY_VERSION` — binary version.
     pub const BINARY_VERSION: i32 = 6;
+    /// `CUfunction_attribute::CACHE_MODE_CA` — cache mode ca.
     pub const CACHE_MODE_CA: i32 = 7;
+    /// `CUfunction_attribute::MAX_DYNAMIC_SHARED_SIZE_BYTES` — max dynamic shared size bytes.
     pub const MAX_DYNAMIC_SHARED_SIZE_BYTES: i32 = 8;
+    /// `CUfunction_attribute::PREFERRED_SHARED_MEMORY_CARVEOUT` — preferred shared memory carveout.
     pub const PREFERRED_SHARED_MEMORY_CARVEOUT: i32 = 9;
+    /// `CUfunction_attribute::CLUSTER_SIZE_MUST_BE_SET` — cluster size must be set.
     pub const CLUSTER_SIZE_MUST_BE_SET: i32 = 10;
+    /// `CUfunction_attribute::REQUIRED_CLUSTER_WIDTH` — required cluster width.
     pub const REQUIRED_CLUSTER_WIDTH: i32 = 11;
+    /// `CUfunction_attribute::REQUIRED_CLUSTER_HEIGHT` — required cluster height.
     pub const REQUIRED_CLUSTER_HEIGHT: i32 = 12;
+    /// `CUfunction_attribute::REQUIRED_CLUSTER_DEPTH` — required cluster depth.
     pub const REQUIRED_CLUSTER_DEPTH: i32 = 13;
+    /// `CUfunction_attribute::NON_PORTABLE_CLUSTER_SIZE_ALLOWED` — non portable cluster size allowed.
     pub const NON_PORTABLE_CLUSTER_SIZE_ALLOWED: i32 = 14;
+    /// `CUfunction_attribute::CLUSTER_SCHEDULING_POLICY_PREFERENCE` — cluster scheduling policy preference.
     pub const CLUSTER_SCHEDULING_POLICY_PREFERENCE: i32 = 15;
 }
 
@@ -708,23 +877,39 @@ pub mod CUfunction_attribute {
 #[derive(Copy, Clone, Debug)]
 #[allow(non_camel_case_types)]
 pub struct CUDA_MEMCPY2D {
+    /// `src_x_in_bytes` field.
     pub src_x_in_bytes: usize,
+    /// `src_y` field.
     pub src_y: usize,
+    /// `src_memory_type` field.
     pub src_memory_type: u32,
+    /// `src_host` field.
     pub src_host: *const c_void,
+    /// `src_device` field.
     pub src_device: CUdeviceptr,
+    /// `src_array` field.
     pub src_array: *mut c_void,
+    /// `src_pitch` field.
     pub src_pitch: usize,
 
+    /// `dst_x_in_bytes` field.
     pub dst_x_in_bytes: usize,
+    /// `dst_y` field.
     pub dst_y: usize,
+    /// `dst_memory_type` field.
     pub dst_memory_type: u32,
+    /// `dst_host` field.
     pub dst_host: *mut c_void,
+    /// `dst_device` field.
     pub dst_device: CUdeviceptr,
+    /// `dst_array` field.
     pub dst_array: *mut c_void,
+    /// `dst_pitch` field.
     pub dst_pitch: usize,
 
+    /// `width_in_bytes` field.
     pub width_in_bytes: usize,
+    /// `height` field.
     pub height: usize,
 }
 
@@ -760,17 +945,29 @@ impl Default for CUDA_MEMCPY2D {
 #[derive(Copy, Clone, Debug)]
 #[allow(non_camel_case_types)]
 pub struct CUDA_KERNEL_NODE_PARAMS {
+    /// `func` field.
     pub func: CUfunction,
+    /// `grid_dim_x` field.
     pub grid_dim_x: core::ffi::c_uint,
+    /// `grid_dim_y` field.
     pub grid_dim_y: core::ffi::c_uint,
+    /// `grid_dim_z` field.
     pub grid_dim_z: core::ffi::c_uint,
+    /// `block_dim_x` field.
     pub block_dim_x: core::ffi::c_uint,
+    /// `block_dim_y` field.
     pub block_dim_y: core::ffi::c_uint,
+    /// `block_dim_z` field.
     pub block_dim_z: core::ffi::c_uint,
+    /// `shared_mem_bytes` field.
     pub shared_mem_bytes: core::ffi::c_uint,
+    /// `kernel_params` field.
     pub kernel_params: *mut *mut c_void,
+    /// `extra` field.
     pub extra: *mut *mut c_void,
+    /// `kern` field.
     pub kern: CUkernel,
+    /// `ctx` field.
     pub ctx: CUcontext,
 }
 
@@ -798,11 +995,17 @@ impl Default for CUDA_KERNEL_NODE_PARAMS {
 #[derive(Copy, Clone, Debug, Default)]
 #[allow(non_camel_case_types)]
 pub struct CUDA_MEMSET_NODE_PARAMS {
+    /// `dst` field.
     pub dst: CUdeviceptr,
+    /// `pitch` field.
     pub pitch: usize,
+    /// `value` field.
     pub value: core::ffi::c_uint,
+    /// `element_size` field.
     pub element_size: core::ffi::c_uint,
+    /// `width` field.
     pub width: usize,
+    /// `height` field.
     pub height: usize,
 }
 
@@ -814,7 +1017,9 @@ pub type CUhostFnRaw = Option<unsafe extern "C" fn(user_data: *mut c_void)>;
 #[derive(Copy, Clone, Debug)]
 #[allow(non_camel_case_types)]
 pub struct CUDA_HOST_NODE_PARAMS {
+    /// `fn_` field.
     pub fn_: CUhostFnRaw,
+    /// `user_data` field.
     pub user_data: *mut c_void,
 }
 
@@ -834,6 +1039,7 @@ impl Default for CUDA_HOST_NODE_PARAMS {
 #[derive(Copy, Clone, Debug)]
 #[allow(non_camel_case_types)]
 pub struct CUtensorMap {
+    /// `opaque` field.
     pub opaque: [u64; 16],
 }
 
@@ -847,51 +1053,77 @@ impl Default for CUtensorMap {
 /// `CUtensorMapDataType` — element type encoding for TMA descriptors.
 #[allow(non_snake_case)]
 pub mod CUtensorMapDataType {
+    /// `CUtensorMapDataType::UINT8` — uint8.
     pub const UINT8: i32 = 0;
+    /// `CUtensorMapDataType::UINT16` — uint16.
     pub const UINT16: i32 = 1;
+    /// `CUtensorMapDataType::UINT32` — uint32.
     pub const UINT32: i32 = 2;
+    /// `CUtensorMapDataType::INT32` — int32.
     pub const INT32: i32 = 3;
+    /// `CUtensorMapDataType::UINT64` — uint64.
     pub const UINT64: i32 = 4;
+    /// `CUtensorMapDataType::INT64` — int64.
     pub const INT64: i32 = 5;
+    /// `CUtensorMapDataType::FLOAT16` — float16.
     pub const FLOAT16: i32 = 6;
+    /// `CUtensorMapDataType::FLOAT32` — float32.
     pub const FLOAT32: i32 = 7;
+    /// `CUtensorMapDataType::FLOAT64` — float64.
     pub const FLOAT64: i32 = 8;
+    /// `CUtensorMapDataType::BFLOAT16` — bfloat16.
     pub const BFLOAT16: i32 = 9;
+    /// `CUtensorMapDataType::FLOAT32_FTZ` — float32 ftz.
     pub const FLOAT32_FTZ: i32 = 10;
+    /// `CUtensorMapDataType::TFLOAT32` — tfloat32.
     pub const TFLOAT32: i32 = 11;
+    /// `CUtensorMapDataType::TFLOAT32_FTZ` — tfloat32 ftz.
     pub const TFLOAT32_FTZ: i32 = 12;
 }
 
 /// `CUtensorMapInterleave`.
 #[allow(non_snake_case)]
 pub mod CUtensorMapInterleave {
+    /// `CUtensorMapInterleave::NONE` — none.
     pub const NONE: i32 = 0;
+    /// `CUtensorMapInterleave::INTERLEAVE_16B` — interleave 16 b.
     pub const INTERLEAVE_16B: i32 = 1;
+    /// `CUtensorMapInterleave::INTERLEAVE_32B` — interleave 32 b.
     pub const INTERLEAVE_32B: i32 = 2;
 }
 
 /// `CUtensorMapSwizzle`.
 #[allow(non_snake_case)]
 pub mod CUtensorMapSwizzle {
+    /// `CUtensorMapSwizzle::NONE` — none.
     pub const NONE: i32 = 0;
+    /// `CUtensorMapSwizzle::SWIZZLE_32B` — swizzle 32 b.
     pub const SWIZZLE_32B: i32 = 1;
+    /// `CUtensorMapSwizzle::SWIZZLE_64B` — swizzle 64 b.
     pub const SWIZZLE_64B: i32 = 2;
+    /// `CUtensorMapSwizzle::SWIZZLE_128B` — swizzle 128 b.
     pub const SWIZZLE_128B: i32 = 3;
 }
 
 /// `CUtensorMapL2promotion` — L2 prefetch hint.
 #[allow(non_snake_case)]
 pub mod CUtensorMapL2promotion {
+    /// `CUtensorMapL2promotion::NONE` — none.
     pub const NONE: i32 = 0;
+    /// `CUtensorMapL2promotion::L2_64B` — l2 64 b.
     pub const L2_64B: i32 = 1;
+    /// `CUtensorMapL2promotion::L2_128B` — l2 128 b.
     pub const L2_128B: i32 = 2;
+    /// `CUtensorMapL2promotion::L2_256B` — l2 256 b.
     pub const L2_256B: i32 = 3;
 }
 
 /// `CUtensorMapFloatOOBfill` — out-of-bounds fill behavior.
 #[allow(non_snake_case)]
 pub mod CUtensorMapFloatOOBfill {
+    /// `CUtensorMapFloatOOBfill::NONE` — none.
     pub const NONE: i32 = 0;
+    /// `CUtensorMapFloatOOBfill::NAN_REQUEST_ZERO_FMA` — nan request zero fma.
     pub const NAN_REQUEST_ZERO_FMA: i32 = 1;
 }
 
@@ -903,6 +1135,7 @@ pub mod CUtensorMapFloatOOBfill {
 #[derive(Copy, Clone, Debug)]
 #[allow(non_camel_case_types)]
 pub struct CUipcEventHandle {
+    /// `reserved` field.
     pub reserved: [core::ffi::c_char; 64],
 }
 
@@ -918,6 +1151,7 @@ impl Default for CUipcEventHandle {
 #[derive(Copy, Clone, Debug)]
 #[allow(non_camel_case_types)]
 pub struct CUipcMemHandle {
+    /// `reserved` field.
     pub reserved: [core::ffi::c_char; 64],
 }
 
@@ -935,8 +1169,11 @@ pub type CUgraphConditionalHandle = u64;
 /// `CUgraphConditionalNodeType`.
 #[allow(non_snake_case)]
 pub mod CUgraphConditionalNodeType {
+    /// `CUgraphConditionalNodeType::IF` — if.
     pub const IF: i32 = 0;
+    /// `CUgraphConditionalNodeType::WHILE` — while.
     pub const WHILE: i32 = 1;
+    /// `CUgraphConditionalNodeType::SWITCH` — switch.
     pub const SWITCH: i32 = 2;
 }
 
@@ -946,10 +1183,15 @@ pub mod CUgraphConditionalNodeType {
 #[derive(Copy, Clone, Debug)]
 #[allow(non_camel_case_types)]
 pub struct CUDA_CONDITIONAL_NODE_PARAMS {
+    /// `handle` field.
     pub handle: CUgraphConditionalHandle,
+    /// `type_` field.
     pub type_: core::ffi::c_int,
+    /// `size` field.
     pub size: core::ffi::c_uint,
+    /// `body_graph_out` field.
     pub body_graph_out: *mut CUgraph,
+    /// `ctx` field.
     pub ctx: CUcontext,
 }
 
@@ -984,9 +1226,13 @@ impl Default for CUDA_CONDITIONAL_NODE_PARAMS {
 #[derive(Copy, Clone)]
 #[allow(non_camel_case_types)]
 pub struct CUgraphNodeParams {
+    /// `type_` field.
     pub type_: core::ffi::c_int,
+    /// `reserved0` field.
     pub reserved0: [core::ffi::c_int; 3],
+    /// `payload` field.
     pub payload: [u64; 29],
+    /// `reserved2` field.
     pub reserved2: core::ffi::c_longlong,
 }
 
@@ -1015,9 +1261,13 @@ impl core::fmt::Debug for CUgraphNodeParams {
 #[derive(Copy, Clone, Debug, Default)]
 #[allow(non_camel_case_types)]
 pub struct CUgraphEdgeData {
+    /// `from_port` field.
     pub from_port: u8,
+    /// `to_port` field.
     pub to_port: u8,
+    /// `type_` field.
     pub type_: u8,
+    /// `reserved` field.
     pub reserved: [u8; 5],
 }
 
@@ -1027,23 +1277,31 @@ pub struct CUgraphEdgeData {
 #[derive(Copy, Clone, Debug, Default)]
 #[allow(non_camel_case_types)]
 pub struct CUmulticastObjectProp {
+    /// `num_devices` field.
     pub num_devices: core::ffi::c_uint,
+    /// `size` field.
     pub size: usize,
+    /// `handle_types` field.
     pub handle_types: u64,
+    /// `flags` field.
     pub flags: u64,
 }
 
 /// `CUmulticastGranularity_flags` — pass to `cuMulticastGetGranularity`.
 #[allow(non_snake_case)]
 pub mod CUmulticastGranularity_flags {
+    /// `CUmulticastGranularity_flags::MINIMUM` — minimum.
     pub const MINIMUM: i32 = 0;
+    /// `CUmulticastGranularity_flags::RECOMMENDED` — recommended.
     pub const RECOMMENDED: i32 = 1;
 }
 
 /// `CUdevResourceType` — green-context resource-kind enum (CUDA 12.4+).
 #[allow(non_snake_case)]
 pub mod CUdevResourceType {
+    /// `CUdevResourceType::INVALID` — invalid.
     pub const INVALID: i32 = 0;
+    /// `CUdevResourceType::SM` — sm.
     pub const SM: i32 = 1;
 }
 
@@ -1052,8 +1310,11 @@ pub mod CUdevResourceType {
 #[derive(Copy, Clone, Debug, Default)]
 #[allow(non_camel_case_types)]
 pub struct CUdevSmResource {
+    /// `sm_count` field.
     pub sm_count: core::ffi::c_uint,
+    /// `min_sm_partition_size` field.
     pub min_sm_partition_size: core::ffi::c_uint,
+    /// `sm_coscheduled_alignment` field.
     pub sm_coscheduled_alignment: core::ffi::c_uint,
 }
 
@@ -1065,8 +1326,11 @@ pub struct CUdevSmResource {
 #[derive(Copy, Clone)]
 #[allow(non_camel_case_types)]
 pub struct CUdevResource {
+    /// `type_` field.
     pub type_: core::ffi::c_int,
+    /// `internal_padding` field.
     pub internal_padding: [core::ffi::c_uchar; 92],
+    /// `res` field.
     pub res: [u64; 6], // 48-byte union
 }
 
@@ -1101,19 +1365,33 @@ impl CUdevResource {
 /// `CUgraphNodeType` — returned by `cuGraphNodeGetType`.
 #[allow(non_snake_case)]
 pub mod CUgraphNodeType {
+    /// `CUgraphNodeType::KERNEL` — kernel.
     pub const KERNEL: i32 = 0;
+    /// `CUgraphNodeType::MEMCPY` — memcpy.
     pub const MEMCPY: i32 = 1;
+    /// `CUgraphNodeType::MEMSET` — memset.
     pub const MEMSET: i32 = 2;
+    /// `CUgraphNodeType::HOST` — host.
     pub const HOST: i32 = 3;
+    /// `CUgraphNodeType::GRAPH` — graph.
     pub const GRAPH: i32 = 4;
+    /// `CUgraphNodeType::EMPTY` — empty.
     pub const EMPTY: i32 = 5;
+    /// `CUgraphNodeType::WAIT_EVENT` — wait event.
     pub const WAIT_EVENT: i32 = 6;
+    /// `CUgraphNodeType::EVENT_RECORD` — event record.
     pub const EVENT_RECORD: i32 = 7;
+    /// `CUgraphNodeType::EXT_SEMAS_SIGNAL` — ext semas signal.
     pub const EXT_SEMAS_SIGNAL: i32 = 8;
+    /// `CUgraphNodeType::EXT_SEMAS_WAIT` — ext semas wait.
     pub const EXT_SEMAS_WAIT: i32 = 9;
+    /// `CUgraphNodeType::MEM_ALLOC` — mem alloc.
     pub const MEM_ALLOC: i32 = 10;
+    /// `CUgraphNodeType::MEM_FREE` — mem free.
     pub const MEM_FREE: i32 = 11;
+    /// `CUgraphNodeType::BATCH_MEM_OP` — batch mem op.
     pub const BATCH_MEM_OP: i32 = 12;
+    /// `CUgraphNodeType::CONDITIONAL` — conditional.
     pub const CONDITIONAL: i32 = 13;
 }
 
@@ -1133,8 +1411,11 @@ pub mod CUstreamCaptureMode {
 /// Stream-capture status (returned by `cuStreamIsCapturing`).
 #[allow(non_snake_case)]
 pub mod CUstreamCaptureStatus {
+    /// `CUstreamCaptureStatus::NONE` — none.
     pub const NONE: u32 = 0;
+    /// `CUstreamCaptureStatus::ACTIVE` — active.
     pub const ACTIVE: u32 = 1;
+    /// `CUstreamCaptureStatus::INVALIDATED` — invalidated.
     pub const INVALIDATED: u32 = 2;
 }
 
@@ -1152,28 +1433,51 @@ pub mod CUgraphInstantiate_flags {
 /// Device attribute selector (subset of `CUdevice_attribute`).
 #[allow(non_snake_case)]
 pub mod CUdevice_attribute {
+    /// `CUdevice_attribute::MAX_THREADS_PER_BLOCK` — max threads per block.
     pub const MAX_THREADS_PER_BLOCK: i32 = 1;
+    /// `CUdevice_attribute::MAX_BLOCK_DIM_X` — max block dim x.
     pub const MAX_BLOCK_DIM_X: i32 = 2;
+    /// `CUdevice_attribute::MAX_BLOCK_DIM_Y` — max block dim y.
     pub const MAX_BLOCK_DIM_Y: i32 = 3;
+    /// `CUdevice_attribute::MAX_BLOCK_DIM_Z` — max block dim z.
     pub const MAX_BLOCK_DIM_Z: i32 = 4;
+    /// `CUdevice_attribute::MAX_GRID_DIM_X` — max grid dim x.
     pub const MAX_GRID_DIM_X: i32 = 5;
+    /// `CUdevice_attribute::MAX_GRID_DIM_Y` — max grid dim y.
     pub const MAX_GRID_DIM_Y: i32 = 6;
+    /// `CUdevice_attribute::MAX_GRID_DIM_Z` — max grid dim z.
     pub const MAX_GRID_DIM_Z: i32 = 7;
+    /// `CUdevice_attribute::MAX_SHARED_MEMORY_PER_BLOCK` — max shared memory per block.
     pub const MAX_SHARED_MEMORY_PER_BLOCK: i32 = 8;
+    /// `CUdevice_attribute::TOTAL_CONSTANT_MEMORY` — total constant memory.
     pub const TOTAL_CONSTANT_MEMORY: i32 = 9;
+    /// `CUdevice_attribute::WARP_SIZE` — warp size.
     pub const WARP_SIZE: i32 = 10;
+    /// `CUdevice_attribute::MAX_PITCH` — max pitch.
     pub const MAX_PITCH: i32 = 11;
+    /// `CUdevice_attribute::MAX_REGISTERS_PER_BLOCK` — max registers per block.
     pub const MAX_REGISTERS_PER_BLOCK: i32 = 12;
+    /// `CUdevice_attribute::CLOCK_RATE` — clock rate.
     pub const CLOCK_RATE: i32 = 13;
+    /// `CUdevice_attribute::TEXTURE_ALIGNMENT` — texture alignment.
     pub const TEXTURE_ALIGNMENT: i32 = 14;
+    /// `CUdevice_attribute::MULTIPROCESSOR_COUNT` — multiprocessor count.
     pub const MULTIPROCESSOR_COUNT: i32 = 16;
+    /// `CUdevice_attribute::INTEGRATED` — integrated.
     pub const INTEGRATED: i32 = 18;
+    /// `CUdevice_attribute::COMPUTE_CAPABILITY_MAJOR` — compute capability major.
     pub const COMPUTE_CAPABILITY_MAJOR: i32 = 75;
+    /// `CUdevice_attribute::COMPUTE_CAPABILITY_MINOR` — compute capability minor.
     pub const COMPUTE_CAPABILITY_MINOR: i32 = 76;
+    /// `CUdevice_attribute::PCI_BUS_ID` — pci bus id.
     pub const PCI_BUS_ID: i32 = 33;
+    /// `CUdevice_attribute::PCI_DEVICE_ID` — pci device id.
     pub const PCI_DEVICE_ID: i32 = 34;
+    /// `CUdevice_attribute::PCI_DOMAIN_ID` — pci domain id.
     pub const PCI_DOMAIN_ID: i32 = 50;
+    /// `CUdevice_attribute::CONCURRENT_KERNELS` — concurrent kernels.
     pub const CONCURRENT_KERNELS: i32 = 31;
+    /// `CUdevice_attribute::ECC_ENABLED` — ecc enabled.
     pub const ECC_ENABLED: i32 = 32;
 }
 
@@ -1182,38 +1486,56 @@ pub mod CUdevice_attribute {
 /// `CUarray_format` — scalar format of an array's texels.
 #[allow(non_snake_case)]
 pub mod CUarray_format {
+    /// `CUarray_format::UNSIGNED_INT8` — unsigned int8.
     pub const UNSIGNED_INT8: u32 = 0x01;
+    /// `CUarray_format::UNSIGNED_INT16` — unsigned int16.
     pub const UNSIGNED_INT16: u32 = 0x02;
+    /// `CUarray_format::UNSIGNED_INT32` — unsigned int32.
     pub const UNSIGNED_INT32: u32 = 0x03;
+    /// `CUarray_format::SIGNED_INT8` — signed int8.
     pub const SIGNED_INT8: u32 = 0x08;
+    /// `CUarray_format::SIGNED_INT16` — signed int16.
     pub const SIGNED_INT16: u32 = 0x09;
+    /// `CUarray_format::SIGNED_INT32` — signed int32.
     pub const SIGNED_INT32: u32 = 0x0a;
+    /// `CUarray_format::HALF` — half.
     pub const HALF: u32 = 0x10;
+    /// `CUarray_format::FLOAT` — float.
     pub const FLOAT: u32 = 0x20;
 }
 
 /// `CUaddress_mode` — out-of-bounds behavior for texture sampling.
 #[allow(non_snake_case)]
 pub mod CUaddress_mode {
+    /// `CUaddress_mode::WRAP` — wrap.
     pub const WRAP: u32 = 0;
+    /// `CUaddress_mode::CLAMP` — clamp.
     pub const CLAMP: u32 = 1;
+    /// `CUaddress_mode::MIRROR` — mirror.
     pub const MIRROR: u32 = 2;
+    /// `CUaddress_mode::BORDER` — border.
     pub const BORDER: u32 = 3;
 }
 
 /// `CUfilter_mode` — point vs. linear filtering.
 #[allow(non_snake_case)]
 pub mod CUfilter_mode {
+    /// `CUfilter_mode::POINT` — point.
     pub const POINT: u32 = 0;
+    /// `CUfilter_mode::LINEAR` — linear.
     pub const LINEAR: u32 = 1;
 }
 
 /// `CUresourcetype` — tag for the variant inside a [`CUDA_RESOURCE_DESC`].
 #[allow(non_snake_case)]
 pub mod CUresourcetype {
+    /// `CUresourcetype::ARRAY` — array.
     pub const ARRAY: u32 = 0;
+    /// `CUresourcetype::MIPMAPPED_ARRAY` — mipmapped array.
     pub const MIPMAPPED_ARRAY: u32 = 1;
+    /// `CUresourcetype::LINEAR` — linear.
     pub const LINEAR: u32 = 2;
+    /// `CUresourcetype::PITCH2D` — pitch2 d.
     pub const PITCH2D: u32 = 3;
 }
 
@@ -1222,9 +1544,13 @@ pub mod CUresourcetype {
 #[derive(Copy, Clone, Debug, Default)]
 #[allow(non_camel_case_types)]
 pub struct CUDA_ARRAY_DESCRIPTOR {
+    /// `width` field.
     pub width: usize,
+    /// `height` field.
     pub height: usize,
+    /// `format` field.
     pub format: u32,
+    /// `num_channels` field.
     pub num_channels: core::ffi::c_uint,
 }
 
@@ -1247,10 +1573,12 @@ pub struct CUDA_ARRAY_DESCRIPTOR {
 #[derive(Copy, Clone)]
 #[allow(non_camel_case_types)]
 pub struct CUDA_RESOURCE_DESC {
+    /// `res_type` field.
     pub res_type: core::ffi::c_int,
     _pad0: u32,
     /// Variant-specific payload (128 bytes, `int reserved[32]` in `cuda.h`).
     pub res: [u64; 16],
+    /// `flags` field.
     pub flags: core::ffi::c_uint,
     _pad1: u32,
 }
@@ -1303,15 +1631,25 @@ impl CUDA_RESOURCE_DESC {
 #[derive(Copy, Clone, Debug)]
 #[allow(non_camel_case_types)]
 pub struct CUDA_TEXTURE_DESC {
+    /// `address_mode` field.
     pub address_mode: [u32; 3],
+    /// `filter_mode` field.
     pub filter_mode: u32,
+    /// `flags` field.
     pub flags: core::ffi::c_uint,
+    /// `max_anisotropy` field.
     pub max_anisotropy: core::ffi::c_uint,
+    /// `mipmap_filter_mode` field.
     pub mipmap_filter_mode: u32,
+    /// `mipmap_level_bias` field.
     pub mipmap_level_bias: f32,
+    /// `min_mipmap_level_clamp` field.
     pub min_mipmap_level_clamp: f32,
+    /// `max_mipmap_level_clamp` field.
     pub max_mipmap_level_clamp: f32,
+    /// `border_color` field.
     pub border_color: [f32; 4],
+    /// `reserved` field.
     pub reserved: [core::ffi::c_int; 12],
 }
 
@@ -1337,35 +1675,50 @@ impl Default for CUDA_TEXTURE_DESC {
 /// `CUmemAllocationType` — what kind of physical backing to create.
 #[allow(non_snake_case)]
 pub mod CUmemAllocationType {
+    /// `CUmemAllocationType::INVALID` — invalid.
     pub const INVALID: i32 = 0;
+    /// `CUmemAllocationType::PINNED` — pinned.
     pub const PINNED: i32 = 1;
 }
 
 /// `CUmemLocationType` — identifies what device/host the backing lives on.
 #[allow(non_snake_case)]
 pub mod CUmemLocationType {
+    /// `CUmemLocationType::INVALID` — invalid.
     pub const INVALID: i32 = 0;
+    /// `CUmemLocationType::DEVICE` — device.
     pub const DEVICE: i32 = 1;
+    /// `CUmemLocationType::HOST` — host.
     pub const HOST: i32 = 2;
+    /// `CUmemLocationType::HOST_NUMA` — host numa.
     pub const HOST_NUMA: i32 = 3;
+    /// `CUmemLocationType::HOST_NUMA_CURRENT` — host numa current.
     pub const HOST_NUMA_CURRENT: i32 = 4;
 }
 
 /// `CUmemAllocationHandleType` — OS-level handle shape for IPC sharing.
 #[allow(non_snake_case)]
 pub mod CUmemAllocationHandleType {
+    /// `CUmemAllocationHandleType::NONE` — none.
     pub const NONE: i32 = 0;
+    /// `CUmemAllocationHandleType::POSIX_FILE_DESCRIPTOR` — posix file descriptor.
     pub const POSIX_FILE_DESCRIPTOR: i32 = 1;
+    /// `CUmemAllocationHandleType::WIN32` — win32.
     pub const WIN32: i32 = 2;
+    /// `CUmemAllocationHandleType::WIN32_KMT` — win32 kmt.
     pub const WIN32_KMT: i32 = 4;
+    /// `CUmemAllocationHandleType::FABRIC` — fabric.
     pub const FABRIC: i32 = 8;
 }
 
 /// `CUmemAccess_flags` — access rights granted by `cuMemSetAccess`.
 #[allow(non_snake_case)]
 pub mod CUmemAccess_flags {
+    /// `CUmemAccess_flags::NONE` — none.
     pub const NONE: i32 = 0;
+    /// `CUmemAccess_flags::READ` — read.
     pub const READ: i32 = 1;
+    /// `CUmemAccess_flags::READWRITE` — readwrite.
     pub const READWRITE: i32 = 3;
 }
 
@@ -1373,7 +1726,9 @@ pub mod CUmemAccess_flags {
 /// `cuMemGetAllocationGranularity`.
 #[allow(non_snake_case)]
 pub mod CUmemAllocationGranularity_flags {
+    /// `CUmemAllocationGranularity_flags::MINIMUM` — minimum.
     pub const MINIMUM: i32 = 0;
+    /// `CUmemAllocationGranularity_flags::RECOMMENDED` — recommended.
     pub const RECOMMENDED: i32 = 1;
 }
 
@@ -1382,7 +1737,9 @@ pub mod CUmemAllocationGranularity_flags {
 #[derive(Copy, Clone, Debug, Default)]
 #[allow(non_camel_case_types)]
 pub struct CUmemLocation {
+    /// `type_` field.
     pub type_: core::ffi::c_int,
+    /// `id` field.
     pub id: core::ffi::c_int,
 }
 
@@ -1391,9 +1748,13 @@ pub struct CUmemLocation {
 #[derive(Copy, Clone, Debug, Default)]
 #[allow(non_camel_case_types)]
 pub struct CUmemAllocationPropFlags {
+    /// `compression_type` field.
     pub compression_type: core::ffi::c_uchar,
+    /// `gpu_direct_rdma_capable` field.
     pub gpu_direct_rdma_capable: core::ffi::c_uchar,
+    /// `usage` field.
     pub usage: core::ffi::c_ushort,
+    /// `reserved` field.
     pub reserved: [core::ffi::c_uchar; 4],
 }
 
@@ -1403,10 +1764,15 @@ pub struct CUmemAllocationPropFlags {
 #[derive(Copy, Clone, Debug, Default)]
 #[allow(non_camel_case_types)]
 pub struct CUmemAllocationProp {
+    /// `type_` field.
     pub type_: core::ffi::c_int,
+    /// `requested_handle_types` field.
     pub requested_handle_types: core::ffi::c_int,
+    /// `location` field.
     pub location: CUmemLocation,
+    /// `win32_handle_meta_data` field.
     pub win32_handle_meta_data: *mut c_void,
+    /// `alloc_flags` field.
     pub alloc_flags: CUmemAllocationPropFlags,
 }
 
@@ -1416,7 +1782,9 @@ pub struct CUmemAllocationProp {
 #[derive(Copy, Clone, Debug, Default)]
 #[allow(non_camel_case_types)]
 pub struct CUmemAccessDesc {
+    /// `location` field.
     pub location: CUmemLocation,
+    /// `flags` field.
     pub flags: core::ffi::c_int,
 }
 
@@ -1425,13 +1793,21 @@ pub struct CUmemAccessDesc {
 /// `CUmemPool_attribute` — pass to `cuMemPoolSetAttribute` / `GetAttribute`.
 #[allow(non_snake_case)]
 pub mod CUmemPool_attribute {
+    /// `CUmemPool_attribute::REUSE_FOLLOW_EVENT_DEPENDENCIES` — reuse follow event dependencies.
     pub const REUSE_FOLLOW_EVENT_DEPENDENCIES: i32 = 1;
+    /// `CUmemPool_attribute::REUSE_ALLOW_OPPORTUNISTIC` — reuse allow opportunistic.
     pub const REUSE_ALLOW_OPPORTUNISTIC: i32 = 2;
+    /// `CUmemPool_attribute::REUSE_ALLOW_INTERNAL_DEPENDENCIES` — reuse allow internal dependencies.
     pub const REUSE_ALLOW_INTERNAL_DEPENDENCIES: i32 = 3;
+    /// `CUmemPool_attribute::RELEASE_THRESHOLD` — release threshold.
     pub const RELEASE_THRESHOLD: i32 = 4;
+    /// `CUmemPool_attribute::RESERVED_MEM_CURRENT` — reserved mem current.
     pub const RESERVED_MEM_CURRENT: i32 = 5;
+    /// `CUmemPool_attribute::RESERVED_MEM_HIGH` — reserved mem high.
     pub const RESERVED_MEM_HIGH: i32 = 6;
+    /// `CUmemPool_attribute::USED_MEM_CURRENT` — used mem current.
     pub const USED_MEM_CURRENT: i32 = 7;
+    /// `CUmemPool_attribute::USED_MEM_HIGH` — used mem high.
     pub const USED_MEM_HIGH: i32 = 8;
 }
 
@@ -1440,12 +1816,19 @@ pub mod CUmemPool_attribute {
 #[derive(Copy, Clone, Debug)]
 #[allow(non_camel_case_types)]
 pub struct CUmemPoolProps {
+    /// `alloc_type` field.
     pub alloc_type: core::ffi::c_int,
+    /// `handle_types` field.
     pub handle_types: core::ffi::c_int,
+    /// `location` field.
     pub location: CUmemLocation,
+    /// `win32_security_attributes` field.
     pub win32_security_attributes: *mut c_void,
+    /// `max_size` field.
     pub max_size: usize,
+    /// `usage` field.
     pub usage: core::ffi::c_ushort,
+    /// `reserved` field.
     pub reserved: [core::ffi::c_uchar; 54],
 }
 
@@ -1469,6 +1852,7 @@ impl Default for CUmemPoolProps {
 #[derive(Copy, Clone, Debug)]
 #[allow(non_camel_case_types)]
 pub struct CUmemPoolPtrExportData {
+    /// `reserved` field.
     pub reserved: [core::ffi::c_uchar; 64],
 }
 
@@ -1485,28 +1869,46 @@ impl Default for CUmemPoolPtrExportData {
 /// `CUexternalMemoryHandleType` — which OS handle shape you're importing.
 #[allow(non_snake_case)]
 pub mod CUexternalMemoryHandleType {
+    /// `CUexternalMemoryHandleType::OPAQUE_FD` — opaque fd.
     pub const OPAQUE_FD: i32 = 1;
+    /// `CUexternalMemoryHandleType::OPAQUE_WIN32` — opaque win32.
     pub const OPAQUE_WIN32: i32 = 2;
+    /// `CUexternalMemoryHandleType::OPAQUE_WIN32_KMT` — opaque win32 kmt.
     pub const OPAQUE_WIN32_KMT: i32 = 3;
+    /// `CUexternalMemoryHandleType::D3D12_HEAP` — d3 d12 heap.
     pub const D3D12_HEAP: i32 = 4;
+    /// `CUexternalMemoryHandleType::D3D12_RESOURCE` — d3 d12 resource.
     pub const D3D12_RESOURCE: i32 = 5;
+    /// `CUexternalMemoryHandleType::D3D11_RESOURCE` — d3 d11 resource.
     pub const D3D11_RESOURCE: i32 = 6;
+    /// `CUexternalMemoryHandleType::D3D11_RESOURCE_KMT` — d3 d11 resource kmt.
     pub const D3D11_RESOURCE_KMT: i32 = 7;
+    /// `CUexternalMemoryHandleType::NVSCIBUF` — nvscibuf.
     pub const NVSCIBUF: i32 = 8;
 }
 
 /// `CUexternalSemaphoreHandleType` — OS handle shape for imported sem.
 #[allow(non_snake_case)]
 pub mod CUexternalSemaphoreHandleType {
+    /// `CUexternalSemaphoreHandleType::OPAQUE_FD` — opaque fd.
     pub const OPAQUE_FD: i32 = 1;
+    /// `CUexternalSemaphoreHandleType::OPAQUE_WIN32` — opaque win32.
     pub const OPAQUE_WIN32: i32 = 2;
+    /// `CUexternalSemaphoreHandleType::OPAQUE_WIN32_KMT` — opaque win32 kmt.
     pub const OPAQUE_WIN32_KMT: i32 = 3;
+    /// `CUexternalSemaphoreHandleType::D3D12_FENCE` — d3 d12 fence.
     pub const D3D12_FENCE: i32 = 4;
+    /// `CUexternalSemaphoreHandleType::D3D11_FENCE` — d3 d11 fence.
     pub const D3D11_FENCE: i32 = 5;
+    /// `CUexternalSemaphoreHandleType::NVSCISYNC` — nvscisync.
     pub const NVSCISYNC: i32 = 6;
+    /// `CUexternalSemaphoreHandleType::KEYED_MUTEX` — keyed mutex.
     pub const KEYED_MUTEX: i32 = 7;
+    /// `CUexternalSemaphoreHandleType::KEYED_MUTEX_KMT` — keyed mutex kmt.
     pub const KEYED_MUTEX_KMT: i32 = 8;
+    /// `CUexternalSemaphoreHandleType::TIMELINE_SEMAPHORE_FD` — timeline semaphore fd.
     pub const TIMELINE_SEMAPHORE_FD: i32 = 9;
+    /// `CUexternalSemaphoreHandleType::TIMELINE_SEMAPHORE_WIN32` — timeline semaphore win32.
     pub const TIMELINE_SEMAPHORE_WIN32: i32 = 10;
 }
 
@@ -1533,9 +1935,13 @@ pub type CUlogIterator = core::ffi::c_uint;
 /// `CUlogLevel` returned to [`CUlogsCallback`].
 #[allow(non_snake_case)]
 pub mod CUlogLevel {
+    /// `CUlogLevel::ERROR` — error.
     pub const ERROR: i32 = 0;
+    /// `CUlogLevel::WARNING` — warning.
     pub const WARNING: i32 = 1;
+    /// `CUlogLevel::INFO` — info.
     pub const INFO: i32 = 2;
+    /// `CUlogLevel::TRACE` — trace.
     pub const TRACE: i32 = 3;
 }
 
@@ -1552,7 +1958,9 @@ pub type CUlogsCallback = Option<
 /// `CUmoduleLoadingMode` — reported by `cuModuleGetLoadingMode`.
 #[allow(non_snake_case)]
 pub mod CUmoduleLoadingMode {
+    /// `CUmoduleLoadingMode::EAGER_LOADING` — eager loading.
     pub const EAGER_LOADING: i32 = 0x1;
+    /// `CUmoduleLoadingMode::LAZY_LOADING` — lazy loading.
     pub const LAZY_LOADING: i32 = 0x2;
 }
 
@@ -1562,14 +1970,23 @@ pub mod CUmoduleLoadingMode {
 /// `cuGraphExecUpdate_v2` via [`CUgraphExecUpdateResultInfo::result`].
 #[allow(non_snake_case)]
 pub mod CUgraphExecUpdateResult {
+    /// `CUgraphExecUpdateResult::SUCCESS` — success.
     pub const SUCCESS: i32 = 0;
+    /// `CUgraphExecUpdateResult::ERROR` — error.
     pub const ERROR: i32 = 1;
+    /// `CUgraphExecUpdateResult::ERROR_TOPOLOGY_CHANGED` — error topology changed.
     pub const ERROR_TOPOLOGY_CHANGED: i32 = 2;
+    /// `CUgraphExecUpdateResult::ERROR_NODE_TYPE_CHANGED` — error node type changed.
     pub const ERROR_NODE_TYPE_CHANGED: i32 = 3;
+    /// `CUgraphExecUpdateResult::ERROR_FUNCTION_CHANGED` — error function changed.
     pub const ERROR_FUNCTION_CHANGED: i32 = 4;
+    /// `CUgraphExecUpdateResult::ERROR_PARAMETERS_CHANGED` — error parameters changed.
     pub const ERROR_PARAMETERS_CHANGED: i32 = 5;
+    /// `CUgraphExecUpdateResult::ERROR_NOT_SUPPORTED` — error not supported.
     pub const ERROR_NOT_SUPPORTED: i32 = 6;
+    /// `CUgraphExecUpdateResult::ERROR_UNSUPPORTED_FUNCTION_CHANGE` — error unsupported function change.
     pub const ERROR_UNSUPPORTED_FUNCTION_CHANGE: i32 = 7;
+    /// `CUgraphExecUpdateResult::ERROR_ATTRIBUTES_CHANGED` — error attributes changed.
     pub const ERROR_ATTRIBUTES_CHANGED: i32 = 8;
 }
 
@@ -1579,8 +1996,11 @@ pub mod CUgraphExecUpdateResult {
 #[derive(Copy, Clone, Debug)]
 #[allow(non_camel_case_types)]
 pub struct CUgraphExecUpdateResultInfo {
+    /// `result` field.
     pub result: core::ffi::c_int,
+    /// `error_node` field.
     pub error_node: CUgraphNode,
+    /// `error_from_node` field.
     pub error_from_node: CUgraphNode,
 }
 
@@ -1597,9 +2017,13 @@ impl Default for CUgraphExecUpdateResultInfo {
 /// `CUgraphMem_attribute` — selector for per-device graph-mem limits.
 #[allow(non_snake_case)]
 pub mod CUgraphMem_attribute {
+    /// `CUgraphMem_attribute::USED_MEM_CURRENT` — used mem current.
     pub const USED_MEM_CURRENT: i32 = 0;
+    /// `CUgraphMem_attribute::USED_MEM_HIGH` — used mem high.
     pub const USED_MEM_HIGH: i32 = 1;
+    /// `CUgraphMem_attribute::RESERVED_MEM_CURRENT` — reserved mem current.
     pub const RESERVED_MEM_CURRENT: i32 = 2;
+    /// `CUgraphMem_attribute::RESERVED_MEM_HIGH` — reserved mem high.
     pub const RESERVED_MEM_HIGH: i32 = 3;
 }
 
@@ -1610,10 +2034,15 @@ pub mod CUgraphMem_attribute {
 #[derive(Copy, Clone, Debug)]
 #[allow(non_camel_case_types)]
 pub struct CUDA_MEM_ALLOC_NODE_PARAMS {
+    /// `pool_props` field.
     pub pool_props: CUmemPoolProps,
+    /// `access_descs` field.
     pub access_descs: *const CUmemAccessDesc,
+    /// `access_desc_count` field.
     pub access_desc_count: usize,
+    /// `bytesize` field.
     pub bytesize: usize,
+    /// `dptr` field.
     pub dptr: CUdeviceptr,
 }
 
@@ -1632,11 +2061,17 @@ impl Default for CUDA_MEM_ALLOC_NODE_PARAMS {
 /// `CUstreamBatchMemOpType` — operation code inside a batch-memop entry.
 #[allow(non_snake_case)]
 pub mod CUstreamBatchMemOpType {
+    /// `CUstreamBatchMemOpType::WAIT_VALUE_32` — wait value 32.
     pub const WAIT_VALUE_32: u32 = 1;
+    /// `CUstreamBatchMemOpType::WRITE_VALUE_32` — write value 32.
     pub const WRITE_VALUE_32: u32 = 2;
+    /// `CUstreamBatchMemOpType::WAIT_VALUE_64` — wait value 64.
     pub const WAIT_VALUE_64: u32 = 4;
+    /// `CUstreamBatchMemOpType::WRITE_VALUE_64` — write value 64.
     pub const WRITE_VALUE_64: u32 = 5;
+    /// `CUstreamBatchMemOpType::BARRIER` — barrier.
     pub const BARRIER: u32 = 6;
+    /// `CUstreamBatchMemOpType::FLUSH_REMOTE_WRITES` — flush remote writes.
     pub const FLUSH_REMOTE_WRITES: u32 = 3;
 }
 
@@ -1644,16 +2079,24 @@ pub mod CUstreamBatchMemOpType {
 /// the individual stream-value ops and their batch-memop equivalents.
 #[allow(non_snake_case)]
 pub mod CUstreamWaitValue_flags {
+    /// `CUstreamWaitValue_flags::GEQ` — geq.
     pub const GEQ: u32 = 0x0;
+    /// `CUstreamWaitValue_flags::EQ` — eq.
     pub const EQ: u32 = 0x1;
+    /// `CUstreamWaitValue_flags::AND` — and.
     pub const AND: u32 = 0x2;
+    /// `CUstreamWaitValue_flags::NOR` — nor.
     pub const NOR: u32 = 0x3;
+    /// `CUstreamWaitValue_flags::FLUSH` — flush.
     pub const FLUSH: u32 = 1 << 30;
 }
 
 #[allow(non_snake_case)]
+/// `CUstreamWriteValue_flags` — submodule grouping related items.
 pub mod CUstreamWriteValue_flags {
+    /// `CUstreamWriteValue_flags::DEFAULT` — default.
     pub const DEFAULT: u32 = 0x0;
+    /// `CUstreamWriteValue_flags::NO_MEMORY_BARRIER` — no memory barrier.
     pub const NO_MEMORY_BARRIER: u32 = 0x1;
 }
 
@@ -1664,6 +2107,7 @@ pub mod CUstreamWriteValue_flags {
 #[derive(Copy, Clone)]
 #[allow(non_camel_case_types)]
 pub struct CUstreamBatchMemOpParams {
+    /// `raw` field.
     pub raw: [u64; 6],
 }
 
@@ -1708,6 +2152,7 @@ impl CUstreamBatchMemOpParams {
         s
     }
 
+    /// `wait_value_64` — wait value 64.
     pub fn wait_value_64(address: CUdeviceptr, value: u64, flags: u32) -> Self {
         let mut s = Self::default();
         unsafe {
@@ -1720,6 +2165,7 @@ impl CUstreamBatchMemOpParams {
         s
     }
 
+    /// `write_value_32` — write value 32.
     pub fn write_value_32(address: CUdeviceptr, value: u32, flags: u32) -> Self {
         let mut s = Self::default();
         unsafe {
@@ -1732,6 +2178,7 @@ impl CUstreamBatchMemOpParams {
         s
     }
 
+    /// `write_value_64` — write value 64.
     pub fn write_value_64(address: CUdeviceptr, value: u64, flags: u32) -> Self {
         let mut s = Self::default();
         unsafe {
@@ -1751,9 +2198,13 @@ impl CUstreamBatchMemOpParams {
 #[derive(Copy, Clone, Debug)]
 #[allow(non_camel_case_types)]
 pub struct CUDA_BATCH_MEM_OP_NODE_PARAMS {
+    /// `ctx` field.
     pub ctx: CUcontext,
+    /// `count` field.
     pub count: core::ffi::c_uint,
+    /// `param_array` field.
     pub param_array: *mut CUstreamBatchMemOpParams,
+    /// `flags` field.
     pub flags: core::ffi::c_uint,
 }
 
@@ -1784,12 +2235,16 @@ pub type CUdevResourceDesc = *mut c_void;
 #[derive(Copy, Clone)]
 #[allow(non_camel_case_types)]
 pub struct CUDA_EXTERNAL_MEMORY_HANDLE_DESC {
+    /// `type_` field.
     pub type_: core::ffi::c_int,
     _pad0: u32,
     /// Union payload: max member is `{ HANDLE, LPCWSTR }` = 16 bytes, align 8.
     pub handle: [u64; 2],
+    /// `size` field.
     pub size: u64,
+    /// `flags` field.
     pub flags: core::ffi::c_uint,
+    /// `reserved` field.
     pub reserved: [core::ffi::c_uint; 16],
 }
 
@@ -1862,9 +2317,13 @@ impl CUDA_EXTERNAL_MEMORY_HANDLE_DESC {
 #[derive(Copy, Clone, Debug, Default)]
 #[allow(non_camel_case_types)]
 pub struct CUDA_EXTERNAL_MEMORY_BUFFER_DESC {
+    /// `offset` field.
     pub offset: u64,
+    /// `size` field.
     pub size: u64,
+    /// `flags` field.
     pub flags: core::ffi::c_uint,
+    /// `reserved` field.
     pub reserved: [core::ffi::c_uint; 16],
 }
 
@@ -1874,10 +2333,14 @@ pub struct CUDA_EXTERNAL_MEMORY_BUFFER_DESC {
 #[derive(Copy, Clone)]
 #[allow(non_camel_case_types)]
 pub struct CUDA_EXTERNAL_SEMAPHORE_HANDLE_DESC {
+    /// `type_` field.
     pub type_: core::ffi::c_int,
     _pad0: u32,
+    /// `handle` field.
     pub handle: [u64; 2],
+    /// `flags` field.
     pub flags: core::ffi::c_uint,
+    /// `reserved` field.
     pub reserved: [core::ffi::c_uint; 16],
 }
 
@@ -1904,6 +2367,7 @@ impl core::fmt::Debug for CUDA_EXTERNAL_SEMAPHORE_HANDLE_DESC {
 }
 
 impl CUDA_EXTERNAL_SEMAPHORE_HANDLE_DESC {
+    /// `from_fd` — from fd.
     pub fn from_fd(fd: core::ffi::c_int, type_: core::ffi::c_int) -> Self {
         let mut d = Self {
             type_,
@@ -1946,7 +2410,9 @@ pub struct CUDA_EXTERNAL_SEMAPHORE_SIGNAL_PARAMS {
     /// - [16..24] keyedMutex.key (u64).
     /// - [24..72] reserved[12] u32.
     pub params: [u64; 9],
+    /// `flags` field.
     pub flags: core::ffi::c_uint,
+    /// `reserved` field.
     pub reserved: [core::ffi::c_uint; 16],
 }
 
@@ -1986,8 +2452,11 @@ impl CUDA_EXTERNAL_SEMAPHORE_SIGNAL_PARAMS {
 #[derive(Copy, Clone)]
 #[allow(non_camel_case_types)]
 pub struct CUDA_EXTERNAL_SEMAPHORE_WAIT_PARAMS {
+    /// `params` field.
     pub params: [u64; 9],
+    /// `flags` field.
     pub flags: core::ffi::c_uint,
+    /// `reserved` field.
     pub reserved: [core::ffi::c_uint; 16],
 }
 
@@ -2012,6 +2481,7 @@ impl core::fmt::Debug for CUDA_EXTERNAL_SEMAPHORE_WAIT_PARAMS {
 }
 
 impl CUDA_EXTERNAL_SEMAPHORE_WAIT_PARAMS {
+    /// `fence_value` — fence value.
     pub fn fence_value(value: u64) -> Self {
         let mut s = Self::default();
         s.params[0] = value;
@@ -2027,24 +2497,38 @@ impl CUDA_EXTERNAL_SEMAPHORE_WAIT_PARAMS {
 #[derive(Copy, Clone, Debug, Default)]
 #[allow(non_camel_case_types)]
 pub struct CUDA_ARRAY3D_DESCRIPTOR {
+    /// `width` field.
     pub width: usize,
+    /// `height` field.
     pub height: usize,
+    /// `depth` field.
     pub depth: usize,
+    /// `format` field.
     pub format: u32,
+    /// `num_channels` field.
     pub num_channels: core::ffi::c_uint,
+    /// `flags` field.
     pub flags: core::ffi::c_uint,
 }
 
 /// `CUarray3D_flags` — creation-time flags for 3D / mipmapped arrays.
 #[allow(non_snake_case)]
 pub mod CUarray3D_flags {
+    /// `CUarray3D_flags::LAYERED` — layered.
     pub const LAYERED: u32 = 0x01;
+    /// `CUarray3D_flags::SURFACE_LDST` — surface ldst.
     pub const SURFACE_LDST: u32 = 0x02;
+    /// `CUarray3D_flags::CUBEMAP` — cubemap.
     pub const CUBEMAP: u32 = 0x04;
+    /// `CUarray3D_flags::TEXTURE_GATHER` — texture gather.
     pub const TEXTURE_GATHER: u32 = 0x08;
+    /// `CUarray3D_flags::DEPTH_TEXTURE` — depth texture.
     pub const DEPTH_TEXTURE: u32 = 0x10;
+    /// `CUarray3D_flags::COLOR_ATTACHMENT` — color attachment.
     pub const COLOR_ATTACHMENT: u32 = 0x20;
+    /// `CUarray3D_flags::SPARSE` — sparse.
     pub const SPARSE: u32 = 0x40;
+    /// `CUarray3D_flags::DEFERRED_MAPPING` — deferred mapping.
     pub const DEFERRED_MAPPING: u32 = 0x80;
 }
 
@@ -2057,34 +2541,59 @@ pub mod CUarray3D_flags {
 #[derive(Copy, Clone, Debug)]
 #[allow(non_camel_case_types)]
 pub struct CUDA_MEMCPY3D {
+    /// `src_x_in_bytes` field.
     pub src_x_in_bytes: usize,
+    /// `src_y` field.
     pub src_y: usize,
+    /// `src_z` field.
     pub src_z: usize,
+    /// `src_lod` field.
     pub src_lod: usize,
+    /// `src_memory_type` field.
     pub src_memory_type: u32,
     _pad0: u32,
+    /// `src_host` field.
     pub src_host: *const c_void,
+    /// `src_device` field.
     pub src_device: CUdeviceptr,
+    /// `src_array` field.
     pub src_array: *mut c_void,
+    /// `reserved0` field.
     pub reserved0: *mut c_void,
+    /// `src_pitch` field.
     pub src_pitch: usize,
+    /// `src_height` field.
     pub src_height: usize,
 
+    /// `dst_x_in_bytes` field.
     pub dst_x_in_bytes: usize,
+    /// `dst_y` field.
     pub dst_y: usize,
+    /// `dst_z` field.
     pub dst_z: usize,
+    /// `dst_lod` field.
     pub dst_lod: usize,
+    /// `dst_memory_type` field.
     pub dst_memory_type: u32,
     _pad1: u32,
+    /// `dst_host` field.
     pub dst_host: *mut c_void,
+    /// `dst_device` field.
     pub dst_device: CUdeviceptr,
+    /// `dst_array` field.
     pub dst_array: *mut c_void,
+    /// `reserved1` field.
     pub reserved1: *mut c_void,
+    /// `dst_pitch` field.
     pub dst_pitch: usize,
+    /// `dst_height` field.
     pub dst_height: usize,
 
+    /// `width_in_bytes` field.
     pub width_in_bytes: usize,
+    /// `height` field.
     pub height: usize,
+    /// `depth` field.
     pub depth: usize,
 }
 

@@ -22,14 +22,22 @@ use baracuda_types::CudaStatus;
 pub struct nvcompStatus_t(pub i32);
 
 impl nvcompStatus_t {
+    /// nvCOMP status code `SUCCESS`.
     pub const SUCCESS: Self = Self(0);
+    /// nvCOMP status code `ERROR_INVALID_VALUE`.
     pub const ERROR_INVALID_VALUE: Self = Self(10);
+    /// nvCOMP status code `ERROR_NOT_SUPPORTED`.
     pub const ERROR_NOT_SUPPORTED: Self = Self(11);
+    /// nvCOMP status code `ERROR_CANNOT_DECOMPRESS`.
     pub const ERROR_CANNOT_DECOMPRESS: Self = Self(12);
+    /// nvCOMP status code `ERROR_BAD_CHECKSUM`.
     pub const ERROR_BAD_CHECKSUM: Self = Self(13);
+    /// nvCOMP status code `ERROR_CUDA`.
     pub const ERROR_CUDA: Self = Self(1000);
+    /// nvCOMP status code `ERROR_INTERNAL`.
     pub const ERROR_INTERNAL: Self = Self(10000);
 
+    /// `is_success` method on `nvcompStatus_t`.
     pub const fn is_success(self) -> bool {
         self.0 == 0
     }
@@ -75,14 +83,23 @@ use core::ffi::c_void;
 /// `nvcompType_t` — element type for batched APIs.
 #[allow(non_snake_case)]
 pub mod nvcompType {
+    /// `CHAR` value of `nvcompType`.
     pub const CHAR: i32 = 0;
+    /// `UCHAR` value of `nvcompType`.
     pub const UCHAR: i32 = 1;
+    /// `SHORT` value of `nvcompType`.
     pub const SHORT: i32 = 2;
+    /// `USHORT` value of `nvcompType`.
     pub const USHORT: i32 = 3;
+    /// `INT` value of `nvcompType`.
     pub const INT: i32 = 4;
+    /// `UINT` value of `nvcompType`.
     pub const UINT: i32 = 5;
+    /// `LONGLONG` value of `nvcompType`.
     pub const LONGLONG: i32 = 6;
+    /// `ULONGLONG` value of `nvcompType`.
     pub const ULONGLONG: i32 = 7;
+    /// `BITS` value of `nvcompType`.
     pub const BITS: i32 = 0xff;
 }
 
@@ -94,8 +111,11 @@ pub mod nvcompType {
 /// `nvcompDecompressBackend_t` — decompression-engine selector (nvCOMP 5+).
 #[allow(non_snake_case)]
 pub mod nvcompDecompressBackend {
+    /// `DEFAULT` value of `nvcompDecompressBackend`.
     pub const DEFAULT: i32 = 0;
+    /// `CUDA` value of `nvcompDecompressBackend`.
     pub const CUDA: i32 = 1;
+    /// `HARDWARE` value of `nvcompDecompressBackend`.
     pub const HARDWARE: i32 = 2;
 }
 
@@ -189,6 +209,7 @@ impl Default for nvcompBatchedGdeflateDecompressOpts_t {
 // nvCOMP 5.x CompressOpts_t structs are all 64 bytes:
 //   4-byte data_type + 4-byte bitshuffle_mode + 56-byte reserved pad.
 
+/// LZ4 batched compression options struct.
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
 pub struct nvcompBatchedLZ4Opts_t {
@@ -207,6 +228,7 @@ impl Default for nvcompBatchedLZ4Opts_t {
     }
 }
 
+/// Snappy batched compression options struct.
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
 pub struct nvcompBatchedSnappyOpts_t {
@@ -225,6 +247,7 @@ impl Default for nvcompBatchedSnappyOpts_t {
     }
 }
 
+/// Zstd batched compression options struct.
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
 pub struct nvcompBatchedZstdOpts_t {
@@ -243,6 +266,7 @@ impl Default for nvcompBatchedZstdOpts_t {
     }
 }
 
+/// Gdeflate batched compression options struct.
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
 pub struct nvcompBatchedGdeflateOpts_t {
@@ -272,6 +296,7 @@ pub type PFN_nvcompBatchedLZ4CompressGetTempSize = unsafe extern "C" fn(
     max_total_uncompressed_bytes: usize,
 ) -> nvcompStatus_t;
 
+/// get max output chunk size for LZ4 batched compression.
 pub type PFN_nvcompBatchedLZ4CompressGetMaxOutputChunkSize = unsafe extern "C" fn(
     max_uncompressed_chunk_size: usize,
     opts: nvcompBatchedLZ4Opts_t,
@@ -279,6 +304,7 @@ pub type PFN_nvcompBatchedLZ4CompressGetMaxOutputChunkSize = unsafe extern "C" f
 )
     -> nvcompStatus_t;
 
+/// launch LZ4 batched compression on a CUDA stream.
 pub type PFN_nvcompBatchedLZ4CompressAsync = unsafe extern "C" fn(
     device_uncompressed_ptrs: *const *const c_void,
     device_uncompressed_bytes: *const usize,
@@ -317,6 +343,7 @@ pub type PFN_nvcompBatchedLZ4DecompressAsync = unsafe extern "C" fn(
     stream: *mut c_void,
 ) -> nvcompStatus_t;
 
+/// launch Snappy batched compression on a CUDA stream.
 pub type PFN_nvcompBatchedSnappyCompressAsync = unsafe extern "C" fn(
     device_uncompressed_ptrs: *const *const c_void,
     device_uncompressed_bytes: *const usize,
@@ -331,6 +358,7 @@ pub type PFN_nvcompBatchedSnappyCompressAsync = unsafe extern "C" fn(
     stream: *mut c_void,
 ) -> nvcompStatus_t;
 
+/// launch Zstd batched compression on a CUDA stream.
 pub type PFN_nvcompBatchedZstdCompressAsync = unsafe extern "C" fn(
     device_uncompressed_ptrs: *const *const c_void,
     device_uncompressed_bytes: *const usize,
@@ -347,6 +375,7 @@ pub type PFN_nvcompBatchedZstdCompressAsync = unsafe extern "C" fn(
 
 // --- Required-alignment structs (nvCOMP 4+) ---
 
+/// alignment hints returned by nvCOMP for buffer planning.
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Default)]
 pub struct nvcompAlignmentRequirements_t {
@@ -357,6 +386,7 @@ pub struct nvcompAlignmentRequirements_t {
 
 // --- Additional codec options ---
 
+/// Bitcomp batched compression options struct.
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Default)]
 pub struct nvcompBatchedBitcompOpts_t {
@@ -364,18 +394,21 @@ pub struct nvcompBatchedBitcompOpts_t {
     pub data_type: i32,
 }
 
+/// ANS batched compression options struct.
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Default)]
 pub struct nvcompBatchedANSOpts_t {
     pub reserved: i32,
 }
 
+/// Deflate batched compression options struct.
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Default)]
 pub struct nvcompBatchedDeflateOpts_t {
     pub algo: i32,
 }
 
+/// Cascaded batched compression options struct.
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Default)]
 pub struct nvcompBatchedCascadedOpts_t {
@@ -393,15 +426,18 @@ pub struct nvcompBatchedCascadedOpts_t {
 // readability.
 
 // LZ4 extras
+/// get required-alignment hints for LZ4 batched compression.
 pub type PFN_nvcompBatchedLZ4CompressGetRequiredAlignments = unsafe extern "C" fn(
     opts: nvcompBatchedLZ4Opts_t,
     alignments_out: *mut nvcompAlignmentRequirements_t,
 )
     -> nvcompStatus_t;
 
+/// get required-alignment hints for LZ4 batched decompression.
 pub type PFN_nvcompBatchedLZ4DecompressGetRequiredAlignments =
     unsafe extern "C" fn(alignments_out: *mut nvcompAlignmentRequirements_t) -> nvcompStatus_t;
 
+/// get decompressed-size estimate for LZ4 batched chunks.
 pub type PFN_nvcompBatchedLZ4GetDecompressSizeAsync = unsafe extern "C" fn(
     device_compressed_ptrs: *const *const c_void,
     device_compressed_bytes: *const usize,
@@ -411,6 +447,7 @@ pub type PFN_nvcompBatchedLZ4GetDecompressSizeAsync = unsafe extern "C" fn(
 ) -> nvcompStatus_t;
 
 // Snappy full set
+/// get scratch size for Snappy batched compression.
 pub type PFN_nvcompBatchedSnappyCompressGetTempSize = unsafe extern "C" fn(
     batch_size: usize,
     max_uncompressed_chunk_size: usize,
@@ -419,6 +456,7 @@ pub type PFN_nvcompBatchedSnappyCompressGetTempSize = unsafe extern "C" fn(
     max_total_uncompressed_bytes: usize,
 ) -> nvcompStatus_t;
 
+/// get max output chunk size for Snappy batched compression.
 pub type PFN_nvcompBatchedSnappyCompressGetMaxOutputChunkSize =
     unsafe extern "C" fn(
         max_uncompressed_chunk_size: usize,
@@ -426,6 +464,7 @@ pub type PFN_nvcompBatchedSnappyCompressGetMaxOutputChunkSize =
         max_compressed_bytes_out: *mut usize,
     ) -> nvcompStatus_t;
 
+/// get scratch size for Snappy batched decompression.
 pub type PFN_nvcompBatchedSnappyDecompressGetTempSize = unsafe extern "C" fn(
     num_chunks: usize,
     max_uncompressed_chunk_bytes: usize,
@@ -434,6 +473,7 @@ pub type PFN_nvcompBatchedSnappyDecompressGetTempSize = unsafe extern "C" fn(
     max_total_uncompressed_bytes: usize,
 ) -> nvcompStatus_t;
 
+/// launch Snappy batched decompression on a CUDA stream.
 pub type PFN_nvcompBatchedSnappyDecompressAsync = unsafe extern "C" fn(
     device_compressed_ptrs: *const *const c_void,
     device_compressed_bytes: *const usize,
@@ -449,6 +489,7 @@ pub type PFN_nvcompBatchedSnappyDecompressAsync = unsafe extern "C" fn(
 ) -> nvcompStatus_t;
 
 // Zstd full set
+/// get scratch size for Zstd batched compression.
 pub type PFN_nvcompBatchedZstdCompressGetTempSize = unsafe extern "C" fn(
     batch_size: usize,
     max_uncompressed_chunk_size: usize,
@@ -457,6 +498,7 @@ pub type PFN_nvcompBatchedZstdCompressGetTempSize = unsafe extern "C" fn(
     max_total_uncompressed_bytes: usize,
 ) -> nvcompStatus_t;
 
+/// get max output chunk size for Zstd batched compression.
 pub type PFN_nvcompBatchedZstdCompressGetMaxOutputChunkSize =
     unsafe extern "C" fn(
         max_uncompressed_chunk_size: usize,
@@ -464,6 +506,7 @@ pub type PFN_nvcompBatchedZstdCompressGetMaxOutputChunkSize =
         max_compressed_bytes_out: *mut usize,
     ) -> nvcompStatus_t;
 
+/// get scratch size for Zstd batched decompression.
 pub type PFN_nvcompBatchedZstdDecompressGetTempSize = unsafe extern "C" fn(
     num_chunks: usize,
     max_uncompressed_chunk_bytes: usize,
@@ -472,6 +515,7 @@ pub type PFN_nvcompBatchedZstdDecompressGetTempSize = unsafe extern "C" fn(
     max_total_uncompressed_bytes: usize,
 ) -> nvcompStatus_t;
 
+/// launch Zstd batched decompression on a CUDA stream.
 pub type PFN_nvcompBatchedZstdDecompressAsync = unsafe extern "C" fn(
     device_compressed_ptrs: *const *const c_void,
     device_compressed_bytes: *const usize,
@@ -487,6 +531,7 @@ pub type PFN_nvcompBatchedZstdDecompressAsync = unsafe extern "C" fn(
 ) -> nvcompStatus_t;
 
 // GDeflate
+/// get scratch size for Gdeflate batched compression.
 pub type PFN_nvcompBatchedGdeflateCompressGetTempSize = unsafe extern "C" fn(
     batch_size: usize,
     max_uncompressed_chunk_size: usize,
@@ -495,6 +540,7 @@ pub type PFN_nvcompBatchedGdeflateCompressGetTempSize = unsafe extern "C" fn(
     max_total_uncompressed_bytes: usize,
 ) -> nvcompStatus_t;
 
+/// get max output chunk size for Gdeflate batched compression.
 pub type PFN_nvcompBatchedGdeflateCompressGetMaxOutputChunkSize =
     unsafe extern "C" fn(
         max_uncompressed_chunk_size: usize,
@@ -502,6 +548,7 @@ pub type PFN_nvcompBatchedGdeflateCompressGetMaxOutputChunkSize =
         max_compressed_bytes_out: *mut usize,
     ) -> nvcompStatus_t;
 
+/// launch Gdeflate batched compression on a CUDA stream.
 pub type PFN_nvcompBatchedGdeflateCompressAsync = unsafe extern "C" fn(
     device_uncompressed_ptrs: *const *const c_void,
     device_uncompressed_bytes: *const usize,
@@ -516,6 +563,7 @@ pub type PFN_nvcompBatchedGdeflateCompressAsync = unsafe extern "C" fn(
     stream: *mut c_void,
 ) -> nvcompStatus_t;
 
+/// get scratch size for Gdeflate batched decompression.
 pub type PFN_nvcompBatchedGdeflateDecompressGetTempSize = unsafe extern "C" fn(
     num_chunks: usize,
     max_uncompressed_chunk_bytes: usize,
@@ -524,6 +572,7 @@ pub type PFN_nvcompBatchedGdeflateDecompressGetTempSize = unsafe extern "C" fn(
     max_total_uncompressed_bytes: usize,
 ) -> nvcompStatus_t;
 
+/// launch Gdeflate batched decompression on a CUDA stream.
 pub type PFN_nvcompBatchedGdeflateDecompressAsync = unsafe extern "C" fn(
     device_compressed_ptrs: *const *const c_void,
     device_compressed_bytes: *const usize,
@@ -539,6 +588,7 @@ pub type PFN_nvcompBatchedGdeflateDecompressAsync = unsafe extern "C" fn(
 ) -> nvcompStatus_t;
 
 // Deflate (zlib/raw-deflate stream path)
+/// launch Deflate batched compression on a CUDA stream.
 pub type PFN_nvcompBatchedDeflateCompressAsync = unsafe extern "C" fn(
     device_uncompressed_ptrs: *const *const c_void,
     device_uncompressed_bytes: *const usize,
@@ -552,6 +602,7 @@ pub type PFN_nvcompBatchedDeflateCompressAsync = unsafe extern "C" fn(
     stream: *mut c_void,
 ) -> nvcompStatus_t;
 
+/// launch Deflate batched decompression on a CUDA stream.
 pub type PFN_nvcompBatchedDeflateDecompressAsync = unsafe extern "C" fn(
     device_compressed_ptrs: *const *const c_void,
     device_compressed_bytes: *const usize,
@@ -566,6 +617,7 @@ pub type PFN_nvcompBatchedDeflateDecompressAsync = unsafe extern "C" fn(
 ) -> nvcompStatus_t;
 
 // Bitcomp
+/// launch Bitcomp batched compression on a CUDA stream.
 pub type PFN_nvcompBatchedBitcompCompressAsync = unsafe extern "C" fn(
     device_uncompressed_ptrs: *const *const c_void,
     device_uncompressed_bytes: *const usize,
@@ -579,6 +631,7 @@ pub type PFN_nvcompBatchedBitcompCompressAsync = unsafe extern "C" fn(
     stream: *mut c_void,
 ) -> nvcompStatus_t;
 
+/// launch Bitcomp batched decompression on a CUDA stream.
 pub type PFN_nvcompBatchedBitcompDecompressAsync = unsafe extern "C" fn(
     device_compressed_ptrs: *const *const c_void,
     device_compressed_bytes: *const usize,
@@ -593,6 +646,7 @@ pub type PFN_nvcompBatchedBitcompDecompressAsync = unsafe extern "C" fn(
 ) -> nvcompStatus_t;
 
 // ANS
+/// launch ANS batched compression on a CUDA stream.
 pub type PFN_nvcompBatchedANSCompressAsync = unsafe extern "C" fn(
     device_uncompressed_ptrs: *const *const c_void,
     device_uncompressed_bytes: *const usize,
@@ -606,6 +660,7 @@ pub type PFN_nvcompBatchedANSCompressAsync = unsafe extern "C" fn(
     stream: *mut c_void,
 ) -> nvcompStatus_t;
 
+/// launch ANS batched decompression on a CUDA stream.
 pub type PFN_nvcompBatchedANSDecompressAsync = unsafe extern "C" fn(
     device_compressed_ptrs: *const *const c_void,
     device_compressed_bytes: *const usize,
@@ -620,6 +675,7 @@ pub type PFN_nvcompBatchedANSDecompressAsync = unsafe extern "C" fn(
 ) -> nvcompStatus_t;
 
 // Cascaded
+/// launch Cascaded batched compression on a CUDA stream.
 pub type PFN_nvcompBatchedCascadedCompressAsync = unsafe extern "C" fn(
     device_uncompressed_ptrs: *const *const c_void,
     device_uncompressed_bytes: *const usize,
@@ -633,6 +689,7 @@ pub type PFN_nvcompBatchedCascadedCompressAsync = unsafe extern "C" fn(
     stream: *mut c_void,
 ) -> nvcompStatus_t;
 
+/// launch Cascaded batched decompression on a CUDA stream.
 pub type PFN_nvcompBatchedCascadedDecompressAsync = unsafe extern "C" fn(
     device_compressed_ptrs: *const *const c_void,
     device_compressed_bytes: *const usize,
@@ -649,6 +706,7 @@ pub type PFN_nvcompBatchedCascadedDecompressAsync = unsafe extern "C" fn(
 // Generic DecompressGetSizeAsync — returns original uncompressed sizes
 // from compressed buffers. Same signature across codecs; we expose one
 // alias per codec via loader entries.
+/// generic decompressed-size estimator (codec-agnostic).
 pub type PFN_nvcompGetDecompressSizeAsync = unsafe extern "C" fn(
     device_compressed_ptrs: *const *const c_void,
     device_compressed_bytes: *const usize,
@@ -659,6 +717,7 @@ pub type PFN_nvcompGetDecompressSizeAsync = unsafe extern "C" fn(
 
 // ---- Gzip codec (nvCOMP 5+) ----
 
+/// Gzip batched compression options struct.
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
 pub struct nvcompBatchedGzipOpts_t {
@@ -677,6 +736,7 @@ impl Default for nvcompBatchedGzipOpts_t {
     }
 }
 
+/// Gzip batched decompression options struct.
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
 pub struct nvcompBatchedGzipDecompressOpts_t {
@@ -697,6 +757,7 @@ impl Default for nvcompBatchedGzipDecompressOpts_t {
     }
 }
 
+/// get scratch size for Gzip batched compression.
 pub type PFN_nvcompBatchedGzipCompressGetTempSize = unsafe extern "C" fn(
     batch_size: usize,
     max_uncompressed_chunk_size: usize,
@@ -705,6 +766,7 @@ pub type PFN_nvcompBatchedGzipCompressGetTempSize = unsafe extern "C" fn(
     max_total_uncompressed_bytes: usize,
 ) -> nvcompStatus_t;
 
+/// get max output chunk size for Gzip batched compression.
 pub type PFN_nvcompBatchedGzipCompressGetMaxOutputChunkSize =
     unsafe extern "C" fn(
         max_uncompressed_chunk_size: usize,
@@ -712,6 +774,7 @@ pub type PFN_nvcompBatchedGzipCompressGetMaxOutputChunkSize =
         max_compressed_bytes_out: *mut usize,
     ) -> nvcompStatus_t;
 
+/// launch Gzip batched compression on a CUDA stream.
 pub type PFN_nvcompBatchedGzipCompressAsync = unsafe extern "C" fn(
     device_uncompressed_ptrs: *const *const c_void,
     device_uncompressed_bytes: *const usize,
@@ -726,6 +789,7 @@ pub type PFN_nvcompBatchedGzipCompressAsync = unsafe extern "C" fn(
     stream: *mut c_void,
 ) -> nvcompStatus_t;
 
+/// get scratch size for Gzip batched decompression.
 pub type PFN_nvcompBatchedGzipDecompressGetTempSize = unsafe extern "C" fn(
     num_chunks: usize,
     max_uncompressed_chunk_bytes: usize,
@@ -734,6 +798,7 @@ pub type PFN_nvcompBatchedGzipDecompressGetTempSize = unsafe extern "C" fn(
     max_total_uncompressed_bytes: usize,
 ) -> nvcompStatus_t;
 
+/// launch Gzip batched decompression on a CUDA stream.
 pub type PFN_nvcompBatchedGzipDecompressAsync = unsafe extern "C" fn(
     device_compressed_ptrs: *const *const c_void,
     device_compressed_bytes: *const usize,
@@ -750,6 +815,7 @@ pub type PFN_nvcompBatchedGzipDecompressAsync = unsafe extern "C" fn(
 
 // ---- CRC32 batched (nvCOMP 5+) ----
 
+/// launch batched CRC32 on a CUDA stream.
 pub type PFN_nvcompBatchedCRC32Async = unsafe extern "C" fn(
     device_data_ptrs: *const *const c_void,
     device_data_bytes: *const usize,
@@ -759,16 +825,20 @@ pub type PFN_nvcompBatchedCRC32Async = unsafe extern "C" fn(
     stream: *mut c_void,
 ) -> nvcompStatus_t;
 
+/// get heuristic CRC32 launch config.
 pub type PFN_nvcompBatchedCRC32GetHeuristicConf =
     unsafe extern "C" fn(max_chunk_bytes: usize, config_out: *mut c_void) -> nvcompStatus_t;
 
+/// search for an optimal CRC32 launch config.
 pub type PFN_nvcompBatchedCRC32SearchConf =
     unsafe extern "C" fn(max_chunk_bytes: usize, config_out: *mut c_void) -> nvcompStatus_t;
 
 // ---- Library-level metadata ----
 
+/// get nvCOMP library version/build properties.
 pub type PFN_nvcompGetProperties = unsafe extern "C" fn(version_out: *mut c_void) -> nvcompStatus_t;
 
+/// stringify an `nvcompStatus_t` code.
 pub type PFN_nvcompGetStatusString =
     unsafe extern "C" fn(status: nvcompStatus_t) -> *const core::ffi::c_char;
 
@@ -778,61 +848,77 @@ pub type PFN_nvcompGetStatusString =
 // `XDecompressGetRequiredAlignments`, `XGetDecompressSizeAsync`. We
 // reuse the PFN type shapes defined earlier (for LZ4).
 
+/// get required-alignment hints for ANS batched compression.
 pub type PFN_nvcompBatchedANSCompressGetRequiredAlignments = unsafe extern "C" fn(
     opts: nvcompBatchedANSOpts_t,
     alignments_out: *mut nvcompAlignmentRequirements_t,
 )
     -> nvcompStatus_t;
+/// get required-alignment hints for Bitcomp batched compression.
 pub type PFN_nvcompBatchedBitcompCompressGetRequiredAlignments =
     unsafe extern "C" fn(
         opts: nvcompBatchedBitcompOpts_t,
         alignments_out: *mut nvcompAlignmentRequirements_t,
     ) -> nvcompStatus_t;
+/// get required-alignment hints for Cascaded batched compression.
 pub type PFN_nvcompBatchedCascadedCompressGetRequiredAlignments =
     unsafe extern "C" fn(
         opts: nvcompBatchedCascadedOpts_t,
         alignments_out: *mut nvcompAlignmentRequirements_t,
     ) -> nvcompStatus_t;
+/// get required-alignment hints for Deflate batched compression.
 pub type PFN_nvcompBatchedDeflateCompressGetRequiredAlignments =
     unsafe extern "C" fn(
         opts: nvcompBatchedDeflateOpts_t,
         alignments_out: *mut nvcompAlignmentRequirements_t,
     ) -> nvcompStatus_t;
+/// get required-alignment hints for Gdeflate batched compression.
 pub type PFN_nvcompBatchedGdeflateCompressGetRequiredAlignments =
     unsafe extern "C" fn(
         opts: nvcompBatchedGdeflateOpts_t,
         alignments_out: *mut nvcompAlignmentRequirements_t,
     ) -> nvcompStatus_t;
+/// get required-alignment hints for Snappy batched compression.
 pub type PFN_nvcompBatchedSnappyCompressGetRequiredAlignments =
     unsafe extern "C" fn(
         opts: nvcompBatchedSnappyOpts_t,
         alignments_out: *mut nvcompAlignmentRequirements_t,
     ) -> nvcompStatus_t;
+/// get required-alignment hints for Zstd batched compression.
 pub type PFN_nvcompBatchedZstdCompressGetRequiredAlignments =
     unsafe extern "C" fn(
         opts: nvcompBatchedZstdOpts_t,
         alignments_out: *mut nvcompAlignmentRequirements_t,
     ) -> nvcompStatus_t;
 
+/// get required-alignment hints for ANS batched decompression.
 pub type PFN_nvcompBatchedANSDecompressGetRequiredAlignments =
     unsafe extern "C" fn(alignments_out: *mut nvcompAlignmentRequirements_t) -> nvcompStatus_t;
+/// get required-alignment hints for Bitcomp batched decompression.
 pub type PFN_nvcompBatchedBitcompDecompressGetRequiredAlignments =
     unsafe extern "C" fn(alignments_out: *mut nvcompAlignmentRequirements_t) -> nvcompStatus_t;
+/// get required-alignment hints for Cascaded batched decompression.
 pub type PFN_nvcompBatchedCascadedDecompressGetRequiredAlignments =
     unsafe extern "C" fn(alignments_out: *mut nvcompAlignmentRequirements_t) -> nvcompStatus_t;
+/// get required-alignment hints for Deflate batched decompression.
 pub type PFN_nvcompBatchedDeflateDecompressGetRequiredAlignments =
     unsafe extern "C" fn(alignments_out: *mut nvcompAlignmentRequirements_t) -> nvcompStatus_t;
+/// get required-alignment hints for Gdeflate batched decompression.
 pub type PFN_nvcompBatchedGdeflateDecompressGetRequiredAlignments =
     unsafe extern "C" fn(alignments_out: *mut nvcompAlignmentRequirements_t) -> nvcompStatus_t;
+/// get required-alignment hints for Gzip batched decompression.
 pub type PFN_nvcompBatchedGzipDecompressGetRequiredAlignments =
     unsafe extern "C" fn(alignments_out: *mut nvcompAlignmentRequirements_t) -> nvcompStatus_t;
+/// get required-alignment hints for Snappy batched decompression.
 pub type PFN_nvcompBatchedSnappyDecompressGetRequiredAlignments =
     unsafe extern "C" fn(alignments_out: *mut nvcompAlignmentRequirements_t) -> nvcompStatus_t;
+/// get required-alignment hints for Zstd batched decompression.
 pub type PFN_nvcompBatchedZstdDecompressGetRequiredAlignments =
     unsafe extern "C" fn(alignments_out: *mut nvcompAlignmentRequirements_t) -> nvcompStatus_t;
 
 // ---- Missing max-output-chunk-size PFNs (ANS / Bitcomp / Cascaded / Deflate) ----
 
+/// get max output chunk size for ANS batched compression.
 pub type PFN_nvcompBatchedANSCompressGetMaxOutputChunkSize = unsafe extern "C" fn(
     max_uncompressed_chunk_size: usize,
     opts: nvcompBatchedANSOpts_t,
@@ -840,6 +926,7 @@ pub type PFN_nvcompBatchedANSCompressGetMaxOutputChunkSize = unsafe extern "C" f
 )
     -> nvcompStatus_t;
 
+/// get max output chunk size for Bitcomp batched compression.
 pub type PFN_nvcompBatchedBitcompCompressGetMaxOutputChunkSize =
     unsafe extern "C" fn(
         max_uncompressed_chunk_size: usize,
@@ -847,6 +934,7 @@ pub type PFN_nvcompBatchedBitcompCompressGetMaxOutputChunkSize =
         max_compressed_bytes_out: *mut usize,
     ) -> nvcompStatus_t;
 
+/// get max output chunk size for Cascaded batched compression.
 pub type PFN_nvcompBatchedCascadedCompressGetMaxOutputChunkSize =
     unsafe extern "C" fn(
         max_uncompressed_chunk_size: usize,
@@ -854,6 +942,7 @@ pub type PFN_nvcompBatchedCascadedCompressGetMaxOutputChunkSize =
         max_compressed_bytes_out: *mut usize,
     ) -> nvcompStatus_t;
 
+/// get max output chunk size for Deflate batched compression.
 pub type PFN_nvcompBatchedDeflateCompressGetMaxOutputChunkSize =
     unsafe extern "C" fn(
         max_uncompressed_chunk_size: usize,
@@ -863,6 +952,7 @@ pub type PFN_nvcompBatchedDeflateCompressGetMaxOutputChunkSize =
 
 // ---- Missing compress-temp-size PFNs (ANS / Bitcomp / Cascaded / Deflate) ----
 
+/// get scratch size for ANS batched compression.
 pub type PFN_nvcompBatchedANSCompressGetTempSize = unsafe extern "C" fn(
     batch_size: usize,
     max_uncompressed_chunk_size: usize,
@@ -871,6 +961,7 @@ pub type PFN_nvcompBatchedANSCompressGetTempSize = unsafe extern "C" fn(
     max_total_uncompressed_bytes: usize,
 ) -> nvcompStatus_t;
 
+/// get scratch size for Bitcomp batched compression.
 pub type PFN_nvcompBatchedBitcompCompressGetTempSize = unsafe extern "C" fn(
     batch_size: usize,
     max_uncompressed_chunk_size: usize,
@@ -879,6 +970,7 @@ pub type PFN_nvcompBatchedBitcompCompressGetTempSize = unsafe extern "C" fn(
     max_total_uncompressed_bytes: usize,
 ) -> nvcompStatus_t;
 
+/// get scratch size for Cascaded batched compression.
 pub type PFN_nvcompBatchedCascadedCompressGetTempSize = unsafe extern "C" fn(
     batch_size: usize,
     max_uncompressed_chunk_size: usize,
@@ -887,6 +979,7 @@ pub type PFN_nvcompBatchedCascadedCompressGetTempSize = unsafe extern "C" fn(
     max_total_uncompressed_bytes: usize,
 ) -> nvcompStatus_t;
 
+/// get scratch size for Deflate batched compression.
 pub type PFN_nvcompBatchedDeflateCompressGetTempSize = unsafe extern "C" fn(
     batch_size: usize,
     max_uncompressed_chunk_size: usize,
@@ -900,6 +993,7 @@ pub type PFN_nvcompBatchedDeflateCompressGetTempSize = unsafe extern "C" fn(
 // ANS + Bitcomp + Cascaded don't have a DecompressOpts_t; they share
 // the LZ4-style "num_chunks + max_chunk + temp_out + max_total" signature.
 
+/// get scratch size for Simple batched decompression.
 pub type PFN_nvcompBatchedSimpleDecompressGetTempSize = unsafe extern "C" fn(
     num_chunks: usize,
     max_uncompressed_chunk_bytes: usize,
@@ -907,6 +1001,7 @@ pub type PFN_nvcompBatchedSimpleDecompressGetTempSize = unsafe extern "C" fn(
     max_total_uncompressed_bytes: usize,
 ) -> nvcompStatus_t;
 
+/// get scratch size for Deflate batched decompression.
 pub type PFN_nvcompBatchedDeflateDecompressGetTempSize = unsafe extern "C" fn(
     num_chunks: usize,
     max_uncompressed_chunk_bytes: usize,
@@ -919,6 +1014,7 @@ pub type PFN_nvcompBatchedDeflateDecompressGetTempSize = unsafe extern "C" fn(
 
 macro_rules! nvcomp_fns {
     ($($(#[$attr:meta])* fn $name:ident as $sym:literal : $pfn:ty;)*) => {
+        /// nvCOMP dynamic-loader handle.
         pub struct Nvcomp {
             pub lib: Library,
             $(
@@ -1200,6 +1296,7 @@ fn nvcomp_extra_dirs() -> Vec<std::path::PathBuf> {
     out
 }
 
+/// resolve and return the process-wide nvCOMP loader.
 pub fn nvcomp() -> Result<&'static Nvcomp, LoaderError> {
     static NVCOMP: OnceLock<Nvcomp> = OnceLock::new();
     if let Some(n) = NVCOMP.get() {

@@ -623,6 +623,7 @@ unsafe extern "C" {
         stream: *mut c_void,
     ) -> i32;
 
+    /// CUTLASS GEMM trampoline (workspace-bytes query for gemm_bias_f16_rrr_sm80).
     pub fn baracuda_cutlass_gemm_bias_f16_rrr_sm80_workspace_size(
         m: i32, n: i32, k: i32,
     ) -> usize;
@@ -654,6 +655,7 @@ unsafe extern "C" {
         stream: *mut c_void,
     ) -> i32;
 
+    /// CUTLASS GEMM trampoline (workspace-bytes query for gemm_bias_bf16_rrr_sm80).
     pub fn baracuda_cutlass_gemm_bias_bf16_rrr_sm80_workspace_size(
         m: i32, n: i32, k: i32,
     ) -> usize;
@@ -687,6 +689,7 @@ unsafe extern "C" {
         stream: *mut c_void,
     ) -> i32;
 
+    /// CUTLASS GEMM trampoline (workspace-bytes query for gemm_bias_relu_f16_rrr_sm80).
     pub fn baracuda_cutlass_gemm_bias_relu_f16_rrr_sm80_workspace_size(
         m: i32, n: i32, k: i32,
     ) -> usize;
@@ -718,6 +721,7 @@ unsafe extern "C" {
         stream: *mut c_void,
     ) -> i32;
 
+    /// CUTLASS GEMM trampoline (workspace-bytes query for gemm_bias_relu_bf16_rrr_sm80).
     pub fn baracuda_cutlass_gemm_bias_relu_bf16_rrr_sm80_workspace_size(
         m: i32, n: i32, k: i32,
     ) -> usize;
@@ -751,6 +755,7 @@ unsafe extern "C" {
         stream: *mut c_void,
     ) -> i32;
 
+    /// CUTLASS GEMM trampoline (workspace-bytes query for gemm_bias_gelu_f16_rrr_sm80).
     pub fn baracuda_cutlass_gemm_bias_gelu_f16_rrr_sm80_workspace_size(
         m: i32, n: i32, k: i32,
     ) -> usize;
@@ -782,6 +787,7 @@ unsafe extern "C" {
         stream: *mut c_void,
     ) -> i32;
 
+    /// CUTLASS GEMM trampoline (workspace-bytes query for gemm_bias_gelu_bf16_rrr_sm80).
     pub fn baracuda_cutlass_gemm_bias_gelu_bf16_rrr_sm80_workspace_size(
         m: i32, n: i32, k: i32,
     ) -> usize;
@@ -815,6 +821,7 @@ unsafe extern "C" {
         stream: *mut c_void,
     ) -> i32;
 
+    /// CUTLASS GEMM trampoline (workspace-bytes query for gemm_bias_silu_f16_rrr_sm80).
     pub fn baracuda_cutlass_gemm_bias_silu_f16_rrr_sm80_workspace_size(
         m: i32, n: i32, k: i32,
     ) -> usize;
@@ -846,6 +853,7 @@ unsafe extern "C" {
         stream: *mut c_void,
     ) -> i32;
 
+    /// CUTLASS GEMM trampoline (workspace-bytes query for gemm_bias_silu_bf16_rrr_sm80).
     pub fn baracuda_cutlass_gemm_bias_silu_bf16_rrr_sm80_workspace_size(
         m: i32, n: i32, k: i32,
     ) -> usize;
@@ -997,6 +1005,7 @@ unsafe extern "C" {
         stream: *mut c_void,
     ) -> i32;
 
+    /// CUTLASS GEMM trampoline (workspace-bytes query for gemm_bias_tf32_rcr_sm80).
     pub fn baracuda_cutlass_gemm_bias_tf32_rcr_sm80_workspace_size(
         m: i32, n: i32, k: i32,
     ) -> usize;
@@ -1030,6 +1039,7 @@ unsafe extern "C" {
         stream: *mut c_void,
     ) -> i32;
 
+    /// CUTLASS GEMM trampoline (workspace-bytes query for gemm_bias_relu_tf32_rcr_sm80).
     pub fn baracuda_cutlass_gemm_bias_relu_tf32_rcr_sm80_workspace_size(
         m: i32, n: i32, k: i32,
     ) -> usize;
@@ -1063,6 +1073,7 @@ unsafe extern "C" {
         stream: *mut c_void,
     ) -> i32;
 
+    /// CUTLASS GEMM trampoline (workspace-bytes query for gemm_bias_gelu_tf32_rcr_sm80).
     pub fn baracuda_cutlass_gemm_bias_gelu_tf32_rcr_sm80_workspace_size(
         m: i32, n: i32, k: i32,
     ) -> usize;
@@ -1096,6 +1107,7 @@ unsafe extern "C" {
         stream: *mut c_void,
     ) -> i32;
 
+    /// CUTLASS GEMM trampoline (workspace-bytes query for gemm_bias_silu_tf32_rcr_sm80).
     pub fn baracuda_cutlass_gemm_bias_silu_tf32_rcr_sm80_workspace_size(
         m: i32, n: i32, k: i32,
     ) -> usize;
@@ -1141,6 +1153,7 @@ unsafe extern "C" {
         stream: *mut c_void,
     ) -> i32;
 
+    /// CUTLASS GEMM trampoline (workspace-bytes query for gemm_bias_tf32_rrr_sm80).
     pub fn baracuda_cutlass_gemm_bias_tf32_rrr_sm80_workspace_size(
         m: i32, n: i32, k: i32,
     ) -> usize;
@@ -1174,6 +1187,7 @@ unsafe extern "C" {
         stream: *mut c_void,
     ) -> i32;
 
+    /// CUTLASS GEMM trampoline (workspace-bytes query for gemm_bias_relu_tf32_rrr_sm80).
     pub fn baracuda_cutlass_gemm_bias_relu_tf32_rrr_sm80_workspace_size(
         m: i32, n: i32, k: i32,
     ) -> usize;
@@ -1207,6 +1221,7 @@ unsafe extern "C" {
         stream: *mut c_void,
     ) -> i32;
 
+    /// CUTLASS GEMM trampoline (workspace-bytes query for gemm_bias_gelu_tf32_rrr_sm80).
     pub fn baracuda_cutlass_gemm_bias_gelu_tf32_rrr_sm80_workspace_size(
         m: i32, n: i32, k: i32,
     ) -> usize;
@@ -1240,6 +1255,7 @@ unsafe extern "C" {
         stream: *mut c_void,
     ) -> i32;
 
+    /// CUTLASS GEMM trampoline (workspace-bytes query for gemm_bias_silu_tf32_rrr_sm80).
     pub fn baracuda_cutlass_gemm_bias_silu_tf32_rrr_sm80_workspace_size(
         m: i32, n: i32, k: i32,
     ) -> usize;
@@ -1343,6 +1359,7 @@ unsafe extern "C" {
 unsafe extern "C" {
     // ---- RCR layout ----
 
+    /// CUTLASS GEMM trampoline (launch gemm_bias_f32_simt_rcr_sm80).
     #[allow(clippy::too_many_arguments)]
     pub fn baracuda_cutlass_gemm_bias_f32_simt_rcr_sm80_run(
         m: i32, n: i32, k: i32,
@@ -1355,7 +1372,9 @@ unsafe extern "C" {
         workspace: *mut c_void, workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// CUTLASS GEMM trampoline (workspace-bytes query for gemm_bias_f32_simt_rcr_sm80).
     pub fn baracuda_cutlass_gemm_bias_f32_simt_rcr_sm80_workspace_size(m: i32, n: i32, k: i32) -> usize;
+    /// CUTLASS GEMM trampoline (implementability check for gemm_bias_f32_simt_rcr_sm80).
     pub fn baracuda_cutlass_gemm_bias_f32_simt_rcr_sm80_can_implement(
         m: i32, n: i32, k: i32,
         a: *const c_void, lda: i64,
@@ -1365,6 +1384,7 @@ unsafe extern "C" {
         bias: *const c_void,
     ) -> i32;
 
+    /// CUTLASS GEMM trampoline (launch gemm_bias_relu_f32_simt_rcr_sm80).
     #[allow(clippy::too_many_arguments)]
     pub fn baracuda_cutlass_gemm_bias_relu_f32_simt_rcr_sm80_run(
         m: i32, n: i32, k: i32,
@@ -1377,7 +1397,9 @@ unsafe extern "C" {
         workspace: *mut c_void, workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// CUTLASS GEMM trampoline (workspace-bytes query for gemm_bias_relu_f32_simt_rcr_sm80).
     pub fn baracuda_cutlass_gemm_bias_relu_f32_simt_rcr_sm80_workspace_size(m: i32, n: i32, k: i32) -> usize;
+    /// CUTLASS GEMM trampoline (implementability check for gemm_bias_relu_f32_simt_rcr_sm80).
     pub fn baracuda_cutlass_gemm_bias_relu_f32_simt_rcr_sm80_can_implement(
         m: i32, n: i32, k: i32,
         a: *const c_void, lda: i64,
@@ -1387,6 +1409,7 @@ unsafe extern "C" {
         bias: *const c_void,
     ) -> i32;
 
+    /// CUTLASS GEMM trampoline (launch gemm_bias_gelu_f32_simt_rcr_sm80).
     #[allow(clippy::too_many_arguments)]
     pub fn baracuda_cutlass_gemm_bias_gelu_f32_simt_rcr_sm80_run(
         m: i32, n: i32, k: i32,
@@ -1399,7 +1422,9 @@ unsafe extern "C" {
         workspace: *mut c_void, workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// CUTLASS GEMM trampoline (workspace-bytes query for gemm_bias_gelu_f32_simt_rcr_sm80).
     pub fn baracuda_cutlass_gemm_bias_gelu_f32_simt_rcr_sm80_workspace_size(m: i32, n: i32, k: i32) -> usize;
+    /// CUTLASS GEMM trampoline (implementability check for gemm_bias_gelu_f32_simt_rcr_sm80).
     pub fn baracuda_cutlass_gemm_bias_gelu_f32_simt_rcr_sm80_can_implement(
         m: i32, n: i32, k: i32,
         a: *const c_void, lda: i64,
@@ -1409,6 +1434,7 @@ unsafe extern "C" {
         bias: *const c_void,
     ) -> i32;
 
+    /// CUTLASS GEMM trampoline (launch gemm_bias_silu_f32_simt_rcr_sm80).
     #[allow(clippy::too_many_arguments)]
     pub fn baracuda_cutlass_gemm_bias_silu_f32_simt_rcr_sm80_run(
         m: i32, n: i32, k: i32,
@@ -1421,7 +1447,9 @@ unsafe extern "C" {
         workspace: *mut c_void, workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// CUTLASS GEMM trampoline (workspace-bytes query for gemm_bias_silu_f32_simt_rcr_sm80).
     pub fn baracuda_cutlass_gemm_bias_silu_f32_simt_rcr_sm80_workspace_size(m: i32, n: i32, k: i32) -> usize;
+    /// CUTLASS GEMM trampoline (implementability check for gemm_bias_silu_f32_simt_rcr_sm80).
     pub fn baracuda_cutlass_gemm_bias_silu_f32_simt_rcr_sm80_can_implement(
         m: i32, n: i32, k: i32,
         a: *const c_void, lda: i64,
@@ -1433,6 +1461,7 @@ unsafe extern "C" {
 
     // ---- RRR layout ----
 
+    /// CUTLASS GEMM trampoline (launch gemm_bias_f32_simt_rrr_sm80).
     #[allow(clippy::too_many_arguments)]
     pub fn baracuda_cutlass_gemm_bias_f32_simt_rrr_sm80_run(
         m: i32, n: i32, k: i32,
@@ -1445,7 +1474,9 @@ unsafe extern "C" {
         workspace: *mut c_void, workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// CUTLASS GEMM trampoline (workspace-bytes query for gemm_bias_f32_simt_rrr_sm80).
     pub fn baracuda_cutlass_gemm_bias_f32_simt_rrr_sm80_workspace_size(m: i32, n: i32, k: i32) -> usize;
+    /// CUTLASS GEMM trampoline (implementability check for gemm_bias_f32_simt_rrr_sm80).
     pub fn baracuda_cutlass_gemm_bias_f32_simt_rrr_sm80_can_implement(
         m: i32, n: i32, k: i32,
         a: *const c_void, lda: i64,
@@ -1455,6 +1486,7 @@ unsafe extern "C" {
         bias: *const c_void,
     ) -> i32;
 
+    /// CUTLASS GEMM trampoline (launch gemm_bias_relu_f32_simt_rrr_sm80).
     #[allow(clippy::too_many_arguments)]
     pub fn baracuda_cutlass_gemm_bias_relu_f32_simt_rrr_sm80_run(
         m: i32, n: i32, k: i32,
@@ -1467,7 +1499,9 @@ unsafe extern "C" {
         workspace: *mut c_void, workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// CUTLASS GEMM trampoline (workspace-bytes query for gemm_bias_relu_f32_simt_rrr_sm80).
     pub fn baracuda_cutlass_gemm_bias_relu_f32_simt_rrr_sm80_workspace_size(m: i32, n: i32, k: i32) -> usize;
+    /// CUTLASS GEMM trampoline (implementability check for gemm_bias_relu_f32_simt_rrr_sm80).
     pub fn baracuda_cutlass_gemm_bias_relu_f32_simt_rrr_sm80_can_implement(
         m: i32, n: i32, k: i32,
         a: *const c_void, lda: i64,
@@ -1477,6 +1511,7 @@ unsafe extern "C" {
         bias: *const c_void,
     ) -> i32;
 
+    /// CUTLASS GEMM trampoline (launch gemm_bias_gelu_f32_simt_rrr_sm80).
     #[allow(clippy::too_many_arguments)]
     pub fn baracuda_cutlass_gemm_bias_gelu_f32_simt_rrr_sm80_run(
         m: i32, n: i32, k: i32,
@@ -1489,7 +1524,9 @@ unsafe extern "C" {
         workspace: *mut c_void, workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// CUTLASS GEMM trampoline (workspace-bytes query for gemm_bias_gelu_f32_simt_rrr_sm80).
     pub fn baracuda_cutlass_gemm_bias_gelu_f32_simt_rrr_sm80_workspace_size(m: i32, n: i32, k: i32) -> usize;
+    /// CUTLASS GEMM trampoline (implementability check for gemm_bias_gelu_f32_simt_rrr_sm80).
     pub fn baracuda_cutlass_gemm_bias_gelu_f32_simt_rrr_sm80_can_implement(
         m: i32, n: i32, k: i32,
         a: *const c_void, lda: i64,
@@ -1499,6 +1536,7 @@ unsafe extern "C" {
         bias: *const c_void,
     ) -> i32;
 
+    /// CUTLASS GEMM trampoline (launch gemm_bias_silu_f32_simt_rrr_sm80).
     #[allow(clippy::too_many_arguments)]
     pub fn baracuda_cutlass_gemm_bias_silu_f32_simt_rrr_sm80_run(
         m: i32, n: i32, k: i32,
@@ -1511,7 +1549,9 @@ unsafe extern "C" {
         workspace: *mut c_void, workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// CUTLASS GEMM trampoline (workspace-bytes query for gemm_bias_silu_f32_simt_rrr_sm80).
     pub fn baracuda_cutlass_gemm_bias_silu_f32_simt_rrr_sm80_workspace_size(m: i32, n: i32, k: i32) -> usize;
+    /// CUTLASS GEMM trampoline (implementability check for gemm_bias_silu_f32_simt_rrr_sm80).
     pub fn baracuda_cutlass_gemm_bias_silu_f32_simt_rrr_sm80_can_implement(
         m: i32, n: i32, k: i32,
         a: *const c_void, lda: i64,
@@ -1552,6 +1592,7 @@ unsafe extern "C" {
         stream: *mut c_void,
     ) -> i32;
 
+    /// CUTLASS GEMM trampoline (workspace-bytes query for gemm_f64_rcr_sm80).
     pub fn baracuda_cutlass_gemm_f64_rcr_sm80_workspace_size(m: i32, n: i32, k: i32) -> usize;
 
     /// # Safety
@@ -1579,6 +1620,7 @@ unsafe extern "C" {
         stream: *mut c_void,
     ) -> i32;
 
+    /// CUTLASS GEMM trampoline (workspace-bytes query for gemm_f64_rrr_sm80).
     pub fn baracuda_cutlass_gemm_f64_rrr_sm80_workspace_size(m: i32, n: i32, k: i32) -> usize;
 
     /// # Safety
@@ -1603,6 +1645,7 @@ unsafe extern "C" {
 unsafe extern "C" {
     // ---- RCR layout ----
 
+    /// CUTLASS GEMM trampoline (launch gemm_bias_f64_rcr_sm80).
     #[allow(clippy::too_many_arguments)]
     pub fn baracuda_cutlass_gemm_bias_f64_rcr_sm80_run(
         m: i32, n: i32, k: i32,
@@ -1615,7 +1658,9 @@ unsafe extern "C" {
         workspace: *mut c_void, workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// CUTLASS GEMM trampoline (workspace-bytes query for gemm_bias_f64_rcr_sm80).
     pub fn baracuda_cutlass_gemm_bias_f64_rcr_sm80_workspace_size(m: i32, n: i32, k: i32) -> usize;
+    /// CUTLASS GEMM trampoline (implementability check for gemm_bias_f64_rcr_sm80).
     pub fn baracuda_cutlass_gemm_bias_f64_rcr_sm80_can_implement(
         m: i32, n: i32, k: i32,
         a: *const c_void, lda: i64,
@@ -1625,6 +1670,7 @@ unsafe extern "C" {
         bias: *const c_void,
     ) -> i32;
 
+    /// CUTLASS GEMM trampoline (launch gemm_bias_relu_f64_rcr_sm80).
     #[allow(clippy::too_many_arguments)]
     pub fn baracuda_cutlass_gemm_bias_relu_f64_rcr_sm80_run(
         m: i32, n: i32, k: i32,
@@ -1637,7 +1683,9 @@ unsafe extern "C" {
         workspace: *mut c_void, workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// CUTLASS GEMM trampoline (workspace-bytes query for gemm_bias_relu_f64_rcr_sm80).
     pub fn baracuda_cutlass_gemm_bias_relu_f64_rcr_sm80_workspace_size(m: i32, n: i32, k: i32) -> usize;
+    /// CUTLASS GEMM trampoline (implementability check for gemm_bias_relu_f64_rcr_sm80).
     pub fn baracuda_cutlass_gemm_bias_relu_f64_rcr_sm80_can_implement(
         m: i32, n: i32, k: i32,
         a: *const c_void, lda: i64,
@@ -1647,6 +1695,7 @@ unsafe extern "C" {
         bias: *const c_void,
     ) -> i32;
 
+    /// CUTLASS GEMM trampoline (launch gemm_bias_gelu_f64_rcr_sm80).
     #[allow(clippy::too_many_arguments)]
     pub fn baracuda_cutlass_gemm_bias_gelu_f64_rcr_sm80_run(
         m: i32, n: i32, k: i32,
@@ -1659,7 +1708,9 @@ unsafe extern "C" {
         workspace: *mut c_void, workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// CUTLASS GEMM trampoline (workspace-bytes query for gemm_bias_gelu_f64_rcr_sm80).
     pub fn baracuda_cutlass_gemm_bias_gelu_f64_rcr_sm80_workspace_size(m: i32, n: i32, k: i32) -> usize;
+    /// CUTLASS GEMM trampoline (implementability check for gemm_bias_gelu_f64_rcr_sm80).
     pub fn baracuda_cutlass_gemm_bias_gelu_f64_rcr_sm80_can_implement(
         m: i32, n: i32, k: i32,
         a: *const c_void, lda: i64,
@@ -1669,6 +1720,7 @@ unsafe extern "C" {
         bias: *const c_void,
     ) -> i32;
 
+    /// CUTLASS GEMM trampoline (launch gemm_bias_silu_f64_rcr_sm80).
     #[allow(clippy::too_many_arguments)]
     pub fn baracuda_cutlass_gemm_bias_silu_f64_rcr_sm80_run(
         m: i32, n: i32, k: i32,
@@ -1681,7 +1733,9 @@ unsafe extern "C" {
         workspace: *mut c_void, workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// CUTLASS GEMM trampoline (workspace-bytes query for gemm_bias_silu_f64_rcr_sm80).
     pub fn baracuda_cutlass_gemm_bias_silu_f64_rcr_sm80_workspace_size(m: i32, n: i32, k: i32) -> usize;
+    /// CUTLASS GEMM trampoline (implementability check for gemm_bias_silu_f64_rcr_sm80).
     pub fn baracuda_cutlass_gemm_bias_silu_f64_rcr_sm80_can_implement(
         m: i32, n: i32, k: i32,
         a: *const c_void, lda: i64,
@@ -1693,6 +1747,7 @@ unsafe extern "C" {
 
     // ---- RRR layout ----
 
+    /// CUTLASS GEMM trampoline (launch gemm_bias_f64_rrr_sm80).
     #[allow(clippy::too_many_arguments)]
     pub fn baracuda_cutlass_gemm_bias_f64_rrr_sm80_run(
         m: i32, n: i32, k: i32,
@@ -1705,7 +1760,9 @@ unsafe extern "C" {
         workspace: *mut c_void, workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// CUTLASS GEMM trampoline (workspace-bytes query for gemm_bias_f64_rrr_sm80).
     pub fn baracuda_cutlass_gemm_bias_f64_rrr_sm80_workspace_size(m: i32, n: i32, k: i32) -> usize;
+    /// CUTLASS GEMM trampoline (implementability check for gemm_bias_f64_rrr_sm80).
     pub fn baracuda_cutlass_gemm_bias_f64_rrr_sm80_can_implement(
         m: i32, n: i32, k: i32,
         a: *const c_void, lda: i64,
@@ -1715,6 +1772,7 @@ unsafe extern "C" {
         bias: *const c_void,
     ) -> i32;
 
+    /// CUTLASS GEMM trampoline (launch gemm_bias_relu_f64_rrr_sm80).
     #[allow(clippy::too_many_arguments)]
     pub fn baracuda_cutlass_gemm_bias_relu_f64_rrr_sm80_run(
         m: i32, n: i32, k: i32,
@@ -1727,7 +1785,9 @@ unsafe extern "C" {
         workspace: *mut c_void, workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// CUTLASS GEMM trampoline (workspace-bytes query for gemm_bias_relu_f64_rrr_sm80).
     pub fn baracuda_cutlass_gemm_bias_relu_f64_rrr_sm80_workspace_size(m: i32, n: i32, k: i32) -> usize;
+    /// CUTLASS GEMM trampoline (implementability check for gemm_bias_relu_f64_rrr_sm80).
     pub fn baracuda_cutlass_gemm_bias_relu_f64_rrr_sm80_can_implement(
         m: i32, n: i32, k: i32,
         a: *const c_void, lda: i64,
@@ -1737,6 +1797,7 @@ unsafe extern "C" {
         bias: *const c_void,
     ) -> i32;
 
+    /// CUTLASS GEMM trampoline (launch gemm_bias_gelu_f64_rrr_sm80).
     #[allow(clippy::too_many_arguments)]
     pub fn baracuda_cutlass_gemm_bias_gelu_f64_rrr_sm80_run(
         m: i32, n: i32, k: i32,
@@ -1749,7 +1810,9 @@ unsafe extern "C" {
         workspace: *mut c_void, workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// CUTLASS GEMM trampoline (workspace-bytes query for gemm_bias_gelu_f64_rrr_sm80).
     pub fn baracuda_cutlass_gemm_bias_gelu_f64_rrr_sm80_workspace_size(m: i32, n: i32, k: i32) -> usize;
+    /// CUTLASS GEMM trampoline (implementability check for gemm_bias_gelu_f64_rrr_sm80).
     pub fn baracuda_cutlass_gemm_bias_gelu_f64_rrr_sm80_can_implement(
         m: i32, n: i32, k: i32,
         a: *const c_void, lda: i64,
@@ -1759,6 +1822,7 @@ unsafe extern "C" {
         bias: *const c_void,
     ) -> i32;
 
+    /// CUTLASS GEMM trampoline (launch gemm_bias_silu_f64_rrr_sm80).
     #[allow(clippy::too_many_arguments)]
     pub fn baracuda_cutlass_gemm_bias_silu_f64_rrr_sm80_run(
         m: i32, n: i32, k: i32,
@@ -1771,7 +1835,9 @@ unsafe extern "C" {
         workspace: *mut c_void, workspace_bytes: usize,
         stream: *mut c_void,
     ) -> i32;
+    /// CUTLASS GEMM trampoline (workspace-bytes query for gemm_bias_silu_f64_rrr_sm80).
     pub fn baracuda_cutlass_gemm_bias_silu_f64_rrr_sm80_workspace_size(m: i32, n: i32, k: i32) -> usize;
+    /// CUTLASS GEMM trampoline (implementability check for gemm_bias_silu_f64_rrr_sm80).
     pub fn baracuda_cutlass_gemm_bias_silu_f64_rrr_sm80_can_implement(
         m: i32, n: i32, k: i32,
         a: *const c_void, lda: i64,

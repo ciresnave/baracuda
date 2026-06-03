@@ -23,22 +23,38 @@ use baracuda_types::CudaStatus;
 pub struct cutensorStatus_t(pub i32);
 
 impl cutensorStatus_t {
+    /// `CUTENSOR_STATUS_SUCCESS` — operation succeeded.
     pub const SUCCESS: Self = Self(0);
+    /// `CUTENSOR_STATUS_NOT_INITIALIZED` — the library is not initialized.
     pub const NOT_INITIALIZED: Self = Self(1);
+    /// `CUTENSOR_STATUS_ALLOC_FAILED` — an allocation failed.
     pub const ALLOC_FAILED: Self = Self(3);
+    /// `CUTENSOR_STATUS_INVALID_VALUE` — an argument has an invalid value.
     pub const INVALID_VALUE: Self = Self(7);
+    /// `CUTENSOR_STATUS_ARCH_MISMATCH` — the device architecture is unsupported.
     pub const ARCH_MISMATCH: Self = Self(8);
+    /// `CUTENSOR_STATUS_MAPPING_ERROR` — a host/device memory mapping error occurred.
     pub const MAPPING_ERROR: Self = Self(11);
+    /// `CUTENSOR_STATUS_EXECUTION_FAILED` — kernel execution failed.
     pub const EXECUTION_FAILED: Self = Self(13);
+    /// `CUTENSOR_STATUS_INTERNAL_ERROR` — an internal cuTENSOR error occurred.
     pub const INTERNAL_ERROR: Self = Self(14);
+    /// `CUTENSOR_STATUS_NOT_SUPPORTED` — the requested feature is not supported.
     pub const NOT_SUPPORTED: Self = Self(15);
+    /// `CUTENSOR_STATUS_LICENSE_ERROR` — license check failed.
     pub const LICENSE_ERROR: Self = Self(16);
+    /// `CUTENSOR_STATUS_CUBLAS_ERROR` — an internal cuBLAS call failed.
     pub const CUBLAS_ERROR: Self = Self(17);
+    /// `CUTENSOR_STATUS_CUDA_ERROR` — an internal CUDA call failed.
     pub const CUDA_ERROR: Self = Self(18);
+    /// `CUTENSOR_STATUS_INSUFFICIENT_WORKSPACE` — supplied workspace buffer is too small.
     pub const INSUFFICIENT_WORKSPACE: Self = Self(19);
+    /// `CUTENSOR_STATUS_INSUFFICIENT_DRIVER` — installed CUDA driver is too old.
     pub const INSUFFICIENT_DRIVER: Self = Self(20);
+    /// `CUTENSOR_STATUS_IO_ERROR` — an I/O error occurred (cache read/write, logger, ...).
     pub const IO_ERROR: Self = Self(21);
 
+    /// Return `true` if the status code denotes success.
     pub const fn is_success(self) -> bool {
         self.0 == 0
     }
@@ -96,15 +112,25 @@ pub type cutensorPlan_t = *mut core::ffi::c_void;
 /// `cutensorDataType_t` — element type enum.
 #[allow(non_snake_case)]
 pub mod cutensorDataType {
+    /// `CUTENSOR_R_16F` — real fp16.
     pub const R_16F: i32 = 2; // fp16
+    /// `CUTENSOR_R_16BF` — real bfloat16.
     pub const R_16BF: i32 = 14; // bfloat16
+    /// `CUTENSOR_R_32F` — real fp32.
     pub const R_32F: i32 = 0; // float
+    /// `CUTENSOR_R_64F` — real fp64.
     pub const R_64F: i32 = 1; // double
+    /// `CUTENSOR_C_32F` — complex fp32.
     pub const C_32F: i32 = 4;
+    /// `CUTENSOR_C_64F` — complex fp64.
     pub const C_64F: i32 = 5;
+    /// `CUTENSOR_R_8I` — real signed 8-bit integer.
     pub const R_8I: i32 = 3;
+    /// `CUTENSOR_R_8U` — real unsigned 8-bit integer.
     pub const R_8U: i32 = 8;
+    /// `CUTENSOR_R_32I` — real signed 32-bit integer.
     pub const R_32I: i32 = 10;
+    /// `CUTENSOR_R_32U` — real unsigned 32-bit integer.
     pub const R_32U: i32 = 12;
 }
 
@@ -174,49 +200,72 @@ impl Cutensor {
 /// `cutensorOperator_t` — element-wise op selector.
 #[allow(non_snake_case)]
 pub mod cutensorOperator {
+    /// `CUTENSOR_OP_IDENTITY` — identity (pass-through).
     pub const IDENTITY: i32 = 1;
+    /// `CUTENSOR_OP_SQRT` — element-wise square root.
     pub const SQRT: i32 = 2;
+    /// `CUTENSOR_OP_RELU` — element-wise ReLU.
     pub const RELU: i32 = 8;
+    /// `CUTENSOR_OP_CONJ` — complex conjugate.
     pub const CONJ: i32 = 9;
+    /// `CUTENSOR_OP_RCP` — element-wise reciprocal.
     pub const RCP: i32 = 10;
+    /// `CUTENSOR_OP_SIGMOID` — element-wise sigmoid.
     pub const SIGMOID: i32 = 11;
+    /// `CUTENSOR_OP_TANH` — element-wise hyperbolic tangent.
     pub const TANH: i32 = 12;
+    /// `CUTENSOR_OP_ADD` — binary add (combines operands).
     pub const ADD: i32 = 3;
+    /// `CUTENSOR_OP_MUL` — binary multiply (combines operands).
     pub const MUL: i32 = 5;
+    /// `CUTENSOR_OP_MAX` — binary max (combines operands).
     pub const MAX: i32 = 6;
+    /// `CUTENSOR_OP_MIN` — binary min (combines operands).
     pub const MIN: i32 = 7;
 }
 
 /// `cutensorAlgo_t` — algorithm selector for contraction planning.
 #[allow(non_snake_case)]
 pub mod cutensorAlgo {
+    /// `CUTENSOR_ALGO_DEFAULT` — library-chosen algorithm.
     pub const DEFAULT: i32 = -1;
+    /// `CUTENSOR_ALGO_GETT` — GETT (general tensor-tensor) algorithm.
     pub const GETT: i32 = -4;
+    /// `CUTENSOR_ALGO_TGETT` — transposed-GETT algorithm.
     pub const TGETT: i32 = -3;
+    /// `CUTENSOR_ALGO_TTGT` — transpose-transpose-GEMM-transpose algorithm.
     pub const TTGT: i32 = -2;
 }
 
 /// `cutensorJitMode_t` — Just-in-time-compile selector (cuTENSOR 2.x).
 #[allow(non_snake_case)]
 pub mod cutensorJitMode {
+    /// `CUTENSOR_JIT_MODE_NONE` — JIT compilation disabled.
     pub const NONE: i32 = 0;
+    /// `CUTENSOR_JIT_MODE_DEFAULT` — library-chosen JIT default.
     pub const DEFAULT: i32 = 1;
 }
 
 /// `cutensorWorksizePreference_t`.
 #[allow(non_snake_case)]
 pub mod cutensorWorksizePreference {
+    /// `CUTENSOR_WORKSPACE_MIN` — request minimum workspace.
     pub const MIN: i32 = 1;
+    /// `CUTENSOR_WORKSPACE_DEFAULT` — request library default workspace.
     pub const DEFAULT: i32 = 2;
+    /// `CUTENSOR_WORKSPACE_MAX` — request maximum workspace.
     pub const MAX: i32 = 3;
 }
 
 // ---- PFN types ----
 
+/// Function-pointer type for `cutensorCreate` (create cuTENSOR library handle). See <https://docs.nvidia.com/cuda/cutensor/index.html>.
 pub type PFN_cutensorCreate =
     unsafe extern "C" fn(handle_out: *mut cutensorHandle_t) -> cutensorStatus_t;
+/// Function-pointer type for `cutensorDestroy` (destroy cuTENSOR library handle). See <https://docs.nvidia.com/cuda/cutensor/index.html>.
 pub type PFN_cutensorDestroy = unsafe extern "C" fn(handle: cutensorHandle_t) -> cutensorStatus_t;
 
+/// Function-pointer type for `cutensorCreateTensorDescriptor` (create a tensor descriptor). See <https://docs.nvidia.com/cuda/cutensor/index.html>.
 pub type PFN_cutensorCreateTensorDescriptor = unsafe extern "C" fn(
     handle: cutensorHandle_t,
     desc_out: *mut cutensorTensorDescriptor_t,
@@ -226,9 +275,11 @@ pub type PFN_cutensorCreateTensorDescriptor = unsafe extern "C" fn(
     data_type: i32,
     alignment_bytes: u32,
 ) -> cutensorStatus_t;
+/// Function-pointer type for `cutensorDestroyTensorDescriptor` (destroy a tensor descriptor). See <https://docs.nvidia.com/cuda/cutensor/index.html>.
 pub type PFN_cutensorDestroyTensorDescriptor =
     unsafe extern "C" fn(desc: cutensorTensorDescriptor_t) -> cutensorStatus_t;
 
+/// Function-pointer type for `cutensorCreateContraction` (build an operation descriptor for a tensor contraction). See <https://docs.nvidia.com/cuda/cutensor/index.html>.
 pub type PFN_cutensorCreateContraction = unsafe extern "C" fn(
     handle: cutensorHandle_t,
     op_desc_out: *mut cutensorOperationDescriptor_t,
@@ -246,18 +297,22 @@ pub type PFN_cutensorCreateContraction = unsafe extern "C" fn(
     compute_desc: cutensorComputeDescriptor_t,
 ) -> cutensorStatus_t;
 
+/// Function-pointer type for `cutensorDestroyOperationDescriptor` (destroy an operation descriptor). See <https://docs.nvidia.com/cuda/cutensor/index.html>.
 pub type PFN_cutensorDestroyOperationDescriptor =
     unsafe extern "C" fn(desc: cutensorOperationDescriptor_t) -> cutensorStatus_t;
 
+/// Function-pointer type for `cutensorCreatePlanPreference` (create a plan-preference object). See <https://docs.nvidia.com/cuda/cutensor/index.html>.
 pub type PFN_cutensorCreatePlanPreference = unsafe extern "C" fn(
     handle: cutensorHandle_t,
     pref_out: *mut cutensorPlanPreference_t,
     algo: i32,
     jit_mode: i32,
 ) -> cutensorStatus_t;
+/// Function-pointer type for `cutensorDestroyPlanPreference` (destroy a plan-preference object). See <https://docs.nvidia.com/cuda/cutensor/index.html>.
 pub type PFN_cutensorDestroyPlanPreference =
     unsafe extern "C" fn(pref: cutensorPlanPreference_t) -> cutensorStatus_t;
 
+/// Function-pointer type for `cutensorEstimateWorkspaceSize` (estimate workspace bytes required by a plan). See <https://docs.nvidia.com/cuda/cutensor/index.html>.
 pub type PFN_cutensorEstimateWorkspaceSize = unsafe extern "C" fn(
     handle: cutensorHandle_t,
     op_desc: cutensorOperationDescriptor_t,
@@ -266,6 +321,7 @@ pub type PFN_cutensorEstimateWorkspaceSize = unsafe extern "C" fn(
     workspace_size_bytes_out: *mut u64,
 ) -> cutensorStatus_t;
 
+/// Function-pointer type for `cutensorCreatePlan` (build an execution plan from an operation descriptor). See <https://docs.nvidia.com/cuda/cutensor/index.html>.
 pub type PFN_cutensorCreatePlan = unsafe extern "C" fn(
     handle: cutensorHandle_t,
     plan_out: *mut cutensorPlan_t,
@@ -273,8 +329,10 @@ pub type PFN_cutensorCreatePlan = unsafe extern "C" fn(
     pref: cutensorPlanPreference_t,
     workspace_size_limit: u64,
 ) -> cutensorStatus_t;
+/// Function-pointer type for `cutensorDestroyPlan` (destroy an execution plan). See <https://docs.nvidia.com/cuda/cutensor/index.html>.
 pub type PFN_cutensorDestroyPlan = unsafe extern "C" fn(plan: cutensorPlan_t) -> cutensorStatus_t;
 
+/// Function-pointer type for `cutensorContract` (execute tensor contraction). See <https://docs.nvidia.com/cuda/cutensor/index.html>.
 pub type PFN_cutensorContract = unsafe extern "C" fn(
     handle: cutensorHandle_t,
     plan: cutensorPlan_t,
@@ -289,13 +347,17 @@ pub type PFN_cutensorContract = unsafe extern "C" fn(
     stream: *mut core::ffi::c_void, // cudaStream_t
 ) -> cutensorStatus_t;
 
+/// Function-pointer type for `cutensorGetVersion` (query cuTENSOR library version). See <https://docs.nvidia.com/cuda/cutensor/index.html>.
 pub type PFN_cutensorGetVersion = unsafe extern "C" fn() -> usize;
+/// Function-pointer type for `cutensorGetCudartVersion` (query the CUDA Runtime version cuTENSOR was built against). See <https://docs.nvidia.com/cuda/cutensor/index.html>.
 pub type PFN_cutensorGetCudartVersion = unsafe extern "C" fn() -> usize;
+/// Function-pointer type for `cutensorGetErrorString` (decode a cutensorStatus_t into a static C string). See <https://docs.nvidia.com/cuda/cutensor/index.html>.
 pub type PFN_cutensorGetErrorString =
     unsafe extern "C" fn(status: cutensorStatus_t) -> *const core::ffi::c_char;
 
 // ---- Compute descriptor (opaque — built-in ones are statically exported from cuTENSOR) ----
 
+/// Function-pointer type for `cutensorCreateElementwiseBinary` (build an operation descriptor for an element-wise binary op). See <https://docs.nvidia.com/cuda/cutensor/index.html>.
 pub type PFN_cutensorCreateElementwiseBinary = unsafe extern "C" fn(
     handle: cutensorHandle_t,
     op_desc_out: *mut cutensorOperationDescriptor_t,
@@ -311,6 +373,7 @@ pub type PFN_cutensorCreateElementwiseBinary = unsafe extern "C" fn(
     compute_desc: cutensorComputeDescriptor_t,
 ) -> cutensorStatus_t;
 
+/// Function-pointer type for `cutensorElementwiseBinaryExecute` (execute an element-wise binary plan). See <https://docs.nvidia.com/cuda/cutensor/index.html>.
 pub type PFN_cutensorElementwiseBinaryExecute = unsafe extern "C" fn(
     handle: cutensorHandle_t,
     plan: cutensorPlan_t,
@@ -322,6 +385,7 @@ pub type PFN_cutensorElementwiseBinaryExecute = unsafe extern "C" fn(
     stream: *mut core::ffi::c_void,
 ) -> cutensorStatus_t;
 
+/// Function-pointer type for `cutensorCreateElementwiseTrinary` (build an operation descriptor for an element-wise trinary op). See <https://docs.nvidia.com/cuda/cutensor/index.html>.
 pub type PFN_cutensorCreateElementwiseTrinary = unsafe extern "C" fn(
     handle: cutensorHandle_t,
     op_desc_out: *mut cutensorOperationDescriptor_t,
@@ -341,6 +405,7 @@ pub type PFN_cutensorCreateElementwiseTrinary = unsafe extern "C" fn(
     compute_desc: cutensorComputeDescriptor_t,
 ) -> cutensorStatus_t;
 
+/// Function-pointer type for `cutensorElementwiseTrinaryExecute` (execute an element-wise trinary plan). See <https://docs.nvidia.com/cuda/cutensor/index.html>.
 pub type PFN_cutensorElementwiseTrinaryExecute = unsafe extern "C" fn(
     handle: cutensorHandle_t,
     plan: cutensorPlan_t,
@@ -354,6 +419,7 @@ pub type PFN_cutensorElementwiseTrinaryExecute = unsafe extern "C" fn(
     stream: *mut core::ffi::c_void,
 ) -> cutensorStatus_t;
 
+/// Function-pointer type for `cutensorCreatePermutation` (build an operation descriptor for a tensor permutation). See <https://docs.nvidia.com/cuda/cutensor/index.html>.
 pub type PFN_cutensorCreatePermutation = unsafe extern "C" fn(
     handle: cutensorHandle_t,
     op_desc_out: *mut cutensorOperationDescriptor_t,
@@ -365,6 +431,7 @@ pub type PFN_cutensorCreatePermutation = unsafe extern "C" fn(
     compute_desc: cutensorComputeDescriptor_t,
 ) -> cutensorStatus_t;
 
+/// Function-pointer type for `cutensorPermute` (execute tensor permutation). See <https://docs.nvidia.com/cuda/cutensor/index.html>.
 pub type PFN_cutensorPermute = unsafe extern "C" fn(
     handle: cutensorHandle_t,
     plan: cutensorPlan_t,
@@ -374,6 +441,7 @@ pub type PFN_cutensorPermute = unsafe extern "C" fn(
     stream: *mut core::ffi::c_void,
 ) -> cutensorStatus_t;
 
+/// Function-pointer type for `cutensorCreateReduction` (build an operation descriptor for a tensor reduction). See <https://docs.nvidia.com/cuda/cutensor/index.html>.
 pub type PFN_cutensorCreateReduction = unsafe extern "C" fn(
     handle: cutensorHandle_t,
     op_desc_out: *mut cutensorOperationDescriptor_t,
@@ -389,6 +457,7 @@ pub type PFN_cutensorCreateReduction = unsafe extern "C" fn(
     compute_desc: cutensorComputeDescriptor_t,
 ) -> cutensorStatus_t;
 
+/// Function-pointer type for `cutensorReduce` (execute tensor reduction). See <https://docs.nvidia.com/cuda/cutensor/index.html>.
 pub type PFN_cutensorReduce = unsafe extern "C" fn(
     handle: cutensorHandle_t,
     plan: cutensorPlan_t,
@@ -404,6 +473,7 @@ pub type PFN_cutensorReduce = unsafe extern "C" fn(
 
 // ---- Attribute getters / setters for operation descriptors + plan preferences ----
 
+/// Function-pointer type for `cutensorOperationDescriptorGetAttribute` (get an attribute on an operation descriptor). See <https://docs.nvidia.com/cuda/cutensor/index.html>.
 pub type PFN_cutensorOperationDescriptorGetAttribute = unsafe extern "C" fn(
     handle: cutensorHandle_t,
     op_desc: cutensorOperationDescriptor_t,
@@ -412,6 +482,7 @@ pub type PFN_cutensorOperationDescriptorGetAttribute = unsafe extern "C" fn(
     size_in_bytes: usize,
 ) -> cutensorStatus_t;
 
+/// Function-pointer type for `cutensorOperationDescriptorSetAttribute` (set an attribute on an operation descriptor). See <https://docs.nvidia.com/cuda/cutensor/index.html>.
 pub type PFN_cutensorOperationDescriptorSetAttribute = unsafe extern "C" fn(
     handle: cutensorHandle_t,
     op_desc: cutensorOperationDescriptor_t,
@@ -420,6 +491,7 @@ pub type PFN_cutensorOperationDescriptorSetAttribute = unsafe extern "C" fn(
     size_in_bytes: usize,
 ) -> cutensorStatus_t;
 
+/// Function-pointer type for `cutensorPlanPreferenceSetAttribute` (set an attribute on a plan-preference object). See <https://docs.nvidia.com/cuda/cutensor/index.html>.
 pub type PFN_cutensorPlanPreferenceSetAttribute = unsafe extern "C" fn(
     handle: cutensorHandle_t,
     pref: cutensorPlanPreference_t,
@@ -428,6 +500,7 @@ pub type PFN_cutensorPlanPreferenceSetAttribute = unsafe extern "C" fn(
     size_in_bytes: usize,
 ) -> cutensorStatus_t;
 
+/// Function-pointer type for `cutensorPlanGetAttribute` (get an attribute on a plan). See <https://docs.nvidia.com/cuda/cutensor/index.html>.
 pub type PFN_cutensorPlanGetAttribute = unsafe extern "C" fn(
     handle: cutensorHandle_t,
     plan: cutensorPlan_t,
@@ -436,6 +509,7 @@ pub type PFN_cutensorPlanGetAttribute = unsafe extern "C" fn(
     size_in_bytes: usize,
 ) -> cutensorStatus_t;
 
+/// Function-pointer type for `cutensorTensorDescriptorGetAttribute` (get an attribute on a tensor descriptor). See <https://docs.nvidia.com/cuda/cutensor/index.html>.
 pub type PFN_cutensorTensorDescriptorGetAttribute = unsafe extern "C" fn(
     handle: cutensorHandle_t,
     desc: cutensorTensorDescriptor_t,
@@ -446,14 +520,17 @@ pub type PFN_cutensorTensorDescriptorGetAttribute = unsafe extern "C" fn(
 
 // ---- Plan-cache management ----
 
+/// Function-pointer type for `cutensorHandleResizePlanCache` (resize a handle's plan cache). See <https://docs.nvidia.com/cuda/cutensor/index.html>.
 pub type PFN_cutensorHandleResizePlanCache =
     unsafe extern "C" fn(handle: cutensorHandle_t, num_entries: u32) -> cutensorStatus_t;
 
+/// Function-pointer type for `cutensorHandleReadCacheFromFile` (read a plan/kernel cache from a file). See <https://docs.nvidia.com/cuda/cutensor/index.html>.
 pub type PFN_cutensorHandleReadCacheFromFile = unsafe extern "C" fn(
     handle: cutensorHandle_t,
     filename: *const core::ffi::c_char,
 ) -> cutensorStatus_t;
 
+/// Function-pointer type for `cutensorHandleWriteCacheToFile` (write a plan/kernel cache to a file). See <https://docs.nvidia.com/cuda/cutensor/index.html>.
 pub type PFN_cutensorHandleWriteCacheToFile = unsafe extern "C" fn(
     handle: cutensorHandle_t,
     filename: *const core::ffi::c_char,
@@ -461,6 +538,7 @@ pub type PFN_cutensorHandleWriteCacheToFile = unsafe extern "C" fn(
 
 // ---- Trinary contraction (3-tensor chains) ----
 
+/// Function-pointer type for `cutensorCreateContractionTrinary` (build an operation descriptor for a three-tensor contraction). See <https://docs.nvidia.com/cuda/cutensor/index.html>.
 pub type PFN_cutensorCreateContractionTrinary = unsafe extern "C" fn(
     handle: cutensorHandle_t,
     op_desc_out: *mut cutensorOperationDescriptor_t,
@@ -481,6 +559,7 @@ pub type PFN_cutensorCreateContractionTrinary = unsafe extern "C" fn(
     compute_desc: cutensorComputeDescriptor_t,
 ) -> cutensorStatus_t;
 
+/// Function-pointer type for `cutensorContractTrinary` (execute three-tensor contraction). See <https://docs.nvidia.com/cuda/cutensor/index.html>.
 pub type PFN_cutensorContractTrinary = unsafe extern "C" fn(
     handle: cutensorHandle_t,
     plan: cutensorPlan_t,
@@ -498,14 +577,17 @@ pub type PFN_cutensorContractTrinary = unsafe extern "C" fn(
 
 // ---- Custom compute descriptor lifecycle ----
 
+/// Function-pointer type for `cutensorCreateComputeDescriptor` (create a compute-precision descriptor). See <https://docs.nvidia.com/cuda/cutensor/index.html>.
 pub type PFN_cutensorCreateComputeDescriptor = unsafe extern "C" fn(
     handle: cutensorHandle_t,
     desc_out: *mut cutensorComputeDescriptor_t,
 ) -> cutensorStatus_t;
 
+/// Function-pointer type for `cutensorDestroyComputeDescriptor` (destroy a compute-precision descriptor). See <https://docs.nvidia.com/cuda/cutensor/index.html>.
 pub type PFN_cutensorDestroyComputeDescriptor =
     unsafe extern "C" fn(desc: cutensorComputeDescriptor_t) -> cutensorStatus_t;
 
+/// Function-pointer type for `cutensorComputeDescriptorGetAttribute` (get an attribute on a compute descriptor). See <https://docs.nvidia.com/cuda/cutensor/index.html>.
 pub type PFN_cutensorComputeDescriptorGetAttribute = unsafe extern "C" fn(
     handle: cutensorHandle_t,
     desc: cutensorComputeDescriptor_t,
@@ -514,6 +596,7 @@ pub type PFN_cutensorComputeDescriptorGetAttribute = unsafe extern "C" fn(
     size_in_bytes: usize,
 ) -> cutensorStatus_t;
 
+/// Function-pointer type for `cutensorComputeDescriptorSetAttribute` (set an attribute on a compute descriptor). See <https://docs.nvidia.com/cuda/cutensor/index.html>.
 pub type PFN_cutensorComputeDescriptorSetAttribute = unsafe extern "C" fn(
     handle: cutensorHandle_t,
     desc: cutensorComputeDescriptor_t,
@@ -524,6 +607,7 @@ pub type PFN_cutensorComputeDescriptorSetAttribute = unsafe extern "C" fn(
 
 // ---- Additional attribute getters / setters ----
 
+/// Function-pointer type for `cutensorTensorDescriptorSetAttribute` (set an attribute on a tensor descriptor). See <https://docs.nvidia.com/cuda/cutensor/index.html>.
 pub type PFN_cutensorTensorDescriptorSetAttribute = unsafe extern "C" fn(
     handle: cutensorHandle_t,
     desc: cutensorTensorDescriptor_t,
@@ -532,6 +616,7 @@ pub type PFN_cutensorTensorDescriptorSetAttribute = unsafe extern "C" fn(
     size_in_bytes: usize,
 ) -> cutensorStatus_t;
 
+/// Function-pointer type for `cutensorPlanPreferenceGetAttribute` (get an attribute on a plan-preference object). See <https://docs.nvidia.com/cuda/cutensor/index.html>.
 pub type PFN_cutensorPlanPreferenceGetAttribute = unsafe extern "C" fn(
     handle: cutensorHandle_t,
     pref: cutensorPlanPreference_t,
@@ -542,6 +627,7 @@ pub type PFN_cutensorPlanPreferenceGetAttribute = unsafe extern "C" fn(
 
 // ---- Operation-level introspection ----
 
+/// Function-pointer type for `cutensorOperationEstimateRuntime` (estimate runtime in milliseconds for a planned operation). See <https://docs.nvidia.com/cuda/cutensor/index.html>.
 pub type PFN_cutensorOperationEstimateRuntime = unsafe extern "C" fn(
     handle: cutensorHandle_t,
     op_desc: cutensorOperationDescriptor_t,
@@ -550,6 +636,7 @@ pub type PFN_cutensorOperationEstimateRuntime = unsafe extern "C" fn(
     runtime_ms_out: *mut f32,
 ) -> cutensorStatus_t;
 
+/// Function-pointer type for `cutensorOperationNumAlgos` (query the number of algorithms available for an operation). See <https://docs.nvidia.com/cuda/cutensor/index.html>.
 pub type PFN_cutensorOperationNumAlgos = unsafe extern "C" fn(
     op_desc: cutensorOperationDescriptor_t,
     num_algos_out: *mut i32,
@@ -557,26 +644,34 @@ pub type PFN_cutensorOperationNumAlgos = unsafe extern "C" fn(
 
 // ---- Logging ----
 
+/// Function-pointer type for `cutensorLoggerSetLevel` (set logger verbosity level). See <https://docs.nvidia.com/cuda/cutensor/index.html>.
 pub type PFN_cutensorLoggerSetLevel = unsafe extern "C" fn(level: i32) -> cutensorStatus_t;
 
+/// Function-pointer type for `cutensorLoggerSetMask` (set logger category mask). See <https://docs.nvidia.com/cuda/cutensor/index.html>.
 pub type PFN_cutensorLoggerSetMask = unsafe extern "C" fn(mask: i32) -> cutensorStatus_t;
 
+/// Function-pointer type for `cutensorLoggerOpenFile` (open a logger output file by path). See <https://docs.nvidia.com/cuda/cutensor/index.html>.
 pub type PFN_cutensorLoggerOpenFile =
     unsafe extern "C" fn(path: *const core::ffi::c_char) -> cutensorStatus_t;
 
+/// Function-pointer type for `cutensorLoggerSetFile` (redirect logger output to an open FILE*). See <https://docs.nvidia.com/cuda/cutensor/index.html>.
 pub type PFN_cutensorLoggerSetFile =
     unsafe extern "C" fn(file: *mut core::ffi::c_void) -> cutensorStatus_t;
 
+/// Function-pointer type for `cutensorLoggerSetCallback` (register a logger callback). See <https://docs.nvidia.com/cuda/cutensor/index.html>.
 pub type PFN_cutensorLoggerSetCallback = unsafe extern "C" fn(
     callback: Option<unsafe extern "C" fn(i32, *const core::ffi::c_char, *const core::ffi::c_char)>,
 ) -> cutensorStatus_t;
 
+/// Function-pointer type for `cutensorLoggerForceDisable` (force-disable the logger). See <https://docs.nvidia.com/cuda/cutensor/index.html>.
 pub type PFN_cutensorLoggerForceDisable = unsafe extern "C" fn() -> cutensorStatus_t;
 
 // ---- Block-sparse contraction (cuTENSOR 2.x) ----
 
+/// Opaque block-sparse tensor descriptor.
 pub type cutensorBlockSparseTensorDescriptor_t = *mut core::ffi::c_void;
 
+/// Function-pointer type for `cutensorCreateBlockSparseTensorDescriptor` (create a block-sparse tensor descriptor). See <https://docs.nvidia.com/cuda/cutensor/index.html>.
 pub type PFN_cutensorCreateBlockSparseTensorDescriptor = unsafe extern "C" fn(
     handle: cutensorHandle_t,
     desc_out: *mut cutensorBlockSparseTensorDescriptor_t,
@@ -590,9 +685,11 @@ pub type PFN_cutensorCreateBlockSparseTensorDescriptor = unsafe extern "C" fn(
     alignment_bytes: u32,
 ) -> cutensorStatus_t;
 
+/// Function-pointer type for `cutensorDestroyBlockSparseTensorDescriptor` (destroy a block-sparse tensor descriptor). See <https://docs.nvidia.com/cuda/cutensor/index.html>.
 pub type PFN_cutensorDestroyBlockSparseTensorDescriptor =
     unsafe extern "C" fn(desc: cutensorBlockSparseTensorDescriptor_t) -> cutensorStatus_t;
 
+/// Function-pointer type for `cutensorCreateBlockSparseContraction` (build an operation descriptor for a block-sparse contraction). See <https://docs.nvidia.com/cuda/cutensor/index.html>.
 pub type PFN_cutensorCreateBlockSparseContraction = unsafe extern "C" fn(
     handle: cutensorHandle_t,
     op_desc_out: *mut cutensorOperationDescriptor_t,
@@ -610,6 +707,7 @@ pub type PFN_cutensorCreateBlockSparseContraction = unsafe extern "C" fn(
     compute_desc: cutensorComputeDescriptor_t,
 ) -> cutensorStatus_t;
 
+/// Function-pointer type for `cutensorBlockSparseContract` (execute block-sparse tensor contraction). See <https://docs.nvidia.com/cuda/cutensor/index.html>.
 pub type PFN_cutensorBlockSparseContract = unsafe extern "C" fn(
     handle: cutensorHandle_t,
     plan: cutensorPlan_t,
@@ -628,6 +726,7 @@ pub type PFN_cutensorBlockSparseContract = unsafe extern "C" fn(
 
 macro_rules! cutensor_fns {
     ($($(#[$attr:meta])* fn $name:ident as $sym:literal : $pfn:ty;)*) => {
+        /// Lazily-resolved cuTENSOR function-pointer table.
         pub struct Cutensor {
             pub lib: Library,
             $(
@@ -839,6 +938,7 @@ fn cutensor_extra_dirs() -> Vec<std::path::PathBuf> {
     out
 }
 
+/// Return the lazily-loaded cuTENSOR library accessor.
 pub fn cutensor() -> Result<&'static Cutensor, LoaderError> {
     static CUTENSOR: OnceLock<Cutensor> = OnceLock::new();
     if let Some(c) = CUTENSOR.get() {
