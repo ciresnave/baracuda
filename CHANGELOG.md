@@ -8,9 +8,14 @@ alpha represents one or more completed phases.
 The phase numbering is Fuel-driven (Fuel is baracuda's primary downstream
 consumer); see `ROADMAP.md` for the active phase board.
 
-## Unreleased (queued for next alpha)
+## 0.0.1-alpha.64 — 2026-06-03 (Phases 64 + 65 + 66-prep + Tier-2 docs sweep)
 
-### Added
+The biggest single release in the alpha series — closes Phases 64–71
+work + the full release-readiness audit (`_can_implement` companion
+contract + Tier-2 cross-crate docs + workspace-wide `missing_docs`
+sweep).
+
+### Added — kernels
 
 - **Phase 64 — In-place aliasing contract docs (extended)**: documented
   `x_ptr == y_ptr` safety for Cast / Where / Triu / Tril / Fill /
@@ -19,38 +24,112 @@ consumer); see `ROADMAP.md` for the active phase board.
 - **Phase 65a — Reusable SMEM kernel helpers**: new
   `baracuda_smem_row_stager.cuh` (`smem_stage_row`, strided variants,
   `smem_budget_for_arch`) and `baracuda_smem_reduce.cuh`
-  (`warp_reduce_{sum,max,min}_f32`, `block_reduce_{sum,max,min}_f32`,
-  cross-warp aggregation via `BARACUDA_MAX_WARPS = 32`). Lifts the SMEM
-  staging pattern out of `baracuda_moe.cuh` into a reusable kernel-helper
-  library at `crates/baracuda-kernels-sys/kernels/include/`.
+  (`warp_reduce_{sum,max,min}_f32` + `f64`, cross-warp aggregation
+  via `BARACUDA_MAX_WARPS = 32`). Lifts the SMEM staging pattern out
+  of `baracuda_moe.cuh` into a reusable kernel-helper library at
+  `crates/baracuda-kernels-sys/kernels/include/`.
 - **Phase 65b — RMSNorm SMEM staging + in-place**: SMEM-staged
   `rms_norm_smem_kernel<T>` enables `y_ptr == x_ptr` aliasing for
-  f32/f16/bf16 (f64 stays on legacy multi-pass-global). 3 in-place
-  proof tests bit-exact vs non-aliased reference.
+  f32/f16/bf16. 3 in-place proof tests bit-exact vs non-aliased reference.
 - **Phase 65c — LayerNorm / Softmax / LogSoftmax SMEM staging +
   in-place**: same pattern, three new `*_smem_kernel<T>` + dispatcher
-  pairs. 9 in-place proof tests. f64 stays on legacy (no
-  `block_reduce_sum_f64` yet — ~1 day of work if asked).
+  pairs. 9 in-place proof tests.
 - **Phase 65d — BN / GN / IN in-place contract** (no kernel changes):
   documented the existing two-stage kernel (stage-1 stats-only,
   stage-2 single-read-then-write per cell) as in-place safe by
-  construction. **f64 IS in-place safe here**, unlike Phase 65b/c
-  normalizers. 12 in-place proof tests across f32/f16/bf16/f64.
+  construction. **f64 IS in-place safe here**. 12 in-place proof tests
+  across f32/f16/bf16/f64.
+- **Phase 65d-ext — f64 in-place SMEM normalizers**: added
+  `block_reduce_{sum,max,min}_f64` to `baracuda_smem_reduce.cuh`;
+  RMSNorm / LayerNorm / Softmax / LogSoftmax SMEM kernels gained `<f64>`
+  specializations. f64 now uses the in-place fast path under the same
+  contig + last-axis preconditions as f32. 4 new f64 in-place proof tests
+  (16/16 in-place tests green on RTX 4070).
+- **Phase 66-prep — `_can_implement` companion fanout (~2030 symbols)**:
+  baracuda's stated FFI convention is one host-side validator per `_run`
+  symbol. Audit found ~2026 `_run` symbols missing a `_can_implement`.
+  Closed completely across four rounds — 59 C-side macros extended,
+  ~2030 Rust extern declarations added. Every `_run` FFI symbol in
+  `baracuda-kernels-sys` + `baracuda-transformer-engine-sys` now has
+  a `_can_implement` validator.
+
+### Added — new optional sibling crates (Phases 66-71, shipping with this alpha)
+
+- **`baracuda-flashinfer`** + **`baracuda-flashinfer-sys`** — Phase 46+66.
+  Safe wrapper for FlashInfer's inference-serving kernels (paged-KV decode
+  + prefill + ragged prefill + append, cascade LSE-merge, sort-free top-K
+  / top-P / min-P sampling, per-row sampling, FP8 KV decode, spec-decode
+  via ChainSpeculativeSampling). Feature-gated behind `flashinfer` on
+  `baracuda-kernels`.
+- **`baracuda-nvshmem`** + **`baracuda-nvshmem-sys`** — Phase 69.
+  Host-side NVSHMEM wrapper: symmetric-heap RDMA (sibling to NCCL's
+  collectives). Feature-gated behind `nvshmem`.
+- **`baracuda-nvimagecodec`** + **`baracuda-nvimagecodec-sys`** — Phase 70.
+  Unified GPU image-codec wrapper (JPEG / JPEG2000 / PNG / TIFF / WebP);
+  supersedes the standalone `baracuda-nvjpeg`.
+- **`baracuda-cuvs`** + **`baracuda-cuvs-sys`** — Phase 71.
+  RAPIDS cuVS vector-search wrapper (IVF-Flat + brute-force k-NN; L2 /
+  cosine / inner-product distance). Linux-only.
+- **`baracuda-tensorrt` shim feature** — Phase 68.
+  Bundled vtable-dispatch C++ shim required to actually call TensorRT
+  (NVIDIA ships no flat C ABI). Gated behind the `shim` feature.
 
 ### Documentation
 
-- Greatly expanded README cargo-features table (4 features → 18
-  documented, organized by category).
-- Brought `ARCHITECTURE.md` and `OP-MATRIX.md` current; removed
-  false-deferred claims for ops shipped in Phases 16/17/18/25/26.
-- Added per-crate README pointers for the 8 crates that previously
-  shipped to crates.io with blank README tabs.
+- **README** — cargo-features table 4 → 18, workspace-layout +14 missing
+  crates, ARCHITECTURE rewritten Phase 14-71, OP-MATRIX swept 11
+  false-deferred claims (Pool family, Segment BWs, EmbeddingBag Max,
+  BatchedOrmqrWy complex, GgufMmvq f16/bf16, paged FlashAttention, etc.),
+  ROADMAP updated.
+- **Per-crate READMEs** authored for 8 crates that previously fell back
+  to the workspace README on crates.io (flashinfer{,-sys}, megatron,
+  optim, ozimmu{,-sys}, transformer-engine{,-sys}).
+- **5 stale crate-level `//!` docs** rewritten — kernels, nvjpeg, cudnn,
+  cublas, nccl all had Phase-0/Phase-5-era "v0.1 covers X" preambles
+  that didn't match the alpha.63 surface; now accurate.
+- **13 `-sys` crate "safe-wrapper" pointer** added — every `-sys` crate
+  now points downstream readers at its safe-wrapper sibling.
+- **~35 executable doctests** added across cublas / cudnn / cufft /
+  cusolver / cusparse / cutensor / cuvs / curand / runtime / types.
+- **8 examples/ directories** created for the major safe wrappers
+  (cublas/cudnn/cufft/cusolver/curand/nccl/runtime/driver).
+- **`[workspace.lints]` clause** added to root Cargo.toml + per-crate
+  `[lints] workspace = true` propagation (70 crates).
+- **Workspace-wide `missing_docs` sweep** (~6900 one-line docs) closed
+  every undocumented public item across 13 `-sys` crates. Workspace lint
+  promoted from `warn` → `deny` as a regression guard.
+
+### Added — tests
+
+- 12 in-place proof tests for BN/GN/IN (Phase 65d) + 4 new f64 in-place
+  proof tests for RMSNorm/LayerNorm/Softmax/LogSoftmax (Phase 65d-ext).
+- `bincount_smoke.rs` (4 tests) — direct-FFI coverage for
+  `baracuda_kernels_bincount_{i32,i64}_run`.
+- `paged_kv_append_smoke.rs` (4 tests) — direct-FFI lifecycle for
+  FlashInfer paged-KV append.
+- `baracuda-cudf/tests/cudf_smoke.rs` (9 tests) — closed the zero-test
+  red flag.
+- `baracuda-types-derive` (21 tests, 10 integration + 11 unit) — proc-macro
+  positive paths + rejection paths.
 
 ### Fixed
 
-- Closed 95 `clippy -D warnings` failures (CI gate); the warnings were
-  stylistic (unnecessary parens, unused imports, mutable not needed) plus
-  10 GGUF-K-block test names allowed via `#[allow(non_snake_case)]`.
+- 95 `clippy -D warnings` CI failures (stylistic + unused imports + Rust
+  2024 `unsafe_op_in_unsafe_fn` migration via `cargo fix`).
+- 10 GGUF-K-block test names allowed via `#[allow(non_snake_case)]`.
+- `map_status_pub` + `alibi_dispatch` `#[allow(dead_code)]` for
+  feature-gated callers (`xformers_sparse24` / `fa2` respectively).
+- `FusedLinearCrossEntropyBackwardPlan::desc` `#[allow(dead_code)]` (BW
+  pass is a pure dy-scalar broadcast that doesn't read the descriptor).
+- Pre-existing `baracuda-cuvs` crate-level doctest used wrong Result error
+  type — would have always failed if anyone ran it; fixed to
+  `Box<dyn std::error::Error>`.
+
+---
+
+## Unreleased (queued for next alpha)
+
+(Empty — alpha.64 just shipped.)
 
 ---
 

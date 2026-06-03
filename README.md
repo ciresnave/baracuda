@@ -8,7 +8,7 @@
 A unified Rust ML-op facade over the NVIDIA CUDA ecosystem.
 
 ![License](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue)
-![Status](https://img.shields.io/badge/status-alpha.63-orange)
+![Status](https://img.shields.io/badge/status-alpha.64-orange)
 ![CUDA](https://img.shields.io/badge/CUDA-12.x-76b900)
 ![Tests](https://img.shields.io/badge/regression-2152%2F0-success)
 
@@ -40,7 +40,7 @@ talk to one library directly.
 
 ## Status
 
-**In active development — alpha.63.** **2240+ GPU tests passing,
+**In active development — alpha.64.** **2240+ GPU tests passing,
 zero failures** across the 6 critical test crates on an RTX 4070
 (sm_89). Phase 63 (alpha.63, Fuel-ask) closes the FlashAttention
 saved-tensor wiring gap: **NEW
@@ -186,8 +186,8 @@ Add the kernel facade and the driver crate:
 
 ```toml
 [dependencies]
-baracuda-kernels = { version = "0.0.1-alpha.63", features = ["sm89", "cudnn"] }
-baracuda-driver  = "0.0.1-alpha.63"
+baracuda-kernels = { version = "0.0.1-alpha.64", features = ["sm89", "cudnn"] }
+baracuda-driver  = "0.0.1-alpha.64"
 ```
 
 A representative example — single-axis numerically stable softmax over a

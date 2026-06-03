@@ -1,6 +1,6 @@
 [package]
 name = "baracuda-transformer-engine-sys"
-version = "0.0.1-alpha.63"
+version = "0.0.1-alpha.64"
 description = "Build + raw FFI bindings to baracuda's port of NVIDIA TransformerEngine's FP8 cast/transpose + delayed-scaling recipe primitives. Cast/recipe subset only — `normalization` / `fused_rope` / `fused_attn` / `fused_softmax` / `activation` / `gemm` deliberately skipped (overlap existing baracuda Phase 3/5/14/17/30/31/36/41/42). NO cuDNN dep (recipe + cast paths don't need it; `fused_attn` would, and we skip it); NO pybind11 (the safe wrapper lives in `baracuda-transformer-engine` and exposes a raw C ABI defined in `csrc/baracuda_te_shim.cu`). Apache-2.0 per upstream — see `ATTRIBUTION.md`."
 readme = "README.md"
 edition.workspace = true
