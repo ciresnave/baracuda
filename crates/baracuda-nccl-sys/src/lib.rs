@@ -26,6 +26,7 @@ pub type ncclComm_t = *mut c_void;
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub struct ncclUniqueId {
+    /// Internal field.
     pub internal: [i8; 128],
 }
 
@@ -373,6 +374,7 @@ macro_rules! nccl_fns {
         }
         impl Nccl {
             $(
+                /// `func` (func).
                 pub fn $name(&self) -> Result<$pfn, LoaderError> {
                     if let Some(&p) = self.$name.get() { return Ok(p); }
                     let raw: *mut () = unsafe { self.lib.raw_symbol($sym)? };

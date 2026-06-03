@@ -6,7 +6,9 @@ use std::path::PathBuf;
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 #[non_exhaustive]
 pub enum OsFamily {
+    /// Linux variant.
     Linux,
+    /// Windows variant.
     Windows,
     /// Anything else (e.g. macOS). baracuda refuses to load on these.
     Unsupported,

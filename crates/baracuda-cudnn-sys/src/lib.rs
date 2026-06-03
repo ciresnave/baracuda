@@ -623,12 +623,19 @@ pub enum cudnnDeterminism_t {
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
 pub struct cudnnConvolutionFwdAlgoPerf_t {
+    /// Algo field.
     pub algo: cudnnConvolutionFwdAlgo_t,
+    /// Status field.
     pub status: cudnnStatus_t,
+    /// Time field.
     pub time: f32,
+    /// Memory field.
     pub memory: usize,
+    /// Determinism field.
     pub determinism: cudnnDeterminism_t,
+    /// Math type field.
     pub math_type: cudnnMathType_t,
+    /// Reserved padding; do not use.
     pub reserved: [c_int; 3],
 }
 
@@ -636,12 +643,19 @@ pub struct cudnnConvolutionFwdAlgoPerf_t {
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
 pub struct cudnnConvolutionBwdDataAlgoPerf_t {
+    /// Algo field.
     pub algo: cudnnConvolutionBwdDataAlgo_t,
+    /// Status field.
     pub status: cudnnStatus_t,
+    /// Time field.
     pub time: f32,
+    /// Memory field.
     pub memory: usize,
+    /// Determinism field.
     pub determinism: cudnnDeterminism_t,
+    /// Math type field.
     pub math_type: cudnnMathType_t,
+    /// Reserved padding; do not use.
     pub reserved: [c_int; 3],
 }
 
@@ -649,12 +663,19 @@ pub struct cudnnConvolutionBwdDataAlgoPerf_t {
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
 pub struct cudnnConvolutionBwdFilterAlgoPerf_t {
+    /// Algo field.
     pub algo: cudnnConvolutionBwdFilterAlgo_t,
+    /// Status field.
     pub status: cudnnStatus_t,
+    /// Time field.
     pub time: f32,
+    /// Memory field.
     pub memory: usize,
+    /// Determinism field.
     pub determinism: cudnnDeterminism_t,
+    /// Math type field.
     pub math_type: cudnnMathType_t,
+    /// Reserved padding; do not use.
     pub reserved: [c_int; 3],
 }
 

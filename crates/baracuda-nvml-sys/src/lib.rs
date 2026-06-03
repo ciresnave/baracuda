@@ -46,8 +46,38 @@ pub enum nvmlClockType_t {
 #[repr(u32)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum nvmlPstates_t {
-    P0 = 0, P1 = 1, P2 = 2, P3 = 3, P4 = 4, P5 = 5, P6 = 6, P7 = 7,
-    P8 = 8, P9 = 9, P10 = 10, P11 = 11, P12 = 12, P13 = 13, P14 = 14, P15 = 15,
+    /// Performance state P0 (maximum performance).
+    P0 = 0,
+    /// Performance state P1.
+    P1 = 1,
+    /// Performance state P2.
+    P2 = 2,
+    /// Performance state P3.
+    P3 = 3,
+    /// Performance state P4.
+    P4 = 4,
+    /// Performance state P5.
+    P5 = 5,
+    /// Performance state P6.
+    P6 = 6,
+    /// Performance state P7.
+    P7 = 7,
+    /// Performance state P8.
+    P8 = 8,
+    /// Performance state P9.
+    P9 = 9,
+    /// Performance state P10.
+    P10 = 10,
+    /// Performance state P11.
+    P11 = 11,
+    /// Performance state P12.
+    P12 = 12,
+    /// Performance state P13.
+    P13 = 13,
+    /// Performance state P14.
+    P14 = 14,
+    /// Performance state P15 (minimum performance).
+    P15 = 15,
     /// unknown
     Unknown = 32,
 }

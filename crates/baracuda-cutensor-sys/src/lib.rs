@@ -728,6 +728,7 @@ macro_rules! cutensor_fns {
     ($($(#[$attr:meta])* fn $name:ident as $sym:literal : $pfn:ty;)*) => {
         /// Lazily-resolved cuTENSOR function-pointer table.
         pub struct Cutensor {
+            /// Lib field.
             pub lib: Library,
             $(
                 $name: OnceLock<$pfn>,

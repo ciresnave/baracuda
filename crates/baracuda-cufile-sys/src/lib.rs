@@ -19,13 +19,20 @@ use baracuda_types::CudaStatus;
 pub struct CUfileOpError(pub i32);
 
 impl CUfileOpError {
+    /// Associated constant `SUCCESS`.
     pub const SUCCESS: Self = Self(0);
+    /// Associated constant `INTERNAL`.
     pub const INTERNAL: Self = Self(5001);
+    /// Associated constant `DRIVER_NOT_INITIALIZED`.
     pub const DRIVER_NOT_INITIALIZED: Self = Self(5002);
+    /// Associated constant `IO_NOT_SUPPORTED`.
     pub const IO_NOT_SUPPORTED: Self = Self(5003);
+    /// Associated constant `NOT_REGISTERED`.
     pub const NOT_REGISTERED: Self = Self(5004);
+    /// Associated constant `INVALID_FILE_HANDLE`.
     pub const INVALID_FILE_HANDLE: Self = Self(5005);
 
+    /// Returns true iff `success`.
     pub const fn is_success(self) -> bool {
         self.0 == 0
     }
@@ -67,7 +74,9 @@ impl CudaStatus for CUfileOpError {
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
 pub struct CUfileError_t {
+    /// Err field.
     pub err: CUfileOpError,
+    /// Cu err field.
     pub cu_err: c_int, // CUresult (driver-API error)
 }
 
@@ -82,10 +91,12 @@ pub type CUfileHandle_t = *mut c_void;
 pub struct CUfileDescr_t {
     /// Handle-type selector: 1 = CU_FILE_HANDLE_TYPE_OPAQUE_FD.
     pub handle_type: c_int,
+    /// Handle fd field.
     pub handle_fd: c_int,
     /// 40-byte reserved tail; cuFile's real union is larger for Win32 +
     /// opaque handles but Linux-only builds don't touch it.
     pub _reserved: [u8; 40],
+    /// Fs ops field.
     pub fs_ops: *mut c_void,
 }
 
@@ -102,20 +113,29 @@ impl Default for CUfileDescr_t {
 
 // ---- PFN types ----
 
+/// Function-pointer type for `cuFileDriverOpen`.
 pub type PFN_cuFileDriverOpen = unsafe extern "C" fn() -> CUfileError_t;
+/// Function-pointer type for `cuFileDriverClose`.
 pub type PFN_cuFileDriverClose = unsafe extern "C" fn() -> CUfileError_t;
+/// Function-pointer type for `cuFileDriverGetProperties`.
 pub type PFN_cuFileDriverGetProperties = unsafe extern "C" fn(props: *mut c_void) -> CUfileError_t;
+/// Function-pointer type for `cuFileDriverSetPollMode`.
 pub type PFN_cuFileDriverSetPollMode =
     unsafe extern "C" fn(poll: bool, poll_threshold_size: usize) -> CUfileError_t;
 
+/// Function-pointer type for `cuFileHandleRegister`.
 pub type PFN_cuFileHandleRegister =
     unsafe extern "C" fn(fh: *mut CUfileHandle_t, descr: *mut CUfileDescr_t) -> CUfileError_t;
+/// Function-pointer type for `cuFileHandleDeregister`.
 pub type PFN_cuFileHandleDeregister = unsafe extern "C" fn(fh: CUfileHandle_t);
 
+/// Function-pointer type for `cuFileBufRegister`.
 pub type PFN_cuFileBufRegister =
     unsafe extern "C" fn(buf_ptr: *mut c_void, length: usize, flags: c_int) -> CUfileError_t;
+/// Function-pointer type for `cuFileBufDeregister`.
 pub type PFN_cuFileBufDeregister = unsafe extern "C" fn(buf_ptr: *mut c_void) -> CUfileError_t;
 
+/// Function-pointer type for `cuFileRead`.
 pub type PFN_cuFileRead = unsafe extern "C" fn(
     fh: CUfileHandle_t,
     buf_ptr: *mut c_void,
@@ -123,6 +143,7 @@ pub type PFN_cuFileRead = unsafe extern "C" fn(
     file_offset: i64,
     buf_ptr_offset: i64,
 ) -> isize;
+/// Function-pointer type for `cuFileWrite`.
 pub type PFN_cuFileWrite = unsafe extern "C" fn(
     fh: CUfileHandle_t,
     buf_ptr: *const c_void,
@@ -131,12 +152,15 @@ pub type PFN_cuFileWrite = unsafe extern "C" fn(
     buf_ptr_offset: i64,
 ) -> isize;
 
+/// Function-pointer type for `cuFileGetVersion`.
 pub type PFN_cuFileGetVersion = unsafe extern "C" fn(version: *mut c_int) -> CUfileError_t;
 
+/// Function-pointer type for `cuFileOpStatusError`.
 pub type PFN_cuFileOpStatusError = unsafe extern "C" fn(status: CUfileOpError) -> *const c_char;
 
 // ---- Stream-registered (v1.6+) async APIs ----
 
+/// Function-pointer type for `cuFileReadAsync`.
 pub type PFN_cuFileReadAsync = unsafe extern "C" fn(
     fh: CUfileHandle_t,
     buf_ptr: *mut c_void,
@@ -147,6 +171,7 @@ pub type PFN_cuFileReadAsync = unsafe extern "C" fn(
     stream: *mut c_void,
 ) -> CUfileError_t;
 
+/// Function-pointer type for `cuFileWriteAsync`.
 pub type PFN_cuFileWriteAsync = unsafe extern "C" fn(
     fh: CUfileHandle_t,
     buf_ptr: *const c_void,
@@ -157,9 +182,11 @@ pub type PFN_cuFileWriteAsync = unsafe extern "C" fn(
     stream: *mut c_void,
 ) -> CUfileError_t;
 
+/// Function-pointer type for `cuFileStreamRegister`.
 pub type PFN_cuFileStreamRegister =
     unsafe extern "C" fn(stream: *mut c_void, flags: c_uint) -> CUfileError_t;
 
+/// Function-pointer type for `cuFileStreamDeregister`.
 pub type PFN_cuFileStreamDeregister = unsafe extern "C" fn(stream: *mut c_void) -> CUfileError_t;
 
 // ---- Batched I/O (v1.6+) ----
@@ -167,7 +194,9 @@ pub type PFN_cuFileStreamDeregister = unsafe extern "C" fn(stream: *mut c_void) 
 /// Opcode selector for `CUfileIOParams_t`.
 #[allow(non_snake_case)]
 pub mod CUfileOpcode {
+    /// `READ` constant.
     pub const READ: i32 = 0;
+    /// `WRITE` constant.
     pub const WRITE: i32 = 1;
 }
 
@@ -180,13 +209,21 @@ pub mod CUfileOpcode {
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
 pub struct CUfileIOParams_t {
+    /// Mode selector.
     pub mode: c_int, // always 0 == CUFILE_BATCH
+    /// Fh field.
     pub fh: CUfileHandle_t,
+    /// Opcode field.
     pub opcode: c_int,
+    /// Cookie field.
     pub cookie: *mut c_void,
+    /// Dev ptr base field.
     pub dev_ptr_base: *mut c_void,
+    /// File offset field.
     pub file_offset: i64,
+    /// Dev ptr offset field.
     pub dev_ptr_offset: i64,
+    /// Size.
     pub size: usize,
 }
 
@@ -209,8 +246,11 @@ impl Default for CUfileIOParams_t {
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Default)]
 pub struct CUfileIOEvents_t {
+    /// Cookie field.
     pub cookie: *mut c_void,
+    /// Status field.
     pub status: c_int,
+    /// Ret field.
     pub ret: usize,
 }
 
@@ -219,11 +259,13 @@ unsafe impl Send for CUfileIOEvents_t {}
 /// Opaque batch-handle (maps to `CUfileBatchHandle_t`).
 pub type CUfileBatchHandle_t = *mut c_void;
 
+/// Function-pointer type for `cuFileBatchIOSetUp`.
 pub type PFN_cuFileBatchIOSetUp = unsafe extern "C" fn(
     batch_handle_out: *mut CUfileBatchHandle_t,
     num_batches: c_uint,
 ) -> CUfileError_t;
 
+/// Function-pointer type for `cuFileBatchIOSubmit`.
 pub type PFN_cuFileBatchIOSubmit = unsafe extern "C" fn(
     batch_handle: CUfileBatchHandle_t,
     num_entries: c_uint,
@@ -231,6 +273,7 @@ pub type PFN_cuFileBatchIOSubmit = unsafe extern "C" fn(
     flags: c_uint,
 ) -> CUfileError_t;
 
+/// Function-pointer type for `cuFileBatchIOGetStatus`.
 pub type PFN_cuFileBatchIOGetStatus = unsafe extern "C" fn(
     batch_handle: CUfileBatchHandle_t,
     min_nr: c_uint,
@@ -239,24 +282,30 @@ pub type PFN_cuFileBatchIOGetStatus = unsafe extern "C" fn(
     timeout: *mut c_void, // struct timespec* — opaque on Linux
 ) -> CUfileError_t;
 
+/// Function-pointer type for `cuFileBatchIOCancel`.
 pub type PFN_cuFileBatchIOCancel =
     unsafe extern "C" fn(batch_handle: CUfileBatchHandle_t) -> CUfileError_t;
 
+/// Function-pointer type for `cuFileBatchIODestroy`.
 pub type PFN_cuFileBatchIODestroy =
     unsafe extern "C" fn(batch_handle: CUfileBatchHandle_t) -> CUfileError_t;
 
 // ---- Compatibility-mode helpers ----
 
+/// Function-pointer type for `cuFileUseCount`.
 pub type PFN_cuFileUseCount = unsafe extern "C" fn(fh: CUfileHandle_t) -> c_int;
 
 // ---- Driver-tuning setters (v1.6+) ----
 
+/// Function-pointer type for `cuFileDriverSetMaxDirectIOSize`.
 pub type PFN_cuFileDriverSetMaxDirectIOSize =
     unsafe extern "C" fn(max_direct_io_size_kb: usize) -> CUfileError_t;
 
+/// Function-pointer type for `cuFileDriverSetMaxCacheSize`.
 pub type PFN_cuFileDriverSetMaxCacheSize =
     unsafe extern "C" fn(max_cache_size_kb: usize) -> CUfileError_t;
 
+/// Function-pointer type for `cuFileDriverSetMaxPinnedMemSize`.
 pub type PFN_cuFileDriverSetMaxPinnedMemSize =
     unsafe extern "C" fn(max_pinned_size_kb: usize) -> CUfileError_t;
 
@@ -264,7 +313,9 @@ pub type PFN_cuFileDriverSetMaxPinnedMemSize =
 
 macro_rules! cufile_fns {
     ($($(#[$attr:meta])* fn $name:ident as $sym:literal : $pfn:ty;)*) => {
+        /// `Cufile` (FFI binding).
         pub struct Cufile {
+            /// Lib field.
             pub lib: Library,
             $(
                 $name: OnceLock<$pfn>,
@@ -344,6 +395,7 @@ fn cufile_candidates() -> &'static [&'static str] {
     &["libcufile.so.0", "libcufile.so"]
 }
 
+/// `cufile` (cufile).
 pub fn cufile() -> Result<&'static Cufile, LoaderError> {
     static CUFILE: OnceLock<Cufile> = OnceLock::new();
     if let Some(c) = CUFILE.get() {

@@ -324,7 +324,9 @@ pub(crate) fn _placeholder_void() -> *mut c_void {
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Default, PartialEq)]
 pub struct cuComplex {
+    /// `x` component.
     pub x: f32,
+    /// `y` component.
     pub y: f32,
 }
 
@@ -332,7 +334,9 @@ pub struct cuComplex {
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Default, PartialEq)]
 pub struct cuDoubleComplex {
+    /// `x` component.
     pub x: f64,
+    /// `y` component.
     pub y: f64,
 }
 
@@ -1400,6 +1404,7 @@ pub type cublasLtMatmulPreference_t = *mut c_void;
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
 pub struct cublasLtMatmulAlgo_t {
+    /// Underlying data.
     pub data: [u64; 8],
 }
 
@@ -1407,10 +1412,15 @@ pub struct cublasLtMatmulAlgo_t {
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
 pub struct cublasLtMatmulHeuristicResult_t {
+    /// Algo field.
     pub algo: cublasLtMatmulAlgo_t,
+    /// Size of `workspace_` in bytes.
     pub workspace_size: usize,
+    /// State field.
     pub state: cublasStatus_t,
+    /// Number of `waves_`.
     pub waves_count: f32,
+    /// Reserved padding; do not use.
     pub reserved: [c_int; 4],
 }
 

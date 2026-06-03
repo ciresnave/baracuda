@@ -22,8 +22,11 @@ use baracuda_types::CudaStatus;
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Default)]
 pub struct NppLibraryVersion {
+    /// Major field.
     pub major: c_int,
+    /// Minor field.
     pub minor: c_int,
+    /// Build field.
     pub build: c_int,
 }
 
@@ -91,7 +94,9 @@ impl CudaStatus for NppStatus {
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Default, Eq, PartialEq)]
 pub struct NppiSize {
+    /// Width.
     pub width: c_int,
+    /// Height.
     pub height: c_int,
 }
 
@@ -99,9 +104,13 @@ pub struct NppiSize {
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Default, Eq, PartialEq)]
 pub struct NppiRect {
+    /// `x` component.
     pub x: c_int,
+    /// `y` component.
     pub y: c_int,
+    /// Width.
     pub width: c_int,
+    /// Height.
     pub height: c_int,
 }
 
@@ -109,7 +118,9 @@ pub struct NppiRect {
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Default, Eq, PartialEq)]
 pub struct NppiPoint {
+    /// `x` component.
     pub x: c_int,
+    /// `y` component.
     pub y: c_int,
 }
 
@@ -301,6 +312,7 @@ fn npps_candidates() -> Vec<String> {
 
 macro_rules! npp_fns {
     ($struct:ident ($candidates:expr) { $($name:ident as $sym:literal : $pfn:ty);* $(;)? }) => {
+        /// `Item` (FFI binding).
         pub struct $struct {
             lib: Library,
             $($name: OnceLock<$pfn>,)*
@@ -312,6 +324,7 @@ macro_rules! npp_fns {
         }
         impl $struct {
             $(
+                /// `func` (func).
                 pub fn $name(&self) -> Result<$pfn, LoaderError> {
                     if let Some(&p) = self.$name.get() { return Ok(p); }
                     let raw: *mut () = unsafe { self.lib.raw_symbol($sym)? };

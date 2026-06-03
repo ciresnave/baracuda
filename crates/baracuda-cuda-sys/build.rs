@@ -1,3 +1,5 @@
+//! `baracuda-cuda-sys` — internal FFI / support crate.
+
 fn main() {
     // Placeholder: the real build script is wired up in day 5 once
     // baracuda-build exposes CUDA detection + bindgen helpers.

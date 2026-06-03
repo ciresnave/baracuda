@@ -39,34 +39,63 @@ pub type cudfScalar_t = *mut c_void;
 #[repr(i32)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum cudfTypeId_t {
+    /// Empty variant.
     Empty = 0,
+    /// Int8 variant.
     Int8 = 1,
+    /// Int16 variant.
     Int16 = 2,
+    /// Int32 variant.
     Int32 = 3,
+    /// Int64 variant.
     Int64 = 4,
+    /// Uint8 variant.
     Uint8 = 5,
+    /// Uint16 variant.
     Uint16 = 6,
+    /// Uint32 variant.
     Uint32 = 7,
+    /// Uint64 variant.
     Uint64 = 8,
+    /// Float32 variant.
     Float32 = 9,
+    /// Float64 variant.
     Float64 = 10,
+    /// Bool8 variant.
     Bool8 = 11,
+    /// Timestamp Days variant.
     Timestamp_Days = 12,
+    /// Timestamp Seconds variant.
     Timestamp_Seconds = 13,
+    /// Timestamp Milliseconds variant.
     Timestamp_Milliseconds = 14,
+    /// Timestamp Microseconds variant.
     Timestamp_Microseconds = 15,
+    /// Timestamp Nanoseconds variant.
     Timestamp_Nanoseconds = 16,
+    /// Duration Days variant.
     Duration_Days = 17,
+    /// Duration Seconds variant.
     Duration_Seconds = 18,
+    /// Duration Milliseconds variant.
     Duration_Milliseconds = 19,
+    /// Duration Microseconds variant.
     Duration_Microseconds = 20,
+    /// Duration Nanoseconds variant.
     Duration_Nanoseconds = 21,
+    /// Dictionary32 variant.
     Dictionary32 = 22,
+    /// String variant.
     String = 23,
+    /// List variant.
     List = 24,
+    /// Decimal32 variant.
     Decimal32 = 25,
+    /// Decimal64 variant.
     Decimal64 = 26,
+    /// Decimal128 variant.
     Decimal128 = 27,
+    /// Struct variant.
     Struct = 28,
 }
 
@@ -227,6 +256,7 @@ macro_rules! cudf_fns {
         }
         impl Cudf {
             $(
+                /// `func` (func).
                 pub fn $name(&self) -> Result<$pfn, LoaderError> {
                     if let Some(&p) = self.$name.get() { return Ok(p); }
                     let raw: *mut () = unsafe { self.lib.raw_symbol($sym)? };

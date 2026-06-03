@@ -38,11 +38,17 @@ use baracuda_types::CudaStatus;
 
 // ---- opaque handles -------------------------------------------------------
 
+/// Opaque `nvimgcodecInstance_t` type (FFI binding).
 pub type nvimgcodecInstance_t = *mut c_void;
+/// Opaque `nvimgcodecCodeStream_t` type (FFI binding).
 pub type nvimgcodecCodeStream_t = *mut c_void;
+/// Opaque `nvimgcodecImage_t` type (FFI binding).
 pub type nvimgcodecImage_t = *mut c_void;
+/// Opaque `nvimgcodecDecoder_t` type (FFI binding).
 pub type nvimgcodecDecoder_t = *mut c_void;
+/// Opaque `nvimgcodecEncoder_t` type (FFI binding).
 pub type nvimgcodecEncoder_t = *mut c_void;
+/// Opaque `nvimgcodecFuture_t` type (FFI binding).
 pub type nvimgcodecFuture_t = *mut c_void;
 
 // ---- constants ------------------------------------------------------------
@@ -69,36 +75,67 @@ pub const NVIMGCODEC_DEVICE_CPU_ONLY: c_int = -99999;
 #[repr(i32)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum nvimgcodecStructureType_t {
+    /// Unknown variant.
     Unknown = 0,
+    /// Properties variant.
     Properties = 1,
+    /// Instance Create Info variant.
     InstanceCreateInfo = 2,
+    /// Device Allocator variant.
     DeviceAllocator = 3,
+    /// Pinned Allocator variant.
     PinnedAllocator = 4,
+    /// Decode Params variant.
     DecodeParams = 5,
+    /// Encode Params variant.
     EncodeParams = 6,
+    /// Orientation variant.
     Orientation = 7,
+    /// Region variant.
     Region = 8,
+    /// Code Stream View variant.
     CodeStreamView = 9,
+    /// Code Stream Info variant.
     CodeStreamInfo = 10,
+    /// Image Info variant.
     ImageInfo = 11,
+    /// Image Plane Info variant.
     ImagePlaneInfo = 12,
+    /// Jpeg Image Info variant.
     JpegImageInfo = 13,
+    /// Jpeg Encode Params variant.
     JpegEncodeParams = 14,
+    /// Tile Geometry Info variant.
     TileGeometryInfo = 15,
+    /// Jpeg2k Encode Params variant.
     Jpeg2kEncodeParams = 16,
+    /// Backend variant.
     Backend = 17,
+    /// Io Stream Desc variant.
     IoStreamDesc = 18,
+    /// Framework Desc variant.
     FrameworkDesc = 19,
+    /// Decoder Desc variant.
     DecoderDesc = 20,
+    /// Encoder Desc variant.
     EncoderDesc = 21,
+    /// Parser Desc variant.
     ParserDesc = 22,
+    /// Image Desc variant.
     ImageDesc = 23,
+    /// Code Stream Desc variant.
     CodeStreamDesc = 24,
+    /// Debug Messenger Desc variant.
     DebugMessengerDesc = 25,
+    /// Debug Message Data variant.
     DebugMessageData = 26,
+    /// Extension Desc variant.
     ExtensionDesc = 27,
+    /// Executor Desc variant.
     ExecutorDesc = 28,
+    /// Backend Params variant.
     BackendParams = 29,
+    /// Execution Params variant.
     ExecutionParams = 30,
 }
 
@@ -108,26 +145,43 @@ pub enum nvimgcodecStructureType_t {
 #[repr(i32)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum nvimgcodecSampleFormat_t {
+    /// Unknown variant.
     Unknown = 0,
     /// Planar, channels unchanged from source.
     PUnchanged = 1,
     /// Interleaved, channels unchanged from source.
     IUnchanged = 2,
+    /// PY variant.
     PY = 3,
+    /// IY variant.
     IY = 4,
+    /// PYA variant.
     PYA = 5,
+    /// IYA variant.
     IYA = 6,
+    /// PRGB variant.
     PRGB = 7,
+    /// IRGB variant.
     IRGB = 8,
+    /// PBGR variant.
     PBGR = 9,
+    /// IBGR variant.
     IBGR = 10,
+    /// PYUV variant.
     PYUV = 11,
+    /// IYUV variant.
     IYUV = 12,
+    /// PRGBA variant.
     PRGBA = 13,
+    /// IRGBA variant.
     IRGBA = 14,
+    /// PYCCK variant.
     PYCCK = 15,
+    /// IYCCK variant.
     IYCCK = 16,
+    /// PCMYK variant.
     PCMYK = 17,
+    /// ICMYK variant.
     ICMYK = 18,
 }
 
@@ -136,17 +190,29 @@ pub enum nvimgcodecSampleFormat_t {
 #[repr(i32)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum nvimgcodecSampleDataType_t {
+    /// Unknown variant.
     Unknown = 0,
+    /// Int8 variant.
     Int8 = 0x0801,
+    /// Uint8 variant.
     Uint8 = 0x0802,
+    /// Int16 variant.
     Int16 = 0x1003,
+    /// Uint16 variant.
     Uint16 = 0x1004,
+    /// Int32 variant.
     Int32 = 0x2005,
+    /// Uint32 variant.
     Uint32 = 0x2006,
+    /// Int64 variant.
     Int64 = 0x4007,
+    /// Uint64 variant.
     Uint64 = 0x4008,
+    /// Float16 variant.
     Float16 = 0x1009,
+    /// Float32 variant.
     Float32 = 0x200B,
+    /// Float64 variant.
     Float64 = 0x400D,
 }
 
@@ -156,12 +222,19 @@ pub enum nvimgcodecSampleDataType_t {
 pub enum nvimgcodecChromaSubsampling_t {
     /// 4:4:4 (no subsampling).
     None = 0,
+    /// Css422 variant.
     Css422 = 2,
+    /// Css420 variant.
     Css420 = 3,
+    /// Css440 variant.
     Css440 = 4,
+    /// Css411 variant.
     Css411 = 5,
+    /// Css410 variant.
     Css410 = 6,
+    /// Gray variant.
     Gray = 7,
+    /// Css410 V variant.
     Css410V = 8,
 }
 
@@ -169,13 +242,21 @@ pub enum nvimgcodecChromaSubsampling_t {
 #[repr(i32)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum nvimgcodecColorSpec_t {
+    /// Unknown variant.
     Unknown = 0,
+    /// Srgb variant.
     Srgb = 1,
+    /// Gray variant.
     Gray = 2,
+    /// Sycc variant.
     Sycc = 3,
+    /// Cmyk variant.
     Cmyk = 4,
+    /// Ycck variant.
     Ycck = 5,
+    /// Palette variant.
     Palette = 6,
+    /// Icc Profile variant.
     IccProfile = 7,
 }
 
@@ -183,6 +264,7 @@ pub enum nvimgcodecColorSpec_t {
 #[repr(i32)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum nvimgcodecImageBufferKind_t {
+    /// Unknown variant.
     Unknown = 0,
     /// Strided device (GPU) memory.
     StridedDevice = 1,
@@ -196,34 +278,55 @@ pub enum nvimgcodecImageBufferKind_t {
 /// `SUCCESS` (`0x1`) means the image decoded cleanly.
 pub type nvimgcodecProcessingStatus_t = u32;
 
+/// `NVIMGCODEC_PROCESSING_STATUS_UNKNOWN` constant.
 pub const NVIMGCODEC_PROCESSING_STATUS_UNKNOWN: nvimgcodecProcessingStatus_t = 0x0;
+/// `NVIMGCODEC_PROCESSING_STATUS_SUCCESS` constant.
 pub const NVIMGCODEC_PROCESSING_STATUS_SUCCESS: nvimgcodecProcessingStatus_t = 0x1;
+/// `NVIMGCODEC_PROCESSING_STATUS_SATURATED` constant.
 pub const NVIMGCODEC_PROCESSING_STATUS_SATURATED: nvimgcodecProcessingStatus_t = 0x2;
+/// `NVIMGCODEC_PROCESSING_STATUS_FAIL` constant.
 pub const NVIMGCODEC_PROCESSING_STATUS_FAIL: nvimgcodecProcessingStatus_t = 0x3;
+/// `NVIMGCODEC_PROCESSING_STATUS_IMAGE_CORRUPTED` constant.
 pub const NVIMGCODEC_PROCESSING_STATUS_IMAGE_CORRUPTED: nvimgcodecProcessingStatus_t = 0x7;
+/// `NVIMGCODEC_PROCESSING_STATUS_CODEC_UNSUPPORTED` constant.
 pub const NVIMGCODEC_PROCESSING_STATUS_CODEC_UNSUPPORTED: nvimgcodecProcessingStatus_t = 0xb;
+/// `NVIMGCODEC_PROCESSING_STATUS_BACKEND_UNSUPPORTED` constant.
 pub const NVIMGCODEC_PROCESSING_STATUS_BACKEND_UNSUPPORTED: nvimgcodecProcessingStatus_t = 0x13;
+/// `NVIMGCODEC_PROCESSING_STATUS_CODESTREAM_UNSUPPORTED` constant.
 pub const NVIMGCODEC_PROCESSING_STATUS_CODESTREAM_UNSUPPORTED: nvimgcodecProcessingStatus_t = 0x83;
 
 // ---- status ---------------------------------------------------------------
 
+/// `nvimgcodecStatus_t` (FFI binding).
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
 #[repr(transparent)]
 pub struct nvimgcodecStatus_t(pub i32);
 
 impl nvimgcodecStatus_t {
+    /// Associated constant `SUCCESS`.
     pub const SUCCESS: Self = Self(0);
+    /// Associated constant `NOT_INITIALIZED`.
     pub const NOT_INITIALIZED: Self = Self(1);
+    /// Associated constant `INVALID_PARAMETER`.
     pub const INVALID_PARAMETER: Self = Self(2);
+    /// Associated constant `BAD_CODESTREAM`.
     pub const BAD_CODESTREAM: Self = Self(3);
+    /// Associated constant `CODESTREAM_UNSUPPORTED`.
     pub const CODESTREAM_UNSUPPORTED: Self = Self(4);
+    /// Associated constant `ALLOCATOR_FAILURE`.
     pub const ALLOCATOR_FAILURE: Self = Self(5);
+    /// Associated constant `EXECUTION_FAILED`.
     pub const EXECUTION_FAILED: Self = Self(6);
+    /// Associated constant `ARCH_MISMATCH`.
     pub const ARCH_MISMATCH: Self = Self(7);
+    /// Associated constant `INTERNAL_ERROR`.
     pub const INTERNAL_ERROR: Self = Self(8);
+    /// Associated constant `IMPLEMENTATION_UNSUPPORTED`.
     pub const IMPLEMENTATION_UNSUPPORTED: Self = Self(9);
+    /// Associated constant `MISSED_DEPENDENCIES`.
     pub const MISSED_DEPENDENCIES: Self = Self(10);
 
+    /// Returns true iff `success`.
     pub const fn is_success(self) -> bool {
         self.0 == 0
     }
@@ -273,8 +376,11 @@ impl CudaStatus for nvimgcodecStatus_t {
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
 pub struct nvimgcodecProperties_t {
+    /// Struct type field.
     pub struct_type: nvimgcodecStructureType_t,
+    /// Size of `struct_` in bytes.
     pub struct_size: usize,
+    /// Struct next field.
     pub struct_next: *mut c_void,
     /// Encoded library version.
     pub version: u32,
@@ -283,6 +389,7 @@ pub struct nvimgcodecProperties_t {
 }
 
 impl nvimgcodecProperties_t {
+    /// Create a new instance.
     pub fn new() -> Self {
         Self {
             struct_type: nvimgcodecStructureType_t::Properties,
@@ -304,16 +411,22 @@ impl Default for nvimgcodecProperties_t {
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
 pub struct nvimgcodecOrientation_t {
+    /// Struct type field.
     pub struct_type: nvimgcodecStructureType_t,
+    /// Size of `struct_` in bytes.
     pub struct_size: usize,
+    /// Struct next field.
     pub struct_next: *mut c_void,
     /// Rotation in degrees (0 / 90 / 180 / 270).
     pub rotated: c_int,
+    /// Flip x field.
     pub flip_x: c_int,
+    /// Flip y field.
     pub flip_y: c_int,
 }
 
 impl nvimgcodecOrientation_t {
+    /// Create a new instance.
     pub fn new() -> Self {
         Self {
             struct_type: nvimgcodecStructureType_t::Orientation,
@@ -336,20 +449,28 @@ impl Default for nvimgcodecOrientation_t {
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
 pub struct nvimgcodecImagePlaneInfo_t {
+    /// Struct type field.
     pub struct_type: nvimgcodecStructureType_t,
+    /// Size of `struct_` in bytes.
     pub struct_size: usize,
+    /// Struct next field.
     pub struct_next: *mut c_void,
+    /// Width.
     pub width: u32,
+    /// Height.
     pub height: u32,
     /// Bytes between successive rows.
     pub row_stride: usize,
+    /// Num channels field.
     pub num_channels: u32,
+    /// Sample type field.
     pub sample_type: nvimgcodecSampleDataType_t,
     /// Bits of precision actually used (0 = full width of `sample_type`).
     pub precision: u8,
 }
 
 impl nvimgcodecImagePlaneInfo_t {
+    /// Create a new instance.
     pub fn new() -> Self {
         Self {
             struct_type: nvimgcodecStructureType_t::ImagePlaneInfo,
@@ -377,26 +498,38 @@ impl Default for nvimgcodecImagePlaneInfo_t {
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub struct nvimgcodecImageInfo_t {
+    /// Struct type field.
     pub struct_type: nvimgcodecStructureType_t,
+    /// Size of `struct_` in bytes.
     pub struct_size: usize,
+    /// Struct next field.
     pub struct_next: *mut c_void,
     /// NUL-terminated codec name (e.g. `b"jpeg"`, `b"png"`, `b"tiff"`).
     pub codec_name: [c_char; NVIMGCODEC_MAX_CODEC_NAME_SIZE],
+    /// Color spec field.
     pub color_spec: nvimgcodecColorSpec_t,
+    /// Chroma subsampling field.
     pub chroma_subsampling: nvimgcodecChromaSubsampling_t,
+    /// Sample format field.
     pub sample_format: nvimgcodecSampleFormat_t,
+    /// Orientation field.
     pub orientation: nvimgcodecOrientation_t,
+    /// Num planes field.
     pub num_planes: u32,
+    /// Plane info field.
     pub plane_info: [nvimgcodecImagePlaneInfo_t; NVIMGCODEC_MAX_NUM_PLANES],
     /// Output buffer pointer (device or host per `buffer_kind`). The library
     /// derives the required size from `plane_info` (`row_stride * height` per
     /// plane); there is no separate `buffer_size` field in `nvimgcodec.h`.
     pub buffer: *mut c_void,
+    /// Buffer kind field.
     pub buffer_kind: nvimgcodecImageBufferKind_t,
+    /// Cuda stream field.
     pub cuda_stream: cudaStream_t,
 }
 
 impl nvimgcodecImageInfo_t {
+    /// Create a new instance.
     pub fn new() -> Self {
         Self {
             struct_type: nvimgcodecStructureType_t::ImageInfo,
@@ -438,8 +571,11 @@ impl core::fmt::Debug for nvimgcodecImageInfo_t {
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
 pub struct nvimgcodecInstanceCreateInfo_t {
+    /// Struct type field.
     pub struct_type: nvimgcodecStructureType_t,
+    /// Size of `struct_` in bytes.
     pub struct_size: usize,
+    /// Struct next field.
     pub struct_next: *mut c_void,
     /// Load the built-in codecs (jpeg, png, ...). Non-zero = yes.
     pub load_builtin_modules: c_int,
@@ -447,9 +583,13 @@ pub struct nvimgcodecInstanceCreateInfo_t {
     pub load_extension_modules: c_int,
     /// Optional override for the extension search path (NUL-terminated).
     pub extension_modules_path: *const c_char,
+    /// Create debug messenger field.
     pub create_debug_messenger: c_int,
+    /// Debug messenger desc field.
     pub debug_messenger_desc: *const c_void,
+    /// Message severity field.
     pub message_severity: u32,
+    /// Message category field.
     pub message_category: u32,
 }
 
@@ -481,14 +621,18 @@ impl Default for nvimgcodecInstanceCreateInfo_t {
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
 pub struct nvimgcodecDecodeParams_t {
+    /// Struct type field.
     pub struct_type: nvimgcodecStructureType_t,
+    /// Size of `struct_` in bytes.
     pub struct_size: usize,
+    /// Struct next field.
     pub struct_next: *mut c_void,
     /// Apply embedded EXIF orientation during decode. Non-zero = yes.
     pub apply_exif_orientation: c_int,
 }
 
 impl nvimgcodecDecodeParams_t {
+    /// Create a new instance.
     pub fn new() -> Self {
         Self {
             struct_type: nvimgcodecStructureType_t::DecodeParams,
@@ -509,17 +653,29 @@ impl Default for nvimgcodecDecodeParams_t {
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
 pub struct nvimgcodecExecutionParams_t {
+    /// Struct type field.
     pub struct_type: nvimgcodecStructureType_t,
+    /// Size of `struct_` in bytes.
     pub struct_size: usize,
+    /// Struct next field.
     pub struct_next: *mut c_void,
+    /// Device allocator field.
     pub device_allocator: *mut c_void,
+    /// Pinned allocator field.
     pub pinned_allocator: *mut c_void,
+    /// Max num cpu threads field.
     pub max_num_cpu_threads: c_int,
+    /// Executor field.
     pub executor: *mut c_void,
+    /// Device ordinal.
     pub device_id: c_int,
+    /// Pre init field.
     pub pre_init: c_int,
+    /// Skip pre sync field.
     pub skip_pre_sync: c_int,
+    /// Num backends field.
     pub num_backends: c_int,
+    /// Backends field.
     pub backends: *const c_void,
 }
 
@@ -551,17 +707,21 @@ impl Default for nvimgcodecExecutionParams_t {
 
 // ---- function-pointer types ----------------------------------------------
 
+/// Function-pointer type for `nvimgcodecGetProperties`.
 pub type PFN_nvimgcodecGetProperties =
     unsafe extern "C" fn(properties: *mut nvimgcodecProperties_t) -> nvimgcodecStatus_t;
 
+/// Function-pointer type for `nvimgcodecInstanceCreate`.
 pub type PFN_nvimgcodecInstanceCreate = unsafe extern "C" fn(
     instance: *mut nvimgcodecInstance_t,
     create_info: *const nvimgcodecInstanceCreateInfo_t,
 ) -> nvimgcodecStatus_t;
 
+/// Function-pointer type for `nvimgcodecInstanceDestroy`.
 pub type PFN_nvimgcodecInstanceDestroy =
     unsafe extern "C" fn(instance: nvimgcodecInstance_t) -> nvimgcodecStatus_t;
 
+/// Function-pointer type for `nvimgcodecCodeStreamCreateFromHostMem`.
 pub type PFN_nvimgcodecCodeStreamCreateFromHostMem = unsafe extern "C" fn(
     instance: nvimgcodecInstance_t,
     code_stream: *mut nvimgcodecCodeStream_t,
@@ -575,6 +735,7 @@ pub type PFN_nvimgcodecCodeStreamCreateFromHostMem = unsafe extern "C" fn(
     code_stream_view: *const c_void,
 ) -> nvimgcodecStatus_t;
 
+/// Function-pointer type for `nvimgcodecCodeStreamCreateFromFile`.
 pub type PFN_nvimgcodecCodeStreamCreateFromFile = unsafe extern "C" fn(
     instance: nvimgcodecInstance_t,
     code_stream: *mut nvimgcodecCodeStream_t,
@@ -583,28 +744,34 @@ pub type PFN_nvimgcodecCodeStreamCreateFromFile = unsafe extern "C" fn(
     code_stream_view: *const c_void,
 ) -> nvimgcodecStatus_t;
 
+/// Function-pointer type for `nvimgcodecCodeStreamGetImageInfo`.
 pub type PFN_nvimgcodecCodeStreamGetImageInfo = unsafe extern "C" fn(
     code_stream: nvimgcodecCodeStream_t,
     image_info: *mut nvimgcodecImageInfo_t,
 ) -> nvimgcodecStatus_t;
 
+/// Function-pointer type for `nvimgcodecCodeStreamDestroy`.
 pub type PFN_nvimgcodecCodeStreamDestroy =
     unsafe extern "C" fn(code_stream: nvimgcodecCodeStream_t) -> nvimgcodecStatus_t;
 
+/// Function-pointer type for `nvimgcodecImageCreate`.
 pub type PFN_nvimgcodecImageCreate = unsafe extern "C" fn(
     instance: nvimgcodecInstance_t,
     image: *mut nvimgcodecImage_t,
     image_info: *const nvimgcodecImageInfo_t,
 ) -> nvimgcodecStatus_t;
 
+/// Function-pointer type for `nvimgcodecImageGetImageInfo`.
 pub type PFN_nvimgcodecImageGetImageInfo = unsafe extern "C" fn(
     image: nvimgcodecImage_t,
     image_info: *mut nvimgcodecImageInfo_t,
 ) -> nvimgcodecStatus_t;
 
+/// Function-pointer type for `nvimgcodecImageDestroy`.
 pub type PFN_nvimgcodecImageDestroy =
     unsafe extern "C" fn(image: nvimgcodecImage_t) -> nvimgcodecStatus_t;
 
+/// Function-pointer type for `nvimgcodecDecoderCreate`.
 pub type PFN_nvimgcodecDecoderCreate = unsafe extern "C" fn(
     instance: nvimgcodecInstance_t,
     decoder: *mut nvimgcodecDecoder_t,
@@ -612,6 +779,7 @@ pub type PFN_nvimgcodecDecoderCreate = unsafe extern "C" fn(
     options: *const c_char,
 ) -> nvimgcodecStatus_t;
 
+/// Function-pointer type for `nvimgcodecDecoderDestroy`.
 pub type PFN_nvimgcodecDecoderDestroy =
     unsafe extern "C" fn(decoder: nvimgcodecDecoder_t) -> nvimgcodecStatus_t;
 
@@ -626,15 +794,18 @@ pub type PFN_nvimgcodecDecoderDecode = unsafe extern "C" fn(
     future: *mut nvimgcodecFuture_t,
 ) -> nvimgcodecStatus_t;
 
+/// Function-pointer type for `nvimgcodecFutureWaitForAll`.
 pub type PFN_nvimgcodecFutureWaitForAll =
     unsafe extern "C" fn(future: nvimgcodecFuture_t) -> nvimgcodecStatus_t;
 
+/// Function-pointer type for `nvimgcodecFutureGetProcessingStatus`.
 pub type PFN_nvimgcodecFutureGetProcessingStatus = unsafe extern "C" fn(
     future: nvimgcodecFuture_t,
     processing_status: *mut nvimgcodecProcessingStatus_t,
     size: *mut usize,
 ) -> nvimgcodecStatus_t;
 
+/// Function-pointer type for `nvimgcodecFutureDestroy`.
 pub type PFN_nvimgcodecFutureDestroy =
     unsafe extern "C" fn(future: nvimgcodecFuture_t) -> nvimgcodecStatus_t;
 
@@ -658,6 +829,7 @@ fn nvimgcodec_candidates() -> Vec<String> {
 
 macro_rules! nvimgcodec_fns {
     ($($name:ident as $sym:literal : $pfn:ty);* $(;)?) => {
+        /// `Nvimgcodec` (FFI binding).
         pub struct Nvimgcodec {
             lib: Library,
             $($name: OnceLock<$pfn>,)*
@@ -669,6 +841,7 @@ macro_rules! nvimgcodec_fns {
         }
         impl Nvimgcodec {
             $(
+                /// `func` (func).
                 pub fn $name(&self) -> Result<$pfn, LoaderError> {
                     if let Some(&p) = self.$name.get() { return Ok(p); }
                     let raw: *mut () = unsafe { self.lib.raw_symbol($sym)? };

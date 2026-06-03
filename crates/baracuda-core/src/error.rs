@@ -22,15 +22,20 @@ pub enum LoaderError {
     /// library search path.
     #[error("could not load {library}: tried {candidates:?} across {search_paths} path(s)")]
     LibraryNotFound {
+        /// Value field.
         library: &'static str,
+        /// Value field.
         candidates: Vec<&'static str>,
+        /// Value field.
         search_paths: usize,
     },
 
     /// The library was loaded but did not export the requested symbol.
     #[error("library '{library}' is missing symbol '{symbol}'")]
     SymbolNotFound {
+        /// Value field.
         library: &'static str,
+        /// Value field.
         symbol: &'static str,
     },
 
@@ -39,8 +44,11 @@ pub enum LoaderError {
     /// baracuda asked for.
     #[error("symbol '{symbol}' requires {required} but baracuda's driver loader sees {installed}")]
     VersionTooOld {
+        /// Value field.
         symbol: &'static str,
+        /// Value field.
         required: CudaVersion,
+        /// Value field.
         installed: CudaVersion,
     },
 
@@ -52,7 +60,10 @@ pub enum LoaderError {
 
     /// baracuda does not target this platform (e.g. macOS).
     #[error("baracuda does not support {platform}; NVIDIA driver is only available on Linux and Windows")]
-    UnsupportedPlatform { platform: &'static str },
+    UnsupportedPlatform {
+        /// Name of the unsupported platform (e.g. "macOS").
+        platform: &'static str,
+    },
 }
 
 impl LoaderError {
@@ -95,7 +106,10 @@ where
 {
     /// The library returned a non-success status code.
     #[error("{} returned {} ({}): {}", .status.library(), .status.name(), .status.code(), .status.description())]
-    Status { status: S },
+    Status {
+        /// The non-success status code returned by the underlying library.
+        status: S,
+    },
 
     /// The dynamic loader failed.
     #[error(transparent)]
@@ -104,7 +118,9 @@ where
     /// The requested API is newer than the installed driver supports.
     #[error("{api} requires {since}; install a newer driver to use it")]
     FeatureNotSupported {
+        /// Value field.
         api: &'static str,
+        /// Value field.
         since: CudaVersion,
     },
 }
@@ -135,9 +151,13 @@ pub enum BaracudaError {
     /// A status code from any NVIDIA library.
     #[error("{library} returned {name} ({code}): {description}")]
     Status {
+        /// Value field.
         library: &'static str,
+        /// Value field.
         name: &'static str,
+        /// Value field.
         description: &'static str,
+        /// Value field.
         code: i32,
     },
 
@@ -148,14 +168,19 @@ pub enum BaracudaError {
     /// The requested API is newer than the installed driver supports.
     #[error("{api} requires {since}; install a newer driver to use it")]
     FeatureNotSupported {
+        /// Value field.
         api: &'static str,
+        /// Value field.
         since: CudaVersion,
     },
 
     /// For sources that want to attach a path or other context (e.g. a
     /// missing PTX file).
     #[error("{context}")]
-    Context { context: &'static str },
+    Context {
+        /// Free-form context attached by the failing call site.
+        context: &'static str,
+    },
 }
 
 impl<S> From<Error<S>> for BaracudaError

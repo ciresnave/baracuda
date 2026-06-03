@@ -124,9 +124,13 @@ pub mod nvcompDecompressBackend {
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
 pub struct nvcompBatchedLZ4DecompressOpts_t {
+    /// Backend field.
     pub backend: i32,
+    /// Sort before hw decompress field.
     pub sort_before_hw_decompress: i32,
+    /// Data type field.
     pub data_type: i32,
+    /// Bitshuffle mode field.
     pub bitshuffle_mode: i32,
     _reserved: [u8; 48],
 }
@@ -147,7 +151,9 @@ impl Default for nvcompBatchedLZ4DecompressOpts_t {
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
 pub struct nvcompBatchedSnappyDecompressOpts_t {
+    /// Backend field.
     pub backend: i32,
+    /// Sort before hw decompress field.
     pub sort_before_hw_decompress: i32,
     _pad: i64,
     _reserved: [u8; 48],
@@ -168,7 +174,9 @@ impl Default for nvcompBatchedSnappyDecompressOpts_t {
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
 pub struct nvcompBatchedZstdDecompressOpts_t {
+    /// Backend field.
     pub backend: i32,
+    /// Sort before hw decompress field.
     pub sort_before_hw_decompress: i32,
     _pad: i64,
     _reserved: [u8; 48],
@@ -189,7 +197,9 @@ impl Default for nvcompBatchedZstdDecompressOpts_t {
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
 pub struct nvcompBatchedGdeflateDecompressOpts_t {
+    /// Backend field.
     pub backend: i32,
+    /// Sort before hw decompress field.
     pub sort_before_hw_decompress: i32,
     _pad: i64,
     _reserved: [u8; 48],
@@ -213,7 +223,9 @@ impl Default for nvcompBatchedGdeflateDecompressOpts_t {
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
 pub struct nvcompBatchedLZ4Opts_t {
+    /// Data type field.
     pub data_type: i32,
+    /// Bitshuffle mode field.
     pub bitshuffle_mode: i32,
     _reserved: [u8; 56],
 }
@@ -232,7 +244,9 @@ impl Default for nvcompBatchedLZ4Opts_t {
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
 pub struct nvcompBatchedSnappyOpts_t {
+    /// Reserved padding; do not use.
     pub reserved_field: i32,
+    /// Pad0 field.
     pub _pad0: i32,
     _reserved: [u8; 56],
 }
@@ -251,7 +265,9 @@ impl Default for nvcompBatchedSnappyOpts_t {
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
 pub struct nvcompBatchedZstdOpts_t {
+    /// Reserved padding; do not use.
     pub reserved_field: i32,
+    /// Pad0 field.
     pub _pad0: i32,
     _reserved: [u8; 56],
 }
@@ -270,7 +286,9 @@ impl Default for nvcompBatchedZstdOpts_t {
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
 pub struct nvcompBatchedGdeflateOpts_t {
+    /// Algo field.
     pub algo: i32,
+    /// Pad0 field.
     pub _pad0: i32,
     _reserved: [u8; 56],
 }
@@ -379,8 +397,11 @@ pub type PFN_nvcompBatchedZstdCompressAsync = unsafe extern "C" fn(
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Default)]
 pub struct nvcompAlignmentRequirements_t {
+    /// Input field.
     pub input: usize,
+    /// Output field.
     pub output: usize,
+    /// Temp field.
     pub temp: usize,
 }
 
@@ -390,7 +411,9 @@ pub struct nvcompAlignmentRequirements_t {
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Default)]
 pub struct nvcompBatchedBitcompOpts_t {
+    /// Algorithm type field.
     pub algorithm_type: i32,
+    /// Data type field.
     pub data_type: i32,
 }
 
@@ -398,6 +421,7 @@ pub struct nvcompBatchedBitcompOpts_t {
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Default)]
 pub struct nvcompBatchedANSOpts_t {
+    /// Reserved padding; do not use.
     pub reserved: i32,
 }
 
@@ -405,6 +429,7 @@ pub struct nvcompBatchedANSOpts_t {
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Default)]
 pub struct nvcompBatchedDeflateOpts_t {
+    /// Algo field.
     pub algo: i32,
 }
 
@@ -412,10 +437,15 @@ pub struct nvcompBatchedDeflateOpts_t {
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Default)]
 pub struct nvcompBatchedCascadedOpts_t {
+    /// Size of `chunk_` in bytes.
     pub chunk_size: usize,
+    /// Type field.
     pub type_: i32,
+    /// Num rles field.
     pub num_rles: i32,
+    /// Num deltas field.
     pub num_deltas: i32,
+    /// Use bp field.
     pub use_bp: i32,
 }
 
@@ -721,7 +751,9 @@ pub type PFN_nvcompGetDecompressSizeAsync = unsafe extern "C" fn(
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
 pub struct nvcompBatchedGzipOpts_t {
+    /// Reserved padding; do not use.
     pub reserved_field: i32,
+    /// Pad0 field.
     pub _pad0: i32,
     _reserved: [u8; 56],
 }
@@ -740,7 +772,9 @@ impl Default for nvcompBatchedGzipOpts_t {
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
 pub struct nvcompBatchedGzipDecompressOpts_t {
+    /// Backend field.
     pub backend: i32,
+    /// Sort before hw decompress field.
     pub sort_before_hw_decompress: i32,
     _pad: i64,
     _reserved: [u8; 48],
@@ -1016,6 +1050,7 @@ macro_rules! nvcomp_fns {
     ($($(#[$attr:meta])* fn $name:ident as $sym:literal : $pfn:ty;)*) => {
         /// nvCOMP dynamic-loader handle.
         pub struct Nvcomp {
+            /// Lib field.
             pub lib: Library,
             $(
                 $name: OnceLock<$pfn>,

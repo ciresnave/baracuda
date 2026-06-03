@@ -100,7 +100,9 @@ pub type nvshmem_team_config_t = c_void;
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub struct nvshmemx_uniqueid_t {
+    /// Structure version tag.
     pub version: c_int,
+    /// Internal field.
     pub internal: [c_char; 124],
 }
 
@@ -331,6 +333,7 @@ macro_rules! nvshmem_fns {
         }
         impl Nvshmem {
             $(
+                /// `func` (func).
                 pub fn $name(&self) -> Result<$pfn, LoaderError> {
                     if let Some(&p) = self.$name.get() { return Ok(p); }
                     let raw: *mut () = unsafe { self.lib.raw_symbol($sym)? };

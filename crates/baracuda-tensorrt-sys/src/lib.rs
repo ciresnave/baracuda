@@ -41,16 +41,27 @@ pub type trtIHostMemory_t = *mut c_void;
 #[repr(i32)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum trtDataType_t {
+    /// Float variant.
     Float = 0,
+    /// Half variant.
     Half = 1,
+    /// Int8 variant.
     Int8 = 2,
+    /// Int32 variant.
     Int32 = 3,
+    /// Bool variant.
     Bool = 4,
+    /// Uint8 variant.
     Uint8 = 5,
+    /// Fp8 variant.
     Fp8 = 6,
+    /// B Float16 variant.
     BFloat16 = 7,
+    /// Int64 variant.
     Int64 = 8,
+    /// Int4 variant.
     Int4 = 9,
+    /// Fp4 variant.
     Fp4 = 10,
 }
 
@@ -58,8 +69,11 @@ pub enum trtDataType_t {
 #[repr(i32)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum trtTensorIOMode_t {
+    /// None variant.
     None = 0,
+    /// Input variant.
     Input = 1,
+    /// Output variant.
     Output = 2,
 }
 
@@ -67,10 +81,15 @@ pub enum trtTensorIOMode_t {
 #[repr(i32)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum trtSeverity_t {
+    /// Internal error error code.
     InternalError = 0,
+    /// Error error code.
     Error = 1,
+    /// Warning variant.
     Warning = 2,
+    /// Info variant.
     Info = 3,
+    /// Verbose variant.
     Verbose = 4,
 }
 
@@ -78,8 +97,11 @@ pub enum trtSeverity_t {
 #[repr(i32)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum trtExecutionContextAllocationStrategy_t {
+    /// Static variant.
     Static = 0,
+    /// On Profile Change variant.
     OnProfileChange = 1,
+    /// User Managed variant.
     UserManaged = 2,
 }
 
@@ -92,7 +114,9 @@ pub const TRT_MAX_DIMS: usize = 8;
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
 pub struct trtDims_t {
+    /// Nb dims field.
     pub nb_dims: i32,
+    /// D field.
     pub d: [i64; TRT_MAX_DIMS],
 }
 
@@ -459,6 +483,7 @@ macro_rules! trt_fns {
         }
         impl TensorRt {
             $(
+                /// `func` (func).
                 pub fn $name(&self) -> Result<$pfn, LoaderError> {
                     if let Some(&p) = self.$name.get() { return Ok(p); }
                     let raw: *mut () = unsafe { self.lib.raw_symbol($sym)? };

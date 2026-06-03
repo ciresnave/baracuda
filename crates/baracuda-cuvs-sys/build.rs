@@ -1,3 +1,5 @@
+//! `baracuda-cuvs-sys` — internal FFI / support crate.
+
 fn main() {
     baracuda_build::emit_rerun_hints();
     // cuVS is dlopen'd at runtime; no link step. `CUVS_ROOT` lets a caller

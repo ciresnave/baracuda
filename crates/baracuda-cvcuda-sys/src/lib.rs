@@ -22,19 +22,32 @@ use baracuda_types::CudaStatus;
 pub struct NVCVStatus(pub i32);
 
 impl NVCVStatus {
+    /// Associated constant `SUCCESS`.
     pub const SUCCESS: Self = Self(0);
+    /// Associated constant `ERROR_NOT_IMPLEMENTED`.
     pub const ERROR_NOT_IMPLEMENTED: Self = Self(1);
+    /// Associated constant `ERROR_INVALID_ARGUMENT`.
     pub const ERROR_INVALID_ARGUMENT: Self = Self(2);
+    /// Associated constant `ERROR_INVALID_IMAGE_FORMAT`.
     pub const ERROR_INVALID_IMAGE_FORMAT: Self = Self(3);
+    /// Associated constant `ERROR_INVALID_OPERATION`.
     pub const ERROR_INVALID_OPERATION: Self = Self(4);
+    /// Associated constant `ERROR_DEVICE`.
     pub const ERROR_DEVICE: Self = Self(5);
+    /// Associated constant `ERROR_NOT_READY`.
     pub const ERROR_NOT_READY: Self = Self(6);
+    /// Associated constant `ERROR_OUT_OF_MEMORY`.
     pub const ERROR_OUT_OF_MEMORY: Self = Self(7);
+    /// Associated constant `ERROR_INTERNAL`.
     pub const ERROR_INTERNAL: Self = Self(8);
+    /// Associated constant `ERROR_NOT_COMPATIBLE`.
     pub const ERROR_NOT_COMPATIBLE: Self = Self(9);
+    /// Associated constant `ERROR_OVERFLOW`.
     pub const ERROR_OVERFLOW: Self = Self(10);
+    /// Associated constant `ERROR_UNDERFLOW`.
     pub const ERROR_UNDERFLOW: Self = Self(11);
 
+    /// Returns true iff `success`.
     pub const fn is_success(self) -> bool {
         self.0 == 0
     }
@@ -76,12 +89,16 @@ use core::ffi::c_void;
 
 // ---- NVCV handle typedefs ----
 
+/// `NVCVTensorHandle` type alias.
 pub type NVCVTensorHandle = *mut c_void;
+/// `NVCVImageHandle` type alias.
 pub type NVCVImageHandle = *mut c_void;
+/// `NVCVImageBatchHandle` type alias.
 pub type NVCVImageBatchHandle = *mut c_void;
 
 // ---- CV-CUDA operator handles ----
 
+/// `CVCUDA_OperatorHandle` type alias.
 pub type CVCUDA_OperatorHandle = *mut c_void;
 
 // ---- Enums ----
@@ -89,11 +106,17 @@ pub type CVCUDA_OperatorHandle = *mut c_void;
 /// `NVCVInterpolationType`.
 #[allow(non_snake_case)]
 pub mod NVCVInterpolationType {
+    /// `NEAREST` constant.
     pub const NEAREST: i32 = 0;
+    /// `LINEAR` constant.
     pub const LINEAR: i32 = 1;
+    /// `CUBIC` constant.
     pub const CUBIC: i32 = 2;
+    /// `AREA` constant.
     pub const AREA: i32 = 3;
+    /// `LANCZOS` constant.
     pub const LANCZOS: i32 = 4;
+    /// `GAUSSIAN` constant.
     pub const GAUSSIAN: i32 = 5;
 }
 
@@ -101,23 +124,35 @@ pub mod NVCVInterpolationType {
 /// Subset — full enum has ~200 values.
 #[allow(non_snake_case)]
 pub mod NVCVColorConversionCode {
+    /// `BGR2BGRA` constant.
     pub const BGR2BGRA: i32 = 0;
+    /// `BGRA2BGR` constant.
     pub const BGRA2BGR: i32 = 1;
+    /// `BGR2RGB` constant.
     pub const BGR2RGB: i32 = 4;
+    /// `BGR2GRAY` constant.
     pub const BGR2GRAY: i32 = 6;
+    /// `RGB2GRAY` constant.
     pub const RGB2GRAY: i32 = 7;
+    /// `GRAY2BGR` constant.
     pub const GRAY2BGR: i32 = 8;
+    /// `BGR2YUV` constant.
     pub const BGR2YUV: i32 = 82;
+    /// `YUV2BGR` constant.
     pub const YUV2BGR: i32 = 84;
+    /// `BGR2HSV` constant.
     pub const BGR2HSV: i32 = 40;
+    /// `HSV2BGR` constant.
     pub const HSV2BGR: i32 = 54;
 }
 
 // ---- PFN types ----
 
+/// Function-pointer type for `cvcudaResizeCreate`.
 pub type PFN_cvcudaResizeCreate =
     unsafe extern "C" fn(handle_out: *mut CVCUDA_OperatorHandle) -> NVCVStatus;
 
+/// Function-pointer type for `cvcudaResizeSubmit`.
 pub type PFN_cvcudaResizeSubmit = unsafe extern "C" fn(
     handle: CVCUDA_OperatorHandle,
     stream: *mut c_void,
@@ -126,9 +161,11 @@ pub type PFN_cvcudaResizeSubmit = unsafe extern "C" fn(
     interpolation: i32,
 ) -> NVCVStatus;
 
+/// Function-pointer type for `cvcudaCvtColorCreate`.
 pub type PFN_cvcudaCvtColorCreate =
     unsafe extern "C" fn(handle_out: *mut CVCUDA_OperatorHandle) -> NVCVStatus;
 
+/// Function-pointer type for `cvcudaCvtColorSubmit`.
 pub type PFN_cvcudaCvtColorSubmit = unsafe extern "C" fn(
     handle: CVCUDA_OperatorHandle,
     stream: *mut c_void,
@@ -137,9 +174,11 @@ pub type PFN_cvcudaCvtColorSubmit = unsafe extern "C" fn(
     code: i32,
 ) -> NVCVStatus;
 
+/// Function-pointer type for `cvcudaConvertToCreate`.
 pub type PFN_cvcudaConvertToCreate =
     unsafe extern "C" fn(handle_out: *mut CVCUDA_OperatorHandle) -> NVCVStatus;
 
+/// Function-pointer type for `cvcudaConvertToSubmit`.
 pub type PFN_cvcudaConvertToSubmit = unsafe extern "C" fn(
     handle: CVCUDA_OperatorHandle,
     stream: *mut c_void,
@@ -149,9 +188,11 @@ pub type PFN_cvcudaConvertToSubmit = unsafe extern "C" fn(
     beta: f64,
 ) -> NVCVStatus;
 
+/// Function-pointer type for `cvcudaFlipCreate`.
 pub type PFN_cvcudaFlipCreate =
     unsafe extern "C" fn(handle_out: *mut CVCUDA_OperatorHandle) -> NVCVStatus;
 
+/// Function-pointer type for `cvcudaFlipSubmit`.
 pub type PFN_cvcudaFlipSubmit = unsafe extern "C" fn(
     handle: CVCUDA_OperatorHandle,
     stream: *mut c_void,
@@ -160,9 +201,11 @@ pub type PFN_cvcudaFlipSubmit = unsafe extern "C" fn(
     flip_code: i32,
 ) -> NVCVStatus;
 
+/// Function-pointer type for `cvcudaNormalizeCreate`.
 pub type PFN_cvcudaNormalizeCreate =
     unsafe extern "C" fn(handle_out: *mut CVCUDA_OperatorHandle) -> NVCVStatus;
 
+/// Function-pointer type for `cvcudaNormalizeSubmit`.
 pub type PFN_cvcudaNormalizeSubmit = unsafe extern "C" fn(
     handle: CVCUDA_OperatorHandle,
     stream: *mut c_void,
@@ -176,10 +219,12 @@ pub type PFN_cvcudaNormalizeSubmit = unsafe extern "C" fn(
     flags: u32,
 ) -> NVCVStatus;
 
+/// Function-pointer type for `cvcudaOperatorDestroy`.
 pub type PFN_cvcudaOperatorDestroy =
     unsafe extern "C" fn(handle: CVCUDA_OperatorHandle) -> NVCVStatus;
 
 // NVCV Tensor create/destroy
+/// Function-pointer type for `nvcvTensorConstruct`.
 pub type PFN_nvcvTensorConstruct = unsafe extern "C" fn(
     shape: *const i64,
     rank: i32,
@@ -188,12 +233,15 @@ pub type PFN_nvcvTensorConstruct = unsafe extern "C" fn(
     handle_out: *mut NVCVTensorHandle,
 ) -> NVCVStatus;
 
+/// Function-pointer type for `nvcvTensorDecRef`.
 pub type PFN_nvcvTensorDecRef =
     unsafe extern "C" fn(handle: NVCVTensorHandle, new_ref: *mut i32) -> NVCVStatus;
 
+/// Function-pointer type for `nvcvTensorIncRef`.
 pub type PFN_nvcvTensorIncRef =
     unsafe extern "C" fn(handle: NVCVTensorHandle, new_ref: *mut i32) -> NVCVStatus;
 
+/// Function-pointer type for `nvcvTensorWrapData`.
 pub type PFN_nvcvTensorWrapData = unsafe extern "C" fn(
     data: *const c_void,  // NVCVTensorData
     cleanup: *mut c_void, // NVCVTensorDataCleanupFunc
@@ -217,57 +265,87 @@ pub type PFN_cvcudaSubmitInOut = unsafe extern "C" fn(
 
 // ---- Border / interpolation constants ----
 
+/// `NVCVBorderType` module.
 #[allow(non_snake_case)]
 pub mod NVCVBorderType {
+    /// `CONSTANT` constant.
     pub const CONSTANT: i32 = 0;
+    /// `REPLICATE` constant.
     pub const REPLICATE: i32 = 1;
+    /// `REFLECT` constant.
     pub const REFLECT: i32 = 2;
+    /// `WRAP` constant.
     pub const WRAP: i32 = 3;
+    /// `REFLECT101` constant.
     pub const REFLECT101: i32 = 4;
+    /// `TRANSPARENT` constant.
     pub const TRANSPARENT: i32 = 5;
 }
 
+/// `NVCVThresholdType` module.
 #[allow(non_snake_case)]
 pub mod NVCVThresholdType {
+    /// `BINARY` constant.
     pub const BINARY: u32 = 1;
+    /// `BINARY_INV` constant.
     pub const BINARY_INV: u32 = 2;
+    /// `TRUNC` constant.
     pub const TRUNC: u32 = 4;
+    /// `TOZERO` constant.
     pub const TOZERO: u32 = 8;
+    /// `TOZERO_INV` constant.
     pub const TOZERO_INV: u32 = 16;
+    /// `OTSU` constant.
     pub const OTSU: u32 = 32;
+    /// `TRIANGLE` constant.
     pub const TRIANGLE: u32 = 64;
 }
 
+/// `NVCVAdaptiveThresholdType` module.
 #[allow(non_snake_case)]
 pub mod NVCVAdaptiveThresholdType {
+    /// `MEAN_C` constant.
     pub const MEAN_C: u32 = 0;
+    /// `GAUSSIAN_C` constant.
     pub const GAUSSIAN_C: u32 = 1;
 }
 
+/// `NVCVMorphologyType` module.
 #[allow(non_snake_case)]
 pub mod NVCVMorphologyType {
+    /// `ERODE` constant.
     pub const ERODE: i32 = 0;
+    /// `DILATE` constant.
     pub const DILATE: i32 = 1;
+    /// `OPEN` constant.
     pub const OPEN: i32 = 2;
+    /// `CLOSE` constant.
     pub const CLOSE: i32 = 3;
 }
 
+/// `NVCVSize2D` (FFI binding).
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Default)]
 pub struct NVCVSize2D {
+    /// `w` component.
     pub w: i32,
+    /// H field.
     pub h: i32,
 }
 
+/// `NVCVFloat2` (FFI binding).
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Default)]
 pub struct NVCVFloat2 {
+    /// `x` component.
     pub x: f32,
+    /// `y` component.
     pub y: f32,
 }
 
 // ---- Per-operator Submit PFN signatures (unique-shape ops) ----
 
+/// Function-pointer type for `cvcudaPillowResizeSubmit`.
 pub type PFN_cvcudaPillowResizeSubmit = unsafe extern "C" fn(
     handle: CVCUDA_OperatorHandle,
     stream: *mut c_void,
@@ -276,6 +354,7 @@ pub type PFN_cvcudaPillowResizeSubmit = unsafe extern "C" fn(
     interpolation: i32,
 ) -> NVCVStatus;
 
+/// Function-pointer type for `cvcudaWarpAffineSubmit`.
 pub type PFN_cvcudaWarpAffineSubmit = unsafe extern "C" fn(
     handle: CVCUDA_OperatorHandle,
     stream: *mut c_void,
@@ -287,6 +366,7 @@ pub type PFN_cvcudaWarpAffineSubmit = unsafe extern "C" fn(
     border_value: *const f32, // 4
 ) -> NVCVStatus;
 
+/// Function-pointer type for `cvcudaWarpPerspectiveSubmit`.
 pub type PFN_cvcudaWarpPerspectiveSubmit = unsafe extern "C" fn(
     handle: CVCUDA_OperatorHandle,
     stream: *mut c_void,
@@ -298,6 +378,7 @@ pub type PFN_cvcudaWarpPerspectiveSubmit = unsafe extern "C" fn(
     border_value: *const f32, // 4
 ) -> NVCVStatus;
 
+/// Function-pointer type for `cvcudaRemapSubmit`.
 pub type PFN_cvcudaRemapSubmit = unsafe extern "C" fn(
     handle: CVCUDA_OperatorHandle,
     stream: *mut c_void,
@@ -312,6 +393,7 @@ pub type PFN_cvcudaRemapSubmit = unsafe extern "C" fn(
     border_value: *const f32,
 ) -> NVCVStatus;
 
+/// Function-pointer type for `cvcudaRotateSubmit`.
 pub type PFN_cvcudaRotateSubmit = unsafe extern "C" fn(
     handle: CVCUDA_OperatorHandle,
     stream: *mut c_void,
@@ -322,6 +404,7 @@ pub type PFN_cvcudaRotateSubmit = unsafe extern "C" fn(
     interpolation: i32,
 ) -> NVCVStatus;
 
+/// Function-pointer type for `cvcudaCenterCropSubmit`.
 pub type PFN_cvcudaCenterCropSubmit = unsafe extern "C" fn(
     handle: CVCUDA_OperatorHandle,
     stream: *mut c_void,
@@ -330,6 +413,7 @@ pub type PFN_cvcudaCenterCropSubmit = unsafe extern "C" fn(
     crop_size: NVCVSize2D,
 ) -> NVCVStatus;
 
+/// Function-pointer type for `cvcudaCustomCropSubmit`.
 pub type PFN_cvcudaCustomCropSubmit = unsafe extern "C" fn(
     handle: CVCUDA_OperatorHandle,
     stream: *mut c_void,
@@ -338,6 +422,7 @@ pub type PFN_cvcudaCustomCropSubmit = unsafe extern "C" fn(
     crop: *const i32, // NVCVRectI: x,y,w,h
 ) -> NVCVStatus;
 
+/// Function-pointer type for `cvcudaPadAndStackSubmit`.
 pub type PFN_cvcudaPadAndStackSubmit = unsafe extern "C" fn(
     handle: CVCUDA_OperatorHandle,
     stream: *mut c_void,
@@ -349,6 +434,7 @@ pub type PFN_cvcudaPadAndStackSubmit = unsafe extern "C" fn(
     border_value: f32,
 ) -> NVCVStatus;
 
+/// Function-pointer type for `cvcudaCopyMakeBorderSubmit`.
 pub type PFN_cvcudaCopyMakeBorderSubmit = unsafe extern "C" fn(
     handle: CVCUDA_OperatorHandle,
     stream: *mut c_void,
@@ -360,10 +446,12 @@ pub type PFN_cvcudaCopyMakeBorderSubmit = unsafe extern "C" fn(
     border_value: *const f32, // 4
 ) -> NVCVStatus;
 
+/// Function-pointer type for `cvcudaReformatSubmit`.
 pub type PFN_cvcudaReformatSubmit = PFN_cvcudaSubmitInOut;
 
 // Filters
 
+/// Function-pointer type for `cvcudaGaussianSubmit`.
 pub type PFN_cvcudaGaussianSubmit = unsafe extern "C" fn(
     handle: CVCUDA_OperatorHandle,
     stream: *mut c_void,
@@ -374,6 +462,7 @@ pub type PFN_cvcudaGaussianSubmit = unsafe extern "C" fn(
     border_mode: i32,
 ) -> NVCVStatus;
 
+/// Function-pointer type for `cvcudaMedianBlurSubmit`.
 pub type PFN_cvcudaMedianBlurSubmit = unsafe extern "C" fn(
     handle: CVCUDA_OperatorHandle,
     stream: *mut c_void,
@@ -382,6 +471,7 @@ pub type PFN_cvcudaMedianBlurSubmit = unsafe extern "C" fn(
     kernel_size: NVCVSize2D,
 ) -> NVCVStatus;
 
+/// Function-pointer type for `cvcudaAverageBlurSubmit`.
 pub type PFN_cvcudaAverageBlurSubmit = unsafe extern "C" fn(
     handle: CVCUDA_OperatorHandle,
     stream: *mut c_void,
@@ -392,6 +482,7 @@ pub type PFN_cvcudaAverageBlurSubmit = unsafe extern "C" fn(
     border_mode: i32,
 ) -> NVCVStatus;
 
+/// Function-pointer type for `cvcudaLaplacianSubmit`.
 pub type PFN_cvcudaLaplacianSubmit = unsafe extern "C" fn(
     handle: CVCUDA_OperatorHandle,
     stream: *mut c_void,
@@ -402,6 +493,7 @@ pub type PFN_cvcudaLaplacianSubmit = unsafe extern "C" fn(
     border_mode: i32,
 ) -> NVCVStatus;
 
+/// Function-pointer type for `cvcudaBilateralFilterSubmit`.
 pub type PFN_cvcudaBilateralFilterSubmit = unsafe extern "C" fn(
     handle: CVCUDA_OperatorHandle,
     stream: *mut c_void,
@@ -413,6 +505,7 @@ pub type PFN_cvcudaBilateralFilterSubmit = unsafe extern "C" fn(
     border_mode: i32,
 ) -> NVCVStatus;
 
+/// Function-pointer type for `cvcudaMotionBlurSubmit`.
 pub type PFN_cvcudaMotionBlurSubmit = unsafe extern "C" fn(
     handle: CVCUDA_OperatorHandle,
     stream: *mut c_void,
@@ -423,6 +516,7 @@ pub type PFN_cvcudaMotionBlurSubmit = unsafe extern "C" fn(
     border_mode: i32,
 ) -> NVCVStatus;
 
+/// Function-pointer type for `cvcudaConv2DSubmit`.
 pub type PFN_cvcudaConv2DSubmit = unsafe extern "C" fn(
     handle: CVCUDA_OperatorHandle,
     stream: *mut c_void,
@@ -433,6 +527,7 @@ pub type PFN_cvcudaConv2DSubmit = unsafe extern "C" fn(
     border_mode: i32,
 ) -> NVCVStatus;
 
+/// Function-pointer type for `cvcudaMorphologySubmit`.
 pub type PFN_cvcudaMorphologySubmit = unsafe extern "C" fn(
     handle: CVCUDA_OperatorHandle,
     stream: *mut c_void,
@@ -447,6 +542,7 @@ pub type PFN_cvcudaMorphologySubmit = unsafe extern "C" fn(
 ) -> NVCVStatus;
 
 // Edge / Stat
+/// Function-pointer type for `cvcudaCannySubmit`.
 pub type PFN_cvcudaCannySubmit = unsafe extern "C" fn(
     handle: CVCUDA_OperatorHandle,
     stream: *mut c_void,
@@ -458,6 +554,7 @@ pub type PFN_cvcudaCannySubmit = unsafe extern "C" fn(
     l2_gradient: bool,
 ) -> NVCVStatus;
 
+/// Function-pointer type for `cvcudaHistogramSubmit`.
 pub type PFN_cvcudaHistogramSubmit = unsafe extern "C" fn(
     handle: CVCUDA_OperatorHandle,
     stream: *mut c_void,
@@ -466,8 +563,10 @@ pub type PFN_cvcudaHistogramSubmit = unsafe extern "C" fn(
     histogram: NVCVTensorHandle,
 ) -> NVCVStatus;
 
+/// Function-pointer type for `cvcudaHistogramEqSubmit`.
 pub type PFN_cvcudaHistogramEqSubmit = PFN_cvcudaSubmitInOut;
 
+/// Function-pointer type for `cvcudaMinMaxLocSubmit`.
 pub type PFN_cvcudaMinMaxLocSubmit = unsafe extern "C" fn(
     handle: CVCUDA_OperatorHandle,
     stream: *mut c_void,
@@ -481,12 +580,14 @@ pub type PFN_cvcudaMinMaxLocSubmit = unsafe extern "C" fn(
 ) -> NVCVStatus;
 
 // Thresholds
+/// Function-pointer type for `cvcudaThresholdCreate`.
 pub type PFN_cvcudaThresholdCreate = unsafe extern "C" fn(
     handle_out: *mut CVCUDA_OperatorHandle,
     threshold_type: u32,
     max_batch_size: i32,
 ) -> NVCVStatus;
 
+/// Function-pointer type for `cvcudaThresholdSubmit`.
 pub type PFN_cvcudaThresholdSubmit = unsafe extern "C" fn(
     handle: CVCUDA_OperatorHandle,
     stream: *mut c_void,
@@ -496,12 +597,14 @@ pub type PFN_cvcudaThresholdSubmit = unsafe extern "C" fn(
     maxval: NVCVTensorHandle,
 ) -> NVCVStatus;
 
+/// Function-pointer type for `cvcudaAdaptiveThresholdCreate`.
 pub type PFN_cvcudaAdaptiveThresholdCreate = unsafe extern "C" fn(
     handle_out: *mut CVCUDA_OperatorHandle,
     max_block_size: i32,
     max_batch_size: i32,
 ) -> NVCVStatus;
 
+/// Function-pointer type for `cvcudaAdaptiveThresholdSubmit`.
 pub type PFN_cvcudaAdaptiveThresholdSubmit = unsafe extern "C" fn(
     handle: CVCUDA_OperatorHandle,
     stream: *mut c_void,
@@ -515,6 +618,7 @@ pub type PFN_cvcudaAdaptiveThresholdSubmit = unsafe extern "C" fn(
 ) -> NVCVStatus;
 
 // Color
+/// Function-pointer type for `cvcudaColorTwistSubmit`.
 pub type PFN_cvcudaColorTwistSubmit = unsafe extern "C" fn(
     handle: CVCUDA_OperatorHandle,
     stream: *mut c_void,
@@ -523,6 +627,7 @@ pub type PFN_cvcudaColorTwistSubmit = unsafe extern "C" fn(
     twist: NVCVTensorHandle, // 3x4 or 4x4
 ) -> NVCVStatus;
 
+/// Function-pointer type for `cvcudaBrightnessContrastSubmit`.
 pub type PFN_cvcudaBrightnessContrastSubmit = unsafe extern "C" fn(
     handle: CVCUDA_OperatorHandle,
     stream: *mut c_void,
@@ -534,12 +639,14 @@ pub type PFN_cvcudaBrightnessContrastSubmit = unsafe extern "C" fn(
     contrast_center: NVCVTensorHandle,
 ) -> NVCVStatus;
 
+/// Function-pointer type for `cvcudaGammaContrastCreate`.
 pub type PFN_cvcudaGammaContrastCreate = unsafe extern "C" fn(
     handle_out: *mut CVCUDA_OperatorHandle,
     max_varshape_batch_size: i32,
     max_varshape_channel_count: i32,
 ) -> NVCVStatus;
 
+/// Function-pointer type for `cvcudaGammaContrastSubmit`.
 pub type PFN_cvcudaGammaContrastSubmit = unsafe extern "C" fn(
     handle: CVCUDA_OperatorHandle,
     stream: *mut c_void,
@@ -549,6 +656,7 @@ pub type PFN_cvcudaGammaContrastSubmit = unsafe extern "C" fn(
 ) -> NVCVStatus;
 
 // Composite / stack / channel
+/// Function-pointer type for `cvcudaCompositeSubmit`.
 pub type PFN_cvcudaCompositeSubmit = unsafe extern "C" fn(
     handle: CVCUDA_OperatorHandle,
     stream: *mut c_void,
@@ -558,6 +666,7 @@ pub type PFN_cvcudaCompositeSubmit = unsafe extern "C" fn(
     output: NVCVTensorHandle,
 ) -> NVCVStatus;
 
+/// Function-pointer type for `cvcudaStackSubmit`.
 pub type PFN_cvcudaStackSubmit = unsafe extern "C" fn(
     handle: CVCUDA_OperatorHandle,
     stream: *mut c_void,
@@ -565,6 +674,7 @@ pub type PFN_cvcudaStackSubmit = unsafe extern "C" fn(
     output: NVCVTensorHandle,
 ) -> NVCVStatus;
 
+/// Function-pointer type for `cvcudaChannelReorderSubmit`.
 pub type PFN_cvcudaChannelReorderSubmit = unsafe extern "C" fn(
     handle: CVCUDA_OperatorHandle,
     stream: *mut c_void,
@@ -575,11 +685,13 @@ pub type PFN_cvcudaChannelReorderSubmit = unsafe extern "C" fn(
 ) -> NVCVStatus;
 
 // Misc
+/// Function-pointer type for `cvcudaEraseCreate`.
 pub type PFN_cvcudaEraseCreate = unsafe extern "C" fn(
     handle_out: *mut CVCUDA_OperatorHandle,
     max_num_erasing_area: i32,
 ) -> NVCVStatus;
 
+/// Function-pointer type for `cvcudaEraseSubmit`.
 pub type PFN_cvcudaEraseSubmit = unsafe extern "C" fn(
     handle: CVCUDA_OperatorHandle,
     stream: *mut c_void,
@@ -594,12 +706,14 @@ pub type PFN_cvcudaEraseSubmit = unsafe extern "C" fn(
     inplace: bool,
 ) -> NVCVStatus;
 
+/// Function-pointer type for `cvcudaInpaintCreate`.
 pub type PFN_cvcudaInpaintCreate = unsafe extern "C" fn(
     handle_out: *mut CVCUDA_OperatorHandle,
     max_batch_size: i32,
     max_shape: NVCVSize2D,
 ) -> NVCVStatus;
 
+/// Function-pointer type for `cvcudaInpaintSubmit`.
 pub type PFN_cvcudaInpaintSubmit = unsafe extern "C" fn(
     handle: CVCUDA_OperatorHandle,
     stream: *mut c_void,
@@ -609,6 +723,7 @@ pub type PFN_cvcudaInpaintSubmit = unsafe extern "C" fn(
     inpaint_radius: f64,
 ) -> NVCVStatus;
 
+/// Function-pointer type for `cvcudaBoxFilterSubmit`.
 pub type PFN_cvcudaBoxFilterSubmit = unsafe extern "C" fn(
     handle: CVCUDA_OperatorHandle,
     stream: *mut c_void,
@@ -619,6 +734,7 @@ pub type PFN_cvcudaBoxFilterSubmit = unsafe extern "C" fn(
     border_mode: i32,
 ) -> NVCVStatus;
 
+/// Function-pointer type for `cvcudaAddWeightedSubmit`.
 pub type PFN_cvcudaAddWeightedSubmit = unsafe extern "C" fn(
     handle: CVCUDA_OperatorHandle,
     stream: *mut c_void,
@@ -630,6 +746,7 @@ pub type PFN_cvcudaAddWeightedSubmit = unsafe extern "C" fn(
     output: NVCVTensorHandle,
 ) -> NVCVStatus;
 
+/// Function-pointer type for `cvcudaNonMaxSuppressionSubmit`.
 pub type PFN_cvcudaNonMaxSuppressionSubmit = unsafe extern "C" fn(
     handle: CVCUDA_OperatorHandle,
     stream: *mut c_void,
@@ -642,6 +759,7 @@ pub type PFN_cvcudaNonMaxSuppressionSubmit = unsafe extern "C" fn(
 
 // ---- Additional operators (round 2) ----
 
+/// Function-pointer type for `cvcudaPadSubmit`.
 pub type PFN_cvcudaPadSubmit = unsafe extern "C" fn(
     handle: CVCUDA_OperatorHandle,
     stream: *mut c_void,
@@ -653,6 +771,7 @@ pub type PFN_cvcudaPadSubmit = unsafe extern "C" fn(
     border_value: *const f32, // 4
 ) -> NVCVStatus;
 
+/// Function-pointer type for `cvcudaJointBilateralFilterSubmit`.
 pub type PFN_cvcudaJointBilateralFilterSubmit = unsafe extern "C" fn(
     handle: CVCUDA_OperatorHandle,
     stream: *mut c_void,
@@ -666,11 +785,13 @@ pub type PFN_cvcudaJointBilateralFilterSubmit = unsafe extern "C" fn(
 ) -> NVCVStatus;
 
 // Label (connected-component labeling)
+/// Function-pointer type for `cvcudaLabelCreate`.
 pub type PFN_cvcudaLabelCreate = unsafe extern "C" fn(
     handle_out: *mut CVCUDA_OperatorHandle,
     max_labels_per_batch: i32,
 ) -> NVCVStatus;
 
+/// Function-pointer type for `cvcudaLabelSubmit`.
 pub type PFN_cvcudaLabelSubmit = unsafe extern "C" fn(
     handle: CVCUDA_OperatorHandle,
     stream: *mut c_void,
@@ -689,12 +810,14 @@ pub type PFN_cvcudaLabelSubmit = unsafe extern "C" fn(
 ) -> NVCVStatus;
 
 // FindContours
+/// Function-pointer type for `cvcudaFindContoursCreate`.
 pub type PFN_cvcudaFindContoursCreate = unsafe extern "C" fn(
     handle_out: *mut CVCUDA_OperatorHandle,
     max_contour_size: NVCVSize2D,
     max_total_contour_count: i32,
 ) -> NVCVStatus;
 
+/// Function-pointer type for `cvcudaFindContoursSubmit`.
 pub type PFN_cvcudaFindContoursSubmit = unsafe extern "C" fn(
     handle: CVCUDA_OperatorHandle,
     stream: *mut c_void,
@@ -704,11 +827,13 @@ pub type PFN_cvcudaFindContoursSubmit = unsafe extern "C" fn(
 ) -> NVCVStatus;
 
 // MinAreaRect
+/// Function-pointer type for `cvcudaMinAreaRectCreate`.
 pub type PFN_cvcudaMinAreaRectCreate = unsafe extern "C" fn(
     handle_out: *mut CVCUDA_OperatorHandle,
     max_contour_count: i32,
 ) -> NVCVStatus;
 
+/// Function-pointer type for `cvcudaMinAreaRectSubmit`.
 pub type PFN_cvcudaMinAreaRectSubmit = unsafe extern "C" fn(
     handle: CVCUDA_OperatorHandle,
     stream: *mut c_void,
@@ -719,6 +844,7 @@ pub type PFN_cvcudaMinAreaRectSubmit = unsafe extern "C" fn(
 ) -> NVCVStatus;
 
 // Bounding-box rendering
+/// Function-pointer type for `cvcudaBndBoxSubmit`.
 pub type PFN_cvcudaBndBoxSubmit = unsafe extern "C" fn(
     handle: CVCUDA_OperatorHandle,
     stream: *mut c_void,
@@ -728,6 +854,7 @@ pub type PFN_cvcudaBndBoxSubmit = unsafe extern "C" fn(
 ) -> NVCVStatus;
 
 // On-screen display
+/// Function-pointer type for `cvcudaOSDSubmit`.
 pub type PFN_cvcudaOSDSubmit = unsafe extern "C" fn(
     handle: CVCUDA_OperatorHandle,
     stream: *mut c_void,
@@ -737,6 +864,7 @@ pub type PFN_cvcudaOSDSubmit = unsafe extern "C" fn(
 ) -> NVCVStatus;
 
 // RandomResizedCrop
+/// Function-pointer type for `cvcudaRandomResizedCropCreate`.
 pub type PFN_cvcudaRandomResizedCropCreate = unsafe extern "C" fn(
     handle_out: *mut CVCUDA_OperatorHandle,
     min_scale: f64,
@@ -747,6 +875,7 @@ pub type PFN_cvcudaRandomResizedCropCreate = unsafe extern "C" fn(
     seed: u32,
 ) -> NVCVStatus;
 
+/// Function-pointer type for `cvcudaRandomResizedCropSubmit`.
 pub type PFN_cvcudaRandomResizedCropSubmit = unsafe extern "C" fn(
     handle: CVCUDA_OperatorHandle,
     stream: *mut c_void,
@@ -756,9 +885,11 @@ pub type PFN_cvcudaRandomResizedCropSubmit = unsafe extern "C" fn(
 ) -> NVCVStatus;
 
 // Gaussian noise
+/// Function-pointer type for `cvcudaGaussianNoiseCreate`.
 pub type PFN_cvcudaGaussianNoiseCreate =
     unsafe extern "C" fn(handle_out: *mut CVCUDA_OperatorHandle, max_batch_size: i32) -> NVCVStatus;
 
+/// Function-pointer type for `cvcudaGaussianNoiseSubmit`.
 pub type PFN_cvcudaGaussianNoiseSubmit = unsafe extern "C" fn(
     handle: CVCUDA_OperatorHandle,
     stream: *mut c_void,
@@ -771,9 +902,11 @@ pub type PFN_cvcudaGaussianNoiseSubmit = unsafe extern "C" fn(
 ) -> NVCVStatus;
 
 // Rhomboid / Salt-and-pepper noise
+/// Function-pointer type for `cvcudaRhomboidNoiseCreate`.
 pub type PFN_cvcudaRhomboidNoiseCreate =
     unsafe extern "C" fn(handle_out: *mut CVCUDA_OperatorHandle, max_batch_size: i32) -> NVCVStatus;
 
+/// Function-pointer type for `cvcudaRhomboidNoiseSubmit`.
 pub type PFN_cvcudaRhomboidNoiseSubmit = unsafe extern "C" fn(
     handle: CVCUDA_OperatorHandle,
     stream: *mut c_void,
@@ -784,6 +917,7 @@ pub type PFN_cvcudaRhomboidNoiseSubmit = unsafe extern "C" fn(
 ) -> NVCVStatus;
 
 // Advanced color conversion (AdvCvtColor)
+/// Function-pointer type for `cvcudaAdvCvtColorSubmit`.
 pub type PFN_cvcudaAdvCvtColorSubmit = unsafe extern "C" fn(
     handle: CVCUDA_OperatorHandle,
     stream: *mut c_void,
@@ -794,6 +928,7 @@ pub type PFN_cvcudaAdvCvtColorSubmit = unsafe extern "C" fn(
 ) -> NVCVStatus;
 
 // SIFT
+/// Function-pointer type for `cvcudaSIFTCreate`.
 pub type PFN_cvcudaSIFTCreate = unsafe extern "C" fn(
     handle_out: *mut CVCUDA_OperatorHandle,
     max_shape: NVCVSize2D,
@@ -805,6 +940,7 @@ pub type PFN_cvcudaSIFTCreate = unsafe extern "C" fn(
     flags: i32,
 ) -> NVCVStatus;
 
+/// Function-pointer type for `cvcudaSIFTSubmit`.
 pub type PFN_cvcudaSIFTSubmit = unsafe extern "C" fn(
     handle: CVCUDA_OperatorHandle,
     stream: *mut c_void,
@@ -821,9 +957,11 @@ pub type PFN_cvcudaSIFTSubmit = unsafe extern "C" fn(
 ) -> NVCVStatus;
 
 // Chroma-keying / alpha composite
+/// Function-pointer type for `cvcudaSaltAndPepperNoiseCreate`.
 pub type PFN_cvcudaSaltAndPepperNoiseCreate =
     unsafe extern "C" fn(handle_out: *mut CVCUDA_OperatorHandle, max_batch_size: i32) -> NVCVStatus;
 
+/// Function-pointer type for `cvcudaSaltAndPepperNoiseSubmit`.
 pub type PFN_cvcudaSaltAndPepperNoiseSubmit = unsafe extern "C" fn(
     handle: CVCUDA_OperatorHandle,
     stream: *mut c_void,
@@ -836,6 +974,7 @@ pub type PFN_cvcudaSaltAndPepperNoiseSubmit = unsafe extern "C" fn(
 ) -> NVCVStatus;
 
 // HQResize (high-quality resize for ML preproc)
+/// Function-pointer type for `cvcudaHQResizeSubmit`.
 pub type PFN_cvcudaHQResizeSubmit = unsafe extern "C" fn(
     handle: CVCUDA_OperatorHandle,
     stream: *mut c_void,
@@ -850,6 +989,7 @@ pub type PFN_cvcudaHQResizeSubmit = unsafe extern "C" fn(
 // ---- Round 3: finish the operator surface ----
 
 // CropFlipNormalizeReformat — the fused ML-preproc bundle.
+/// Function-pointer type for `cvcudaCropFlipNormalizeReformatSubmit`.
 pub type PFN_cvcudaCropFlipNormalizeReformatSubmit = unsafe extern "C" fn(
     handle: CVCUDA_OperatorHandle,
     stream: *mut c_void,
@@ -867,6 +1007,7 @@ pub type PFN_cvcudaCropFlipNormalizeReformatSubmit = unsafe extern "C" fn(
 ) -> NVCVStatus;
 
 // GuidedFilter — edge-preserving filter that uses a guide image.
+/// Function-pointer type for `cvcudaGuidedFilterSubmit`.
 pub type PFN_cvcudaGuidedFilterSubmit = unsafe extern "C" fn(
     handle: CVCUDA_OperatorHandle,
     stream: *mut c_void,
@@ -879,9 +1020,11 @@ pub type PFN_cvcudaGuidedFilterSubmit = unsafe extern "C" fn(
 ) -> NVCVStatus;
 
 // PairwiseMatcher — feature-descriptor matcher (e.g. SIFT output).
+/// Function-pointer type for `cvcudaPairwiseMatcherCreate`.
 pub type PFN_cvcudaPairwiseMatcherCreate =
     unsafe extern "C" fn(handle_out: *mut CVCUDA_OperatorHandle, algo_choice: i32) -> NVCVStatus;
 
+/// Function-pointer type for `cvcudaPairwiseMatcherSubmit`.
 pub type PFN_cvcudaPairwiseMatcherSubmit = unsafe extern "C" fn(
     handle: CVCUDA_OperatorHandle,
     stream: *mut c_void,
@@ -898,6 +1041,7 @@ pub type PFN_cvcudaPairwiseMatcherSubmit = unsafe extern "C" fn(
 ) -> NVCVStatus;
 
 // HausdorffDistance
+/// Function-pointer type for `cvcudaHausdorffDistanceSubmit`.
 pub type PFN_cvcudaHausdorffDistanceSubmit = unsafe extern "C" fn(
     handle: CVCUDA_OperatorHandle,
     stream: *mut c_void,
@@ -907,6 +1051,7 @@ pub type PFN_cvcudaHausdorffDistanceSubmit = unsafe extern "C" fn(
 ) -> NVCVStatus;
 
 // Resize for CropFlipNormalizeReformat (VarShape)
+/// Function-pointer type for `cvcudaResizeCropConvertReformatSubmit`.
 pub type PFN_cvcudaResizeCropConvertReformatSubmit = unsafe extern "C" fn(
     handle: CVCUDA_OperatorHandle,
     stream: *mut c_void,
@@ -923,6 +1068,7 @@ pub type PFN_cvcudaResizeCropConvertReformatSubmit = unsafe extern "C" fn(
 ) -> NVCVStatus;
 
 // ResizeCropConvertReformat alt API (direct signature per 0.14)
+/// Function-pointer type for `cvcudaResizeCropConvertReformatWithParamsSubmit`.
 pub type PFN_cvcudaResizeCropConvertReformatWithParamsSubmit = unsafe extern "C" fn(
     handle: CVCUDA_OperatorHandle,
     stream: *mut c_void,
@@ -937,6 +1083,7 @@ pub type PFN_cvcudaResizeCropConvertReformatWithParamsSubmit = unsafe extern "C"
 ) -> NVCVStatus;
 
 // RotateBatch
+/// Function-pointer type for `cvcudaRotateBatchSubmit`.
 pub type PFN_cvcudaRotateBatchSubmit = unsafe extern "C" fn(
     handle: CVCUDA_OperatorHandle,
     stream: *mut c_void,
@@ -948,6 +1095,7 @@ pub type PFN_cvcudaRotateBatchSubmit = unsafe extern "C" fn(
 ) -> NVCVStatus;
 
 // WarpAffine batched with per-frame transform
+/// Function-pointer type for `cvcudaWarpAffineBatchSubmit`.
 pub type PFN_cvcudaWarpAffineBatchSubmit = unsafe extern "C" fn(
     handle: CVCUDA_OperatorHandle,
     stream: *mut c_void,
@@ -960,9 +1108,11 @@ pub type PFN_cvcudaWarpAffineBatchSubmit = unsafe extern "C" fn(
 ) -> NVCVStatus;
 
 // HistogramEq (tensor-level, per-channel)
+/// Function-pointer type for `cvcudaHistogramEqTensorSubmit`.
 pub type PFN_cvcudaHistogramEqTensorSubmit = PFN_cvcudaSubmitInOut;
 
 // ResizeVarShape
+/// Function-pointer type for `cvcudaResizeVarShapeSubmit`.
 pub type PFN_cvcudaResizeVarShapeSubmit = unsafe extern "C" fn(
     handle: CVCUDA_OperatorHandle,
     stream: *mut c_void,
@@ -975,7 +1125,9 @@ pub type PFN_cvcudaResizeVarShapeSubmit = unsafe extern "C" fn(
 
 macro_rules! cvcuda_fns {
     ($($(#[$attr:meta])* fn $name:ident as $sym:literal : $pfn:ty;)*) => {
+        /// `Cvcuda` (FFI binding).
         pub struct Cvcuda {
+            /// Lib field.
             pub lib: Library,
             $(
                 $name: OnceLock<$pfn>,
@@ -1197,6 +1349,7 @@ fn cvcuda_candidates() -> &'static [&'static str] {
     }
 }
 
+/// `cvcuda` (cvcuda).
 pub fn cvcuda() -> Result<&'static Cvcuda, LoaderError> {
     static CVCUDA: OnceLock<Cvcuda> = OnceLock::new();
     if let Some(c) = CVCUDA.get() {

@@ -45,7 +45,9 @@ pub enum cufftType {
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Default, PartialEq)]
 pub struct cufftComplex {
+    /// `x` component.
     pub x: f32,
+    /// `y` component.
     pub y: f32,
 }
 
@@ -53,7 +55,9 @@ pub struct cufftComplex {
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Default, PartialEq)]
 pub struct cufftDoubleComplex {
+    /// `x` component.
     pub x: f64,
+    /// `y` component.
     pub y: f64,
 }
 
@@ -474,6 +478,7 @@ macro_rules! cufft_fns {
         }
         impl Cufft {
             $(
+                /// `func` (func).
                 pub fn $name(&self) -> Result<$pfn, LoaderError> {
                     if let Some(&p) = self.$name.get() { return Ok(p); }
                     let raw: *mut () = unsafe { self.lib.raw_symbol($sym)? };

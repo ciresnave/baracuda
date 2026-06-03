@@ -16,26 +16,42 @@ use baracuda_core::{platform, Library, LoaderError};
 use baracuda_cuda_sys::runtime::cudaStream_t;
 use baracuda_types::CudaStatus;
 
+/// Opaque `nvjpegHandle_t` type (FFI binding).
 pub type nvjpegHandle_t = *mut c_void;
+/// Opaque `nvjpegJpegState_t` type (FFI binding).
 pub type nvjpegJpegState_t = *mut c_void;
+/// Opaque `nvjpegEncoderState_t` type (FFI binding).
 pub type nvjpegEncoderState_t = *mut c_void;
+/// Opaque `nvjpegEncoderParams_t` type (FFI binding).
 pub type nvjpegEncoderParams_t = *mut c_void;
+/// Opaque `nvjpegJpegStream_t` type (FFI binding).
 pub type nvjpegJpegStream_t = *mut c_void;
+/// Opaque `nvjpegJpegDecoder_t` type (FFI binding).
 pub type nvjpegJpegDecoder_t = *mut c_void;
+/// Opaque `nvjpegBufferPinned_t` type (FFI binding).
 pub type nvjpegBufferPinned_t = *mut c_void;
+/// Opaque `nvjpegBufferDevice_t` type (FFI binding).
 pub type nvjpegBufferDevice_t = *mut c_void;
+/// Opaque `nvjpegDecodeParams_t` type (FFI binding).
 pub type nvjpegDecodeParams_t = *mut c_void;
 
 /// nvJPEG backend selector.
 #[repr(i32)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum nvjpegBackend_t {
+    /// Default variant.
     Default = 0,
+    /// Hybrid variant.
     Hybrid = 1,
+    /// Gpu Hybrid variant.
     GpuHybrid = 2,
+    /// Hardware variant.
     Hardware = 3,
+    /// Gpu Hybrid Device variant.
     GpuHybridDevice = 4,
+    /// Hardware With Backup variant.
     HardwareWithBackup = 5,
+    /// Lossless variant.
     Lossless = 6,
 }
 
@@ -43,13 +59,21 @@ pub enum nvjpegBackend_t {
 #[repr(i32)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum nvjpegChromaSubsampling_t {
+    /// Css444 variant.
     Css444 = 0,
+    /// Css422 variant.
     Css422 = 1,
+    /// Css420 variant.
     Css420 = 2,
+    /// Css440 variant.
     Css440 = 3,
+    /// Css411 variant.
     Css411 = 4,
+    /// Css410 variant.
     Css410 = 5,
+    /// Css Gray variant.
     CssGray = 6,
+    /// Css410 V variant.
     Css410V = 7,
 }
 
@@ -57,7 +81,9 @@ pub enum nvjpegChromaSubsampling_t {
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
 pub struct nvjpegImage_t {
+    /// Channel field.
     pub channel: [*mut c_uchar; 4],
+    /// Pitch.
     pub pitch: [usize; 4],
 }
 
@@ -74,10 +100,15 @@ impl Default for nvjpegImage_t {
 #[repr(i32)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum nvjpegOutputFormat_t {
+    /// Unchanged variant.
     Unchanged = 0,
+    /// Yuv variant.
     Yuv = 1,
+    /// Y variant.
     Y = 2,
+    /// Rgb variant.
     Rgb = 3,
+    /// Bgr variant.
     Bgr = 4,
     /// RGB interleaved (single output pointer, 3 bytes per pixel).
     Rgbi = 5,
@@ -87,22 +118,34 @@ pub enum nvjpegOutputFormat_t {
 
 // ---- status ---------------------------------------------------------------
 
+/// `nvjpegStatus_t` (FFI binding).
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
 #[repr(transparent)]
 pub struct nvjpegStatus_t(pub i32);
 
 impl nvjpegStatus_t {
+    /// Associated constant `SUCCESS`.
     pub const SUCCESS: Self = Self(0);
+    /// Associated constant `NOT_INITIALIZED`.
     pub const NOT_INITIALIZED: Self = Self(1);
+    /// Associated constant `INVALID_PARAMETER`.
     pub const INVALID_PARAMETER: Self = Self(2);
+    /// Associated constant `BAD_JPEG`.
     pub const BAD_JPEG: Self = Self(3);
+    /// Associated constant `JPEG_NOT_SUPPORTED`.
     pub const JPEG_NOT_SUPPORTED: Self = Self(4);
+    /// Associated constant `ALLOCATOR_FAILURE`.
     pub const ALLOCATOR_FAILURE: Self = Self(5);
+    /// Associated constant `EXECUTION_FAILED`.
     pub const EXECUTION_FAILED: Self = Self(6);
+    /// Associated constant `ARCH_MISMATCH`.
     pub const ARCH_MISMATCH: Self = Self(7);
+    /// Associated constant `INTERNAL_ERROR`.
     pub const INTERNAL_ERROR: Self = Self(8);
+    /// Associated constant `IMPLEMENTATION_NOT_SUPPORTED`.
     pub const IMPLEMENTATION_NOT_SUPPORTED: Self = Self(9);
 
+    /// Returns true iff `success`.
     pub const fn is_success(self) -> bool {
         self.0 == 0
     }
@@ -142,13 +185,18 @@ impl CudaStatus for nvjpegStatus_t {
 
 // ---- function-pointer types ----------------------------------------------
 
+/// Function-pointer type for `nvjpegCreateSimple`.
 pub type PFN_nvjpegCreateSimple =
     unsafe extern "C" fn(handle: *mut nvjpegHandle_t) -> nvjpegStatus_t;
+/// Function-pointer type for `nvjpegDestroy`.
 pub type PFN_nvjpegDestroy = unsafe extern "C" fn(handle: nvjpegHandle_t) -> nvjpegStatus_t;
+/// Function-pointer type for `nvjpegJpegStateCreate`.
 pub type PFN_nvjpegJpegStateCreate =
     unsafe extern "C" fn(handle: nvjpegHandle_t, state: *mut nvjpegJpegState_t) -> nvjpegStatus_t;
+/// Function-pointer type for `nvjpegJpegStateDestroy`.
 pub type PFN_nvjpegJpegStateDestroy =
     unsafe extern "C" fn(state: nvjpegJpegState_t) -> nvjpegStatus_t;
+/// Function-pointer type for `nvjpegGetImageInfo`.
 pub type PFN_nvjpegGetImageInfo = unsafe extern "C" fn(
     handle: nvjpegHandle_t,
     data: *const c_uchar,
@@ -158,6 +206,7 @@ pub type PFN_nvjpegGetImageInfo = unsafe extern "C" fn(
     widths: *mut c_int,
     heights: *mut c_int,
 ) -> nvjpegStatus_t;
+/// Function-pointer type for `nvjpegDecode`.
 pub type PFN_nvjpegDecode = unsafe extern "C" fn(
     handle: nvjpegHandle_t,
     state: nvjpegJpegState_t,
@@ -170,6 +219,7 @@ pub type PFN_nvjpegDecode = unsafe extern "C" fn(
 
 // ---- Full handle creation (backend-aware) ----
 
+/// Function-pointer type for `nvjpegCreate`.
 pub type PFN_nvjpegCreate = unsafe extern "C" fn(
     backend: nvjpegBackend_t,
     allocator: *mut c_void,
@@ -177,6 +227,7 @@ pub type PFN_nvjpegCreate = unsafe extern "C" fn(
     handle: *mut nvjpegHandle_t,
 ) -> nvjpegStatus_t;
 
+/// Function-pointer type for `nvjpegCreateEx`.
 pub type PFN_nvjpegCreateEx = unsafe extern "C" fn(
     backend: nvjpegBackend_t,
     allocator: *mut c_void,
@@ -185,11 +236,13 @@ pub type PFN_nvjpegCreateEx = unsafe extern "C" fn(
     handle: *mut nvjpegHandle_t,
 ) -> nvjpegStatus_t;
 
+/// Function-pointer type for `nvjpegGetProperty`.
 pub type PFN_nvjpegGetProperty =
     unsafe extern "C" fn(prop: c_int, value_out: *mut c_int) -> nvjpegStatus_t;
 
 // ---- Batched decode ----
 
+/// Function-pointer type for `nvjpegDecodeBatchedInitialize`.
 pub type PFN_nvjpegDecodeBatchedInitialize = unsafe extern "C" fn(
     handle: nvjpegHandle_t,
     state: nvjpegJpegState_t,
@@ -198,6 +251,7 @@ pub type PFN_nvjpegDecodeBatchedInitialize = unsafe extern "C" fn(
     output_format: nvjpegOutputFormat_t,
 ) -> nvjpegStatus_t;
 
+/// Function-pointer type for `nvjpegDecodeBatched`.
 pub type PFN_nvjpegDecodeBatched = unsafe extern "C" fn(
     handle: nvjpegHandle_t,
     state: nvjpegJpegState_t,
@@ -207,6 +261,7 @@ pub type PFN_nvjpegDecodeBatched = unsafe extern "C" fn(
     stream: cudaStream_t,
 ) -> nvjpegStatus_t;
 
+/// Function-pointer type for `nvjpegDecodeBatchedPreAllocate`.
 pub type PFN_nvjpegDecodeBatchedPreAllocate = unsafe extern "C" fn(
     handle: nvjpegHandle_t,
     state: nvjpegJpegState_t,
@@ -219,15 +274,18 @@ pub type PFN_nvjpegDecodeBatchedPreAllocate = unsafe extern "C" fn(
 
 // ---- Hybrid / pipelined decoder (separate phase controls) ----
 
+/// Function-pointer type for `nvjpegDecoderCreate`.
 pub type PFN_nvjpegDecoderCreate = unsafe extern "C" fn(
     handle: nvjpegHandle_t,
     backend: nvjpegBackend_t,
     decoder_out: *mut nvjpegJpegDecoder_t,
 ) -> nvjpegStatus_t;
 
+/// Function-pointer type for `nvjpegDecoderDestroy`.
 pub type PFN_nvjpegDecoderDestroy =
     unsafe extern "C" fn(decoder: nvjpegJpegDecoder_t) -> nvjpegStatus_t;
 
+/// Function-pointer type for `nvjpegDecodeJpegHost`.
 pub type PFN_nvjpegDecodeJpegHost = unsafe extern "C" fn(
     handle: nvjpegHandle_t,
     decoder: nvjpegJpegDecoder_t,
@@ -236,6 +294,7 @@ pub type PFN_nvjpegDecodeJpegHost = unsafe extern "C" fn(
     stream_in: nvjpegJpegStream_t,
 ) -> nvjpegStatus_t;
 
+/// Function-pointer type for `nvjpegDecodeJpegTransferToDevice`.
 pub type PFN_nvjpegDecodeJpegTransferToDevice = unsafe extern "C" fn(
     handle: nvjpegHandle_t,
     decoder: nvjpegJpegDecoder_t,
@@ -244,6 +303,7 @@ pub type PFN_nvjpegDecodeJpegTransferToDevice = unsafe extern "C" fn(
     stream: cudaStream_t,
 ) -> nvjpegStatus_t;
 
+/// Function-pointer type for `nvjpegDecodeJpegDevice`.
 pub type PFN_nvjpegDecodeJpegDevice = unsafe extern "C" fn(
     handle: nvjpegHandle_t,
     decoder: nvjpegJpegDecoder_t,
@@ -254,12 +314,15 @@ pub type PFN_nvjpegDecodeJpegDevice = unsafe extern "C" fn(
 
 // ---- JPEG-stream parsing ----
 
+/// Function-pointer type for `nvjpegJpegStreamCreate`.
 pub type PFN_nvjpegJpegStreamCreate =
     unsafe extern "C" fn(handle: nvjpegHandle_t, stream: *mut nvjpegJpegStream_t) -> nvjpegStatus_t;
 
+/// Function-pointer type for `nvjpegJpegStreamDestroy`.
 pub type PFN_nvjpegJpegStreamDestroy =
     unsafe extern "C" fn(stream: nvjpegJpegStream_t) -> nvjpegStatus_t;
 
+/// Function-pointer type for `nvjpegJpegStreamParse`.
 pub type PFN_nvjpegJpegStreamParse = unsafe extern "C" fn(
     handle: nvjpegHandle_t,
     data: *const c_uchar,
@@ -269,15 +332,18 @@ pub type PFN_nvjpegJpegStreamParse = unsafe extern "C" fn(
     stream: nvjpegJpegStream_t,
 ) -> nvjpegStatus_t;
 
+/// Function-pointer type for `nvjpegJpegStreamGetFrameDimensions`.
 pub type PFN_nvjpegJpegStreamGetFrameDimensions = unsafe extern "C" fn(
     stream: nvjpegJpegStream_t,
     width: *mut u32,
     height: *mut u32,
 ) -> nvjpegStatus_t;
 
+/// Function-pointer type for `nvjpegJpegStreamGetComponentsNum`.
 pub type PFN_nvjpegJpegStreamGetComponentsNum =
     unsafe extern "C" fn(stream: nvjpegJpegStream_t, components_num: *mut u32) -> nvjpegStatus_t;
 
+/// Function-pointer type for `nvjpegJpegStreamGetChromaSubsampling`.
 pub type PFN_nvjpegJpegStreamGetChromaSubsampling = unsafe extern "C" fn(
     stream: nvjpegJpegStream_t,
     subsampling: *mut nvjpegChromaSubsampling_t,
@@ -285,29 +351,35 @@ pub type PFN_nvjpegJpegStreamGetChromaSubsampling = unsafe extern "C" fn(
 
 // ---- Buffer pools (pinned + device) ----
 
+/// Function-pointer type for `nvjpegBufferPinnedCreate`.
 pub type PFN_nvjpegBufferPinnedCreate = unsafe extern "C" fn(
     handle: nvjpegHandle_t,
     allocator: *mut c_void,
     buffer_out: *mut nvjpegBufferPinned_t,
 ) -> nvjpegStatus_t;
 
+/// Function-pointer type for `nvjpegBufferPinnedDestroy`.
 pub type PFN_nvjpegBufferPinnedDestroy =
     unsafe extern "C" fn(buf: nvjpegBufferPinned_t) -> nvjpegStatus_t;
 
+/// Function-pointer type for `nvjpegBufferDeviceCreate`.
 pub type PFN_nvjpegBufferDeviceCreate = unsafe extern "C" fn(
     handle: nvjpegHandle_t,
     allocator: *mut c_void,
     buffer_out: *mut nvjpegBufferDevice_t,
 ) -> nvjpegStatus_t;
 
+/// Function-pointer type for `nvjpegBufferDeviceDestroy`.
 pub type PFN_nvjpegBufferDeviceDestroy =
     unsafe extern "C" fn(buf: nvjpegBufferDevice_t) -> nvjpegStatus_t;
 
+/// Function-pointer type for `nvjpegStateAttachPinnedBuffer`.
 pub type PFN_nvjpegStateAttachPinnedBuffer = unsafe extern "C" fn(
     state: nvjpegJpegState_t,
     buf: nvjpegBufferPinned_t,
 ) -> nvjpegStatus_t;
 
+/// Function-pointer type for `nvjpegStateAttachDeviceBuffer`.
 pub type PFN_nvjpegStateAttachDeviceBuffer = unsafe extern "C" fn(
     state: nvjpegJpegState_t,
     buf: nvjpegBufferDevice_t,
@@ -315,19 +387,23 @@ pub type PFN_nvjpegStateAttachDeviceBuffer = unsafe extern "C" fn(
 
 // ---- Decode params ----
 
+/// Function-pointer type for `nvjpegDecodeParamsCreate`.
 pub type PFN_nvjpegDecodeParamsCreate = unsafe extern "C" fn(
     handle: nvjpegHandle_t,
     params_out: *mut nvjpegDecodeParams_t,
 ) -> nvjpegStatus_t;
 
+/// Function-pointer type for `nvjpegDecodeParamsDestroy`.
 pub type PFN_nvjpegDecodeParamsDestroy =
     unsafe extern "C" fn(params: nvjpegDecodeParams_t) -> nvjpegStatus_t;
 
+/// Function-pointer type for `nvjpegDecodeParamsSetOutputFormat`.
 pub type PFN_nvjpegDecodeParamsSetOutputFormat = unsafe extern "C" fn(
     params: nvjpegDecodeParams_t,
     output_format: nvjpegOutputFormat_t,
 ) -> nvjpegStatus_t;
 
+/// Function-pointer type for `nvjpegDecodeParamsSetROI`.
 pub type PFN_nvjpegDecodeParamsSetROI = unsafe extern "C" fn(
     params: nvjpegDecodeParams_t,
     offset_x: c_int,
@@ -336,47 +412,56 @@ pub type PFN_nvjpegDecodeParamsSetROI = unsafe extern "C" fn(
     roi_height: c_int,
 ) -> nvjpegStatus_t;
 
+/// Function-pointer type for `nvjpegDecodeParamsSetAllowCMYK`.
 pub type PFN_nvjpegDecodeParamsSetAllowCMYK =
     unsafe extern "C" fn(params: nvjpegDecodeParams_t, allow: c_int) -> nvjpegStatus_t;
 
 // ---- Encoder ----
 
+/// Function-pointer type for `nvjpegEncoderStateCreate`.
 pub type PFN_nvjpegEncoderStateCreate = unsafe extern "C" fn(
     handle: nvjpegHandle_t,
     state_out: *mut nvjpegEncoderState_t,
     stream: cudaStream_t,
 ) -> nvjpegStatus_t;
 
+/// Function-pointer type for `nvjpegEncoderStateDestroy`.
 pub type PFN_nvjpegEncoderStateDestroy =
     unsafe extern "C" fn(state: nvjpegEncoderState_t) -> nvjpegStatus_t;
 
+/// Function-pointer type for `nvjpegEncoderParamsCreate`.
 pub type PFN_nvjpegEncoderParamsCreate = unsafe extern "C" fn(
     handle: nvjpegHandle_t,
     params_out: *mut nvjpegEncoderParams_t,
     stream: cudaStream_t,
 ) -> nvjpegStatus_t;
 
+/// Function-pointer type for `nvjpegEncoderParamsDestroy`.
 pub type PFN_nvjpegEncoderParamsDestroy =
     unsafe extern "C" fn(params: nvjpegEncoderParams_t) -> nvjpegStatus_t;
 
+/// Function-pointer type for `nvjpegEncoderParamsSetQuality`.
 pub type PFN_nvjpegEncoderParamsSetQuality = unsafe extern "C" fn(
     params: nvjpegEncoderParams_t,
     quality: c_int,
     stream: cudaStream_t,
 ) -> nvjpegStatus_t;
 
+/// Function-pointer type for `nvjpegEncoderParamsSetSamplingFactors`.
 pub type PFN_nvjpegEncoderParamsSetSamplingFactors = unsafe extern "C" fn(
     params: nvjpegEncoderParams_t,
     subsampling: nvjpegChromaSubsampling_t,
     stream: cudaStream_t,
 ) -> nvjpegStatus_t;
 
+/// Function-pointer type for `nvjpegEncoderParamsSetOptimizedHuffman`.
 pub type PFN_nvjpegEncoderParamsSetOptimizedHuffman = unsafe extern "C" fn(
     params: nvjpegEncoderParams_t,
     optimized: c_int,
     stream: cudaStream_t,
 ) -> nvjpegStatus_t;
 
+/// Function-pointer type for `nvjpegEncodeImage`.
 pub type PFN_nvjpegEncodeImage = unsafe extern "C" fn(
     handle: nvjpegHandle_t,
     state: nvjpegEncoderState_t,
@@ -388,6 +473,7 @@ pub type PFN_nvjpegEncodeImage = unsafe extern "C" fn(
     stream: cudaStream_t,
 ) -> nvjpegStatus_t;
 
+/// Function-pointer type for `nvjpegEncodeYUV`.
 pub type PFN_nvjpegEncodeYUV = unsafe extern "C" fn(
     handle: nvjpegHandle_t,
     state: nvjpegEncoderState_t,
@@ -399,6 +485,7 @@ pub type PFN_nvjpegEncodeYUV = unsafe extern "C" fn(
     stream: cudaStream_t,
 ) -> nvjpegStatus_t;
 
+/// Function-pointer type for `nvjpegEncodeRetrieveBitstream`.
 pub type PFN_nvjpegEncodeRetrieveBitstream = unsafe extern "C" fn(
     handle: nvjpegHandle_t,
     state: nvjpegEncoderState_t,
@@ -415,6 +502,7 @@ fn nvjpeg_candidates() -> Vec<String> {
 
 macro_rules! nvjpeg_fns {
     ($($name:ident as $sym:literal : $pfn:ty);* $(;)?) => {
+        /// `Nvjpeg` (FFI binding).
         pub struct Nvjpeg {
             lib: Library,
             $($name: OnceLock<$pfn>,)*
@@ -426,6 +514,7 @@ macro_rules! nvjpeg_fns {
         }
         impl Nvjpeg {
             $(
+                /// `func` (func).
                 pub fn $name(&self) -> Result<$pfn, LoaderError> {
                     if let Some(&p) = self.$name.get() { return Ok(p); }
                     let raw: *mut () = unsafe { self.lib.raw_symbol($sym)? };
@@ -520,6 +609,7 @@ nvjpeg_fns! {
         PFN_nvjpegEncodeRetrieveBitstream;
 }
 
+/// `nvjpeg` (nvjpeg).
 pub fn nvjpeg() -> Result<&'static Nvjpeg, LoaderError> {
     static NVJPEG: OnceLock<Nvjpeg> = OnceLock::new();
     if let Some(n) = NVJPEG.get() {
