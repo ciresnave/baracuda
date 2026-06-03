@@ -401,4 +401,35 @@ int baracuda_kernels_flashinfer_top_k_top_p_sampling_f32_arr_run(
     return translate(e);
 }
 
+
+// Per-symbol _can_implement companions for the per-row (_arr) sampler variants.
+// Threshold pointer is opaque (validated at call time); we validate batch/vocab here.
+extern "C" int32_t baracuda_kernels_flashinfer_top_k_sampling_f32_arr_can_implement(
+    int32_t batch, int32_t vocab)
+{
+    if (batch <= 0 || vocab <= 0) return STATUS_INVALID_ARG;
+    return STATUS_OK;
+}
+
+extern "C" int32_t baracuda_kernels_flashinfer_top_p_sampling_f32_arr_can_implement(
+    int32_t batch, int32_t vocab)
+{
+    if (batch <= 0 || vocab <= 0) return STATUS_INVALID_ARG;
+    return STATUS_OK;
+}
+
+extern "C" int32_t baracuda_kernels_flashinfer_min_p_sampling_f32_arr_can_implement(
+    int32_t batch, int32_t vocab)
+{
+    if (batch <= 0 || vocab <= 0) return STATUS_INVALID_ARG;
+    return STATUS_OK;
+}
+
+extern "C" int32_t baracuda_kernels_flashinfer_top_k_top_p_sampling_f32_arr_can_implement(
+    int32_t batch, int32_t vocab)
+{
+    if (batch <= 0 || vocab <= 0) return STATUS_INVALID_ARG;
+    return STATUS_OK;
+}
+
 }  // extern "C"

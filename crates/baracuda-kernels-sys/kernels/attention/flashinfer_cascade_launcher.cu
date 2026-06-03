@@ -228,4 +228,48 @@ int baracuda_kernels_flashinfer_merge_states_can_implement(
     return STATUS_OK;
 }
 
+
+// Per-symbol _can_implement companions. Delegate to family-level validators.
+extern "C" int32_t baracuda_kernels_flashinfer_merge_state_in_place_f16_can_implement(
+    int32_t seq_len, int32_t num_heads, int32_t head_dim)
+{
+    return baracuda_kernels_flashinfer_merge_state_in_place_can_implement(
+        seq_len, num_heads, head_dim);
+}
+
+extern "C" int32_t baracuda_kernels_flashinfer_merge_state_in_place_bf16_can_implement(
+    int32_t seq_len, int32_t num_heads, int32_t head_dim)
+{
+    return baracuda_kernels_flashinfer_merge_state_in_place_can_implement(
+        seq_len, num_heads, head_dim);
+}
+
+extern "C" int32_t baracuda_kernels_flashinfer_merge_state_in_place_f32_can_implement(
+    int32_t seq_len, int32_t num_heads, int32_t head_dim)
+{
+    return baracuda_kernels_flashinfer_merge_state_in_place_can_implement(
+        seq_len, num_heads, head_dim);
+}
+
+extern "C" int32_t baracuda_kernels_flashinfer_merge_states_f16_can_implement(
+    int32_t num_index_sets, int32_t seq_len, int32_t num_heads, int32_t head_dim)
+{
+    return baracuda_kernels_flashinfer_merge_states_can_implement(
+        num_index_sets, seq_len, num_heads, head_dim);
+}
+
+extern "C" int32_t baracuda_kernels_flashinfer_merge_states_bf16_can_implement(
+    int32_t num_index_sets, int32_t seq_len, int32_t num_heads, int32_t head_dim)
+{
+    return baracuda_kernels_flashinfer_merge_states_can_implement(
+        num_index_sets, seq_len, num_heads, head_dim);
+}
+
+extern "C" int32_t baracuda_kernels_flashinfer_merge_states_f32_can_implement(
+    int32_t num_index_sets, int32_t seq_len, int32_t num_heads, int32_t head_dim)
+{
+    return baracuda_kernels_flashinfer_merge_states_can_implement(
+        num_index_sets, seq_len, num_heads, head_dim);
+}
+
 }  // extern "C"

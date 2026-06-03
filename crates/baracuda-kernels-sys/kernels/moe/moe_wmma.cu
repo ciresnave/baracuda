@@ -173,3 +173,27 @@ extern "C" int32_t baracuda_kernels_moe_wmma_bf16_run(
                                         num_experts, topk, size_m, size_n, size_k,
                                         is_prefill != 0, stream);
 }
+
+extern "C" int32_t baracuda_kernels_moe_wmma_f16_can_implement(
+    int32_t num_experts, int32_t topk,
+    int32_t size_m, int32_t size_n, int32_t size_k,
+    int32_t /*is_prefill*/)
+{
+    if (num_experts <= 0 || topk <= 0) return 2;
+    if (size_m <= 0 || size_n <= 0 || size_k <= 0) return 2;
+    if (topk > num_experts) return 2;
+    if (num_experts > 1024) return 3;  // single-block prefix-sum cap
+    return 0;
+}
+
+extern "C" int32_t baracuda_kernels_moe_wmma_bf16_can_implement(
+    int32_t num_experts, int32_t topk,
+    int32_t size_m, int32_t size_n, int32_t size_k,
+    int32_t /*is_prefill*/)
+{
+    if (num_experts <= 0 || topk <= 0) return 2;
+    if (size_m <= 0 || size_n <= 0 || size_k <= 0) return 2;
+    if (topk > num_experts) return 2;
+    if (num_experts > 1024) return 3;
+    return 0;
+}

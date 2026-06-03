@@ -41,3 +41,18 @@ extern "C" int32_t baracuda_kernels_write_slice_nibble_run(
         dest, source, source_byte_numel, rank,
         dest_byte_shape, source_byte_shape, range_start_bytes, stream);
 }
+
+extern "C" int32_t baracuda_kernels_write_slice_nibble_can_implement(
+    const void* /*dest*/, const void* /*source*/,
+    int64_t source_byte_numel,
+    int32_t rank,
+    const int32_t* dest_byte_shape,
+    const int32_t* source_byte_shape,
+    const int32_t* range_start_bytes)
+{
+    if (source_byte_numel < 0) return 2;
+    if (rank < 1 || rank > baracuda::write_slice::MAX_RANK) return 2;
+    if (source_byte_numel > 0 && (dest_byte_shape == nullptr || source_byte_shape == nullptr ||
+                                   range_start_bytes == nullptr)) return 2;
+    return 0;
+}

@@ -157,6 +157,15 @@ extern "C" int32_t baracuda_kernels_quantize_q8_1_f32_run(
         static_cast<const float *>(src), dst_q8_1, stream);
 }
 
+extern "C" int32_t baracuda_kernels_quantize_q8_1_f32_can_implement(
+    int64_t kx, int64_t ny,
+    const void * /*src*/,
+    const void * /*dst_q8_1*/)
+{
+    if (kx <= 0 || ny <= 0) return 2;
+    return 0;
+}
+
 extern "C" int32_t baracuda_kernels_quantize_q8_1_f16_run(
     int64_t kx, int64_t ny,
     const void * __restrict__ src,
@@ -169,6 +178,15 @@ extern "C" int32_t baracuda_kernels_quantize_q8_1_f16_run(
         static_cast<const __half *>(src), dst_q8_1, stream);
 }
 
+extern "C" int32_t baracuda_kernels_quantize_q8_1_f16_can_implement(
+    int64_t kx, int64_t ny,
+    const void * /*src*/,
+    const void * /*dst_q8_1*/)
+{
+    if (kx <= 0 || ny <= 0) return 2;
+    return 0;
+}
+
 extern "C" int32_t baracuda_kernels_quantize_q8_1_bf16_run(
     int64_t kx, int64_t ny,
     const void * __restrict__ src,
@@ -179,6 +197,15 @@ extern "C" int32_t baracuda_kernels_quantize_q8_1_bf16_run(
     cudaStream_t stream = static_cast<cudaStream_t>(stream_ptr);
     return launch_quantize<__nv_bfloat16>(kx, ny,
         static_cast<const __nv_bfloat16 *>(src), dst_q8_1, stream);
+}
+
+extern "C" int32_t baracuda_kernels_quantize_q8_1_bf16_can_implement(
+    int64_t kx, int64_t ny,
+    const void * /*src*/,
+    const void * /*dst_q8_1*/)
+{
+    if (kx <= 0 || ny <= 0) return 2;
+    return 0;
 }
 
 // Helper: returns the number of bytes needed to stage `ny × kx` activations

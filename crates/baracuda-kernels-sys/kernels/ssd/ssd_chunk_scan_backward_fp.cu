@@ -417,6 +417,16 @@ extern "C" size_t baracuda_kernels_ssd_chunk_scan_workspace_bytes(
             static_cast<T*>(ddt), static_cast<T*>(dA),                                        \
             batch, seqlen, heads, head_dim, state_dim, chunk_size,                            \
             workspace, workspace_bytes, stream);                                              \
+    }                                                                                          \
+    extern "C" int32_t baracuda_kernels_##NAME##_backward_can_implement(                      \
+        int32_t batch, int32_t seqlen, int32_t heads,                                         \
+        int32_t head_dim, int32_t state_dim, int32_t chunk_size)                              \
+    {                                                                                          \
+        if (batch < 0 || seqlen < 0 || heads < 0 || head_dim < 0 || state_dim < 0) return 2;  \
+        if (chunk_size <= 0) return 2;                                                        \
+        /* BW SMEM cap is tighter than FW: dh[D*N] + B[N] + C[N] all f32. */                  \
+        if (head_dim > 64 || state_dim > 64) return 3;                                        \
+        return 0;                                                                              \
     }
 
 BARACUDA_SSD_CHUNK_SCAN_BWD_INSTANTIATE(ssd_chunk_scan_f32,  float)

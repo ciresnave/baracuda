@@ -261,6 +261,17 @@ __global__ void prelu_dweight_kernel<double>(
             static_cast<const T*>(x), static_cast<const T*>(weight), static_cast<T*>(y),            \
             numel, channel_stride, channel_extent, scalar_weight);                                  \
         return (cudaGetLastError() == cudaSuccess) ? 0 : 5;                                         \
+    }                                                                                               \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                    \
+        int64_t numel,                                                                              \
+        int64_t /*channel_stride*/,                                                                 \
+        int32_t channel_extent,                                                                     \
+        int32_t /*scalar_weight*/,                                                                  \
+        const void* /*x*/, const void* /*weight*/, const void* /*y*/)                               \
+    {                                                                                               \
+        if (numel < 0) return 2;                                                                   \
+        if (channel_extent < 1) return 2;                                                          \
+        return 0;                                                                                   \
     }
 
 // PReLU BW. Launches dx kernel + dweight kernel. dweight is one block per
@@ -300,6 +311,20 @@ __global__ void prelu_dweight_kernel<double>(
                 numel, channel_stride, channel_extent, scalar_weight);                              \
             if (cudaGetLastError() != cudaSuccess) return 5;                                        \
         }                                                                                           \
+        return 0;                                                                                   \
+    }                                                                                               \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                    \
+        int64_t numel,                                                                              \
+        int64_t channel_stride,                                                                     \
+        int32_t channel_extent,                                                                     \
+        int32_t scalar_weight,                                                                      \
+        const void* /*dy*/, const void* /*x*/, const void* /*weight*/,                              \
+        const void* /*dx*/, const void* /*dweight*/)                                                \
+    {                                                                                               \
+        if (numel < 0) return 2;                                                                   \
+        if (channel_extent < 1) return 2;                                                          \
+        (void)channel_stride;                                                                       \
+        (void)scalar_weight;                                                                        \
         return 0;                                                                                   \
     }
 

@@ -193,6 +193,13 @@ __host__ inline int32_t launch_topk_backward(
                 static_cast<const T*>(x), static_cast<T*>(y_vals),                                \
                 static_cast<int32_t*>(y_idx), batch, row_len, k, stream);                         \
         }                                                                                          \
+    }                                                                                              \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                   \
+        int32_t batch, int32_t row_len, int32_t k, int32_t /*largest*/)                           \
+    {                                                                                              \
+        if (batch < 0 || row_len < 0 || k < 0) return 2;                                          \
+        if (k > row_len) return 2;                                                                \
+        return 0;                                                                                 \
     }
 
 #define BARACUDA_KERNELS_TOPK_BACKWARD_INSTANTIATE(NAME, T)                                       \
@@ -208,6 +215,13 @@ __host__ inline int32_t launch_topk_backward(
             static_cast<const int32_t*>(indices),                                                 \
             static_cast<T*>(dx),                                                                  \
             batch, k, row_len, stream);                                                           \
+    }                                                                                              \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                   \
+        int32_t batch, int32_t k, int32_t row_len)                                                \
+    {                                                                                              \
+        if (batch < 0 || k < 0 || row_len < 0) return 2;                                          \
+        if (k > row_len) return 2;                                                                \
+        return 0;                                                                                 \
     }
 
 #endif // BARACUDA_TOPK_CUH

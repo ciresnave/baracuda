@@ -211,6 +211,20 @@ __host__ inline int32_t launch_write_slice_nibble(
         return baracuda::write_slice::launch_write_slice_byte<BLOB>(                                   \
             dest, source, source_numel, rank,                                                          \
             dest_shape, source_shape, range_start, stream);                                            \
+    }                                                                                                  \
+    extern "C" int32_t baracuda_kernels_write_slice_##SUFFIX##_can_implement(                          \
+        const void* /*dest*/, const void* /*source*/,                                                  \
+        int64_t source_numel,                                                                          \
+        int32_t rank,                                                                                  \
+        const int32_t* dest_shape,                                                                     \
+        const int32_t* source_shape,                                                                   \
+        const int32_t* range_start)                                                                    \
+    {                                                                                                  \
+        if (source_numel < 0) return 2;                                                                \
+        if (rank < 1 || rank > baracuda::write_slice::MAX_RANK) return 2;                              \
+        if (source_numel > 0 && (dest_shape == nullptr || source_shape == nullptr ||                   \
+                                  range_start == nullptr)) return 2;                                   \
+        return 0;                                                                                      \
     }
 
 #endif // BARACUDA_WRITE_SLICE_CUH

@@ -138,3 +138,23 @@ extern "C" int32_t baracuda_kernels_moe_scalar_gguf_run(
     cudaFreeAsync(y_q8_1, stream);
     return status_from_launch(cudaPeekAtLastError());
 }
+
+extern "C" int32_t baracuda_kernels_moe_scalar_gguf_can_implement(
+    const void * /*inputs*/,
+    const void * /*weights*/,
+    const int32_t * /*sorted_token_ids*/,
+    const int32_t * /*expert_ids*/,
+    const float   * /*topk_weights*/,
+    const void * /*outputs*/,
+    int32_t num_experts,
+    int32_t topk,
+    int32_t size_m,
+    int32_t size_n,
+    int32_t size_k,
+    int32_t gguf_dtype)
+{
+    if (num_experts <= 0 || topk <= 0 || size_m <= 0 || size_n <= 0 || size_k <= 0) return 2;
+    // Only the same six gguf_dtype values handled by _run are valid.
+    if (gguf_dtype < 0 || gguf_dtype > 5) return 2;
+    return 0;
+}

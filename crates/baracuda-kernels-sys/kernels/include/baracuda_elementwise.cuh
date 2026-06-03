@@ -5600,6 +5600,19 @@ __host__ inline int32_t launch_gated_activation_backward_contig(
         return baracuda::elementwise::launch_pad_replicate<T>(                                    \
             static_cast<const T*>(x), static_cast<T*>(y), output_numel, rank,                     \
             input_shape, output_shape, pad_low, stride_x, stride_y, stream);                      \
+    }                                                                                              \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                   \
+        int64_t output_numel, int32_t rank,                                                       \
+        const int32_t* input_shape, const int32_t* output_shape, const int32_t* pad_low,          \
+        const int64_t* stride_x, const int64_t* stride_y,                                         \
+        const void* /*x*/, const void* /*y*/)                                                     \
+    {                                                                                              \
+        if (output_numel < 0) return 2;                                                           \
+        if (rank < 0) return 2;                                                                   \
+        if (output_numel > 0 && (input_shape == nullptr || output_shape == nullptr ||             \
+                                  pad_low == nullptr || stride_x == nullptr ||                    \
+                                  stride_y == nullptr)) return 2;                                 \
+        return 0;                                                                                  \
     }
 
 // Emit one Pad-circular launcher. No `value` parameter — pad-region

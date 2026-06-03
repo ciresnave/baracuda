@@ -27,6 +27,14 @@ extern "C" int32_t baracuda_kernels_ring_attention_init_run(
         o_len, ml_len, stream);
 }
 
+extern "C" int32_t baracuda_kernels_ring_attention_init_can_implement(
+    const void* /*o_acc*/, const void* /*m_acc*/, const void* /*l_acc*/,
+    int64_t o_len, int64_t ml_len)
+{
+    if (o_len < 0 || ml_len < 0) return 2;
+    return 0;
+}
+
 // Workspace bytes for the Ring Attention persistent accumulator state.
 extern "C" size_t baracuda_kernels_ring_attention_workspace_bytes(
     int32_t batch, int32_t heads, int32_t q_local, int32_t d)

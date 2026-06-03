@@ -178,4 +178,111 @@ int32_t baracuda_kernels_gemm_u4_rcr_sm89_bias_silu_i32_run(
     );
 }
 
+
+// ---- _can_implement companions ----
+
+int32_t baracuda_kernels_gemm_u4_rcr_sm89_bias_f32_can_implement(
+    int32_t m, int32_t n, int32_t k,
+    const void * /*a*/, int64_t /*lda_bytes*/,
+    const void * /*b*/, int64_t /*ldb_bytes*/,
+    const void * /*c*/, int64_t /*ldc_bytes*/,
+    const void * /*d*/, int64_t /*ldd_bytes*/
+) {
+    if (m <= 0 || n <= 0 || k <= 0) return 2;
+    if ((k & 1) != 0) return 3;
+    if ((n & 1) != 0) return 3;
+    return 0;
+}
+
+int32_t baracuda_kernels_gemm_u4_rcr_sm89_bias_i32_can_implement(
+    int32_t m, int32_t n, int32_t k,
+    const void * /*a*/, int64_t /*lda_bytes*/,
+    const void * /*b*/, int64_t /*ldb_bytes*/,
+    const void * /*c*/, int64_t /*ldc_bytes*/,
+    const void * /*d*/, int64_t /*ldd_bytes*/
+) {
+    if (m <= 0 || n <= 0 || k <= 0) return 2;
+    if ((k & 1) != 0) return 3;
+    if ((n & 1) != 0) return 3;
+    return 0;
+}
+
+int32_t baracuda_kernels_gemm_u4_rcr_sm89_bias_relu_f32_can_implement(
+    int32_t m, int32_t n, int32_t k,
+    const void * /*a*/, int64_t /*lda_bytes*/,
+    const void * /*b*/, int64_t /*ldb_bytes*/,
+    const void * /*c*/, int64_t /*ldc_bytes*/,
+    const void * /*d*/, int64_t /*ldd_bytes*/
+) {
+    if (m <= 0 || n <= 0 || k <= 0) return 2;
+    if ((k & 1) != 0) return 3;
+    if ((n & 1) != 0) return 3;
+    return 0;
+}
+
+int32_t baracuda_kernels_gemm_u4_rcr_sm89_bias_relu_i32_can_implement(
+    int32_t m, int32_t n, int32_t k,
+    const void * /*a*/, int64_t /*lda_bytes*/,
+    const void * /*b*/, int64_t /*ldb_bytes*/,
+    const void * /*c*/, int64_t /*ldc_bytes*/,
+    const void * /*d*/, int64_t /*ldd_bytes*/
+) {
+    if (m <= 0 || n <= 0 || k <= 0) return 2;
+    if ((k & 1) != 0) return 3;
+    if ((n & 1) != 0) return 3;
+    return 0;
+}
+
+int32_t baracuda_kernels_gemm_u4_rcr_sm89_bias_gelu_f32_can_implement(
+    int32_t m, int32_t n, int32_t k,
+    const void * /*a*/, int64_t /*lda_bytes*/,
+    const void * /*b*/, int64_t /*ldb_bytes*/,
+    const void * /*c*/, int64_t /*ldc_bytes*/,
+    const void * /*d*/, int64_t /*ldd_bytes*/
+) {
+    if (m <= 0 || n <= 0 || k <= 0) return 2;
+    if ((k & 1) != 0) return 3;
+    if ((n & 1) != 0) return 3;
+    return 0;
+}
+
+int32_t baracuda_kernels_gemm_u4_rcr_sm89_bias_gelu_i32_can_implement(
+    int32_t m, int32_t n, int32_t k,
+    const void * /*a*/, int64_t /*lda_bytes*/,
+    const void * /*b*/, int64_t /*ldb_bytes*/,
+    const void * /*c*/, int64_t /*ldc_bytes*/,
+    const void * /*d*/, int64_t /*ldd_bytes*/
+) {
+    if (m <= 0 || n <= 0 || k <= 0) return 2;
+    if ((k & 1) != 0) return 3;
+    if ((n & 1) != 0) return 3;
+    return 0;
+}
+
+int32_t baracuda_kernels_gemm_u4_rcr_sm89_bias_silu_f32_can_implement(
+    int32_t m, int32_t n, int32_t k,
+    const void * /*a*/, int64_t /*lda_bytes*/,
+    const void * /*b*/, int64_t /*ldb_bytes*/,
+    const void * /*c*/, int64_t /*ldc_bytes*/,
+    const void * /*d*/, int64_t /*ldd_bytes*/
+) {
+    if (m <= 0 || n <= 0 || k <= 0) return 2;
+    if ((k & 1) != 0) return 3;
+    if ((n & 1) != 0) return 3;
+    return 0;
+}
+
+int32_t baracuda_kernels_gemm_u4_rcr_sm89_bias_silu_i32_can_implement(
+    int32_t m, int32_t n, int32_t k,
+    const void * /*a*/, int64_t /*lda_bytes*/,
+    const void * /*b*/, int64_t /*ldb_bytes*/,
+    const void * /*c*/, int64_t /*ldc_bytes*/,
+    const void * /*d*/, int64_t /*ldd_bytes*/
+) {
+    if (m <= 0 || n <= 0 || k <= 0) return 2;
+    if ((k & 1) != 0) return 3;
+    if ((n & 1) != 0) return 3;
+    return 0;
+}
+
 } // extern "C"

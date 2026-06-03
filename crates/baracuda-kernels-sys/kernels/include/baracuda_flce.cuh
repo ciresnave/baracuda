@@ -431,6 +431,18 @@ static __global__ void flce_count_non_ignore_kernel(
             static_cast<float*>(loss_1d),                                                           \
             v, row_stride, target_ignore, scale_per_row);                                           \
         return (cudaGetLastError() == cudaSuccess) ? 0 : 5;                                         \
+    }                                                                                               \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                    \
+        int32_t n_rows,                                                                             \
+        int32_t v,                                                                                  \
+        int64_t row_stride,                                                                         \
+        int64_t /*target_ignore*/,                                                                  \
+        float /*scale_per_row*/,                                                                    \
+        const void* /*logits*/, const void* /*target*/, const void* /*loss_1d*/)                    \
+    {                                                                                               \
+        if (n_rows < 0 || v < 1) return 2;                                                         \
+        if (row_stride < 0) return 2;                                                              \
+        return 0;                                                                                   \
     }
 
 // Per-row loss copy (reduction_mode = None). Casts f32 loss_1d → T per-cell.
@@ -451,6 +463,13 @@ static __global__ void flce_count_non_ignore_kernel(
             static_cast<const float*>(loss_1d),                                                     \
             static_cast<T*>(out), n_rows);                                                          \
         return (cudaGetLastError() == cudaSuccess) ? 0 : 5;                                         \
+    }                                                                                               \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                    \
+        int64_t n_rows,                                                                             \
+        const void* /*loss_1d*/, const void* /*out*/)                                               \
+    {                                                                                               \
+        if (n_rows < 0) return 2;                                                                   \
+        return 0;                                                                                   \
     }
 
 // Scalar finalize (reduction_mode = Mean / Sum). f32 loss_1d → scalar T.
@@ -468,6 +487,14 @@ static __global__ void flce_count_non_ignore_kernel(
             static_cast<const float*>(loss_1d),                                                     \
             static_cast<T*>(out), n_rows, denom_inv);                                               \
         return (cudaGetLastError() == cudaSuccess) ? 0 : 5;                                         \
+    }                                                                                               \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                    \
+        int64_t n_rows,                                                                             \
+        float /*denom_inv*/,                                                                        \
+        const void* /*loss_1d*/, const void* /*out*/)                                               \
+    {                                                                                               \
+        if (n_rows < 0) return 2;                                                                   \
+        return 0;                                                                                   \
     }
 
 // In-place scale: `buf *= scalar` over `numel` elements. Used in BW to
@@ -491,6 +518,14 @@ static __global__ void flce_count_non_ignore_kernel(
         baracuda::flce::flce_inplace_scale_kernel<T><<<blocks, kBlock, 0, stream>>>(                \
             static_cast<T*>(buf), numel, scalar);                                                   \
         return (cudaGetLastError() == cudaSuccess) ? 0 : 5;                                         \
+    }                                                                                               \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                    \
+        int64_t numel,                                                                              \
+        float /*scalar*/,                                                                           \
+        const void* /*buf*/)                                                                        \
+    {                                                                                               \
+        if (numel < 0) return 2;                                                                    \
+        return 0;                                                                                   \
     }
 
 // Count non-ignore launcher. No template params (single int64_t signature).
@@ -513,6 +548,15 @@ static __global__ void flce_count_non_ignore_kernel(
             static_cast<const int64_t*>(target),                                                    \
             static_cast<int64_t*>(count_out), bt, ignore_index);                                    \
         return (cudaGetLastError() == cudaSuccess) ? 0 : 5;                                         \
+    }                                                                                               \
+    extern "C" int32_t baracuda_kernels_loss_flce_count_non_ignore_can_implement(                  \
+        int32_t bt,                                                                                 \
+        int64_t /*ignore_index*/,                                                                   \
+        const void* /*target*/,                                                                     \
+        const void* /*count_out*/)                                                                  \
+    {                                                                                               \
+        if (bt < 0) return 2;                                                                       \
+        return 0;                                                                                   \
     }
 
 #endif // BARACUDA_FLCE_CUH

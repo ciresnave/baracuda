@@ -322,3 +322,418 @@ BCDA_BATCHED_FP_RUN(__half,        f16)
 BCDA_BATCHED_FP_RUN(__nv_bfloat16, bf16)
 
 #undef BCDA_BATCHED_FP_RUN
+
+// =============================================================================
+// _can_implement companions -- host-side validators (Phase 66-prep).
+// Mirror each _run signature minus workspace/stream; output pointers demoted
+// to const void*. Returns 0 (ok) / 2 (invalid arg) / 3 (unsupported).
+// =============================================================================
+
+extern "C" int32_t baracuda_kernels_mmvq_batched_bf16_can_implement(
+    int32_t n_experts, int32_t n_rows_per_expert, int32_t n_cols,
+    const void * /*weights*/, const void * /*activations*/,
+    const int32_t * /*sorted_token_ids*/, const int32_t * /*expert_offsets*/,
+    const float * /*topk_weights*/, const void * /*output*/, int32_t /*top_k*/)
+{
+    if (n_experts < 0 || n_rows_per_expert < 0 || n_cols < 0) return 2;
+    return 0;
+}
+
+extern "C" int32_t baracuda_kernels_mmvq_batched_f16_can_implement(
+    int32_t n_experts, int32_t n_rows_per_expert, int32_t n_cols,
+    const void * /*weights*/, const void * /*activations*/,
+    const int32_t * /*sorted_token_ids*/, const int32_t * /*expert_offsets*/,
+    const float * /*topk_weights*/, const void * /*output*/, int32_t /*top_k*/)
+{
+    if (n_experts < 0 || n_rows_per_expert < 0 || n_cols < 0) return 2;
+    return 0;
+}
+
+extern "C" int32_t baracuda_kernels_mmvq_batched_f32_can_implement(
+    int32_t n_experts, int32_t n_rows_per_expert, int32_t n_cols,
+    const void * /*weights*/, const void * /*activations*/,
+    const int32_t * /*sorted_token_ids*/, const int32_t * /*expert_offsets*/,
+    const float * /*topk_weights*/, const void * /*output*/, int32_t /*top_k*/)
+{
+    if (n_experts < 0 || n_rows_per_expert < 0 || n_cols < 0) return 2;
+    return 0;
+}
+
+extern "C" int32_t baracuda_kernels_mmvq_q2_K_batched_can_implement(
+    int32_t n_experts, int32_t n_rows_per_expert, int32_t n_cols,
+    const void * /*weights*/, const void * /*activations*/,
+    const int32_t * /*sorted_token_ids*/, const int32_t * /*expert_offsets*/,
+    const float * /*topk_weights*/, const void * /*output*/, int32_t /*top_k*/)
+{
+    if (n_experts < 0 || n_rows_per_expert < 0 || n_cols < 0) return 2;
+    if (n_cols > 0 && (n_cols % QK_K) != 0) return 2;
+    return 0;
+}
+
+extern "C" int32_t baracuda_kernels_mmvq_q2_K_batched_bf16_can_implement(
+    int32_t n_experts, int32_t n_rows_per_expert, int32_t n_cols,
+    const void * /*weights*/, const void * /*activations*/,
+    const int32_t * /*sorted_token_ids*/, const int32_t * /*expert_offsets*/,
+    const float * /*topk_weights*/, const void * /*output*/, int32_t /*top_k*/)
+{
+    if (n_experts < 0 || n_rows_per_expert < 0 || n_cols < 0) return 2;
+    if (n_cols > 0 && (n_cols % QK_K) != 0) return 2;
+    return 0;
+}
+
+extern "C" int32_t baracuda_kernels_mmvq_q2_K_batched_f16_can_implement(
+    int32_t n_experts, int32_t n_rows_per_expert, int32_t n_cols,
+    const void * /*weights*/, const void * /*activations*/,
+    const int32_t * /*sorted_token_ids*/, const int32_t * /*expert_offsets*/,
+    const float * /*topk_weights*/, const void * /*output*/, int32_t /*top_k*/)
+{
+    if (n_experts < 0 || n_rows_per_expert < 0 || n_cols < 0) return 2;
+    if (n_cols > 0 && (n_cols % QK_K) != 0) return 2;
+    return 0;
+}
+
+extern "C" int32_t baracuda_kernels_mmvq_q3_K_batched_can_implement(
+    int32_t n_experts, int32_t n_rows_per_expert, int32_t n_cols,
+    const void * /*weights*/, const void * /*activations*/,
+    const int32_t * /*sorted_token_ids*/, const int32_t * /*expert_offsets*/,
+    const float * /*topk_weights*/, const void * /*output*/, int32_t /*top_k*/)
+{
+    if (n_experts < 0 || n_rows_per_expert < 0 || n_cols < 0) return 2;
+    if (n_cols > 0 && (n_cols % QK_K) != 0) return 2;
+    return 0;
+}
+
+extern "C" int32_t baracuda_kernels_mmvq_q3_K_batched_bf16_can_implement(
+    int32_t n_experts, int32_t n_rows_per_expert, int32_t n_cols,
+    const void * /*weights*/, const void * /*activations*/,
+    const int32_t * /*sorted_token_ids*/, const int32_t * /*expert_offsets*/,
+    const float * /*topk_weights*/, const void * /*output*/, int32_t /*top_k*/)
+{
+    if (n_experts < 0 || n_rows_per_expert < 0 || n_cols < 0) return 2;
+    if (n_cols > 0 && (n_cols % QK_K) != 0) return 2;
+    return 0;
+}
+
+extern "C" int32_t baracuda_kernels_mmvq_q3_K_batched_f16_can_implement(
+    int32_t n_experts, int32_t n_rows_per_expert, int32_t n_cols,
+    const void * /*weights*/, const void * /*activations*/,
+    const int32_t * /*sorted_token_ids*/, const int32_t * /*expert_offsets*/,
+    const float * /*topk_weights*/, const void * /*output*/, int32_t /*top_k*/)
+{
+    if (n_experts < 0 || n_rows_per_expert < 0 || n_cols < 0) return 2;
+    if (n_cols > 0 && (n_cols % QK_K) != 0) return 2;
+    return 0;
+}
+
+extern "C" int32_t baracuda_kernels_mmvq_q4_0_batched_can_implement(
+    int32_t n_experts, int32_t n_rows_per_expert, int32_t n_cols,
+    const void * /*weights*/, const void * /*activations*/,
+    const int32_t * /*sorted_token_ids*/, const int32_t * /*expert_offsets*/,
+    const float * /*topk_weights*/, const void * /*output*/, int32_t /*top_k*/)
+{
+    if (n_experts < 0 || n_rows_per_expert < 0 || n_cols < 0) return 2;
+    if (n_cols > 0 && n_cols < 64) return 2;
+    if (n_cols > 0 && (n_cols % 32) != 0) return 2;
+    return 0;
+}
+
+extern "C" int32_t baracuda_kernels_mmvq_q4_0_batched_bf16_can_implement(
+    int32_t n_experts, int32_t n_rows_per_expert, int32_t n_cols,
+    const void * /*weights*/, const void * /*activations*/,
+    const int32_t * /*sorted_token_ids*/, const int32_t * /*expert_offsets*/,
+    const float * /*topk_weights*/, const void * /*output*/, int32_t /*top_k*/)
+{
+    if (n_experts < 0 || n_rows_per_expert < 0 || n_cols < 0) return 2;
+    if (n_cols > 0 && n_cols < 64) return 2;
+    if (n_cols > 0 && (n_cols % 32) != 0) return 2;
+    return 0;
+}
+
+extern "C" int32_t baracuda_kernels_mmvq_q4_0_batched_f16_can_implement(
+    int32_t n_experts, int32_t n_rows_per_expert, int32_t n_cols,
+    const void * /*weights*/, const void * /*activations*/,
+    const int32_t * /*sorted_token_ids*/, const int32_t * /*expert_offsets*/,
+    const float * /*topk_weights*/, const void * /*output*/, int32_t /*top_k*/)
+{
+    if (n_experts < 0 || n_rows_per_expert < 0 || n_cols < 0) return 2;
+    if (n_cols > 0 && n_cols < 64) return 2;
+    if (n_cols > 0 && (n_cols % 32) != 0) return 2;
+    return 0;
+}
+
+extern "C" int32_t baracuda_kernels_mmvq_q4_1_batched_can_implement(
+    int32_t n_experts, int32_t n_rows_per_expert, int32_t n_cols,
+    const void * /*weights*/, const void * /*activations*/,
+    const int32_t * /*sorted_token_ids*/, const int32_t * /*expert_offsets*/,
+    const float * /*topk_weights*/, const void * /*output*/, int32_t /*top_k*/)
+{
+    if (n_experts < 0 || n_rows_per_expert < 0 || n_cols < 0) return 2;
+    if (n_cols > 0 && n_cols < 64) return 2;
+    if (n_cols > 0 && (n_cols % 32) != 0) return 2;
+    return 0;
+}
+
+extern "C" int32_t baracuda_kernels_mmvq_q4_1_batched_bf16_can_implement(
+    int32_t n_experts, int32_t n_rows_per_expert, int32_t n_cols,
+    const void * /*weights*/, const void * /*activations*/,
+    const int32_t * /*sorted_token_ids*/, const int32_t * /*expert_offsets*/,
+    const float * /*topk_weights*/, const void * /*output*/, int32_t /*top_k*/)
+{
+    if (n_experts < 0 || n_rows_per_expert < 0 || n_cols < 0) return 2;
+    if (n_cols > 0 && n_cols < 64) return 2;
+    if (n_cols > 0 && (n_cols % 32) != 0) return 2;
+    return 0;
+}
+
+extern "C" int32_t baracuda_kernels_mmvq_q4_1_batched_f16_can_implement(
+    int32_t n_experts, int32_t n_rows_per_expert, int32_t n_cols,
+    const void * /*weights*/, const void * /*activations*/,
+    const int32_t * /*sorted_token_ids*/, const int32_t * /*expert_offsets*/,
+    const float * /*topk_weights*/, const void * /*output*/, int32_t /*top_k*/)
+{
+    if (n_experts < 0 || n_rows_per_expert < 0 || n_cols < 0) return 2;
+    if (n_cols > 0 && n_cols < 64) return 2;
+    if (n_cols > 0 && (n_cols % 32) != 0) return 2;
+    return 0;
+}
+
+extern "C" int32_t baracuda_kernels_mmvq_q4_K_batched_can_implement(
+    int32_t n_experts, int32_t n_rows_per_expert, int32_t n_cols,
+    const void * /*weights*/, const void * /*activations*/,
+    const int32_t * /*sorted_token_ids*/, const int32_t * /*expert_offsets*/,
+    const float * /*topk_weights*/, const void * /*output*/, int32_t /*top_k*/)
+{
+    if (n_experts < 0 || n_rows_per_expert < 0 || n_cols < 0) return 2;
+    if (n_cols > 0 && (n_cols % QK_K) != 0) return 2;
+    return 0;
+}
+
+extern "C" int32_t baracuda_kernels_mmvq_q4_K_batched_bf16_can_implement(
+    int32_t n_experts, int32_t n_rows_per_expert, int32_t n_cols,
+    const void * /*weights*/, const void * /*activations*/,
+    const int32_t * /*sorted_token_ids*/, const int32_t * /*expert_offsets*/,
+    const float * /*topk_weights*/, const void * /*output*/, int32_t /*top_k*/)
+{
+    if (n_experts < 0 || n_rows_per_expert < 0 || n_cols < 0) return 2;
+    if (n_cols > 0 && (n_cols % QK_K) != 0) return 2;
+    return 0;
+}
+
+extern "C" int32_t baracuda_kernels_mmvq_q4_K_batched_f16_can_implement(
+    int32_t n_experts, int32_t n_rows_per_expert, int32_t n_cols,
+    const void * /*weights*/, const void * /*activations*/,
+    const int32_t * /*sorted_token_ids*/, const int32_t * /*expert_offsets*/,
+    const float * /*topk_weights*/, const void * /*output*/, int32_t /*top_k*/)
+{
+    if (n_experts < 0 || n_rows_per_expert < 0 || n_cols < 0) return 2;
+    if (n_cols > 0 && (n_cols % QK_K) != 0) return 2;
+    return 0;
+}
+
+extern "C" int32_t baracuda_kernels_mmvq_q5_0_batched_can_implement(
+    int32_t n_experts, int32_t n_rows_per_expert, int32_t n_cols,
+    const void * /*weights*/, const void * /*activations*/,
+    const int32_t * /*sorted_token_ids*/, const int32_t * /*expert_offsets*/,
+    const float * /*topk_weights*/, const void * /*output*/, int32_t /*top_k*/)
+{
+    if (n_experts < 0 || n_rows_per_expert < 0 || n_cols < 0) return 2;
+    if (n_cols > 0 && n_cols < 64) return 2;
+    if (n_cols > 0 && (n_cols % 32) != 0) return 2;
+    return 0;
+}
+
+extern "C" int32_t baracuda_kernels_mmvq_q5_0_batched_bf16_can_implement(
+    int32_t n_experts, int32_t n_rows_per_expert, int32_t n_cols,
+    const void * /*weights*/, const void * /*activations*/,
+    const int32_t * /*sorted_token_ids*/, const int32_t * /*expert_offsets*/,
+    const float * /*topk_weights*/, const void * /*output*/, int32_t /*top_k*/)
+{
+    if (n_experts < 0 || n_rows_per_expert < 0 || n_cols < 0) return 2;
+    if (n_cols > 0 && n_cols < 64) return 2;
+    if (n_cols > 0 && (n_cols % 32) != 0) return 2;
+    return 0;
+}
+
+extern "C" int32_t baracuda_kernels_mmvq_q5_0_batched_f16_can_implement(
+    int32_t n_experts, int32_t n_rows_per_expert, int32_t n_cols,
+    const void * /*weights*/, const void * /*activations*/,
+    const int32_t * /*sorted_token_ids*/, const int32_t * /*expert_offsets*/,
+    const float * /*topk_weights*/, const void * /*output*/, int32_t /*top_k*/)
+{
+    if (n_experts < 0 || n_rows_per_expert < 0 || n_cols < 0) return 2;
+    if (n_cols > 0 && n_cols < 64) return 2;
+    if (n_cols > 0 && (n_cols % 32) != 0) return 2;
+    return 0;
+}
+
+extern "C" int32_t baracuda_kernels_mmvq_q5_1_batched_can_implement(
+    int32_t n_experts, int32_t n_rows_per_expert, int32_t n_cols,
+    const void * /*weights*/, const void * /*activations*/,
+    const int32_t * /*sorted_token_ids*/, const int32_t * /*expert_offsets*/,
+    const float * /*topk_weights*/, const void * /*output*/, int32_t /*top_k*/)
+{
+    if (n_experts < 0 || n_rows_per_expert < 0 || n_cols < 0) return 2;
+    if (n_cols > 0 && n_cols < 64) return 2;
+    if (n_cols > 0 && (n_cols % 32) != 0) return 2;
+    return 0;
+}
+
+extern "C" int32_t baracuda_kernels_mmvq_q5_1_batched_bf16_can_implement(
+    int32_t n_experts, int32_t n_rows_per_expert, int32_t n_cols,
+    const void * /*weights*/, const void * /*activations*/,
+    const int32_t * /*sorted_token_ids*/, const int32_t * /*expert_offsets*/,
+    const float * /*topk_weights*/, const void * /*output*/, int32_t /*top_k*/)
+{
+    if (n_experts < 0 || n_rows_per_expert < 0 || n_cols < 0) return 2;
+    if (n_cols > 0 && n_cols < 64) return 2;
+    if (n_cols > 0 && (n_cols % 32) != 0) return 2;
+    return 0;
+}
+
+extern "C" int32_t baracuda_kernels_mmvq_q5_1_batched_f16_can_implement(
+    int32_t n_experts, int32_t n_rows_per_expert, int32_t n_cols,
+    const void * /*weights*/, const void * /*activations*/,
+    const int32_t * /*sorted_token_ids*/, const int32_t * /*expert_offsets*/,
+    const float * /*topk_weights*/, const void * /*output*/, int32_t /*top_k*/)
+{
+    if (n_experts < 0 || n_rows_per_expert < 0 || n_cols < 0) return 2;
+    if (n_cols > 0 && n_cols < 64) return 2;
+    if (n_cols > 0 && (n_cols % 32) != 0) return 2;
+    return 0;
+}
+
+extern "C" int32_t baracuda_kernels_mmvq_q5_K_batched_can_implement(
+    int32_t n_experts, int32_t n_rows_per_expert, int32_t n_cols,
+    const void * /*weights*/, const void * /*activations*/,
+    const int32_t * /*sorted_token_ids*/, const int32_t * /*expert_offsets*/,
+    const float * /*topk_weights*/, const void * /*output*/, int32_t /*top_k*/)
+{
+    if (n_experts < 0 || n_rows_per_expert < 0 || n_cols < 0) return 2;
+    if (n_cols > 0 && (n_cols % QK_K) != 0) return 2;
+    return 0;
+}
+
+extern "C" int32_t baracuda_kernels_mmvq_q5_K_batched_bf16_can_implement(
+    int32_t n_experts, int32_t n_rows_per_expert, int32_t n_cols,
+    const void * /*weights*/, const void * /*activations*/,
+    const int32_t * /*sorted_token_ids*/, const int32_t * /*expert_offsets*/,
+    const float * /*topk_weights*/, const void * /*output*/, int32_t /*top_k*/)
+{
+    if (n_experts < 0 || n_rows_per_expert < 0 || n_cols < 0) return 2;
+    if (n_cols > 0 && (n_cols % QK_K) != 0) return 2;
+    return 0;
+}
+
+extern "C" int32_t baracuda_kernels_mmvq_q5_K_batched_f16_can_implement(
+    int32_t n_experts, int32_t n_rows_per_expert, int32_t n_cols,
+    const void * /*weights*/, const void * /*activations*/,
+    const int32_t * /*sorted_token_ids*/, const int32_t * /*expert_offsets*/,
+    const float * /*topk_weights*/, const void * /*output*/, int32_t /*top_k*/)
+{
+    if (n_experts < 0 || n_rows_per_expert < 0 || n_cols < 0) return 2;
+    if (n_cols > 0 && (n_cols % QK_K) != 0) return 2;
+    return 0;
+}
+
+extern "C" int32_t baracuda_kernels_mmvq_q6_K_batched_can_implement(
+    int32_t n_experts, int32_t n_rows_per_expert, int32_t n_cols,
+    const void * /*weights*/, const void * /*activations*/,
+    const int32_t * /*sorted_token_ids*/, const int32_t * /*expert_offsets*/,
+    const float * /*topk_weights*/, const void * /*output*/, int32_t /*top_k*/)
+{
+    if (n_experts < 0 || n_rows_per_expert < 0 || n_cols < 0) return 2;
+    if (n_cols > 0 && (n_cols % QK_K) != 0) return 2;
+    return 0;
+}
+
+extern "C" int32_t baracuda_kernels_mmvq_q6_K_batched_bf16_can_implement(
+    int32_t n_experts, int32_t n_rows_per_expert, int32_t n_cols,
+    const void * /*weights*/, const void * /*activations*/,
+    const int32_t * /*sorted_token_ids*/, const int32_t * /*expert_offsets*/,
+    const float * /*topk_weights*/, const void * /*output*/, int32_t /*top_k*/)
+{
+    if (n_experts < 0 || n_rows_per_expert < 0 || n_cols < 0) return 2;
+    if (n_cols > 0 && (n_cols % QK_K) != 0) return 2;
+    return 0;
+}
+
+extern "C" int32_t baracuda_kernels_mmvq_q6_K_batched_f16_can_implement(
+    int32_t n_experts, int32_t n_rows_per_expert, int32_t n_cols,
+    const void * /*weights*/, const void * /*activations*/,
+    const int32_t * /*sorted_token_ids*/, const int32_t * /*expert_offsets*/,
+    const float * /*topk_weights*/, const void * /*output*/, int32_t /*top_k*/)
+{
+    if (n_experts < 0 || n_rows_per_expert < 0 || n_cols < 0) return 2;
+    if (n_cols > 0 && (n_cols % QK_K) != 0) return 2;
+    return 0;
+}
+
+extern "C" int32_t baracuda_kernels_mmvq_q8_0_batched_can_implement(
+    int32_t n_experts, int32_t n_rows_per_expert, int32_t n_cols,
+    const void * /*weights*/, const void * /*activations*/,
+    const int32_t * /*sorted_token_ids*/, const int32_t * /*expert_offsets*/,
+    const float * /*topk_weights*/, const void * /*output*/, int32_t /*top_k*/)
+{
+    if (n_experts < 0 || n_rows_per_expert < 0 || n_cols < 0) return 2;
+    if (n_cols > 0 && n_cols < 64) return 2;
+    if (n_cols > 0 && (n_cols % 32) != 0) return 2;
+    return 0;
+}
+
+extern "C" int32_t baracuda_kernels_mmvq_q8_0_batched_bf16_can_implement(
+    int32_t n_experts, int32_t n_rows_per_expert, int32_t n_cols,
+    const void * /*weights*/, const void * /*activations*/,
+    const int32_t * /*sorted_token_ids*/, const int32_t * /*expert_offsets*/,
+    const float * /*topk_weights*/, const void * /*output*/, int32_t /*top_k*/)
+{
+    if (n_experts < 0 || n_rows_per_expert < 0 || n_cols < 0) return 2;
+    if (n_cols > 0 && n_cols < 64) return 2;
+    if (n_cols > 0 && (n_cols % 32) != 0) return 2;
+    return 0;
+}
+
+extern "C" int32_t baracuda_kernels_mmvq_q8_0_batched_f16_can_implement(
+    int32_t n_experts, int32_t n_rows_per_expert, int32_t n_cols,
+    const void * /*weights*/, const void * /*activations*/,
+    const int32_t * /*sorted_token_ids*/, const int32_t * /*expert_offsets*/,
+    const float * /*topk_weights*/, const void * /*output*/, int32_t /*top_k*/)
+{
+    if (n_experts < 0 || n_rows_per_expert < 0 || n_cols < 0) return 2;
+    if (n_cols > 0 && n_cols < 64) return 2;
+    if (n_cols > 0 && (n_cols % 32) != 0) return 2;
+    return 0;
+}
+
+extern "C" int32_t baracuda_kernels_mmvq_q8_K_batched_can_implement(
+    int32_t n_experts, int32_t n_rows_per_expert, int32_t n_cols,
+    const void * /*weights*/, const void * /*activations*/,
+    const int32_t * /*sorted_token_ids*/, const int32_t * /*expert_offsets*/,
+    const float * /*topk_weights*/, const void * /*output*/, int32_t /*top_k*/)
+{
+    if (n_experts < 0 || n_rows_per_expert < 0 || n_cols < 0) return 2;
+    if (n_cols > 0 && (n_cols % QK_K) != 0) return 2;
+    return 0;
+}
+
+extern "C" int32_t baracuda_kernels_mmvq_q8_K_batched_bf16_can_implement(
+    int32_t n_experts, int32_t n_rows_per_expert, int32_t n_cols,
+    const void * /*weights*/, const void * /*activations*/,
+    const int32_t * /*sorted_token_ids*/, const int32_t * /*expert_offsets*/,
+    const float * /*topk_weights*/, const void * /*output*/, int32_t /*top_k*/)
+{
+    if (n_experts < 0 || n_rows_per_expert < 0 || n_cols < 0) return 2;
+    if (n_cols > 0 && (n_cols % QK_K) != 0) return 2;
+    return 0;
+}
+
+extern "C" int32_t baracuda_kernels_mmvq_q8_K_batched_f16_can_implement(
+    int32_t n_experts, int32_t n_rows_per_expert, int32_t n_cols,
+    const void * /*weights*/, const void * /*activations*/,
+    const int32_t * /*sorted_token_ids*/, const int32_t * /*expert_offsets*/,
+    const float * /*topk_weights*/, const void * /*output*/, int32_t /*top_k*/)
+{
+    if (n_experts < 0 || n_rows_per_expert < 0 || n_cols < 0) return 2;
+    if (n_cols > 0 && (n_cols % QK_K) != 0) return 2;
+    return 0;
+}
+

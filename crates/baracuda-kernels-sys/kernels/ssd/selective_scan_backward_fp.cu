@@ -448,6 +448,13 @@ extern "C" size_t baracuda_kernels_selective_scan_workspace_bytes(
             static_cast<T*>(dz), static_cast<T*>(ddelta_bias),                                 \
             workspace, workspace_bytes,                                                        \
             batch, seqlen, dim, dstate, delta_softplus, stream);                               \
+    }                                                                                          \
+    extern "C" int32_t baracuda_kernels_##NAME##_backward_can_implement(                       \
+        int32_t batch, int32_t seqlen, int32_t dim, int32_t dstate)                            \
+    {                                                                                          \
+        if (batch < 0 || seqlen < 0 || dim < 0 || dstate < 0) return 2;                        \
+        if (dstate > 256) return 3;                                                            \
+        return 0;                                                                              \
     }
 
 BARACUDA_SELECTIVE_SCAN_BWD_INSTANTIATE(selective_scan_f32,  float)

@@ -255,3 +255,15 @@ extern "C" int32_t baracuda_kernels_int4_awq_dequantize_f16_run(
     // helper to Error::Unsupported).
     return 3;
 }
+
+extern "C" int32_t baracuda_kernels_int4_awq_dequantize_f16_can_implement(
+    int32_t N, int32_t K, int32_t group_size,
+    const void * /*kernel_weights*/,
+    const void * /*scaling_factors*/,
+    const void * /*zeros*/,
+    const void * /*out*/)
+{
+    if (N < 0 || K < 0 || group_size < 0) return 2;
+    // Mirror _run's blanket Unsupported (no dequant path is wired today).
+    return 3;
+}

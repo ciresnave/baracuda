@@ -176,4 +176,24 @@ int baracuda_kernels_flashinfer_paged_prefill_can_implement(
     return STATUS_OK;
 }
 
+
+// Per-symbol _can_implement companions. Delegate to family-level validator.
+extern "C" int32_t baracuda_kernels_flashinfer_paged_prefill_f16_can_implement(
+    int32_t batch_size, int32_t total_num_rows, int32_t page_size, int32_t head_dim,
+    int32_t num_qo_heads, int32_t num_kv_heads,
+    float /*sm_scale*/, int32_t /*causal*/, int32_t /*enable_split*/)
+{
+    return baracuda_kernels_flashinfer_paged_prefill_can_implement(
+        batch_size, total_num_rows, page_size, head_dim, num_qo_heads, num_kv_heads);
+}
+
+extern "C" int32_t baracuda_kernels_flashinfer_paged_prefill_bf16_can_implement(
+    int32_t batch_size, int32_t total_num_rows, int32_t page_size, int32_t head_dim,
+    int32_t num_qo_heads, int32_t num_kv_heads,
+    float /*sm_scale*/, int32_t /*causal*/, int32_t /*enable_split*/)
+{
+    return baracuda_kernels_flashinfer_paged_prefill_can_implement(
+        batch_size, total_num_rows, page_size, head_dim, num_qo_heads, num_kv_heads);
+}
+
 }  // extern "C"

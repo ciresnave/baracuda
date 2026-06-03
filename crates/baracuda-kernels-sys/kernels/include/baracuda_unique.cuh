@@ -109,6 +109,14 @@ __host__ inline int32_t launch_unique_consecutive(
             static_cast<int32_t*>(y_counts),                                                       \
             static_cast<int32_t*>(counter),                                                        \
             batch, row_len, max_unique, stream);                                                  \
+    }                                                                                              \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                   \
+        int32_t batch, int32_t row_len, int32_t max_unique,                                       \
+        const void* /*x*/, const void* /*y_vals*/,                                                \
+        const void* /*y_counts*/, const void* /*counter*/)                                        \
+    {                                                                                              \
+        if (batch < 0 || row_len < 0 || max_unique < 0) return 2;                                 \
+        return 0;                                                                                 \
     }
 
 #endif // BARACUDA_UNIQUE_CUH

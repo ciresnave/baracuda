@@ -303,3 +303,42 @@ extern "C" int32_t baracuda_kernels_dequantize_q8_K_run(
         x, static_cast<float*>(y));
     return status_from_launch(cudaPeekAtLastError());
 }
+
+// =============================================================================
+// _can_implement companions — host-side dispatch validation.
+// =============================================================================
+//
+// Type-0/1 formats (Q4_0/1, Q5_0/1, Q8_0) accept numel % 32 == 0.
+// k-quants (Q2..Q6, Q8_K) accept numel % QK_K == 0.
+
+#define BARACUDA_KERNELS_DEQUANT_TYPE01_CAN_IMPL(NAME)                          \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                 \
+        int64_t numel,                                                          \
+        const void * /*x*/,                                                     \
+        const void * /*y*/)                                                     \
+    {                                                                           \
+        if (numel <= 0 || (numel % 32) != 0) return 2;                          \
+        return 0;                                                               \
+    }
+
+#define BARACUDA_KERNELS_DEQUANT_KQUANT_CAN_IMPL(NAME)                          \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                 \
+        int64_t numel,                                                          \
+        const void * /*x*/,                                                     \
+        const void * /*y*/)                                                     \
+    {                                                                           \
+        if (numel <= 0 || (numel % QK_K) != 0) return 2;                        \
+        return 0;                                                               \
+    }
+
+BARACUDA_KERNELS_DEQUANT_TYPE01_CAN_IMPL(dequantize_q4_0)
+BARACUDA_KERNELS_DEQUANT_TYPE01_CAN_IMPL(dequantize_q4_1)
+BARACUDA_KERNELS_DEQUANT_TYPE01_CAN_IMPL(dequantize_q5_0)
+BARACUDA_KERNELS_DEQUANT_TYPE01_CAN_IMPL(dequantize_q5_1)
+BARACUDA_KERNELS_DEQUANT_TYPE01_CAN_IMPL(dequantize_q8_0)
+BARACUDA_KERNELS_DEQUANT_KQUANT_CAN_IMPL(dequantize_q2_K)
+BARACUDA_KERNELS_DEQUANT_KQUANT_CAN_IMPL(dequantize_q3_K)
+BARACUDA_KERNELS_DEQUANT_KQUANT_CAN_IMPL(dequantize_q4_K)
+BARACUDA_KERNELS_DEQUANT_KQUANT_CAN_IMPL(dequantize_q5_K)
+BARACUDA_KERNELS_DEQUANT_KQUANT_CAN_IMPL(dequantize_q6_K)
+BARACUDA_KERNELS_DEQUANT_KQUANT_CAN_IMPL(dequantize_q8_K)

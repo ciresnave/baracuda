@@ -205,6 +205,22 @@ __host__ inline int32_t launch_reduce_logsumexp_axis(
             output_shape, stride_x, stride_y,                                                     \
             reduce_axis, reduce_extent, reduce_stride_x,                                          \
             stream);                                                                              \
+    }                                                                                              \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                   \
+        int64_t output_numel, int32_t rank,                                                       \
+        const int32_t* output_shape,                                                              \
+        const int64_t* stride_x, const int64_t* stride_y,                                         \
+        int32_t reduce_axis, int32_t reduce_extent, int64_t reduce_stride_x,                     \
+        const void* /*x*/, const void* /*y*/)                                                     \
+    {                                                                                              \
+        if (output_numel < 0) return 2;                                                           \
+        if (rank < 0) return 2;                                                                   \
+        if (reduce_extent <= 0) return 2;                                                         \
+        if (reduce_axis < 0 || reduce_axis >= rank) return 2;                                     \
+        if (output_numel > 0 && (output_shape == nullptr || stride_x == nullptr ||                \
+                                  stride_y == nullptr)) return 2;                                 \
+        (void)reduce_stride_x;                                                                    \
+        return 0;                                                                                  \
     }
 
 BARACUDA_KERNELS_REDUCE_LOGSUMEXP_INSTANTIATE(reduce_logsumexp_f32, float)

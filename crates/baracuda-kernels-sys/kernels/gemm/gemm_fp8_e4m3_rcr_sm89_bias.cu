@@ -104,4 +104,51 @@ int32_t baracuda_kernels_gemm_fp8_e4m3_rcr_sm89_bias_silu_run(
     );
 }
 
+
+// ---- _can_implement companions ----
+
+int32_t baracuda_kernels_gemm_fp8_e4m3_rcr_sm89_bias_can_implement(
+    int32_t m, int32_t n, int32_t k,
+    const void * /*a*/, int64_t /*lda*/,
+    const void * /*b*/, int64_t /*ldb*/,
+    const void * /*c*/, int64_t /*ldc*/,
+    const void * /*d*/, int64_t /*ldd*/
+) {
+    if (m <= 0 || n <= 0 || k <= 0) return 2;
+    return 0;
+}
+
+int32_t baracuda_kernels_gemm_fp8_e4m3_rcr_sm89_bias_relu_can_implement(
+    int32_t m, int32_t n, int32_t k,
+    const void * /*a*/, int64_t /*lda*/,
+    const void * /*b*/, int64_t /*ldb*/,
+    const void * /*c*/, int64_t /*ldc*/,
+    const void * /*d*/, int64_t /*ldd*/
+) {
+    if (m <= 0 || n <= 0 || k <= 0) return 2;
+    return 0;
+}
+
+int32_t baracuda_kernels_gemm_fp8_e4m3_rcr_sm89_bias_gelu_can_implement(
+    int32_t m, int32_t n, int32_t k,
+    const void * /*a*/, int64_t /*lda*/,
+    const void * /*b*/, int64_t /*ldb*/,
+    const void * /*c*/, int64_t /*ldc*/,
+    const void * /*d*/, int64_t /*ldd*/
+) {
+    if (m <= 0 || n <= 0 || k <= 0) return 2;
+    return 0;
+}
+
+int32_t baracuda_kernels_gemm_fp8_e4m3_rcr_sm89_bias_silu_can_implement(
+    int32_t m, int32_t n, int32_t k,
+    const void * /*a*/, int64_t /*lda*/,
+    const void * /*b*/, int64_t /*ldb*/,
+    const void * /*c*/, int64_t /*ldc*/,
+    const void * /*d*/, int64_t /*ldd*/
+) {
+    if (m <= 0 || n <= 0 || k <= 0) return 2;
+    return 0;
+}
+
 } // extern "C"

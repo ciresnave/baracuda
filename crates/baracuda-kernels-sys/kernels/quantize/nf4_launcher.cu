@@ -185,6 +185,60 @@ extern "C" int32_t baracuda_kernels_nf4_gemv_m1_bf16_run(
     return launch_nf4_gemv_m1<__nv_bfloat16>(N, K, block_size, w_packed, absmax, y, out, stream);
 }
 
+
+// =============================================================================
+// _can_implement companions — NF4 dequant
+// =============================================================================
+
+extern "C" int32_t baracuda_kernels_nf4_dequantize_f16_can_implement(
+    int32_t N, int32_t K, int32_t block_size)
+{
+    if (N <= 0 || K <= 0 || block_size <= 0) return 2;
+    if ((K % block_size) != 0) return 2;
+    if ((N % 2) != 0) return 2;
+    return 0;
+}
+
+extern "C" int32_t baracuda_kernels_nf4_dequantize_bf16_can_implement(
+    int32_t N, int32_t K, int32_t block_size)
+{
+    if (N <= 0 || K <= 0 || block_size <= 0) return 2;
+    if ((K % block_size) != 0) return 2;
+    if ((N % 2) != 0) return 2;
+    return 0;
+}
+
+extern "C" int32_t baracuda_kernels_nf4_dequantize_f32_can_implement(
+    int32_t N, int32_t K, int32_t block_size)
+{
+    if (N <= 0 || K <= 0 || block_size <= 0) return 2;
+    if ((K % block_size) != 0) return 2;
+    if ((N % 2) != 0) return 2;
+    return 0;
+}
+
+// =============================================================================
+// _can_implement companions — NF4 GEMV M=1
+// =============================================================================
+
+extern "C" int32_t baracuda_kernels_nf4_gemv_m1_f16_can_implement(
+    int32_t N, int32_t K, int32_t block_size)
+{
+    if (N <= 0 || K <= 0 || block_size <= 0) return 2;
+    if ((K % block_size) != 0) return 2;
+    if ((N % 2) != 0) return 2;
+    return 0;
+}
+
+extern "C" int32_t baracuda_kernels_nf4_gemv_m1_bf16_can_implement(
+    int32_t N, int32_t K, int32_t block_size)
+{
+    if (N <= 0 || K <= 0 || block_size <= 0) return 2;
+    if ((K % block_size) != 0) return 2;
+    if ((N % 2) != 0) return 2;
+    return 0;
+}
+
 // =============================================================================
 // FFI surface — NF4 GEMV multi-M (M = 2 / 4 / 8)
 // =============================================================================
@@ -202,6 +256,14 @@ extern "C" int32_t baracuda_kernels_nf4_gemv_m##M_VAL##_##T_TAG##_run( \
     cudaStream_t stream = static_cast<cudaStream_t>(stream_ptr); \
     return launch_nf4_gemv_multim<T_TY, M_VAL>( \
         N, K, block_size, w_packed, absmax, y, out, stream); \
+} \
+extern "C" int32_t baracuda_kernels_nf4_gemv_m##M_VAL##_##T_TAG##_can_implement( \
+    int32_t N, int32_t K, int32_t block_size) \
+{ \
+    if (N <= 0 || K <= 0 || block_size <= 0) return 2; \
+    if ((K % block_size) != 0) return 2; \
+    if ((N % 2) != 0) return 2; \
+    return 0; \
 }
 
 BARACUDA_NF4_MULTIM_LAUNCHER(f16,  __half,        2)

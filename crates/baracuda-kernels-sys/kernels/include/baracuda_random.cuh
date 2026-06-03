@@ -463,6 +463,16 @@ __host__ inline int32_t launch_affine_inplace_strided_bf16(
             static_cast<const float*>(rand),                                                        \
             static_cast<uint8_t*>(y),                                                               \
             numel, p, stream);                                                                      \
+    }                                                                                               \
+    extern "C" int32_t baracuda_kernels_bernoulli_can_implement(                                    \
+        int64_t numel,                                                                              \
+        float p,                                                                                    \
+        const void* /*rand*/,                                                                       \
+        const void* /*y*/)                                                                          \
+    {                                                                                               \
+        if (numel < 0) return 2;                                                                   \
+        if (!(p >= 0.0f && p <= 1.0f)) return 2;                                                   \
+        return 0;                                                                                   \
     }
 
 // ABI: `(numel, p, scale, x, rand, y, mask, ws, ws_bytes, stream) -> i32`.
@@ -494,6 +504,19 @@ __host__ inline int32_t launch_affine_inplace_strided_bf16(
             static_cast<T*>(y),                                                                     \
             static_cast<uint8_t*>(mask),                                                            \
             numel, keep_prob, scale, stream);                                                       \
+    }                                                                                               \
+    extern "C" int32_t baracuda_kernels_dropout_##NAME##_can_implement(                            \
+        int64_t numel,                                                                              \
+        float p,                                                                                    \
+        SCALE_T /*scale*/,                                                                          \
+        const void* /*x*/,                                                                          \
+        const void* /*rand*/,                                                                       \
+        const void* /*y*/,                                                                          \
+        const void* /*mask*/)                                                                       \
+    {                                                                                               \
+        if (numel < 0) return 2;                                                                   \
+        if (!(p >= 0.0f && p < 1.0f)) return 2;                                                    \
+        return 0;                                                                                   \
     }
 
 // ABI: `(numel, scale, dy, mask, dx, ws, ws_bytes, stream) -> i32`.
@@ -516,6 +539,16 @@ __host__ inline int32_t launch_affine_inplace_strided_bf16(
             static_cast<const uint8_t*>(mask),                                                      \
             static_cast<T*>(dx),                                                                    \
             numel, scale, stream);                                                                  \
+    }                                                                                               \
+    extern "C" int32_t baracuda_kernels_dropout_backward_##NAME##_can_implement(                   \
+        int64_t numel,                                                                              \
+        SCALE_T /*scale*/,                                                                          \
+        const void* /*dy*/,                                                                         \
+        const void* /*mask*/,                                                                       \
+        const void* /*dx*/)                                                                         \
+    {                                                                                               \
+        if (numel < 0) return 2;                                                                   \
+        return 0;                                                                                   \
     }
 
 // ABI: `(numel, scale, offset, y, ws, ws_bytes, stream) -> i32`.
@@ -539,6 +572,15 @@ __host__ inline int32_t launch_affine_inplace_strided_bf16(
         cudaStream_t stream = static_cast<cudaStream_t>(stream_ptr);                               \
         return baracuda::random::launch_affine_inplace<T>(                                          \
             static_cast<T*>(y), numel, scale, offset, stream);                                      \
+    }                                                                                               \
+    extern "C" int32_t baracuda_kernels_affine_inplace_##NAME##_can_implement(                     \
+        int64_t numel,                                                                              \
+        T /*scale*/,                                                                                \
+        T /*offset*/,                                                                               \
+        const void* /*y*/)                                                                          \
+    {                                                                                               \
+        if (numel < 0) return 2;                                                                   \
+        return 0;                                                                                   \
     }
 
 // f32-scalar variant for half-precision storage types (Phase 61).
@@ -570,6 +612,15 @@ __host__ inline int32_t launch_affine_inplace_strided_bf16(
         cudaStream_t stream = static_cast<cudaStream_t>(stream_ptr);                               \
         return baracuda::random::launch_affine_inplace_##NAME(                                      \
             static_cast<T*>(y), numel, scale, offset, stream);                                      \
+    }                                                                                               \
+    extern "C" int32_t baracuda_kernels_affine_inplace_##NAME##_can_implement(                     \
+        int64_t numel,                                                                              \
+        float /*scale*/,                                                                            \
+        float /*offset*/,                                                                           \
+        const void* /*y*/)                                                                          \
+    {                                                                                               \
+        if (numel < 0) return 2;                                                                   \
+        return 0;                                                                                   \
     }
 
 // Phase 62 — strided in-place affine, ABI:
@@ -597,6 +648,20 @@ __host__ inline int32_t launch_affine_inplace_strided_bf16(
         cudaStream_t stream = static_cast<cudaStream_t>(stream_ptr);                               \
         return baracuda::random::launch_affine_inplace_strided<T>(                                  \
             static_cast<T*>(y), numel, rank, shape, stride_y, scale, offset, stream);              \
+    }                                                                                               \
+    extern "C" int32_t baracuda_kernels_affine_inplace_##NAME##_strided_can_implement(             \
+        int64_t numel,                                                                              \
+        int32_t rank,                                                                               \
+        const int32_t* shape,                                                                       \
+        const int64_t* stride_y,                                                                    \
+        T /*scale*/,                                                                                \
+        T /*offset*/,                                                                               \
+        const void* /*y*/)                                                                          \
+    {                                                                                               \
+        if (numel < 0) return 2;                                                                   \
+        if (rank < 0) return 2;                                                                    \
+        if (rank > 0 && (shape == nullptr || stride_y == nullptr)) return 2;                       \
+        return 0;                                                                                   \
     }
 
 // Phase 62 — f32-scalar strided in-place variant for half-precision.
@@ -621,6 +686,20 @@ __host__ inline int32_t launch_affine_inplace_strided_bf16(
         cudaStream_t stream = static_cast<cudaStream_t>(stream_ptr);                               \
         return baracuda::random::launch_affine_inplace_strided_##NAME(                              \
             static_cast<T*>(y), numel, rank, shape, stride_y, scale, offset, stream);              \
+    }                                                                                               \
+    extern "C" int32_t baracuda_kernels_affine_inplace_##NAME##_strided_can_implement(             \
+        int64_t numel,                                                                              \
+        int32_t rank,                                                                               \
+        const int32_t* shape,                                                                       \
+        const int64_t* stride_y,                                                                    \
+        float /*scale*/,                                                                            \
+        float /*offset*/,                                                                           \
+        const void* /*y*/)                                                                          \
+    {                                                                                               \
+        if (numel < 0) return 2;                                                                   \
+        if (rank < 0) return 2;                                                                    \
+        if (rank > 0 && (shape == nullptr || stride_y == nullptr)) return 2;                       \
+        return 0;                                                                                   \
     }
 
 #endif // BARACUDA_RANDOM_CUH

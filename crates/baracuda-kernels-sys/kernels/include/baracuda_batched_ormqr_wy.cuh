@@ -349,6 +349,15 @@ __host__ inline int32_t launch_batched_ormqr_wy_extract_v(
             static_cast<const T*>(tau),                                                         \
             static_cast<T*>(t_out),                                                              \
             batch, M, K, nb, num_blocks, stream);                                                \
+    }                                                                                                \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                \
+        int32_t batch, int32_t M, int32_t K, int32_t nb, int32_t num_blocks)                   \
+    {                                                                                            \
+        if (batch < 0 || M < 0 || K < 0) return 2;                                              \
+        if (nb <= 0) return 2;                                                                   \
+        if (num_blocks < 0) return 2;                                                            \
+        if (K > M) return 2;                                                                     \
+        return 0;                                                                                \
     }
 
 #define BARACUDA_KERNELS_BATCHED_ORMQR_WY_EXTRACT_V_INSTANTIATE(NAME, T)                       \
@@ -369,6 +378,16 @@ __host__ inline int32_t launch_batched_ormqr_wy_extract_v(
             static_cast<const T*>(a_packed),                                                    \
             static_cast<T*>(v_out),                                                              \
             batch, M, K, nb, block_start, block_k, stream);                                      \
+    }                                                                                                \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                \
+        int32_t batch, int32_t M, int32_t K, int32_t nb,                                       \
+        int32_t block_start, int32_t block_k)                                                  \
+    {                                                                                            \
+        if (batch < 0 || M < 0 || K < 0) return 2;                                              \
+        if (nb <= 0) return 2;                                                                   \
+        if (block_start < 0 || block_k < 0) return 2;                                            \
+        if (block_start + block_k > K) return 2;                                                 \
+        return 0;                                                                                \
     }
 
 #endif // BARACUDA_BATCHED_ORMQR_WY_CUH

@@ -432,6 +432,18 @@ __host__ inline int32_t launch_affine_strided_bf16(
         return baracuda::affine::launch_affine_strided<T>(                                          \
             static_cast<const T*>(x), static_cast<T*>(y), a, b, numel,                              \
             rank, shape, stride_x, stride_y, stream);                                              \
+    }                                                                                               \
+    extern "C" int32_t baracuda_kernels_##NAME##_strided_can_implement(                            \
+        int64_t numel, int32_t rank,                                                                \
+        const int32_t* shape,                                                                       \
+        const int64_t* stride_x, const int64_t* stride_y,                                          \
+        const void* /*x*/, const void* /*y*/,                                                       \
+        T /*a*/, T /*b*/)                                                                           \
+    {                                                                                               \
+        if (numel < 0) return 2;                                                                   \
+        if (rank < 0 || rank > baracuda::affine::MAX_RANK) return 2;                                \
+        if (rank > 0 && (shape == nullptr || stride_x == nullptr || stride_y == nullptr)) return 2;\
+        return 0;                                                                                   \
     }
 
 // f16-storage / f32-compute strided variant. `a` / `b` arrive as `float`.
@@ -454,6 +466,18 @@ __host__ inline int32_t launch_affine_strided_bf16(
         return baracuda::affine::launch_affine_strided_f16(                                         \
             static_cast<const __half*>(x), static_cast<__half*>(y), a, b, numel,                    \
             rank, shape, stride_x, stride_y, stream);                                              \
+    }                                                                                               \
+    extern "C" int32_t baracuda_kernels_##NAME##_strided_can_implement(                            \
+        int64_t numel, int32_t rank,                                                                \
+        const int32_t* shape,                                                                       \
+        const int64_t* stride_x, const int64_t* stride_y,                                          \
+        const void* /*x*/, const void* /*y*/,                                                       \
+        float /*a*/, float /*b*/)                                                                   \
+    {                                                                                               \
+        if (numel < 0) return 2;                                                                   \
+        if (rank < 0 || rank > baracuda::affine::MAX_RANK) return 2;                                \
+        if (rank > 0 && (shape == nullptr || stride_x == nullptr || stride_y == nullptr)) return 2;\
+        return 0;                                                                                   \
     }
 
 // bf16-storage / f32-compute strided variant. `a` / `b` arrive as `float`.
@@ -476,6 +500,18 @@ __host__ inline int32_t launch_affine_strided_bf16(
         return baracuda::affine::launch_affine_strided_bf16(                                        \
             static_cast<const __nv_bfloat16*>(x), static_cast<__nv_bfloat16*>(y), a, b, numel,      \
             rank, shape, stride_x, stride_y, stream);                                              \
+    }                                                                                               \
+    extern "C" int32_t baracuda_kernels_##NAME##_strided_can_implement(                            \
+        int64_t numel, int32_t rank,                                                                \
+        const int32_t* shape,                                                                       \
+        const int64_t* stride_x, const int64_t* stride_y,                                          \
+        const void* /*x*/, const void* /*y*/,                                                       \
+        float /*a*/, float /*b*/)                                                                   \
+    {                                                                                               \
+        if (numel < 0) return 2;                                                                   \
+        if (rank < 0 || rank > baracuda::affine::MAX_RANK) return 2;                                \
+        if (rank > 0 && (shape == nullptr || stride_x == nullptr || stride_y == nullptr)) return 2;\
+        return 0;                                                                                   \
     }
 
 #endif // BARACUDA_AFFINE_CUH

@@ -103,6 +103,13 @@ __host__ inline int32_t launch_searchsorted(
             static_cast<const T*>(sorted_seq), static_cast<const T*>(values),                     \
             static_cast<int32_t*>(output),                                                         \
             num_queries, len_sorted, right, stream);                                              \
+    }                                                                                              \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                   \
+        int64_t num_queries, int32_t len_sorted, int32_t /*right*/,                               \
+        const void* /*sorted_seq*/, const void* /*values*/, const void* /*output*/)               \
+    {                                                                                              \
+        if (num_queries < 0 || len_sorted < 0) return 2;                                          \
+        return 0;                                                                                 \
     }
 
 #endif // BARACUDA_SEARCHSORTED_CUH

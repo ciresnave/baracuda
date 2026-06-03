@@ -380,6 +380,14 @@ int32_t launch_causal_conv1d_bwd(
             static_cast<T*>(dw),                                                              \
             static_cast<T*>(db),                                                              \
             batch, channels, seqlen, width, use_silu, stream);                                \
+    }                                                                                          \
+    extern "C" int32_t baracuda_kernels_##NAME##_backward_can_implement(                      \
+        int32_t batch, int32_t channels, int32_t seqlen, int32_t width,                       \
+        int32_t /*use_silu*/)                                                                 \
+    {                                                                                          \
+        if (batch < 0 || channels < 0 || seqlen < 0) return 2;                                \
+        if (width < 2 || width > 4) return 3;                                                 \
+        return 0;                                                                              \
     }
 
 BARACUDA_CAUSAL_CONV1D_BWD_INSTANTIATE(causal_conv1d_f32,  float)

@@ -568,6 +568,15 @@ __host__ inline int32_t launch_batched_qr_materialize_identity(
             static_cast<const T*>(tau),                                                           \
             static_cast<T*>(c),                                                                   \
             batch, M, N, K, side, op, stream);                                                    \
+    }                                                                                                  \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                  \
+        int32_t batch, int32_t M, int32_t N, int32_t K, int32_t side, int32_t op)                \
+    {                                                                                              \
+        if (batch < 0 || M < 0 || N < 0 || K < 0) return 2;                                       \
+        if (side != 0 && side != 1) return 2;     /* 0 = Left, 1 = Right */                       \
+        if (op < 0 || op > 2) return 2;            /* 0 = N, 1 = T, 2 = C */                       \
+        if (K > M) return 2;                                                                       \
+        return 0;                                                                                  \
     }
 
 #define BARACUDA_KERNELS_BATCHED_QR_MATERIALIZE_R_INSTANTIATE(NAME, T)                          \
@@ -586,6 +595,13 @@ __host__ inline int32_t launch_batched_qr_materialize_identity(
             static_cast<const T*>(a_packed),                                                      \
             static_cast<T*>(r),                                                                   \
             batch, M, N, K, stream);                                                              \
+    }                                                                                                  \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                  \
+        int32_t batch, int32_t M, int32_t N, int32_t K)                                          \
+    {                                                                                              \
+        if (batch < 0 || M < 0 || N < 0 || K < 0) return 2;                                       \
+        if (K > M || K > N) return 2;                                                              \
+        return 0;                                                                                  \
     }
 
 #define BARACUDA_KERNELS_BATCHED_QR_MATERIALIZE_IDENTITY_INSTANTIATE(NAME, T)                   \
@@ -599,6 +615,12 @@ __host__ inline int32_t launch_batched_qr_materialize_identity(
         cudaStream_t stream = static_cast<cudaStream_t>(stream_ptr);                              \
         return baracuda::linalg::launch_batched_qr_materialize_identity<T>(                       \
             static_cast<T*>(q), batch, M, stream);                                                \
+    }                                                                                                  \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                  \
+        int32_t batch, int32_t M)                                                                 \
+    {                                                                                              \
+        if (batch < 0 || M < 0) return 2;                                                          \
+        return 0;                                                                                  \
     }
 
 #endif // BARACUDA_BATCHED_ORMQR_CUH

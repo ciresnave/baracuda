@@ -2279,3 +2279,700 @@ BCDA_MMVQ_Q5K_STR_LAUNCHER(f16,  __half,         baracuda_gguf_mmvq_q5_K_f16_act
 BCDA_MMVQ_Q5K_STR_LAUNCHER(bf16, __nv_bfloat16,  baracuda_gguf_mmvq_q5_K_bf16_actstrided_kernel)
 
 #undef BCDA_MMVQ_Q5K_STR_LAUNCHER
+
+// =============================================================================
+// _can_implement companions -- host-side validators (Phase 66-prep).
+// Mirror each _run signature minus workspace/stream; output pointers demoted
+// to const void*. Returns 0 (ok) / 2 (invalid arg) / 3 (unsupported).
+// =============================================================================
+
+extern "C" int32_t baracuda_kernels_mmvq_q2_K_can_implement(
+    int32_t ncols, int32_t nrows,
+    const void * /*x*/, const void * /*y*/, const void * /*dst*/)
+{
+    if (ncols < 0 || nrows < 0) return 2;
+    if (ncols > 0 && (ncols % QK_K) != 0) return 2;
+    return 0;
+}
+
+extern "C" int32_t baracuda_kernels_mmvq_q2_K_actstrided_can_implement(
+    int32_t ncols, int32_t nrows,
+    const void * /*x*/,
+    int64_t /*w_start_byte_offset*/, int64_t /*stride_y*/,
+    const void * /*y*/, const void * /*dst*/)
+{
+    if (ncols < 0 || nrows < 0) return 2;
+    if (ncols > 0 && (ncols % QK_K) != 0) return 2;
+    return 0;
+}
+
+extern "C" int32_t baracuda_kernels_mmvq_q2_K_actstrided_bf16_can_implement(
+    int32_t ncols, int32_t nrows,
+    const void * /*x*/,
+    int64_t /*w_start_byte_offset*/, int64_t /*stride_y*/,
+    const void * /*y*/, const void * /*dst*/)
+{
+    if (ncols < 0 || nrows < 0) return 2;
+    if (ncols > 0 && (ncols % QK_K) != 0) return 2;
+    return 0;
+}
+
+extern "C" int32_t baracuda_kernels_mmvq_q2_K_actstrided_f16_can_implement(
+    int32_t ncols, int32_t nrows,
+    const void * /*x*/,
+    int64_t /*w_start_byte_offset*/, int64_t /*stride_y*/,
+    const void * /*y*/, const void * /*dst*/)
+{
+    if (ncols < 0 || nrows < 0) return 2;
+    if (ncols > 0 && (ncols % QK_K) != 0) return 2;
+    return 0;
+}
+
+extern "C" int32_t baracuda_kernels_mmvq_q2_K_bf16_can_implement(
+    int32_t ncols, int32_t nrows,
+    const void * /*x*/, const void * /*y*/, const void * /*dst*/)
+{
+    if (ncols < 0 || nrows < 0) return 2;
+    if (ncols > 0 && (ncols % QK_K) != 0) return 2;
+    return 0;
+}
+
+extern "C" int32_t baracuda_kernels_mmvq_q2_K_f16_can_implement(
+    int32_t ncols, int32_t nrows,
+    const void * /*x*/, const void * /*y*/, const void * /*dst*/)
+{
+    if (ncols < 0 || nrows < 0) return 2;
+    if (ncols > 0 && (ncols % QK_K) != 0) return 2;
+    return 0;
+}
+
+extern "C" int32_t baracuda_kernels_mmvq_q3_K_can_implement(
+    int32_t ncols, int32_t nrows,
+    const void * /*x*/, const void * /*y*/, const void * /*dst*/)
+{
+    if (ncols < 0 || nrows < 0) return 2;
+    if (ncols > 0 && (ncols % QK_K) != 0) return 2;
+    return 0;
+}
+
+extern "C" int32_t baracuda_kernels_mmvq_q3_K_actstrided_can_implement(
+    int32_t ncols, int32_t nrows,
+    const void * /*x*/,
+    int64_t /*w_start_byte_offset*/, int64_t /*stride_y*/,
+    const void * /*y*/, const void * /*dst*/)
+{
+    if (ncols < 0 || nrows < 0) return 2;
+    if (ncols > 0 && (ncols % QK_K) != 0) return 2;
+    return 0;
+}
+
+extern "C" int32_t baracuda_kernels_mmvq_q3_K_actstrided_bf16_can_implement(
+    int32_t ncols, int32_t nrows,
+    const void * /*x*/,
+    int64_t /*w_start_byte_offset*/, int64_t /*stride_y*/,
+    const void * /*y*/, const void * /*dst*/)
+{
+    if (ncols < 0 || nrows < 0) return 2;
+    if (ncols > 0 && (ncols % QK_K) != 0) return 2;
+    return 0;
+}
+
+extern "C" int32_t baracuda_kernels_mmvq_q3_K_actstrided_f16_can_implement(
+    int32_t ncols, int32_t nrows,
+    const void * /*x*/,
+    int64_t /*w_start_byte_offset*/, int64_t /*stride_y*/,
+    const void * /*y*/, const void * /*dst*/)
+{
+    if (ncols < 0 || nrows < 0) return 2;
+    if (ncols > 0 && (ncols % QK_K) != 0) return 2;
+    return 0;
+}
+
+extern "C" int32_t baracuda_kernels_mmvq_q3_K_bf16_can_implement(
+    int32_t ncols, int32_t nrows,
+    const void * /*x*/, const void * /*y*/, const void * /*dst*/)
+{
+    if (ncols < 0 || nrows < 0) return 2;
+    if (ncols > 0 && (ncols % QK_K) != 0) return 2;
+    return 0;
+}
+
+extern "C" int32_t baracuda_kernels_mmvq_q3_K_f16_can_implement(
+    int32_t ncols, int32_t nrows,
+    const void * /*x*/, const void * /*y*/, const void * /*dst*/)
+{
+    if (ncols < 0 || nrows < 0) return 2;
+    if (ncols > 0 && (ncols % QK_K) != 0) return 2;
+    return 0;
+}
+
+extern "C" int32_t baracuda_kernels_mmvq_q4_0_can_implement(
+    int32_t ncols, int32_t nrows,
+    const void * /*x*/, const void * /*y*/, const void * /*dst*/)
+{
+    if (ncols < 0 || nrows < 0) return 2;
+    if (ncols > 0 && ncols < 64) return 2;
+    if (ncols > 0 && (ncols % 32) != 0) return 2;
+    return 0;
+}
+
+extern "C" int32_t baracuda_kernels_mmvq_q4_0_actstrided_can_implement(
+    int32_t ncols, int32_t nrows,
+    const void * /*x*/,
+    int64_t /*w_start_byte_offset*/, int64_t /*stride_y*/,
+    const void * /*y*/, const void * /*dst*/)
+{
+    if (ncols < 0 || nrows < 0) return 2;
+    if (ncols > 0 && ncols < 64) return 2;
+    if (ncols > 0 && (ncols % 32) != 0) return 2;
+    return 0;
+}
+
+extern "C" int32_t baracuda_kernels_mmvq_q4_0_actstrided_bf16_can_implement(
+    int32_t ncols, int32_t nrows,
+    const void * /*x*/,
+    int64_t /*w_start_byte_offset*/, int64_t /*stride_y*/,
+    const void * /*y*/, const void * /*dst*/)
+{
+    if (ncols < 0 || nrows < 0) return 2;
+    if (ncols > 0 && ncols < 64) return 2;
+    if (ncols > 0 && (ncols % 32) != 0) return 2;
+    return 0;
+}
+
+extern "C" int32_t baracuda_kernels_mmvq_q4_0_actstrided_f16_can_implement(
+    int32_t ncols, int32_t nrows,
+    const void * /*x*/,
+    int64_t /*w_start_byte_offset*/, int64_t /*stride_y*/,
+    const void * /*y*/, const void * /*dst*/)
+{
+    if (ncols < 0 || nrows < 0) return 2;
+    if (ncols > 0 && ncols < 64) return 2;
+    if (ncols > 0 && (ncols % 32) != 0) return 2;
+    return 0;
+}
+
+extern "C" int32_t baracuda_kernels_mmvq_q4_0_bf16_can_implement(
+    int32_t ncols, int32_t nrows,
+    const void * /*x*/, const void * /*y*/, const void * /*dst*/)
+{
+    if (ncols < 0 || nrows < 0) return 2;
+    if (ncols > 0 && ncols < 64) return 2;
+    if (ncols > 0 && (ncols % 32) != 0) return 2;
+    return 0;
+}
+
+extern "C" int32_t baracuda_kernels_mmvq_q4_0_f16_can_implement(
+    int32_t ncols, int32_t nrows,
+    const void * /*x*/, const void * /*y*/, const void * /*dst*/)
+{
+    if (ncols < 0 || nrows < 0) return 2;
+    if (ncols > 0 && ncols < 64) return 2;
+    if (ncols > 0 && (ncols % 32) != 0) return 2;
+    return 0;
+}
+
+extern "C" int32_t baracuda_kernels_mmvq_q4_1_can_implement(
+    int32_t ncols, int32_t nrows,
+    const void * /*x*/, const void * /*y*/, const void * /*dst*/)
+{
+    if (ncols < 0 || nrows < 0) return 2;
+    if (ncols > 0 && ncols < 64) return 2;
+    if (ncols > 0 && (ncols % 32) != 0) return 2;
+    return 0;
+}
+
+extern "C" int32_t baracuda_kernels_mmvq_q4_1_actstrided_can_implement(
+    int32_t ncols, int32_t nrows,
+    const void * /*x*/,
+    int64_t /*w_start_byte_offset*/, int64_t /*stride_y*/,
+    const void * /*y*/, const void * /*dst*/)
+{
+    if (ncols < 0 || nrows < 0) return 2;
+    if (ncols > 0 && ncols < 64) return 2;
+    if (ncols > 0 && (ncols % 32) != 0) return 2;
+    return 0;
+}
+
+extern "C" int32_t baracuda_kernels_mmvq_q4_1_actstrided_bf16_can_implement(
+    int32_t ncols, int32_t nrows,
+    const void * /*x*/,
+    int64_t /*w_start_byte_offset*/, int64_t /*stride_y*/,
+    const void * /*y*/, const void * /*dst*/)
+{
+    if (ncols < 0 || nrows < 0) return 2;
+    if (ncols > 0 && ncols < 64) return 2;
+    if (ncols > 0 && (ncols % 32) != 0) return 2;
+    return 0;
+}
+
+extern "C" int32_t baracuda_kernels_mmvq_q4_1_actstrided_f16_can_implement(
+    int32_t ncols, int32_t nrows,
+    const void * /*x*/,
+    int64_t /*w_start_byte_offset*/, int64_t /*stride_y*/,
+    const void * /*y*/, const void * /*dst*/)
+{
+    if (ncols < 0 || nrows < 0) return 2;
+    if (ncols > 0 && ncols < 64) return 2;
+    if (ncols > 0 && (ncols % 32) != 0) return 2;
+    return 0;
+}
+
+extern "C" int32_t baracuda_kernels_mmvq_q4_1_bf16_can_implement(
+    int32_t ncols, int32_t nrows,
+    const void * /*x*/, const void * /*y*/, const void * /*dst*/)
+{
+    if (ncols < 0 || nrows < 0) return 2;
+    if (ncols > 0 && ncols < 64) return 2;
+    if (ncols > 0 && (ncols % 32) != 0) return 2;
+    return 0;
+}
+
+extern "C" int32_t baracuda_kernels_mmvq_q4_1_f16_can_implement(
+    int32_t ncols, int32_t nrows,
+    const void * /*x*/, const void * /*y*/, const void * /*dst*/)
+{
+    if (ncols < 0 || nrows < 0) return 2;
+    if (ncols > 0 && ncols < 64) return 2;
+    if (ncols > 0 && (ncols % 32) != 0) return 2;
+    return 0;
+}
+
+extern "C" int32_t baracuda_kernels_mmvq_q4_K_can_implement(
+    int32_t ncols, int32_t nrows,
+    const void * /*x*/, const void * /*y*/, const void * /*dst*/)
+{
+    if (ncols < 0 || nrows < 0) return 2;
+    if (ncols > 0 && (ncols % QK_K) != 0) return 2;
+    return 0;
+}
+
+extern "C" int32_t baracuda_kernels_mmvq_q4_K_actstrided_can_implement(
+    int32_t ncols, int32_t nrows,
+    const void * /*x*/,
+    int64_t /*w_start_byte_offset*/, int64_t /*stride_y*/,
+    const void * /*y*/, const void * /*dst*/)
+{
+    if (ncols < 0 || nrows < 0) return 2;
+    if (ncols > 0 && (ncols % QK_K) != 0) return 2;
+    return 0;
+}
+
+extern "C" int32_t baracuda_kernels_mmvq_q4_K_actstrided_bf16_can_implement(
+    int32_t ncols, int32_t nrows,
+    const void * /*x*/,
+    int64_t /*w_start_byte_offset*/, int64_t /*stride_y*/,
+    const void * /*y*/, const void * /*dst*/)
+{
+    if (ncols < 0 || nrows < 0) return 2;
+    if (ncols > 0 && (ncols % QK_K) != 0) return 2;
+    return 0;
+}
+
+extern "C" int32_t baracuda_kernels_mmvq_q4_K_actstrided_f16_can_implement(
+    int32_t ncols, int32_t nrows,
+    const void * /*x*/,
+    int64_t /*w_start_byte_offset*/, int64_t /*stride_y*/,
+    const void * /*y*/, const void * /*dst*/)
+{
+    if (ncols < 0 || nrows < 0) return 2;
+    if (ncols > 0 && (ncols % QK_K) != 0) return 2;
+    return 0;
+}
+
+extern "C" int32_t baracuda_kernels_mmvq_q4_K_bf16_can_implement(
+    int32_t ncols, int32_t nrows,
+    const void * /*x*/, const void * /*y*/, const void * /*dst*/)
+{
+    if (ncols < 0 || nrows < 0) return 2;
+    if (ncols > 0 && (ncols % QK_K) != 0) return 2;
+    return 0;
+}
+
+extern "C" int32_t baracuda_kernels_mmvq_q4_K_f16_can_implement(
+    int32_t ncols, int32_t nrows,
+    const void * /*x*/, const void * /*y*/, const void * /*dst*/)
+{
+    if (ncols < 0 || nrows < 0) return 2;
+    if (ncols > 0 && (ncols % QK_K) != 0) return 2;
+    return 0;
+}
+
+extern "C" int32_t baracuda_kernels_mmvq_q5_0_can_implement(
+    int32_t ncols, int32_t nrows,
+    const void * /*x*/, const void * /*y*/, const void * /*dst*/)
+{
+    if (ncols < 0 || nrows < 0) return 2;
+    if (ncols > 0 && ncols < 64) return 2;
+    if (ncols > 0 && (ncols % 32) != 0) return 2;
+    return 0;
+}
+
+extern "C" int32_t baracuda_kernels_mmvq_q5_0_actstrided_can_implement(
+    int32_t ncols, int32_t nrows,
+    const void * /*x*/,
+    int64_t /*w_start_byte_offset*/, int64_t /*stride_y*/,
+    const void * /*y*/, const void * /*dst*/)
+{
+    if (ncols < 0 || nrows < 0) return 2;
+    if (ncols > 0 && ncols < 64) return 2;
+    if (ncols > 0 && (ncols % 32) != 0) return 2;
+    return 0;
+}
+
+extern "C" int32_t baracuda_kernels_mmvq_q5_0_actstrided_bf16_can_implement(
+    int32_t ncols, int32_t nrows,
+    const void * /*x*/,
+    int64_t /*w_start_byte_offset*/, int64_t /*stride_y*/,
+    const void * /*y*/, const void * /*dst*/)
+{
+    if (ncols < 0 || nrows < 0) return 2;
+    if (ncols > 0 && ncols < 64) return 2;
+    if (ncols > 0 && (ncols % 32) != 0) return 2;
+    return 0;
+}
+
+extern "C" int32_t baracuda_kernels_mmvq_q5_0_actstrided_f16_can_implement(
+    int32_t ncols, int32_t nrows,
+    const void * /*x*/,
+    int64_t /*w_start_byte_offset*/, int64_t /*stride_y*/,
+    const void * /*y*/, const void * /*dst*/)
+{
+    if (ncols < 0 || nrows < 0) return 2;
+    if (ncols > 0 && ncols < 64) return 2;
+    if (ncols > 0 && (ncols % 32) != 0) return 2;
+    return 0;
+}
+
+extern "C" int32_t baracuda_kernels_mmvq_q5_0_bf16_can_implement(
+    int32_t ncols, int32_t nrows,
+    const void * /*x*/, const void * /*y*/, const void * /*dst*/)
+{
+    if (ncols < 0 || nrows < 0) return 2;
+    if (ncols > 0 && ncols < 64) return 2;
+    if (ncols > 0 && (ncols % 32) != 0) return 2;
+    return 0;
+}
+
+extern "C" int32_t baracuda_kernels_mmvq_q5_0_f16_can_implement(
+    int32_t ncols, int32_t nrows,
+    const void * /*x*/, const void * /*y*/, const void * /*dst*/)
+{
+    if (ncols < 0 || nrows < 0) return 2;
+    if (ncols > 0 && ncols < 64) return 2;
+    if (ncols > 0 && (ncols % 32) != 0) return 2;
+    return 0;
+}
+
+extern "C" int32_t baracuda_kernels_mmvq_q5_1_can_implement(
+    int32_t ncols, int32_t nrows,
+    const void * /*x*/, const void * /*y*/, const void * /*dst*/)
+{
+    if (ncols < 0 || nrows < 0) return 2;
+    if (ncols > 0 && ncols < 64) return 2;
+    if (ncols > 0 && (ncols % 32) != 0) return 2;
+    return 0;
+}
+
+extern "C" int32_t baracuda_kernels_mmvq_q5_1_actstrided_can_implement(
+    int32_t ncols, int32_t nrows,
+    const void * /*x*/,
+    int64_t /*w_start_byte_offset*/, int64_t /*stride_y*/,
+    const void * /*y*/, const void * /*dst*/)
+{
+    if (ncols < 0 || nrows < 0) return 2;
+    if (ncols > 0 && ncols < 64) return 2;
+    if (ncols > 0 && (ncols % 32) != 0) return 2;
+    return 0;
+}
+
+extern "C" int32_t baracuda_kernels_mmvq_q5_1_actstrided_bf16_can_implement(
+    int32_t ncols, int32_t nrows,
+    const void * /*x*/,
+    int64_t /*w_start_byte_offset*/, int64_t /*stride_y*/,
+    const void * /*y*/, const void * /*dst*/)
+{
+    if (ncols < 0 || nrows < 0) return 2;
+    if (ncols > 0 && ncols < 64) return 2;
+    if (ncols > 0 && (ncols % 32) != 0) return 2;
+    return 0;
+}
+
+extern "C" int32_t baracuda_kernels_mmvq_q5_1_actstrided_f16_can_implement(
+    int32_t ncols, int32_t nrows,
+    const void * /*x*/,
+    int64_t /*w_start_byte_offset*/, int64_t /*stride_y*/,
+    const void * /*y*/, const void * /*dst*/)
+{
+    if (ncols < 0 || nrows < 0) return 2;
+    if (ncols > 0 && ncols < 64) return 2;
+    if (ncols > 0 && (ncols % 32) != 0) return 2;
+    return 0;
+}
+
+extern "C" int32_t baracuda_kernels_mmvq_q5_1_bf16_can_implement(
+    int32_t ncols, int32_t nrows,
+    const void * /*x*/, const void * /*y*/, const void * /*dst*/)
+{
+    if (ncols < 0 || nrows < 0) return 2;
+    if (ncols > 0 && ncols < 64) return 2;
+    if (ncols > 0 && (ncols % 32) != 0) return 2;
+    return 0;
+}
+
+extern "C" int32_t baracuda_kernels_mmvq_q5_1_f16_can_implement(
+    int32_t ncols, int32_t nrows,
+    const void * /*x*/, const void * /*y*/, const void * /*dst*/)
+{
+    if (ncols < 0 || nrows < 0) return 2;
+    if (ncols > 0 && ncols < 64) return 2;
+    if (ncols > 0 && (ncols % 32) != 0) return 2;
+    return 0;
+}
+
+extern "C" int32_t baracuda_kernels_mmvq_q5_K_can_implement(
+    int32_t ncols, int32_t nrows,
+    const void * /*x*/, const void * /*y*/, const void * /*dst*/)
+{
+    if (ncols < 0 || nrows < 0) return 2;
+    if (ncols > 0 && (ncols % QK_K) != 0) return 2;
+    return 0;
+}
+
+extern "C" int32_t baracuda_kernels_mmvq_q5_K_actstrided_can_implement(
+    int32_t ncols, int32_t nrows,
+    const void * /*x*/,
+    int64_t /*w_start_byte_offset*/, int64_t /*stride_y*/,
+    const void * /*y*/, const void * /*dst*/)
+{
+    if (ncols < 0 || nrows < 0) return 2;
+    if (ncols > 0 && (ncols % QK_K) != 0) return 2;
+    return 0;
+}
+
+extern "C" int32_t baracuda_kernels_mmvq_q5_K_actstrided_bf16_can_implement(
+    int32_t ncols, int32_t nrows,
+    const void * /*x*/,
+    int64_t /*w_start_byte_offset*/, int64_t /*stride_y*/,
+    const void * /*y*/, const void * /*dst*/)
+{
+    if (ncols < 0 || nrows < 0) return 2;
+    if (ncols > 0 && (ncols % QK_K) != 0) return 2;
+    return 0;
+}
+
+extern "C" int32_t baracuda_kernels_mmvq_q5_K_actstrided_f16_can_implement(
+    int32_t ncols, int32_t nrows,
+    const void * /*x*/,
+    int64_t /*w_start_byte_offset*/, int64_t /*stride_y*/,
+    const void * /*y*/, const void * /*dst*/)
+{
+    if (ncols < 0 || nrows < 0) return 2;
+    if (ncols > 0 && (ncols % QK_K) != 0) return 2;
+    return 0;
+}
+
+extern "C" int32_t baracuda_kernels_mmvq_q5_K_bf16_can_implement(
+    int32_t ncols, int32_t nrows,
+    const void * /*x*/, const void * /*y*/, const void * /*dst*/)
+{
+    if (ncols < 0 || nrows < 0) return 2;
+    if (ncols > 0 && (ncols % QK_K) != 0) return 2;
+    return 0;
+}
+
+extern "C" int32_t baracuda_kernels_mmvq_q5_K_f16_can_implement(
+    int32_t ncols, int32_t nrows,
+    const void * /*x*/, const void * /*y*/, const void * /*dst*/)
+{
+    if (ncols < 0 || nrows < 0) return 2;
+    if (ncols > 0 && (ncols % QK_K) != 0) return 2;
+    return 0;
+}
+
+extern "C" int32_t baracuda_kernels_mmvq_q6_K_can_implement(
+    int32_t ncols, int32_t nrows,
+    const void * /*x*/, const void * /*y*/, const void * /*dst*/)
+{
+    if (ncols < 0 || nrows < 0) return 2;
+    if (ncols > 0 && (ncols % QK_K) != 0) return 2;
+    return 0;
+}
+
+extern "C" int32_t baracuda_kernels_mmvq_q6_K_actstrided_can_implement(
+    int32_t ncols, int32_t nrows,
+    const void * /*x*/,
+    int64_t /*w_start_byte_offset*/, int64_t /*stride_y*/,
+    const void * /*y*/, const void * /*dst*/)
+{
+    if (ncols < 0 || nrows < 0) return 2;
+    if (ncols > 0 && (ncols % QK_K) != 0) return 2;
+    return 0;
+}
+
+extern "C" int32_t baracuda_kernels_mmvq_q6_K_actstrided_bf16_can_implement(
+    int32_t ncols, int32_t nrows,
+    const void * /*x*/,
+    int64_t /*w_start_byte_offset*/, int64_t /*stride_y*/,
+    const void * /*y*/, const void * /*dst*/)
+{
+    if (ncols < 0 || nrows < 0) return 2;
+    if (ncols > 0 && (ncols % QK_K) != 0) return 2;
+    return 0;
+}
+
+extern "C" int32_t baracuda_kernels_mmvq_q6_K_actstrided_f16_can_implement(
+    int32_t ncols, int32_t nrows,
+    const void * /*x*/,
+    int64_t /*w_start_byte_offset*/, int64_t /*stride_y*/,
+    const void * /*y*/, const void * /*dst*/)
+{
+    if (ncols < 0 || nrows < 0) return 2;
+    if (ncols > 0 && (ncols % QK_K) != 0) return 2;
+    return 0;
+}
+
+extern "C" int32_t baracuda_kernels_mmvq_q6_K_bf16_can_implement(
+    int32_t ncols, int32_t nrows,
+    const void * /*x*/, const void * /*y*/, const void * /*dst*/)
+{
+    if (ncols < 0 || nrows < 0) return 2;
+    if (ncols > 0 && (ncols % QK_K) != 0) return 2;
+    return 0;
+}
+
+extern "C" int32_t baracuda_kernels_mmvq_q6_K_f16_can_implement(
+    int32_t ncols, int32_t nrows,
+    const void * /*x*/, const void * /*y*/, const void * /*dst*/)
+{
+    if (ncols < 0 || nrows < 0) return 2;
+    if (ncols > 0 && (ncols % QK_K) != 0) return 2;
+    return 0;
+}
+
+extern "C" int32_t baracuda_kernels_mmvq_q8_0_can_implement(
+    int32_t ncols, int32_t nrows,
+    const void * /*x*/, const void * /*y*/, const void * /*dst*/)
+{
+    if (ncols < 0 || nrows < 0) return 2;
+    if (ncols > 0 && ncols < 64) return 2;
+    if (ncols > 0 && (ncols % 32) != 0) return 2;
+    return 0;
+}
+
+extern "C" int32_t baracuda_kernels_mmvq_q8_0_actstrided_can_implement(
+    int32_t ncols, int32_t nrows,
+    const void * /*x*/,
+    int64_t /*w_start_byte_offset*/, int64_t /*stride_y*/,
+    const void * /*y*/, const void * /*dst*/)
+{
+    if (ncols < 0 || nrows < 0) return 2;
+    if (ncols > 0 && ncols < 64) return 2;
+    if (ncols > 0 && (ncols % 32) != 0) return 2;
+    return 0;
+}
+
+extern "C" int32_t baracuda_kernels_mmvq_q8_0_actstrided_bf16_can_implement(
+    int32_t ncols, int32_t nrows,
+    const void * /*x*/,
+    int64_t /*w_start_byte_offset*/, int64_t /*stride_y*/,
+    const void * /*y*/, const void * /*dst*/)
+{
+    if (ncols < 0 || nrows < 0) return 2;
+    if (ncols > 0 && ncols < 64) return 2;
+    if (ncols > 0 && (ncols % 32) != 0) return 2;
+    return 0;
+}
+
+extern "C" int32_t baracuda_kernels_mmvq_q8_0_actstrided_f16_can_implement(
+    int32_t ncols, int32_t nrows,
+    const void * /*x*/,
+    int64_t /*w_start_byte_offset*/, int64_t /*stride_y*/,
+    const void * /*y*/, const void * /*dst*/)
+{
+    if (ncols < 0 || nrows < 0) return 2;
+    if (ncols > 0 && ncols < 64) return 2;
+    if (ncols > 0 && (ncols % 32) != 0) return 2;
+    return 0;
+}
+
+extern "C" int32_t baracuda_kernels_mmvq_q8_0_bf16_can_implement(
+    int32_t ncols, int32_t nrows,
+    const void * /*x*/, const void * /*y*/, const void * /*dst*/)
+{
+    if (ncols < 0 || nrows < 0) return 2;
+    if (ncols > 0 && ncols < 64) return 2;
+    if (ncols > 0 && (ncols % 32) != 0) return 2;
+    return 0;
+}
+
+extern "C" int32_t baracuda_kernels_mmvq_q8_0_f16_can_implement(
+    int32_t ncols, int32_t nrows,
+    const void * /*x*/, const void * /*y*/, const void * /*dst*/)
+{
+    if (ncols < 0 || nrows < 0) return 2;
+    if (ncols > 0 && ncols < 64) return 2;
+    if (ncols > 0 && (ncols % 32) != 0) return 2;
+    return 0;
+}
+
+extern "C" int32_t baracuda_kernels_mmvq_q8_K_can_implement(
+    int32_t ncols, int32_t nrows,
+    const void * /*x*/, const void * /*y*/, const void * /*dst*/)
+{
+    if (ncols < 0 || nrows < 0) return 2;
+    if (ncols > 0 && (ncols % QK_K) != 0) return 2;
+    return 0;
+}
+
+extern "C" int32_t baracuda_kernels_mmvq_q8_K_actstrided_can_implement(
+    int32_t ncols, int32_t nrows,
+    const void * /*x*/,
+    int64_t /*w_start_byte_offset*/, int64_t /*stride_y*/,
+    const void * /*y*/, const void * /*dst*/)
+{
+    if (ncols < 0 || nrows < 0) return 2;
+    if (ncols > 0 && (ncols % QK_K) != 0) return 2;
+    return 0;
+}
+
+extern "C" int32_t baracuda_kernels_mmvq_q8_K_actstrided_bf16_can_implement(
+    int32_t ncols, int32_t nrows,
+    const void * /*x*/,
+    int64_t /*w_start_byte_offset*/, int64_t /*stride_y*/,
+    const void * /*y*/, const void * /*dst*/)
+{
+    if (ncols < 0 || nrows < 0) return 2;
+    if (ncols > 0 && (ncols % QK_K) != 0) return 2;
+    return 0;
+}
+
+extern "C" int32_t baracuda_kernels_mmvq_q8_K_actstrided_f16_can_implement(
+    int32_t ncols, int32_t nrows,
+    const void * /*x*/,
+    int64_t /*w_start_byte_offset*/, int64_t /*stride_y*/,
+    const void * /*y*/, const void * /*dst*/)
+{
+    if (ncols < 0 || nrows < 0) return 2;
+    if (ncols > 0 && (ncols % QK_K) != 0) return 2;
+    return 0;
+}
+
+extern "C" int32_t baracuda_kernels_mmvq_q8_K_bf16_can_implement(
+    int32_t ncols, int32_t nrows,
+    const void * /*x*/, const void * /*y*/, const void * /*dst*/)
+{
+    if (ncols < 0 || nrows < 0) return 2;
+    if (ncols > 0 && (ncols % QK_K) != 0) return 2;
+    return 0;
+}
+
+extern "C" int32_t baracuda_kernels_mmvq_q8_K_f16_can_implement(
+    int32_t ncols, int32_t nrows,
+    const void * /*x*/, const void * /*y*/, const void * /*dst*/)
+{
+    if (ncols < 0 || nrows < 0) return 2;
+    if (ncols > 0 && (ncols % QK_K) != 0) return 2;
+    return 0;
+}
+

@@ -130,6 +130,21 @@ struct EluFunctor<__nv_bfloat16> {
             static_cast<const T*>(x), static_cast<T*>(y),                                             \
             numel, rank, shape, stride_x, stride_y, stream,                                           \
             baracuda::elementwise::EluFunctor<T>(alpha));                                             \
+    }                                                                                                 \
+    extern "C" int32_t baracuda_kernels_unary_elu_##SUFFIX##_strided_can_implement(                  \
+        int64_t numel,                                                                                \
+        int32_t rank,                                                                                 \
+        const int32_t* shape,                                                                         \
+        const int64_t* stride_x,                                                                      \
+        const int64_t* stride_y,                                                                      \
+        const void* /*x*/, const void* /*y*/,                                                         \
+        float /*alpha*/)                                                                              \
+    {                                                                                                 \
+        if (numel < 0) return 2;                                                                     \
+        if (rank < 0) return 2;                                                                      \
+        if (numel > 0 && (shape == nullptr || stride_x == nullptr ||                                  \
+                           stride_y == nullptr)) return 2;                                            \
+        return 0;                                                                                     \
     }
 
 BARACUDA_KERNELS_ELU_INSTANTIATE_CONTIG(f32,  float)

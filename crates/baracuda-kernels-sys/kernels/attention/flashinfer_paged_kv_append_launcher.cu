@@ -150,4 +150,27 @@ int baracuda_kernels_flashinfer_paged_kv_append_decode_can_implement(
     return STATUS_OK;
 }
 
+
+// Per-symbol _can_implement companions. Delegate to family-level validator.
+extern "C" int32_t baracuda_kernels_flashinfer_paged_kv_append_decode_f16_can_implement(
+    int32_t batch_size, int32_t page_size, int32_t num_heads, int32_t head_dim)
+{
+    return baracuda_kernels_flashinfer_paged_kv_append_decode_can_implement(
+        batch_size, page_size, num_heads, head_dim);
+}
+
+extern "C" int32_t baracuda_kernels_flashinfer_paged_kv_append_decode_bf16_can_implement(
+    int32_t batch_size, int32_t page_size, int32_t num_heads, int32_t head_dim)
+{
+    return baracuda_kernels_flashinfer_paged_kv_append_decode_can_implement(
+        batch_size, page_size, num_heads, head_dim);
+}
+
+extern "C" int32_t baracuda_kernels_flashinfer_paged_kv_append_decode_f32_can_implement(
+    int32_t batch_size, int32_t page_size, int32_t num_heads, int32_t head_dim)
+{
+    return baracuda_kernels_flashinfer_paged_kv_append_decode_can_implement(
+        batch_size, page_size, num_heads, head_dim);
+}
+
 }  // extern "C"

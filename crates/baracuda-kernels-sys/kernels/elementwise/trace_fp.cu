@@ -113,6 +113,15 @@ __host__ inline int32_t launch_trace(
         return baracuda::elementwise::launch_trace<T>(                                           \
             static_cast<const T*>(x), static_cast<T*>(y),                                        \
             rows, stride_row, stride_col, stream);                                               \
+    }                                                                                             \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                  \
+        int32_t rows,                                                                             \
+        int64_t /*stride_row*/,                                                                   \
+        int64_t /*stride_col*/,                                                                   \
+        const void* /*x*/, const void* /*y*/)                                                     \
+    {                                                                                             \
+        if (rows < 0) return 2;                                                                  \
+        return 0;                                                                                 \
     }
 
 BARACUDA_KERNELS_TRACE_INSTANTIATE(trace_f32, float)

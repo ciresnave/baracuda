@@ -390,6 +390,15 @@ __host__ inline int32_t launch_contiguize_nibble(
         cudaStream_t stream = static_cast<cudaStream_t>(stream_ptr);                               \
         return baracuda::contiguize::launch_contiguize<BYTES>(                                     \
             source, dest, shape, source_strides, source_offset, rank, stream);                     \
+    }                                                                                              \
+    extern "C" int32_t baracuda_kernels_contiguize_##NAME##_can_implement(                         \
+        const void* /*dest*/, const void* /*source*/,                                              \
+        const int32_t* shape, const int64_t* source_strides, int64_t /*source_offset*/,            \
+        int32_t rank)                                                                              \
+    {                                                                                              \
+        if (rank < 0 || rank > baracuda::contiguize::MAX_RANK) return 2;                           \
+        if (rank > 0 && (shape == nullptr || source_strides == nullptr)) return 2;                 \
+        return 0;                                                                                  \
     }
 
 #define BARACUDA_KERNELS_CONTIGUIZE_NIBBLE_INSTANTIATE(NAME)                                       \
@@ -403,6 +412,17 @@ __host__ inline int32_t launch_contiguize_nibble(
         cudaStream_t stream = static_cast<cudaStream_t>(stream_ptr);                               \
         return baracuda::contiguize::launch_contiguize_nibble(                                     \
             source, dest, shape, source_strides, source_offset, rank, stream);                     \
+    }                                                                                              \
+    extern "C" int32_t baracuda_kernels_contiguize_##NAME##_can_implement(                         \
+        const void* /*dest*/, const void* /*source*/,                                              \
+        const int32_t* shape, const int64_t* source_strides, int64_t /*source_offset*/,            \
+        int32_t rank)                                                                              \
+    {                                                                                              \
+        if (rank < 1 || rank > baracuda::contiguize::MAX_RANK) return 2;                           \
+        if (shape == nullptr || source_strides == nullptr) return 2;                               \
+        int64_t inner_s = source_strides[rank - 1];                                                \
+        if (!(inner_s == 1 || inner_s == -1 || inner_s == 2)) return 3;                            \
+        return 0;                                                                                  \
     }
 
 #endif  // BARACUDA_CONTIGUIZE_CUH

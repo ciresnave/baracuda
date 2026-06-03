@@ -477,4 +477,64 @@ BARACUDA_FI_FP8_DECODE(baracuda_kernels_flashinfer_paged_decode_bf16_e5m2_run, _
 
 #undef BARACUDA_FI_FP8_DECODE
 
+
+// Per-symbol _can_implement companions (Phase 66-prep). Delegate to the
+// family-level shared validator; one stub per _run symbol so Rust callers
+// don't need to special-case the shared name.
+extern "C" int32_t baracuda_kernels_flashinfer_paged_decode_f16_can_implement(
+    int32_t batch_size, int32_t page_size, int32_t head_dim,
+    int32_t num_qo_heads, int32_t num_kv_heads, float /*sm_scale*/)
+{
+    return baracuda_kernels_flashinfer_paged_decode_can_implement(
+        batch_size, page_size, head_dim, num_qo_heads, num_kv_heads);
+}
+
+extern "C" int32_t baracuda_kernels_flashinfer_paged_decode_bf16_can_implement(
+    int32_t batch_size, int32_t page_size, int32_t head_dim,
+    int32_t num_qo_heads, int32_t num_kv_heads, float /*sm_scale*/)
+{
+    return baracuda_kernels_flashinfer_paged_decode_can_implement(
+        batch_size, page_size, head_dim, num_qo_heads, num_kv_heads);
+}
+
+extern "C" int32_t baracuda_kernels_flashinfer_paged_decode_f32_can_implement(
+    int32_t batch_size, int32_t page_size, int32_t head_dim,
+    int32_t num_qo_heads, int32_t num_kv_heads, float /*sm_scale*/)
+{
+    return baracuda_kernels_flashinfer_paged_decode_can_implement(
+        batch_size, page_size, head_dim, num_qo_heads, num_kv_heads);
+}
+
+extern "C" int32_t baracuda_kernels_flashinfer_paged_decode_f16_e4m3_can_implement(
+    int32_t batch_size, int32_t page_size, int32_t head_dim,
+    int32_t num_qo_heads, int32_t num_kv_heads, float /*sm_scale*/)
+{
+    return baracuda_kernels_flashinfer_paged_decode_can_implement(
+        batch_size, page_size, head_dim, num_qo_heads, num_kv_heads);
+}
+
+extern "C" int32_t baracuda_kernels_flashinfer_paged_decode_f16_e5m2_can_implement(
+    int32_t batch_size, int32_t page_size, int32_t head_dim,
+    int32_t num_qo_heads, int32_t num_kv_heads, float /*sm_scale*/)
+{
+    return baracuda_kernels_flashinfer_paged_decode_can_implement(
+        batch_size, page_size, head_dim, num_qo_heads, num_kv_heads);
+}
+
+extern "C" int32_t baracuda_kernels_flashinfer_paged_decode_bf16_e4m3_can_implement(
+    int32_t batch_size, int32_t page_size, int32_t head_dim,
+    int32_t num_qo_heads, int32_t num_kv_heads, float /*sm_scale*/)
+{
+    return baracuda_kernels_flashinfer_paged_decode_can_implement(
+        batch_size, page_size, head_dim, num_qo_heads, num_kv_heads);
+}
+
+extern "C" int32_t baracuda_kernels_flashinfer_paged_decode_bf16_e5m2_can_implement(
+    int32_t batch_size, int32_t page_size, int32_t head_dim,
+    int32_t num_qo_heads, int32_t num_kv_heads, float /*sm_scale*/)
+{
+    return baracuda_kernels_flashinfer_paged_decode_can_implement(
+        batch_size, page_size, head_dim, num_qo_heads, num_kv_heads);
+}
+
 }  // extern "C"

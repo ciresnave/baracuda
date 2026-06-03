@@ -143,6 +143,13 @@ __host__ inline int32_t launch_histogram(
         return baracuda::histogram::launch_bincount<TIDX>(                                        \
             static_cast<const TIDX*>(x), static_cast<int32_t*>(output),                           \
             n, num_bins, stream);                                                                 \
+    }                                                                                              \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                   \
+        int64_t n, int32_t num_bins,                                                              \
+        const void* /*x*/, const void* /*output*/)                                                \
+    {                                                                                              \
+        if (n < 0 || num_bins < 0) return 2;                                                      \
+        return 0;                                                                                 \
     }
 
 #define BARACUDA_KERNELS_HISTOGRAM_INSTANTIATE(NAME, T)                                           \
@@ -159,6 +166,14 @@ __host__ inline int32_t launch_histogram(
         return baracuda::histogram::launch_histogram<T>(                                          \
             static_cast<const T*>(x), static_cast<int32_t*>(output),                              \
             n, num_bins, lo, hi, stream);                                                         \
+    }                                                                                              \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                   \
+        int64_t n, int32_t num_bins,                                                              \
+        double /*lo_d*/, double /*hi_d*/,                                                         \
+        const void* /*x*/, const void* /*output*/)                                                \
+    {                                                                                              \
+        if (n < 0 || num_bins < 0) return 2;                                                      \
+        return 0;                                                                                 \
     }
 
 #endif // BARACUDA_HISTOGRAM_CUH

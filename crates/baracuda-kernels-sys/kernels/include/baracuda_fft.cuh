@@ -341,6 +341,15 @@ __host__ inline int32_t launch_fftshift_nd(
             static_cast<const CELL_T*>(x),                                                          \
             static_cast<CELL_T*>(y),                                                                \
             batch, n, stream);                                                                      \
+    }                                                                                               \
+    extern "C" int32_t baracuda_kernels_fftshift_##BYTES##_can_implement(                           \
+        int64_t batch,                                                                              \
+        int32_t n,                                                                                  \
+        const void* /*x*/,                                                                          \
+        const void* /*y*/)                                                                          \
+    {                                                                                               \
+        if (batch < 0 || n < 0) return 2;                                                           \
+        return 0;                                                                                   \
     }
 
 #define BARACUDA_KERNELS_IFFTSHIFT_INSTANTIATE(BYTES, CELL_T)                                       \
@@ -360,6 +369,15 @@ __host__ inline int32_t launch_fftshift_nd(
             static_cast<const CELL_T*>(x),                                                          \
             static_cast<CELL_T*>(y),                                                                \
             batch, n, stream);                                                                      \
+    }                                                                                               \
+    extern "C" int32_t baracuda_kernels_ifftshift_##BYTES##_can_implement(                          \
+        int64_t batch,                                                                              \
+        int32_t n,                                                                                  \
+        const void* /*x*/,                                                                          \
+        const void* /*y*/)                                                                          \
+    {                                                                                               \
+        if (batch < 0 || n < 0) return 2;                                                           \
+        return 0;                                                                                   \
     }
 
 // ABI: `(numel, scale, y, ws, ws_bytes, stream) -> i32`. In-place scale
@@ -380,6 +398,14 @@ __host__ inline int32_t launch_fftshift_nd(
         cudaStream_t stream = static_cast<cudaStream_t>(stream_ptr);                                \
         return baracuda::fft::launch_scale_inplace_c32(                                             \
             static_cast<baracuda::fft::Complex32*>(y), numel, scale, stream);                       \
+    }                                                                                               \
+    extern "C" int32_t baracuda_kernels_scale_inplace_c32_can_implement(                            \
+        int64_t numel,                                                                              \
+        float /*scale*/,                                                                            \
+        const void* /*y*/)                                                                          \
+    {                                                                                               \
+        if (numel < 0) return 2;                                                                    \
+        return 0;                                                                                   \
     }
 
 #define BARACUDA_KERNELS_SCALE_INPLACE_C64_INSTANTIATE()                                            \
@@ -396,6 +422,14 @@ __host__ inline int32_t launch_fftshift_nd(
         cudaStream_t stream = static_cast<cudaStream_t>(stream_ptr);                                \
         return baracuda::fft::launch_scale_inplace_c64(                                             \
             static_cast<baracuda::fft::Complex64*>(y), numel, scale, stream);                       \
+    }                                                                                               \
+    extern "C" int32_t baracuda_kernels_scale_inplace_c64_can_implement(                            \
+        int64_t numel,                                                                              \
+        double /*scale*/,                                                                           \
+        const void* /*y*/)                                                                          \
+    {                                                                                               \
+        if (numel < 0) return 2;                                                                    \
+        return 0;                                                                                   \
     }
 
 #define BARACUDA_KERNELS_SCALE_INPLACE_REAL_INSTANTIATE(NAME, T)                                    \
@@ -412,6 +446,14 @@ __host__ inline int32_t launch_fftshift_nd(
         cudaStream_t stream = static_cast<cudaStream_t>(stream_ptr);                                \
         return baracuda::fft::launch_scale_inplace_real<T>(                                         \
             static_cast<T*>(y), numel, scale, stream);                                              \
+    }                                                                                               \
+    extern "C" int32_t baracuda_kernels_scale_inplace_real_##NAME##_can_implement(                  \
+        int64_t numel,                                                                              \
+        T /*scale*/,                                                                                \
+        const void* /*y*/)                                                                          \
+    {                                                                                               \
+        if (numel < 0) return 2;                                                                    \
+        return 0;                                                                                   \
     }
 
 // ABI: `(total, rank, shape, shift_amt, stride, x, y, ws, ws_bytes, stream) -> i32`.
@@ -447,6 +489,18 @@ __host__ inline int32_t launch_fftshift_nd(
             static_cast<const CELL_T*>(x),                                                          \
             static_cast<CELL_T*>(y),                                                                \
             total, rank, shape, shift_amt, stride, stream);                                         \
+    }                                                                                               \
+    extern "C" int32_t baracuda_kernels_fftshift_nd_##BYTES##_can_implement(                        \
+        int64_t total,                                                                              \
+        int32_t rank,                                                                               \
+        const int32_t* /*shape*/,                                                                   \
+        const int32_t* /*shift_amt*/,                                                               \
+        const int64_t* /*stride*/,                                                                  \
+        const void* /*x*/,                                                                          \
+        const void* /*y*/)                                                                          \
+    {                                                                                               \
+        if (total < 0 || rank < 0 || rank > baracuda::fft::kFftShiftNdMaxRank) return 2;            \
+        return 0;                                                                                   \
     }
 
 #endif // BARACUDA_FFT_CUH

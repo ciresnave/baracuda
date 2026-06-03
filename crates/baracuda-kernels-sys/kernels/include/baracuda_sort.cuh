@@ -371,6 +371,13 @@ __host__ inline int32_t launch_sort_backward(
                 static_cast<const T*>(x), static_cast<T*>(y_vals),                                \
                 static_cast<int32_t*>(y_idx), batch, row_len, stream);                            \
         }                                                                                          \
+    }                                                                                              \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                   \
+        int32_t batch, int32_t row_len)                                                           \
+    {                                                                                              \
+        if (batch < 0 || row_len < 0) return 2;                                                   \
+        if (row_len > baracuda::sort::MAX_ROW) return 3;                                          \
+        return 0;                                                                                 \
     }
 
 #define BARACUDA_KERNELS_MSORT_INSTANTIATE(NAME, T)                                               \
@@ -390,6 +397,13 @@ __host__ inline int32_t launch_sort_backward(
                 static_cast<const T*>(x), static_cast<T*>(y_vals),                                \
                 static_cast<int32_t*>(y_idx), batch, row_len, stream);                            \
         }                                                                                          \
+    }                                                                                              \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                   \
+        int32_t batch, int32_t row_len)                                                           \
+    {                                                                                              \
+        if (batch < 0 || row_len < 0) return 2;                                                   \
+        if (row_len > baracuda::sort::MAX_ROW) return 3;                                          \
+        return 0;                                                                                 \
     }
 
 #define BARACUDA_KERNELS_ARGSORT_INSTANTIATE(NAME, T)                                             \
@@ -432,6 +446,13 @@ __host__ inline int32_t launch_sort_backward(
             static_cast<const int32_t*>(indices),                                                 \
             static_cast<T*>(dx),                                                                  \
             batch, row_len, stream);                                                              \
+    }                                                                                              \
+    extern "C" int32_t baracuda_kernels_##NAME##_can_implement(                                   \
+        int32_t batch, int32_t row_len)                                                           \
+    {                                                                                              \
+        if (batch < 0 || row_len < 0) return 2;                                                   \
+        if (row_len > baracuda::sort::MAX_ROW) return 3;                                          \
+        return 0;                                                                                 \
     }
 
 #endif // BARACUDA_SORT_CUH
