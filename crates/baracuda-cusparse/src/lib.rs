@@ -8,6 +8,93 @@
 //! All matrix/vector descriptors borrow the underlying [`DeviceBuffer`]s and
 //! tie their lifetime to them so the buffers can't be freed while cuSPARSE
 //! is still holding references.
+//!
+//! # Examples
+//!
+//! **SpMV (sparse-times-dense vector):** `y = A · x` for a 4×4 CSR matrix
+//! with 6 non-zeros.
+//!
+//! ```no_run
+//! use baracuda_cusparse::{spmv, spmv_buffer_size, DnVec, Handle, Op, SpMVAlg, SpMat};
+//! use baracuda_driver::{Context, Device, DeviceBuffer};
+//!
+//! # fn demo() -> Result<(), Box<dyn std::error::Error>> {
+//! baracuda_driver::init()?;
+//! let device = Device::get(0)?;
+//! let ctx = Context::new(&device)?;
+//! let handle = Handle::new()?;
+//!
+//! // A = [[1, 0, 0, 2], [0, 3, 0, 0], [0, 0, 0, 4], [5, 0, 6, 0]], nnz = 6
+//! let mut row_offsets = DeviceBuffer::from_slice(&ctx, &[0i32, 2, 3, 4, 6])?;
+//! let mut col_indices = DeviceBuffer::from_slice(&ctx, &[0i32, 3, 1, 3, 0, 2])?;
+//! let mut values     = DeviceBuffer::from_slice(&ctx, &[1.0f32, 2.0, 3.0, 4.0, 5.0, 6.0])?;
+//! let mut x          = DeviceBuffer::from_slice(&ctx, &[1.0f32, 2.0, 3.0, 4.0])?;
+//! let mut y: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, 4)?;
+//!
+//! let a = SpMat::csr(4, 4, 6, &mut row_offsets, &mut col_indices, &mut values)?;
+//! let x_d = DnVec::new(&mut x)?;
+//! let mut y_d = DnVec::new(&mut y)?;
+//!
+//! let bytes = spmv_buffer_size::<f32>(
+//!     &handle, Op::N, &1.0, &a, &x_d, &0.0, &y_d, SpMVAlg::Default)?;
+//! let mut workspace: DeviceBuffer<u8> = DeviceBuffer::new(&ctx, bytes.max(1))?;
+//! spmv::<f32>(&handle, Op::N, &1.0, &a, &x_d, &0.0, &mut y_d, SpMVAlg::Default, &mut workspace)?;
+//! # Ok(()) }
+//! ```
+//!
+//! **COO descriptor build** — feed an unsorted `(row, col, value)` triple
+//! stream into cuSPARSE without pre-converting to CSR:
+//!
+//! ```no_run
+//! use baracuda_cusparse::SpMat;
+//! use baracuda_driver::{Context, Device, DeviceBuffer};
+//!
+//! # fn demo() -> Result<(), Box<dyn std::error::Error>> {
+//! baracuda_driver::init()?;
+//! let device = Device::get(0)?;
+//! let ctx = Context::new(&device)?;
+//!
+//! // Same 4×4 matrix as above, expressed as (row, col, value) triples.
+//! let mut row_idx = DeviceBuffer::from_slice(&ctx, &[0i32, 0, 1, 2, 3, 3])?;
+//! let mut col_idx = DeviceBuffer::from_slice(&ctx, &[0i32, 3, 1, 3, 0, 2])?;
+//! let mut values  = DeviceBuffer::from_slice(&ctx, &[1.0f32, 2.0, 3.0, 4.0, 5.0, 6.0])?;
+//!
+//! let _coo = SpMat::coo(4, 4, 6, &mut row_idx, &mut col_idx, &mut values)?;
+//! // Pass `_coo` to `spmv`, `spmm`, or `sparse_to_dense` just like a CSR descriptor.
+//! # Ok(()) }
+//! ```
+//!
+//! **SpMM (sparse-times-dense matrix):** `C = A · B` where `A` is sparse,
+//! `B` and `C` are dense column-major.
+//!
+//! ```no_run
+//! use baracuda_cusparse::{spmm, spmm_buffer_size, DnMat, Handle, Op, Order, SpMMAlg, SpMat};
+//! use baracuda_driver::{Context, Device, DeviceBuffer};
+//!
+//! # fn demo() -> Result<(), Box<dyn std::error::Error>> {
+//! baracuda_driver::init()?;
+//! let device = Device::get(0)?;
+//! let ctx = Context::new(&device)?;
+//! let handle = Handle::new()?;
+//!
+//! // 4×4 CSR A (same as the SpMV example) times a 4×2 dense B → 4×2 dense C.
+//! let mut row_offsets = DeviceBuffer::from_slice(&ctx, &[0i32, 2, 3, 4, 6])?;
+//! let mut col_indices = DeviceBuffer::from_slice(&ctx, &[0i32, 3, 1, 3, 0, 2])?;
+//! let mut values     = DeviceBuffer::from_slice(&ctx, &[1.0f32, 2.0, 3.0, 4.0, 5.0, 6.0])?;
+//! let mut b_data: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, 4 * 2)?;
+//! let mut c_data: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, 4 * 2)?;
+//!
+//! let a = SpMat::csr(4, 4, 6, &mut row_offsets, &mut col_indices, &mut values)?;
+//! let b = DnMat::new(4, 2, /* ld */ 4, Order::Col, &mut b_data)?;
+//! let mut c = DnMat::new(4, 2, /* ld */ 4, Order::Col, &mut c_data)?;
+//!
+//! let bytes = spmm_buffer_size::<f32>(
+//!     &handle, Op::N, Op::N, &1.0, &a, &b, &0.0, &c, SpMMAlg::Default)?;
+//! let mut workspace: DeviceBuffer<u8> = DeviceBuffer::new(&ctx, bytes.max(1))?;
+//! spmm::<f32>(&handle, Op::N, Op::N, &1.0, &a, &b, &0.0, &mut c, SpMMAlg::Default,
+//!     &mut workspace)?;
+//! # Ok(()) }
+//! ```
 
 #![warn(missing_debug_implementations)]
 
@@ -83,9 +170,12 @@ mod sealed {
 /// Transpose / conjugate-transpose selector.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Default)]
 pub enum Op {
+    /// No transpose.
     #[default]
     N,
+    /// Transpose.
     T,
+    /// Conjugate transpose (real types: same as `T`).
     C,
 }
 
@@ -102,7 +192,9 @@ impl Op {
 /// Dense-matrix storage order.
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum Order {
+    /// Row-major (C-style) storage.
     Row,
+    /// Column-major (Fortran-style) storage.
     Col,
 }
 
@@ -115,9 +207,12 @@ impl Order {
     }
 }
 
+/// Triangular storage mode for sparse matrices.
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum Fill {
+    /// Lower triangle is the populated half.
     Lower,
+    /// Upper triangle is the populated half.
     Upper,
 }
 
@@ -130,9 +225,12 @@ impl Fill {
     }
 }
 
+/// Unit-diagonal flag for triangular sparse matrices.
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum Diag {
+    /// Diagonal entries are read from the matrix.
     NonUnit,
+    /// Diagonal entries are implicitly 1 (not read).
     Unit,
 }
 
@@ -163,6 +261,7 @@ impl core::fmt::Debug for Handle {
 }
 
 impl Handle {
+    /// Create a new cuSPARSE handle (`cusparseCreate`).
     pub fn new() -> Result<Self> {
         let c = cusparse()?;
         let cu = c.cusparse_create()?;
@@ -171,12 +270,16 @@ impl Handle {
         Ok(Self { handle: h })
     }
 
+    /// Bind this handle to `stream`; subsequent cuSPARSE calls dispatch on
+    /// it (`cusparseSetStream`).
     pub fn set_stream(&self, stream: &Stream) -> Result<()> {
         let c = cusparse()?;
         let cu = c.cusparse_set_stream()?;
         check(unsafe { cu(self.handle, stream.as_raw() as _) })
     }
 
+    /// cuSPARSE library version (`cusparseGetVersion`),
+    /// e.g. `12604` for cuSPARSE 12.6.4.
     pub fn version(&self) -> Result<i32> {
         let c = cusparse()?;
         let cu = c.cusparse_get_version()?;
@@ -185,6 +288,7 @@ impl Handle {
         Ok(v)
     }
 
+    /// Raw `cusparseHandle_t`. Use with care.
     #[inline]
     pub fn as_raw(&self) -> cusparseHandle_t {
         self.handle
@@ -457,6 +561,7 @@ impl<T> SpMat<'_, T> {
         })
     }
 
+    /// Raw `cusparseSpMatDescr_t`. Use with care.
     #[inline]
     pub fn as_raw(&self) -> cusparseSpMatDescr_t {
         self.descr
@@ -475,6 +580,10 @@ impl<T> Drop for SpMat<'_, T> {
 
 // ---- Dense vector / matrix -----------------------------------------------
 
+/// Dense vector descriptor for cuSPARSE's generic API.
+///
+/// Borrows the underlying [`DeviceBuffer`]; the buffer cannot be freed while
+/// the descriptor is alive.
 pub struct DnVec<'buf, T> {
     descr: cusparseDnVecDescr_t,
     _marker: PhantomData<&'buf mut T>,
@@ -491,6 +600,8 @@ impl<T> core::fmt::Debug for DnVec<'_, T> {
 }
 
 impl<'buf, T: SparseScalar + baracuda_types::DeviceRepr> DnVec<'buf, T> {
+    /// Build a dense-vector descriptor (`cusparseCreateDnVec`)
+    /// over the buffer `values`.
     pub fn new(values: &'buf mut DeviceBuffer<T>) -> Result<Self> {
         let c = cusparse()?;
         let cu = c.cusparse_create_dn_vec()?;
@@ -511,6 +622,7 @@ impl<'buf, T: SparseScalar + baracuda_types::DeviceRepr> DnVec<'buf, T> {
 }
 
 impl<T> DnVec<'_, T> {
+    /// Raw `cusparseDnVecDescr_t`. Use with care.
     #[inline]
     pub fn as_raw(&self) -> cusparseDnVecDescr_t {
         self.descr
@@ -527,6 +639,10 @@ impl<T> Drop for DnVec<'_, T> {
     }
 }
 
+/// Dense matrix descriptor for cuSPARSE's generic API.
+///
+/// Borrows the underlying [`DeviceBuffer`]; the buffer cannot be freed while
+/// the descriptor is alive.
 pub struct DnMat<'buf, T> {
     descr: cusparseDnMatDescr_t,
     _marker: PhantomData<&'buf mut T>,
@@ -543,6 +659,8 @@ impl<T> core::fmt::Debug for DnMat<'_, T> {
 }
 
 impl<'buf, T: SparseScalar + baracuda_types::DeviceRepr> DnMat<'buf, T> {
+    /// Build a dense-matrix descriptor (`cusparseCreateDnMat`) for the
+    /// given shape, leading dimension, and storage order.
     pub fn new(
         rows: i64,
         cols: i64,
@@ -572,6 +690,7 @@ impl<'buf, T: SparseScalar + baracuda_types::DeviceRepr> DnMat<'buf, T> {
 }
 
 impl<T> DnMat<'_, T> {
+    /// Raw `cusparseDnMatDescr_t`. Use with care.
     #[inline]
     pub fn as_raw(&self) -> cusparseDnMatDescr_t {
         self.descr
@@ -689,6 +808,8 @@ pub fn spmm_buffer_size<T: SparseScalar>(
     Ok(size)
 }
 
+/// `C = alpha * op(A) * op(B) + beta * C` with `A` sparse, `B`/`C` dense
+/// (`cusparseSpMM`).
 #[allow(clippy::too_many_arguments)]
 pub fn spmm<T: SparseScalar>(
     handle: &Handle,
@@ -766,6 +887,8 @@ pub struct SpGEMMPlan {
 }
 
 impl SpGEMMPlan {
+    /// Create a new SpGEMM plan descriptor
+    /// (`cusparseSpGEMM_createDescr`).
     pub fn new() -> Result<Self> {
         let c = cusparse()?;
         let cu = c.cusparse_spgemm_create_descr()?;
@@ -903,12 +1026,15 @@ pub fn spgemm_copy<T: SparseScalar>(
 
 // ---- SpSV / SpSM --------------------------------------------------------
 
+/// Per-plan handle for an SpSV (sparse triangular solve, single RHS).
 #[derive(Debug)]
 pub struct SpSVPlan {
     raw: cusparseSpSVDescr_t,
 }
 
 impl SpSVPlan {
+    /// Create a new SpSV plan descriptor
+    /// (`cusparseSpSV_createDescr`).
     pub fn new() -> Result<Self> {
         let c = cusparse()?;
         let cu = c.cusparse_spsv_create_descr()?;
@@ -928,6 +1054,8 @@ impl Drop for SpSVPlan {
     }
 }
 
+/// Query buffer-size for a sparse triangular solve
+/// (`cusparseSpSV_bufferSize`).
 #[allow(clippy::too_many_arguments)]
 pub fn spsv_buffer_size<T: SparseScalar>(
     handle: &Handle,
@@ -959,6 +1087,8 @@ pub fn spsv_buffer_size<T: SparseScalar>(
     Ok(size)
 }
 
+/// Run the SpSV analysis phase
+/// (`cusparseSpSV_analysis`) — must be called once before [`spsv_solve`].
 #[allow(clippy::too_many_arguments)]
 pub fn spsv_analysis<T: SparseScalar>(
     handle: &Handle,
@@ -989,6 +1119,8 @@ pub fn spsv_analysis<T: SparseScalar>(
     })
 }
 
+/// Execute the sparse triangular solve `op(A) * y = alpha * x`
+/// (`cusparseSpSV_solve`). Requires a prior [`spsv_analysis`] call.
 #[allow(clippy::too_many_arguments)]
 pub fn spsv_solve<T: SparseScalar>(
     handle: &Handle,
@@ -1017,12 +1149,15 @@ pub fn spsv_solve<T: SparseScalar>(
     })
 }
 
+/// Per-plan handle for an SpSM (sparse triangular solve, multiple RHS).
 #[derive(Debug)]
 pub struct SpSMPlan {
     raw: cusparseSpSMDescr_t,
 }
 
 impl SpSMPlan {
+    /// Create a new SpSM plan descriptor
+    /// (`cusparseSpSM_createDescr`).
     pub fn new() -> Result<Self> {
         let c = cusparse()?;
         let cu = c.cusparse_spsm_create_descr()?;
@@ -1042,6 +1177,8 @@ impl Drop for SpSMPlan {
     }
 }
 
+/// Query buffer-size for a multi-RHS sparse triangular solve
+/// (`cusparseSpSM_bufferSize`).
 #[allow(clippy::too_many_arguments)]
 pub fn spsm_buffer_size<T: SparseScalar>(
     handle: &Handle,
@@ -1075,6 +1212,8 @@ pub fn spsm_buffer_size<T: SparseScalar>(
     Ok(size)
 }
 
+/// Run the SpSM analysis phase
+/// (`cusparseSpSM_analysis`) — must be called once before [`spsm_solve`].
 #[allow(clippy::too_many_arguments)]
 pub fn spsm_analysis<T: SparseScalar>(
     handle: &Handle,
@@ -1107,6 +1246,8 @@ pub fn spsm_analysis<T: SparseScalar>(
     })
 }
 
+/// Execute the multi-RHS sparse triangular solve `op(A) * C = alpha * op(B)`
+/// (`cusparseSpSM_solve`).
 #[allow(clippy::too_many_arguments)]
 pub fn spsm_solve<T: SparseScalar>(
     handle: &Handle,
@@ -1139,6 +1280,8 @@ pub fn spsm_solve<T: SparseScalar>(
 
 // ---- SDDMM -------------------------------------------------------------
 
+/// Query buffer-size for the sampled dense-dense matmul
+/// (`cusparseSDDMM_bufferSize`).
 #[allow(clippy::too_many_arguments)]
 pub fn sddmm_buffer_size<T: SparseScalar>(
     handle: &Handle,
@@ -1172,6 +1315,8 @@ pub fn sddmm_buffer_size<T: SparseScalar>(
     Ok(size)
 }
 
+/// Sampled dense-dense matrix multiply (`cusparseSDDMM`): computes
+/// `C = alpha * op(A) * op(B) + beta * C` at the sparsity pattern of `C`.
 #[allow(clippy::too_many_arguments)]
 pub fn sddmm<T: SparseScalar>(
     handle: &Handle,
@@ -1240,6 +1385,8 @@ pub fn sddmm_preprocess<T: SparseScalar>(
 
 // ---- Sparse / dense conversions ----------------------------------------
 
+/// Query buffer-size for a sparse → dense conversion
+/// (`cusparseSparseToDense_bufferSize`).
 pub fn sparse_to_dense_buffer_size<T: SparseScalar>(
     handle: &Handle,
     sp: &SpMat<'_, T>,
@@ -1252,6 +1399,8 @@ pub fn sparse_to_dense_buffer_size<T: SparseScalar>(
     Ok(size)
 }
 
+/// Convert a sparse matrix into a dense one
+/// (`cusparseSparseToDense`).
 pub fn sparse_to_dense<T: SparseScalar>(
     handle: &Handle,
     sp: &SpMat<'_, T>,
@@ -1271,6 +1420,8 @@ pub fn sparse_to_dense<T: SparseScalar>(
     })
 }
 
+/// Query buffer-size for a dense → sparse conversion
+/// (`cusparseDenseToSparse_bufferSize`).
 pub fn dense_to_sparse_buffer_size<T: SparseScalar>(
     handle: &Handle,
     dn: &DnMat<'_, T>,
@@ -1283,6 +1434,8 @@ pub fn dense_to_sparse_buffer_size<T: SparseScalar>(
     Ok(size)
 }
 
+/// Run the dense → sparse analysis phase
+/// (`cusparseDenseToSparse_analysis`); fills in the sparsity pattern.
 pub fn dense_to_sparse_analysis<T: SparseScalar>(
     handle: &Handle,
     dn: &DnMat<'_, T>,
@@ -1302,6 +1455,8 @@ pub fn dense_to_sparse_analysis<T: SparseScalar>(
     })
 }
 
+/// Execute the dense → sparse conversion
+/// (`cusparseDenseToSparse_convert`); fills in the sparse values.
 pub fn dense_to_sparse_convert<T: SparseScalar>(
     handle: &Handle,
     dn: &DnMat<'_, T>,
@@ -1407,6 +1562,8 @@ pub fn csr2csc_ex2<T: SparseScalar + baracuda_types::DeviceRepr>(
 
 // ---- Sparse BLAS-1 helpers ---------------------------------------------
 
+/// Sparse AXPBY: `y = alpha * x + beta * y` over dense vectors
+/// (`cusparseAxpby`).
 pub fn axpby<T: SparseScalar>(
     handle: &Handle,
     alpha: &T,
@@ -1427,6 +1584,7 @@ pub fn axpby<T: SparseScalar>(
     })
 }
 
+/// Sparse gather: `x = y[indices]` (`cusparseGather`).
 pub fn gather<T: SparseScalar>(
     handle: &Handle,
     y: &DnVec<'_, T>,
@@ -1437,6 +1595,7 @@ pub fn gather<T: SparseScalar>(
     check(unsafe { cu(handle.as_raw(), y.descr, x.descr) })
 }
 
+/// Sparse scatter: `y[indices] = x` (`cusparseScatter`).
 pub fn scatter<T: SparseScalar>(
     handle: &Handle,
     x: &DnVec<'_, T>,
@@ -1447,6 +1606,8 @@ pub fn scatter<T: SparseScalar>(
     check(unsafe { cu(handle.as_raw(), x.descr, y.descr) })
 }
 
+/// Givens rotation applied to a pair of sparse/dense vectors
+/// (`cusparseRot`).
 pub fn rot<T: SparseScalar>(
     handle: &Handle,
     c_cos: &T,

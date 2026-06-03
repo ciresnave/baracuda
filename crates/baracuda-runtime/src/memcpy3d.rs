@@ -51,11 +51,14 @@ impl<T: DeviceRepr> Pitched3dBuffer<T> {
         })
     }
 
+    /// Underlying `cudaPitchedPtr` (base pointer + pitch + xsize/ysize)
+    /// produced by `cudaMalloc3D`.
     #[inline]
     pub fn as_pitched_ptr(&self) -> cudaPitchedPtr {
         self.ptr
     }
 
+    /// 3-D extent (width × height × depth) of the allocation.
     #[inline]
     pub fn extent(&self) -> cudaExtent {
         self.extent

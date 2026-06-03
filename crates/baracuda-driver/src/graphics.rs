@@ -84,6 +84,8 @@ impl GraphicsResource {
         }
     }
 
+    /// Raw `CUgraphicsResource` handle. Use with care — the handle is
+    /// owned by `self` and must not outlive it.
     #[inline]
     pub fn as_raw(&self) -> CUgraphicsResource {
         self.inner.handle

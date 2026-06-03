@@ -320,12 +320,17 @@ impl Drop for TensorDescriptor {
 /// Activation function kind.
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum ActivationMode {
+    /// Rectified linear: `max(0, x)`.
     Relu,
+    /// Logistic sigmoid: `1 / (1 + exp(-x))`.
     Sigmoid,
+    /// Hyperbolic tangent.
     Tanh,
     /// Clipped ReLU: `min(max(0, x), ceiling)`.
     ClippedRelu,
+    /// Exponential linear unit: `x` if `x > 0`, else `α · (exp(x) - 1)`.
     Elu,
+    /// Pass-through (no activation applied).
     Identity,
     /// Swish / SiLU: `x · sigmoid(x)`.
     Swish,
@@ -401,6 +406,32 @@ impl Drop for ActivationDescriptor {
 /// Compute `y = alpha * activation(x) + beta * y` element-wise.
 ///
 /// `x` and `y` may alias (in-place activation is legal).
+///
+/// # Example
+///
+/// ReLU on a `1 × 16 × 8 × 8` NCHW tensor.
+///
+/// ```no_run
+/// use baracuda_driver::{Context, Device, DeviceBuffer};
+/// use baracuda_cudnn::{
+///     activation_forward, ActivationDescriptor, ActivationMode,
+///     DType, Handle, TensorDescriptor, TensorFormat,
+/// };
+///
+/// # fn demo() -> Result<(), Box<dyn std::error::Error>> {
+/// let ctx = Context::new(&Device::get(0)?)?;
+/// let cudnn = Handle::new()?;
+///
+/// let (n, c, h, w) = (1, 16, 8, 8);
+/// let tdesc = TensorDescriptor::new_4d(TensorFormat::Nchw, DType::F32, n, c, h, w)?;
+/// let act = ActivationDescriptor::new(ActivationMode::Relu, 0.0)?;
+///
+/// let x: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, (n*c*h*w) as usize)?;
+/// let mut y: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, (n*c*h*w) as usize)?;
+///
+/// activation_forward(&cudnn, &act, 1.0, &tdesc, &x, 0.0, &tdesc, &mut y)?;
+/// # Ok(()) }
+/// ```
 #[allow(clippy::too_many_arguments)]
 pub fn activation_forward<T: DeviceRepr>(
     handle: &Handle,
@@ -507,14 +538,22 @@ impl ConvMode {
 /// applicable.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Default)]
 pub enum FwdAlgo {
+    /// Implicit GEMM — no extra workspace, broad compatibility. **Default.**
     #[default]
     ImplicitGemm,
+    /// Implicit GEMM with pre-computed indexing tables for faster lookup.
     ImplicitPrecompGemm,
+    /// Explicit im2col + GEMM; widest dtype / shape coverage.
     Gemm,
+    /// Direct convolution; small kernel + low-batch sweet spot.
     Direct,
+    /// FFT-based convolution; favors large kernels.
     Fft,
+    /// Tiled FFT; lower workspace than `Fft` at some perf cost.
     FftTiling,
+    /// Winograd small-kernel fast algorithm.
     Winograd,
+    /// Non-fused Winograd; trades workspace for perf.
     WinogradNonfused,
 }
 
@@ -821,12 +860,18 @@ pub fn convolution_forward<T: DeviceRepr>(
 /// Backward-data convolution algorithm selector.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Default)]
 pub enum BwdDataAlgo {
+    /// Non-deterministic, broad-coverage backward-data algorithm. **Default.**
     #[default]
     Algo0,
+    /// Deterministic backward-data algorithm.
     Algo1,
+    /// FFT-based backward-data algorithm.
     Fft,
+    /// Tiled FFT — lower workspace than `Fft`.
     FftTiling,
+    /// Winograd small-kernel fast algorithm.
     Winograd,
+    /// Non-fused Winograd; trades workspace for perf.
     WinogradNonfused,
 }
 
@@ -846,13 +891,20 @@ impl BwdDataAlgo {
 /// Backward-filter convolution algorithm selector.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Default)]
 pub enum BwdFilterAlgo {
+    /// Non-deterministic, broad-coverage backward-filter algorithm. **Default.**
     #[default]
     Algo0,
+    /// Deterministic backward-filter algorithm.
     Algo1,
+    /// FFT-based backward-filter algorithm.
     Fft,
+    /// Alternative non-deterministic algorithm (typically faster on large filters).
     Algo3,
+    /// Winograd small-kernel fast algorithm.
     Winograd,
+    /// Non-fused Winograd; trades workspace for perf.
     WinogradNonfused,
+    /// Tiled FFT — lower workspace than `Fft`.
     FftTiling,
 }
 
@@ -870,6 +922,8 @@ impl BwdFilterAlgo {
     }
 }
 
+/// Workspace bytes required to run [`convolution_backward_data`] with the
+/// given `algo` and descriptors.
 pub fn convolution_backward_data_workspace_size(
     handle: &Handle,
     w: &FilterDescriptor,
@@ -895,6 +949,8 @@ pub fn convolution_backward_data_workspace_size(
     Ok(size)
 }
 
+/// Workspace bytes required to run [`convolution_backward_filter`] with
+/// the given `algo` and descriptors.
 pub fn convolution_backward_filter_workspace_size(
     handle: &Handle,
     x: &TensorDescriptor,
@@ -1021,12 +1077,17 @@ pub fn convolution_backward_bias<T: DeviceRepr>(
 
 // ---- pooling --------------------------------------------------------------
 
+/// Pooling reduction kind.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Default)]
 pub enum PoolingMode {
+    /// Max-pool; non-deterministic when ties occur. **Default.**
     #[default]
     Max,
+    /// Average-pool counting padded cells in the denominator.
     AverageCountIncludePadding,
+    /// Average-pool excluding padded cells from the denominator.
     AverageCountExcludePadding,
+    /// Max-pool with deterministic tie-break (lower throughput).
     MaxDeterministic,
 }
 
@@ -1041,6 +1102,7 @@ impl PoolingMode {
     }
 }
 
+/// A pooling descriptor: pooling mode, window extent, padding, and stride.
 pub struct PoolingDescriptor {
     desc: cudnnPoolingDescriptor_t,
 }
@@ -1056,6 +1118,8 @@ impl core::fmt::Debug for PoolingDescriptor {
 }
 
 impl PoolingDescriptor {
+    /// 2-D pooling descriptor with explicit window / padding / stride.
+    /// NaN propagation defaults to `PropagateNan`.
     #[allow(clippy::too_many_arguments)]
     pub fn new_2d(
         mode: PoolingMode,
@@ -1088,6 +1152,7 @@ impl PoolingDescriptor {
         Ok(this)
     }
 
+    /// Raw descriptor.
     #[inline]
     pub fn as_raw(&self) -> cudnnPoolingDescriptor_t {
         self.desc
@@ -1104,6 +1169,39 @@ impl Drop for PoolingDescriptor {
     }
 }
 
+/// `Y = alpha * pool(X) + beta * Y` (forward pass).
+///
+/// # Example
+///
+/// 2×2 max-pool with stride 2 on a `1 × 16 × 8 × 8` input → `1 × 16 × 4 × 4`
+/// output.
+///
+/// ```no_run
+/// use baracuda_driver::{Context, Device, DeviceBuffer};
+/// use baracuda_cudnn::{
+///     pooling_forward, DType, Handle, PoolingDescriptor, PoolingMode,
+///     TensorDescriptor, TensorFormat,
+/// };
+///
+/// # fn demo() -> Result<(), Box<dyn std::error::Error>> {
+/// let ctx = Context::new(&Device::get(0)?)?;
+/// let cudnn = Handle::new()?;
+///
+/// let (n, c) = (1, 16);
+/// let (in_h, in_w) = (8, 8);
+/// let (out_h, out_w) = (4, 4);
+///
+/// let x_desc = TensorDescriptor::new_4d(TensorFormat::Nchw, DType::F32, n, c, in_h, in_w)?;
+/// let y_desc = TensorDescriptor::new_4d(TensorFormat::Nchw, DType::F32, n, c, out_h, out_w)?;
+/// // MaxPool2d: window=2x2, pad=0, stride=2.
+/// let pool = PoolingDescriptor::new_2d(PoolingMode::Max, 2, 2, 0, 0, 2, 2)?;
+///
+/// let x: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, (n*c*in_h*in_w) as usize)?;
+/// let mut y: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, (n*c*out_h*out_w) as usize)?;
+///
+/// pooling_forward(&cudnn, &pool, 1.0, &x_desc, &x, 0.0, &y_desc, &mut y)?;
+/// # Ok(()) }
+/// ```
 #[allow(clippy::too_many_arguments)]
 pub fn pooling_forward<T: DeviceRepr>(
     handle: &Handle,
@@ -1131,6 +1229,7 @@ pub fn pooling_forward<T: DeviceRepr>(
     })
 }
 
+/// `dX = alpha * pool_backward(Y, dY, X) + beta * dX`.
 #[allow(clippy::too_many_arguments)]
 pub fn pooling_backward<T: DeviceRepr>(
     handle: &Handle,
@@ -1168,11 +1267,15 @@ pub fn pooling_backward<T: DeviceRepr>(
 
 // ---- softmax --------------------------------------------------------------
 
+/// Numerical softmax algorithm.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Default)]
 pub enum SoftmaxAlgo {
+    /// Direct `exp(x) / sum(exp(x))` — fast but susceptible to overflow.
     Fast,
+    /// Max-shifted softmax for numerical stability. **Default.**
     #[default]
     Accurate,
+    /// Log-softmax: `x - logsumexp(x)`.
     Log,
 }
 
@@ -1186,9 +1289,12 @@ impl SoftmaxAlgo {
     }
 }
 
+/// Axis the softmax normalizes over.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Default)]
 pub enum SoftmaxMode {
+    /// Softmax over all `C × H × W` per sample (one normalizer per batch row).
     Instance,
+    /// Softmax over `C` per spatial location (one normalizer per `(N, H, W)`). **Default.**
     #[default]
     Channel,
 }
@@ -1202,6 +1308,7 @@ impl SoftmaxMode {
     }
 }
 
+/// `Y = alpha * softmax(X, algo, mode) + beta * Y`.
 #[allow(clippy::too_many_arguments)]
 pub fn softmax_forward<T: DeviceRepr>(
     handle: &Handle,
@@ -1231,6 +1338,7 @@ pub fn softmax_forward<T: DeviceRepr>(
     })
 }
 
+/// `dX = alpha * softmax_backward(Y, dY) + beta * dX`.
 #[allow(clippy::too_many_arguments)]
 pub fn softmax_backward<T: DeviceRepr>(
     handle: &Handle,
@@ -1266,11 +1374,15 @@ pub fn softmax_backward<T: DeviceRepr>(
 
 // ---- batch normalization --------------------------------------------------
 
+/// Batch-normalization parameter sharing pattern.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Default)]
 pub enum BatchNormMode {
+    /// One scale/bias per `(C, H, W)` cell — used by fully-connected BN.
     PerActivation,
+    /// One scale/bias per `C` channel (shared spatially). **Default.** Matches `nn.BatchNorm2d`.
     #[default]
     Spatial,
+    /// Same as `Spatial` but uses the persistent-mode fast kernel where available.
     SpatialPersistent,
 }
 
@@ -1381,6 +1493,46 @@ pub fn batch_normalization_backward<T: DeviceRepr>(
     })
 }
 
+/// Inference-time BN forward: uses pre-computed running statistics (no
+/// state update). Use after model training is complete.
+///
+/// # Example
+///
+/// Per-spatial BN on a `1 × 16 × 8 × 8` NCHW tensor with 16 channel scale /
+/// bias / mean / variance vectors.
+///
+/// ```no_run
+/// use baracuda_driver::{Context, Device, DeviceBuffer};
+/// use baracuda_cudnn::{
+///     batch_normalization_forward_inference, BatchNormMode, DType, Handle,
+///     TensorDescriptor, TensorFormat,
+/// };
+///
+/// # fn demo() -> Result<(), Box<dyn std::error::Error>> {
+/// let ctx = Context::new(&Device::get(0)?)?;
+/// let cudnn = Handle::new()?;
+///
+/// let (n, c, h, w) = (1, 16, 8, 8);
+/// let xy_desc = TensorDescriptor::new_4d(TensorFormat::Nchw, DType::F32, n, c, h, w)?;
+/// // BN parameter tensor is shape (1, C, 1, 1) for Spatial mode.
+/// let bn_desc = TensorDescriptor::new_4d(TensorFormat::Nchw, DType::F32, 1, c, 1, 1)?;
+///
+/// let x: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, (n*c*h*w) as usize)?;
+/// let mut y: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, (n*c*h*w) as usize)?;
+/// let scale: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, c as usize)?;
+/// let bias:  DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, c as usize)?;
+/// let mean:  DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, c as usize)?;
+/// let var:   DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, c as usize)?;
+///
+/// batch_normalization_forward_inference(
+///     &cudnn, BatchNormMode::Spatial,
+///     1.0, 0.0,
+///     &xy_desc, &x, &xy_desc, &mut y,
+///     &bn_desc, &scale, &bias, &mean, &var,
+///     1e-5,
+/// )?;
+/// # Ok(()) }
+/// ```
 #[allow(clippy::too_many_arguments)]
 pub fn batch_normalization_forward_inference<T: DeviceRepr>(
     handle: &Handle,
@@ -1422,6 +1574,7 @@ pub fn batch_normalization_forward_inference<T: DeviceRepr>(
 
 // ---- dropout --------------------------------------------------------------
 
+/// A dropout descriptor: dropout probability + RNG state buffer.
 pub struct DropoutDescriptor {
     desc: cudnnDropoutDescriptor_t,
 }
@@ -1466,6 +1619,7 @@ impl DropoutDescriptor {
         Ok(this)
     }
 
+    /// Raw descriptor.
     #[inline]
     pub fn as_raw(&self) -> cudnnDropoutDescriptor_t {
         self.desc
@@ -1500,6 +1654,8 @@ pub fn dropout_reserve_size(x: &TensorDescriptor) -> Result<usize> {
     Ok(size)
 }
 
+/// Apply dropout to `x`, writing scaled survivors to `y` and the
+/// keep/drop mask into `reserve` for the matching backward call.
 #[allow(clippy::too_many_arguments)]
 pub fn dropout_forward<T: DeviceRepr>(
     handle: &Handle,
@@ -1526,6 +1682,9 @@ pub fn dropout_forward<T: DeviceRepr>(
     })
 }
 
+/// Backward dropout: replays the mask saved in `reserve` to produce `dx`
+/// from `dy`. `reserve` must be the exact buffer populated by the
+/// matching [`dropout_forward`] call.
 #[allow(clippy::too_many_arguments)]
 pub fn dropout_backward<T: DeviceRepr>(
     handle: &Handle,
@@ -1554,6 +1713,7 @@ pub fn dropout_backward<T: DeviceRepr>(
 
 // ---- LRN ------------------------------------------------------------------
 
+/// Local Response Normalization descriptor: window size + α / β / k coefficients.
 pub struct LrnDescriptor {
     desc: cudnnLRNDescriptor_t,
 }
@@ -1569,6 +1729,8 @@ impl core::fmt::Debug for LrnDescriptor {
 }
 
 impl LrnDescriptor {
+    /// Build an LRN descriptor with window size `n` and the standard
+    /// `(α, β, k)` formula coefficients.
     pub fn new(n: i32, alpha: f64, beta: f64, k: f64) -> Result<Self> {
         let cu = cudnn()?;
         let create = cu.cudnn_create_lrn_descriptor()?;
@@ -1580,6 +1742,7 @@ impl LrnDescriptor {
         Ok(this)
     }
 
+    /// Raw descriptor.
     #[inline]
     pub fn as_raw(&self) -> cudnnLRNDescriptor_t {
         self.desc
@@ -1598,13 +1761,20 @@ impl Drop for LrnDescriptor {
 
 // ---- op-tensor / reduce / transform --------------------------------------
 
+/// Element-wise op for [`OpTensorDescriptor`] / [`op_tensor`].
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum OpTensorOp {
+    /// `c = a + b` element-wise.
     Add,
+    /// `c = a * b` element-wise.
     Mul,
+    /// `c = min(a, b)` element-wise.
     Min,
+    /// `c = max(a, b)` element-wise.
     Max,
+    /// `c = sqrt(a)` — `b` ignored.
     Sqrt,
+    /// `c = 1 - a` — `b` ignored.
     Not,
 }
 
@@ -1621,6 +1791,7 @@ impl OpTensorOp {
     }
 }
 
+/// An op-tensor descriptor: binary element-wise op + compute dtype.
 pub struct OpTensorDescriptor {
     desc: cudnnOpTensorDescriptor_t,
 }
@@ -1636,6 +1807,8 @@ impl core::fmt::Debug for OpTensorDescriptor {
 }
 
 impl OpTensorDescriptor {
+    /// Build an op-tensor descriptor for `op` with `compute` as the
+    /// accumulation dtype. NaN propagation defaults to `PropagateNan`.
     pub fn new(op: OpTensorOp, compute: DType) -> Result<Self> {
         let cu = cudnn()?;
         let create = cu.cudnn_create_op_tensor_descriptor()?;
@@ -1654,6 +1827,7 @@ impl OpTensorDescriptor {
         Ok(this)
     }
 
+    /// Raw descriptor.
     #[inline]
     pub fn as_raw(&self) -> cudnnOpTensorDescriptor_t {
         self.desc
@@ -1704,16 +1878,26 @@ pub fn op_tensor<T: DeviceRepr>(
     })
 }
 
+/// Reduction op for [`ReduceTensorDescriptor`] / [`reduce_tensor`].
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum ReduceOp {
+    /// Sum of inputs.
     Add,
+    /// Product of inputs.
     Mul,
+    /// Minimum value.
     Min,
+    /// Maximum value.
     Max,
+    /// Maximum absolute value (`max(|x|)`).
     AbsMax,
+    /// Arithmetic mean.
     Avg,
+    /// L1 norm: `sum(|x|)`.
     Norm1,
+    /// L2 norm: `sqrt(sum(x^2))`.
     Norm2,
+    /// Product, skipping any zero inputs.
     MulNoZeros,
 }
 
@@ -1733,6 +1917,7 @@ impl ReduceOp {
     }
 }
 
+/// A reduce-tensor descriptor: reduction op + compute dtype.
 pub struct ReduceTensorDescriptor {
     desc: cudnnReduceTensorDescriptor_t,
 }
@@ -1748,6 +1933,10 @@ impl core::fmt::Debug for ReduceTensorDescriptor {
 }
 
 impl ReduceTensorDescriptor {
+    /// Build a reduce-tensor descriptor for `op` with `compute` as the
+    /// accumulation dtype. NaN propagation defaults to `PropagateNan`;
+    /// indices are not returned (use the lower-level cuDNN API directly
+    /// for arg-reductions).
     pub fn new(op: ReduceOp, compute: DType) -> Result<Self> {
         let cu = cudnn()?;
         let create = cu.cudnn_create_reduce_tensor_descriptor()?;
@@ -1768,6 +1957,7 @@ impl ReduceTensorDescriptor {
         Ok(this)
     }
 
+    /// Workspace bytes required to run [`reduce_tensor`] reducing `a` into `c`.
     pub fn workspace_size(
         &self,
         handle: &Handle,
@@ -1781,6 +1971,7 @@ impl ReduceTensorDescriptor {
         Ok(size)
     }
 
+    /// Raw descriptor.
     #[inline]
     pub fn as_raw(&self) -> cudnnReduceTensorDescriptor_t {
         self.desc
@@ -1881,6 +2072,10 @@ impl core::fmt::Debug for BackendDescriptor {
 }
 
 impl BackendDescriptor {
+    /// Allocate and initialize a backend descriptor of the given `kind`.
+    /// The descriptor is unfinalized; set attributes via
+    /// [`set_attribute_raw`](Self::set_attribute_raw) then call
+    /// [`finalize`](Self::finalize).
     pub fn new(kind: cudnnBackendDescriptorType_t) -> Result<Self> {
         let cu = cudnn()?;
         let create = cu.cudnn_backend_create_descriptor()?;
@@ -1913,6 +2108,8 @@ impl BackendDescriptor {
         check(f(self.desc, name, ty, element_count, array_of_elements))
     }}
 
+    /// Lock in the descriptor's attributes. Idempotent — repeated calls
+    /// are no-ops.
     pub fn finalize(&mut self) -> Result<()> {
         if self.finalized {
             return Ok(());
@@ -1932,6 +2129,7 @@ impl BackendDescriptor {
         check(unsafe { f(handle.handle, self.desc, variant_pack.desc) })
     }
 
+    /// Raw descriptor.
     #[inline]
     pub fn as_raw(&self) -> cudnnBackendDescriptor_t {
         self.desc
@@ -1960,6 +2158,7 @@ pub use baracuda_cudnn_sys::{
 
 use baracuda_cudnn_sys::cudnnCTCLossDescriptor_t;
 
+/// CTC (Connectionist Temporal Classification) loss descriptor.
 pub struct CtcLossDescriptor {
     desc: cudnnCTCLossDescriptor_t,
 }
@@ -1975,6 +2174,7 @@ impl core::fmt::Debug for CtcLossDescriptor {
 }
 
 impl CtcLossDescriptor {
+    /// Build a CTC-loss descriptor with `compute` as the accumulation dtype.
     pub fn new(compute: DType) -> Result<Self> {
         let cu = cudnn()?;
         let create = cu.cudnn_create_ctc_loss_descriptor()?;
@@ -1986,6 +2186,7 @@ impl CtcLossDescriptor {
         Ok(this)
     }
 
+    /// Raw descriptor.
     #[inline]
     pub fn as_raw(&self) -> cudnnCTCLossDescriptor_t {
         self.desc
@@ -2074,6 +2275,7 @@ pub fn ctc_loss<T: DeviceRepr>(
 
 use baracuda_cudnn_sys::cudnnSpatialTransformerDescriptor_t;
 
+/// Spatial-transformer descriptor: sampler kind + output shape.
 pub struct SpatialTransformerDescriptor {
     desc: cudnnSpatialTransformerDescriptor_t,
 }
@@ -2109,6 +2311,7 @@ impl SpatialTransformerDescriptor {
         Ok(this)
     }
 
+    /// Raw descriptor.
     #[inline]
     pub fn as_raw(&self) -> cudnnSpatialTransformerDescriptor_t {
         self.desc
@@ -2215,8 +2418,10 @@ impl MathType {
 /// Filter / bias reorder selector for INT8 quantized inference paths.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Default)]
 pub enum ReorderType {
+    /// cuDNN-chosen reorder layout. **Default.**
     #[default]
     Default,
+    /// Leave the filter / bias buffers in their original layout.
     None,
 }
 
@@ -2385,8 +2590,11 @@ impl ActivationDescriptor {
 // Tier 2 — Algorithm finders / pickers
 // ============================================================================
 
+/// Per-algorithm performance record returned by the forward-convolution finders.
 pub use baracuda_cudnn_sys::cudnnConvolutionFwdAlgoPerf_t as FwdAlgoPerf;
+/// Per-algorithm performance record returned by the backward-data convolution finders.
 pub use baracuda_cudnn_sys::cudnnConvolutionBwdDataAlgoPerf_t as BwdDataAlgoPerf;
+/// Per-algorithm performance record returned by the backward-filter convolution finders.
 pub use baracuda_cudnn_sys::cudnnConvolutionBwdFilterAlgoPerf_t as BwdFilterAlgoPerf;
 
 /// Heuristic-pick the top-N forward-convolution algorithms (cheap; doesn't run them).
@@ -2473,9 +2681,12 @@ pub fn get_convolution_backward_filter_algorithm(
 // Tier 3 — Generic Normalization API enums (cuDNN 8+) + workspace queries
 // ============================================================================
 
+/// Generic-normalization parameter sharing pattern (cuDNN 8+).
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Default)]
 pub enum NormMode {
+    /// One scale/bias per `(C, H, W)` cell.
     PerActivation,
+    /// One scale/bias per `C` channel (shared spatially). **Default.**
     #[default]
     PerChannel,
 }
@@ -2488,10 +2699,13 @@ impl NormMode {
     }
 }
 
+/// Generic-normalization kernel selector.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Default)]
 pub enum NormAlgo {
+    /// Standard normalization kernel. **Default.**
     #[default]
     Standard,
+    /// Persistent-mode fast kernel where available.
     Persist,
 }
 impl NormAlgo {
@@ -2503,11 +2717,15 @@ impl NormAlgo {
     }
 }
 
+/// Optional fused op for the generic-normalization API.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Default)]
 pub enum NormOp {
+    /// Plain normalization, no fused activation. **Default.**
     #[default]
     Norm,
+    /// Fused `activation(norm(x))`.
     NormActivation,
+    /// Fused `activation(norm(x) + z)` for residual add.
     NormAddActivation,
 }
 impl NormOp {
@@ -2523,9 +2741,12 @@ impl NormOp {
 /// Optional fused op for the `*Ex` BatchNorm variants.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Default)]
 pub enum BnOp {
+    /// Plain batch normalization, no fused activation. **Default.**
     #[default]
     Bn,
+    /// Fused `activation(bn(x))`.
     BnActivation,
+    /// Fused `activation(bn(x) + z)` for residual add.
     BnAddActivation,
 }
 impl BnOp {
@@ -2606,6 +2827,8 @@ impl core::fmt::Debug for RnnDescriptor {
     }
 }
 impl RnnDescriptor {
+    /// Allocate an empty RNN descriptor. Configure it with
+    /// [`set_v8`](Self::set_v8) before use.
     pub fn new() -> Result<Self> {
         let c = cudnn()?;
         let create = c.cudnn_create_rnn_descriptor()?;
@@ -2650,6 +2873,7 @@ impl RnnDescriptor {
         })
     }
 
+    /// Raw descriptor.
     #[inline]
     pub fn as_raw(&self) -> baracuda_cudnn_sys::cudnnRNNDescriptor_t { self.desc }
 }
@@ -2674,6 +2898,8 @@ impl core::fmt::Debug for RnnDataDescriptor {
     }
 }
 impl RnnDataDescriptor {
+    /// Allocate an empty RNN-data descriptor. Configure attributes through
+    /// the raw cuDNN setter exposed via [`as_raw`](Self::as_raw).
     pub fn new() -> Result<Self> {
         let c = cudnn()?;
         let create = c.cudnn_create_rnn_data_descriptor()?;
@@ -2681,6 +2907,7 @@ impl RnnDataDescriptor {
         check(unsafe { create(&mut desc) })?;
         Ok(Self { desc })
     }
+    /// Raw descriptor.
     #[inline]
     pub fn as_raw(&self) -> baracuda_cudnn_sys::cudnnRNNDataDescriptor_t { self.desc }
 }
@@ -2737,6 +2964,9 @@ impl core::fmt::Debug for AttnDescriptor {
     }
 }
 impl AttnDescriptor {
+    /// Allocate an empty multi-head attention descriptor. Configure with
+    /// [`set`](Self::set) before passing it to the attention forward / backward
+    /// functions.
     pub fn new() -> Result<Self> {
         let c = cudnn()?;
         let cu = c.cudnn_create_attn_descriptor()?;
@@ -2771,6 +3001,7 @@ impl AttnDescriptor {
         })
     }
 
+    /// Raw descriptor.
     #[inline]
     pub fn as_raw(&self) -> cudnnAttnDescriptor_t { self.desc }
 }
@@ -2806,6 +3037,8 @@ impl core::fmt::Debug for SeqDataDescriptor {
     }
 }
 impl SeqDataDescriptor {
+    /// Allocate an empty sequence-data descriptor. Configure with
+    /// [`set`](Self::set) before passing it to a multi-head attention call.
     pub fn new() -> Result<Self> {
         let c = cudnn()?;
         let cu = c.cudnn_create_seq_data_descriptor()?;
@@ -2834,6 +3067,7 @@ impl SeqDataDescriptor {
         ))
     }}
 
+    /// Raw descriptor.
     #[inline]
     pub fn as_raw(&self) -> cudnnSeqDataDescriptor_t { self.desc }
 }

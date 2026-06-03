@@ -355,6 +355,7 @@ impl core::fmt::Debug for EncoderState {
 }
 
 impl EncoderState {
+    /// Wraps `nvjpegEncoderStateCreate`; allocate per-encoder scratch state.
     pub fn new(handle: &Handle, stream: Option<&Stream>) -> Result<Self> {
         let n = nvjpeg()?;
         let cu = n.nvjpeg_encoder_state_create()?;
@@ -364,6 +365,7 @@ impl EncoderState {
         Ok(Self { raw })
     }
 
+    /// Raw `nvjpegEncoderState_t`. Use with care.
     #[inline]
     pub fn as_raw(&self) -> nvjpegEncoderState_t {
         self.raw
@@ -396,6 +398,7 @@ impl core::fmt::Debug for EncoderParams {
 }
 
 impl EncoderParams {
+    /// Wraps `nvjpegEncoderParamsCreate`; allocate a fresh parameter block.
     pub fn new(handle: &Handle, stream: Option<&Stream>) -> Result<Self> {
         let n = nvjpeg()?;
         let cu = n.nvjpeg_encoder_params_create()?;
@@ -405,6 +408,7 @@ impl EncoderParams {
         Ok(Self { raw })
     }
 
+    /// Wraps `nvjpegEncoderParamsSetQuality`; sets JPEG quality (1–100).
     pub fn set_quality(&self, quality: i32, stream: Option<&Stream>) -> Result<()> {
         let n = nvjpeg()?;
         let cu = n.nvjpeg_encoder_params_set_quality()?;
@@ -412,6 +416,7 @@ impl EncoderParams {
         check(unsafe { cu(self.raw, quality, stream_handle) })
     }
 
+    /// Wraps `nvjpegEncoderParamsSetSamplingFactors`; selects chroma subsampling.
     pub fn set_sampling(
         &self,
         subsampling: ChromaSubsampling,
@@ -423,6 +428,8 @@ impl EncoderParams {
         check(unsafe { cu(self.raw, subsampling, stream_handle) })
     }
 
+    /// Wraps `nvjpegEncoderParamsSetOptimizedHuffman`; toggles the optimized
+    /// (two-pass) Huffman encoder.
     pub fn set_optimized_huffman(&self, optimize: bool, stream: Option<&Stream>) -> Result<()> {
         let n = nvjpeg()?;
         let cu = n.nvjpeg_encoder_params_set_optimized_huffman()?;
@@ -430,6 +437,7 @@ impl EncoderParams {
         check(unsafe { cu(self.raw, optimize as i32, stream_handle) })
     }
 
+    /// Raw `nvjpegEncoderParams_t`. Use with care.
     #[inline]
     pub fn as_raw(&self) -> nvjpegEncoderParams_t {
         self.raw
@@ -525,6 +533,8 @@ impl core::fmt::Debug for Decoder {
 }
 
 impl Decoder {
+    /// Wraps `nvjpegDecoderCreate`; bind a decoder to a specific `backend`
+    /// (e.g. `Backend::HybridGpu`, `Backend::Hardware`).
     pub fn new(handle: &Handle, backend: Backend) -> Result<Self> {
         let n = nvjpeg()?;
         let cu = n.nvjpeg_decoder_create()?;
@@ -533,6 +543,8 @@ impl Decoder {
         Ok(Self { raw })
     }
 
+    /// Phase 1 of the 3-phase hybrid pipeline: do the host-side Huffman
+    /// decoding into [`State`]'s pinned buffers. Wraps `nvjpegDecodeJpegHost`.
     pub fn decode_host(
         &self,
         handle: &Handle,
@@ -545,6 +557,8 @@ impl Decoder {
         check(unsafe { cu(handle.handle, self.raw, state.state, params.raw, jpeg_stream.raw) })
     }
 
+    /// Phase 2 of the 3-phase hybrid pipeline: enqueue the H2D transfer of
+    /// the host-decoded data. Wraps `nvjpegDecodeJpegTransferToDevice`.
     pub fn decode_transfer_to_device(
         &self,
         handle: &Handle,
@@ -577,6 +591,7 @@ impl Decoder {
         check(cu(handle.handle, self.raw, state.state, dest, stream_handle))
     }}
 
+    /// Raw `nvjpegJpegDecoder_t`. Use with care.
     #[inline]
     pub fn as_raw(&self) -> nvjpegJpegDecoder_t {
         self.raw
@@ -595,6 +610,9 @@ impl Drop for Decoder {
 
 // ---- JPEG stream (parsed stream metadata) -------------------------------
 
+/// A parsed JPEG bitstream — used by [`Decoder`] for staged hybrid decoding.
+/// Build one via [`JpegStream::new`] then call [`JpegStream::parse`] on the
+/// JPEG bytes.
 pub struct JpegStream {
     raw: nvjpegJpegStream_t,
 }
@@ -610,6 +628,8 @@ impl core::fmt::Debug for JpegStream {
 }
 
 impl JpegStream {
+    /// Wraps `nvjpegJpegStreamCreate`; allocate an empty parsed-stream
+    /// container.
     pub fn new(handle: &Handle) -> Result<Self> {
         let n = nvjpeg()?;
         let cu = n.nvjpeg_jpeg_stream_create()?;
@@ -618,6 +638,9 @@ impl JpegStream {
         Ok(Self { raw })
     }
 
+    /// Wraps `nvjpegJpegStreamParse`; parse `jpeg_bytes` into this stream.
+    /// `save_metadata` retains EXIF/XMP fields, `save_stream` retains the
+    /// raw bitstream copy needed by the staged hybrid decoder.
     pub fn parse(
         &self,
         handle: &Handle,
@@ -639,6 +662,7 @@ impl JpegStream {
         })
     }
 
+    /// Image dimensions in pixels.
     pub fn frame_dimensions(&self) -> Result<(u32, u32)> {
         let n = nvjpeg()?;
         let cu = n.nvjpeg_jpeg_stream_get_frame_dimensions()?;
@@ -647,6 +671,7 @@ impl JpegStream {
         Ok((w, h))
     }
 
+    /// Number of components in the JPEG (1 for grayscale, 3 for YCbCr).
     pub fn num_components(&self) -> Result<u32> {
         let n = nvjpeg()?;
         let cu = n.nvjpeg_jpeg_stream_get_components_num()?;
@@ -655,6 +680,7 @@ impl JpegStream {
         Ok(n_comp)
     }
 
+    /// Chroma-subsampling factor reported by the bitstream.
     pub fn chroma_subsampling(&self) -> Result<ChromaSubsampling> {
         let n = nvjpeg()?;
         let cu = n.nvjpeg_jpeg_stream_get_chroma_subsampling()?;
@@ -663,6 +689,7 @@ impl JpegStream {
         Ok(s)
     }
 
+    /// Raw `nvjpegJpegStream_t`. Use with care.
     #[inline]
     pub fn as_raw(&self) -> nvjpegJpegStream_t {
         self.raw
@@ -681,6 +708,8 @@ impl Drop for JpegStream {
 
 // ---- Pinned / device buffer pools (attachable to a State) --------------
 
+/// A pinned-host-memory scratch buffer that can be attached to a [`State`]
+/// for staged hybrid decoding (avoids per-frame pinned-alloc churn).
 pub struct BufferPinned {
     raw: nvjpegBufferPinned_t,
 }
@@ -706,12 +735,15 @@ impl BufferPinned {
         Ok(Self { raw })
     }
 
+    /// Wraps `nvjpegStateAttachPinnedBuffer`; bind this buffer to `state` so
+    /// the decoder reuses it for all subsequent host-decode phases.
     pub fn attach_to(&self, state: &State) -> Result<()> {
         let n = nvjpeg()?;
         let cu = n.nvjpeg_state_attach_pinned_buffer()?;
         check(unsafe { cu(state.state, self.raw) })
     }
 
+    /// Raw `nvjpegBufferPinned_t`. Use with care.
     #[inline]
     pub fn as_raw(&self) -> nvjpegBufferPinned_t {
         self.raw
@@ -728,6 +760,8 @@ impl Drop for BufferPinned {
     }
 }
 
+/// A device-memory scratch buffer that can be attached to a [`State`] for
+/// staged hybrid decoding (avoids per-frame device-alloc churn).
 pub struct BufferDevice {
     raw: nvjpegBufferDevice_t,
 }
@@ -743,6 +777,8 @@ impl core::fmt::Debug for BufferDevice {
 }
 
 impl BufferDevice {
+    /// Wraps `nvjpegBufferDeviceCreate`; allocate a device-memory scratch
+    /// buffer using the default allocator.
     pub fn new(handle: &Handle) -> Result<Self> {
         let n = nvjpeg()?;
         let cu = n.nvjpeg_buffer_device_create()?;
@@ -751,12 +787,14 @@ impl BufferDevice {
         Ok(Self { raw })
     }
 
+    /// Wraps `nvjpegStateAttachDeviceBuffer`; bind this buffer to `state`.
     pub fn attach_to(&self, state: &State) -> Result<()> {
         let n = nvjpeg()?;
         let cu = n.nvjpeg_state_attach_device_buffer()?;
         check(unsafe { cu(state.state, self.raw) })
     }
 
+    /// Raw `nvjpegBufferDevice_t`. Use with care.
     #[inline]
     pub fn as_raw(&self) -> nvjpegBufferDevice_t {
         self.raw
@@ -775,6 +813,8 @@ impl Drop for BufferDevice {
 
 // ---- Decode params (output format / ROI / CMYK) -------------------------
 
+/// Per-decode-call parameter block — output pixel format, region-of-interest,
+/// and CMYK opt-in for the hybrid 3-phase decoder.
 pub struct DecodeParams {
     raw: nvjpegDecodeParams_t,
 }
@@ -790,6 +830,8 @@ impl core::fmt::Debug for DecodeParams {
 }
 
 impl DecodeParams {
+    /// Wraps `nvjpegDecodeParamsCreate`; allocate a fresh parameter block
+    /// pre-populated with defaults.
     pub fn new(handle: &Handle) -> Result<Self> {
         let n = nvjpeg()?;
         let cu = n.nvjpeg_decode_params_create()?;
@@ -798,24 +840,30 @@ impl DecodeParams {
         Ok(Self { raw })
     }
 
+    /// Wraps `nvjpegDecodeParamsSetOutputFormat`; chooses the output pixel
+    /// layout (e.g. interleaved RGB vs planar).
     pub fn set_output_format(&self, fmt: PixelFormat) -> Result<()> {
         let n = nvjpeg()?;
         let cu = n.nvjpeg_decode_params_set_output_format()?;
         check(unsafe { cu(self.raw, fmt.raw()) })
     }
 
+    /// Wraps `nvjpegDecodeParamsSetROI`; restrict decode to the given pixel
+    /// rectangle.
     pub fn set_roi(&self, offset_x: i32, offset_y: i32, width: i32, height: i32) -> Result<()> {
         let n = nvjpeg()?;
         let cu = n.nvjpeg_decode_params_set_roi()?;
         check(unsafe { cu(self.raw, offset_x, offset_y, width, height) })
     }
 
+    /// Wraps `nvjpegDecodeParamsSetAllowCMYK`; opt in to CMYK-encoded JPEGs.
     pub fn set_allow_cmyk(&self, allow: bool) -> Result<()> {
         let n = nvjpeg()?;
         let cu = n.nvjpeg_decode_params_set_allow_cmyk()?;
         check(unsafe { cu(self.raw, allow as c_int) })
     }
 
+    /// Raw `nvjpegDecodeParams_t`. Use with care.
     #[inline]
     pub fn as_raw(&self) -> nvjpegDecodeParams_t {
         self.raw

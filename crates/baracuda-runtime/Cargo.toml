@@ -23,3 +23,6 @@ baracuda-core.workspace = true
 baracuda-cuda-sys.workspace = true
 baracuda-driver = { workspace = true, optional = true }
 thiserror.workspace = true
+
+[lints]
+workspace = true

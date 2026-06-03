@@ -154,18 +154,22 @@ impl Array3D {
         }
     }
 
+    /// Raw `CUarray` handle. Use with care — owned by `self`.
     #[inline]
     pub fn as_raw(&self) -> CUarray {
         self.inner.handle
     }
+    /// Width of the 3-D array, in elements.
     #[inline]
     pub fn width(&self) -> usize {
         self.inner.width
     }
+    /// Height of the 3-D array, in elements.
     #[inline]
     pub fn height(&self) -> usize {
         self.inner.height
     }
+    /// Depth of the 3-D array, in elements.
     #[inline]
     pub fn depth(&self) -> usize {
         self.inner.depth
@@ -386,10 +390,12 @@ impl MipmappedArray {
         Ok(view)
     }
 
+    /// Raw `CUmipmappedArray` handle. Use with care — owned by `self`.
     #[inline]
     pub fn as_raw(&self) -> CUmipmappedArray {
         self.handle
     }
+    /// Number of mip levels (highest-resolution level is `0`).
     #[inline]
     pub fn num_levels(&self) -> u32 {
         self.num_levels

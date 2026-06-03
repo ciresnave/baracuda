@@ -49,3 +49,6 @@ thiserror = { workspace = true }
 [package.metadata.docs.rs]
 features = ["sm80"]
 no-default-features = false
+
+[lints]
+workspace = true

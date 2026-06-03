@@ -39,6 +39,9 @@ pub struct LaunchExBuilder<'s> {
 }
 
 impl<'s> LaunchExBuilder<'s> {
+    /// Start an extended-launch builder targeting `stream` with the given
+    /// grid / block dimensions. Add attributes via the `with_*` methods,
+    /// then call [`launch`](Self::launch).
     pub fn new(stream: &'s Stream, grid: impl Into<Dim3>, block: impl Into<Dim3>) -> Self {
         let g: Dim3 = grid.into();
         let b: Dim3 = block.into();
@@ -56,6 +59,7 @@ impl<'s> LaunchExBuilder<'s> {
         }
     }
 
+    /// Reserve `bytes` of dynamic shared memory per block.
     pub fn dynamic_shared_memory(mut self, bytes: usize) -> Self {
         self.config.dynamic_smem_bytes = bytes;
         self

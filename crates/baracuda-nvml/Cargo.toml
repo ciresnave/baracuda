@@ -16,3 +16,6 @@ baracuda-types.workspace = true
 baracuda-core.workspace = true
 baracuda-nvml-sys.workspace = true
 thiserror.workspace = true
+
+[lints]
+workspace = true

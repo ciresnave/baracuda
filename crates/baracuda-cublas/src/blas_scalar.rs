@@ -560,6 +560,25 @@ pub fn gemm<T: BlasScalar>(
 ///
 /// `x` and `y` are 1-D device vectors; `incx` / `incy` are element strides
 /// (usually `1`).
+///
+/// # Example
+///
+/// ```no_run
+/// use baracuda_driver::{Context, Device, DeviceBuffer};
+/// use baracuda_cublas::{axpy, Handle};
+///
+/// # fn demo() -> Result<(), Box<dyn std::error::Error>> {
+/// let ctx = Context::new(&Device::get(0)?)?;
+/// let handle = Handle::new()?;
+///
+/// // y := 2.0 * x + y
+/// let x = DeviceBuffer::from_slice(&ctx, &[1.0f32, 2.0, 3.0, 4.0])?;
+/// let mut y = DeviceBuffer::from_slice(&ctx, &[10.0f32, 20.0, 30.0, 40.0])?;
+///
+/// axpy(&handle, 4, 2.0f32, &x.as_slice(), 1, &mut y, 1)?;
+/// // y is now [12, 24, 36, 48]
+/// # Ok(()) }
+/// ```
 pub fn axpy<T: BlasScalar>(
     handle: &crate::Handle,
     n: i32,
@@ -591,6 +610,34 @@ pub fn axpy<T: BlasScalar>(
 ///
 /// This is the core primitive behind transformer multi-head attention
 /// (Q·Kᵀ and AttnScores·V are both strided-batched GEMMs).
+///
+/// # Example
+///
+/// 4 independent 2×2 × 2×2 matmuls, packed contiguously (stride = m*k / k*n / m*n).
+///
+/// ```no_run
+/// use baracuda_driver::{Context, Device, DeviceBuffer};
+/// use baracuda_cublas::{gemm_strided_batched, Handle, Op};
+///
+/// # fn demo() -> Result<(), Box<dyn std::error::Error>> {
+/// let ctx = Context::new(&Device::get(0)?)?;
+/// let handle = Handle::new()?;
+///
+/// let batch = 4;
+/// let (m, n, k) = (2, 2, 2);
+/// let a: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, (m * k * batch) as usize)?;
+/// let b: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, (k * n * batch) as usize)?;
+/// let mut c: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, (m * n * batch) as usize)?;
+///
+/// gemm_strided_batched(
+///     &handle, Op::N, Op::N, m, n, k,
+///     1.0f32, &a, m, (m * k) as i64,
+///             &b, k, (k * n) as i64,
+///     0.0f32, &mut c, m, (m * n) as i64,
+///     batch,
+/// )?;
+/// # Ok(()) }
+/// ```
 #[allow(clippy::too_many_arguments)]
 pub fn gemm_strided_batched<T: BlasScalar>(
     handle: &crate::Handle,

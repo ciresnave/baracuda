@@ -382,6 +382,49 @@ pub unsafe fn getri<T: BatchedDirectScalar>(
 ///
 /// # Safety
 /// See [`getrf`].
+///
+/// # Example
+///
+/// Invert 8 independent 4×4 matrices in one call. The pointer arrays must
+/// live in device memory and point at the per-matrix device buffers.
+///
+/// ```no_run
+/// use baracuda_driver::{Context, Device, DeviceBuffer};
+/// use baracuda_cublas::{direct_batched, Handle};
+///
+/// # fn demo() -> Result<(), Box<dyn std::error::Error>> {
+/// let ctx = Context::new(&Device::get(0)?)?;
+/// let handle = Handle::new()?;
+///
+/// let batch = 8i32;
+/// let n = 4i32;
+///
+/// // Allocate the input and output matrices contiguously.
+/// let a: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, (n * n * batch) as usize)?;
+/// let mut inv: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, (n * n * batch) as usize)?;
+/// let mut info: DeviceBuffer<i32> = DeviceBuffer::zeros(&ctx, batch as usize)?;
+///
+/// // In real code, build host pointer arrays here and upload to device
+/// // buffers `a_ptrs_dev` / `inv_ptrs_dev` of type DeviceBuffer<*mut f32>.
+/// // For brevity this example just sketches the call shape.
+/// let a_ptrs_dev: DeviceBuffer<u64> = DeviceBuffer::zeros(&ctx, batch as usize)?;
+/// let inv_ptrs_dev: DeviceBuffer<u64> = DeviceBuffer::zeros(&ctx, batch as usize)?;
+///
+/// unsafe {
+///     direct_batched::matinv::<f32>(
+///         &handle,
+///         n,
+///         a_ptrs_dev.as_raw().0 as *const *const f32,
+///         n,
+///         inv_ptrs_dev.as_raw().0 as *const *mut f32,
+///         n,
+///         &mut info,
+///         batch,
+///     )?;
+/// }
+/// let _ = (a, inv);
+/// # Ok(()) }
+/// ```
 #[allow(clippy::too_many_arguments)]
 pub unsafe fn matinv<T: BatchedDirectScalar>(
     handle: &crate::Handle,

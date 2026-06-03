@@ -18,7 +18,9 @@ use crate::error::{check, Result};
 /// Triangular storage mode.
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum Fill {
+    /// Lower triangle is the populated half.
     Lower,
+    /// Upper triangle is the populated half.
     Upper,
 }
 
@@ -34,7 +36,9 @@ impl Fill {
 /// Whether the structured operand is on the left or right of the product.
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum Side {
+    /// Structured matrix on the left (`op(A) * B`).
     Left,
+    /// Structured matrix on the right (`B * op(A)`).
     Right,
 }
 
@@ -50,7 +54,9 @@ impl Side {
 /// Triangular unit-diagonal flag.
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum Diag {
+    /// Diagonal entries are read from the matrix.
     NonUnit,
+    /// Diagonal entries are implicitly 1 (not read).
     Unit,
 }
 

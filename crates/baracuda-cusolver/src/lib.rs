@@ -63,6 +63,7 @@ impl core::fmt::Debug for DnHandle {
 }
 
 impl DnHandle {
+    /// Create a new cuSOLVER dense handle (`cusolverDnCreate`).
     pub fn new() -> Result<Self> {
         let c = cusolver()?;
         let cu = c.cusolver_dn_create()?;
@@ -71,6 +72,8 @@ impl DnHandle {
         Ok(Self { handle: h })
     }
 
+    /// Bind this handle to `stream`; subsequent cuSOLVER calls dispatch on
+    /// it (`cusolverDnSetStream`).
     pub fn set_stream(&self, stream: &Stream) -> Result<()> {
         let c = cusolver()?;
         let cu = c.cusolver_dn_set_stream()?;
@@ -90,6 +93,8 @@ impl DnHandle {
         Ok(s)
     }
 
+    /// cuSOLVER library version (`cusolverGetVersion`),
+    /// e.g. `12604` for cuSOLVER 12.6.4.
     pub fn version() -> Result<i32> {
         let c = cusolver()?;
         let cu = c.cusolver_get_version()?;
@@ -98,6 +103,7 @@ impl DnHandle {
         Ok(v)
     }
 
+    /// Raw `cusolverDnHandle_t`. Use with care.
     #[inline]
     pub fn as_raw(&self) -> cusolverDnHandle_t {
         self.handle
@@ -117,9 +123,12 @@ impl Drop for DnHandle {
 /// Transposition selector for solve-step calls.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Default)]
 pub enum Op {
+    /// No transpose.
     #[default]
     N,
+    /// Transpose.
     T,
+    /// Conjugate transpose (real types: same as `T`).
     C,
 }
 
@@ -864,6 +873,34 @@ complex_impl!(
 // ---- Public API ---------------------------------------------------------
 
 /// In-place LU factorization of a column-major matrix. Overwrites `a`.
+///
+/// On return `a` holds `L` (unit-diagonal lower) and `U` (upper) packed
+/// together; `ipiv` holds the row-pivot permutation (length = `min(m, n)`);
+/// `info` is a single-element device int (0 on success, k > 0 means U[k,k]
+/// is exactly zero).
+///
+/// # Example
+///
+/// LU-factorize a 4×4 matrix on the device. Pair with [`getrs`] to solve
+/// `A x = b`.
+///
+/// ```no_run
+/// use baracuda_driver::{Context, Device, DeviceBuffer};
+/// use baracuda_cusolver::{getrf, DnHandle};
+///
+/// # fn demo() -> Result<(), Box<dyn std::error::Error>> {
+/// let ctx = Context::new(&Device::get(0)?)?;
+/// let solver = DnHandle::new()?;
+///
+/// let n = 4i32;
+/// // Column-major 4×4 (caller initialises to a real, non-singular matrix).
+/// let mut a:    DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, (n * n) as usize)?;
+/// let mut ipiv: DeviceBuffer<i32> = DeviceBuffer::zeros(&ctx, n as usize)?;
+/// let mut info: DeviceBuffer<i32> = DeviceBuffer::zeros(&ctx, 1)?;
+///
+/// getrf::<f32>(&solver, n, n, &mut a, n, &mut ipiv, &mut info)?;
+/// # Ok(()) }
+/// ```
 #[allow(clippy::too_many_arguments)]
 pub fn getrf<T: SolverScalar>(
     handle: &DnHandle,
@@ -924,6 +961,31 @@ pub fn getrs<T: SolverScalar>(
 
 /// QR factorization: `A = Q * R`. Overwrites `a` (upper triangle = R,
 /// lower = Householder reflectors); `tau` receives reflector scalars.
+///
+/// To materialise `Q` explicitly, pair this with [`orgqr`]; to apply
+/// `Q` (or `Qᵀ`) to another matrix without forming it, use [`ormqr`].
+///
+/// # Example
+///
+/// QR-factorize a 6×4 tall-skinny matrix.
+///
+/// ```no_run
+/// use baracuda_driver::{Context, Device, DeviceBuffer};
+/// use baracuda_cusolver::{geqrf, DnHandle};
+///
+/// # fn demo() -> Result<(), Box<dyn std::error::Error>> {
+/// let ctx = Context::new(&Device::get(0)?)?;
+/// let solver = DnHandle::new()?;
+///
+/// let (m, n) = (6i32, 4i32);
+/// let mut a:    DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, (m * n) as usize)?;
+/// // `tau` is min(m, n) reflector scalars.
+/// let mut tau:  DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, n as usize)?;
+/// let mut info: DeviceBuffer<i32> = DeviceBuffer::zeros(&ctx, 1)?;
+///
+/// geqrf::<f32>(&solver, m, n, &mut a, m, &mut tau, &mut info)?;
+/// # Ok(()) }
+/// ```
 #[allow(clippy::too_many_arguments)]
 pub fn geqrf<T: SolverScalar>(
     handle: &DnHandle,
@@ -954,6 +1016,31 @@ pub fn geqrf<T: SolverScalar>(
 }
 
 /// Cholesky factorization: `A = L * Lᵀ` (or `Uᵀ * U`). Overwrites `a`.
+///
+/// Requires `A` to be symmetric / Hermitian and positive-definite. `uplo`
+/// selects which triangle of `a` holds the input (and receives the factor);
+/// the other triangle is read- and write- ignored.
+///
+/// # Example
+///
+/// Cholesky of a 5×5 SPD matrix, storing `L` in the lower triangle.
+///
+/// ```no_run
+/// use baracuda_driver::{Context, Device, DeviceBuffer};
+/// use baracuda_cusolver::{potrf, DnHandle, Fill};
+///
+/// # fn demo() -> Result<(), Box<dyn std::error::Error>> {
+/// let ctx = Context::new(&Device::get(0)?)?;
+/// let solver = DnHandle::new()?;
+///
+/// let n = 5i32;
+/// let mut a:    DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, (n * n) as usize)?;
+/// let mut info: DeviceBuffer<i32> = DeviceBuffer::zeros(&ctx, 1)?;
+///
+/// potrf::<f32>(&solver, Fill::Lower, n, &mut a, n, &mut info)?;
+/// // After return, lower triangle of `a` holds L such that A = L Lᵀ.
+/// # Ok(()) }
+/// ```
 pub fn potrf<T: SolverScalar>(
     handle: &DnHandle,
     uplo: Fill,
@@ -1013,6 +1100,39 @@ pub fn potrs<T: SolverScalar>(
 ///
 /// `rwork` must be provided for complex element types; pass an empty buffer
 /// for real types (pointer is still non-null; cuSOLVER ignores it).
+///
+/// # Example
+///
+/// Full SVD of a 6×4 real matrix (`U` 6×6, `Σ` length-4, `Vᵀ` 4×4).
+///
+/// ```no_run
+/// use baracuda_driver::{Context, Device, DeviceBuffer};
+/// use baracuda_cusolver::{gesvd, DnHandle};
+///
+/// # fn demo() -> Result<(), Box<dyn std::error::Error>> {
+/// let ctx = Context::new(&Device::get(0)?)?;
+/// let solver = DnHandle::new()?;
+///
+/// let (m, n) = (6i32, 4i32);
+/// let mut a:    DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, (m * n) as usize)?;
+/// let mut s:    DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, n as usize)?;
+/// let mut u:    DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, (m * m) as usize)?;
+/// let mut vt:   DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, (n * n) as usize)?;
+/// // Real-type SVD ignores `rwork`; allocate an empty buffer.
+/// let mut rwork: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, 1)?;
+/// let mut info:  DeviceBuffer<i32> = DeviceBuffer::zeros(&ctx, 1)?;
+///
+/// gesvd::<f32>(
+///     &solver, b'A', b'A', m, n,
+///     &mut a, m,
+///     &mut s,
+///     &mut u, m,
+///     &mut vt, n,
+///     &mut rwork,
+///     &mut info,
+/// )?;
+/// # Ok(()) }
+/// ```
 #[allow(clippy::too_many_arguments)]
 pub fn gesvd<T: SolverScalar>(
     handle: &DnHandle,
@@ -1110,6 +1230,7 @@ pub struct SyevjInfo {
 }
 
 impl SyevjInfo {
+    /// Create a tuning-info handle (`cusolverDnCreateSyevjInfo`).
     pub fn new() -> Result<Self> {
         let c = cusolver()?;
         let cu = c.cusolver_dn_create_syevj_info()?;
@@ -1118,18 +1239,23 @@ impl SyevjInfo {
         Ok(Self { raw })
     }
 
+    /// Set the per-sweep convergence tolerance
+    /// (`cusolverDnXsyevjSetTolerance`).
     pub fn set_tolerance(&self, tol: f64) -> Result<()> {
         let c = cusolver()?;
         let cu = c.cusolver_dn_xsyevj_set_tolerance()?;
         check(unsafe { cu(self.raw, tol) })
     }
 
+    /// Cap the number of Jacobi sweeps
+    /// (`cusolverDnXsyevjSetMaxSweeps`).
     pub fn set_max_sweeps(&self, n: i32) -> Result<()> {
         let c = cusolver()?;
         let cu = c.cusolver_dn_xsyevj_set_max_sweeps()?;
         check(unsafe { cu(self.raw, n) })
     }
 
+    /// Raw `syevjInfo_t`. Use with care.
     pub fn as_raw(&self) -> SyevjInfoRaw {
         self.raw
     }
@@ -1152,6 +1278,7 @@ pub struct GesvdjInfo {
 }
 
 impl GesvdjInfo {
+    /// Create a tuning-info handle (`cusolverDnCreateGesvdjInfo`).
     pub fn new() -> Result<Self> {
         let c = cusolver()?;
         let cu = c.cusolver_dn_create_gesvdj_info()?;
@@ -1160,6 +1287,7 @@ impl GesvdjInfo {
         Ok(Self { raw })
     }
 
+    /// Raw `gesvdjInfo_t`. Use with care.
     pub fn as_raw(&self) -> GesvdjInfoRaw {
         self.raw
     }
@@ -1507,7 +1635,9 @@ pub fn orgqr<T: SolverScalar>(
 /// Side argument for [`ormqr`].
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum Side {
+    /// Apply `Q` from the left: `C = op(Q) * C`.
     Left,
+    /// Apply `Q` from the right: `C = C * op(Q)`.
     Right,
 }
 
@@ -2059,6 +2189,8 @@ pub mod mg {
     }
 
     impl Handle {
+        /// Create a new multi-GPU cuSOLVER handle
+        /// (`cusolverMgCreate`).
         pub fn new() -> Result<Self> {
             let mg = cusolver_mg()?;
             let cu = mg.cusolver_mg_create()?;
@@ -2075,6 +2207,7 @@ pub mod mg {
             check(unsafe { cu(self.raw, devices.len() as c_int, devices.as_ptr()) })
         }
 
+        /// Raw `cusolverMgHandle_t`. Use with care.
         pub fn as_raw(&self) -> cusolverMgHandle_t {
             self.raw
         }
@@ -2097,6 +2230,8 @@ pub mod mg {
     }
 
     impl DeviceGrid {
+        /// Build a device grid (`cusolverMgCreateDeviceGrid`).
+        ///
         /// `mapping` is typically `CUDALIBMG_GRID_MAPPING_COL_MAJOR (1)`.
         pub fn new(num_row_devices: i32, num_col_devices: i32, devices: &[i32], mapping: i32) -> Result<Self> {
             let mg = cusolver_mg()?;
@@ -2114,6 +2249,7 @@ pub mod mg {
             Ok(Self { raw })
         }
 
+        /// Raw `cudaLibMgGrid_t`. Use with care.
         pub fn as_raw(&self) -> cudaLibMgGrid_t {
             self.raw
         }
@@ -2136,6 +2272,8 @@ pub mod mg {
     }
 
     impl MatrixDesc {
+        /// Create a distributed-matrix descriptor
+        /// (`cusolverMgCreateMatrixDesc`).
         pub fn new(
             num_rows: i64,
             num_cols: i64,
@@ -2161,6 +2299,7 @@ pub mod mg {
             Ok(Self { raw })
         }
 
+        /// Raw `cudaLibMgMatrixDesc_t`. Use with care.
         pub fn as_raw(&self) -> cudaLibMgMatrixDesc_t {
             self.raw
         }
@@ -2433,12 +2572,16 @@ pub mod xapi {
     use super::*;
     use baracuda_cusolver_sys::{cudaDataType, cusolverDnParams_t};
 
+    /// Opaque parameter handle for the generic `cusolverDnX*` API
+    /// (`cusolverDnParams_t`).
     #[derive(Debug)]
     pub struct Params {
         raw: cusolverDnParams_t,
     }
 
     impl Params {
+        /// Create a new parameters handle
+        /// (`cusolverDnCreateParams`).
         pub fn new() -> Result<Self> {
             let c = cusolver()?;
             let cu = c.cusolver_dn_create_params()?;
@@ -2447,6 +2590,7 @@ pub mod xapi {
             Ok(Self { raw: p })
         }
 
+        /// Raw `cusolverDnParams_t`. Use with care.
         pub fn as_raw(&self) -> cusolverDnParams_t {
             self.raw
         }
@@ -2642,6 +2786,7 @@ pub mod sparse {
     use baracuda_cusolver_sys::cusolverSpHandle_t;
     use core::ffi::c_int;
 
+    /// Sparse cuSOLVER handle (`cusolverSpHandle_t`).
     #[derive(Debug)]
     pub struct SpHandle {
         raw: cusolverSpHandle_t,
@@ -2649,6 +2794,8 @@ pub mod sparse {
     }
 
     impl SpHandle {
+        /// Create a new sparse cuSOLVER handle
+        /// (`cusolverSpCreate`).
         pub fn new() -> Result<Self> {
             let c = cusolver()?;
             let cu = c.cusolver_sp_create()?;
@@ -2660,12 +2807,15 @@ pub mod sparse {
             })
         }
 
+        /// Bind this handle to `stream`
+        /// (`cusolverSpSetStream`).
         pub fn set_stream(&self, stream: &Stream) -> Result<()> {
             let c = cusolver()?;
             let cu = c.cusolver_sp_set_stream()?;
             check(unsafe { cu(self.raw, stream.as_raw() as _) })
         }
 
+        /// Raw `cusolverSpHandle_t`. Use with care.
         pub fn as_raw(&self) -> cusolverSpHandle_t {
             self.raw
         }
@@ -2767,6 +2917,7 @@ pub mod refactor {
     use super::*;
     use baracuda_cusolver_sys::cusolverRfHandle_t;
 
+    /// Refactor cuSOLVER handle (`cusolverRfHandle_t`).
     #[derive(Debug)]
     pub struct RfHandle {
         raw: cusolverRfHandle_t,
@@ -2774,6 +2925,8 @@ pub mod refactor {
     }
 
     impl RfHandle {
+        /// Create a new refactor handle
+        /// (`cusolverRfCreate`).
         pub fn new() -> Result<Self> {
             let c = cusolver()?;
             let cu = c.cusolver_rf_create()?;
@@ -2785,16 +2938,21 @@ pub mod refactor {
             })
         }
 
+        /// Raw `cusolverRfHandle_t`. Use with care.
         pub fn as_raw(&self) -> cusolverRfHandle_t {
             self.raw
         }
 
+        /// Run the symbolic analysis phase
+        /// (`cusolverRfAnalyze`).
         pub fn analyze(&self) -> Result<()> {
             let c = cusolver()?;
             let cu = c.cusolver_rf_analyze()?;
             check(unsafe { cu(self.raw) })
         }
 
+        /// Run the numeric refactorization step
+        /// (`cusolverRfRefactor`).
         pub fn refactor(&self) -> Result<()> {
             let c = cusolver()?;
             let cu = c.cusolver_rf_refactor()?;

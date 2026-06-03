@@ -29,3 +29,6 @@ baracuda-cuvs-sys.workspace = true
 baracuda-driver.workspace = true
 thiserror.workspace = true
 half = { workspace = true, optional = true }
+
+[lints]
+workspace = true

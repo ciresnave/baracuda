@@ -160,6 +160,7 @@ impl FileHandle {
         Ok(Self { handle: h })
     }}
 
+    /// Raw `CUfileHandle_t`. Use with care.
     #[inline]
     pub fn as_raw(&self) -> CUfileHandle_t {
         self.handle
@@ -441,6 +442,7 @@ impl BatchIO {
         check(unsafe { cu(self.handle) })
     }
 
+    /// Raw `CUfileBatchHandle_t`. Use with care.
     #[inline]
     pub fn as_raw(&self) -> CUfileBatchHandle_t {
         self.handle

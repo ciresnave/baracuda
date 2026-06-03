@@ -26,6 +26,9 @@ use crate::device_repr::DeviceRepr;
 ///    shared access; in practice this means the referent is either `Copy`
 ///    or borrowed immutably for the duration of submission.
 pub unsafe trait KernelArg {
+    /// Pointer suitable for the `void** kernelParams` slot of
+    /// `cuLaunchKernel` / `cudaLaunchKernel`. The pointee must be a valid
+    /// [`DeviceRepr`] value for the duration of the kernel-launch submission.
     fn as_kernel_arg_ptr(&self) -> *mut c_void;
 }
 

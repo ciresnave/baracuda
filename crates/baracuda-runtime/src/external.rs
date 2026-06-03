@@ -171,6 +171,7 @@ impl ExternalSemaphore {
         check(unsafe { cu(&self.inner.handle, &params, 1, stream.as_raw()) })
     }
 
+    /// Raw `cudaExternalSemaphore_t` handle. Use with care — owned by `self`.
     #[inline]
     pub fn as_raw(&self) -> cudaExternalSemaphore_t {
         self.inner.handle

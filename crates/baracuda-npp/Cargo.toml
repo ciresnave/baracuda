@@ -17,3 +17,6 @@ baracuda-core.workspace = true
 baracuda-npp-sys.workspace = true
 baracuda-driver.workspace = true
 thiserror.workspace = true
+
+[lints]
+workspace = true

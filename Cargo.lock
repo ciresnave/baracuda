@@ -809,6 +809,7 @@ dependencies = [
 name = "baracuda-types-derive"
 version = "0.0.1-alpha.63"
 dependencies = [
+ "baracuda-types",
  "proc-macro2",
  "quote",
  "syn",

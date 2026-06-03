@@ -122,6 +122,8 @@ impl MemoryPool {
         })
     }
 
+    /// Read the current release threshold (in bytes) via
+    /// `cuMemPoolGetAttribute` with `CU_MEMPOOL_ATTR_RELEASE_THRESHOLD`.
     pub fn release_threshold(&self) -> Result<u64> {
         let d = driver()?;
         let cu = d.cu_mem_pool_get_attribute()?;

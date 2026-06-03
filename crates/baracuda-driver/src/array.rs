@@ -71,13 +71,21 @@ impl Clone for Array {
 /// channel count directly to [`Array::new`].
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum ArrayFormat {
+    /// 8-bit unsigned integer (`CU_AD_FORMAT_UNSIGNED_INT8`).
     U8,
+    /// 16-bit unsigned integer (`CU_AD_FORMAT_UNSIGNED_INT16`).
     U16,
+    /// 32-bit unsigned integer (`CU_AD_FORMAT_UNSIGNED_INT32`).
     U32,
+    /// 8-bit signed integer (`CU_AD_FORMAT_SIGNED_INT8`).
     I8,
+    /// 16-bit signed integer (`CU_AD_FORMAT_SIGNED_INT16`).
     I16,
+    /// 32-bit signed integer (`CU_AD_FORMAT_SIGNED_INT32`).
     I32,
+    /// 16-bit IEEE float (`CU_AD_FORMAT_HALF`).
     F16,
+    /// 32-bit IEEE float (`CU_AD_FORMAT_FLOAT`).
     F32,
 }
 
@@ -149,14 +157,17 @@ impl Array {
     pub fn as_raw(&self) -> CUarray {
         self.inner.handle
     }
+    /// Width of the array, in elements.
     #[inline]
     pub fn width(&self) -> usize {
         self.inner.width
     }
+    /// Height of the array, in elements. Zero for a 1-D array.
     #[inline]
     pub fn height(&self) -> usize {
         self.inner.height
     }
+    /// Number of channels per texel (1, 2, or 4).
     #[inline]
     pub fn num_channels(&self) -> u32 {
         self.inner.num_channels
@@ -318,9 +329,17 @@ unsafe impl Sync for TextureObject {}
 /// Configuration for [`TextureObject::new`].
 #[derive(Copy, Clone, Debug)]
 pub struct TextureDesc {
+    /// Per-axis out-of-bounds addressing mode (x, y, z).
     pub address_mode: [TextureAddressMode; 3],
+    /// Filtering mode applied to texture fetches.
     pub filter_mode: TextureFilterMode,
+    /// When `true`, integer-typed elements are read as normalized floats
+    /// in `[0, 1]` (unsigned) or `[-1, 1]` (signed) — corresponds to
+    /// *omitting* `CU_TRSF_READ_AS_INTEGER`.
     pub read_normalized: bool,
+    /// When `true`, texture coordinates are normalized to `[0, 1]`
+    /// (`CU_TRSF_NORMALIZED_COORDINATES`); otherwise coordinates are
+    /// in absolute texels.
     pub normalized_coords: bool,
 }
 
@@ -335,17 +354,25 @@ impl Default for TextureDesc {
     }
 }
 
+/// Out-of-bounds addressing mode for a texture fetch.
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum TextureAddressMode {
+    /// Repeat the texture (`CU_TR_ADDRESS_MODE_WRAP`).
     Wrap,
+    /// Clamp to the nearest valid coordinate (`CU_TR_ADDRESS_MODE_CLAMP`).
     Clamp,
+    /// Mirror-repeat the texture (`CU_TR_ADDRESS_MODE_MIRROR`).
     Mirror,
+    /// Return the configured border color (`CU_TR_ADDRESS_MODE_BORDER`).
     Border,
 }
 
+/// Filtering mode for texture fetches.
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum TextureFilterMode {
+    /// Nearest-neighbour (point) sampling (`CU_TR_FILTER_MODE_POINT`).
     Point,
+    /// Linear interpolation between texels (`CU_TR_FILTER_MODE_LINEAR`).
     Linear,
 }
 
@@ -378,6 +405,9 @@ impl TextureObject {
         Self::with_desc(array, TextureDesc::default())
     }
 
+    /// Safe wrapper for `cuTexObjectCreate`. Build a texture object that
+    /// reads from `array` with the addressing / filtering options given by
+    /// `desc`.
     pub fn with_desc(array: &Array, desc: TextureDesc) -> Result<Self> {
         let d = driver()?;
         let cu = d.cu_tex_object_create()?;
@@ -409,6 +439,8 @@ impl TextureObject {
         })
     }
 
+    /// Raw `CUtexObject` handle. Use with care — the handle is owned by
+    /// `self` and must not outlive it.
     #[inline]
     pub fn as_raw(&self) -> CUtexObject {
         self.handle
@@ -446,6 +478,8 @@ unsafe impl Send for SurfaceObject {}
 unsafe impl Sync for SurfaceObject {}
 
 impl SurfaceObject {
+    /// Safe wrapper for `cuSurfObjectCreate`. Create a surface object that
+    /// allows read/write access to `array` from kernel code.
     pub fn new(array: &Array) -> Result<Self> {
         let d = driver()?;
         let cu = d.cu_surf_object_create()?;
@@ -458,6 +492,8 @@ impl SurfaceObject {
         })
     }
 
+    /// Raw `CUsurfObject` handle. Use with care — the handle is owned by
+    /// `self` and must not outlive it.
     #[inline]
     pub fn as_raw(&self) -> CUsurfObject {
         self.handle

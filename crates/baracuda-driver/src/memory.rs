@@ -471,11 +471,22 @@ impl ManagedAttach {
 /// Memory-usage advice for `cuMemAdvise`.
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum MemAdvise {
+    /// Mark the range as read-mostly so the driver can replicate pages on
+    /// readers (`CU_MEM_ADVISE_SET_READ_MOSTLY`).
     SetReadMostly,
+    /// Clear the read-mostly hint (`CU_MEM_ADVISE_UNSET_READ_MOSTLY`).
     UnsetReadMostly,
+    /// Set the preferred resident location of the range
+    /// (`CU_MEM_ADVISE_SET_PREFERRED_LOCATION`).
     SetPreferredLocation,
+    /// Clear the preferred-location hint
+    /// (`CU_MEM_ADVISE_UNSET_PREFERRED_LOCATION`).
     UnsetPreferredLocation,
+    /// Record that `device` will access this range so the driver can build
+    /// mappings ahead of time (`CU_MEM_ADVISE_SET_ACCESSED_BY`).
     SetAccessedBy,
+    /// Clear an earlier `SetAccessedBy` hint
+    /// (`CU_MEM_ADVISE_UNSET_ACCESSED_BY`).
     UnsetAccessedBy,
 }
 
@@ -922,14 +933,17 @@ impl<'a, T: DeviceRepr> core::fmt::Debug for DeviceSlice<'a, T> {
 }
 
 impl<'a, T: DeviceRepr> DeviceSlice<'a, T> {
+    /// Length of the slice, in elements of `T`.
     #[inline]
     pub fn len(&self) -> usize {
         self.len
     }
+    /// `true` if the slice has zero elements.
     #[inline]
     pub fn is_empty(&self) -> bool {
         self.len == 0
     }
+    /// Raw `CUdeviceptr` to the first element. Use with care.
     #[inline]
     pub fn as_raw(&self) -> CUdeviceptr {
         self.ptr
@@ -1002,14 +1016,17 @@ impl<'a, T: DeviceRepr> core::fmt::Debug for DeviceSliceMut<'a, T> {
 }
 
 impl<'a, T: DeviceRepr> DeviceSliceMut<'a, T> {
+    /// Length of the slice, in elements of `T`.
     #[inline]
     pub fn len(&self) -> usize {
         self.len
     }
+    /// `true` if the slice has zero elements.
     #[inline]
     pub fn is_empty(&self) -> bool {
         self.len == 0
     }
+    /// Raw `CUdeviceptr` to the first element. Use with care.
     #[inline]
     pub fn as_raw(&self) -> CUdeviceptr {
         self.ptr

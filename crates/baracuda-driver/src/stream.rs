@@ -298,6 +298,8 @@ impl Stream {
         check(unsafe { cu(self.inner.handle, addr, value, flags) })
     }
 
+    /// 64-bit version of [`write_value_32`](Self::write_value_32). Safe
+    /// wrapper for `cuStreamWriteValue64`.
     pub fn write_value_64(
         &self,
         addr: baracuda_cuda_sys::CUdeviceptr,
@@ -324,6 +326,8 @@ impl Stream {
         check(unsafe { cu(self.inner.handle, addr, value, flags) })
     }
 
+    /// 64-bit version of [`wait_value_32`](Self::wait_value_32). Safe
+    /// wrapper for `cuStreamWaitValue64`.
     pub fn wait_value_64(
         &self,
         addr: baracuda_cuda_sys::CUdeviceptr,

@@ -16,10 +16,15 @@
 //! - [`Plan`] — compiled op, bound to a workspace size.
 //! - [`Plan::contract`] / [`Plan::reduce`] / etc. — execute the plan.
 //!
-//! # Example — `D = α * A ⊗ B + β * C` (matmul via contraction)
+//! # Example — `D = α · A ⊗ B + β · C` (matmul via contraction)
+//!
+//! Einstein notation: `D[m,n] = A[m,k] · B[k,n]`. Mode IDs identify the
+//! shared `k` index — pick any distinct integers per mode.
 //!
 //! ```no_run
 //! use baracuda_cutensor::*;
+//!
+//! # fn demo() -> Result<(), Error> {
 //! let handle = Handle::new()?;
 //! let m = 64i64; let n = 64i64; let k = 32i64;
 //! let a = TensorDescriptor::new(&handle, &[m, k], None, DataType::F32, 128)?;
@@ -35,7 +40,64 @@
 //! let pref = PlanPreference::default_for(&handle)?;
 //! let ws = op.estimate_workspace(&pref, WorkspaceKind::Default)?;
 //! let plan = Plan::new(&op, &pref, ws)?;
-//! # Result::<(), Error>::Ok(())
+//! # Ok(()) }
+//! ```
+//!
+//! # Example — reduce along an axis (sum over `k`)
+//!
+//! `D[m] = Σ_k A[m, k]`. Modes present in `A` but absent from `D` are
+//! reduced with the chosen [`BinaryOp`] (`Add` for sum).
+//!
+//! ```no_run
+//! use baracuda_cutensor::*;
+//!
+//! # fn demo() -> Result<(), Error> {
+//! let handle = Handle::new()?;
+//! let m = 128i64; let k = 64i64;
+//! let a = TensorDescriptor::new(&handle, &[m, k], None, DataType::F32, 128)?;
+//! let d = TensorDescriptor::new(&handle, &[m],    None, DataType::F32, 128)?;
+//!
+//! let modes_a = &[0i32, 1]; // [m, k]
+//! let modes_d = &[0i32];     // [m]
+//! let op = unsafe {
+//!     Reduction::new(&handle, &a, modes_a, &d, modes_d, &d, modes_d,
+//!         BinaryOp::Add, core::ptr::null())
+//! }?;
+//! let pref = PlanPreference::default_for(&handle)?;
+//! let ws = op.estimate_workspace(&pref, WorkspaceKind::Default)?;
+//! let _plan = Plan::new(&op, &pref, ws)?;
+//! # Ok(()) }
+//! ```
+//!
+//! # Example — element-wise `D = A + C` via [`ElementwiseBinary`]
+//!
+//! Same modes on every operand, no contraction or reduction — just a
+//! fused per-element op with optional unary pre-ops on each input.
+//!
+//! ```no_run
+//! use baracuda_cutensor::*;
+//!
+//! # fn demo() -> Result<(), Error> {
+//! let handle = Handle::new()?;
+//! let n = 1024i64;
+//! let a = TensorDescriptor::new(&handle, &[n], None, DataType::F32, 128)?;
+//! let c = TensorDescriptor::new(&handle, &[n], None, DataType::F32, 128)?;
+//! let d = TensorDescriptor::new(&handle, &[n], None, DataType::F32, 128)?;
+//!
+//! let modes = &[0i32];
+//! let op = unsafe {
+//!     ElementwiseBinary::new(
+//!         &handle,
+//!         &a, modes, UnaryOp::Identity,
+//!         &c, modes, UnaryOp::Identity,
+//!         &d, modes,
+//!         BinaryOp::Add,
+//!         core::ptr::null(),
+//!     )
+//! }?;
+//! let pref = PlanPreference::default_for(&handle)?;
+//! let _plan = Plan::new(&op, &pref, /* workspace */ 0)?;
+//! # Ok(()) }
 //! ```
 
 #![warn(missing_debug_implementations)]
@@ -115,15 +177,25 @@ pub fn force_disable_logging() -> Result<()> {
 /// Element dtype for tensor descriptors.
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum DataType {
+    /// IEEE-754 half-precision (`f16`).
     F16,
+    /// Brain float (`bf16`).
     BF16,
+    /// Single-precision float (`f32`).
     F32,
+    /// Double-precision float (`f64`).
     F64,
+    /// Single-precision complex (real + imag `f32`).
     ComplexF32,
+    /// Double-precision complex (real + imag `f64`).
     ComplexF64,
+    /// Signed 8-bit integer.
     I8,
+    /// Unsigned 8-bit integer.
     U8,
+    /// Signed 32-bit integer.
     I32,
+    /// Unsigned 32-bit integer.
     U32,
 }
 
@@ -148,12 +220,19 @@ impl DataType {
 /// Per-operand unary operator (applied to A/B/C before the main op).
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum UnaryOp {
+    /// No-op; pass the operand through unchanged.
     Identity,
+    /// Square root.
     Sqrt,
+    /// Rectified linear unit (`max(0, x)`).
     Relu,
+    /// Complex conjugate (no-op for real types).
     Conj,
+    /// Reciprocal (`1 / x`).
     Rcp,
+    /// Logistic sigmoid (`1 / (1 + exp(-x))`).
     Sigmoid,
+    /// Hyperbolic tangent.
     Tanh,
 }
 
@@ -176,9 +255,13 @@ impl UnaryOp {
 /// reduction ops).
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum BinaryOp {
+    /// Sum (`a + b`).
     Add,
+    /// Product (`a * b`).
     Mul,
+    /// Element-wise maximum.
     Max,
+    /// Element-wise minimum.
     Min,
 }
 
@@ -203,6 +286,7 @@ pub struct Handle {
 unsafe impl Send for Handle {}
 
 impl Handle {
+    /// Create a new cuTENSOR handle (`cutensorCreate`).
     pub fn new() -> Result<Self> {
         let c = cutensor()?;
         let cu = c.cutensor_create()?;
@@ -211,6 +295,7 @@ impl Handle {
         Ok(Self { handle: h })
     }
 
+    /// Raw `cutensorHandle_t`. Use with care.
     #[inline]
     pub fn as_raw(&self) -> cutensorHandle_t {
         self.handle
@@ -256,6 +341,7 @@ impl Handle {
         check(unsafe { cu(self.handle, cpath.as_ptr()) })
     }
 
+    /// Read a previously-written kernel cache from disk.
     pub fn read_kernel_cache_from_file(&self, path: &str) -> Result<()> {
         let cpath = CString::new(path).map_err(|_| Error::Status {
             status: cutensorStatus_t::INVALID_VALUE,
@@ -271,27 +357,35 @@ impl Handle {
     pub fn compute_desc_32f(&self) -> Result<*const c_void> {
         Ok(cutensor()?.compute_desc_32f()?)
     }
+    /// Fetch `CUTENSOR_COMPUTE_DESC_64F` — double-precision accumulator.
     pub fn compute_desc_64f(&self) -> Result<*const c_void> {
         Ok(cutensor()?.compute_desc_64f()?)
     }
+    /// Fetch `CUTENSOR_COMPUTE_DESC_16F` — half-precision accumulator.
     pub fn compute_desc_16f(&self) -> Result<*const c_void> {
         Ok(cutensor()?.compute_desc_16f()?)
     }
+    /// Fetch `CUTENSOR_COMPUTE_DESC_16BF` — bf16 accumulator.
     pub fn compute_desc_16bf(&self) -> Result<*const c_void> {
         Ok(cutensor()?.compute_desc_16bf()?)
     }
+    /// Fetch `CUTENSOR_COMPUTE_DESC_TF32` — TF32 tensor-core accumulator.
     pub fn compute_desc_tf32(&self) -> Result<*const c_void> {
         Ok(cutensor()?.compute_desc_tf32()?)
     }
+    /// Fetch `CUTENSOR_COMPUTE_DESC_3XTF32` — 3xTF32 emulation for f32.
     pub fn compute_desc_3xtf32(&self) -> Result<*const c_void> {
         Ok(cutensor()?.compute_desc_3xtf32()?)
     }
+    /// Fetch `CUTENSOR_COMPUTE_DESC_4X16F` — 4x f16 mixed-precision.
     pub fn compute_desc_4x16f(&self) -> Result<*const c_void> {
         Ok(cutensor()?.compute_desc_4x16f()?)
     }
+    /// Fetch `CUTENSOR_COMPUTE_DESC_8XINT8` — packed int8 tensor cores.
     pub fn compute_desc_8xint8(&self) -> Result<*const c_void> {
         Ok(cutensor()?.compute_desc_8xint8()?)
     }
+    /// Fetch `CUTENSOR_COMPUTE_DESC_9X16BF` — bf16 stochastic-rounding mode.
     pub fn compute_desc_9x16bf(&self) -> Result<*const c_void> {
         Ok(cutensor()?.compute_desc_9x16bf()?)
     }
@@ -307,6 +401,8 @@ pub struct ComputeDescriptor<'h> {
 }
 
 impl<'h> ComputeDescriptor<'h> {
+    /// Create a new compute descriptor
+    /// (`cutensorCreateComputeDescriptor`).
     pub fn new(handle: &'h Handle) -> Result<Self> {
         let c = cutensor()?;
         let cu = c.cutensor_create_compute_descriptor()?;
@@ -318,6 +414,7 @@ impl<'h> ComputeDescriptor<'h> {
         })
     }
 
+    /// Raw `cutensorComputeDescriptor_t`. Use with care.
     #[inline]
     pub fn as_raw(&self) -> baracuda_cutensor_sys::cutensorComputeDescriptor_t {
         self.desc
@@ -430,6 +527,7 @@ impl<'h> BlockSparseTensorDescriptor<'h> {
         })
     }
 
+    /// Raw `cutensorBlockSparseTensorDescriptor_t`. Use with care.
     #[inline]
     pub fn as_raw(&self) -> baracuda_cutensor_sys::cutensorBlockSparseTensorDescriptor_t {
         self.desc
@@ -598,6 +696,7 @@ impl<'h> TensorDescriptor<'h> {
         })
     }
 
+    /// Raw `cutensorTensorDescriptor_t`. Use with care.
     #[inline]
     pub fn as_raw(&self) -> cutensorTensorDescriptor_t {
         self.desc
@@ -654,6 +753,7 @@ pub struct OperationDescriptor<'h> {
 }
 
 impl<'h> OperationDescriptor<'h> {
+    /// Raw `cutensorOperationDescriptor_t`. Use with care.
     #[inline]
     pub fn as_raw(&self) -> cutensorOperationDescriptor_t {
         self.desc
@@ -1004,6 +1104,8 @@ pub struct PlanPreference<'h> {
 }
 
 impl<'h> PlanPreference<'h> {
+    /// Build a plan-preference (`cutensorCreatePlanPreference`)
+    /// requesting `algo` (e.g. `cutensorAlgo::DEFAULT`) and `jit_mode`.
     pub fn new(handle: &'h Handle, algo: i32, jit_mode: i32) -> Result<Self> {
         let c = cutensor()?;
         let cu = c.cutensor_create_plan_preference()?;
@@ -1020,6 +1122,7 @@ impl<'h> PlanPreference<'h> {
         Self::new(handle, cutensorAlgo::DEFAULT, cutensorJitMode::NONE)
     }
 
+    /// Raw `cutensorPlanPreference_t`. Use with care.
     #[inline]
     pub fn as_raw(&self) -> cutensorPlanPreference_t {
         self.pref
@@ -1085,8 +1188,11 @@ impl Drop for PlanPreference<'_> {
 /// Workspace-size preference tier.
 #[derive(Copy, Clone, Debug)]
 pub enum WorkspaceKind {
+    /// Smallest workspace the algorithm can run with.
     Min,
+    /// Library default — balanced size vs. performance.
     Default,
+    /// Largest workspace the algorithm will ever need.
     Max,
 }
 
@@ -1137,6 +1243,7 @@ impl<'h> Plan<'h> {
         })
     }
 
+    /// Raw `cutensorPlan_t`. Use with care.
     #[inline]
     pub fn as_raw(&self) -> cutensorPlan_t {
         self.plan

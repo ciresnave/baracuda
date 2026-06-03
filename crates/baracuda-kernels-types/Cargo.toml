@@ -17,3 +17,6 @@ baracuda-types = { workspace = true, features = ["half-crate", "f8-crate"] }
 baracuda-driver = { workspace = true }
 half = { workspace = true }
 float8 = { workspace = true }
+
+[lints]
+workspace = true

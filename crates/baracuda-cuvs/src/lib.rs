@@ -11,9 +11,14 @@
 //! resolved lazily at runtime, so on a host without cuVS the constructors
 //! return [`baracuda_core::Error::Loader`] rather than failing to link.
 //!
+//! # Examples
+//!
+//! **IVF-Flat build + search** — train an inverted-file index over 1000
+//! vectors of dim 128, then query 5 of them for k = 10 nearest neighbours.
+//!
 //! ```no_run
 //! # #[cfg(feature = "cuvs")]
-//! # fn demo() -> baracuda_cuvs::Result<()> {
+//! # fn demo() -> Result<(), Box<dyn std::error::Error>> {
 //! use baracuda_cuvs::{Resources, IvfFlat, IvfFlatBuildParams, IvfFlatSearchParams, Metric};
 //! use baracuda_driver::{Context, Device, DeviceBuffer};
 //!
@@ -32,6 +37,52 @@
 //! let (neighbors, distances) = index.search(&res, &queries, 5, 10, IvfFlatSearchParams::default())?;
 //! # let _ = (neighbors, distances); Ok(())
 //! # }
+//! ```
+//!
+//! **Brute-force exact k-NN** — no training, no recall loss. Note that
+//! [`BruteForce`] borrows the dataset for its whole lifetime (the cuVS
+//! index keeps a non-owning view + precomputed norms).
+//!
+//! ```no_run
+//! # #[cfg(feature = "cuvs")]
+//! # fn demo() -> Result<(), Box<dyn std::error::Error>> {
+//! use baracuda_cuvs::{BruteForce, Metric, Resources};
+//! use baracuda_driver::{Context, Device, DeviceBuffer};
+//!
+//! let ctx = Context::new(&Device::get(0)?)?;
+//! let res = Resources::new()?;
+//!
+//! let dataset: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, 500 * 64)?;
+//! let index = BruteForce::<f32>::build(&res, &dataset, 500, 64, Metric::L2Expanded)?;
+//!
+//! let queries: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, 4 * 64)?;
+//! let (_neighbors, _distances) = index.search(&res, &queries, /* n_queries */ 4, /* k */ 8)?;
+//! # Ok(()) }
+//! ```
+//!
+//! **Distance-metric selection** — each [`Metric`] ranks neighbours
+//! differently. L2 (Euclidean) is the default; cosine and inner-product
+//! are useful for embedding lookups and recommender systems.
+//!
+//! ```no_run
+//! # #[cfg(feature = "cuvs")]
+//! # fn demo() -> Result<(), Box<dyn std::error::Error>> {
+//! use baracuda_cuvs::{BruteForce, Metric, Resources};
+//! use baracuda_driver::{Context, Device, DeviceBuffer};
+//!
+//! let ctx = Context::new(&Device::get(0)?)?;
+//! let res = Resources::new()?;
+//! let dataset: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, 100 * 32)?;
+//!
+//! // Squared Euclidean (cuVS default; ranks the same as true L2).
+//! let _l2  = BruteForce::<f32>::build(&res, &dataset, 100, 32, Metric::L2Expanded)?;
+//! // True (non-squared) Euclidean — costs an extra sqrt per pair.
+//! let _l2s = BruteForce::<f32>::build(&res, &dataset, 100, 32, Metric::L2SqrtExpanded)?;
+//! // 1 - cosine similarity.
+//! let _cos = BruteForce::<f32>::build(&res, &dataset, 100, 32, Metric::Cosine)?;
+//! // Negative dot product (larger dot = smaller "distance").
+//! let _ip  = BruteForce::<f32>::build(&res, &dataset, 100, 32, Metric::InnerProduct)?;
+//! # Ok(()) }
 //! ```
 //!
 //! # Stream ordering

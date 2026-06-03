@@ -1,5 +1,9 @@
 //! Safe Rust wrappers for NVIDIA cuRAND.
 //!
+//! # Examples
+//!
+//! Uniform `(0, 1]` float vector seeded for reproducibility:
+//!
 //! ```no_run
 //! use baracuda_driver::{Context, Device, DeviceBuffer};
 //! use baracuda_curand::{Generator, RngKind};
@@ -9,9 +13,53 @@
 //! let ctx = Context::new(&device)?;
 //! let mut buf: DeviceBuffer<f32> = DeviceBuffer::new(&ctx, 1024)?;
 //!
-//! let mut rng = Generator::new(RngKind::Default)?;
+//! let rng = Generator::new(RngKind::Default)?;
 //! rng.seed(0xDEAD_BEEF)?;
 //! rng.uniform(&mut buf)?;
+//! # Ok(()) }
+//! ```
+//!
+//! Normal-distributed samples (`N(0, 1)`) using Philox 4×32-10. Note
+//! `buf.len()` must be even — cuRAND emits normals in pairs:
+//!
+//! ```no_run
+//! use baracuda_driver::{Context, Device, DeviceBuffer};
+//! use baracuda_curand::{Generator, RngKind};
+//!
+//! # fn demo() -> Result<(), Box<dyn std::error::Error>> {
+//! let device = Device::get(0)?;
+//! let ctx = Context::new(&device)?;
+//! let mut buf: DeviceBuffer<f32> = DeviceBuffer::new(&ctx, 2048)?;
+//!
+//! let rng = Generator::new(RngKind::Philox4_32_10)?;
+//! rng.seed(0xCAFE_BABE)?;
+//! rng.normal(&mut buf, /* mean */ 0.0, /* stddev */ 1.0)?;
+//! # Ok(()) }
+//! ```
+//!
+//! Two generators with the same seed produce identical streams —
+//! reproducibility check pattern:
+//!
+//! ```no_run
+//! use baracuda_driver::{Context, Device, DeviceBuffer};
+//! use baracuda_curand::{Generator, RngKind};
+//!
+//! # fn demo() -> Result<(), Box<dyn std::error::Error>> {
+//! let device = Device::get(0)?;
+//! let ctx = Context::new(&device)?;
+//! let mut buf_a: DeviceBuffer<f32> = DeviceBuffer::new(&ctx, 256)?;
+//! let mut buf_b: DeviceBuffer<f32> = DeviceBuffer::new(&ctx, 256)?;
+//!
+//! const SEED: u64 = 0x1234_5678_ABCD_EF01;
+//! let a = Generator::new(RngKind::Philox4_32_10)?;
+//! a.seed(SEED)?;
+//! a.uniform(&mut buf_a)?;
+//!
+//! let b = Generator::new(RngKind::Philox4_32_10)?;
+//! b.seed(SEED)?;
+//! b.uniform(&mut buf_b)?;
+//!
+//! // buf_a and buf_b now contain identical samples.
 //! # Ok(()) }
 //! ```
 
@@ -41,9 +89,13 @@ pub enum RngKind {
     /// Default (XORWOW).
     #[default]
     Default,
+    /// XOR-shift / Weyl 32-bit pseudo-RNG (`curandRngType_t::PSEUDO_XORWOW`).
     XORWOW,
+    /// Combined multiple-recursive generator (`curandRngType_t::PSEUDO_MRG32K3A`).
     MRG32K3A,
+    /// Mersenne Twister for GPU (`curandRngType_t::PSEUDO_MTGP32`).
     MTGP32,
+    /// Standard Mersenne Twister (`curandRngType_t::PSEUDO_MT19937`).
     MT19937,
     /// Philox 4×32 with 10 rounds — usually the best general-purpose choice.
     Philox4_32_10,
@@ -53,6 +105,7 @@ pub enum RngKind {
     ScrambledSobol32,
     /// Sobol 64-bit.
     Sobol64,
+    /// Scrambled Sobol 64-bit.
     ScrambledSobol64,
 }
 
@@ -77,12 +130,18 @@ impl RngKind {
 /// Ordering of the generated sequence.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Default)]
 pub enum Ordering {
+    /// "Best" ordering — currently identical to default on most algorithms.
     PseudoBest,
+    /// Default ordering (per-algorithm-recommended).
     #[default]
     PseudoDefault,
+    /// Ordering keyed on the seed value (reproducible across runs).
     PseudoSeeded,
+    /// Pre-CUDA-11 legacy ordering.
     PseudoLegacy,
+    /// Dynamic ordering chosen at runtime based on GPU width.
     PseudoDynamic,
+    /// Default ordering for quasi-random (Sobol) generators.
     QuasiDefault,
 }
 

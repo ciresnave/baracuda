@@ -60,10 +60,14 @@ fn check(status: ncclResult_t) -> Result<()> {
 /// Reduction operation for `all_reduce` / `reduce`.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Default)]
 pub enum RedOp {
+    /// Element-wise sum across ranks.
     #[default]
     Sum,
+    /// Element-wise product across ranks.
     Prod,
+    /// Element-wise maximum across ranks.
     Max,
+    /// Element-wise minimum across ranks.
     Min,
     /// Arithmetic mean. NCCL 2.10+.
     Avg,
@@ -695,6 +699,7 @@ impl NcclMem {
         Ok(Self { ptr: p })
     }
 
+    /// Raw device pointer to the underlying NCCL allocation.
     #[inline]
     pub fn as_raw(&self) -> *mut core::ffi::c_void {
         self.ptr

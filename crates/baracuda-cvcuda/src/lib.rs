@@ -41,11 +41,17 @@ pub fn probe() -> Result<()> {
 /// Interpolation selector for resampling operators.
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum Interpolation {
+    /// Nearest-neighbor sampling.
     Nearest,
+    /// Bilinear sampling.
     Linear,
+    /// Bicubic sampling.
     Cubic,
+    /// Pixel area resampling (best for downscaling).
     Area,
+    /// Lanczos windowed-sinc resampling (high quality).
     Lanczos,
+    /// Gaussian-weighted resampling.
     Gaussian,
 }
 
@@ -90,6 +96,7 @@ impl Tensor {
         Self { handle }
     }
 
+    /// Raw `NVCVTensorHandle`. Use with care.
     #[inline]
     pub fn as_raw(&self) -> NVCVTensorHandle {
         self.handle
@@ -130,6 +137,7 @@ pub struct Resize {
 }
 
 impl Resize {
+    /// Wraps `cvcudaResizeCreate`; construct a reusable resize operator.
     pub fn new() -> Result<Self> {
         let c = cvcuda()?;
         let cu = c.resize_create()?;
@@ -171,6 +179,7 @@ pub struct CvtColor {
 }
 
 impl CvtColor {
+    /// Wraps `cvcudaCvtColorCreate`; construct a reusable color-conversion operator.
     pub fn new() -> Result<Self> {
         let c = cvcuda()?;
         let cu = c.cvt_color_create()?;
@@ -213,6 +222,7 @@ pub struct ConvertTo {
 }
 
 impl ConvertTo {
+    /// Wraps `cvcudaConvertToCreate`; construct a reusable convert-to operator.
     pub fn new() -> Result<Self> {
         let c = cvcuda()?;
         let cu = c.convert_to_create()?;
@@ -256,6 +266,7 @@ pub struct Flip {
 }
 
 impl Flip {
+    /// Wraps `cvcudaFlipCreate`; construct a reusable flip operator.
     pub fn new() -> Result<Self> {
         let c = cvcuda()?;
         let cu = c.flip_create()?;
@@ -295,6 +306,7 @@ pub struct Normalize {
 }
 
 impl Normalize {
+    /// Wraps `cvcudaNormalizeCreate`; construct a reusable normalize operator.
     pub fn new() -> Result<Self> {
         let c = cvcuda()?;
         let cu = c.normalize_create()?;
@@ -387,6 +399,8 @@ macro_rules! simple_op {
             op: OpHandle,
         }
         impl $Name {
+            /// Construct the operator handle (calls the underlying
+            /// `cvcuda<Name>Create` entry point with default arguments).
             pub fn new() -> Result<Self> {
                 let op = create_op(|c| c.$create_fn())?;
                 Ok(Self { op })
@@ -1120,6 +1134,9 @@ pub struct Threshold {
 }
 
 impl Threshold {
+    /// Wraps `cvcudaThresholdCreate`. `threshold_type` selects between
+    /// binary / truncate / tozero / Otsu / triangle; `max_batch_size` caps
+    /// the per-call batch the operator will accept.
     pub fn new(threshold_type: u32, max_batch_size: i32) -> Result<Self> {
         let c = cvcuda()?;
         let cu = c.threshold_create()?;
@@ -1161,6 +1178,8 @@ pub struct AdaptiveThreshold {
 }
 
 impl AdaptiveThreshold {
+    /// Wraps `cvcudaAdaptiveThresholdCreate` with per-call upper bounds for
+    /// the block size and the batch dimension.
     pub fn new(max_block_size: i32, max_batch_size: i32) -> Result<Self> {
         let c = cvcuda()?;
         let cu = c.adaptive_threshold_create()?;
@@ -1274,6 +1293,8 @@ pub struct GammaContrast {
 }
 
 impl GammaContrast {
+    /// Wraps `cvcudaGammaContrastCreate` with per-call upper bounds for the
+    /// var-shape batch dimension and channel count.
     pub fn new(max_varshape_batch_size: i32, max_varshape_channel_count: i32) -> Result<Self> {
         let c = cvcuda()?;
         let cu = c.gamma_contrast_create()?;
@@ -1397,6 +1418,8 @@ pub struct Erase {
 }
 
 impl Erase {
+    /// Wraps `cvcudaEraseCreate`; `max_num_erasing_area` upper-bounds the
+    /// erasing-rectangles count the operator will accept per call.
     pub fn new(max_num_erasing_area: i32) -> Result<Self> {
         let c = cvcuda()?;
         let cu = c.erase_create()?;
@@ -1449,6 +1472,8 @@ pub struct Inpaint {
 }
 
 impl Inpaint {
+    /// Wraps `cvcudaInpaintCreate` with per-call upper bounds for the
+    /// batch dimension and image shape.
     pub fn new(max_batch_size: i32, max_shape: NVCVSize2D) -> Result<Self> {
         let c = cvcuda()?;
         let cu = c.inpaint_create()?;
@@ -1557,6 +1582,7 @@ pub struct PadAndStack {
 }
 
 impl PadAndStack {
+    /// Wraps `cvcudaPadAndStackCreate`; construct a reusable pad+stack operator.
     pub fn new() -> Result<Self> {
         let op = create_op(|c| c.pad_and_stack_create())?;
         Ok(Self { op })
@@ -1675,6 +1701,8 @@ pub struct Label {
 }
 
 impl Label {
+    /// Wraps `cvcudaLabelCreate`; `max_labels_per_batch` upper-bounds the
+    /// number of distinct labels the operator will assign per batch.
     pub fn new(max_labels_per_batch: i32) -> Result<Self> {
         let c = cvcuda()?;
         let cu = c.label_create()?;
@@ -1737,6 +1765,8 @@ pub struct FindContours {
 }
 
 impl FindContours {
+    /// Wraps `cvcudaFindContoursCreate` with per-call upper bounds for the
+    /// individual contour shape and the total contour count.
     pub fn new(max_contour_size: NVCVSize2D, max_total_contour_count: i32) -> Result<Self> {
         let c = cvcuda()?;
         let cu = c.find_contours_create()?;
@@ -1776,6 +1806,8 @@ pub struct MinAreaRect {
 }
 
 impl MinAreaRect {
+    /// Wraps `cvcudaMinAreaRectCreate`; `max_contour_count` upper-bounds the
+    /// contour count the operator will process per call.
     pub fn new(max_contour_count: i32) -> Result<Self> {
         let c = cvcuda()?;
         let cu = c.min_area_rect_create()?;
@@ -1879,6 +1911,9 @@ pub struct RandomResizedCrop {
 }
 
 impl RandomResizedCrop {
+    /// Wraps `cvcudaRandomResizedCropCreate`. `min_scale`/`max_scale` bound
+    /// the crop area fraction, `min_ratio`/`max_ratio` bound the aspect
+    /// ratio, `max_batch_size` caps batches, `seed` reseeds the RNG.
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         min_scale: f64,
@@ -1936,6 +1971,8 @@ pub struct GaussianNoise {
 }
 
 impl GaussianNoise {
+    /// Wraps `cvcudaGaussianNoiseCreate`; `max_batch_size` caps the batch
+    /// dimension the operator will accept per call.
     pub fn new(max_batch_size: i32) -> Result<Self> {
         let c = cvcuda()?;
         let cu = c.gaussian_noise_create()?;
@@ -1982,6 +2019,8 @@ pub struct RhomboidNoise {
 }
 
 impl RhomboidNoise {
+    /// Wraps `cvcudaRhomboidNoiseCreate`; `max_batch_size` caps the batch
+    /// dimension the operator will accept per call.
     pub fn new(max_batch_size: i32) -> Result<Self> {
         let c = cvcuda()?;
         let cu = c.rhomboid_noise_create()?;
@@ -2023,6 +2062,8 @@ pub struct SaltAndPepperNoise {
 }
 
 impl SaltAndPepperNoise {
+    /// Wraps `cvcudaSaltAndPepperNoiseCreate`; `max_batch_size` caps the
+    /// batch dimension the operator will accept per call.
     pub fn new(max_batch_size: i32) -> Result<Self> {
         let c = cvcuda()?;
         let cu = c.salt_and_pepper_noise_create()?;
@@ -2099,6 +2140,9 @@ pub struct Sift {
 }
 
 impl Sift {
+    /// Wraps `cvcudaSiftCreate` with all the SIFT hyperparameters; values
+    /// match OpenCV's defaults (`num_octave_layers=3`, `contrast_threshold=0.04`,
+    /// `edge_threshold=10`, `init_sigma=1.6`).
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         max_shape: NVCVSize2D,
@@ -2294,7 +2338,8 @@ pub struct PairwiseMatcher {
 }
 
 impl PairwiseMatcher {
-    /// `algo_choice`: 0 = brute-force, 1 = brute-force-crosscheck.
+    /// Wraps `cvcudaPairwiseMatcherCreate`. `algo_choice`: 0 = brute-force,
+    /// 1 = brute-force-crosscheck.
     pub fn new(algo_choice: i32) -> Result<Self> {
         let c = cvcuda()?;
         let cu = c.pairwise_matcher_create()?;

@@ -67,6 +67,7 @@ impl GreenContext {
         Self { handle }
     }
 
+    /// Raw `cudaGreenCtx_t` handle. Use with care — owned by `self`.
     #[inline]
     pub fn as_raw(&self) -> cudaGreenCtx_t {
         self.handle

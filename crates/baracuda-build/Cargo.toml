@@ -17,3 +17,6 @@ bindgen = { workspace = true, optional = true }
 [features]
 default = []
 bindgen = ["dep:bindgen"]
+
+[lints]
+workspace = true

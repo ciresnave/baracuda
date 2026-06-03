@@ -65,18 +65,24 @@ impl UserObject {
         Ok(Self { handle: object })
     }
 
+    /// Safe wrapper for `cudaUserObjectRetain`. Add `count` references to
+    /// this user object.
     pub fn retain(&self, count: u32) -> Result<()> {
         let r = runtime()?;
         let cu = r.cuda_user_object_retain()?;
         check(unsafe { cu(self.handle, count) })
     }
 
+    /// Safe wrapper for `cudaUserObjectRelease`. Drop `count` references
+    /// from this user object; when the count reaches zero the destructor
+    /// supplied at creation runs.
     pub fn release(&self, count: u32) -> Result<()> {
         let r = runtime()?;
         let cu = r.cuda_user_object_release()?;
         check(unsafe { cu(self.handle, count) })
     }
 
+    /// Raw `cudaUserObject_t` handle. Use with care — owned by `self`.
     #[inline]
     pub fn as_raw(&self) -> cudaUserObject_t {
         self.handle
@@ -104,6 +110,8 @@ impl crate::Graph {
         check(unsafe { cu(self.as_raw(), object.as_raw(), count, flags) })
     }
 
+    /// Safe wrapper for `cudaGraphReleaseUserObject`. Drop `count`
+    /// references this graph holds on `object`.
     pub fn release_user_object(&self, object: &UserObject, count: u32) -> Result<()> {
         let r = runtime()?;
         let cu = r.cuda_graph_release_user_object()?;

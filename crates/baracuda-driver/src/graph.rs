@@ -1048,6 +1048,10 @@ impl Drop for GraphExecInner {
 /// `SUCCESS` (0) means the executable graph was patched in place.
 #[derive(Clone, Debug)]
 pub struct UpdateResult {
+    /// Raw status code from `cuGraphExecUpdate` (see
+    /// `CUgraphExecUpdateResult`). `SUCCESS` (0) indicates the update
+    /// was applied; any other value indicates the topology / parameters
+    /// were incompatible.
     pub result: core::ffi::c_int,
     /// Node in the *new* template that triggered the failure, if any.
     pub error_node: Option<GraphNode>,

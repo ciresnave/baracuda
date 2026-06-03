@@ -221,3 +221,6 @@ libm = "0.2"
 [package.metadata.docs.rs]
 features = ["sm80"]
 no-default-features = false
+
+[lints]
+workspace = true

@@ -113,3 +113,6 @@ baracuda-nvrtc.workspace = true
 [[example]]
 name = "matmul_cublas"
 required-features = ["cublas", "curand"]
+
+[lints]
+workspace = true

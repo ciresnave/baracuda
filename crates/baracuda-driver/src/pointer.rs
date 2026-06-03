@@ -28,9 +28,15 @@ pub unsafe fn raw_attribute(
 /// Memory "kind" returned by `CUpointer_attribute::MEMORY_TYPE`.
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum MemoryType {
+    /// Pinned/registered host memory (`CU_MEMORYTYPE_HOST`).
     Host,
+    /// Device-resident memory from `cuMemAlloc` / VMM
+    /// (`CU_MEMORYTYPE_DEVICE`).
     Device,
+    /// CUDA array storage (`CU_MEMORYTYPE_ARRAY`).
     Array,
+    /// Unified/managed memory accessible from both host and device
+    /// (`CU_MEMORYTYPE_UNIFIED`).
     Unified,
     /// Unrecognized value; includes the raw code for forward compatibility.
     Unknown(u32),

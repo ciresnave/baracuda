@@ -106,6 +106,8 @@ impl ExternalMemory {
         Ok(ptr)
     }
 
+    /// Raw `CUexternalMemory` handle. Use with care — the handle is owned
+    /// by `self` and must not outlive it.
     #[inline]
     pub fn as_raw(&self) -> CUexternalMemory {
         self.inner.handle
@@ -197,6 +199,8 @@ impl ExternalSemaphore {
         check(unsafe { cu(&self.inner.handle, &params, 1, stream.as_raw()) })
     }
 
+    /// Raw `CUexternalSemaphore` handle. Use with care — the handle is
+    /// owned by `self` and must not outlive it.
     #[inline]
     pub fn as_raw(&self) -> CUexternalSemaphore {
         self.inner.handle

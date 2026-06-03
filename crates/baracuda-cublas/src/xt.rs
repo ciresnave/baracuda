@@ -21,6 +21,7 @@ pub struct XtHandle {
 unsafe impl Send for XtHandle {}
 
 impl XtHandle {
+    /// Create a new cuBLASXt handle (`cublasXtCreate`).
     pub fn new() -> Result<Self> {
         let c = cublas()?;
         let f = c.cublas_xt_create()?;
@@ -29,18 +30,24 @@ impl XtHandle {
         Ok(Self { raw: h })
     }
 
+    /// Select the CUDA devices XT will stripe work across
+    /// (`cublasXtDeviceSelect`).
     pub fn device_select(&self, devices: &[i32]) -> Result<()> {
         let c = cublas()?;
         let f = c.cublas_xt_device_select()?;
         check(unsafe { f(self.raw, devices.len() as i32, devices.as_ptr()) })
     }
 
+    /// Set the tiling block dimension used to split work across devices
+    /// (`cublasXtSetBlockDim`).
     pub fn set_block_dim(&self, block_dim: i32) -> Result<()> {
         let c = cublas()?;
         let f = c.cublas_xt_set_block_dim()?;
         check(unsafe { f(self.raw, block_dim) })
     }
 
+    /// Read back the current tiling block dimension
+    /// (`cublasXtGetBlockDim`).
     pub fn block_dim(&self) -> Result<i32> {
         let c = cublas()?;
         let f = c.cublas_xt_get_block_dim()?;
@@ -49,6 +56,7 @@ impl XtHandle {
         Ok(v)
     }
 
+    /// Raw `cublasXtHandle_t`. Use with care.
     pub fn as_raw(&self) -> cublasXtHandle_t {
         self.raw
     }

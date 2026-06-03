@@ -39,9 +39,15 @@ impl MemoryType {
 /// Typed view over `cudaPointerAttributes`.
 #[derive(Copy, Clone, Debug)]
 pub struct PointerAttributes {
+    /// Memory kind CUDA classified the pointer as.
     pub memory_type: MemoryType,
+    /// Device ordinal that owns the allocation (`-1` for unregistered).
     pub device: i32,
+    /// Device-side pointer aliasing the allocation (may equal the host
+    /// pointer for managed memory).
     pub device_pointer: *mut core::ffi::c_void,
+    /// Host-side pointer aliasing the allocation, when one exists
+    /// (mapped pinned / managed); null otherwise.
     pub host_pointer: *mut core::ffi::c_void,
 }
 
@@ -78,26 +84,47 @@ pub fn pointer_attributes(ptr: *const core::ffi::c_void) -> Result<PointerAttrib
 /// advanced users can cast through.
 #[derive(Clone, Debug)]
 pub struct DeviceProperties {
+    /// ASCII device name as reported by `cudaGetDeviceProperties`.
     pub name: String,
+    /// Total global memory, in bytes.
     pub total_global_memory_bytes: u64,
+    /// Maximum shared memory available per block, in bytes.
     pub shared_memory_per_block_bytes: u64,
+    /// Number of 32-bit registers available per block.
     pub regs_per_block: i32,
+    /// Warp size in threads (32 on all current architectures).
     pub warp_size: i32,
+    /// Maximum number of threads per block.
     pub max_threads_per_block: i32,
+    /// Maximum block dimensions `[x, y, z]`.
     pub max_block_dim: [i32; 3],
+    /// Maximum grid dimensions `[x, y, z]`.
     pub max_grid_dim: [i32; 3],
+    /// Peak SM clock frequency, in kHz.
     pub clock_rate_khz: i32,
+    /// Peak memory clock frequency, in kHz.
     pub memory_clock_rate_khz: i32,
+    /// Width of the global-memory bus, in bits.
     pub memory_bus_width_bits: i32,
+    /// L2 cache capacity, in bytes.
     pub l2_cache_size_bytes: i32,
+    /// Maximum number of resident threads per SM.
     pub max_threads_per_sm: i32,
+    /// Number of streaming multiprocessors on the device.
     pub multiprocessor_count: i32,
+    /// Major part of the compute capability (e.g. `8` for sm_89).
     pub compute_capability_major: i32,
+    /// Minor part of the compute capability (e.g. `9` for sm_89).
     pub compute_capability_minor: i32,
+    /// `true` if the device shares memory with the host (iGPU).
     pub integrated: bool,
+    /// `true` if the device supports concurrent kernel execution.
     pub concurrent_kernels: bool,
+    /// PCI bus ID.
     pub pci_bus_id: i32,
+    /// PCI device ID.
     pub pci_device_id: i32,
+    /// PCI domain ID.
     pub pci_domain_id: i32,
 }
 

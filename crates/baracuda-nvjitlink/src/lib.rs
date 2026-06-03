@@ -34,11 +34,17 @@ fn check(status: nvJitLinkResult) -> Result<()> {
 /// Kind of blob passed to [`Linker::add_data`] / [`Linker::add_file`].
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum InputType {
+    /// Compiled CUDA binary (`.cubin`).
     Cubin,
+    /// Parallel Thread Execution assembly (`.ptx`).
     Ptx,
+    /// Link-time optimization intermediate representation (`-lto`).
     LtoIr,
+    /// Fat binary container holding multiple `cubin`/`ptx` variants.
     Fatbin,
+    /// Host object file (`.o`).
     Object,
+    /// Static archive (`.a` / `.lib`).
     Library,
 }
 

@@ -22,3 +22,6 @@ libloading.workspace = true
 
 [build-dependencies]
 baracuda-build.workspace = true
+
+[lints]
+workspace = true

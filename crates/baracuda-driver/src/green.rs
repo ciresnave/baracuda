@@ -163,6 +163,8 @@ impl GreenContext {
         }
     }
 
+    /// Raw `CUgreenCtx` handle. Use with care — the handle is owned by
+    /// `self` and must not outlive it.
     #[inline]
     pub fn as_raw(&self) -> CUgreenCtx {
         self.inner.handle

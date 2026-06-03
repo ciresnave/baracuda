@@ -80,6 +80,9 @@ impl core::fmt::Debug for MulticastObject {
 }
 
 impl MulticastObject {
+    /// Safe wrapper for `cuMulticastCreate`. Allocates a multicast object
+    /// of `size_bytes` that can later bind one VMM allocation per device
+    /// from up to `num_devices` participating GPUs.
     pub fn new(num_devices: u32, size_bytes: usize) -> Result<Self> {
         let d = driver()?;
         let cu = d.cu_multicast_create()?;
@@ -96,6 +99,8 @@ impl MulticastObject {
         })
     }
 
+    /// Safe wrapper for `cuMulticastAddDevice`. Register `device` as a
+    /// participant of this multicast object before any bind.
     pub fn add_device(&self, device: &Device) -> Result<()> {
         let d = driver()?;
         let cu = d.cu_multicast_add_device()?;
@@ -131,12 +136,16 @@ impl MulticastObject {
         check(unsafe { cu(self.inner.handle, mc_offset, ptr, size, 0) })
     }
 
+    /// Safe wrapper for `cuMulticastUnbind`. Release the `[mc_offset,
+    /// mc_offset + size)` window for `device`.
     pub fn unbind(&self, device: &Device, mc_offset: usize, size: usize) -> Result<()> {
         let d = driver()?;
         let cu = d.cu_multicast_unbind()?;
         check(unsafe { cu(self.inner.handle, device.as_raw(), mc_offset, size) })
     }
 
+    /// Raw `CUmemGenericAllocationHandle` for the multicast object. Use
+    /// with care — the handle is owned by `self`.
     #[inline]
     pub fn as_raw(&self) -> CUmemGenericAllocationHandle {
         self.inner.handle

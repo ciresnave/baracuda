@@ -74,10 +74,12 @@ impl<T: DeviceRepr> PitchedBuffer<T> {
         })
     }
 
+    /// Logical width of the pitched region, in elements of `T`.
     #[inline]
     pub fn width_elems(&self) -> usize {
         self.width_elems
     }
+    /// Height of the pitched region, in rows.
     #[inline]
     pub fn height(&self) -> usize {
         self.height
@@ -87,10 +89,13 @@ impl<T: DeviceRepr> PitchedBuffer<T> {
     pub fn pitch_bytes(&self) -> usize {
         self.pitch_bytes
     }
+    /// Raw `CUdeviceptr` to the start of the pitched allocation.
+    /// Use with care.
     #[inline]
     pub fn as_raw(&self) -> CUdeviceptr {
         self.ptr
     }
+    /// The [`Context`] this allocation lives in.
     #[inline]
     pub fn context(&self) -> &Context {
         &self.context

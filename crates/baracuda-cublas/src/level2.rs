@@ -165,6 +165,29 @@ mod l2_sealed {
 ///
 /// `A` is column-major `m × n` (before transpose). `lda` is the column
 /// stride of `A` in elements.
+///
+/// # Example
+///
+/// 3×4 matrix times a 4-vector, producing a 3-vector.
+///
+/// ```no_run
+/// use baracuda_driver::{Context, Device, DeviceBuffer};
+/// use baracuda_cublas::{gemv, Handle, Op};
+///
+/// # fn demo() -> Result<(), Box<dyn std::error::Error>> {
+/// let ctx = Context::new(&Device::get(0)?)?;
+/// let handle = Handle::new()?;
+///
+/// let (m, n) = (3, 4);
+/// // Column-major 3×4 matrix (12 elements).
+/// let a: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, (m * n) as usize)?;
+/// let x = DeviceBuffer::from_slice(&ctx, &[1.0f32, 2.0, 3.0, 4.0])?;
+/// let mut y: DeviceBuffer<f32> = DeviceBuffer::zeros(&ctx, m as usize)?;
+///
+/// // y := 1.0 * A * x + 0.0 * y
+/// gemv(&handle, Op::N, m, n, 1.0f32, &a, m, &x.as_slice(), 1, 0.0f32, &mut y, 1)?;
+/// # Ok(()) }
+/// ```
 #[allow(clippy::too_many_arguments)]
 pub fn gemv<T: L2Scalar>(
     handle: &crate::Handle,

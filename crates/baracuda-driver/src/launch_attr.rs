@@ -46,6 +46,7 @@ impl LaunchAttr {
         self.0
     }
 
+    /// Borrow the underlying raw `CUlaunchAttribute`.
     #[inline]
     pub fn as_raw(&self) -> &CUlaunchAttribute {
         &self.0

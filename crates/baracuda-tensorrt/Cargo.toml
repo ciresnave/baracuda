@@ -25,3 +25,6 @@ baracuda-cuda-sys.workspace = true
 baracuda-driver.workspace = true
 baracuda-tensorrt-sys.workspace = true
 thiserror.workspace = true
+
+[lints]
+workspace = true

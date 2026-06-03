@@ -37,16 +37,30 @@ use baracuda_cuda_sys::runtime::cudaStream_t;
 use baracuda_driver::Stream;
 use baracuda_tensorrt_sys as sys;
 
+/// Error type for TensorRT operations.
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
+    /// The TensorRT dynamic library or one of its symbols could not be loaded.
     #[error("TensorRT loader: {0}")]
     Loader(#[from] baracuda_core::LoaderError),
+    /// A TensorRT entry point returned a null handle (failed allocation /
+    /// invalid arguments).
     #[error("TensorRT returned null for {op}")]
-    NullHandle { op: &'static str },
+    NullHandle {
+        /// Name of the entry point that returned null.
+        op: &'static str,
+    },
+    /// A TensorRT entry point returned a false / non-success status.
     #[error("TensorRT call failed: {op}")]
-    Call { op: &'static str },
+    Call {
+        /// Name of the entry point that failed.
+        op: &'static str,
+    },
+    /// A Rust string contained an interior NUL byte and could not be passed to C.
     #[error("invalid C string: {0}")]
     Utf8(#[from] std::ffi::NulError),
+    /// The TensorRT C-ABI shim was not compiled into `baracuda-tensorrt-sys`.
+    /// See the crate-level docs for how to rebuild with the `shim` feature.
     #[error(
         "TensorRT C-ABI shim not built — rebuild baracuda-tensorrt-sys with the `shim` \
          feature (needs the TensorRT SDK headers; see crates/baracuda-tensorrt/AUDIT.md)"
@@ -54,6 +68,7 @@ pub enum Error {
     ShimNotBuilt,
 }
 
+/// Result alias for TensorRT operations.
 pub type Result<T> = std::result::Result<T, Error>;
 
 /// Whether the C++ runtime shim was compiled in (the `shim` feature on
@@ -77,11 +92,15 @@ pub fn version() -> Result<i32> {
 /// A dimension list up to 8 axes.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct Dims {
+    /// Fixed-size backing storage; only the first `rank` entries are meaningful.
     pub dims: [i64; sys::TRT_MAX_DIMS],
+    /// Number of axes actually populated (`0..=TRT_MAX_DIMS`).
     pub rank: usize,
 }
 
 impl Dims {
+    /// Construct from a Rust slice; extra axes are truncated, missing axes
+    /// are zero-padded.
     pub fn new(dims: &[i64]) -> Self {
         let mut out = Dims {
             dims: [0; sys::TRT_MAX_DIMS],
@@ -90,6 +109,7 @@ impl Dims {
         out.dims[..out.rank].copy_from_slice(&dims[..out.rank]);
         out
     }
+    /// View the populated axes as a slice.
     pub fn as_slice(&self) -> &[i64] {
         &self.dims[..self.rank]
     }
@@ -178,6 +198,7 @@ impl Runtime {
         self.deserialize_engine(blob)
     }
 
+    /// Raw `trtIRuntime_t`. Use with care.
     pub fn as_raw(&self) -> sys::trtIRuntime_t {
         self.raw
     }
@@ -199,14 +220,17 @@ pub struct Engine<'rt> {
 }
 
 impl Engine<'_> {
+    /// Raw `trtICudaEngine_t`. Use with care.
     pub fn as_raw(&self) -> sys::trtICudaEngine_t {
         self.raw
     }
 
+    /// Number of I/O tensors the engine exposes (sum of inputs + outputs).
     pub fn num_io_tensors(&self) -> Result<i32> {
         Ok(unsafe { sys::trtCudaEngineGetNbIOTensors(self.raw) })
     }
 
+    /// Look up the I/O tensor name at `index` (`0..num_io_tensors()`).
     pub fn io_tensor_name(&self, index: i32) -> Result<String> {
         let cstr = unsafe { sys::trtCudaEngineGetIOTensorName(self.raw, index) };
         if cstr.is_null() {
@@ -217,16 +241,19 @@ impl Engine<'_> {
         Ok(unsafe { CStr::from_ptr(cstr) }.to_string_lossy().into_owned())
     }
 
+    /// Whether a named tensor is an input, output, or unused binding.
     pub fn tensor_io_mode(&self, name: &str) -> Result<IoMode> {
         let c = CString::new(name)?;
         Ok(unsafe { sys::trtCudaEngineGetTensorIOMode(self.raw, c.as_ptr()) })
     }
 
+    /// Element data type for a named tensor.
     pub fn tensor_data_type(&self, name: &str) -> Result<DataType> {
         let c = CString::new(name)?;
         Ok(unsafe { sys::trtCudaEngineGetTensorDataType(self.raw, c.as_ptr()) })
     }
 
+    /// Engine-time shape for a named tensor (may contain `-1` for dynamic axes).
     pub fn tensor_shape(&self, name: &str) -> Result<Dims> {
         let c = CString::new(name)?;
         let raw = unsafe { sys::trtCudaEngineGetTensorShape(self.raw, c.as_ptr()) };
@@ -240,6 +267,8 @@ impl Engine<'_> {
         Ok(unsafe { sys::trtCudaEngineGetTensorBytesPerComponent(self.raw, c.as_ptr()) })
     }
 
+    /// Wraps `engine->createExecutionContext()` with the default allocation
+    /// strategy; the returned [`ExecutionContext`] is borrowed from this engine.
     pub fn create_execution_context(&self) -> Result<ExecutionContext<'_>> {
         let raw = unsafe { sys::trtCudaEngineCreateExecutionContext(self.raw) };
         if raw.is_null() {
@@ -312,14 +341,17 @@ pub struct HostMemory {
 }
 
 impl HostMemory {
+    /// Size of the buffer in bytes.
     pub fn len(&self) -> Result<usize> {
         Ok(unsafe { sys::trtHostMemorySize(self.raw) })
     }
 
+    /// `true` if [`HostMemory::len`] is zero.
     pub fn is_empty(&self) -> Result<bool> {
         Ok(self.len()? == 0)
     }
 
+    /// Borrow the buffer as a Rust byte slice.
     pub fn as_slice(&self) -> Result<&[u8]> {
         let ptr = unsafe { sys::trtHostMemoryData(self.raw) };
         let len = self.len()?;
@@ -342,6 +374,8 @@ impl Drop for Engine<'_> {
     }
 }
 
+/// A TensorRT execution context — the per-call state needed to actually run
+/// inference against an [`Engine`]. Borrows the engine for its lifetime.
 #[derive(Debug)]
 pub struct ExecutionContext<'e> {
     raw: sys::trtIExecutionContext_t,
@@ -349,10 +383,13 @@ pub struct ExecutionContext<'e> {
 }
 
 impl ExecutionContext<'_> {
+    /// Raw `trtIExecutionContext_t`. Use with care.
     pub fn as_raw(&self) -> sys::trtIExecutionContext_t {
         self.raw
     }
 
+    /// Set the runtime shape of an input tensor. Required before
+    /// [`Self::enqueue_v3`] when the engine has dynamic input shapes.
     pub fn set_input_shape(&self, name: &str, dims: Dims) -> Result<()> {
         let c = CString::new(name)?;
         let raw_dims = dims.to_raw();
@@ -387,6 +424,8 @@ impl ExecutionContext<'_> {
         Ok(())
     }
 
+    /// Read the currently-bound shape for a named tensor on this context
+    /// (post-`set_input_shape` for inputs; engine-time shape for outputs).
     pub fn tensor_shape(&self, name: &str) -> Result<Dims> {
         let c = CString::new(name)?;
         let raw = unsafe { sys::trtExecutionContextGetTensorShape(self.raw, c.as_ptr()) };

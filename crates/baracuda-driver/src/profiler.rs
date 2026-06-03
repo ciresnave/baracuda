@@ -37,6 +37,8 @@ pub fn section() -> Result<Section> {
     Ok(Section { _nonzst: () })
 }
 
+/// RAII guard returned by [`section`]. Profiling is started by the
+/// constructor and stopped (via `cuProfilerStop`) when this value drops.
 #[derive(Debug)]
 pub struct Section {
     _nonzst: (),

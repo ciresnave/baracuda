@@ -39,8 +39,11 @@ use crate::stream::Stream;
 /// Three-dimensional grid/block size.
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub struct Dim3 {
+    /// Extent in the X dimension. Must be `>= 1`.
     pub x: u32,
+    /// Extent in the Y dimension. Use `1` for 1-D launches.
     pub y: u32,
+    /// Extent in the Z dimension. Use `1` for 1-D and 2-D launches.
     pub z: u32,
 }
 

@@ -162,23 +162,28 @@ impl Array {
         }
     }
 
+    /// Raw `cudaArray_t` handle. Use with care — owned by `self`.
     #[inline]
     pub fn as_raw(&self) -> cudaArray_t {
         self.inner.handle
     }
 
+    /// Width of the array, in elements.
     #[inline]
     pub fn width(&self) -> usize {
         self.inner.width
     }
+    /// Height of the array, in elements. Zero for a 1-D array.
     #[inline]
     pub fn height(&self) -> usize {
         self.inner.height
     }
+    /// Depth of the array, in elements. Zero for a 1- or 2-D array.
     #[inline]
     pub fn depth(&self) -> usize {
         self.inner.depth
     }
+    /// The channel-format descriptor captured at allocation time.
     #[inline]
     pub fn desc(&self) -> &cudaChannelFormatDesc {
         &self.inner.desc
@@ -262,6 +267,7 @@ impl MipmappedArray {
         })
     }
 
+    /// Raw `cudaMipmappedArray_t` handle. Use with care — owned by `self`.
     #[inline]
     pub fn as_raw(&self) -> cudaMipmappedArray_t {
         self.inner.handle
@@ -361,6 +367,7 @@ impl TextureObject {
         })
     }}
 
+    /// Raw `cudaTextureObject_t` handle. Use with care — owned by `self`.
     #[inline]
     pub fn as_raw(&self) -> cudaTextureObject_t {
         self.handle
@@ -428,6 +435,7 @@ impl SurfaceObject {
         })
     }
 
+    /// Raw `cudaSurfaceObject_t` handle. Use with care — owned by `self`.
     #[inline]
     pub fn as_raw(&self) -> cudaSurfaceObject_t {
         self.handle

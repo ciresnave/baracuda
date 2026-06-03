@@ -294,6 +294,7 @@ impl<T: DeviceRepr> ManagedBuffer<T> {
         self.len
     }
 
+    /// `true` if the allocation has zero elements.
     #[inline]
     pub fn is_empty(&self) -> bool {
         self.len == 0
@@ -305,6 +306,9 @@ impl<T: DeviceRepr> ManagedBuffer<T> {
         self.ptr
     }
 
+    /// Raw mutable pointer to the start of the managed allocation. Use
+    /// with care — managed memory is host-accessible but the driver may
+    /// migrate the backing pages between host and device.
     #[inline]
     pub fn as_mut_ptr(&mut self) -> *mut T {
         self.ptr
@@ -317,6 +321,7 @@ impl<T: DeviceRepr> ManagedBuffer<T> {
         unsafe { core::slice::from_raw_parts(self.ptr, self.len) }
     }
 
+    /// Mutable host slice view of the managed allocation.
     pub fn as_mut_slice(&mut self) -> &mut [T] {
         unsafe { core::slice::from_raw_parts_mut(self.ptr, self.len) }
     }
@@ -404,18 +409,22 @@ impl<T: DeviceRepr> PinnedHostBuffer<T> {
         Ok(f)
     }
 
+    /// Length of the allocation, in elements of `T`.
     #[inline]
     pub fn len(&self) -> usize {
         self.len
     }
+    /// `true` if the allocation has zero elements.
     #[inline]
     pub fn is_empty(&self) -> bool {
         self.len == 0
     }
+    /// Raw const host pointer to the first element.
     #[inline]
     pub fn as_ptr(&self) -> *const T {
         self.ptr
     }
+    /// Raw mutable host pointer to the first element.
     #[inline]
     pub fn as_mut_ptr(&mut self) -> *mut T {
         self.ptr
@@ -473,6 +482,9 @@ impl<'a, T: DeviceRepr> PinnedRegistration<'a, T> {
         Self::register_with_flags(slice, 0)
     }
 
+    /// Safe wrapper for `cudaHostRegister`. Pin `slice` for the lifetime
+    /// of the returned guard, passing `flags` verbatim (see
+    /// [`cudaHostRegisterFlags`](baracuda_cuda_sys::runtime::types::cudaHostRegisterFlags)).
     pub fn register_with_flags(slice: &'a mut [T], flags: u32) -> Result<Self> {
         let r = runtime()?;
         let cu = r.cuda_host_register()?;
@@ -490,10 +502,12 @@ impl<'a, T: DeviceRepr> PinnedRegistration<'a, T> {
         })
     }
 
+    /// Length of the pinned slice, in elements of `T`.
     #[inline]
     pub fn len(&self) -> usize {
         self.len
     }
+    /// `true` if the pinned slice has zero elements.
     #[inline]
     pub fn is_empty(&self) -> bool {
         self.len == 0

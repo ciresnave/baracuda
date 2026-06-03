@@ -18,46 +18,66 @@ use core::fmt;
 /// Layout: 1 sign bit, 5 exponent bits (bias 15), 10 mantissa bits.
 #[derive(Copy, Clone, Default, PartialEq, Eq, Hash)]
 #[repr(transparent)]
-pub struct Half(pub u16);
+pub struct Half(
+    /// Raw 16-bit IEEE 754 binary16 bit pattern.
+    pub u16,
+);
 
 impl Half {
+    /// Positive zero (`+0.0`).
     pub const ZERO: Self = Self(0x0000);
+    /// Negative zero (`-0.0`).
     pub const NEG_ZERO: Self = Self(0x8000);
+    /// `+1.0`.
     pub const ONE: Self = Self(0x3C00);
+    /// `-1.0`.
     pub const NEG_ONE: Self = Self(0xBC00);
+    /// Positive infinity.
     pub const INFINITY: Self = Self(0x7C00);
+    /// Negative infinity.
     pub const NEG_INFINITY: Self = Self(0xFC00);
+    /// A quiet NaN (`0x7E00`).
     pub const NAN: Self = Self(0x7E00);
+    /// Smallest positive normal value (`2^-14 ≈ 6.10e-5`).
     pub const MIN_POSITIVE: Self = Self(0x0400); // smallest normal
+    /// Largest finite value (`65504`).
     pub const MAX: Self = Self(0x7BFF);
+    /// Smallest (most negative) finite value (`-65504`).
     pub const MIN: Self = Self(0xFBFF);
+    /// Machine epsilon (`2^-10`).
     pub const EPSILON: Self = Self(0x1400); // 2^-10
 
+    /// Construct a `Half` from its raw 16-bit IEEE 754 binary16 representation.
     #[inline]
     pub const fn from_bits(bits: u16) -> Self {
         Self(bits)
     }
 
+    /// Return the raw 16-bit IEEE 754 binary16 representation.
     #[inline]
     pub const fn to_bits(self) -> u16 {
         self.0
     }
 
+    /// `true` if this value is NaN.
     #[inline]
     pub const fn is_nan(self) -> bool {
         (self.0 & 0x7FFF) > 0x7C00
     }
 
+    /// `true` if this value is `±∞`.
     #[inline]
     pub const fn is_infinite(self) -> bool {
         (self.0 & 0x7FFF) == 0x7C00
     }
 
+    /// `true` if this value is neither NaN nor infinite.
     #[inline]
     pub const fn is_finite(self) -> bool {
         (self.0 & 0x7C00) != 0x7C00
     }
 
+    /// `true` if the sign bit is set (including `-0.0` and negative NaN).
     #[inline]
     pub const fn is_sign_negative(self) -> bool {
         (self.0 & 0x8000) != 0
@@ -195,41 +215,60 @@ impl From<f32> for Half {
 /// Brain Floating Point 16 (`__nv_bfloat16` in CUDA). The top 16 bits of an IEEE 754 `f32`.
 #[derive(Copy, Clone, Default, PartialEq, Eq, Hash)]
 #[repr(transparent)]
-pub struct BFloat16(pub u16);
+pub struct BFloat16(
+    /// Raw 16-bit bfloat16 representation (top 16 bits of an `f32`).
+    pub u16,
+);
 
 impl BFloat16 {
+    /// Positive zero (`+0.0`).
     pub const ZERO: Self = Self(0x0000);
+    /// Negative zero (`-0.0`).
     pub const NEG_ZERO: Self = Self(0x8000);
+    /// `+1.0`.
     pub const ONE: Self = Self(0x3F80);
+    /// `-1.0`.
     pub const NEG_ONE: Self = Self(0xBF80);
+    /// Positive infinity.
     pub const INFINITY: Self = Self(0x7F80);
+    /// Negative infinity.
     pub const NEG_INFINITY: Self = Self(0xFF80);
+    /// A quiet NaN (`0x7FC0`).
     pub const NAN: Self = Self(0x7FC0);
+    /// Smallest positive normal value (matches `f32::MIN_POSITIVE` truncated to bf16).
     pub const MIN_POSITIVE: Self = Self(0x0080);
+    /// Largest finite value (`≈ 3.39e38`).
     pub const MAX: Self = Self(0x7F7F);
+    /// Smallest (most negative) finite value.
     pub const MIN: Self = Self(0xFF7F);
+    /// Machine epsilon (`2^-7`).
     pub const EPSILON: Self = Self(0x3C00);
 
+    /// Construct a `BFloat16` from its raw 16-bit representation.
     #[inline]
     pub const fn from_bits(bits: u16) -> Self {
         Self(bits)
     }
 
+    /// Return the raw 16-bit representation (top 16 bits of an `f32`).
     #[inline]
     pub const fn to_bits(self) -> u16 {
         self.0
     }
 
+    /// `true` if this value is NaN.
     #[inline]
     pub const fn is_nan(self) -> bool {
         (self.0 & 0x7FFF) > 0x7F80
     }
 
+    /// `true` if this value is `±∞`.
     #[inline]
     pub const fn is_infinite(self) -> bool {
         (self.0 & 0x7FFF) == 0x7F80
     }
 
+    /// `true` if the sign bit is set.
     #[inline]
     pub const fn is_sign_negative(self) -> bool {
         (self.0 & 0x8000) != 0
@@ -248,6 +287,8 @@ impl BFloat16 {
         Self((rounded >> 16) as u16)
     }
 
+    /// Exact conversion to `f32` (the bf16 bits are placed in the upper
+    /// 16 bits of the resulting `f32`).
     #[inline]
     pub fn to_f32(self) -> f32 {
         f32::from_bits((self.0 as u32) << 16)
@@ -290,7 +331,9 @@ impl From<f32> for BFloat16 {
 #[derive(Copy, Clone, Debug, Default, PartialEq)]
 #[repr(C)]
 pub struct Complex32 {
+    /// Real component.
     pub re: f32,
+    /// Imaginary component.
     pub im: f32,
 }
 
@@ -328,7 +371,9 @@ impl Complex32 {
 #[derive(Copy, Clone, Debug, Default, PartialEq)]
 #[repr(C)]
 pub struct Complex64 {
+    /// Real component.
     pub re: f64,
+    /// Imaginary component.
     pub im: f64,
 }
 
@@ -346,11 +391,13 @@ impl Complex64 {
         Self { re, im }
     }
 
+    /// Squared magnitude: `re² + im²`.
     #[inline]
     pub fn norm_sqr(self) -> f64 {
         self.re * self.re + self.im * self.im
     }
 
+    /// Complex conjugate: `re - i·im`.
     #[inline]
     pub fn conj(self) -> Self {
         Self {

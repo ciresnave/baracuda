@@ -21,8 +21,11 @@ use crate::stream::Stream;
 /// Access rights granted to a device for a pool's allocations.
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum AccessFlags {
+    /// No access (`cudaMemAccessFlagsProtNone`).
     None,
+    /// Read-only access (`cudaMemAccessFlagsProtRead`).
     Read,
+    /// Full read/write access (`cudaMemAccessFlagsProtReadWrite`).
     ReadWrite,
 }
 
@@ -116,6 +119,8 @@ impl MemoryPool {
         }
     }
 
+    /// Raw `cudaMemPool_t` handle. Use with care — owned pools are
+    /// destroyed when the last clone of `self` drops.
     #[inline]
     pub fn as_raw(&self) -> cudaMemPool_t {
         self.inner.handle
@@ -136,6 +141,8 @@ impl MemoryPool {
         })
     }
 
+    /// Read the current release threshold (in bytes) via
+    /// `cudaMemPoolGetAttribute` with `cudaMemPoolAttrReleaseThreshold`.
     pub fn release_threshold(&self) -> Result<u64> {
         self.get_u64_attr(cudaMemPoolAttr::RELEASE_THRESHOLD)
     }

@@ -18,3 +18,14 @@ proc-macro = true
 proc-macro2.workspace = true
 quote.workspace = true
 syn.workspace = true
+
+# Dev-only: pull `baracuda-types` (with the `derive` feature) so the
+# integration tests can drive the proc-macro through its emitted path
+# `::baracuda_types::DeviceRepr`. A dev-dep cycle back to the parent
+# crate is legal in Cargo and only affects the test build, not the
+# publish artifact.
+[dev-dependencies]
+baracuda-types = { workspace = true, features = ["derive"] }
+
+[lints]
+workspace = true

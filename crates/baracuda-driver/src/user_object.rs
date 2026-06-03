@@ -87,6 +87,7 @@ impl UserObject {
         check(unsafe { cu(self.handle, count) })
     }
 
+    /// Raw `CUuserObject` handle. Use with care — owned by `self`.
     #[inline]
     pub fn as_raw(&self) -> CUuserObject {
         self.handle
@@ -120,6 +121,8 @@ impl crate::Graph {
         check(unsafe { cu(self.as_raw(), object.as_raw(), count, flags) })
     }
 
+    /// Safe wrapper for `cuGraphReleaseUserObject`. Drop `count`
+    /// references this graph holds on `object`.
     pub fn release_user_object(&self, object: &UserObject, count: u32) -> Result<()> {
         let d = driver()?;
         let cu = d.cu_graph_release_user_object()?;

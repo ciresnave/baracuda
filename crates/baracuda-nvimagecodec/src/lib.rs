@@ -192,6 +192,7 @@ impl<'data> CodeStream<'data> {
         Ok(ImageInfo::from_raw(info))
     }
 
+    /// Raw `nvimgcodecCodeStream_t`. Use with care.
     #[inline]
     pub fn as_raw(&self) -> nvimgcodecCodeStream_t {
         self.raw
@@ -347,6 +348,7 @@ impl<'buf> Image<'buf> {
         })
     }
 
+    /// Raw `nvimgcodecImage_t`. Use with care.
     #[inline]
     pub fn as_raw(&self) -> nvimgcodecImage_t {
         self.raw
@@ -448,6 +450,7 @@ impl Decoder {
         Ok(Future { raw: future })
     }
 
+    /// Raw `nvimgcodecDecoder_t`. Use with care.
     #[inline]
     pub fn as_raw(&self) -> nvimgcodecDecoder_t {
         self.raw
@@ -512,6 +515,7 @@ impl Future {
             .all(|&s| s == NVIMGCODEC_PROCESSING_STATUS_SUCCESS))
     }
 
+    /// Raw `nvimgcodecFuture_t`. Use with care.
     #[inline]
     pub fn as_raw(&self) -> nvimgcodecFuture_t {
         self.raw

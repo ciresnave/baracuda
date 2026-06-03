@@ -35,3 +35,6 @@ libloading.workspace = true
 [build-dependencies]
 baracuda-build.workspace = true
 cc.workspace = true
+
+[lints]
+workspace = true

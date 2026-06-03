@@ -23,9 +23,14 @@ use crate::error::{check, Error, Result};
 #[derive(Copy, Clone, Debug, Default)]
 #[allow(non_camel_case_types)]
 pub struct MulticastProp {
+    /// Number of devices that will be added via
+    /// [`MulticastObject::add_device`].
     pub num_devices: core::ffi::c_uint,
+    /// Size of the multicast window, in bytes.
     pub size: usize,
+    /// `cudaMemAllocationHandleType` value (use `NONE` unless exporting).
     pub handle_types: core::ffi::c_int,
+    /// Reserved — pass 0.
     pub flags: u64,
 }
 
@@ -58,6 +63,8 @@ impl MulticastObject {
         Ok(Self { handle: h })
     }
 
+    /// Raw `cudaMemGenericAllocationHandle_t` for the multicast object.
+    /// Use with care — released on drop.
     #[inline]
     pub fn as_raw(&self) -> cudaMemGenericAllocationHandle_t {
         self.handle

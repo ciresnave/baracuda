@@ -16,3 +16,6 @@ baracuda-core.workspace = true
 baracuda-types.workspace = true
 baracuda-cudf-sys.workspace = true
 thiserror.workspace = true
+
+[lints]
+workspace = true

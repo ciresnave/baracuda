@@ -25,9 +25,15 @@ use crate::stream::Stream;
 /// Stream-capture mode (matches `cudaStreamCaptureMode`).
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Default)]
 pub enum CaptureMode {
+    /// Process-wide capture (`cudaStreamCaptureModeGlobal`) — concurrent
+    /// CUDA calls on other threads are also forced into capture.
     Global,
+    /// Capture only the calling thread's work
+    /// (`cudaStreamCaptureModeThreadLocal`). Default.
     #[default]
     ThreadLocal,
+    /// Allow concurrent non-captured CUDA work in other threads
+    /// (`cudaStreamCaptureModeRelaxed`).
     Relaxed,
 }
 
@@ -176,6 +182,7 @@ impl Graph {
         Ok(count)
     }
 
+    /// Raw `cudaGraph_t` handle. Use with care — owned by `self`.
     #[inline]
     pub fn as_raw(&self) -> cudaGraph_t {
         self.inner.handle
@@ -461,6 +468,8 @@ pub struct GraphNode {
 }
 
 impl GraphNode {
+    /// Raw `cudaGraphNode_t` handle. The node is owned by its parent
+    /// [`Graph`].
     #[inline]
     pub fn as_raw(&self) -> cudaGraphNode_t {
         self.raw
@@ -568,6 +577,7 @@ impl GraphExec {
         })
     }
 
+    /// Raw `cudaGraphExec_t` handle. Use with care — owned by `self`.
     #[inline]
     pub fn as_raw(&self) -> cudaGraphExec_t {
         self.inner.handle
@@ -579,11 +589,16 @@ impl GraphExec {
 /// graph was patched in place.
 #[derive(Clone, Debug)]
 pub struct UpdateResult {
+    /// Raw status code from `cudaGraphExecUpdate`. `SUCCESS` (0)
+    /// indicates the update was applied; other values describe why the
+    /// new template was incompatible with the existing exec.
     pub result: core::ffi::c_int,
+    /// The node in the new template that triggered the failure, if any.
     pub error_node: Option<GraphNode>,
 }
 
 impl UpdateResult {
+    /// `true` iff CUDA accepted the update.
     pub fn is_success(&self) -> bool {
         self.result == baracuda_cuda_sys::runtime::types::cudaGraphExecUpdateResult::SUCCESS
     }

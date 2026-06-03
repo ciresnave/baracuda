@@ -21,3 +21,6 @@ baracuda-cuda-sys.workspace = true
 baracuda-nvshmem-sys.workspace = true
 baracuda-driver.workspace = true
 thiserror.workspace = true
+
+[lints]
+workspace = true

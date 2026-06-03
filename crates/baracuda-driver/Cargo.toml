@@ -26,3 +26,6 @@ futures-core = { workspace = true, optional = true }
 # `wave2_smoke` uses NVRTC to compile a fixture kernel at test time,
 # avoiding hand-written PTX fragility.
 baracuda-nvrtc.workspace = true
+
+[lints]
+workspace = true

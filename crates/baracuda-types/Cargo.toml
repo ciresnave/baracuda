@@ -28,3 +28,6 @@ half = { workspace = true, optional = true }
 num-complex = { workspace = true, optional = true }
 bytemuck = { workspace = true, optional = true }
 float8 = { workspace = true, optional = true }
+
+[lints]
+workspace = true

@@ -30,8 +30,14 @@ use crate::error::{check, Result};
 /// caching mode that speeds up HtoD at the cost of slow host reads.
 #[allow(non_snake_case)]
 pub mod flags {
+    /// Allocation is portable across all CUDA contexts in the process
+    /// (`CU_MEMHOSTALLOC_PORTABLE`).
     pub const PORTABLE: u32 = 0x01;
+    /// Allocation is mapped into the device address space for zero-copy
+    /// kernel access (`CU_MEMHOSTALLOC_DEVICEMAP`).
     pub const DEVICEMAP: u32 = 0x02;
+    /// Pages use write-combined memory ordering — faster HtoD, slower host
+    /// reads (`CU_MEMHOSTALLOC_WRITECOMBINED`).
     pub const WRITECOMBINED: u32 = 0x04;
 }
 
@@ -129,18 +135,22 @@ impl<T: DeviceRepr> PinnedBuffer<T> {
         Ok(flags)
     }
 
+    /// Length of the allocation, in elements of `T`.
     #[inline]
     pub fn len(&self) -> usize {
         self.len
     }
+    /// `true` if the allocation has zero elements.
     #[inline]
     pub fn is_empty(&self) -> bool {
         self.len == 0
     }
+    /// Raw const host pointer to the first element.
     #[inline]
     pub fn as_ptr(&self) -> *const T {
         self.ptr
     }
+    /// Raw mutable host pointer to the first element.
     #[inline]
     pub fn as_mut_ptr(&mut self) -> *mut T {
         self.ptr
@@ -196,6 +206,9 @@ impl<'a, T: DeviceRepr> PinnedRegistration<'a, T> {
         Self::register_with_flags(slice, 0)
     }
 
+    /// Safe wrapper for `cuMemHostRegister`. Pin `slice` for the lifetime
+    /// of the returned guard, passing `flags` verbatim (see the [`flags`]
+    /// module for permitted values).
     pub fn register_with_flags(slice: &'a mut [T], flags: u32) -> Result<Self> {
         let d = driver()?;
         let cu = d.cu_mem_host_register()?;
@@ -217,10 +230,12 @@ impl<'a, T: DeviceRepr> PinnedRegistration<'a, T> {
         Ok(dptr)
     }
 
+    /// Length of the pinned slice, in elements of `T`.
     #[inline]
     pub fn len(&self) -> usize {
         self.len
     }
+    /// `true` if the pinned slice has zero elements.
     #[inline]
     pub fn is_empty(&self) -> bool {
         self.len == 0

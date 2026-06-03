@@ -25,3 +25,6 @@ cutlass-2-11 = []
 
 [build-dependencies]
 fs2 = "0.4"
+
+[lints]
+workspace = true

@@ -38,18 +38,24 @@ use baracuda_types::CudaStatus;
 
 pub use sys::cudfTypeId_t as TypeId;
 
+/// Error type for cuDF operations.
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
+    /// The cuDF dynamic library or one of its symbols could not be loaded.
     #[error("cuDF loader: {0}")]
     Loader(#[from] baracuda_core::LoaderError),
+    /// A cuDF C API call returned a non-success status.
     #[error("cuDF status {0:?}: {1}")]
     Status(sys::cudfStatus_t, &'static str),
+    /// A filesystem path could not be converted to a UTF-8 string.
     #[error("invalid path: {0}")]
     Path(String),
+    /// A Rust string contained an interior NUL byte and could not be passed to C.
     #[error("invalid C string: {0}")]
     Nul(#[from] std::ffi::NulError),
 }
 
+/// Result alias for cuDF operations.
 pub type Result<T> = std::result::Result<T, Error>;
 
 fn check(status: sys::cudfStatus_t) -> Result<()> {
@@ -60,6 +66,7 @@ fn check(status: sys::cudfStatus_t) -> Result<()> {
     }
 }
 
+/// Wraps `cudfGetVersion`; returns the cuDF library version as a packed integer.
 pub fn version() -> Result<i32> {
     let c = sys::cudf()?;
     let mut v = 0;
@@ -67,6 +74,9 @@ pub fn version() -> Result<i32> {
     Ok(v)
 }
 
+/// A cuDF column — a typed device-resident vector. May be either an owned
+/// allocation (constructed via [`Column::new_empty`]) or a non-owning view
+/// borrowed from a parent [`Table`].
 #[derive(Debug)]
 pub struct Column {
     raw: sys::cudfColumn_t,
@@ -74,6 +84,8 @@ pub struct Column {
 }
 
 impl Column {
+    /// Wraps `cudfColumnCreateEmpty`; allocate a new owned column of `size`
+    /// elements of `type_id`. Values are uninitialized until written.
     pub fn new_empty(type_id: TypeId, size: usize) -> Result<Self> {
         let c = sys::cudf()?;
         let mut raw: sys::cudfColumn_t = core::ptr::null_mut();
@@ -81,6 +93,7 @@ impl Column {
         Ok(Self { raw, owned: true })
     }
 
+    /// Wraps `cudfColumnGetSize`; number of elements in the column.
     pub fn len(&self) -> Result<usize> {
         let c = sys::cudf()?;
         let mut n = 0usize;
@@ -88,10 +101,12 @@ impl Column {
         Ok(n)
     }
 
+    /// `true` if [`Column::len`] is zero.
     pub fn is_empty(&self) -> Result<bool> {
         Ok(self.len()? == 0)
     }
 
+    /// Wraps `cudfColumnGetType`; the column's element [`TypeId`].
     pub fn type_id(&self) -> Result<TypeId> {
         let c = sys::cudf()?;
         let mut t = TypeId::Empty;
@@ -99,6 +114,7 @@ impl Column {
         Ok(t)
     }
 
+    /// Raw `cudfColumn_t`. Use with care.
     pub fn as_raw(&self) -> sys::cudfColumn_t {
         self.raw
     }
@@ -119,12 +135,15 @@ impl Drop for Column {
     }
 }
 
+/// A cuDF table — a heterogeneous collection of columns sharing a row count.
+/// Constructed via [`Table::from_csv`] / [`Table::from_parquet`].
 #[derive(Debug)]
 pub struct Table {
     raw: sys::cudfTable_t,
 }
 
 impl Table {
+    /// Wraps `cudfReadCsv`; load a CSV file into a device-resident table.
     pub fn from_csv(path: impl AsRef<Path>) -> Result<Self> {
         let c = sys::cudf()?;
         let p = path
@@ -137,6 +156,7 @@ impl Table {
         Ok(Self { raw })
     }
 
+    /// Wraps `cudfReadParquet`; load a Parquet file into a device-resident table.
     pub fn from_parquet(path: impl AsRef<Path>) -> Result<Self> {
         let c = sys::cudf()?;
         let p = path
@@ -149,6 +169,7 @@ impl Table {
         Ok(Self { raw })
     }
 
+    /// Wraps `cudfWriteParquet`; serialize the table to a Parquet file at `path`.
     pub fn write_parquet(&self, path: impl AsRef<Path>) -> Result<()> {
         let c = sys::cudf()?;
         let p = path
@@ -160,6 +181,7 @@ impl Table {
         Ok(())
     }
 
+    /// Wraps `cudfTableGetNumColumns`; number of columns in the table.
     pub fn num_columns(&self) -> Result<usize> {
         let c = sys::cudf()?;
         let mut n = 0usize;
@@ -167,6 +189,7 @@ impl Table {
         Ok(n)
     }
 
+    /// Wraps `cudfTableGetNumRows`; number of rows in the table.
     pub fn num_rows(&self) -> Result<usize> {
         let c = sys::cudf()?;
         let mut n = 0usize;
@@ -185,6 +208,7 @@ impl Table {
         })
     }
 
+    /// Raw `cudfTable_t`. Use with care.
     pub fn as_raw(&self) -> sys::cudfTable_t {
         self.raw
     }

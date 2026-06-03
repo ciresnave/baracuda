@@ -117,10 +117,12 @@ impl AddressRange {
         })
     }
 
+    /// Base `CUdeviceptr` of the reserved virtual range.
     #[inline]
     pub fn as_raw(&self) -> CUdeviceptr {
         self.inner.ptr
     }
+    /// Size of the reservation, in bytes.
     #[inline]
     pub fn size(&self) -> usize {
         self.inner.size
@@ -201,10 +203,13 @@ impl PhysicalMemory {
         })
     }
 
+    /// Raw `CUmemGenericAllocationHandle` for the physical allocation.
+    /// Use with care — owned by `self`.
     #[inline]
     pub fn as_raw(&self) -> CUmemGenericAllocationHandle {
         self.inner.handle
     }
+    /// Size of the physical allocation, in bytes.
     #[inline]
     pub fn size(&self) -> usize {
         self.inner.size
@@ -227,12 +232,16 @@ impl Drop for PhysicalMemoryInner {
 /// Access rights granted to a device by [`MappedRange::set_access`].
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum AccessFlags {
+    /// No access from the device (`CU_MEM_ACCESS_FLAGS_PROT_NONE`).
     None,
+    /// Read-only access (`CU_MEM_ACCESS_FLAGS_PROT_READ`).
     Read,
+    /// Full read/write access (`CU_MEM_ACCESS_FLAGS_PROT_READWRITE`).
     ReadWrite,
 }
 
 impl AccessFlags {
+    /// Return the raw `CUmemAccess_flags` int corresponding to this enum.
     #[doc(hidden)]
     #[inline]
     pub fn raw(self) -> core::ffi::c_int {
@@ -309,6 +318,7 @@ impl MappedRange {
         CUdeviceptr(self.range.as_raw().0 + self.offset as u64)
     }
 
+    /// Size of the mapping, in bytes.
     #[inline]
     pub fn size(&self) -> usize {
         self.size

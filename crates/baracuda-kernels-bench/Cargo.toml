@@ -181,3 +181,6 @@ harness = false
 # minimal so docs.rs doesn't try to build benchmarks.
 all-features = false
 no-default-features = true
+
+[lints]
+workspace = true

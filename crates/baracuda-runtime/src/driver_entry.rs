@@ -19,11 +19,15 @@ use crate::error::{check, Error, Result};
 /// 0 = Success, 1 = SymbolNotFound, 2 = VersionNotSufficient.
 #[derive(Copy, Clone, Debug)]
 pub struct DriverEntryPoint {
+    /// Resolved Driver-API function pointer, or null on lookup failure.
     pub fn_ptr: *mut c_void,
+    /// Raw `cudaDriverEntryPointQueryResult` code (0 = success).
     pub status: i32,
 }
 
 impl DriverEntryPoint {
+    /// `true` iff the runtime resolved the symbol and the function
+    /// pointer is non-null.
     #[inline]
     pub fn is_success(&self) -> bool {
         self.status == 0 && !self.fn_ptr.is_null()

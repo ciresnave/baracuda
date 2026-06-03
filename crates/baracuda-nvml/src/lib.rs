@@ -337,6 +337,8 @@ impl Device {
         Ok((cur != 0, pend != 0))
     }
 
+    /// Wraps `nvmlDeviceSetEccMode`; enable or disable ECC (takes effect
+    /// after the next driver reload).
     pub fn set_ecc_mode(&self, enable: bool) -> Result<()> {
         let n = nvml()?;
         let cu = n.nvml_device_set_ecc_mode()?;
@@ -345,6 +347,8 @@ impl Device {
 
     // ---- PCIe / NVLink ----------------------------------------------
 
+    /// Wraps `nvmlDeviceGetPciInfo_v3`; PCIe bus / device / function and
+    /// vendor / device IDs for the GPU.
     pub fn pci_info(&self) -> Result<nvmlPciInfo_t> {
         let n = nvml()?;
         let cu = n.nvml_device_get_pci_info_v3()?;
@@ -353,6 +357,7 @@ impl Device {
         Ok(pci)
     }
 
+    /// Wraps `nvmlDeviceGetCurrPcieLinkGeneration`; e.g. `4` for PCIe Gen4.
     pub fn pcie_link_generation(&self) -> Result<u32> {
         let n = nvml()?;
         let cu = n.nvml_device_get_curr_pcie_link_generation()?;
@@ -361,6 +366,7 @@ impl Device {
         Ok(v)
     }
 
+    /// Wraps `nvmlDeviceGetCurrPcieLinkWidth`; current PCIe link width in lanes.
     pub fn pcie_link_width(&self) -> Result<u32> {
         let n = nvml()?;
         let cu = n.nvml_device_get_curr_pcie_link_width()?;
@@ -387,6 +393,8 @@ impl Device {
         Ok(v != 0)
     }
 
+    /// Wraps `nvmlDeviceGetNvLinkVersion`; NVLink protocol version for the
+    /// given link index.
     pub fn nvlink_version(&self, link: u32) -> Result<u32> {
         let n = nvml()?;
         let cu = n.nvml_device_get_nvlink_version()?;
@@ -424,6 +432,8 @@ impl Device {
 
     // ---- compute mode --------------------------------------------------
 
+    /// Wraps `nvmlDeviceGetComputeMode`; whether the GPU is in default,
+    /// exclusive-process, or prohibited mode.
     pub fn compute_mode(&self) -> Result<ComputeMode> {
         let n = nvml()?;
         let cu = n.nvml_device_get_compute_mode()?;
@@ -432,6 +442,7 @@ impl Device {
         Ok(m)
     }
 
+    /// Wraps `nvmlDeviceSetComputeMode`; change the GPU's compute mode.
     pub fn set_compute_mode(&self, mode: ComputeMode) -> Result<()> {
         let n = nvml()?;
         let cu = n.nvml_device_set_compute_mode()?;
@@ -440,6 +451,7 @@ impl Device {
 
     // ---- identity ------------------------------------------------------
 
+    /// Wraps `nvmlDeviceGetUUID`; the GPU's globally-unique identifier.
     pub fn uuid(&self) -> Result<String> {
         let n = nvml()?;
         let cu = n.nvml_device_get_uuid()?;
@@ -448,6 +460,7 @@ impl Device {
         Ok(cstr_to_string(&buf))
     }
 
+    /// Wraps `nvmlDeviceGetSerial`; the GPU's factory serial number.
     pub fn serial(&self) -> Result<String> {
         let n = nvml()?;
         let cu = n.nvml_device_get_serial()?;
@@ -456,6 +469,7 @@ impl Device {
         Ok(cstr_to_string(&buf))
     }
 
+    /// Wraps `nvmlDeviceGetIndex`; the device's NVML enumeration index.
     pub fn index(&self) -> Result<u32> {
         let n = nvml()?;
         let cu = n.nvml_device_get_index()?;
@@ -464,6 +478,7 @@ impl Device {
         Ok(v)
     }
 
+    /// Wraps `nvmlDeviceGetMinorNumber`; the `/dev/nvidiaN` minor number on Linux.
     pub fn minor_number(&self) -> Result<u32> {
         let n = nvml()?;
         let cu = n.nvml_device_get_minor_number()?;
@@ -530,6 +545,7 @@ pub struct EventSet {
 }
 
 impl EventSet {
+    /// Wraps `nvmlEventSetCreate`; allocate a fresh event set.
     pub fn new() -> Result<Self> {
         let n = nvml()?;
         let cu = n.nvml_event_set_create()?;
@@ -548,6 +564,7 @@ impl EventSet {
         Ok(data)
     }
 
+    /// Raw `nvmlEventSet_t`. Use with care.
     pub fn as_raw(&self) -> nvmlEventSet_t {
         self.raw
     }
@@ -566,7 +583,9 @@ impl Drop for EventSet {
 /// GPU and memory utilization, 0–100 integer percent.
 #[derive(Copy, Clone, Debug, Default, Eq, PartialEq)]
 pub struct Utilization {
+    /// GPU core utilization (%).
     pub gpu: u32,
+    /// GPU memory-controller utilization (%).
     pub memory: u32,
 }
 

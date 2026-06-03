@@ -25,3 +25,6 @@ default = []
 # Lets callers use `half::f16` / `half::bf16` directly as `CudnnDataType`.
 # Forwards to `baracuda-types/half-crate` for the underlying `DeviceRepr`.
 half-crate = ["dep:half", "baracuda-types/half-crate"]
+
+[lints]
+workspace = true

@@ -178,6 +178,7 @@ pub mod callback {
             check(unsafe { cu(enable as u32, self.handle, domain) })
         }
 
+        /// Raw `CUpti_SubscriberHandle`. Use with care.
         #[inline]
         pub fn as_raw(&self) -> CUpti_SubscriberHandle {
             self.handle
@@ -230,6 +231,8 @@ pub mod event {
     }
 
     impl Group {
+        /// Wraps `cuptiEventGroupCreate`; create an event-group bound to `ctx`.
+        ///
         /// # Safety
         /// `ctx` must be a valid `CUcontext` (use [`baracuda_driver::Context::as_raw`]).
         pub unsafe fn new(ctx: *mut core::ffi::c_void) -> Result<Self> { unsafe {
@@ -240,24 +243,28 @@ pub mod event {
             Ok(Self { raw })
         }}
 
+        /// Wraps `cuptiEventGroupAddEvent`; attach an event to the group.
         pub fn add(&self, event: CUpti_EventID) -> Result<()> {
             let c = cupti()?;
             let cu = c.cupti_event_group_add_event()?;
             check(unsafe { cu(self.raw, event) })
         }
 
+        /// Wraps `cuptiEventGroupRemoveEvent`; detach `event` from the group.
         pub fn remove(&self, event: CUpti_EventID) -> Result<()> {
             let c = cupti()?;
             let cu = c.cupti_event_group_remove_event()?;
             check(unsafe { cu(self.raw, event) })
         }
 
+        /// Wraps `cuptiEventGroupEnable`; begin counter collection.
         pub fn enable(&self) -> Result<()> {
             let c = cupti()?;
             let cu = c.cupti_event_group_enable()?;
             check(unsafe { cu(self.raw) })
         }
 
+        /// Wraps `cuptiEventGroupDisable`; stop counter collection.
         pub fn disable(&self) -> Result<()> {
             let c = cupti()?;
             let cu = c.cupti_event_group_disable()?;
@@ -278,6 +285,7 @@ pub mod event {
             Ok(buf[0])
         }
 
+        /// Raw `CUpti_EventGroup`. Use with care.
         pub fn as_raw(&self) -> CUpti_EventGroup {
             self.raw
         }
@@ -300,6 +308,7 @@ pub mod metric {
     use super::*;
     use baracuda_cupti_sys::CUpti_MetricID;
 
+    /// Wraps `cuptiMetricGetIdFromName`; resolve a metric name to its ID.
     pub fn id_from_name(device: i32, name: &str) -> Result<CUpti_MetricID> {
         let c = cupti()?;
         let cu = c.cupti_metric_get_id_from_name()?;

@@ -108,6 +108,8 @@ impl MemHandle {
         Self { handle }
     }
 
+    /// Raw `cudaMemGenericAllocationHandle_t`. Use with care — released
+    /// when `self` drops.
     #[inline]
     pub fn as_raw(&self) -> cudaMemGenericAllocationHandle_t {
         self.handle

@@ -2,7 +2,7 @@
 name = "baracuda-optim"
 version = "0.0.1-alpha.63"
 description = "Optimizer kernels (Adam / LAMB / SGD) for the baracuda CUDA stack, built on the multi_tensor_apply idiom vendored from NVIDIA Apex (BSD-3-Clause). One launch over thousands of parameter tensors — critical for the optimizer step on large-model training stacks. NEW in Phase 49; deliberate scope expansion (training-framework-adjacent). Off-by-default in baracuda-kernels via the `optim` cargo feature so inference-only consumers don't pay the FFI surface cost."
-readme = "../../README.md"
+readme = "README.md"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
@@ -46,3 +46,6 @@ baracuda-forge = { workspace = true }
 
 [package.metadata.docs.rs]
 no-default-features = true
+
+[lints]
+workspace = true

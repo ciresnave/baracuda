@@ -72,8 +72,10 @@ impl Transform {
 /// Direction for `C2C` transforms.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Default)]
 pub enum Direction {
+    /// Forward transform (`exp(-2πi…)`).
     #[default]
     Forward,
+    /// Inverse / unnormalized backward transform (`exp(+2πi…)`).
     Inverse,
 }
 
@@ -103,6 +105,27 @@ impl core::fmt::Debug for Plan1d {
 
 impl Plan1d {
     /// Create a 1-D plan of length `nx` and `batch` parallel transforms.
+    ///
+    /// # Example
+    ///
+    /// A single forward R2C transform of length 1024.
+    ///
+    /// ```no_run
+    /// use baracuda_driver::{Context, Device, DeviceBuffer};
+    /// use baracuda_cufft::{Plan1d, Transform};
+    /// use baracuda_types::Complex32;
+    ///
+    /// # fn demo() -> Result<(), Box<dyn std::error::Error>> {
+    /// let ctx = Context::new(&Device::get(0)?)?;
+    /// let n = 1024;
+    ///
+    /// let mut input:  DeviceBuffer<f32>       = DeviceBuffer::zeros(&ctx, n)?;
+    /// let mut output: DeviceBuffer<Complex32> = DeviceBuffer::new(&ctx, n / 2 + 1)?;
+    ///
+    /// let plan = Plan1d::new(n as i32, Transform::R2C, 1)?;
+    /// plan.exec_r2c(&mut input, &mut output)?;
+    /// # Ok(()) }
+    /// ```
     pub fn new(nx: i32, transform: Transform, batch: i32) -> Result<Self> {
         let c = cufft()?;
         let cu = c.cufft_plan_1d()?;
@@ -136,6 +159,35 @@ impl Plan1d {
     }
 
     /// Execute a complex-to-real transform.
+    ///
+    /// Plan must have been built with [`Transform::C2R`]. cuFFT inverse R2C
+    /// transforms are unnormalised — divide by `n` to recover the original
+    /// signal.
+    ///
+    /// # Example
+    ///
+    /// Round-trip a length-1024 real signal through R2C then C2R.
+    ///
+    /// ```no_run
+    /// use baracuda_driver::{Context, Device, DeviceBuffer};
+    /// use baracuda_cufft::{Plan1d, Transform};
+    /// use baracuda_types::Complex32;
+    ///
+    /// # fn demo() -> Result<(), Box<dyn std::error::Error>> {
+    /// let ctx = Context::new(&Device::get(0)?)?;
+    /// let n = 1024;
+    ///
+    /// let mut signal: DeviceBuffer<f32>       = DeviceBuffer::zeros(&ctx, n)?;
+    /// let mut spectrum: DeviceBuffer<Complex32> = DeviceBuffer::new(&ctx, n / 2 + 1)?;
+    /// let mut recovered: DeviceBuffer<f32>    = DeviceBuffer::zeros(&ctx, n)?;
+    ///
+    /// let fwd = Plan1d::new(n as i32, Transform::R2C, 1)?;
+    /// let inv = Plan1d::new(n as i32, Transform::C2R, 1)?;
+    /// fwd.exec_r2c(&mut signal, &mut spectrum)?;
+    /// inv.exec_c2r(&mut spectrum, &mut recovered)?;
+    /// // `recovered` now holds signal * n; divide by n for the original.
+    /// # Ok(()) }
+    /// ```
     pub fn exec_c2r(
         &self,
         input: &mut DeviceBuffer<Complex32>,
@@ -205,6 +257,27 @@ impl core::fmt::Debug for Plan2d {
 
 impl Plan2d {
     /// Create a 2-D plan of dimensions `nx × ny`.
+    ///
+    /// # Example
+    ///
+    /// Forward 2-D C2C FFT of a 128×128 complex image.
+    ///
+    /// ```no_run
+    /// use baracuda_driver::{Context, Device, DeviceBuffer};
+    /// use baracuda_cufft::{Direction, Plan2d, Transform};
+    /// use baracuda_types::Complex32;
+    ///
+    /// # fn demo() -> Result<(), Box<dyn std::error::Error>> {
+    /// let ctx = Context::new(&Device::get(0)?)?;
+    /// let (nx, ny) = (128, 128);
+    ///
+    /// let mut img:      DeviceBuffer<Complex32> = DeviceBuffer::new(&ctx, (nx * ny) as usize)?;
+    /// let mut spectrum: DeviceBuffer<Complex32> = DeviceBuffer::new(&ctx, (nx * ny) as usize)?;
+    ///
+    /// let plan = Plan2d::new(nx, ny, Transform::C2C)?;
+    /// plan.exec_c2c(&mut img, &mut spectrum, Direction::Forward)?;
+    /// # Ok(()) }
+    /// ```
     pub fn new(nx: i32, ny: i32, transform: Transform) -> Result<Self> {
         let c = cufft()?;
         let cu = c.cufft_plan_2d()?;
@@ -274,12 +347,14 @@ impl Plan3d {
         Ok(Self { handle: plan })
     }
 
+    /// Bind subsequent exec calls on this plan to `stream`.
     pub fn set_stream(&self, stream: &Stream) -> Result<()> {
         let c = cufft()?;
         let cu = c.cufft_set_stream()?;
         check(unsafe { cu(self.handle, stream.as_raw() as _) })
     }
 
+    /// Execute a 3-D complex-to-complex transform in the given direction.
     pub fn exec_c2c(
         &self,
         input: &mut DeviceBuffer<Complex32>,
@@ -298,6 +373,7 @@ impl Plan3d {
         })
     }
 
+    /// Raw `cufftHandle`. Use with care.
     #[inline]
     pub fn as_raw(&self) -> cufftHandle {
         self.handle
@@ -403,6 +479,43 @@ impl PlanMany {
     /// (pass `None` for packed). `istride`/`ostride` are element strides
     /// between successive elements; `idist`/`odist` are element strides
     /// between successive batches.
+    ///
+    /// # Example
+    ///
+    /// 32 packed 1-D R2C transforms of length 256 (e.g., a STFT frame).
+    ///
+    /// ```no_run
+    /// use baracuda_driver::{Context, Device, DeviceBuffer};
+    /// use baracuda_cufft::{PlanMany, Transform};
+    /// use baracuda_types::Complex32;
+    ///
+    /// # fn demo() -> Result<(), Box<dyn std::error::Error>> {
+    /// let ctx = Context::new(&Device::get(0)?)?;
+    /// let n_per = 256i32;
+    /// let batch = 32i32;
+    /// let mut n = [n_per];
+    ///
+    /// // Packed contiguous layout: pass None for embeds, strides = 1, dist = transform length.
+    /// let plan = PlanMany::new(
+    ///     /* rank   */ 1,
+    ///     /* n      */ &mut n,
+    ///     /* inemb  */ None,
+    ///     /* istr   */ 1,
+    ///     /* idist  */ n_per,
+    ///     /* onemb  */ None,
+    ///     /* ostr   */ 1,
+    ///     /* odist  */ n_per / 2 + 1,
+    ///     /* type   */ Transform::R2C,
+    ///     /* batch  */ batch,
+    /// )?;
+    ///
+    /// let mut input:  DeviceBuffer<f32>       =
+    ///     DeviceBuffer::zeros(&ctx, (n_per * batch) as usize)?;
+    /// let mut output: DeviceBuffer<Complex32> =
+    ///     DeviceBuffer::new(&ctx, ((n_per / 2 + 1) * batch) as usize)?;
+    /// plan.exec_r2c(&mut input, &mut output)?;
+    /// # Ok(()) }
+    /// ```
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         rank: i32,
@@ -437,6 +550,7 @@ impl PlanMany {
         Ok(Self { handle: h })
     }
 
+    /// Raw `cufftHandle`. Use with care.
     #[inline]
     pub fn as_raw(&self) -> cufftHandle {
         self.handle
@@ -526,6 +640,8 @@ pub fn estimate_1d(nx: i32, ty: Transform, batch: i32) -> Result<usize> {
     Ok(s)
 }
 
+/// 2-D workspace-size estimate (bytes) for a plan of the given shape.
+/// Wraps `cufftEstimate2d`.
 pub fn estimate_2d(nx: i32, ny: i32, ty: Transform) -> Result<usize> {
     let c = cufft()?;
     let cu = c.cufft_estimate_2d()?;
@@ -534,6 +650,8 @@ pub fn estimate_2d(nx: i32, ny: i32, ty: Transform) -> Result<usize> {
     Ok(s)
 }
 
+/// 3-D workspace-size estimate (bytes) for a plan of the given shape.
+/// Wraps `cufftEstimate3d`.
 pub fn estimate_3d(nx: i32, ny: i32, nz: i32, ty: Transform) -> Result<usize> {
     let c = cufft()?;
     let cu = c.cufft_estimate_3d()?;

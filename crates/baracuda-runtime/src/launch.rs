@@ -12,8 +12,11 @@ use crate::stream::Stream;
 /// Grid / block size triple, matching [`baracuda_driver::Dim3`].
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub struct Dim3 {
+    /// Extent in the X dimension. Must be `>= 1`.
     pub x: u32,
+    /// Extent in the Y dimension. Use `1` for 1-D launches.
     pub y: u32,
+    /// Extent in the Z dimension. Use `1` for 1-D and 2-D launches.
     pub z: u32,
 }
 
@@ -80,30 +83,36 @@ impl core::fmt::Debug for LaunchBuilder<'_> {
 }
 
 impl<'k> LaunchBuilder<'k> {
+    /// Set the grid dimensions (number of thread blocks).
     #[inline]
     pub fn grid(mut self, grid: impl Into<Dim3>) -> Self {
         self.grid = grid.into();
         self
     }
 
+    /// Set the block dimensions (threads per block).
     #[inline]
     pub fn block(mut self, block: impl Into<Dim3>) -> Self {
         self.block = block.into();
         self
     }
 
+    /// Reserve `bytes` of dynamic shared memory per block.
     #[inline]
     pub fn shared_mem_bytes(mut self, bytes: usize) -> Self {
         self.shared_mem_bytes = bytes;
         self
     }
 
+    /// Enqueue on `stream` instead of the default stream.
     #[inline]
     pub fn stream(mut self, stream: &'k Stream) -> Self {
         self.stream = Some(stream);
         self
     }
 
+    /// Append `arg` to the kernel argument list. Arguments are passed
+    /// positionally in the order they are added.
     #[inline]
     pub fn arg<K: KernelArg>(mut self, arg: K) -> Self {
         self.args.push(arg.as_kernel_arg_ptr());

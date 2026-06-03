@@ -89,6 +89,30 @@ pub struct LtHandle {
 }
 
 impl LtHandle {
+    /// Create a new cuBLASLt handle.
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use baracuda_cublas::lt::{LtHandle, MatmulDesc, MatrixLayout};
+    /// use baracuda_cublas_sys::cublasOperation_t;
+    /// use baracuda_cublas_sys::functions::{cublasComputeType_t, cudaDataType_t};
+    ///
+    /// # fn demo() -> baracuda_cublas::Result<()> {
+    /// let lt = LtHandle::new()?;
+    ///
+    /// // FP32 matmul descriptor with N=non-transposed A, N=non-transposed B.
+    /// let desc = MatmulDesc::new(cublasComputeType_t::Compute32F, cudaDataType_t::R_32F)?;
+    /// desc.set_transa(cublasOperation_t::N)?;
+    /// desc.set_transb(cublasOperation_t::N)?;
+    ///
+    /// // Row counts / col counts / leading dims for a 64x32 = 64x16 * 16x32 matmul.
+    /// let a = MatrixLayout::new(cudaDataType_t::R_32F, 64, 16, 64)?;
+    /// let b = MatrixLayout::new(cudaDataType_t::R_32F, 16, 32, 16)?;
+    /// let c = MatrixLayout::new(cudaDataType_t::R_32F, 64, 32, 64)?;
+    /// # let _ = (lt, desc, a, b, c);
+    /// # Ok(()) }
+    /// ```
     pub fn new() -> Result<Self> {
         let lt = cublas_lt()?;
         let create = lt.cublas_lt_create()?;
@@ -97,6 +121,7 @@ impl LtHandle {
         Ok(Self { raw: h })
     }
 
+    /// Raw `cublasLtHandle_t`. Use with care.
     pub fn as_raw(&self) -> cublasLtHandle_t {
         self.raw
     }
@@ -123,6 +148,8 @@ pub struct MatmulDesc {
 }
 
 impl MatmulDesc {
+    /// Create a matmul descriptor (`cublasLtMatmulDescCreate`) for the
+    /// given compute type and scalar/data type.
     pub fn new(compute: cublasComputeType_t, scale: cudaDataType_t) -> Result<Self> {
         let lt = cublas_lt()?;
         let create = lt.cublas_lt_matmul_desc_create()?;
@@ -198,14 +225,18 @@ impl MatmulDesc {
         self.get_attr::<T>(attr)
     }
 
+    /// Set the transpose flag for the A operand.
     pub fn set_transa(&self, op: cublasOperation_t) -> Result<()> {
         self.set_attr(cublasLtMatmulDescAttributes_t::Transa, &(op as i32))
     }
 
+    /// Set the transpose flag for the B operand.
     pub fn set_transb(&self, op: cublasOperation_t) -> Result<()> {
         self.set_attr(cublasLtMatmulDescAttributes_t::Transb, &(op as i32))
     }
 
+    /// Set the epilogue selector (raw `cublasLtEpilogue_t` value). Prefer
+    /// [`set_activation`](Self::set_activation) for the typed wrapper.
     pub fn set_epilogue(&self, epilogue: i32) -> Result<()> {
         self.set_attr(cublasLtMatmulDescAttributes_t::Epilogue, &epilogue)
     }
@@ -217,10 +248,13 @@ impl MatmulDesc {
         self.set_epilogue(activation as i32)
     }
 
+    /// Set the device pointer to the bias vector used by bias-fused
+    /// epilogues (`ReluBias`, `GeluBias`, etc.).
     pub fn set_bias_pointer(&self, ptr: *const c_void) -> Result<()> {
         self.set_attr(cublasLtMatmulDescAttributes_t::BiasPointer, &ptr)
     }
 
+    /// Raw `cublasLtMatmulDesc_t`. Use with care.
     pub fn as_raw(&self) -> cublasLtMatmulDesc_t {
         self.raw
     }
@@ -243,6 +277,8 @@ pub struct MatrixLayout {
 }
 
 impl MatrixLayout {
+    /// Create a matrix layout (`cublasLtMatrixLayoutCreate`) describing
+    /// element type, row/col counts, and leading dimension.
     pub fn new(element_type: cudaDataType_t, rows: u64, cols: u64, ld: i64) -> Result<Self> {
         let lt = cublas_lt()?;
         let create = lt.cublas_lt_matrix_layout_create()?;
@@ -264,14 +300,18 @@ impl MatrixLayout {
         })
     }
 
+    /// Set the number of matrices in a strided-batched layout.
     pub fn set_batch_count(&self, n: i32) -> Result<()> {
         self.set_attr(cublasLtMatrixLayoutAttribute_t::BatchCount, &n)
     }
 
+    /// Set the element-stride between consecutive matrices in a
+    /// strided-batched layout.
     pub fn set_strided_batch_offset(&self, stride: i64) -> Result<()> {
         self.set_attr(cublasLtMatrixLayoutAttribute_t::StridedBatchOffset, &stride)
     }
 
+    /// Raw `cublasLtMatrixLayout_t`. Use with care.
     pub fn as_raw(&self) -> cublasLtMatrixLayout_t {
         self.raw
     }
@@ -294,6 +334,8 @@ pub struct MatmulPreference {
 }
 
 impl MatmulPreference {
+    /// Create a preference container
+    /// (`cublasLtMatmulPreferenceCreate`).
     pub fn new() -> Result<Self> {
         let lt = cublas_lt()?;
         let create = lt.cublas_lt_matmul_preference_create()?;
@@ -302,6 +344,8 @@ impl MatmulPreference {
         Ok(Self { raw: p })
     }
 
+    /// Cap the workspace cuBLASLt is allowed to consume during heuristic
+    /// search and execution.
     pub fn set_max_workspace_bytes(&self, bytes: usize) -> Result<()> {
         let lt = cublas_lt()?;
         let set = lt.cublas_lt_matmul_preference_set_attribute()?;
@@ -316,6 +360,7 @@ impl MatmulPreference {
         })
     }
 
+    /// Raw `cublasLtMatmulPreference_t`. Use with care.
     pub fn as_raw(&self) -> cublasLtMatmulPreference_t {
         self.raw
     }
@@ -334,8 +379,11 @@ impl Drop for MatmulPreference {
 /// A single algorithm candidate returned by the heuristic search.
 #[derive(Copy, Clone, Debug)]
 pub struct MatmulHeuristic {
+    /// Opaque algorithm identifier to pass back to [`matmul`].
     pub algo: cublasLtMatmulAlgo_t,
+    /// Workspace required by this algorithm, in bytes.
     pub workspace_size: usize,
+    /// Estimated SM-wave count (lower is better for occupancy).
     pub waves_count: f32,
 }
 
