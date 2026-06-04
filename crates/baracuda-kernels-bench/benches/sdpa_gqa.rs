@@ -102,6 +102,19 @@ fn bench<T>(
             Err(_) => continue,
         };
 
+        // FA2 backend (Phase 42) needs an explicit workspace; bespoke
+        // sm_80 reports 0 bytes. Allocate per the plan's report so
+        // either path runs without a panic.
+        let ws_bytes = plan.workspace_size();
+        let mut workspace: Option<DeviceBuffer<u8>> = if ws_bytes > 0 {
+            match DeviceBuffer::zeros(&ctx, ws_bytes) {
+                Ok(b) => Some(b),
+                Err(_) => continue,
+            }
+        } else {
+            None
+        };
+
         // Q: contiguous (BATCH, NUM_Q_HEADS, SEQ_LEN, HEAD_DIM).
         // K/V: physical (BATCH, num_kv, SEQ_LEN, HEAD_DIM) — but the
         // descriptor advertises `num_heads = NUM_Q_HEADS`. To broadcast
@@ -219,7 +232,11 @@ fn bench<T>(
                             mask: None,
                             alibi_slopes: None,
             };
-            plan.run(&stream, Workspace::None, args).expect("baracuda flash gqa");
+            let ws = match workspace.as_mut() {
+                Some(b) => Workspace::Borrowed(b.as_slice_mut()),
+                None => Workspace::None,
+            };
+            plan.run(&stream, ws, args).expect("baracuda flash gqa");
         });
         let baracuda_ns = measure_median_ns(&ctx, &stream, 11, 20, || {
             let args = FlashSdpaArgs::<T> {
@@ -251,7 +268,11 @@ fn bench<T>(
                             mask: None,
                             alibi_slopes: None,
             };
-            plan.run(&stream, Workspace::None, args).expect("baracuda flash gqa");
+            let ws = match workspace.as_mut() {
+                Some(b) => Workspace::Borrowed(b.as_slice_mut()),
+                None => Workspace::None,
+            };
+            plan.run(&stream, ws, args).expect("baracuda flash gqa");
         });
         append_csv_row(
             BENCH_NAME,
@@ -301,7 +322,11 @@ fn bench<T>(
                                             mask: None,
                                             alibi_slopes: None,
                     };
-                    plan.run(&stream, Workspace::None, args).expect("baracuda flash gqa");
+                    let ws = match workspace.as_mut() {
+                Some(b) => Workspace::Borrowed(b.as_slice_mut()),
+                None => Workspace::None,
+            };
+            plan.run(&stream, ws, args).expect("baracuda flash gqa");
                 })
             });
         });

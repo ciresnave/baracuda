@@ -1502,15 +1502,34 @@ better memory ordering.
 
 Bench currently uses default build (no `fa2`) so it hits the sm_80
 trailblazer. The 270ms / 2.5ms = ~108× gap is real, but ONLY for
-default-feature builds. With `--features fa2` and a `seq_q × seq_k
-≥ 1M` shape the auto-route to FA2 closes the gap entirely (the FA2
-vendor was specifically integrated for this regime).
+default-feature builds.
+
+**Empirically validated with `cargo bench -p baracuda-kernels-bench
+--bench sdpa_gqa --features fa2 -- --quick`** (RTX 4070, 2026-06-04):
+
+| Shape | bespoke | FA2 | PyTorch | FA2 vs bespoke | FA2 vs PyTorch |
+| --- | --- | --- | --- | --- | --- |
+| Hq32_Hkv32_Q2048_D128 f16 | 269ms | **1.66ms** | 2.48ms | **162×** | **1.49×** |
+| Hq32_Hkv32_Q2048_D128 bf16 | 275ms | **1.66ms** | 2.45ms | **165×** | **1.48×** |
+
+With `fa2` on, the `should_use_fa2` heuristic routes the shape
+correctly and baracuda **beats PyTorch by ~50%** at the standard
+MHA shape. Hkv=1 (full MQA broadcast) still gets rejected by the
+public `FlashSdpaPlan` — see the separate "GQA-broadcast routing
+gap" entry — but Hkv=Hq plain MHA is fully fixed when the feature
+is enabled.
+
+This experiment also turned up a separate pre-existing build break:
+`flash_sdpa_varlen.rs` (FA2-gated code) called `map_status` without
+defining or importing it. Fixed locally (added the same-shaped
+private helper used in 30+ other modules — see commit log).
 
 **Why pre-1.0:** publishing BENCHMARKS.md with a 100× gap to
 PyTorch on a load-bearing op undermines the 1.0 perf narrative —
 even if the fix is "enable a feature flag." Recommendation: pick
-(c) and document the feature requirement, OR pick (a) and pay the
-build-cost tax for the perf claim.
+**(c)** and document the feature requirement, OR pick **(a)** and
+pay the build-cost tax. The bench evidence now backs whichever
+direction you choose.
 
 ### `FlashSdpaPlan` GQA-broadcast routing gap
 

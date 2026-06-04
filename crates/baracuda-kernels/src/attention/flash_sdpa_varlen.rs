@@ -702,6 +702,21 @@ impl<T: Element> FlashSdpaVarlenBackwardPlan<T> {
 // Shared helpers
 // ---------------------------------------------------------------------------
 
+fn map_status(code: i32) -> Result<()> {
+    match code {
+        0 => Ok(()),
+        1 => Err(Error::MisalignedOperand),
+        2 => Err(Error::InvalidProblem(
+            "baracuda-kernels-sys reported invalid problem",
+        )),
+        3 => Err(Error::Unsupported(
+            "baracuda-kernels-sys reported unsupported configuration",
+        )),
+        4 => Err(Error::WorkspaceTooSmall { needed: 0, got: 0 }),
+        n => Err(Error::CutlassInternal(n)),
+    }
+}
+
 fn validate_desc<T: Element>(desc: &FlashSdpaVarlenDescriptor) -> Result<()> {
     if desc.element != T::KIND {
         return Err(Error::Unsupported(
