@@ -1444,18 +1444,73 @@ decisions itself.
 
 Phase 73.3 bench surfaced a **~100× perf gap** vs PyTorch at the
 plain-MHA shape: baracuda reports ~270ms per launch, PyTorch reports
-~2.5ms. Reproducible across runs. Either baracuda's `FlashSdpaPlan`
-isn't hitting the tensor-core fast path at this configuration, or
-the bench timing closure is including setup work that should be
-hoisted outside the inner loop.
+~2.5ms.
 
-**Scope:** profile the f16 path at Hq=Hkv=32, Q=K=2048, D=128.
-Compare against PyTorch's reference. Either fix the kernel dispatch
-(if a slow path was selected) or fix the bench harness.
+**Root cause** (Phase 73 follow-up profiling, 2026-06-04): the bench
+is NOT an artifact — the bespoke kernel really is ~100× slower than
+PyTorch at this shape. The `FlashSdpaPlan::select` always picks
+`ArchSku::Sm80` (the Phase 10 trailblazer kernel,
+`flash_sdpa_fw_kernel<T>` in `baracuda_flash_sdpa.cuh`). That kernel
+performs the QKᵀ and SV matmuls as **scalar fp32 FMAs**:
 
-**Why pre-1.0:** publishing a BENCHMARKS.md with a 100× gap to
-PyTorch on a load-bearing op undermines the 1.0 perf narrative,
-even if it's a bench artifact rather than a real kernel issue.
+```cuda
+// kBr × kBc = 4096 output cells of S, 128 threads/block → 32 cells/thread.
+// Each thread serially walks d_k = 128 and accumulates in fp32 with no
+// tensor-core MMA, no warp cooperation, no cp.async.
+CT acc = (CT)0;
+#pragma unroll 4
+for (int d = 0; d < d_k; ++d) {
+    CT qv = load_ct<T>(sQ[r * d_k + d]);
+    CT kv = load_ct<T>(sK[c * d_k + d]);
+    acc += qv * kv;
+}
+```
+
+For Hq=Hkv=32, Q=K=2048, D=128 f16 that's:
+
+- 1024 blocks × 128 threads × 32 K-tiles × 4096 S cells × 128 dot-loops
+  = ~16 G scalar fp32 FMAs.
+- RTX 4070 scalar fp32 throughput is ~24 TFLOPS — even at peak that's
+  ~700µs of arithmetic, plus SMEM-thrash and bank-conflict overhead
+  pushes wall-clock to ~270ms (380× over peak).
+
+PyTorch's 2.5ms uses cuBLAS / cuDNN MMA tensor-core kernels: the same
+16 G FMA work runs at ~6.4 GFLOPS/clock on tensor cores instead of
+~78 MFLOPS/clock on scalar units → ~80× speedup math-only, plus
+better memory ordering.
+
+**Why isn't this routed to a faster kernel?**
+
+1. **`FlashSdpaSm89Plan` (Phase 10/17)** — sibling for sm_89 with
+   cp.async, but still scalar FMAs. ~10× faster than the sm_80
+   trailblazer but still ~10× slower than PyTorch. NOT auto-routed;
+   callers must construct the sibling plan directly.
+2. **`BackendKind::FlashAttentionV2`** (Phase 42 vendored Tri Dao FA2)
+   — uses tensor cores and matches PyTorch's reference kernel.
+   Gated behind `fa2` cargo feature. The `should_use_fa2` heuristic
+   in `flash_sdpa.rs` would auto-route this shape (seq_q × seq_k =
+   4M ≥ 1M threshold) when the feature is enabled, but the bench
+   was built without `--features fa2`.
+
+**Fix options** (none yet implemented):
+
+| Option | Effort | Result | Trade-off |
+| --- | --- | --- | --- |
+| (a) Auto-enable `fa2` by default | trivial | matches PyTorch (2.5ms) | adds vendored FA2 to every build; mid-context shapes can stay on bespoke |
+| (b) Rewrite bespoke with tensor-core MMA | 1-2 weeks | ~PyTorch (2.5ms) | own the kernel; no fa2 dep |
+| (c) Auto-route to FA2 when fa2 feature is on | trivial | matches PyTorch when fa2 is on | opt-in; default builds still slow |
+
+Bench currently uses default build (no `fa2`) so it hits the sm_80
+trailblazer. The 270ms / 2.5ms = ~108× gap is real, but ONLY for
+default-feature builds. With `--features fa2` and a `seq_q × seq_k
+≥ 1M` shape the auto-route to FA2 closes the gap entirely (the FA2
+vendor was specifically integrated for this regime).
+
+**Why pre-1.0:** publishing BENCHMARKS.md with a 100× gap to
+PyTorch on a load-bearing op undermines the 1.0 perf narrative —
+even if the fix is "enable a feature flag." Recommendation: pick
+(c) and document the feature requirement, OR pick (a) and pay the
+build-cost tax for the perf claim.
 
 ### `FlashSdpaPlan` GQA-broadcast routing gap
 
