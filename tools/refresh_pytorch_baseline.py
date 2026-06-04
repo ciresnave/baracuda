@@ -295,23 +295,54 @@ def reduce_cases() -> Iterable[tuple[str, str, str, Callable[[], None]]]:
 
 
 def elementwise_cases() -> Iterable[tuple[str, str, str, Callable[[], None]]]:
-    """`a + b`, `a * b`, `F.relu(x)`, `F.gelu(x)`, `F.silu(x)`, `torch.tanh(x)`,
-    `torch.sigmoid(x)` over ELT_SWEEP."""
+    """Comprehensive elementwise coverage — binary ops, activations, math
+    unaries. Phase 73.5 extended the original 4 ops (add/mul/relu/gelu)
+    with the full set listed below."""
     device = torch.device("cuda")
     binary_ops: tuple[tuple[str, Callable], ...] = (
         ("add", lambda a, b: a + b),
         ("mul", lambda a, b: a * b),
+        # Phase 73.5: additional binaries.
+        ("sub", lambda a, b: a - b),
+        ("div", lambda a, b: a / b),
+        ("maximum", lambda a, b: torch.maximum(a, b)),
+        ("minimum", lambda a, b: torch.minimum(a, b)),
+        ("pow", lambda a, b: torch.pow(a, b)),
     )
     unary_ops: tuple[tuple[str, Callable], ...] = (
         ("relu", lambda x: torch.nn.functional.relu(x)),
         # baracuda's gelu uses the exact erf-based formulation; match PyTorch
         # default (approximate='none').
         ("gelu", lambda x: torch.nn.functional.gelu(x, approximate="none")),
-        # Phase 73.4: extend coverage with Silu (Llama-family activation) +
-        # classical Tanh/Sigmoid.
+        # Phase 73.4: Silu (Llama-family) + classical Tanh/Sigmoid.
         ("silu", lambda x: torch.nn.functional.silu(x)),
         ("tanh", lambda x: torch.tanh(x)),
         ("sigmoid", lambda x: torch.sigmoid(x)),
+        # Phase 73.5: additional activations.
+        ("mish", lambda x: torch.nn.functional.mish(x)),
+        ("hardswish", lambda x: torch.nn.functional.hardswish(x)),
+        ("hardsigmoid", lambda x: torch.nn.functional.hardsigmoid(x)),
+        ("hardtanh", lambda x: torch.nn.functional.hardtanh(x)),
+        ("leaky_relu", lambda x: torch.nn.functional.leaky_relu(x)),
+        ("elu", lambda x: torch.nn.functional.elu(x)),
+        ("selu", lambda x: torch.nn.functional.selu(x)),
+        ("relu6", lambda x: torch.nn.functional.relu6(x)),
+        ("softplus", lambda x: torch.nn.functional.softplus(x)),
+        ("softsign", lambda x: torch.nn.functional.softsign(x)),
+        ("gelu_tanh", lambda x: torch.nn.functional.gelu(x, approximate="tanh")),
+        # Phase 73.5: basic math unaries.
+        ("abs", lambda x: torch.abs(x)),
+        ("neg", lambda x: torch.neg(x)),
+        ("sign", lambda x: torch.sign(x)),
+        ("reciprocal", lambda x: torch.reciprocal(x)),
+        ("sqrt", lambda x: torch.sqrt(x)),
+        ("rsqrt", lambda x: torch.rsqrt(x)),
+        ("square", lambda x: torch.square(x)),
+        ("exp", lambda x: torch.exp(x)),
+        ("log", lambda x: torch.log(x)),
+        ("sin", lambda x: torch.sin(x)),
+        ("cos", lambda x: torch.cos(x)),
+        ("erf", lambda x: torch.erf(x)),
     )
     for n in ELT_NUMELS:
         shape = f"N{n}"

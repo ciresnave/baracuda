@@ -8,7 +8,7 @@
       8,
       9
     ],
-    "generated_at_utc": "2026-06-04T14:12:42+00:00",
+    "generated_at_utc": "2026-06-04T14:37:35+00:00",
     "sample_count": 11,
     "inner_iters": 50,
     "warmup_launches": 10,
@@ -19,865 +19,1537 @@
       "op": "gemm",
       "shape": "M1_N2048_K2048",
       "dtype": "f32",
-      "median_ns": 28568.0
+      "median_ns": 26962.0
     },
     {
       "op": "gemm",
       "shape": "M1_N2048_K2048",
       "dtype": "f16",
-      "median_ns": 30744.0
+      "median_ns": 28940.0
     },
     {
       "op": "gemm",
       "shape": "M1_N2048_K2048",
       "dtype": "bf16",
-      "median_ns": 27862.0
+      "median_ns": 29858.0
     },
     {
       "op": "gemm",
       "shape": "M32_N2048_K2048",
       "dtype": "f32",
-      "median_ns": 48644.0
+      "median_ns": 48748.0
     },
     {
       "op": "gemm",
       "shape": "M32_N2048_K2048",
       "dtype": "f16",
-      "median_ns": 29326.0
+      "median_ns": 31324.0
     },
     {
       "op": "gemm",
       "shape": "M32_N2048_K2048",
       "dtype": "bf16",
-      "median_ns": 30534.0
+      "median_ns": 31342.0
     },
     {
       "op": "gemm",
       "shape": "M128_N2048_K2048",
       "dtype": "f32",
-      "median_ns": 203068.0
+      "median_ns": 204512.0
     },
     {
       "op": "gemm",
       "shape": "M128_N2048_K2048",
       "dtype": "f16",
-      "median_ns": 58868.0
+      "median_ns": 58072.0
     },
     {
       "op": "gemm",
       "shape": "M128_N2048_K2048",
       "dtype": "bf16",
-      "median_ns": 47696.0
+      "median_ns": 43234.0
     },
     {
       "op": "gemm",
       "shape": "M1_N4096_K4096",
       "dtype": "f32",
-      "median_ns": 286764.0
+      "median_ns": 280994.0
     },
     {
       "op": "gemm",
       "shape": "M1_N4096_K4096",
       "dtype": "f16",
-      "median_ns": 104526.0
+      "median_ns": 80008.0
     },
     {
       "op": "gemm",
       "shape": "M1_N4096_K4096",
       "dtype": "bf16",
-      "median_ns": 67414.0
+      "median_ns": 62560.0
     },
     {
       "op": "gemm",
       "shape": "M32_N4096_K4096",
       "dtype": "f32",
-      "median_ns": 517940.0
+      "median_ns": 465824.0
     },
     {
       "op": "gemm",
       "shape": "M32_N4096_K4096",
       "dtype": "f16",
-      "median_ns": 112270.0
+      "median_ns": 89448.0
     },
     {
       "op": "gemm",
       "shape": "M32_N4096_K4096",
       "dtype": "bf16",
-      "median_ns": 98714.0
+      "median_ns": 98872.0
     },
     {
       "op": "gemm",
       "shape": "M128_N4096_K4096",
       "dtype": "f32",
-      "median_ns": 853056.0
+      "median_ns": 820838.0
     },
     {
       "op": "gemm",
       "shape": "M128_N4096_K4096",
       "dtype": "f16",
-      "median_ns": 189050.0
+      "median_ns": 190252.0
     },
     {
       "op": "gemm",
       "shape": "M128_N4096_K4096",
       "dtype": "bf16",
-      "median_ns": 186698.0
+      "median_ns": 179430.0
     },
     {
       "op": "softmax",
       "shape": "R512_C1024",
       "dtype": "f32",
+      "median_ns": 18530.0
+    },
+    {
+      "op": "softmax",
+      "shape": "R512_C1024",
+      "dtype": "f16",
+      "median_ns": 19314.0
+    },
+    {
+      "op": "softmax",
+      "shape": "R512_C4096",
+      "dtype": "f32",
+      "median_ns": 31956.0
+    },
+    {
+      "op": "softmax",
+      "shape": "R512_C4096",
+      "dtype": "f16",
+      "median_ns": 33494.0
+    },
+    {
+      "op": "softmax",
+      "shape": "R2048_C1024",
+      "dtype": "f32",
+      "median_ns": 19758.0
+    },
+    {
+      "op": "softmax",
+      "shape": "R2048_C1024",
+      "dtype": "f16",
+      "median_ns": 20418.0
+    },
+    {
+      "op": "softmax",
+      "shape": "R2048_C4096",
+      "dtype": "f32",
+      "median_ns": 358716.0
+    },
+    {
+      "op": "softmax",
+      "shape": "R2048_C4096",
+      "dtype": "f16",
+      "median_ns": 203210.0
+    },
+    {
+      "op": "softmax",
+      "shape": "R4096_C1024",
+      "dtype": "f32",
+      "median_ns": 47148.0
+    },
+    {
+      "op": "softmax",
+      "shape": "R4096_C1024",
+      "dtype": "f16",
+      "median_ns": 70624.0
+    },
+    {
+      "op": "softmax",
+      "shape": "R4096_C4096",
+      "dtype": "f32",
+      "median_ns": 681356.0
+    },
+    {
+      "op": "softmax",
+      "shape": "R4096_C4096",
+      "dtype": "f16",
+      "median_ns": 470146.0
+    },
+    {
+      "op": "log_softmax",
+      "shape": "R512_C1024",
+      "dtype": "f32",
+      "median_ns": 16138.0
+    },
+    {
+      "op": "log_softmax",
+      "shape": "R512_C1024",
+      "dtype": "f16",
+      "median_ns": 17344.0
+    },
+    {
+      "op": "log_softmax",
+      "shape": "R512_C4096",
+      "dtype": "f32",
+      "median_ns": 54404.0
+    },
+    {
+      "op": "log_softmax",
+      "shape": "R512_C4096",
+      "dtype": "f16",
+      "median_ns": 43776.0
+    },
+    {
+      "op": "log_softmax",
+      "shape": "R2048_C1024",
+      "dtype": "f32",
+      "median_ns": 19942.0
+    },
+    {
+      "op": "log_softmax",
+      "shape": "R2048_C1024",
+      "dtype": "f16",
+      "median_ns": 16158.0
+    },
+    {
+      "op": "log_softmax",
+      "shape": "R2048_C4096",
+      "dtype": "f32",
+      "median_ns": 339222.0
+    },
+    {
+      "op": "log_softmax",
+      "shape": "R2048_C4096",
+      "dtype": "f16",
+      "median_ns": 165890.0
+    },
+    {
+      "op": "log_softmax",
+      "shape": "R4096_C1024",
+      "dtype": "f32",
+      "median_ns": 44906.0
+    },
+    {
+      "op": "log_softmax",
+      "shape": "R4096_C1024",
+      "dtype": "f16",
+      "median_ns": 32740.0
+    },
+    {
+      "op": "log_softmax",
+      "shape": "R4096_C4096",
+      "dtype": "f32",
+      "median_ns": 678914.0
+    },
+    {
+      "op": "log_softmax",
+      "shape": "R4096_C4096",
+      "dtype": "f16",
+      "median_ns": 468480.0
+    },
+    {
+      "op": "layernorm",
+      "shape": "R512_H1024",
+      "dtype": "f32",
+      "median_ns": 23710.0
+    },
+    {
+      "op": "layernorm",
+      "shape": "R512_H1024",
+      "dtype": "f16",
+      "median_ns": 25140.0
+    },
+    {
+      "op": "layernorm",
+      "shape": "R512_H4096",
+      "dtype": "f32",
+      "median_ns": 28448.0
+    },
+    {
+      "op": "layernorm",
+      "shape": "R512_H4096",
+      "dtype": "f16",
+      "median_ns": 24142.0
+    },
+    {
+      "op": "layernorm",
+      "shape": "R2048_H1024",
+      "dtype": "f32",
+      "median_ns": 32076.0
+    },
+    {
+      "op": "layernorm",
+      "shape": "R2048_H1024",
+      "dtype": "f16",
+      "median_ns": 27600.0
+    },
+    {
+      "op": "layernorm",
+      "shape": "R2048_H4096",
+      "dtype": "f32",
+      "median_ns": 330156.0
+    },
+    {
+      "op": "layernorm",
+      "shape": "R2048_H4096",
+      "dtype": "f16",
+      "median_ns": 143230.0
+    },
+    {
+      "op": "layernorm",
+      "shape": "R4096_H1024",
+      "dtype": "f32",
+      "median_ns": 127448.0
+    },
+    {
+      "op": "layernorm",
+      "shape": "R4096_H1024",
+      "dtype": "f16",
+      "median_ns": 76426.0
+    },
+    {
+      "op": "layernorm",
+      "shape": "R4096_H4096",
+      "dtype": "f32",
+      "median_ns": 662844.0
+    },
+    {
+      "op": "layernorm",
+      "shape": "R4096_H4096",
+      "dtype": "f16",
+      "median_ns": 386836.0
+    },
+    {
+      "op": "rmsnorm",
+      "shape": "R512_H1024",
+      "dtype": "f32",
+      "median_ns": 124918.0
+    },
+    {
+      "op": "rmsnorm",
+      "shape": "R512_H1024",
+      "dtype": "f16",
+      "median_ns": 176132.0
+    },
+    {
+      "op": "rmsnorm",
+      "shape": "R512_H1024",
+      "dtype": "bf16",
+      "median_ns": 171222.0
+    },
+    {
+      "op": "rmsnorm",
+      "shape": "R512_H4096",
+      "dtype": "f32",
+      "median_ns": 125692.0
+    },
+    {
+      "op": "rmsnorm",
+      "shape": "R512_H4096",
+      "dtype": "f16",
+      "median_ns": 170308.0
+    },
+    {
+      "op": "rmsnorm",
+      "shape": "R512_H4096",
+      "dtype": "bf16",
+      "median_ns": 163744.0
+    },
+    {
+      "op": "rmsnorm",
+      "shape": "R2048_H1024",
+      "dtype": "f32",
+      "median_ns": 116986.0
+    },
+    {
+      "op": "rmsnorm",
+      "shape": "R2048_H1024",
+      "dtype": "f16",
+      "median_ns": 168120.0
+    },
+    {
+      "op": "rmsnorm",
+      "shape": "R2048_H1024",
+      "dtype": "bf16",
+      "median_ns": 170656.0
+    },
+    {
+      "op": "rmsnorm",
+      "shape": "R2048_H4096",
+      "dtype": "f32",
+      "median_ns": 1090088.0
+    },
+    {
+      "op": "rmsnorm",
+      "shape": "R2048_H4096",
+      "dtype": "f16",
+      "median_ns": 1317338.0
+    },
+    {
+      "op": "rmsnorm",
+      "shape": "R2048_H4096",
+      "dtype": "bf16",
+      "median_ns": 1306226.0
+    },
+    {
+      "op": "rmsnorm",
+      "shape": "R4096_H1024",
+      "dtype": "f32",
+      "median_ns": 350874.0
+    },
+    {
+      "op": "rmsnorm",
+      "shape": "R4096_H1024",
+      "dtype": "f16",
+      "median_ns": 441692.0
+    },
+    {
+      "op": "rmsnorm",
+      "shape": "R4096_H1024",
+      "dtype": "bf16",
+      "median_ns": 420400.0
+    },
+    {
+      "op": "rmsnorm",
+      "shape": "R4096_H4096",
+      "dtype": "f32",
+      "median_ns": 2709438.0
+    },
+    {
+      "op": "rmsnorm",
+      "shape": "R4096_H4096",
+      "dtype": "f16",
+      "median_ns": 3451940.0
+    },
+    {
+      "op": "rmsnorm",
+      "shape": "R4096_H4096",
+      "dtype": "bf16",
+      "median_ns": 3448546.0
+    },
+    {
+      "op": "reduce_sum",
+      "shape": "R512_H1024",
+      "dtype": "f32",
+      "median_ns": 21270.0
+    },
+    {
+      "op": "reduce_sum",
+      "shape": "R512_H4096",
+      "dtype": "f32",
+      "median_ns": 20944.0
+    },
+    {
+      "op": "reduce_sum",
+      "shape": "R2048_H1024",
+      "dtype": "f32",
+      "median_ns": 22532.0
+    },
+    {
+      "op": "reduce_sum",
+      "shape": "R2048_H4096",
+      "dtype": "f32",
+      "median_ns": 31020.0
+    },
+    {
+      "op": "reduce_sum",
+      "shape": "R4096_H1024",
+      "dtype": "f32",
+      "median_ns": 21188.0
+    },
+    {
+      "op": "reduce_sum",
+      "shape": "R4096_H4096",
+      "dtype": "f32",
+      "median_ns": 364800.0
+    },
+    {
+      "op": "reduce_max",
+      "shape": "R512_H1024",
+      "dtype": "f32",
+      "median_ns": 20536.0
+    },
+    {
+      "op": "reduce_max",
+      "shape": "R512_H4096",
+      "dtype": "f32",
+      "median_ns": 21078.0
+    },
+    {
+      "op": "reduce_max",
+      "shape": "R2048_H1024",
+      "dtype": "f32",
+      "median_ns": 19624.0
+    },
+    {
+      "op": "reduce_max",
+      "shape": "R2048_H4096",
+      "dtype": "f32",
+      "median_ns": 31192.0
+    },
+    {
+      "op": "reduce_max",
+      "shape": "R4096_H1024",
+      "dtype": "f32",
+      "median_ns": 20150.0
+    },
+    {
+      "op": "reduce_max",
+      "shape": "R4096_H4096",
+      "dtype": "f32",
+      "median_ns": 314868.0
+    },
+    {
+      "op": "reduce_mean",
+      "shape": "R512_H1024",
+      "dtype": "f32",
+      "median_ns": 19318.0
+    },
+    {
+      "op": "reduce_mean",
+      "shape": "R512_H4096",
+      "dtype": "f32",
+      "median_ns": 20288.0
+    },
+    {
+      "op": "reduce_mean",
+      "shape": "R2048_H1024",
+      "dtype": "f32",
+      "median_ns": 20826.0
+    },
+    {
+      "op": "reduce_mean",
+      "shape": "R2048_H4096",
+      "dtype": "f32",
+      "median_ns": 37856.0
+    },
+    {
+      "op": "reduce_mean",
+      "shape": "R4096_H1024",
+      "dtype": "f32",
+      "median_ns": 19914.0
+    },
+    {
+      "op": "reduce_mean",
+      "shape": "R4096_H4096",
+      "dtype": "f32",
+      "median_ns": 314878.0
+    },
+    {
+      "op": "reduce_prod",
+      "shape": "R512_H1024",
+      "dtype": "f32",
+      "median_ns": 20584.0
+    },
+    {
+      "op": "reduce_prod",
+      "shape": "R512_H4096",
+      "dtype": "f32",
+      "median_ns": 19548.0
+    },
+    {
+      "op": "reduce_prod",
+      "shape": "R2048_H1024",
+      "dtype": "f32",
+      "median_ns": 19822.0
+    },
+    {
+      "op": "reduce_prod",
+      "shape": "R2048_H4096",
+      "dtype": "f32",
+      "median_ns": 36868.0
+    },
+    {
+      "op": "reduce_prod",
+      "shape": "R4096_H1024",
+      "dtype": "f32",
+      "median_ns": 19892.0
+    },
+    {
+      "op": "reduce_prod",
+      "shape": "R4096_H4096",
+      "dtype": "f32",
+      "median_ns": 313952.0
+    },
+    {
+      "op": "add",
+      "shape": "N1048576",
+      "dtype": "f32",
+      "median_ns": 16784.0
+    },
+    {
+      "op": "mul",
+      "shape": "N1048576",
+      "dtype": "f32",
+      "median_ns": 17212.0
+    },
+    {
+      "op": "sub",
+      "shape": "N1048576",
+      "dtype": "f32",
+      "median_ns": 17346.0
+    },
+    {
+      "op": "div",
+      "shape": "N1048576",
+      "dtype": "f32",
+      "median_ns": 16462.0
+    },
+    {
+      "op": "maximum",
+      "shape": "N1048576",
+      "dtype": "f32",
+      "median_ns": 18436.0
+    },
+    {
+      "op": "minimum",
+      "shape": "N1048576",
+      "dtype": "f32",
+      "median_ns": 17840.0
+    },
+    {
+      "op": "pow",
+      "shape": "N1048576",
+      "dtype": "f32",
+      "median_ns": 18182.0
+    },
+    {
+      "op": "relu",
+      "shape": "N1048576",
+      "dtype": "f32",
+      "median_ns": 18800.0
+    },
+    {
+      "op": "gelu",
+      "shape": "N1048576",
+      "dtype": "f32",
+      "median_ns": 16414.0
+    },
+    {
+      "op": "silu",
+      "shape": "N1048576",
+      "dtype": "f32",
+      "median_ns": 17178.0
+    },
+    {
+      "op": "tanh",
+      "shape": "N1048576",
+      "dtype": "f32",
+      "median_ns": 16600.0
+    },
+    {
+      "op": "sigmoid",
+      "shape": "N1048576",
+      "dtype": "f32",
+      "median_ns": 17364.0
+    },
+    {
+      "op": "mish",
+      "shape": "N1048576",
+      "dtype": "f32",
+      "median_ns": 16558.0
+    },
+    {
+      "op": "hardswish",
+      "shape": "N1048576",
+      "dtype": "f32",
+      "median_ns": 16464.0
+    },
+    {
+      "op": "hardsigmoid",
+      "shape": "N1048576",
+      "dtype": "f32",
+      "median_ns": 17862.0
+    },
+    {
+      "op": "hardtanh",
+      "shape": "N1048576",
+      "dtype": "f32",
+      "median_ns": 18940.0
+    },
+    {
+      "op": "leaky_relu",
+      "shape": "N1048576",
+      "dtype": "f32",
+      "median_ns": 17696.0
+    },
+    {
+      "op": "elu",
+      "shape": "N1048576",
+      "dtype": "f32",
+      "median_ns": 17998.0
+    },
+    {
+      "op": "selu",
+      "shape": "N1048576",
+      "dtype": "f32",
+      "median_ns": 17996.0
+    },
+    {
+      "op": "relu6",
+      "shape": "N1048576",
+      "dtype": "f32",
+      "median_ns": 19896.0
+    },
+    {
+      "op": "softplus",
+      "shape": "N1048576",
+      "dtype": "f32",
+      "median_ns": 17220.0
+    },
+    {
+      "op": "softsign",
+      "shape": "N1048576",
+      "dtype": "f32",
+      "median_ns": 58334.0
+    },
+    {
+      "op": "gelu_tanh",
+      "shape": "N1048576",
+      "dtype": "f32",
+      "median_ns": 16850.0
+    },
+    {
+      "op": "abs",
+      "shape": "N1048576",
+      "dtype": "f32",
+      "median_ns": 18098.0
+    },
+    {
+      "op": "neg",
+      "shape": "N1048576",
+      "dtype": "f32",
+      "median_ns": 17174.0
+    },
+    {
+      "op": "sign",
+      "shape": "N1048576",
+      "dtype": "f32",
+      "median_ns": 16302.0
+    },
+    {
+      "op": "reciprocal",
+      "shape": "N1048576",
+      "dtype": "f32",
+      "median_ns": 16770.0
+    },
+    {
+      "op": "sqrt",
+      "shape": "N1048576",
+      "dtype": "f32",
+      "median_ns": 16804.0
+    },
+    {
+      "op": "rsqrt",
+      "shape": "N1048576",
+      "dtype": "f32",
+      "median_ns": 16514.0
+    },
+    {
+      "op": "square",
+      "shape": "N1048576",
+      "dtype": "f32",
+      "median_ns": 17664.0
+    },
+    {
+      "op": "exp",
+      "shape": "N1048576",
+      "dtype": "f32",
+      "median_ns": 17408.0
+    },
+    {
+      "op": "log",
+      "shape": "N1048576",
+      "dtype": "f32",
+      "median_ns": 17010.0
+    },
+    {
+      "op": "sin",
+      "shape": "N1048576",
+      "dtype": "f32",
+      "median_ns": 16938.0
+    },
+    {
+      "op": "cos",
+      "shape": "N1048576",
+      "dtype": "f32",
+      "median_ns": 17080.0
+    },
+    {
+      "op": "erf",
+      "shape": "N1048576",
+      "dtype": "f32",
+      "median_ns": 16936.0
+    },
+    {
+      "op": "add",
+      "shape": "N1048576",
+      "dtype": "f16",
+      "median_ns": 16362.0
+    },
+    {
+      "op": "mul",
+      "shape": "N1048576",
+      "dtype": "f16",
+      "median_ns": 16494.0
+    },
+    {
+      "op": "sub",
+      "shape": "N1048576",
+      "dtype": "f16",
       "median_ns": 16148.0
     },
     {
-      "op": "softmax",
-      "shape": "R512_C1024",
-      "dtype": "f16",
-      "median_ns": 16584.0
-    },
-    {
-      "op": "softmax",
-      "shape": "R512_C4096",
-      "dtype": "f32",
-      "median_ns": 35234.0
-    },
-    {
-      "op": "softmax",
-      "shape": "R512_C4096",
-      "dtype": "f16",
-      "median_ns": 39628.0
-    },
-    {
-      "op": "softmax",
-      "shape": "R2048_C1024",
-      "dtype": "f32",
-      "median_ns": 20670.0
-    },
-    {
-      "op": "softmax",
-      "shape": "R2048_C1024",
-      "dtype": "f16",
-      "median_ns": 20572.0
-    },
-    {
-      "op": "softmax",
-      "shape": "R2048_C4096",
-      "dtype": "f32",
-      "median_ns": 394846.0
-    },
-    {
-      "op": "softmax",
-      "shape": "R2048_C4096",
-      "dtype": "f16",
-      "median_ns": 225698.0
-    },
-    {
-      "op": "softmax",
-      "shape": "R4096_C1024",
-      "dtype": "f32",
-      "median_ns": 46276.0
-    },
-    {
-      "op": "softmax",
-      "shape": "R4096_C1024",
-      "dtype": "f16",
-      "median_ns": 60896.0
-    },
-    {
-      "op": "softmax",
-      "shape": "R4096_C4096",
-      "dtype": "f32",
-      "median_ns": 786280.0
-    },
-    {
-      "op": "softmax",
-      "shape": "R4096_C4096",
-      "dtype": "f16",
-      "median_ns": 473578.0
-    },
-    {
-      "op": "log_softmax",
-      "shape": "R512_C1024",
-      "dtype": "f32",
-      "median_ns": 17088.0
-    },
-    {
-      "op": "log_softmax",
-      "shape": "R512_C1024",
-      "dtype": "f16",
-      "median_ns": 17754.0
-    },
-    {
-      "op": "log_softmax",
-      "shape": "R512_C4096",
-      "dtype": "f32",
-      "median_ns": 43760.0
-    },
-    {
-      "op": "log_softmax",
-      "shape": "R512_C4096",
-      "dtype": "f16",
-      "median_ns": 37962.0
-    },
-    {
-      "op": "log_softmax",
-      "shape": "R2048_C1024",
-      "dtype": "f32",
-      "median_ns": 19776.0
-    },
-    {
-      "op": "log_softmax",
-      "shape": "R2048_C1024",
-      "dtype": "f16",
-      "median_ns": 18596.0
-    },
-    {
-      "op": "log_softmax",
-      "shape": "R2048_C4096",
-      "dtype": "f32",
-      "median_ns": 395102.0
-    },
-    {
-      "op": "log_softmax",
-      "shape": "R2048_C4096",
-      "dtype": "f16",
-      "median_ns": 144300.0
-    },
-    {
-      "op": "log_softmax",
-      "shape": "R4096_C1024",
-      "dtype": "f32",
-      "median_ns": 46324.0
-    },
-    {
-      "op": "log_softmax",
-      "shape": "R4096_C1024",
-      "dtype": "f16",
-      "median_ns": 33390.0
-    },
-    {
-      "op": "log_softmax",
-      "shape": "R4096_C4096",
-      "dtype": "f32",
-      "median_ns": 789736.0
-    },
-    {
-      "op": "log_softmax",
-      "shape": "R4096_C4096",
-      "dtype": "f16",
-      "median_ns": 471594.0
-    },
-    {
-      "op": "layernorm",
-      "shape": "R512_H1024",
-      "dtype": "f32",
-      "median_ns": 23646.0
-    },
-    {
-      "op": "layernorm",
-      "shape": "R512_H1024",
-      "dtype": "f16",
-      "median_ns": 24504.0
-    },
-    {
-      "op": "layernorm",
-      "shape": "R512_H4096",
-      "dtype": "f32",
-      "median_ns": 29872.0
-    },
-    {
-      "op": "layernorm",
-      "shape": "R512_H4096",
-      "dtype": "f16",
-      "median_ns": 23738.0
-    },
-    {
-      "op": "layernorm",
-      "shape": "R2048_H1024",
-      "dtype": "f32",
-      "median_ns": 31568.0
-    },
-    {
-      "op": "layernorm",
-      "shape": "R2048_H1024",
-      "dtype": "f16",
-      "median_ns": 26258.0
-    },
-    {
-      "op": "layernorm",
-      "shape": "R2048_H4096",
-      "dtype": "f32",
-      "median_ns": 379796.0
-    },
-    {
-      "op": "layernorm",
-      "shape": "R2048_H4096",
-      "dtype": "f16",
-      "median_ns": 90270.0
-    },
-    {
-      "op": "layernorm",
-      "shape": "R4096_H1024",
-      "dtype": "f32",
-      "median_ns": 141756.0
-    },
-    {
-      "op": "layernorm",
-      "shape": "R4096_H1024",
-      "dtype": "f16",
-      "median_ns": 87096.0
-    },
-    {
-      "op": "layernorm",
-      "shape": "R4096_H4096",
-      "dtype": "f32",
-      "median_ns": 757382.0
-    },
-    {
-      "op": "layernorm",
-      "shape": "R4096_H4096",
-      "dtype": "f16",
-      "median_ns": 386350.0
-    },
-    {
-      "op": "rmsnorm",
-      "shape": "R512_H1024",
-      "dtype": "f32",
-      "median_ns": 122812.0
-    },
-    {
-      "op": "rmsnorm",
-      "shape": "R512_H1024",
-      "dtype": "f16",
-      "median_ns": 164992.0
-    },
-    {
-      "op": "rmsnorm",
-      "shape": "R512_H1024",
-      "dtype": "bf16",
-      "median_ns": 171828.0
-    },
-    {
-      "op": "rmsnorm",
-      "shape": "R512_H4096",
-      "dtype": "f32",
-      "median_ns": 120296.0
-    },
-    {
-      "op": "rmsnorm",
-      "shape": "R512_H4096",
-      "dtype": "f16",
-      "median_ns": 167854.0
-    },
-    {
-      "op": "rmsnorm",
-      "shape": "R512_H4096",
-      "dtype": "bf16",
-      "median_ns": 166472.0
-    },
-    {
-      "op": "rmsnorm",
-      "shape": "R2048_H1024",
-      "dtype": "f32",
-      "median_ns": 118052.0
-    },
-    {
-      "op": "rmsnorm",
-      "shape": "R2048_H1024",
-      "dtype": "f16",
-      "median_ns": 166238.0
-    },
-    {
-      "op": "rmsnorm",
-      "shape": "R2048_H1024",
-      "dtype": "bf16",
-      "median_ns": 168686.0
-    },
-    {
-      "op": "rmsnorm",
-      "shape": "R2048_H4096",
-      "dtype": "f32",
-      "median_ns": 1087088.0
-    },
-    {
-      "op": "rmsnorm",
-      "shape": "R2048_H4096",
-      "dtype": "f16",
-      "median_ns": 1517898.0
-    },
-    {
-      "op": "rmsnorm",
-      "shape": "R2048_H4096",
-      "dtype": "bf16",
-      "median_ns": 1501606.0
-    },
-    {
-      "op": "rmsnorm",
-      "shape": "R4096_H1024",
-      "dtype": "f32",
-      "median_ns": 356214.0
-    },
-    {
-      "op": "rmsnorm",
-      "shape": "R4096_H1024",
-      "dtype": "f16",
-      "median_ns": 408412.0
-    },
-    {
-      "op": "rmsnorm",
-      "shape": "R4096_H1024",
-      "dtype": "bf16",
-      "median_ns": 407760.0
-    },
-    {
-      "op": "rmsnorm",
-      "shape": "R4096_H4096",
-      "dtype": "f32",
-      "median_ns": 2708512.0
-    },
-    {
-      "op": "rmsnorm",
-      "shape": "R4096_H4096",
-      "dtype": "f16",
-      "median_ns": 3449220.0
-    },
-    {
-      "op": "rmsnorm",
-      "shape": "R4096_H4096",
-      "dtype": "bf16",
-      "median_ns": 3445624.0
-    },
-    {
-      "op": "reduce_sum",
-      "shape": "R512_H1024",
-      "dtype": "f32",
-      "median_ns": 22118.0
-    },
-    {
-      "op": "reduce_sum",
-      "shape": "R512_H4096",
-      "dtype": "f32",
-      "median_ns": 23322.0
-    },
-    {
-      "op": "reduce_sum",
-      "shape": "R2048_H1024",
-      "dtype": "f32",
-      "median_ns": 21400.0
-    },
-    {
-      "op": "reduce_sum",
-      "shape": "R2048_H4096",
-      "dtype": "f32",
-      "median_ns": 31776.0
-    },
-    {
-      "op": "reduce_sum",
-      "shape": "R4096_H1024",
-      "dtype": "f32",
-      "median_ns": 22766.0
-    },
-    {
-      "op": "reduce_sum",
-      "shape": "R4096_H4096",
-      "dtype": "f32",
-      "median_ns": 366056.0
-    },
-    {
-      "op": "reduce_max",
-      "shape": "R512_H1024",
-      "dtype": "f32",
-      "median_ns": 22272.0
-    },
-    {
-      "op": "reduce_max",
-      "shape": "R512_H4096",
-      "dtype": "f32",
-      "median_ns": 22690.0
-    },
-    {
-      "op": "reduce_max",
-      "shape": "R2048_H1024",
-      "dtype": "f32",
-      "median_ns": 22236.0
-    },
-    {
-      "op": "reduce_max",
-      "shape": "R2048_H4096",
-      "dtype": "f32",
-      "median_ns": 33050.0
-    },
-    {
-      "op": "reduce_max",
-      "shape": "R4096_H1024",
-      "dtype": "f32",
-      "median_ns": 22720.0
-    },
-    {
-      "op": "reduce_max",
-      "shape": "R4096_H4096",
-      "dtype": "f32",
-      "median_ns": 366768.0
-    },
-    {
-      "op": "reduce_mean",
-      "shape": "R512_H1024",
-      "dtype": "f32",
-      "median_ns": 21894.0
-    },
-    {
-      "op": "reduce_mean",
-      "shape": "R512_H4096",
-      "dtype": "f32",
-      "median_ns": 22370.0
-    },
-    {
-      "op": "reduce_mean",
-      "shape": "R2048_H1024",
-      "dtype": "f32",
-      "median_ns": 21900.0
-    },
-    {
-      "op": "reduce_mean",
-      "shape": "R2048_H4096",
-      "dtype": "f32",
-      "median_ns": 34572.0
-    },
-    {
-      "op": "reduce_mean",
-      "shape": "R4096_H1024",
-      "dtype": "f32",
-      "median_ns": 22292.0
-    },
-    {
-      "op": "reduce_mean",
-      "shape": "R4096_H4096",
-      "dtype": "f32",
-      "median_ns": 365818.0
-    },
-    {
-      "op": "reduce_prod",
-      "shape": "R512_H1024",
-      "dtype": "f32",
-      "median_ns": 21062.0
-    },
-    {
-      "op": "reduce_prod",
-      "shape": "R512_H4096",
-      "dtype": "f32",
-      "median_ns": 21780.0
-    },
-    {
-      "op": "reduce_prod",
-      "shape": "R2048_H1024",
-      "dtype": "f32",
-      "median_ns": 21856.0
-    },
-    {
-      "op": "reduce_prod",
-      "shape": "R2048_H4096",
-      "dtype": "f32",
-      "median_ns": 34242.0
-    },
-    {
-      "op": "reduce_prod",
-      "shape": "R4096_H1024",
-      "dtype": "f32",
-      "median_ns": 21890.0
-    },
-    {
-      "op": "reduce_prod",
-      "shape": "R4096_H4096",
-      "dtype": "f32",
-      "median_ns": 365542.0
-    },
-    {
-      "op": "add",
-      "shape": "N1048576",
-      "dtype": "f32",
-      "median_ns": 18674.0
-    },
-    {
-      "op": "mul",
-      "shape": "N1048576",
-      "dtype": "f32",
-      "median_ns": 19222.0
-    },
-    {
-      "op": "relu",
-      "shape": "N1048576",
-      "dtype": "f32",
-      "median_ns": 20594.0
-    },
-    {
-      "op": "gelu",
-      "shape": "N1048576",
-      "dtype": "f32",
-      "median_ns": 19464.0
-    },
-    {
-      "op": "silu",
-      "shape": "N1048576",
-      "dtype": "f32",
-      "median_ns": 19576.0
-    },
-    {
-      "op": "tanh",
-      "shape": "N1048576",
-      "dtype": "f32",
-      "median_ns": 18628.0
-    },
-    {
-      "op": "sigmoid",
-      "shape": "N1048576",
-      "dtype": "f32",
-      "median_ns": 19228.0
-    },
-    {
-      "op": "add",
+      "op": "div",
       "shape": "N1048576",
       "dtype": "f16",
-      "median_ns": 20544.0
+      "median_ns": 17662.0
     },
     {
-      "op": "mul",
+      "op": "maximum",
       "shape": "N1048576",
       "dtype": "f16",
-      "median_ns": 19782.0
+      "median_ns": 17290.0
+    },
+    {
+      "op": "minimum",
+      "shape": "N1048576",
+      "dtype": "f16",
+      "median_ns": 17484.0
+    },
+    {
+      "op": "pow",
+      "shape": "N1048576",
+      "dtype": "f16",
+      "median_ns": 18824.0
     },
     {
       "op": "relu",
       "shape": "N1048576",
       "dtype": "f16",
-      "median_ns": 20306.0
+      "median_ns": 18488.0
     },
     {
       "op": "gelu",
       "shape": "N1048576",
       "dtype": "f16",
-      "median_ns": 19954.0
+      "median_ns": 17144.0
     },
     {
       "op": "silu",
       "shape": "N1048576",
       "dtype": "f16",
-      "median_ns": 19770.0
+      "median_ns": 17470.0
     },
     {
       "op": "tanh",
       "shape": "N1048576",
       "dtype": "f16",
-      "median_ns": 18784.0
+      "median_ns": 17490.0
     },
     {
       "op": "sigmoid",
       "shape": "N1048576",
       "dtype": "f16",
-      "median_ns": 19176.0
+      "median_ns": 15878.0
+    },
+    {
+      "op": "mish",
+      "shape": "N1048576",
+      "dtype": "f16",
+      "median_ns": 17646.0
+    },
+    {
+      "op": "hardswish",
+      "shape": "N1048576",
+      "dtype": "f16",
+      "median_ns": 18926.0
+    },
+    {
+      "op": "hardsigmoid",
+      "shape": "N1048576",
+      "dtype": "f16",
+      "median_ns": 18214.0
+    },
+    {
+      "op": "hardtanh",
+      "shape": "N1048576",
+      "dtype": "f16",
+      "median_ns": 20166.0
+    },
+    {
+      "op": "leaky_relu",
+      "shape": "N1048576",
+      "dtype": "f16",
+      "median_ns": 18458.0
+    },
+    {
+      "op": "elu",
+      "shape": "N1048576",
+      "dtype": "f16",
+      "median_ns": 18410.0
+    },
+    {
+      "op": "selu",
+      "shape": "N1048576",
+      "dtype": "f16",
+      "median_ns": 18262.0
+    },
+    {
+      "op": "relu6",
+      "shape": "N1048576",
+      "dtype": "f16",
+      "median_ns": 20418.0
+    },
+    {
+      "op": "softplus",
+      "shape": "N1048576",
+      "dtype": "f16",
+      "median_ns": 18014.0
+    },
+    {
+      "op": "softsign",
+      "shape": "N1048576",
+      "dtype": "f16",
+      "median_ns": 56696.0
+    },
+    {
+      "op": "gelu_tanh",
+      "shape": "N1048576",
+      "dtype": "f16",
+      "median_ns": 18160.0
+    },
+    {
+      "op": "abs",
+      "shape": "N1048576",
+      "dtype": "f16",
+      "median_ns": 17478.0
+    },
+    {
+      "op": "neg",
+      "shape": "N1048576",
+      "dtype": "f16",
+      "median_ns": 18094.0
+    },
+    {
+      "op": "sign",
+      "shape": "N1048576",
+      "dtype": "f16",
+      "median_ns": 17388.0
+    },
+    {
+      "op": "reciprocal",
+      "shape": "N1048576",
+      "dtype": "f16",
+      "median_ns": 17226.0
+    },
+    {
+      "op": "sqrt",
+      "shape": "N1048576",
+      "dtype": "f16",
+      "median_ns": 17918.0
+    },
+    {
+      "op": "rsqrt",
+      "shape": "N1048576",
+      "dtype": "f16",
+      "median_ns": 18654.0
+    },
+    {
+      "op": "square",
+      "shape": "N1048576",
+      "dtype": "f16",
+      "median_ns": 18064.0
+    },
+    {
+      "op": "exp",
+      "shape": "N1048576",
+      "dtype": "f16",
+      "median_ns": 17252.0
+    },
+    {
+      "op": "log",
+      "shape": "N1048576",
+      "dtype": "f16",
+      "median_ns": 18120.0
+    },
+    {
+      "op": "sin",
+      "shape": "N1048576",
+      "dtype": "f16",
+      "median_ns": 17932.0
+    },
+    {
+      "op": "cos",
+      "shape": "N1048576",
+      "dtype": "f16",
+      "median_ns": 18240.0
+    },
+    {
+      "op": "erf",
+      "shape": "N1048576",
+      "dtype": "f16",
+      "median_ns": 18460.0
     },
     {
       "op": "add",
       "shape": "N16777216",
       "dtype": "f32",
-      "median_ns": 993362.0
+      "median_ns": 867316.0
     },
     {
       "op": "mul",
       "shape": "N16777216",
       "dtype": "f32",
-      "median_ns": 993458.0
+      "median_ns": 868656.0
+    },
+    {
+      "op": "sub",
+      "shape": "N16777216",
+      "dtype": "f32",
+      "median_ns": 865494.0
+    },
+    {
+      "op": "div",
+      "shape": "N16777216",
+      "dtype": "f32",
+      "median_ns": 862198.0
+    },
+    {
+      "op": "maximum",
+      "shape": "N16777216",
+      "dtype": "f32",
+      "median_ns": 986562.0
+    },
+    {
+      "op": "minimum",
+      "shape": "N16777216",
+      "dtype": "f32",
+      "median_ns": 867770.0
+    },
+    {
+      "op": "pow",
+      "shape": "N16777216",
+      "dtype": "f32",
+      "median_ns": 1133264.0
     },
     {
       "op": "relu",
       "shape": "N16777216",
       "dtype": "f32",
-      "median_ns": 677066.0
+      "median_ns": 678078.0
     },
     {
       "op": "gelu",
       "shape": "N16777216",
       "dtype": "f32",
-      "median_ns": 674938.0
+      "median_ns": 590774.0
     },
     {
       "op": "silu",
       "shape": "N16777216",
       "dtype": "f32",
-      "median_ns": 680906.0
+      "median_ns": 745780.0
     },
     {
       "op": "tanh",
       "shape": "N16777216",
       "dtype": "f32",
-      "median_ns": 676902.0
+      "median_ns": 675042.0
     },
     {
       "op": "sigmoid",
       "shape": "N16777216",
       "dtype": "f32",
-      "median_ns": 681054.0
+      "median_ns": 682466.0
+    },
+    {
+      "op": "mish",
+      "shape": "N16777216",
+      "dtype": "f32",
+      "median_ns": 676472.0
+    },
+    {
+      "op": "hardswish",
+      "shape": "N16777216",
+      "dtype": "f32",
+      "median_ns": 676740.0
+    },
+    {
+      "op": "hardsigmoid",
+      "shape": "N16777216",
+      "dtype": "f32",
+      "median_ns": 591768.0
+    },
+    {
+      "op": "hardtanh",
+      "shape": "N16777216",
+      "dtype": "f32",
+      "median_ns": 590918.0
+    },
+    {
+      "op": "leaky_relu",
+      "shape": "N16777216",
+      "dtype": "f32",
+      "median_ns": 591074.0
+    },
+    {
+      "op": "elu",
+      "shape": "N16777216",
+      "dtype": "f32",
+      "median_ns": 590542.0
+    },
+    {
+      "op": "selu",
+      "shape": "N16777216",
+      "dtype": "f32",
+      "median_ns": 590554.0
+    },
+    {
+      "op": "relu6",
+      "shape": "N16777216",
+      "dtype": "f32",
+      "median_ns": 590842.0
+    },
+    {
+      "op": "softplus",
+      "shape": "N16777216",
+      "dtype": "f32",
+      "median_ns": 767360.0
+    },
+    {
+      "op": "softsign",
+      "shape": "N16777216",
+      "dtype": "f32",
+      "median_ns": 2046182.0
+    },
+    {
+      "op": "gelu_tanh",
+      "shape": "N16777216",
+      "dtype": "f32",
+      "median_ns": 608074.0
+    },
+    {
+      "op": "abs",
+      "shape": "N16777216",
+      "dtype": "f32",
+      "median_ns": 591100.0
+    },
+    {
+      "op": "neg",
+      "shape": "N16777216",
+      "dtype": "f32",
+      "median_ns": 591128.0
+    },
+    {
+      "op": "sign",
+      "shape": "N16777216",
+      "dtype": "f32",
+      "median_ns": 591092.0
+    },
+    {
+      "op": "reciprocal",
+      "shape": "N16777216",
+      "dtype": "f32",
+      "median_ns": 597564.0
+    },
+    {
+      "op": "sqrt",
+      "shape": "N16777216",
+      "dtype": "f32",
+      "median_ns": 592856.0
+    },
+    {
+      "op": "rsqrt",
+      "shape": "N16777216",
+      "dtype": "f32",
+      "median_ns": 591080.0
+    },
+    {
+      "op": "square",
+      "shape": "N16777216",
+      "dtype": "f32",
+      "median_ns": 591060.0
+    },
+    {
+      "op": "exp",
+      "shape": "N16777216",
+      "dtype": "f32",
+      "median_ns": 590330.0
+    },
+    {
+      "op": "log",
+      "shape": "N16777216",
+      "dtype": "f32",
+      "median_ns": 593186.0
+    },
+    {
+      "op": "sin",
+      "shape": "N16777216",
+      "dtype": "f32",
+      "median_ns": 678134.0
+    },
+    {
+      "op": "cos",
+      "shape": "N16777216",
+      "dtype": "f32",
+      "median_ns": 677896.0
+    },
+    {
+      "op": "erf",
+      "shape": "N16777216",
+      "dtype": "f32",
+      "median_ns": 677760.0
     },
     {
       "op": "add",
       "shape": "N16777216",
       "dtype": "f16",
-      "median_ns": 494574.0
+      "median_ns": 495178.0
     },
     {
       "op": "mul",
       "shape": "N16777216",
       "dtype": "f16",
-      "median_ns": 494732.0
+      "median_ns": 452340.0
+    },
+    {
+      "op": "sub",
+      "shape": "N16777216",
+      "dtype": "f16",
+      "median_ns": 435340.0
+    },
+    {
+      "op": "div",
+      "shape": "N16777216",
+      "dtype": "f16",
+      "median_ns": 441424.0
+    },
+    {
+      "op": "maximum",
+      "shape": "N16777216",
+      "dtype": "f16",
+      "median_ns": 436852.0
+    },
+    {
+      "op": "minimum",
+      "shape": "N16777216",
+      "dtype": "f16",
+      "median_ns": 434602.0
+    },
+    {
+      "op": "pow",
+      "shape": "N16777216",
+      "dtype": "f16",
+      "median_ns": 493174.0
     },
     {
       "op": "relu",
       "shape": "N16777216",
       "dtype": "f16",
-      "median_ns": 342574.0
+      "median_ns": 341656.0
     },
     {
       "op": "gelu",
       "shape": "N16777216",
       "dtype": "f16",
-      "median_ns": 339822.0
+      "median_ns": 341588.0
     },
     {
       "op": "silu",
       "shape": "N16777216",
       "dtype": "f16",
-      "median_ns": 339770.0
+      "median_ns": 342136.0
     },
     {
       "op": "tanh",
       "shape": "N16777216",
       "dtype": "f16",
-      "median_ns": 340594.0
+      "median_ns": 341918.0
     },
     {
       "op": "sigmoid",
       "shape": "N16777216",
       "dtype": "f16",
-      "median_ns": 339652.0
+      "median_ns": 342104.0
+    },
+    {
+      "op": "mish",
+      "shape": "N16777216",
+      "dtype": "f16",
+      "median_ns": 340020.0
+    },
+    {
+      "op": "hardswish",
+      "shape": "N16777216",
+      "dtype": "f16",
+      "median_ns": 340802.0
+    },
+    {
+      "op": "hardsigmoid",
+      "shape": "N16777216",
+      "dtype": "f16",
+      "median_ns": 341470.0
+    },
+    {
+      "op": "hardtanh",
+      "shape": "N16777216",
+      "dtype": "f16",
+      "median_ns": 299502.0
+    },
+    {
+      "op": "leaky_relu",
+      "shape": "N16777216",
+      "dtype": "f16",
+      "median_ns": 297684.0
+    },
+    {
+      "op": "elu",
+      "shape": "N16777216",
+      "dtype": "f16",
+      "median_ns": 297612.0
+    },
+    {
+      "op": "selu",
+      "shape": "N16777216",
+      "dtype": "f16",
+      "median_ns": 298796.0
+    },
+    {
+      "op": "relu6",
+      "shape": "N16777216",
+      "dtype": "f16",
+      "median_ns": 299494.0
+    },
+    {
+      "op": "softplus",
+      "shape": "N16777216",
+      "dtype": "f16",
+      "median_ns": 466594.0
+    },
+    {
+      "op": "softsign",
+      "shape": "N16777216",
+      "dtype": "f16",
+      "median_ns": 1039750.0
+    },
+    {
+      "op": "gelu_tanh",
+      "shape": "N16777216",
+      "dtype": "f16",
+      "median_ns": 306690.0
+    },
+    {
+      "op": "abs",
+      "shape": "N16777216",
+      "dtype": "f16",
+      "median_ns": 300940.0
+    },
+    {
+      "op": "neg",
+      "shape": "N16777216",
+      "dtype": "f16",
+      "median_ns": 298692.0
+    },
+    {
+      "op": "sign",
+      "shape": "N16777216",
+      "dtype": "f16",
+      "median_ns": 300186.0
+    },
+    {
+      "op": "reciprocal",
+      "shape": "N16777216",
+      "dtype": "f16",
+      "median_ns": 298068.0
+    },
+    {
+      "op": "sqrt",
+      "shape": "N16777216",
+      "dtype": "f16",
+      "median_ns": 298004.0
+    },
+    {
+      "op": "rsqrt",
+      "shape": "N16777216",
+      "dtype": "f16",
+      "median_ns": 299342.0
+    },
+    {
+      "op": "square",
+      "shape": "N16777216",
+      "dtype": "f16",
+      "median_ns": 298702.0
+    },
+    {
+      "op": "exp",
+      "shape": "N16777216",
+      "dtype": "f16",
+      "median_ns": 298364.0
+    },
+    {
+      "op": "log",
+      "shape": "N16777216",
+      "dtype": "f16",
+      "median_ns": 300000.0
+    },
+    {
+      "op": "sin",
+      "shape": "N16777216",
+      "dtype": "f16",
+      "median_ns": 361834.0
+    },
+    {
+      "op": "cos",
+      "shape": "N16777216",
+      "dtype": "f16",
+      "median_ns": 373084.0
+    },
+    {
+      "op": "erf",
+      "shape": "N16777216",
+      "dtype": "f16",
+      "median_ns": 342812.0
     },
     {
       "op": "conv2d",
       "shape": "N1_Cin64_Cout64_HW56_K3",
       "dtype": "f32",
-      "median_ns": 58876.0
+      "median_ns": 60252.0
     },
     {
       "op": "conv2d",
       "shape": "N1_Cin64_Cout64_HW56_K3",
       "dtype": "f16",
-      "median_ns": 69344.0
+      "median_ns": 74140.0
     },
     {
       "op": "conv2d",
       "shape": "N1_Cin128_Cout128_HW28_K3",
       "dtype": "f32",
-      "median_ns": 58418.0
+      "median_ns": 60790.0
     },
     {
       "op": "conv2d",
       "shape": "N1_Cin128_Cout128_HW28_K3",
       "dtype": "f16",
-      "median_ns": 74518.0
+      "median_ns": 78172.0
     },
     {
       "op": "conv2d",
       "shape": "N1_Cin256_Cout256_HW14_K3",
       "dtype": "f32",
-      "median_ns": 64770.0
+      "median_ns": 68776.0
     },
     {
       "op": "conv2d",
       "shape": "N1_Cin256_Cout256_HW14_K3",
       "dtype": "f16",
-      "median_ns": 73522.0
+      "median_ns": 82900.0
     },
     {
       "op": "maxpool2d",
       "shape": "N1_C64_H56_W56_K3_S2",
       "dtype": "f32",
-      "median_ns": 21036.0
+      "median_ns": 29548.0
     },
     {
       "op": "maxpool2d",
       "shape": "N1_C64_H56_W56_K3_S2",
       "dtype": "f16",
-      "median_ns": 20086.0
+      "median_ns": 24304.0
     },
     {
       "op": "maxpool2d",
       "shape": "N1_C128_H28_W28_K3_S2",
       "dtype": "f32",
-      "median_ns": 20768.0
+      "median_ns": 22844.0
     },
     {
       "op": "maxpool2d",
       "shape": "N1_C128_H28_W28_K3_S2",
       "dtype": "f16",
-      "median_ns": 20184.0
+      "median_ns": 22052.0
     },
     {
       "op": "maxpool2d",
       "shape": "N1_C256_H14_W14_K3_S2",
       "dtype": "f32",
-      "median_ns": 20226.0
+      "median_ns": 21660.0
     },
     {
       "op": "maxpool2d",
       "shape": "N1_C256_H14_W14_K3_S2",
       "dtype": "f16",
-      "median_ns": 20622.0
+      "median_ns": 25016.0
     },
     {
       "op": "flash_sdpa_gqa",
       "shape": "Hq32_Hkv32_Q2048_D128",
       "dtype": "f16",
-      "median_ns": 2600680.0
+      "median_ns": 2474570.0
     },
     {
       "op": "flash_sdpa_gqa",
       "shape": "Hq32_Hkv32_Q2048_D128",
       "dtype": "bf16",
-      "median_ns": 2547548.0
+      "median_ns": 2462514.0
     },
     {
       "op": "flash_sdpa_gqa",
       "shape": "Hq32_Hkv8_Q2048_D128",
       "dtype": "f16",
-      "median_ns": 2590044.0
+      "median_ns": 2515912.0
     },
     {
       "op": "flash_sdpa_gqa",
       "shape": "Hq32_Hkv8_Q2048_D128",
       "dtype": "bf16",
-      "median_ns": 2547850.0
+      "median_ns": 2455136.0
     },
     {
       "op": "flash_sdpa_gqa",
       "shape": "Hq32_Hkv4_Q2048_D128",
       "dtype": "f16",
-      "median_ns": 2608780.0
+      "median_ns": 2533440.0
     },
     {
       "op": "flash_sdpa_gqa",
       "shape": "Hq32_Hkv4_Q2048_D128",
       "dtype": "bf16",
-      "median_ns": 2550458.0
+      "median_ns": 2449304.0
     },
     {
       "op": "flash_sdpa_gqa",
       "shape": "Hq32_Hkv1_Q2048_D128",
       "dtype": "f16",
-      "median_ns": 2608736.0
+      "median_ns": 2522668.0
     },
     {
       "op": "flash_sdpa_gqa",
       "shape": "Hq32_Hkv1_Q2048_D128",
       "dtype": "bf16",
-      "median_ns": 2550612.0
+      "median_ns": 2455338.0
     }
   ]
 }
