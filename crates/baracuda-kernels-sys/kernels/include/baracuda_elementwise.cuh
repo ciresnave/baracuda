@@ -1746,6 +1746,47 @@ __global__ void concat2_kernel(
     }
 }
 
+// Detect whether (shape, stride) describe a fully-contiguous row-major
+// tensor. Used by the concat2 fast path to gate the cudaMemcpy2DAsync
+// route on inputs+output all being plain contig.
+__host__ inline bool concat2_is_contig(
+    int32_t rank,
+    const int32_t* shape,
+    const int64_t* stride)
+{
+    if (rank <= 0) return true;
+    int64_t expected = 1;
+    for (int d = rank - 1; d >= 0; --d) {
+        if (stride[d] != expected) return false;
+        expected *= (int64_t)shape[d];
+    }
+    return true;
+}
+
+// Phase 73-followup fast path for `concat2`:
+//
+// The legacy `concat2_kernel` runs one thread per output cell with
+// per-thread N-D coord unraveling + double stride dot product. For an
+// LLM KV-cache decode shape (BH=32, Ka=2047, Kb=1, D=128) it was
+// measured at ~7 GB/s (3% of an RTX 4070's 250 GB/s peak) — 13× slower
+// than PyTorch's torch.cat at the same shape.
+//
+// When all three tensors (A, B, output) are contiguous row-major, the
+// concat reduces to two strided block copies:
+//
+//   outer = prod(output_shape[0 .. concat_dim))
+//   inner = prod(output_shape[concat_dim+1 .. rank))
+//   ka_w  = split_offset * inner    (A's row width in the output)
+//   kb_w  = (output_shape[concat_dim] - split_offset) * inner
+//
+//   For each `outer` row: dst row stride = (ka_w + kb_w) elements,
+//   src A row stride = ka_w, src B row stride = kb_w. cudaMemcpy2DAsync
+//   handles this directly.
+//
+// cudaMemcpy2DAsync's driver-internal implementation reaches
+// near-peak memory bandwidth for sane pitches, so this routes the
+// common-case to a kernel that's already highly tuned.
+
 template <typename T>
 __host__ inline int32_t launch_concat2(
     const T* a, const T* b, T* y,
@@ -1761,6 +1802,80 @@ __host__ inline int32_t launch_concat2(
 {
     if (rank < 0 || rank > MAX_RANK) return 2;
     if (concat_dim < 0 || concat_dim >= rank) return 2;
+
+    // Build the per-input shapes (output shape with concat_dim replaced
+    // by split_offset for A, and by `output_shape[concat_dim] - split_offset`
+    // for B). Used by both the fast-path contig probe and the legacy
+    // fallback path's DimsI* setup below.
+    int32_t a_shape_host[MAX_RANK] = {0};
+    int32_t b_shape_host[MAX_RANK] = {0};
+    int32_t out_extent = output_shape_host[concat_dim];
+    for (int i = 0; i < rank; ++i) {
+        a_shape_host[i] = output_shape_host[i];
+        b_shape_host[i] = output_shape_host[i];
+    }
+    a_shape_host[concat_dim] = split_offset;
+    b_shape_host[concat_dim] = out_extent - split_offset;
+
+    // -------- Fast path: all three tensors contig row-major. --------
+    //
+    // Hits the common case (LLM KV-cache concat, residual joins). The
+    // legacy slow kernel stays as the fallback below.
+    if (concat2_is_contig(rank, a_shape_host, stride_a_host)
+        && concat2_is_contig(rank, b_shape_host, stride_b_host)
+        && concat2_is_contig(rank, output_shape_host, stride_y_host))
+    {
+        int64_t outer = 1, inner = 1;
+        for (int d = 0; d < concat_dim; ++d) {
+            outer *= (int64_t)output_shape_host[d];
+        }
+        for (int d = concat_dim + 1; d < rank; ++d) {
+            inner *= (int64_t)output_shape_host[d];
+        }
+        if (outer == 0 || inner == 0 || out_extent == 0) {
+            return 0;  // empty — nothing to copy
+        }
+        const int64_t ka = (int64_t)split_offset;
+        const int64_t kb = (int64_t)(out_extent - split_offset);
+        const size_t elt = sizeof(T);
+        const size_t a_row_bytes = (size_t)(ka * inner) * elt;
+        const size_t b_row_bytes = (size_t)(kb * inner) * elt;
+        const size_t y_row_bytes = (size_t)((ka + kb) * inner) * elt;
+
+        cudaError_t err = cudaSuccess;
+        if (ka > 0) {
+            err = cudaMemcpy2DAsync(
+                /*dst=*/      y,
+                /*dst_pitch=*/y_row_bytes,
+                /*src=*/      a,
+                /*src_pitch=*/a_row_bytes,
+                /*width=*/    a_row_bytes,
+                /*height=*/   (size_t)outer,
+                cudaMemcpyDeviceToDevice,
+                stream);
+            if (err != cudaSuccess) return 5;
+        }
+        if (kb > 0) {
+            T* y_b = y + ka * inner;
+            err = cudaMemcpy2DAsync(
+                /*dst=*/      y_b,
+                /*dst_pitch=*/y_row_bytes,
+                /*src=*/      b,
+                /*src_pitch=*/b_row_bytes,
+                /*width=*/    b_row_bytes,
+                /*height=*/   (size_t)outer,
+                cudaMemcpyDeviceToDevice,
+                stream);
+            if (err != cudaSuccess) return 5;
+        }
+        return 0;
+    }
+
+    // -------- Legacy strided fallback (non-contig inputs/output). --------
+    //
+    // Same per-thread coord-unravel as before. Kept because the fast
+    // path requires fully contig layouts; arbitrary-stride callers
+    // (rare in practice) still need a correct path.
     DimsI32 out_shape = {};
     DimsI64 sa = {}, sb = {}, sy = {};
     for (int i = 0; i < rank; ++i) {

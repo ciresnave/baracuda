@@ -1479,35 +1479,50 @@ broadly: unify the two plans so users don't have to pick. Either
 way, plain end-user MQA / GQA inference should not require manual
 plan-selection logic.
 
-### `ConcatPlan` perf gap on KV-cache-typical shapes
+### `ConcatPlan` perf gap on KV-cache-typical shapes — ✓ FIXED
 
-Phase 73.8 bench surfaced a **12-50× perf gap** vs PyTorch on the
-2-input concat at LLM-typical KV-cache shapes:
+Phase 73.8 bench surfaced a 12-50× perf gap vs PyTorch on 2-input
+concat at LLM-typical KV-cache shapes. **Fixed in Phase 73 follow-up
+(2026-06-04)** by routing the contiguous fast path through
+`cudaMemcpy2DAsync` × 2 (one call per input) instead of the
+per-element coord-unravel kernel.
 
-- **BH32_Ka2047_Kb1_D128 f32** (the canonical KV-cache decode shape —
-  append one new token to a 2047-long cache): baracuda **4.42ms** vs
-  PyTorch **339μs** (**13× slower**).
-- **BH32_Ka1024_Kb1024_D128 f32** (mid-sequence join): baracuda
-  **4.36ms** vs PyTorch **342μs** (**13× slower**).
-- **BH32_Ka512_Kb512_D128 f32**: baracuda **2.15ms** vs PyTorch
-  **44.8μs** (**48× slower** — gap grows worse at smaller shapes).
+Root cause: the legacy `concat2_kernel` was one thread per output
+cell, each thread doing N-D unravel (modulo+division per axis) +
+double stride dot product, all to copy one byte. At the bench shape
+8.4M threads spent all their time on arithmetic, not on memory
+bandwidth.
 
-baracuda 4.42ms for ~16MB of data read + 16MB write = ~7 GB/s
-effective bandwidth — far under the RTX 4070's ~250 GB/s peak. The
-kernel is doing something pathological (likely per-element naive
-copy with poor coalescing) rather than the standard cudaMemcpyAsync
-or vectorized large-stride copy that PyTorch uses.
+Fix (in `baracuda_elementwise.cuh::launch_concat2`):
 
-**Why pre-1.0:** the KV-cache concat is in the inner loop of every
-autoregressive LLM decode step. A 13× perf gap here means every
-LLM inference pipeline using baracuda is paying 13× the time it
-should on this one op. Critical for the 1.0 perf credibility.
+- Detect the all-contig case (A, B, output all have plain row-major
+  strides — `concat2_is_contig` helper).
+- Compute `outer` = product of dims before concat_dim, `inner` =
+  product of dims after. The concat reduces to two strided block
+  copies: A is `outer` rows of `ka * inner` elements, B is `outer`
+  rows of `kb * inner` elements, output is the corresponding
+  strided pitch.
+- Use `cudaMemcpy2DAsync` for each input — driver-internal
+  implementation reaches near-peak bandwidth.
+- Legacy per-element kernel kept as the non-contig fallback for
+  arbitrary-stride callers.
 
-**Scope:** profile `ConcatPlan::run`'s C kernel; replace with a
-cudaMemcpyAsync-per-input or vectorized-copy pattern. The per-input
-data is contiguous (shape match on every axis except concat_dim);
-the output write is also contiguous strided. This should be a
-near-trivial memcpy kernel, not a per-element compute kernel.
+Result on RTX 4070 (re-bench, --quick):
+
+| Shape | Before | After | Speedup |
+| --- | --- | --- | --- |
+| BH32_Ka2047_Kb1_D128 f32 (KV-cache decode) | 4.42ms | 338μs | **13.1×** |
+| BH32_Ka1024_Kb1024_D128 f32 | 4.36ms | 297μs | **14.7×** |
+| BH32_Ka512_Kb512_D128 f32 | 2.15ms | 44μs | **48.9×** |
+
+baracuda now matches or beats PyTorch on f32 (0.84-1.15× ratio
+across the sweep) — gap closed at the order-of-magnitude level
+that mattered. The remaining ~16% f16 small-shape gap is launch
+overhead from 2× cudaMemcpy2DAsync calls vs PyTorch's fused kernel;
+not worth a follow-up.
+
+All 8 existing concat smoke tests pass at every dtype +
+non-axis-1 + non-contig pattern.
 
 ### Reductions perf gap vs PyTorch at small rows × small hidden
 
