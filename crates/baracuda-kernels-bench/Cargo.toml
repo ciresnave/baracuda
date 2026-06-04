@@ -54,16 +54,6 @@ cuda_l2 = []
 # comparison.
 ozimmu = ["dep:baracuda-ozimmu"]
 
-# Phase 73 — PyTorch (LibTorch / tch-rs) cross-implementation reference.
-# Gates the `*_vs_pytorch` bench files. Off by default; flip on to
-# compile the tch-rs bindings and run baracuda head-to-head against
-# PyTorch's CUDA matmul / softmax / conv / etc. Requires LibTorch on
-# the system: either `pip install torch` + `LIBTORCH_USE_PYTORCH=1`
-# (recommended), or standalone LibTorch download + `LIBTORCH=<path>`.
-# Also set `LIBTORCH_BYPASS_VERSION_CHECK=1` if your pip-installed
-# torch is newer than the version tch-rs pins to.
-pytorch = ["dep:tch"]
-
 [dependencies]
 baracuda-kernels = { workspace = true }
 baracuda-kernels-types = { workspace = true }
@@ -75,10 +65,6 @@ baracuda-cudnn = { workspace = true, features = ["half-crate"] }
 baracuda-types = { workspace = true, features = ["half-crate", "f8-crate"] }
 # Phase 44c — optional, gated behind the `ozimmu` feature on this crate.
 baracuda-ozimmu = { workspace = true, optional = true, features = ["build-vendor"] }
-# Phase 73 — optional, gated behind the `pytorch` feature on this crate.
-# tch-rs provides PyTorch C++ API bindings; the `cuda` feature unlocks
-# CUDA-side tensor placement so we can compare on-device.
-tch = { version = "0.24.0", optional = true }
 half = { workspace = true }
 
 [build-dependencies]
@@ -188,14 +174,6 @@ harness = false
 # Phase 44c — ozIMMU variant A/B/C/D timing.
 [[bench]]
 name = "gemm_ozaki_variants"
-harness = false
-
-# Phase 73 — PyTorch vs baracuda GEMM head-to-head via tch-rs.
-# Requires the `pytorch` feature to do anything useful (the bench file
-# builds a no-op `main` without it). See feature doc above for LibTorch
-# setup.
-[[bench]]
-name = "gemm_vs_pytorch"
 harness = false
 
 [package.metadata.docs.rs]
