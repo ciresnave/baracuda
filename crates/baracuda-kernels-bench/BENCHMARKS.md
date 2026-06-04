@@ -31,6 +31,7 @@ hand-maintained roll-up.
 | `elementwise` (Phase 73.5) | 33 ops × f32 / f16 — activations (ReLU/GELU/Silu/Tanh/Sigmoid/Mish/Hardswish/Hardsigmoid/Hardtanh/LeakyReLU/Elu/Selu/ReLU6/Softplus/Softsign/GELU-Tanh), math unaries (Abs/Neg/Sign/Reciprocal/Sqrt/Rsqrt/Square/Exp/Log/Sin/Cos/Erf), binaries (Add/Sub/Mul/Div/Maximum/Minimum/Pow) | self | numel ∈ {1M, 16M} |
 | `sdpa_gqa` | Flash SDPA + GQA broadcast (f16 / bf16) | self | H_q=32, H_kv ∈ {32, 1}, Q=K=2048, D=128 |
 | `concat` (Phase 73.8) | 2-input torch.cat × f32 / f16 | self (no library equiv) | KV-cache decode (BH32_Ka2047_Kb1_D128) + mid-seq joins |
+| `embedding` (Phase 73.8) | F.embedding × f32 / f16 | self (no library equiv) | Llama-2 7B decode (V32000_D4096_N1) + prefill (N2048) + smaller dense |
 
 Also see the Phase 10 baseline benches (`gemm.rs`, `flash_attention.rs`,
 `conv2d.rs`) for wider per-dtype shape sweeps without the cross-impl
@@ -565,6 +566,17 @@ Speedup column convention: `library_ns / baracuda_ns`.
 | f32 | `N16777216` | 782.4μs | 590.5μs | 0.75× |
 | f16 | `N1048576` | 11.4μs | 18.4μs | **1.61×** |
 | f16 | `N16777216` | 362.4μs | 297.6μs | 0.82× |
+
+### `embedding`
+
+| dtype | shape | baracuda | PyTorch | PyTorch/baracuda |
+| --- | --- | --- | --- | --- |
+| f32 | `V8192_D1024_N512` | 13.5μs | 50.8μs | **3.76×** |
+| f32 | `V32000_D4096_N1` | 13.4μs | 26.0μs | **1.94×** |
+| f32 | `V32000_D4096_N2048` | 332.8μs | 333.9μs | ≈ |
+| f16 | `V8192_D1024_N512` | 14.9μs | 53.7μs | **3.60×** |
+| f16 | `V32000_D4096_N1` | 13.3μs | 29.2μs | **2.19×** |
+| f16 | `V32000_D4096_N2048` | 236.1μs | 66.2μs | 0.28× |
 
 ### `erf`
 

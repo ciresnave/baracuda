@@ -419,6 +419,27 @@ CONCAT_SWEEP: tuple[tuple[int, int, int, int], ...] = (
 CONCAT_DTYPES = NORM_DTYPES  # f32, f16
 
 
+EMBEDDING_SWEEP: tuple[tuple[int, int, int], ...] = (
+    (32000, 4096, 1),
+    (32000, 4096, 2048),
+    (8192, 1024, 512),
+)
+
+
+def embedding_cases() -> Iterable[tuple[str, str, str, Callable[[], None]]]:
+    """`F.embedding(input_ids, weight)` over EMBEDDING_SWEEP. Indices are
+    int32 in `[0, vocab)`; weight is float."""
+    device = torch.device("cuda")
+    for (vocab, hidden, num) in EMBEDDING_SWEEP:
+        shape = f"V{vocab}_D{hidden}_N{num}"
+        # Pre-build indices once per shape; reuse across dtypes.
+        idx = torch.randint(0, vocab, (num,), dtype=torch.int32, device=device).long()
+        for dtype_name, dtype in NORM_DTYPES:  # f32, f16
+            weight = torch.randn((vocab, hidden), dtype=dtype, device=device)
+            launch = lambda w=weight, i=idx: torch.nn.functional.embedding(i, w)
+            yield ("embedding", shape, dtype_name, launch)
+
+
 def concat_cases() -> Iterable[tuple[str, str, str, Callable[[], None]]]:
     """`torch.cat([a, b], dim=1)` over CONCAT_SWEEP — KV-cache concat
     pattern. Shape label matches `BH{bh}_Ka{ka}_Kb{kb}_D{d}` from the
@@ -484,6 +505,7 @@ OP_REGISTRY: dict[str, Callable[[], Iterable[tuple[str, str, str, Callable[[], N
     "maxpool2d": maxpool2d_cases,
     "avgpool2d": avgpool2d_cases,
     "concat": concat_cases,
+    "embedding": embedding_cases,
     "sdpa": sdpa_cases,
 }
 

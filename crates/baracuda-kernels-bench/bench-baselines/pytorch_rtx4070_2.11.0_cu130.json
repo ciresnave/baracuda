@@ -8,7 +8,7 @@
       8,
       9
     ],
-    "generated_at_utc": "2026-06-04T14:51:34+00:00",
+    "generated_at_utc": "2026-06-04T14:54:50+00:00",
     "sample_count": 11,
     "inner_iters": 50,
     "warmup_launches": 10,
@@ -1802,6 +1802,42 @@
       "shape": "BH32_Ka512_Kb512_D128",
       "dtype": "f16",
       "median_ns": 26562.0
+    },
+    {
+      "op": "embedding",
+      "shape": "V32000_D4096_N1",
+      "dtype": "f32",
+      "median_ns": 26016.0
+    },
+    {
+      "op": "embedding",
+      "shape": "V32000_D4096_N1",
+      "dtype": "f16",
+      "median_ns": 29216.0
+    },
+    {
+      "op": "embedding",
+      "shape": "V32000_D4096_N2048",
+      "dtype": "f32",
+      "median_ns": 333948.0
+    },
+    {
+      "op": "embedding",
+      "shape": "V32000_D4096_N2048",
+      "dtype": "f16",
+      "median_ns": 66156.0
+    },
+    {
+      "op": "embedding",
+      "shape": "V8192_D1024_N512",
+      "dtype": "f32",
+      "median_ns": 50770.0
+    },
+    {
+      "op": "embedding",
+      "shape": "V8192_D1024_N512",
+      "dtype": "f16",
+      "median_ns": 53704.0
     }
   ]
 }
