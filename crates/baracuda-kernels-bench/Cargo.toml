@@ -200,6 +200,10 @@ harness = false
 name = "batch_norm"
 harness = false
 
+[[bench]]
+name = "topk"
+harness = false
+
 [package.metadata.docs.rs]
 # This crate is a bench harness — no docs to publish. Keep the metadata
 # minimal so docs.rs doesn't try to build benchmarks.

@@ -440,6 +440,29 @@ def embedding_cases() -> Iterable[tuple[str, str, str, Callable[[], None]]]:
             yield ("embedding", shape, dtype_name, launch)
 
 
+TOPK_SWEEP: tuple[tuple[int, int, int], ...] = (
+    (32, 128, 4),
+    (8, 512, 16),
+    (1, 1024, 64),
+)
+
+
+def topk_cases() -> Iterable[tuple[str, str, str, Callable[[], None]]]:
+    """`torch.topk(x, k, dim=-1, largest=True)` over TOPK_SWEEP. f32 only
+    (baracuda trailblazer doesn't ship f16). Fixture matches the Rust
+    side's `(i * 0.001 + b * 0.137)` pattern."""
+    device = torch.device("cuda")
+    for (batch, row_len, k) in TOPK_SWEEP:
+        shape_label = f"B{batch}_L{row_len}_K{k}"
+        # Match the Rust fixture deterministically.
+        rows = torch.arange(row_len, dtype=torch.float32, device=device) * 0.001
+        cols = torch.arange(batch, dtype=torch.float32, device=device) * 0.137
+        x = rows.unsqueeze(0).expand(batch, row_len).clone()
+        x.add_(cols.unsqueeze(1))
+        launch = lambda x=x, k=k: torch.topk(x, k=k, dim=-1, largest=True)
+        yield ("topk", shape_label, "f32", launch)
+
+
 def batch_norm_cases() -> Iterable[tuple[str, str, str, Callable[[], None]]]:
     """`F.batch_norm(x, running_mean, running_var, weight, bias,
     training=True, eps=1e-5)` over POOL_SWEEP. Training-mode = compute
@@ -548,6 +571,7 @@ OP_REGISTRY: dict[str, Callable[[], Iterable[tuple[str, str, str, Callable[[], N
     "embedding": embedding_cases,
     "masked_fill": masked_fill_cases,
     "batch_norm": batch_norm_cases,
+    "topk": topk_cases,
     "sdpa": sdpa_cases,
 }
 

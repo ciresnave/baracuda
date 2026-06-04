@@ -8,7 +8,7 @@
       8,
       9
     ],
-    "generated_at_utc": "2026-06-04T15:00:12+00:00",
+    "generated_at_utc": "2026-06-04T15:02:50+00:00",
     "sample_count": 11,
     "inner_iters": 50,
     "warmup_launches": 10,
@@ -1910,6 +1910,24 @@
       "shape": "N1_C256_H14_W14",
       "dtype": "f16",
       "median_ns": 91160.0
+    },
+    {
+      "op": "topk",
+      "shape": "B32_L128_K4",
+      "dtype": "f32",
+      "median_ns": 50638.0
+    },
+    {
+      "op": "topk",
+      "shape": "B8_L512_K16",
+      "dtype": "f32",
+      "median_ns": 48286.0
+    },
+    {
+      "op": "topk",
+      "shape": "B1_L1024_K64",
+      "dtype": "f32",
+      "median_ns": 35464.0
     }
   ]
 }

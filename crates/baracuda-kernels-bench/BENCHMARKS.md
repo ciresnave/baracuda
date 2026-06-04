@@ -34,6 +34,7 @@ hand-maintained roll-up.
 | `embedding` (Phase 73.8) | F.embedding × f32 / f16 | self (no library equiv) | Llama-2 7B decode (V32000_D4096_N1) + prefill (N2048) + smaller dense |
 | `masked_fill` (Phase 73.8) | tensor.masked_fill(mask, -inf) × f32 | self (no library equiv) | rows × hidden, same as softmax |
 | `batch_norm` (Phase 73.8) | BatchNorm training-mode FW × f32 / f16 | self (PyTorch via JSON; cuDNN BN has heavier API) | ResNet-50 picks (3) |
+| `topk` (Phase 73.8) | torch.topk × f32 | self (no library equiv) | MoE-style (B32_L128_K4) + intermediate (B8_L512_K16) + cap (B1_L1024_K64) |
 
 Also see the Phase 10 baseline benches (`gemm.rs`, `flash_attention.rs`,
 `conv2d.rs`) for wider per-dtype shape sweeps without the cross-impl
@@ -927,5 +928,13 @@ Speedup column convention: `library_ns / baracuda_ns`.
 | f32 | `N16777216` | 678.9μs | 675.0μs | ≈ |
 | f16 | `N1048576` | 15.8μs | 17.5μs | **1.11×** |
 | f16 | `N16777216` | 337.2μs | 341.9μs | ≈ |
+
+### `topk`
+
+| dtype | shape | baracuda | PyTorch | PyTorch/baracuda |
+| --- | --- | --- | --- | --- |
+| f32 | `B1_L1024_K64` | 18.5μs | 35.5μs | **1.92×** |
+| f32 | `B8_L512_K16` | 15.7μs | 48.3μs | **3.07×** |
+| f32 | `B32_L128_K4` | 13.7μs | 50.6μs | **3.71×** |
 
 <!-- END auto-generated phase29 rollup -->
