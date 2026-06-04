@@ -440,6 +440,28 @@ def embedding_cases() -> Iterable[tuple[str, str, str, Callable[[], None]]]:
             yield ("embedding", shape, dtype_name, launch)
 
 
+def batch_norm_cases() -> Iterable[tuple[str, str, str, Callable[[], None]]]:
+    """`F.batch_norm(x, running_mean, running_var, weight, bias,
+    training=True, eps=1e-5)` over POOL_SWEEP. Training-mode = compute
+    mean/var per-call (matches baracuda's BatchNormPlan), so the
+    comparison is apples-to-apples vs the per-batch stats compute."""
+    device = torch.device("cuda")
+    for (n, c, h, w, _k, _s, _p) in POOL_SWEEP:
+        shape = f"N{n}_C{c}_H{h}_W{w}"
+        for dtype_name, dtype in NORM_DTYPES:  # f32, f16
+            x = torch.randn((n, c, h, w), dtype=dtype, device=device)
+            weight = torch.ones((c,), dtype=dtype, device=device)
+            bias = torch.zeros((c,), dtype=dtype, device=device)
+            running_mean = torch.zeros((c,), dtype=dtype, device=device)
+            running_var = torch.ones((c,), dtype=dtype, device=device)
+            launch = lambda x=x, w=weight, b=bias, rm=running_mean, rv=running_var: (
+                torch.nn.functional.batch_norm(
+                    x, rm, rv, w, b, training=True, eps=1e-5
+                )
+            )
+            yield ("batch_norm", shape, dtype_name, launch)
+
+
 def masked_fill_cases() -> Iterable[tuple[str, str, str, Callable[[], None]]]:
     """`tensor.masked_fill(mask, -inf)` over CROSS_SEQLEN × CROSS_HIDDEN.
 
@@ -525,6 +547,7 @@ OP_REGISTRY: dict[str, Callable[[], Iterable[tuple[str, str, str, Callable[[], N
     "concat": concat_cases,
     "embedding": embedding_cases,
     "masked_fill": masked_fill_cases,
+    "batch_norm": batch_norm_cases,
     "sdpa": sdpa_cases,
 }
 

@@ -33,6 +33,7 @@ hand-maintained roll-up.
 | `concat` (Phase 73.8) | 2-input torch.cat × f32 / f16 | self (no library equiv) | KV-cache decode (BH32_Ka2047_Kb1_D128) + mid-seq joins |
 | `embedding` (Phase 73.8) | F.embedding × f32 / f16 | self (no library equiv) | Llama-2 7B decode (V32000_D4096_N1) + prefill (N2048) + smaller dense |
 | `masked_fill` (Phase 73.8) | tensor.masked_fill(mask, -inf) × f32 | self (no library equiv) | rows × hidden, same as softmax |
+| `batch_norm` (Phase 73.8) | BatchNorm training-mode FW × f32 / f16 | self (PyTorch via JSON; cuDNN BN has heavier API) | ResNet-50 picks (3) |
 
 Also see the Phase 10 baseline benches (`gemm.rs`, `flash_attention.rs`,
 `conv2d.rs`) for wider per-dtype shape sweeps without the cross-impl
@@ -529,6 +530,17 @@ Speedup column convention: `library_ns / baracuda_ns`.
 | f16 | `N1_C64_H56_W56_K3_S2` | 12.9μs | 13.0μs | ≈ | 17.1μs | **1.32×** |
 | f16 | `N1_C128_H28_W28_K3_S2` | 12.3μs | 11.8μs | ≈ | 18.1μs | **1.47×** |
 | f16 | `N1_C256_H14_W14_K3_S2` | 12.4μs | 12.2μs | ≈ | 17.6μs | **1.42×** |
+
+### `batch_norm`
+
+| dtype | shape | baracuda | PyTorch | PyTorch/baracuda |
+| --- | --- | --- | --- | --- |
+| f32 | `N1_C64_H56_W56` | 24.2μs | 84.1μs | **3.48×** |
+| f32 | `N1_C128_H28_W28` | 25.9μs | 72.9μs | **2.81×** |
+| f32 | `N1_C256_H14_W14` | 26.3μs | 75.9μs | **2.89×** |
+| f16 | `N1_C64_H56_W56` | 26.2μs | 109.0μs | **4.16×** |
+| f16 | `N1_C128_H28_W28` | 25.1μs | 100.5μs | **4.01×** |
+| f16 | `N1_C256_H14_W14` | 25.1μs | 91.2μs | **3.63×** |
 
 ### `concat`
 
