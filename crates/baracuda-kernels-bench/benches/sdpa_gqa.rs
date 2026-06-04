@@ -148,6 +148,47 @@ fn bench<T>(
         let sl = [BATCH, NUM_Q_HEADS, SEQ_LEN];
         let stl = contiguous_stride(sl);
 
+        // Probe — `FlashSdpaPlan::can_implement` rejects non-contiguous
+        // K/V (it gates the bespoke contig kernel). The GQA broadcast
+        // pattern (`stride[1] = 0` on K/V) trips this, even though the
+        // strided sibling `FlashSdpaSm89Plan` supports it (Phase 17).
+        // Issue: the public `FlashSdpaPlan` doesn't auto-route to the
+        // sibling on GQA broadcast — see ROADMAP for the follow-up
+        // ("FlashSdpaPlan GQA-broadcast routing gap"). For now, detect
+        // the rejection and emit a placeholder CSV row + log a
+        // diagnostic so the rollup script knows this cell was skipped.
+        {
+            let probe = FlashSdpaArgs::<T> {
+                q: TensorRef { data: dq.as_slice(), shape: sq, stride: stq },
+                k: TensorRef { data: dk.as_slice(), shape: skv, stride: stkv },
+                v: TensorRef { data: dv.as_slice(), shape: skv, stride: stkv },
+                y: TensorMut { data: dy.as_slice_mut(), shape: sy, stride: sty },
+                lse: TensorMut { data: dlse.as_slice_mut(), shape: sl, stride: stl },
+                mask: None,
+                alibi_slopes: None,
+            };
+            if let Err(e) = plan.can_implement(&probe) {
+                eprintln!(
+                    "sdpa_gqa: skipping {label}/{dtype_label} \
+                     (FlashSdpaPlan rejected this shape: {e:?})"
+                );
+                append_csv_row(
+                    BENCH_NAME,
+                    &PhaseTwentyNineRow {
+                        op: "flash_sdpa_gqa",
+                        shape: label.clone(),
+                        dtype: leak_str(dtype_label),
+                        baracuda_ns: f64::NAN,
+                        reference_ns: None,
+                        reference: "skipped",
+                        pytorch_ns: baseline
+                            .and_then(|b| b.lookup("flash_sdpa_gqa", &label, dtype_label)),
+                    },
+                );
+                continue;
+            }
+        }
+
         warmup(&stream, || {
             let args = FlashSdpaArgs::<T> {
                 q: TensorRef {

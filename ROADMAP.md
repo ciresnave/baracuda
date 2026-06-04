@@ -1457,19 +1457,27 @@ Compare against PyTorch's reference. Either fix the kernel dispatch
 PyTorch on a load-bearing op undermines the 1.0 perf narrative,
 even if it's a bench artifact rather than a real kernel issue.
 
-### `sdpa_gqa.rs` bench panics on Hkv=1 full MQA broadcast
+### `FlashSdpaPlan` GQA-broadcast routing gap
 
-`plan.run` returns an error during the warmup phase for the
-`stride[1] = 0` full-MQA-broadcast configuration; the `.expect()`
-panics. The intermediate ratios Hkv∈{8,4} are intentionally skipped
-by the bench (no stride-0 broadcast pattern for them), so the only
-runnable cells are Hkv=32 (plain MHA) and Hkv=1 (full MQA) —
-neither produces clean data today.
+**Root cause** (Phase 73.3 follow-up): the public `FlashSdpaPlan`
+rejects non-contiguous K/V tensors at `can_implement` ("trailblazer
+requires contiguous tensors"), even though the strided sibling
+`FlashSdpaSm89Plan` already supports the GQA broadcast case via the
+Phase 17 template-bool `gqa_broadcast` switch. The safe-wrapper
+layer doesn't route to the sibling when broadcast is detected.
 
-**Scope:** either fix the plan to accept the stride-0 broadcast at
-this shape OR fix the bench to skip the failing config with a
-diagnostic. Either way, the GQA bench should produce data on at
-least 2 of the 4 KV-head sweep points.
+The `sdpa_gqa.rs` bench was the test that surfaced this — its
+Hkv=1 full-MQA-broadcast case sets `stride[1] = 0` on K/V, hits
+the rejection, and panics. As an immediate mitigation the bench now
+catches the rejection, emits a `reference: "skipped"` row, and
+continues; the underlying baracuda gap remains.
+
+**Fix scope:** make `FlashSdpaPlan::can_implement` accept stride-0
+on K/V's head axis when the strided sibling can handle it, and
+route `run` through `FlashSdpaSm89Plan` in that case. Or, more
+broadly: unify the two plans so users don't have to pick. Either
+way, plain end-user MQA / GQA inference should not require manual
+plan-selection logic.
 
 ### Reductions perf gap vs PyTorch at small rows × small hidden
 
