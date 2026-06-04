@@ -1440,6 +1440,45 @@ Pairs with the cuDNN strided siblings item above.
 load-bearing for 1.0 if downstream is willing to make layout
 decisions itself.
 
+### Flash SDPA perf gap at Hq=Hkv=32, Q=K=2048, D=128, f16
+
+Phase 73.3 bench surfaced a **~100× perf gap** vs PyTorch at the
+plain-MHA shape: baracuda reports ~270ms per launch, PyTorch reports
+~2.5ms. Reproducible across runs. Either baracuda's `FlashSdpaPlan`
+isn't hitting the tensor-core fast path at this configuration, or
+the bench timing closure is including setup work that should be
+hoisted outside the inner loop.
+
+**Scope:** profile the f16 path at Hq=Hkv=32, Q=K=2048, D=128.
+Compare against PyTorch's reference. Either fix the kernel dispatch
+(if a slow path was selected) or fix the bench harness.
+
+**Why pre-1.0:** publishing a BENCHMARKS.md with a 100× gap to
+PyTorch on a load-bearing op undermines the 1.0 perf narrative,
+even if it's a bench artifact rather than a real kernel issue.
+
+### `sdpa_gqa.rs` bench panics on Hkv=1 full MQA broadcast
+
+`plan.run` returns an error during the warmup phase for the
+`stride[1] = 0` full-MQA-broadcast configuration; the `.expect()`
+panics. The intermediate ratios Hkv∈{8,4} are intentionally skipped
+by the bench (no stride-0 broadcast pattern for them), so the only
+runnable cells are Hkv=32 (plain MHA) and Hkv=1 (full MQA) —
+neither produces clean data today.
+
+**Scope:** either fix the plan to accept the stride-0 broadcast at
+this shape OR fix the bench to skip the failing config with a
+diagnostic. Either way, the GQA bench should produce data on at
+least 2 of the 4 KV-head sweep points.
+
+### Reductions perf gap vs PyTorch at small rows × small hidden
+
+Phase 73.3 bench surfaced PyTorch reduce_sum / reduce_max /
+reduce_mean running 5-20× faster than baracuda at small (R×H ≤
+2048×4096) shapes. baracuda's reductions are tuned for the large
+case where they're 2-2.4× faster than cuDNN; small-shape regression
+suggests a kernel-selection heuristic gap. Worth profiling.
+
 ## Post-1.0 (hardware-gated or follow-on)
 
 Items that need hardware we don't have, or are natural 1.x follow-on
