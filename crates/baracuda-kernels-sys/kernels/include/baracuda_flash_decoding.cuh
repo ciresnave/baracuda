@@ -151,7 +151,6 @@ __global__ void flash_decoding_split_kernel(
     __shared__ float sM;
     __shared__ float sL;
     __shared__ float sO[kMaxD];
-    // K tile in SMEM (kChunkK × D, but we stream one K row at a time).
     __shared__ float sS[kChunkK];     // scores for this chunk
     __shared__ float warp_buf[32];    // for block_reduce_*
 
@@ -170,28 +169,58 @@ __global__ void flash_decoding_split_kernel(
     const T* k_bh = k + (int64_t)b * k_b_stride + (int64_t)h * k_h_stride;
     const T* v_bh = v + (int64_t)b * v_b_stride + (int64_t)h * v_h_stride;
 
-    // Stage A — compute the score for each k in this split, then row-
-    // softmax over the chunk + accumulate into O.
-    //
-    // We compute the full chunk's scores into sS first (one thread per
-    // score, looping over d in-warp), then do the chunk-wide softmax
-    // merge, then the V accumulation. This is the FlashDecoding
-    // "vector inner product" pattern.
-
     const int chunk_len = k_end - k_start;
+    const int warp_id = tid >> 5;
+    const int lane    = tid & 31;
+    const int num_warps = nthreads >> 5;   // 4 for kThreadsPerBlock = 128
 
-    // 1. Scores: sS[ki] = sum_d sQ[d] * K[k_start+ki][d] * scale.
-    //    One thread per (ki). The d-loop is serial per thread; this is
-    //    fine because head_dim ≤ 128 and we have chunk_len ≤ 256 threads
-    //    of work per block.
-    for (int ki = tid; ki < chunk_len; ki += nthreads) {
-        const T* k_row = k_bh + (int64_t)(k_start + ki) * k_seq_stride;
-        float acc = 0.0f;
-        #pragma unroll 4
-        for (int d = 0; d < head_dim; ++d) {
-            acc += sQ[d] * LoadAcc<T>::load(k_row[d]);
+    // Pass 1 — scores. Warp-cooperative dot product: one warp owns one
+    // K-row at a time, all 32 lanes cooperate along the D axis.
+    //
+    // Why this layout (and not 1 thread per K row, walking D serially):
+    // the per-thread serial-D pattern has each warp's 32 threads load
+    // K from 32 *different* rows at the same d step. That's 32 cache
+    // lines fetched per d step per warp — high pressure, poor reuse.
+    //
+    // With warp-along-D, 32 lanes of one warp load contiguous D=32
+    // halfs of the SAME row — fully coalesced. The warp processes
+    // `chunk_len / num_warps` rows over the chunk; 4 warps × 64 rows
+    // = 256 rows total for kChunkK = 256.
+    //
+    // head_dim must be ≥ 32 for this to be meaningful; for D=128 each
+    // lane handles D/32 = 4 elements per row.
+    if (head_dim >= 32) {
+        for (int k_off = warp_id; k_off < chunk_len; k_off += num_warps) {
+            const int k_abs = k_start + k_off;
+            const T* k_row = k_bh + (int64_t)k_abs * k_seq_stride;
+            float acc = 0.0f;
+            // Each lane covers D/32 contiguous d-slots, interleaved by
+            // warp stride. For D=128: lanes 0..31 own d 0..31, then
+            // d 32..63, etc.
+            for (int d = lane; d < head_dim; d += 32) {
+                acc += sQ[d] * LoadAcc<T>::load(k_row[d]);
+            }
+            // Warp-reduce sum across the 32 lanes.
+            #pragma unroll
+            for (int delta = 16; delta > 0; delta >>= 1) {
+                acc += __shfl_xor_sync(0xffffffff, acc, delta, 32);
+            }
+            if (lane == 0) {
+                sS[k_off] = acc * scale;
+            }
         }
-        sS[ki] = acc * scale;
+    } else {
+        // Tiny-D fallback — one thread per K-row, serial-D. Same shape
+        // as the legacy path; we don't care about perf here because the
+        // bandwidth math is dominated by the long-D shapes anyway.
+        for (int ki = tid; ki < chunk_len; ki += nthreads) {
+            const T* k_row = k_bh + (int64_t)(k_start + ki) * k_seq_stride;
+            float acc = 0.0f;
+            for (int d = 0; d < head_dim; ++d) {
+                acc += sQ[d] * LoadAcc<T>::load(k_row[d]);
+            }
+            sS[ki] = acc * scale;
+        }
     }
     // Mask the tail of the chunk if k_len doesn't fill kChunkK.
     for (int ki = tid + chunk_len; ki < kChunkK; ki += nthreads) {
@@ -215,8 +244,10 @@ __global__ void flash_decoding_split_kernel(
     }
     float chunk_sum = block_reduce_sum_f32(local_sum, warp_buf);
 
-    // 4. O = sum_ki sS[ki] * V[k_start + ki].
-    //    One thread per (d). Each thread walks all chunk_len rows of V.
+    // Pass 2 — V accumulation. The "1 thread per d, walks all K-rows"
+    // pattern (used in v1) is ALREADY coalesced across a warp because
+    // 32 lanes share the same `ki` and load V[ki, lane..lane+31] which
+    // is one contiguous row segment per cache line. Keep this layout.
     for (int d = tid; d < head_dim; d += nthreads) {
         float acc = 0.0f;
         for (int ki = 0; ki < chunk_len; ++ki) {
