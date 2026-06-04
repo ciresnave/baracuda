@@ -13,7 +13,15 @@ categories = ["api-bindings", "science"]
 exclude = ["*.profraw", "target/"]
 
 [features]
-default = ["sm80"]
+# `fa2` is on by default — closes the ~108× perf gap vs PyTorch at the
+# standard MHA shape (Hq=Hkv=32, Q=K=2048, D=128, f16/bf16) where the
+# bespoke kernel does scalar fp32 FMAs and ~270ms while FA2 does
+# tensor-core MMA at ~1.66ms (50% faster than PyTorch). Decode-class
+# shapes (seq_q × seq_k < 1M) still hit the bespoke / FlashDecoding
+# paths via the `should_use_fa2` heuristic. Disable explicitly with
+# `default-features = false, features = ["sm80"]` if you don't want
+# the ~3-5min nvcc cost on first build.
+default = ["sm80", "fa2"]
 
 # Architecture features forwarded to the bespoke kernel crate.
 sm80 = ["baracuda-kernels-sys/sm80", "baracuda-cutlass/sm80"]
