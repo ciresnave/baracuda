@@ -8,7 +8,7 @@
       8,
       9
     ],
-    "generated_at_utc": "2026-06-04T14:48:44+00:00",
+    "generated_at_utc": "2026-06-04T14:51:34+00:00",
     "sample_count": 11,
     "inner_iters": 50,
     "warmup_launches": 10,
@@ -1766,6 +1766,42 @@
       "shape": "N1_C256_H14_W14_K3_S2",
       "dtype": "f16",
       "median_ns": 17558.0
+    },
+    {
+      "op": "concat",
+      "shape": "BH32_Ka2047_Kb1_D128",
+      "dtype": "f32",
+      "median_ns": 338792.0
+    },
+    {
+      "op": "concat",
+      "shape": "BH32_Ka2047_Kb1_D128",
+      "dtype": "f16",
+      "median_ns": 41082.0
+    },
+    {
+      "op": "concat",
+      "shape": "BH32_Ka1024_Kb1024_D128",
+      "dtype": "f32",
+      "median_ns": 341898.0
+    },
+    {
+      "op": "concat",
+      "shape": "BH32_Ka1024_Kb1024_D128",
+      "dtype": "f16",
+      "median_ns": 40716.0
+    },
+    {
+      "op": "concat",
+      "shape": "BH32_Ka512_Kb512_D128",
+      "dtype": "f32",
+      "median_ns": 44802.0
+    },
+    {
+      "op": "concat",
+      "shape": "BH32_Ka512_Kb512_D128",
+      "dtype": "f16",
+      "median_ns": 26562.0
     }
   ]
 }

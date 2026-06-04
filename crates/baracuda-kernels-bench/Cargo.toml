@@ -182,6 +182,12 @@ harness = false
 name = "gemm_ozaki_variants"
 harness = false
 
+# Phase 73.8 — new bench files. baracuda-only self-benches with PyTorch
+# references via the frozen JSON baseline; no cuDNN/cuBLAS equivalents.
+[[bench]]
+name = "concat"
+harness = false
+
 [package.metadata.docs.rs]
 # This crate is a bench harness — no docs to publish. Keep the metadata
 # minimal so docs.rs doesn't try to build benchmarks.

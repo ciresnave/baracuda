@@ -409,6 +409,30 @@ def avgpool2d_cases() -> Iterable[tuple[str, str, str, Callable[[], None]]]:
             yield ("avgpool2d", shape, dtype_name, launch)
 
 
+# `concat.rs` shape sweep — (BH, Ka, Kb, D) tuples. KV-cache decode shape
+# + mid-sequence joins. Must match CONCAT_SWEEP in benches/concat.rs.
+CONCAT_SWEEP: tuple[tuple[int, int, int, int], ...] = (
+    (32, 2047, 1, 128),
+    (32, 1024, 1024, 128),
+    (32, 512, 512, 128),
+)
+CONCAT_DTYPES = NORM_DTYPES  # f32, f16
+
+
+def concat_cases() -> Iterable[tuple[str, str, str, Callable[[], None]]]:
+    """`torch.cat([a, b], dim=1)` over CONCAT_SWEEP — KV-cache concat
+    pattern. Shape label matches `BH{bh}_Ka{ka}_Kb{kb}_D{d}` from the
+    bench file."""
+    device = torch.device("cuda")
+    for (bh, ka, kb, d) in CONCAT_SWEEP:
+        shape = f"BH{bh}_Ka{ka}_Kb{kb}_D{d}"
+        for dtype_name, dtype in CONCAT_DTYPES:
+            a = torch.randn((bh, ka, d), dtype=dtype, device=device)
+            b = torch.randn((bh, kb, d), dtype=dtype, device=device)
+            launch = lambda a=a, b=b: torch.cat([a, b], dim=1)
+            yield ("concat", shape, dtype_name, launch)
+
+
 def sdpa_cases() -> Iterable[tuple[str, str, str, Callable[[], None]]]:
     """`F.scaled_dot_product_attention(q, k, v, is_causal=True)` with
     GQA broadcasting. PyTorch supports GQA natively by accepting K/V
@@ -459,6 +483,7 @@ OP_REGISTRY: dict[str, Callable[[], Iterable[tuple[str, str, str, Callable[[], N
     "conv2d": conv2d_cases,
     "maxpool2d": maxpool2d_cases,
     "avgpool2d": avgpool2d_cases,
+    "concat": concat_cases,
     "sdpa": sdpa_cases,
 }
 

@@ -1479,6 +1479,36 @@ broadly: unify the two plans so users don't have to pick. Either
 way, plain end-user MQA / GQA inference should not require manual
 plan-selection logic.
 
+### `ConcatPlan` perf gap on KV-cache-typical shapes
+
+Phase 73.8 bench surfaced a **12-50× perf gap** vs PyTorch on the
+2-input concat at LLM-typical KV-cache shapes:
+
+- **BH32_Ka2047_Kb1_D128 f32** (the canonical KV-cache decode shape —
+  append one new token to a 2047-long cache): baracuda **4.42ms** vs
+  PyTorch **339μs** (**13× slower**).
+- **BH32_Ka1024_Kb1024_D128 f32** (mid-sequence join): baracuda
+  **4.36ms** vs PyTorch **342μs** (**13× slower**).
+- **BH32_Ka512_Kb512_D128 f32**: baracuda **2.15ms** vs PyTorch
+  **44.8μs** (**48× slower** — gap grows worse at smaller shapes).
+
+baracuda 4.42ms for ~16MB of data read + 16MB write = ~7 GB/s
+effective bandwidth — far under the RTX 4070's ~250 GB/s peak. The
+kernel is doing something pathological (likely per-element naive
+copy with poor coalescing) rather than the standard cudaMemcpyAsync
+or vectorized large-stride copy that PyTorch uses.
+
+**Why pre-1.0:** the KV-cache concat is in the inner loop of every
+autoregressive LLM decode step. A 13× perf gap here means every
+LLM inference pipeline using baracuda is paying 13× the time it
+should on this one op. Critical for the 1.0 perf credibility.
+
+**Scope:** profile `ConcatPlan::run`'s C kernel; replace with a
+cudaMemcpyAsync-per-input or vectorized-copy pattern. The per-input
+data is contiguous (shape match on every axis except concat_dim);
+the output write is also contiguous strided. This should be a
+near-trivial memcpy kernel, not a per-element compute kernel.
+
 ### Reductions perf gap vs PyTorch at small rows × small hidden
 
 Phase 73.3 bench surfaced PyTorch reduce_sum / reduce_max /
