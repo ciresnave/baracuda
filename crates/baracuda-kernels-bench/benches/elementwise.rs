@@ -15,7 +15,7 @@ use baracuda_kernels::{
 };
 use baracuda_kernels_bench::{
     append_csv_row, measure_median_ns, setup_device, time_with_events, warmup,
-    PhaseTwentyNineRow,
+    PhaseTwentyNineRow, PytorchBaseline,
 };
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use half::f16;
@@ -28,7 +28,14 @@ fn leak_str(s: &str) -> &'static str {
     Box::leak(s.to_owned().into_boxed_str())
 }
 
-fn bench_binary<T>(c: &mut Criterion, kind: BinaryKind, kind_label: &str, dtype_label: &str, fill: T)
+fn bench_binary<T>(
+    c: &mut Criterion,
+    kind: BinaryKind,
+    kind_label: &str,
+    dtype_label: &str,
+    fill: T,
+    baseline: Option<&PytorchBaseline>,
+)
 where
     T: baracuda_kernels::Element + Copy + 'static,
 {
@@ -115,7 +122,7 @@ where
                 baracuda_ns,
                 reference_ns: None,
                 reference: "",
-                pytorch_ns: None,
+                pytorch_ns: baseline.and_then(|b| b.lookup(kind_label, &shape_str, dtype_label)),
             },
         );
 
@@ -148,7 +155,14 @@ where
     group.finish();
 }
 
-fn bench_unary<T>(c: &mut Criterion, kind: UnaryKind, kind_label: &str, dtype_label: &str, fill: T)
+fn bench_unary<T>(
+    c: &mut Criterion,
+    kind: UnaryKind,
+    kind_label: &str,
+    dtype_label: &str,
+    fill: T,
+    baseline: Option<&PytorchBaseline>,
+)
 where
     T: baracuda_kernels::Element + Copy + 'static,
 {
@@ -220,7 +234,7 @@ where
                 baracuda_ns,
                 reference_ns: None,
                 reference: "",
-                pytorch_ns: None,
+                pytorch_ns: baseline.and_then(|b| b.lookup(kind_label, &shape_str, dtype_label)),
             },
         );
 
@@ -250,15 +264,24 @@ where
 
 /// Top-level criterion entry - invoked by criterion_main!.
 fn benches(c: &mut Criterion) {
-    bench_binary::<f32>(c, BinaryKind::Add, "add", "f32", 1.0_f32);
-    bench_binary::<f16>(c, BinaryKind::Add, "add", "f16", f16::ONE);
-    bench_binary::<f32>(c, BinaryKind::Mul, "mul", "f32", 1.0_f32);
-    bench_binary::<f16>(c, BinaryKind::Mul, "mul", "f16", f16::ONE);
-    bench_unary::<f32>(c, UnaryKind::Relu, "relu", "f32", 1.0_f32);
-    bench_unary::<f16>(c, UnaryKind::Relu, "relu", "f16", f16::ONE);
-    bench_unary::<f32>(c, UnaryKind::Gelu, "gelu", "f32", 1.0_f32);
-    bench_unary::<f16>(c, UnaryKind::Gelu, "gelu", "f16", f16::ONE);
+    let baseline = PytorchBaseline::load_default();
+    let baseline_ref = baseline.as_ref();
+    bench_binary::<f32>(c, BinaryKind::Add, "add", "f32", 1.0_f32, baseline_ref);
+    bench_binary::<f16>(c, BinaryKind::Add, "add", "f16", f16::ONE, baseline_ref);
+    bench_binary::<f32>(c, BinaryKind::Mul, "mul", "f32", 1.0_f32, baseline_ref);
+    bench_binary::<f16>(c, BinaryKind::Mul, "mul", "f16", f16::ONE, baseline_ref);
+    bench_unary::<f32>(c, UnaryKind::Relu, "relu", "f32", 1.0_f32, baseline_ref);
+    bench_unary::<f16>(c, UnaryKind::Relu, "relu", "f16", f16::ONE, baseline_ref);
+    bench_unary::<f32>(c, UnaryKind::Gelu, "gelu", "f32", 1.0_f32, baseline_ref);
+    bench_unary::<f16>(c, UnaryKind::Gelu, "gelu", "f16", f16::ONE, baseline_ref);
 }
 
-criterion_group!(benches_grp, benches);
-criterion_main!(benches_grp);
+// `criterion_group!` expands into a `pub fn benches_grp` whose
+// signature is fixed by the macro - can't doc-comment it directly, so
+// suppress the workspace `missing_docs = deny` lint on the generated fn.
+#[allow(missing_docs)]
+mod criterion_glue {
+    use super::*;
+    criterion_group!(benches_grp, benches);
+}
+criterion_main!(criterion_glue::benches_grp);

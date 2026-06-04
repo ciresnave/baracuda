@@ -354,5 +354,12 @@ where
     group.finish();
 }
 
-criterion_group!(benches, flash_benches);
-criterion_main!(benches);
+// `criterion_group!` expands into a `pub fn benches` whose
+// signature is fixed by the macro - can't doc-comment it directly, so
+// suppress the workspace `missing_docs = deny` lint on the generated fn.
+#[allow(missing_docs)]
+mod criterion_glue {
+    use super::*;
+    criterion_group!(benches, flash_benches);
+}
+criterion_main!(criterion_glue::benches);

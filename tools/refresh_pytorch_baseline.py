@@ -38,19 +38,31 @@ harness — and add ~550 launches per (op, shape, dtype) cell. For the
 ~10 ops × ~10 shapes × ~3 dtypes covered in Phase 29 that's ~165k
 launches, roughly 3-5 minutes on RTX 4070.
 
-Ops covered in this initial pass (extended over time):
+Ops covered (Phase 73.2 fanout):
 
-  - gemm: `torch.matmul` × {f32, f16, bf16} × shape sweep matching
-    `CROSS_GEMM_M_SWEEP` × `CROSS_GEMM_KN_SWEEP` from
-    `crates/baracuda-kernels-bench/src/lib.rs`.
+  - gemm:        `torch.matmul`                            × {f32, f16, bf16}
+  - softmax:     `F.softmax(..., dim=-1)`                  × {f32, f16}
+  - layernorm:   `F.layer_norm(..., normalized_shape=[H])` × {f32, f16}
+  - rmsnorm:     manual `x / sqrt(mean(x^2) + eps) * w`    × {f32, f16, bf16}
+  - reduce_sum:  `torch.sum(x, dim=-1)`                    × {f32}
+  - reduce_max:  `torch.amax(x, dim=-1)`                   × {f32}
+  - reduce_mean: `torch.mean(x, dim=-1)`                   × {f32}
+  - add:         `a + b` elementwise                       × {f32, f16}
+  - mul:         `a * b` elementwise                       × {f32, f16}
+  - relu:        `F.relu(x)`                               × {f32, f16}
+  - gelu:        `F.gelu(x)`           (exact, erf-based)  × {f32, f16}
+  - conv2d:      `F.conv2d(x, w, padding=k//2)`            × {f32, f16}
+  - maxpool2d:   `F.max_pool2d(x, k, stride, pad)`         × {f32, f16}
+  - flash_sdpa_gqa:
+                 `F.scaled_dot_product_attention(q,k,v, is_causal=True)`
+                                                           × {f16, bf16}
 
-Future ops (planned):
+mmvq (GGUF-quantized matrix-vector) intentionally skipped — PyTorch has
+no direct equivalent op; baseline would need a separate design.
 
-  - softmax, log_softmax, layer_norm, rms_norm
-  - conv2d, max_pool2d
-  - reductions (sum / max / mean)
-  - elementwise (add / mul / relu / gelu)
-  - flash sdpa + gqa
+Shape constants mirror `crates/baracuda-kernels-bench/src/lib.rs`
+(CROSS_GEMM_*, CROSS_SEQLEN_SWEEP, CROSS_HIDDEN_SWEEP, CONV2D_SWEEP,
+POOL_SWEEP, sdpa_gqa.rs constants).
 """
 
 from __future__ import annotations
@@ -84,6 +96,58 @@ GEMM_KN_SWEEP: tuple[int, ...] = (2048, 4096)
 # tensor-core paths.
 GEMM_DTYPES: tuple[tuple[str, torch.dtype], ...] = (
     ("f32", torch.float32),
+    ("f16", torch.float16),
+    ("bf16", torch.bfloat16),
+)
+
+# `CROSS_SEQLEN_SWEEP` / `CROSS_HIDDEN_SWEEP` from lib.rs — used by
+# softmax / layernorm / rmsnorm / reductions.
+NORM_R_SWEEP: tuple[int, ...] = (512, 2048, 4096)
+NORM_H_SWEEP: tuple[int, ...] = (1024, 4096)
+
+# Norm-family dtypes. softmax + layernorm cover f32 / f16; rmsnorm
+# also covers bf16 (the bench has the wider sweep).
+NORM_DTYPES: tuple[tuple[str, torch.dtype], ...] = (
+    ("f32", torch.float32),
+    ("f16", torch.float16),
+)
+RMSNORM_DTYPES: tuple[tuple[str, torch.dtype], ...] = (
+    ("f32", torch.float32),
+    ("f16", torch.float16),
+    ("bf16", torch.bfloat16),
+)
+
+# `ELT_SWEEP` from elementwise.rs.
+ELT_NUMELS: tuple[int, ...] = (1 << 20, 1 << 24)
+ELT_DTYPES: tuple[tuple[str, torch.dtype], ...] = (
+    ("f32", torch.float32),
+    ("f16", torch.float16),
+)
+
+# `CONV2D_SWEEP` from lib.rs — (n, c_in, c_out, hw, k) tuples. Only
+# square shapes (h == w) are bench-covered.
+CONV2D_SWEEP: tuple[tuple[int, int, int, int, int], ...] = (
+    (1, 64, 64, 56, 3),
+    (1, 128, 128, 28, 3),
+    (1, 256, 256, 14, 3),
+)
+CONV2D_DTYPES = NORM_DTYPES  # f32, f16
+
+# `POOL_SWEEP` from lib.rs — (n, c, h, w, k, stride, pad).
+POOL_SWEEP: tuple[tuple[int, int, int, int, int, int, int], ...] = (
+    (1, 64, 56, 56, 3, 2, 1),
+    (1, 128, 28, 28, 3, 2, 1),
+    (1, 256, 14, 14, 3, 2, 1),
+)
+POOL_DTYPES = NORM_DTYPES  # f32, f16
+
+# `sdpa_gqa.rs` constants.
+SDPA_BATCH: int = 1
+SDPA_NUM_Q_HEADS: int = 32
+SDPA_KV_HEAD_SWEEP: tuple[int, ...] = (32, 8, 4, 1)
+SDPA_SEQ_LEN: int = 2048
+SDPA_HEAD_DIM: int = 128
+SDPA_DTYPES: tuple[tuple[str, torch.dtype], ...] = (
     ("f16", torch.float16),
     ("bf16", torch.bfloat16),
 )
@@ -144,9 +208,175 @@ def gemm_cases() -> Iterable[tuple[str, str, str, Callable[[], None]]]:
                 yield ("gemm", shape, dtype_name, launch)
 
 
+def softmax_cases() -> Iterable[tuple[str, str, str, Callable[[], None]]]:
+    """`F.softmax(x, dim=-1)` over CROSS_SEQLEN × CROSS_HIDDEN."""
+    device = torch.device("cuda")
+    for rows in NORM_R_SWEEP:
+        for cols in NORM_H_SWEEP:
+            shape = f"R{rows}_C{cols}"
+            for dtype_name, dtype in NORM_DTYPES:
+                x = torch.randn((rows, cols), dtype=dtype, device=device)
+                launch = lambda x=x: torch.nn.functional.softmax(x, dim=-1)
+                yield ("softmax", shape, dtype_name, launch)
+
+
+def layernorm_cases() -> Iterable[tuple[str, str, str, Callable[[], None]]]:
+    """`F.layer_norm(x, normalized_shape=[H])`."""
+    device = torch.device("cuda")
+    for rows in NORM_R_SWEEP:
+        for hidden in NORM_H_SWEEP:
+            shape = f"R{rows}_H{hidden}"
+            for dtype_name, dtype in NORM_DTYPES:
+                x = torch.randn((rows, hidden), dtype=dtype, device=device)
+                w = torch.ones((hidden,), dtype=dtype, device=device)
+                b = torch.zeros((hidden,), dtype=dtype, device=device)
+                launch = lambda x=x, w=w, b=b, h=hidden: torch.nn.functional.layer_norm(
+                    x, normalized_shape=[h], weight=w, bias=b
+                )
+                yield ("layernorm", shape, dtype_name, launch)
+
+
+def rmsnorm_cases() -> Iterable[tuple[str, str, str, Callable[[], None]]]:
+    """`y = x / sqrt(mean(x^2) + eps) * w`. PyTorch 2.11 may or may not
+    have `F.rms_norm` (it became stable in 2.4). Use the manual form for
+    cross-version determinism."""
+    device = torch.device("cuda")
+    eps = 1e-5
+    for rows in NORM_R_SWEEP:
+        for hidden in NORM_H_SWEEP:
+            shape = f"R{rows}_H{hidden}"
+            for dtype_name, dtype in RMSNORM_DTYPES:
+                x = torch.randn((rows, hidden), dtype=dtype, device=device)
+                w = torch.ones((hidden,), dtype=dtype, device=device)
+                def launch(x=x, w=w):
+                    # Match baracuda's RMSNorm: pop. mean of x^2 along
+                    # last axis; cast to f32 accumulator if dtype is half.
+                    upcast = x.float() if x.dtype != torch.float32 else x
+                    rms = upcast.pow(2).mean(dim=-1, keepdim=True).add(eps).sqrt()
+                    y = (upcast / rms).to(x.dtype) * w
+                    return y
+                yield ("rmsnorm", shape, dtype_name, launch)
+
+
+def reduce_cases() -> Iterable[tuple[str, str, str, Callable[[], None]]]:
+    """`torch.sum/amax/mean(x, dim=-1)` over CROSS_SEQLEN × CROSS_HIDDEN."""
+    device = torch.device("cuda")
+    fns: tuple[tuple[str, Callable[[torch.Tensor], torch.Tensor]], ...] = (
+        ("reduce_sum", lambda t: torch.sum(t, dim=-1)),
+        ("reduce_max", lambda t: torch.amax(t, dim=-1)),
+        ("reduce_mean", lambda t: torch.mean(t, dim=-1)),
+    )
+    for op_name, fn in fns:
+        for rows in NORM_R_SWEEP:
+            for hidden in NORM_H_SWEEP:
+                shape = f"R{rows}_H{hidden}"
+                x = torch.randn((rows, hidden), dtype=torch.float32, device=device)
+                launch = lambda x=x, fn=fn: fn(x)
+                yield (op_name, shape, "f32", launch)
+
+
+def elementwise_cases() -> Iterable[tuple[str, str, str, Callable[[], None]]]:
+    """`a + b`, `a * b`, `F.relu(x)`, `F.gelu(x)` over ELT_SWEEP."""
+    device = torch.device("cuda")
+    binary_ops: tuple[tuple[str, Callable], ...] = (
+        ("add", lambda a, b: a + b),
+        ("mul", lambda a, b: a * b),
+    )
+    unary_ops: tuple[tuple[str, Callable], ...] = (
+        ("relu", lambda x: torch.nn.functional.relu(x)),
+        # baracuda's gelu uses the exact erf-based formulation; match PyTorch
+        # default (approximate='none').
+        ("gelu", lambda x: torch.nn.functional.gelu(x, approximate="none")),
+    )
+    for n in ELT_NUMELS:
+        shape = f"N{n}"
+        for dtype_name, dtype in ELT_DTYPES:
+            a = torch.ones((n,), dtype=dtype, device=device)
+            b = torch.ones((n,), dtype=dtype, device=device)
+            for op_name, fn in binary_ops:
+                launch = lambda a=a, b=b, fn=fn: fn(a, b)
+                yield (op_name, shape, dtype_name, launch)
+            for op_name, fn in unary_ops:
+                launch = lambda a=a, fn=fn: fn(a)
+                yield (op_name, shape, dtype_name, launch)
+
+
+def conv2d_cases() -> Iterable[tuple[str, str, str, Callable[[], None]]]:
+    """`F.conv2d(x, w, padding=k//2)` over CONV2D_SWEEP. NCHW layout."""
+    device = torch.device("cuda")
+    for (n, c_in, c_out, hw, k) in CONV2D_SWEEP:
+        shape = f"N{n}_Cin{c_in}_Cout{c_out}_HW{hw}_K{k}"
+        for dtype_name, dtype in CONV2D_DTYPES:
+            x = torch.randn((n, c_in, hw, hw), dtype=dtype, device=device)
+            weight = torch.randn((c_out, c_in, k, k), dtype=dtype, device=device)
+            launch = lambda x=x, w=weight, p=k // 2: torch.nn.functional.conv2d(
+                x, w, padding=p
+            )
+            yield ("conv2d", shape, dtype_name, launch)
+
+
+def maxpool2d_cases() -> Iterable[tuple[str, str, str, Callable[[], None]]]:
+    """`F.max_pool2d(x, kernel_size=k, stride=s, padding=p)` over POOL_SWEEP."""
+    device = torch.device("cuda")
+    for (n, c, h, w, k, s, p) in POOL_SWEEP:
+        shape = f"N{n}_C{c}_H{h}_W{w}_K{k}_S{s}"
+        for dtype_name, dtype in POOL_DTYPES:
+            x = torch.randn((n, c, h, w), dtype=dtype, device=device)
+            launch = lambda x=x, k=k, s=s, p=p: torch.nn.functional.max_pool2d(
+                x, kernel_size=k, stride=s, padding=p
+            )
+            yield ("maxpool2d", shape, dtype_name, launch)
+
+
+def sdpa_cases() -> Iterable[tuple[str, str, str, Callable[[], None]]]:
+    """`F.scaled_dot_product_attention(q, k, v, is_causal=True)` with
+    GQA broadcasting. PyTorch supports GQA natively by accepting K/V
+    with fewer head groups than Q (broadcast happens inside SDPA).
+
+    Shape format matches `sdpa_gqa.rs`:
+    `Hq{NUM_Q_HEADS}_Hkv{num_kv}_Q{SEQ_LEN}_D{HEAD_DIM}`.
+    """
+    device = torch.device("cuda")
+    nq = SDPA_NUM_Q_HEADS
+    seq = SDPA_SEQ_LEN
+    d = SDPA_HEAD_DIM
+    batch = SDPA_BATCH
+    for num_kv in SDPA_KV_HEAD_SWEEP:
+        if nq % num_kv != 0:
+            continue
+        shape = f"Hq{nq}_Hkv{num_kv}_Q{seq}_D{d}"
+        for dtype_name, dtype in SDPA_DTYPES:
+            q = torch.randn((batch, nq, seq, d), dtype=dtype, device=device)
+            # K/V physical = (batch, num_kv, seq, d); SDPA expects them in
+            # the same num-heads dim as Q. For GQA we expand via repeat_interleave
+            # so the underlying allocation matches what PyTorch's reference
+            # implementation would do (no zero-stride broadcast).
+            k = torch.randn((batch, num_kv, seq, d), dtype=dtype, device=device)
+            v = torch.randn((batch, num_kv, seq, d), dtype=dtype, device=device)
+            if num_kv != nq:
+                k_exp = k.repeat_interleave(nq // num_kv, dim=1)
+                v_exp = v.repeat_interleave(nq // num_kv, dim=1)
+            else:
+                k_exp, v_exp = k, v
+            launch = lambda q=q, k=k_exp, v=v_exp: (
+                torch.nn.functional.scaled_dot_product_attention(
+                    q, k, v, is_causal=True
+                )
+            )
+            yield ("flash_sdpa_gqa", shape, dtype_name, launch)
+
+
 # Op registry — name → cases generator. Extend per-op for fanout.
 OP_REGISTRY: dict[str, Callable[[], Iterable[tuple[str, str, str, Callable[[], None]]]]] = {
     "gemm": gemm_cases,
+    "softmax": softmax_cases,
+    "layernorm": layernorm_cases,
+    "rmsnorm": rmsnorm_cases,
+    "reduce": reduce_cases,
+    "elementwise": elementwise_cases,
+    "conv2d": conv2d_cases,
+    "maxpool2d": maxpool2d_cases,
+    "sdpa": sdpa_cases,
 }
 
 

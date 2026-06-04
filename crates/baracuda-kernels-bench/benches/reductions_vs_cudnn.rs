@@ -34,7 +34,7 @@ mod cudnn_impl {
     };
     use baracuda_kernels_bench::{
         append_csv_row, measure_median_ns, setup_device, time_with_events, warmup,
-        PhaseTwentyNineRow, CROSS_HIDDEN_SWEEP, CROSS_SEQLEN_SWEEP,
+        PhaseTwentyNineRow, PytorchBaseline, CROSS_HIDDEN_SWEEP, CROSS_SEQLEN_SWEEP,
     };
     use criterion::{BenchmarkId, Criterion};
 
@@ -155,7 +155,12 @@ mod cudnn_impl {
         group.finish();
     }
 
-    fn bench_cudnn_one(c: &mut Criterion, op: ReduceOp, kind_label: &str) {
+    fn bench_cudnn_one(
+        c: &mut Criterion,
+        op: ReduceOp,
+        kind_label: &str,
+        baseline: Option<&PytorchBaseline>,
+    ) {
         let (ctx, stream) = setup_device();
         let cudnn = CudnnHandle::new().expect("cudnn handle");
         cudnn.set_stream(&stream).expect("cudnn set_stream");
@@ -215,16 +220,17 @@ mod cudnn_impl {
                     )
                     .expect("cudnn reduce");
                 });
+                let op_name = format!("reduce_{kind_label}");
                 append_csv_row(
                     BENCH_NAME,
                     &PhaseTwentyNineRow {
-                        op: leak_str(&format!("reduce_{kind_label}")),
+                        op: leak_str(&op_name),
                         shape: shape_str.clone(),
                         dtype: "f32",
                         baracuda_ns: 0.0,
                         reference_ns: Some(cudnn_ns),
                         reference: "cuDNN",
-                        pytorch_ns: None,
+                        pytorch_ns: baseline.and_then(|b| b.lookup(&op_name, &shape_str, "f32")),
                     },
                 );
                 group.bench_with_input(BenchmarkId::from_parameter(&shape_str), &(), |bb, _| {
@@ -243,20 +249,30 @@ mod cudnn_impl {
         group.finish();
     }
 
+    /// Top-level criterion entry - invoked by criterion_main!.
     pub fn benches(c: &mut Criterion) {
+        let baseline = PytorchBaseline::load_default();
+        let baseline_ref = baseline.as_ref();
         bench_baracuda_one(c, ReduceKind::Sum, "sum");
-        bench_cudnn_one(c, ReduceOp::Add, "sum");
+        bench_cudnn_one(c, ReduceOp::Add, "sum", baseline_ref);
         bench_baracuda_one(c, ReduceKind::Max, "max");
-        bench_cudnn_one(c, ReduceOp::Max, "max");
+        bench_cudnn_one(c, ReduceOp::Max, "max", baseline_ref);
         bench_baracuda_one(c, ReduceKind::Mean, "mean");
-        bench_cudnn_one(c, ReduceOp::Avg, "mean");
+        bench_cudnn_one(c, ReduceOp::Avg, "mean", baseline_ref);
     }
 }
 
 #[cfg(feature = "cudnn")]
 use criterion::{criterion_group, criterion_main};
 
+// `criterion_group!` expands into a `pub fn benches_grp` whose
+// signature is fixed by the macro - can't doc-comment it directly, so
+// suppress the workspace `missing_docs = deny` lint on the generated fn.
 #[cfg(feature = "cudnn")]
-criterion_group!(benches_grp, cudnn_impl::benches);
+#[allow(missing_docs)]
+mod criterion_glue {
+    use super::*;
+    criterion_group!(benches_grp, cudnn_impl::benches);
+}
 #[cfg(feature = "cudnn")]
-criterion_main!(benches_grp);
+criterion_main!(criterion_glue::benches_grp);

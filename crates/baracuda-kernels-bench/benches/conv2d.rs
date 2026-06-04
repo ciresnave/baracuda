@@ -165,7 +165,14 @@ mod cudnn_impl {
 #[cfg(feature = "cudnn")]
 use criterion::{criterion_group, criterion_main};
 
+// `criterion_group!` expands into a `pub fn benches` whose
+// signature is fixed by the macro - can't doc-comment it directly, so
+// suppress the workspace `missing_docs = deny` lint on the generated fn.
 #[cfg(feature = "cudnn")]
-criterion_group!(benches, cudnn_impl::conv2d_benches);
+#[allow(missing_docs)]
+mod criterion_glue {
+    use super::*;
+    criterion_group!(benches, cudnn_impl::conv2d_benches);
+}
 #[cfg(feature = "cudnn")]
-criterion_main!(benches);
+criterion_main!(criterion_glue::benches);

@@ -519,5 +519,12 @@ fn benches(c: &mut Criterion) {
     bench_cuda_l2_f16(c);
 }
 
-criterion_group!(benches_grp, benches);
-criterion_main!(benches_grp);
+// `criterion_group!` expands into a `pub fn benches_grp` whose
+// signature is fixed by the macro - can't doc-comment it directly, so
+// suppress the workspace `missing_docs = deny` lint on the generated fn.
+#[allow(missing_docs)]
+mod criterion_glue {
+    use super::*;
+    criterion_group!(benches_grp, benches);
+}
+criterion_main!(criterion_glue::benches_grp);

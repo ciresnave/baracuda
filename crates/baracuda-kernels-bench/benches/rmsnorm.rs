@@ -18,7 +18,7 @@ use baracuda_kernels::{
 };
 use baracuda_kernels_bench::{
     append_csv_row, measure_median_ns, setup_device, time_with_events, warmup,
-    PhaseTwentyNineRow, CROSS_HIDDEN_SWEEP, CROSS_SEQLEN_SWEEP,
+    PhaseTwentyNineRow, PytorchBaseline, CROSS_HIDDEN_SWEEP, CROSS_SEQLEN_SWEEP,
 };
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use half::{bf16, f16};
@@ -29,8 +29,12 @@ fn leak_str(s: &str) -> &'static str {
     Box::leak(s.to_owned().into_boxed_str())
 }
 
-fn bench<T>(c: &mut Criterion, dtype_label: &str, fill: T)
-where
+fn bench<T>(
+    c: &mut Criterion,
+    dtype_label: &str,
+    fill: T,
+    baseline: Option<&PytorchBaseline>,
+) where
     T: baracuda_kernels::Element + Copy + 'static,
 {
     let (ctx, stream) = setup_device();
@@ -143,7 +147,7 @@ where
                     baracuda_ns,
                     reference_ns: None,
                     reference: "",
-                    pytorch_ns: None,
+                    pytorch_ns: baseline.and_then(|b| b.lookup("rmsnorm", &shape, dtype_label)),
                 },
             );
             group.bench_with_input(BenchmarkId::from_parameter(&shape), &(), |bb, _| {
@@ -182,10 +186,19 @@ where
 
 /// Top-level criterion entry - invoked by criterion_main!.
 fn benches(c: &mut Criterion) {
-    bench::<f32>(c, "f32", 1.0_f32);
-    bench::<f16>(c, "f16", f16::ONE);
-    bench::<bf16>(c, "bf16", bf16::ONE);
+    let baseline = PytorchBaseline::load_default();
+    let baseline_ref = baseline.as_ref();
+    bench::<f32>(c, "f32", 1.0_f32, baseline_ref);
+    bench::<f16>(c, "f16", f16::ONE, baseline_ref);
+    bench::<bf16>(c, "bf16", bf16::ONE, baseline_ref);
 }
 
-criterion_group!(benches_grp, benches);
-criterion_main!(benches_grp);
+// `criterion_group!` expands into a `pub fn benches_grp` whose
+// signature is fixed by the macro - can't doc-comment it directly, so
+// suppress the workspace `missing_docs = deny` lint on the generated fn.
+#[allow(missing_docs)]
+mod criterion_glue {
+    use super::*;
+    criterion_group!(benches_grp, benches);
+}
+criterion_main!(criterion_glue::benches_grp);

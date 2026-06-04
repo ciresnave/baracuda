@@ -34,7 +34,7 @@ mod cudnn_impl {
     };
     use baracuda_kernels_bench::{
         append_csv_row, measure_median_ns, setup_device, time_with_events, warmup,
-        PhaseTwentyNineRow, CROSS_HIDDEN_SWEEP, CROSS_SEQLEN_SWEEP,
+        PhaseTwentyNineRow, PytorchBaseline, CROSS_HIDDEN_SWEEP, CROSS_SEQLEN_SWEEP,
     };
     use criterion::{BenchmarkId, Criterion};
     use half::f16;
@@ -157,6 +157,7 @@ mod cudnn_impl {
         c: &mut Criterion,
         dtype_label: &str,
         dtype: DType,
+        baseline: Option<&PytorchBaseline>,
     ) {
         let (ctx, stream) = setup_device();
         let cudnn = CudnnHandle::new().expect("cudnn handle");
@@ -224,7 +225,7 @@ mod cudnn_impl {
                         baracuda_ns: 0.0,
                         reference_ns: Some(cudnn_ns),
                         reference: "cuDNN",
-                        pytorch_ns: None,
+                        pytorch_ns: baseline.and_then(|b| b.lookup("softmax", &shape, dtype_label)),
                     },
                 );
                 group.bench_with_input(BenchmarkId::from_parameter(&shape), &(), |bb, _| {
@@ -251,17 +252,26 @@ mod cudnn_impl {
     }
 
     pub fn softmax_benches(c: &mut Criterion) {
+        let baseline = PytorchBaseline::load_default();
+        let baseline_ref = baseline.as_ref();
         bench_baracuda::<f32>(c, "f32", 1.0_f32);
-        bench_cudnn::<f32>(c, "f32", DType::F32);
+        bench_cudnn::<f32>(c, "f32", DType::F32, baseline_ref);
         bench_baracuda::<f16>(c, "f16", f16::ONE);
-        bench_cudnn::<f16>(c, "f16", DType::F16);
+        bench_cudnn::<f16>(c, "f16", DType::F16, baseline_ref);
     }
 }
 
 #[cfg(feature = "cudnn")]
 use criterion::{criterion_group, criterion_main};
 
+// `criterion_group!` expands into a `pub fn benches_grp` whose
+// signature is fixed by the macro - can't doc-comment it directly, so
+// suppress the workspace `missing_docs = deny` lint on the generated fn.
 #[cfg(feature = "cudnn")]
-criterion_group!(benches_grp, cudnn_impl::softmax_benches);
+#[allow(missing_docs)]
+mod criterion_glue {
+    use super::*;
+    criterion_group!(benches_grp, cudnn_impl::softmax_benches);
+}
 #[cfg(feature = "cudnn")]
-criterion_main!(benches_grp);
+criterion_main!(criterion_glue::benches_grp);
