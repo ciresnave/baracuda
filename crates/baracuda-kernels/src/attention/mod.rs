@@ -66,6 +66,7 @@
 
 pub mod alibi;
 pub mod alibi_backward;
+pub mod flash_decoding;
 pub mod flash_sdpa;
 pub mod flash_sdpa_backward;
 // Phase 59b — packed-batch (varlen) FlashAttention v2 plans (FW + BW).
@@ -87,6 +88,9 @@ pub mod sdpa_backward;
 
 pub use alibi::{AlibiArgs, AlibiDescriptor, AlibiPlan};
 pub use alibi_backward::{AlibiBackwardArgs, AlibiBackwardDescriptor, AlibiBackwardPlan};
+pub use flash_decoding::{
+    FlashDecodingArgs, FlashDecodingDescriptor, FlashDecodingPlan, FLASH_DECODING_MAX_D,
+};
 pub use flash_sdpa::{FlashSdpaArgs, FlashSdpaDescriptor, FlashSdpaPlan, FLASH_SDPA_MAX_D};
 pub use flash_sdpa_backward::{
     FlashSdpaBackwardArgs, FlashSdpaBackwardDescriptor, FlashSdpaBackwardPlan,

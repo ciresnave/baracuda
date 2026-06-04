@@ -158,6 +158,12 @@ harness = false
 name = "sdpa_vs_fa2"
 harness = false
 
+# Phase 73 follow-up — FlashDecoding (split-K parallel decode for
+# seq_q=1) vs `FlashSdpaPlan` reference at decode-typical shapes.
+[[bench]]
+name = "flash_decoding"
+harness = false
+
 # Phase 43 — HyperConnectionPlan vs naive residual baseline. Requires
 # the `mhc` feature to do anything useful (the bench file builds a
 # no-op `main` without it).

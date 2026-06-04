@@ -44443,6 +44443,98 @@ unsafe extern "C" {
     ) -> i32;
 
     // =========================================================================
+    // Phase 73 follow-up — FlashDecoding (split-K parallel attention
+    // decode for seq_q = 1). Closes the perf gap FA2 leaves at the
+    // decode regime where seq_q is too short to fill FA2's q-tile rows.
+    // Two-kernel pipeline (split + combine) is implemented in
+    // `kernels/include/baracuda_flash_decoding.cuh`; this FFI surfaces
+    // the per-dtype launcher symbols.
+    //
+    // Strides are in element units (matching the rest of baracuda's
+    // strided FFI). GQA is expressed via stride[1] = 0 on K/V.
+    // =========================================================================
+    /// FlashDecoding FW, f16 (f32 accumulators). seq_q = 1; split-K
+    /// over chunks of 256 K-rows each, combined via a second kernel.
+    pub fn baracuda_kernels_flash_decoding_f16_run(
+        q: *const c_void,
+        k: *const c_void,
+        v: *const c_void,
+        y: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        batch: i32,
+        heads: i32,
+        k_len: i32,
+        head_dim: i32,
+        q_b_stride: i64,
+        q_h_stride: i64,
+        k_b_stride: i64,
+        k_h_stride: i64,
+        k_seq_stride: i64,
+        v_b_stride: i64,
+        v_h_stride: i64,
+        v_seq_stride: i64,
+        y_b_stride: i64,
+        y_h_stride: i64,
+        scale: f32,
+        stream_ptr: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `flash_decoding_f16`. Host-side only.
+    pub fn baracuda_kernels_flash_decoding_f16_can_implement(
+        batch: i32,
+        heads: i32,
+        k_len: i32,
+        head_dim: i32,
+    ) -> i32;
+    /// Workspace requirement for `flash_decoding_f16` in bytes.
+    pub fn baracuda_kernels_flash_decoding_f16_workspace_bytes(
+        batch: i32,
+        heads: i32,
+        k_len: i32,
+        head_dim: i32,
+    ) -> usize;
+
+    /// FlashDecoding FW, bf16 (f32 accumulators).
+    pub fn baracuda_kernels_flash_decoding_bf16_run(
+        q: *const c_void,
+        k: *const c_void,
+        v: *const c_void,
+        y: *mut c_void,
+        workspace: *mut c_void,
+        workspace_bytes: usize,
+        batch: i32,
+        heads: i32,
+        k_len: i32,
+        head_dim: i32,
+        q_b_stride: i64,
+        q_h_stride: i64,
+        k_b_stride: i64,
+        k_h_stride: i64,
+        k_seq_stride: i64,
+        v_b_stride: i64,
+        v_h_stride: i64,
+        v_seq_stride: i64,
+        y_b_stride: i64,
+        y_h_stride: i64,
+        scale: f32,
+        stream_ptr: *mut c_void,
+    ) -> i32;
+    /// Implementability check for `flash_decoding_bf16`. Host-side only.
+    pub fn baracuda_kernels_flash_decoding_bf16_can_implement(
+        batch: i32,
+        heads: i32,
+        k_len: i32,
+        head_dim: i32,
+    ) -> i32;
+    /// Workspace requirement for `flash_decoding_bf16` in bytes.
+    pub fn baracuda_kernels_flash_decoding_bf16_workspace_bytes(
+        batch: i32,
+        heads: i32,
+        k_len: i32,
+        head_dim: i32,
+    ) -> usize;
+
+    // =========================================================================
     // Phase 51 — arbitrary additive-mask attention FW.
     //
     // Same online-softmax algorithm as the `flash_sdpa_*_run` family with

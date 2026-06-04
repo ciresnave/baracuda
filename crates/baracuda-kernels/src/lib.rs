@@ -282,7 +282,10 @@ pub mod attention;
 
 pub use attention::{
     AlibiArgs, AlibiBackwardArgs, AlibiBackwardDescriptor, AlibiBackwardPlan, AlibiDescriptor,
-    AlibiPlan, FlashSdpaArgs, FlashSdpaBackwardArgs, FlashSdpaBackwardDescriptor,
+    AlibiPlan,
+    // Phase 73 follow-up — FlashDecoding (split-K parallel decode).
+    FlashDecodingArgs, FlashDecodingDescriptor, FlashDecodingPlan, FLASH_DECODING_MAX_D,
+    FlashSdpaArgs, FlashSdpaBackwardArgs, FlashSdpaBackwardDescriptor,
     FlashSdpaBackwardPlan, FlashSdpaDescriptor, FlashSdpaPlan,
     // Phase 59b — packed-batch (varlen) FlashAttention v2 plans.
     FlashSdpaVarlenArgs, FlashSdpaVarlenBackwardArgs, FlashSdpaVarlenBackwardPlan,

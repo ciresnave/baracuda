@@ -1114,6 +1114,12 @@ fn collect_kernel_files() -> Vec<&'static str> {
             // `lse` ([B, H, Q]) replaces the saved `attn` of naive SDPA.
             "attention/flash_sdpa_fp.cu",
             "attention/flash_sdpa_backward_fp.cu",
+            // Phase 73 follow-up — split-K parallel attention decode
+            // for seq_q=1. Closes the gap FA2 leaves at the decode
+            // regime (FA2's tile shape assumes seq_q ≥ block-rows;
+            // FlashDecoding flips parallelism to the K dimension).
+            // Tier-1 scope: f16/bf16, head_dim ≤ 128, FW only.
+            "attention/flash_decoding_fp.cu",
             // Phase 51 — arbitrary additive-mask attention FW. Same
             // online-softmax algorithm as flash_sdpa_fp.cu with an
             // extra `mask: f32[B, H, Q, K]` bias applied to S before
