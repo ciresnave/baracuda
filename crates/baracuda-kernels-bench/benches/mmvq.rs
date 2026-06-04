@@ -153,6 +153,7 @@ where
                     baracuda_ns,
                     reference_ns: None,
                     reference: "",
+                    pytorch_ns: None,
                 },
             );
 
@@ -401,6 +402,7 @@ fn bench_mmvq_multim_for(c: &mut Criterion, fmt: GgufBlockFormat) {
                     baracuda_ns: multim_ns,
                     reference_ns: Some(baseline_ns),
                     reference: "mmvq_per_token_loop",
+                    pytorch_ns: None,
                 },
             );
 
@@ -448,6 +450,7 @@ fn bench_mmvq_multim_for(c: &mut Criterion, fmt: GgufBlockFormat) {
     group.finish();
 }
 
+/// Top-level criterion entry - invoked by criterion_main!.
 fn mmvq_benches(c: &mut Criterion) {
     bench_mmvq::<f32>(c, "f32", 1.0_f32);
     bench_mmvq::<f16>(c, "f16", f16::ONE);

@@ -307,6 +307,7 @@ mod bench_impl_inner {
                     baracuda_ns: mhc_ns,
                     reference_ns: naive_ns,
                     reference: "naive_rmsnorm_lower_bound",
+                    pytorch_ns: None,
                 },
             );
 

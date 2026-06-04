@@ -28,7 +28,7 @@ use baracuda_kernels::{
 };
 use baracuda_kernels_bench::{
     append_csv_row, gemm_flops, measure_median_ns, setup_device, time_with_events, warmup,
-    PhaseTwentyNineRow, CROSS_GEMM_KN_SWEEP, CROSS_GEMM_M_SWEEP,
+    PhaseTwentyNineRow, PytorchBaseline, CROSS_GEMM_KN_SWEEP, CROSS_GEMM_M_SWEEP,
 };
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use half::{bf16, f16};
@@ -140,6 +140,7 @@ fn bench_baracuda_f32(c: &mut Criterion) {
                     baracuda_ns,
                     reference_ns: None,
                     reference: "baracuda",
+                    pytorch_ns: None,
                 },
             );
 
@@ -191,7 +192,7 @@ fn bench_baracuda_f32(c: &mut Criterion) {
 /// A^T, etc. The canonical row-major-from-cuBLAS trick: compute
 /// `C^T = B^T · A^T` in column-major, which lets us pass A/B straight
 /// through and read C in row-major.
-fn bench_cublas_f32(c: &mut Criterion) {
+fn bench_cublas_f32(c: &mut Criterion, baseline: Option<&PytorchBaseline>) {
     let (ctx, stream) = setup_device();
     let handle = CublasHandle::new().expect("cublas handle");
     handle.set_stream(&stream).expect("cublas set_stream");
@@ -272,6 +273,7 @@ fn bench_cublas_f32(c: &mut Criterion) {
                     baracuda_ns: 0.0,
                     reference_ns: Some(cublas_ns),
                     reference: "cuBLAS",
+                    pytorch_ns: baseline.and_then(|b| b.lookup("gemm", &shape, "f32")),
                 },
             );
 
@@ -420,6 +422,7 @@ fn bench_baracuda_half<T>(
                     baracuda_ns,
                     reference_ns: None,
                     reference: "baracuda",
+                    pytorch_ns: None,
                 },
             );
 
@@ -466,6 +469,7 @@ fn bench_cublas_half(
     dtype_label: &str,
     data_type: cudaDataType_t,
     elt_bytes: usize,
+    baseline: Option<&PytorchBaseline>,
 ) {
     let (ctx, stream) = setup_device();
     let handle = CublasHandle::new().expect("cublas handle");
@@ -568,6 +572,7 @@ fn bench_cublas_half(
                     baracuda_ns: 0.0,
                     reference_ns: Some(cublas_ns),
                     reference: "cuBLAS",
+                    pytorch_ns: baseline.and_then(|b| b.lookup("gemm", &shape, dtype_label)),
                 },
             );
 
@@ -613,14 +618,31 @@ fn leak_str(s: &str) -> &'static str {
     Box::leak(s.to_owned().into_boxed_str())
 }
 
+/// Top-level criterion entry - invoked by criterion_main!.
 fn benches(c: &mut Criterion) {
+    // Phase 73.1 — load the PyTorch frozen-JSON baseline once at the
+    // start of the run and thread it through the cuBLAS arms so each
+    // (shape, dtype) cell ends up with all three timings (baracuda,
+    // cuBLAS, PyTorch) on a single CSV row.
+    let baseline = PytorchBaseline::load_default();
+    let baseline_ref = baseline.as_ref();
+
     bench_baracuda_f32(c);
-    bench_cublas_f32(c);
+    bench_cublas_f32(c, baseline_ref);
     bench_baracuda_half::<f16>(c, "f16", f16::ONE, 1.0_f32, 0.0_f32);
-    bench_cublas_half(c, "f16", cudaDataType_t::R_16F, 2);
+    bench_cublas_half(c, "f16", cudaDataType_t::R_16F, 2, baseline_ref);
     bench_baracuda_half::<bf16>(c, "bf16", bf16::ONE, 1.0_f32, 0.0_f32);
-    bench_cublas_half(c, "bf16", cudaDataType_t::R_16BF, 2);
+    bench_cublas_half(c, "bf16", cudaDataType_t::R_16BF, 2, baseline_ref);
 }
 
-criterion_group!(benches_grp, benches);
-criterion_main!(benches_grp);
+// `criterion_group!` expands into a `pub fn benches_grp(...)` whose
+// signature is fixed by the macro — we can't add a doc comment to it
+// directly, so suppress the workspace `missing_docs = "deny"` lint on
+// the generated fn.
+#[allow(missing_docs)]
+mod criterion_glue {
+    use super::*;
+    criterion_group!(benches_grp, benches);
+}
+
+criterion_main!(criterion_glue::benches_grp);

@@ -115,6 +115,7 @@ where
                 baracuda_ns,
                 reference_ns: None,
                 reference: "",
+                pytorch_ns: None,
             },
         );
 
@@ -219,6 +220,7 @@ where
                 baracuda_ns,
                 reference_ns: None,
                 reference: "",
+                pytorch_ns: None,
             },
         );
 
@@ -246,6 +248,7 @@ where
     group.finish();
 }
 
+/// Top-level criterion entry - invoked by criterion_main!.
 fn benches(c: &mut Criterion) {
     bench_binary::<f32>(c, BinaryKind::Add, "add", "f32", 1.0_f32);
     bench_binary::<f16>(c, BinaryKind::Add, "add", "f16", f16::ONE);

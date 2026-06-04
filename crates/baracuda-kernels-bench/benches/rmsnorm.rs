@@ -143,6 +143,7 @@ where
                     baracuda_ns,
                     reference_ns: None,
                     reference: "",
+                    pytorch_ns: None,
                 },
             );
             group.bench_with_input(BenchmarkId::from_parameter(&shape), &(), |bb, _| {
@@ -179,6 +180,7 @@ where
     group.finish();
 }
 
+/// Top-level criterion entry - invoked by criterion_main!.
 fn benches(c: &mut Criterion) {
     bench::<f32>(c, "f32", 1.0_f32);
     bench::<f16>(c, "f16", f16::ONE);

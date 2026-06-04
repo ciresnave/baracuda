@@ -289,6 +289,14 @@ pub struct PhaseTwentyNineRow {
     pub reference_ns: Option<f64>,
     /// Reference label — `"cuBLAS"`, `"cuDNN"`, `""` (none).
     pub reference: &'static str,
+    /// PyTorch baseline median wall time, nanoseconds (Phase 73.1).
+    /// Loaded from the frozen JSON baseline at
+    /// `crates/baracuda-kernels-bench/bench-baselines/`. `None` when no
+    /// matching `(op, shape, dtype)` entry exists in the JSON — i.e.
+    /// the bench hasn't been added to the Python refresh script yet,
+    /// or the bench is running on hardware/PyTorch-version with no
+    /// matching baseline file.
+    pub pytorch_ns: Option<f64>,
 }
 
 impl PhaseTwentyNineRow {
@@ -296,6 +304,17 @@ impl PhaseTwentyNineRow {
     /// `> 1.0` ⇒ reference faster. `None` when no reference present.
     pub fn delta(&self) -> Option<f64> {
         let r = self.reference_ns?;
+        if self.baracuda_ns == 0.0 {
+            None
+        } else {
+            Some(r / self.baracuda_ns)
+        }
+    }
+
+    /// PyTorch delta = `pytorch_ns / baracuda_ns`. Same convention as
+    /// `delta()`: `< 1.0` ⇒ baracuda faster than PyTorch.
+    pub fn pytorch_delta(&self) -> Option<f64> {
+        let r = self.pytorch_ns?;
         if self.baracuda_ns == 0.0 {
             None
         } else {
@@ -334,7 +353,9 @@ pub fn measure_median_ns<F: FnMut()>(
 /// Append a `PhaseTwentyNineRow` to `target/criterion/phase29/<bench>.csv`,
 /// creating the file (with header) if it doesn't exist.
 ///
-/// CSV columns: `op,shape,dtype,baracuda_ns,reference_ns,reference,delta`.
+/// CSV columns: `op,shape,dtype,baracuda_ns,reference_ns,reference,delta,
+/// pytorch_ns,pytorch_delta` (Phase 73.1 extended the format with the
+/// last two columns — see `PhaseTwentyNineRow::pytorch_ns`).
 ///
 /// Errors are swallowed (printed to stderr) — bench correctness mustn't
 /// depend on the CSV write succeeding. The criterion HTML report is the
@@ -363,7 +384,10 @@ pub fn append_csv_row(bench: &str, row: &PhaseTwentyNineRow) {
         }
     };
     if !exists {
-        let _ = writeln!(f, "op,shape,dtype,baracuda_ns,reference_ns,reference,delta");
+        let _ = writeln!(
+            f,
+            "op,shape,dtype,baracuda_ns,reference_ns,reference,delta,pytorch_ns,pytorch_delta"
+        );
     }
     let ref_ns = row
         .reference_ns
@@ -373,9 +397,17 @@ pub fn append_csv_row(bench: &str, row: &PhaseTwentyNineRow) {
         .delta()
         .map(|x| format!("{x:.4}"))
         .unwrap_or_else(|| "".into());
+    let pytorch_ns = row
+        .pytorch_ns
+        .map(|x| format!("{x:.3}"))
+        .unwrap_or_else(|| "".into());
+    let pytorch_delta = row
+        .pytorch_delta()
+        .map(|x| format!("{x:.4}"))
+        .unwrap_or_else(|| "".into());
     let _ = writeln!(
         f,
-        "{op},{shape},{dtype},{ba:.3},{rf},{rl},{dl}",
+        "{op},{shape},{dtype},{ba:.3},{rf},{rl},{dl},{pn},{pd}",
         op = row.op,
         shape = row.shape,
         dtype = row.dtype,
@@ -383,6 +415,8 @@ pub fn append_csv_row(bench: &str, row: &PhaseTwentyNineRow) {
         rf = ref_ns,
         rl = row.reference,
         dl = delta,
+        pn = pytorch_ns,
+        pd = pytorch_delta,
     );
 }
 
@@ -479,3 +513,176 @@ pub const CROSS_MMVQ_FORMATS: &[baracuda_kernels::GgufBlockFormat] = &[
     baracuda_kernels::GgufBlockFormat::Q6K,
     baracuda_kernels::GgufBlockFormat::Q8_0,
 ];
+
+// =====================================================================
+// Phase 73.1 — PyTorch frozen-JSON baseline loader.
+// =====================================================================
+
+/// Metadata block from the PyTorch baseline JSON. Self-describing so a
+/// reader can verify the baseline was produced under hardware + PyTorch
+/// + CUDA versions comparable to the current run.
+///
+/// Schema authored in `tools/refresh_pytorch_baseline.py`.
+#[derive(Clone, Debug, serde::Deserialize)]
+pub struct PytorchBaselineMetadata {
+    /// JSON schema version. Increment if the format changes
+    /// incompatibly; loaders should refuse mismatched versions.
+    pub schema_version: u32,
+    /// e.g. `"2.11.0+cu130"`.
+    pub torch_version: String,
+    /// e.g. `"13.0"`.
+    pub cuda_version: String,
+    /// Full device name as `torch.cuda.get_device_name(0)` reports.
+    pub device_name: String,
+    /// `(major, minor)` from `torch.cuda.get_device_capability(0)`.
+    pub device_capability: [u32; 2],
+    /// ISO-8601 UTC timestamp from the refresh run.
+    pub generated_at_utc: String,
+    /// Number of independent timing batches the median is over.
+    pub sample_count: u32,
+    /// Launches per timing batch.
+    pub inner_iters: u32,
+    /// Warmup launches before the first timed sample.
+    pub warmup_launches: u32,
+    /// Human-readable methodology blurb.
+    pub methodology: String,
+}
+
+/// One per-cell timing entry in the baseline.
+#[derive(Clone, Debug, serde::Deserialize)]
+pub struct PytorchBaselineEntry {
+    /// Op family, e.g. `"gemm"`.
+    pub op: String,
+    /// Shape descriptor matching `PhaseTwentyNineRow::shape`.
+    pub shape: String,
+    /// Dtype label matching `PhaseTwentyNineRow::dtype`.
+    pub dtype: String,
+    /// Median per-launch wall-clock nanoseconds from PyTorch.
+    pub median_ns: f64,
+}
+
+/// In-memory representation of a PyTorch baseline JSON file. Built by
+/// [`PytorchBaseline::load_from`] / [`PytorchBaseline::load_default`].
+#[derive(Clone, Debug)]
+pub struct PytorchBaseline {
+    /// Self-describing metadata block.
+    pub metadata: PytorchBaselineMetadata,
+    /// `(op, shape, dtype) → median_ns`. O(1) lookup.
+    by_key: std::collections::HashMap<(String, String, String), f64>,
+}
+
+#[derive(serde::Deserialize)]
+struct PytorchBaselineFile {
+    metadata: PytorchBaselineMetadata,
+    results: Vec<PytorchBaselineEntry>,
+}
+
+impl PytorchBaseline {
+    /// Parse a baseline JSON from `path`. Returns `Err` with a human-
+    /// readable message on parse / IO failure.
+    pub fn load_from(path: &std::path::Path) -> Result<Self, String> {
+        let raw = std::fs::read(path).map_err(|e| {
+            format!("pytorch baseline: failed to read {}: {e}", path.display())
+        })?;
+        let parsed: PytorchBaselineFile = serde_json::from_slice(&raw).map_err(|e| {
+            format!(
+                "pytorch baseline: failed to parse {} as JSON: {e}",
+                path.display()
+            )
+        })?;
+        if parsed.metadata.schema_version != 1 {
+            return Err(format!(
+                "pytorch baseline: schema_version {} not supported (expected 1)",
+                parsed.metadata.schema_version
+            ));
+        }
+        let by_key = parsed
+            .results
+            .into_iter()
+            .map(|e| ((e.op, e.shape, e.dtype), e.median_ns))
+            .collect();
+        Ok(Self {
+            metadata: parsed.metadata,
+            by_key,
+        })
+    }
+
+    /// Resolve the default baseline file for the crate-local
+    /// `bench-baselines/` directory.
+    ///
+    /// Resolution rule: prefer a single `pytorch_*.json` file in the
+    /// baselines directory. If there are zero or multiple matches, log
+    /// the situation and return `None` — the bench harness then runs
+    /// without a PyTorch column (the `pytorch_ns` field stays `None`
+    /// on every emitted row).
+    ///
+    /// In CI we expect exactly one baseline per (device, torch version)
+    /// the run targets; matching by filename keeps the harness honest
+    /// about which JSON it actually loaded (printed at startup).
+    ///
+    /// Path resolution uses `CARGO_MANIFEST_DIR` baked in at compile
+    /// time. This sidesteps the cargo-bench-process-CWD quirk where
+    /// the bench binary runs from the bench crate root, not the
+    /// workspace root.
+    pub fn load_default() -> Option<Self> {
+        let dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("bench-baselines");
+        let entries: Vec<_> = match std::fs::read_dir(&dir) {
+            Ok(it) => it
+                .filter_map(|e| e.ok())
+                .map(|e| e.path())
+                .filter(|p| {
+                    p.file_name()
+                        .and_then(|n| n.to_str())
+                        .is_some_and(|n| n.starts_with("pytorch_") && n.ends_with(".json"))
+                })
+                .collect(),
+            Err(_) => {
+                eprintln!("pytorch baseline: {} not found — skipping", dir.display());
+                return None;
+            }
+        };
+        match entries.len() {
+            0 => {
+                eprintln!("pytorch baseline: no pytorch_*.json in {} — skipping", dir.display());
+                None
+            }
+            1 => match Self::load_from(&entries[0]) {
+                Ok(b) => {
+                    eprintln!(
+                        "pytorch baseline: loaded {} ({} cells, torch {}, cuda {}, device {})",
+                        entries[0].display(),
+                        b.by_key.len(),
+                        b.metadata.torch_version,
+                        b.metadata.cuda_version,
+                        b.metadata.device_name,
+                    );
+                    Some(b)
+                }
+                Err(e) => {
+                    eprintln!("pytorch baseline: {e}");
+                    None
+                }
+            },
+            n => {
+                eprintln!(
+                    "pytorch baseline: {} files in {} — ambiguous, skipping. Found:",
+                    n,
+                    dir.display()
+                );
+                for e in &entries {
+                    eprintln!("  - {}", e.display());
+                }
+                None
+            }
+        }
+    }
+
+    /// O(1) lookup. Returns the PyTorch median wall-clock ns for the
+    /// matching `(op, shape, dtype)` cell, or `None` if absent.
+    pub fn lookup(&self, op: &str, shape: &str, dtype: &str) -> Option<f64> {
+        self.by_key
+            .get(&(op.to_owned(), shape.to_owned(), dtype.to_owned()))
+            .copied()
+    }
+}

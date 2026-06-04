@@ -180,6 +180,7 @@ where
                     baracuda_ns,
                     reference_ns: None,
                     reference: "",
+                    pytorch_ns: None,
                 },
             );
             group.bench_with_input(BenchmarkId::from_parameter(&shape), &(), |bb, _| {

@@ -129,6 +129,7 @@ mod cudnn_impl {
                     baracuda_ns,
                     reference_ns: None,
                     reference: "baracuda",
+                    pytorch_ns: None,
                 },
             );
             group.bench_with_input(BenchmarkId::from_parameter(&label), &(), |bb, _| {
@@ -230,6 +231,7 @@ mod cudnn_impl {
                     baracuda_ns: 0.0,
                     reference_ns: Some(cudnn_ns),
                     reference: "cuDNN",
+                    pytorch_ns: None,
                 },
             );
             group.bench_with_input(BenchmarkId::from_parameter(&label), &(), |bb, _| {

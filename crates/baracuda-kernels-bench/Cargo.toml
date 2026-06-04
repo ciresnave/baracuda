@@ -66,6 +66,12 @@ baracuda-types = { workspace = true, features = ["half-crate", "f8-crate"] }
 # Phase 44c — optional, gated behind the `ozimmu` feature on this crate.
 baracuda-ozimmu = { workspace = true, optional = true, features = ["build-vendor"] }
 half = { workspace = true }
+# Phase 73.1 — JSON-baseline loader (PytorchBaseline). Pulls in serde +
+# serde_json directly rather than adding to the workspace deps because
+# this bench crate is `publish = false` — the dep doesn't reach
+# downstream consumers (per `feedback_dep_budget`).
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
 
 [build-dependencies]
 # Phase 44 — only used when the `cuda_l2` feature is enabled to

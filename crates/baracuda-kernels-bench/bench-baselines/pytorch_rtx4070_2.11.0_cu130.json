@@ -1,0 +1,127 @@
+{
+  "metadata": {
+    "schema_version": 1,
+    "torch_version": "2.11.0+cu130",
+    "cuda_version": "13.0",
+    "device_name": "NVIDIA GeForce RTX 4070 Laptop GPU",
+    "device_capability": [
+      8,
+      9
+    ],
+    "generated_at_utc": "2026-06-04T04:54:33+00:00",
+    "sample_count": 11,
+    "inner_iters": 50,
+    "warmup_launches": 10,
+    "methodology": "wall-clock around torch.cuda.synchronize() per batch; median of per-batch averages. Matches baracuda's measure_median_ns in baracuda-kernels-bench/src/lib.rs."
+  },
+  "results": [
+    {
+      "op": "gemm",
+      "shape": "M1_N2048_K2048",
+      "dtype": "f32",
+      "median_ns": 30564.0
+    },
+    {
+      "op": "gemm",
+      "shape": "M1_N2048_K2048",
+      "dtype": "f16",
+      "median_ns": 43502.0
+    },
+    {
+      "op": "gemm",
+      "shape": "M1_N2048_K2048",
+      "dtype": "bf16",
+      "median_ns": 45724.0
+    },
+    {
+      "op": "gemm",
+      "shape": "M32_N2048_K2048",
+      "dtype": "f32",
+      "median_ns": 56014.0
+    },
+    {
+      "op": "gemm",
+      "shape": "M32_N2048_K2048",
+      "dtype": "f16",
+      "median_ns": 46954.0
+    },
+    {
+      "op": "gemm",
+      "shape": "M32_N2048_K2048",
+      "dtype": "bf16",
+      "median_ns": 46234.0
+    },
+    {
+      "op": "gemm",
+      "shape": "M128_N2048_K2048",
+      "dtype": "f32",
+      "median_ns": 165688.0
+    },
+    {
+      "op": "gemm",
+      "shape": "M128_N2048_K2048",
+      "dtype": "f16",
+      "median_ns": 48676.0
+    },
+    {
+      "op": "gemm",
+      "shape": "M128_N2048_K2048",
+      "dtype": "bf16",
+      "median_ns": 45476.0
+    },
+    {
+      "op": "gemm",
+      "shape": "M1_N4096_K4096",
+      "dtype": "f32",
+      "median_ns": 313104.0
+    },
+    {
+      "op": "gemm",
+      "shape": "M1_N4096_K4096",
+      "dtype": "f16",
+      "median_ns": 35984.0
+    },
+    {
+      "op": "gemm",
+      "shape": "M1_N4096_K4096",
+      "dtype": "bf16",
+      "median_ns": 35446.0
+    },
+    {
+      "op": "gemm",
+      "shape": "M32_N4096_K4096",
+      "dtype": "f32",
+      "median_ns": 286062.0
+    },
+    {
+      "op": "gemm",
+      "shape": "M32_N4096_K4096",
+      "dtype": "f16",
+      "median_ns": 60302.0
+    },
+    {
+      "op": "gemm",
+      "shape": "M32_N4096_K4096",
+      "dtype": "bf16",
+      "median_ns": 63642.0
+    },
+    {
+      "op": "gemm",
+      "shape": "M128_N4096_K4096",
+      "dtype": "f32",
+      "median_ns": 352490.0
+    },
+    {
+      "op": "gemm",
+      "shape": "M128_N4096_K4096",
+      "dtype": "f16",
+      "median_ns": 150264.0
+    },
+    {
+      "op": "gemm",
+      "shape": "M128_N4096_K4096",
+      "dtype": "bf16",
+      "median_ns": 150606.0
+    }
+  ]
+}

@@ -217,6 +217,7 @@ where
                 baracuda_ns,
                 reference_ns: None,
                 reference: "",
+                pytorch_ns: None,
             },
         );
 
@@ -264,6 +265,7 @@ where
     let _ = ElementKind::F32;
 }
 
+/// Top-level criterion entry - invoked by criterion_main!.
 fn benches(c: &mut Criterion) {
     bench::<f16>(c, "f16", f16::ONE);
     bench::<bf16>(c, "bf16", bf16::ONE);

@@ -178,6 +178,7 @@ where
     group.finish();
 }
 
+/// Top-level criterion entry - invoked by criterion_main!.
 fn flash_benches(c: &mut Criterion) {
     bench_flash::<f32>(c, "f32", ElementKind::F32, 1.0_f32);
     bench_flash::<f16>(c, "f16", ElementKind::F16, f16::ONE);

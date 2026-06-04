@@ -201,6 +201,7 @@ fn bench_baracuda_f16(c: &mut Criterion) {
                 baracuda_ns,
                 reference_ns: None,
                 reference: "baracuda",
+                pytorch_ns: None,
             },
         );
 
@@ -325,6 +326,7 @@ fn bench_cublas_f16(c: &mut Criterion) {
                 baracuda_ns: 0.0,
                 reference_ns: Some(cublas_ns),
                 reference: "cuBLAS",
+                pytorch_ns: None,
             },
         );
 
@@ -426,6 +428,7 @@ fn bench_cuda_l2_f16(c: &mut Criterion) {
                 baracuda_ns: 0.0,
                 reference_ns: Some(cuda_l2_ns),
                 reference: "CUDA-L2",
+                pytorch_ns: None,
             },
         );
 
@@ -503,11 +506,13 @@ fn bench_cuda_l2_f16(_c: &mut Criterion) {
                 baracuda_ns: 0.0,
                 reference_ns: Some(l2_us * 1_000.0),
                 reference: "CUDA-L2-ref",
+                pytorch_ns: None,
             },
         );
     }
 }
 
+/// Top-level criterion entry - invoked by criterion_main!.
 fn benches(c: &mut Criterion) {
     bench_baracuda_f16(c);
     bench_cublas_f16(c);
