@@ -259,6 +259,9 @@ mod cudnn_impl {
         bench_cudnn_one(c, ReduceOp::Max, "max", baseline_ref);
         bench_baracuda_one(c, ReduceKind::Mean, "mean");
         bench_cudnn_one(c, ReduceOp::Avg, "mean", baseline_ref);
+        // Phase 73.4: Prod completes the standard reduce set.
+        bench_baracuda_one(c, ReduceKind::Prod, "prod");
+        bench_cudnn_one(c, ReduceOp::Mul, "prod", baseline_ref);
     }
 }
 

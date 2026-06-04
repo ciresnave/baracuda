@@ -220,6 +220,23 @@ def softmax_cases() -> Iterable[tuple[str, str, str, Callable[[], None]]]:
                 yield ("softmax", shape, dtype_name, launch)
 
 
+def log_softmax_cases() -> Iterable[tuple[str, str, str, Callable[[], None]]]:
+    """`F.log_softmax(x, dim=-1)` over CROSS_SEQLEN × CROSS_HIDDEN.
+
+    Phase 73.4 addition — sibling to `softmax_cases`. Same shapes, same
+    dtypes; the bench harness uses the same `R{rows}_C{cols}` shape key
+    so the lookup matches `softmax_vs_cudnn.rs`'s LogSoftmax pass.
+    """
+    device = torch.device("cuda")
+    for rows in NORM_R_SWEEP:
+        for cols in NORM_H_SWEEP:
+            shape = f"R{rows}_C{cols}"
+            for dtype_name, dtype in NORM_DTYPES:
+                x = torch.randn((rows, cols), dtype=dtype, device=device)
+                launch = lambda x=x: torch.nn.functional.log_softmax(x, dim=-1)
+                yield ("log_softmax", shape, dtype_name, launch)
+
+
 def layernorm_cases() -> Iterable[tuple[str, str, str, Callable[[], None]]]:
     """`F.layer_norm(x, normalized_shape=[H])`."""
     device = torch.device("cuda")
@@ -259,12 +276,14 @@ def rmsnorm_cases() -> Iterable[tuple[str, str, str, Callable[[], None]]]:
 
 
 def reduce_cases() -> Iterable[tuple[str, str, str, Callable[[], None]]]:
-    """`torch.sum/amax/mean(x, dim=-1)` over CROSS_SEQLEN × CROSS_HIDDEN."""
+    """`torch.sum/amax/mean/prod(x, dim=-1)` over CROSS_SEQLEN × CROSS_HIDDEN."""
     device = torch.device("cuda")
     fns: tuple[tuple[str, Callable[[torch.Tensor], torch.Tensor]], ...] = (
         ("reduce_sum", lambda t: torch.sum(t, dim=-1)),
         ("reduce_max", lambda t: torch.amax(t, dim=-1)),
         ("reduce_mean", lambda t: torch.mean(t, dim=-1)),
+        # Phase 73.4: add Prod to complete the standard reduce set.
+        ("reduce_prod", lambda t: torch.prod(t, dim=-1)),
     )
     for op_name, fn in fns:
         for rows in NORM_R_SWEEP:
@@ -276,7 +295,8 @@ def reduce_cases() -> Iterable[tuple[str, str, str, Callable[[], None]]]:
 
 
 def elementwise_cases() -> Iterable[tuple[str, str, str, Callable[[], None]]]:
-    """`a + b`, `a * b`, `F.relu(x)`, `F.gelu(x)` over ELT_SWEEP."""
+    """`a + b`, `a * b`, `F.relu(x)`, `F.gelu(x)`, `F.silu(x)`, `torch.tanh(x)`,
+    `torch.sigmoid(x)` over ELT_SWEEP."""
     device = torch.device("cuda")
     binary_ops: tuple[tuple[str, Callable], ...] = (
         ("add", lambda a, b: a + b),
@@ -287,6 +307,11 @@ def elementwise_cases() -> Iterable[tuple[str, str, str, Callable[[], None]]]:
         # baracuda's gelu uses the exact erf-based formulation; match PyTorch
         # default (approximate='none').
         ("gelu", lambda x: torch.nn.functional.gelu(x, approximate="none")),
+        # Phase 73.4: extend coverage with Silu (Llama-family activation) +
+        # classical Tanh/Sigmoid.
+        ("silu", lambda x: torch.nn.functional.silu(x)),
+        ("tanh", lambda x: torch.tanh(x)),
+        ("sigmoid", lambda x: torch.sigmoid(x)),
     )
     for n in ELT_NUMELS:
         shape = f"N{n}"
@@ -370,6 +395,7 @@ def sdpa_cases() -> Iterable[tuple[str, str, str, Callable[[], None]]]:
 OP_REGISTRY: dict[str, Callable[[], Iterable[tuple[str, str, str, Callable[[], None]]]]] = {
     "gemm": gemm_cases,
     "softmax": softmax_cases,
+    "log_softmax": log_softmax_cases,
     "layernorm": layernorm_cases,
     "rmsnorm": rmsnorm_cases,
     "reduce": reduce_cases,

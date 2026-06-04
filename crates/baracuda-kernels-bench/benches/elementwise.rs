@@ -274,6 +274,13 @@ fn benches(c: &mut Criterion) {
     bench_unary::<f16>(c, UnaryKind::Relu, "relu", "f16", f16::ONE, baseline_ref);
     bench_unary::<f32>(c, UnaryKind::Gelu, "gelu", "f32", 1.0_f32, baseline_ref);
     bench_unary::<f16>(c, UnaryKind::Gelu, "gelu", "f16", f16::ONE, baseline_ref);
+    // Phase 73.4: extend coverage with Llama-family Silu + classical Tanh/Sigmoid.
+    bench_unary::<f32>(c, UnaryKind::Silu, "silu", "f32", 1.0_f32, baseline_ref);
+    bench_unary::<f16>(c, UnaryKind::Silu, "silu", "f16", f16::ONE, baseline_ref);
+    bench_unary::<f32>(c, UnaryKind::Tanh, "tanh", "f32", 1.0_f32, baseline_ref);
+    bench_unary::<f16>(c, UnaryKind::Tanh, "tanh", "f16", f16::ONE, baseline_ref);
+    bench_unary::<f32>(c, UnaryKind::Sigmoid, "sigmoid", "f32", 1.0_f32, baseline_ref);
+    bench_unary::<f16>(c, UnaryKind::Sigmoid, "sigmoid", "f16", f16::ONE, baseline_ref);
 }
 
 // `criterion_group!` expands into a `pub fn benches_grp` whose

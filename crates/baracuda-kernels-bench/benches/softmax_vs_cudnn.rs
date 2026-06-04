@@ -45,12 +45,18 @@ mod cudnn_impl {
         Box::leak(s.to_owned().into_boxed_str())
     }
 
-    pub fn bench_baracuda<T>(c: &mut Criterion, dtype_label: &str, fill: T)
-    where
+    pub fn bench_baracuda<T>(
+        c: &mut Criterion,
+        kind: SoftmaxKind,
+        kind_label: &str,
+        dtype_label: &str,
+        fill: T,
+    ) where
         T: baracuda_kernels::Element + Copy + 'static,
     {
         let (ctx, stream) = setup_device();
-        let mut group = c.benchmark_group(format!("softmax_vs_cudnn/baracuda/{dtype_label}"));
+        let mut group =
+            c.benchmark_group(format!("{BENCH_NAME}/baracuda/{kind_label}/{dtype_label}"));
 
         for &rows in CROSS_SEQLEN_SWEEP {
             for &cols in CROSS_HIDDEN_SWEEP {
@@ -68,7 +74,7 @@ mod cudnn_impl {
                 };
 
                 let desc = SoftmaxDescriptor::<2> {
-                    kind: SoftmaxKind::Softmax,
+                    kind,
                     input_shape: [rows, cols],
                     softmax_axis: 1,
                     element: T::KIND,
@@ -117,7 +123,7 @@ mod cudnn_impl {
                 append_csv_row(
                     BENCH_NAME,
                     &PhaseTwentyNineRow {
-                        op: "softmax",
+                        op: leak_str(kind_label),
                         shape: shape.clone(),
                         dtype: leak_str(dtype_label),
                         baracuda_ns,
@@ -155,6 +161,8 @@ mod cudnn_impl {
 
     pub fn bench_cudnn<T: baracuda_cudnn::CudnnDataType + Default>(
         c: &mut Criterion,
+        algo: SoftmaxAlgo,
+        kind_label: &str,
         dtype_label: &str,
         dtype: DType,
         baseline: Option<&PytorchBaseline>,
@@ -163,7 +171,8 @@ mod cudnn_impl {
         let cudnn = CudnnHandle::new().expect("cudnn handle");
         cudnn.set_stream(&stream).expect("cudnn set_stream");
 
-        let mut group = c.benchmark_group(format!("softmax_vs_cudnn/cudnn/{dtype_label}"));
+        let mut group =
+            c.benchmark_group(format!("{BENCH_NAME}/cudnn/{kind_label}/{dtype_label}"));
 
         for &rows in CROSS_SEQLEN_SWEEP {
             for &cols in CROSS_HIDDEN_SWEEP {
@@ -191,7 +200,7 @@ mod cudnn_impl {
                 warmup(&stream, || {
                     softmax_forward(
                         &cudnn,
-                        SoftmaxAlgo::Accurate,
+                        algo,
                         SoftmaxMode::Channel,
                         1.0,
                         &x_desc,
@@ -205,7 +214,7 @@ mod cudnn_impl {
                 let cudnn_ns = measure_median_ns(&ctx, &stream, 11, 50, || {
                     softmax_forward(
                         &cudnn,
-                        SoftmaxAlgo::Accurate,
+                        algo,
                         SoftmaxMode::Channel,
                         1.0,
                         &x_desc,
@@ -219,13 +228,14 @@ mod cudnn_impl {
                 append_csv_row(
                     BENCH_NAME,
                     &PhaseTwentyNineRow {
-                        op: "softmax",
+                        op: leak_str(kind_label),
                         shape: shape.clone(),
                         dtype: leak_str(dtype_label),
                         baracuda_ns: 0.0,
                         reference_ns: Some(cudnn_ns),
                         reference: "cuDNN",
-                        pytorch_ns: baseline.and_then(|b| b.lookup("softmax", &shape, dtype_label)),
+                        pytorch_ns: baseline
+                            .and_then(|b| b.lookup(kind_label, &shape, dtype_label)),
                     },
                 );
                 group.bench_with_input(BenchmarkId::from_parameter(&shape), &(), |bb, _| {
@@ -233,7 +243,7 @@ mod cudnn_impl {
                         time_with_events(&ctx, &stream, iters, || {
                             softmax_forward(
                                 &cudnn,
-                                SoftmaxAlgo::Accurate,
+                                algo,
                                 SoftmaxMode::Channel,
                                 1.0,
                                 &x_desc,
@@ -254,10 +264,16 @@ mod cudnn_impl {
     pub fn softmax_benches(c: &mut Criterion) {
         let baseline = PytorchBaseline::load_default();
         let baseline_ref = baseline.as_ref();
-        bench_baracuda::<f32>(c, "f32", 1.0_f32);
-        bench_cudnn::<f32>(c, "f32", DType::F32, baseline_ref);
-        bench_baracuda::<f16>(c, "f16", f16::ONE);
-        bench_cudnn::<f16>(c, "f16", DType::F16, baseline_ref);
+        // Softmax variants
+        bench_baracuda::<f32>(c, SoftmaxKind::Softmax, "softmax", "f32", 1.0_f32);
+        bench_cudnn::<f32>(c, SoftmaxAlgo::Accurate, "softmax", "f32", DType::F32, baseline_ref);
+        bench_baracuda::<f16>(c, SoftmaxKind::Softmax, "softmax", "f16", f16::ONE);
+        bench_cudnn::<f16>(c, SoftmaxAlgo::Accurate, "softmax", "f16", DType::F16, baseline_ref);
+        // Phase 73.4: LogSoftmax variants (same harness, kind toggle).
+        bench_baracuda::<f32>(c, SoftmaxKind::LogSoftmax, "log_softmax", "f32", 1.0_f32);
+        bench_cudnn::<f32>(c, SoftmaxAlgo::Log, "log_softmax", "f32", DType::F32, baseline_ref);
+        bench_baracuda::<f16>(c, SoftmaxKind::LogSoftmax, "log_softmax", "f16", f16::ONE);
+        bench_cudnn::<f16>(c, SoftmaxAlgo::Log, "log_softmax", "f16", DType::F16, baseline_ref);
     }
 }
 
