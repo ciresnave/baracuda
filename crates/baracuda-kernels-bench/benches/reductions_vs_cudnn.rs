@@ -259,9 +259,20 @@ mod cudnn_impl {
         bench_cudnn_one(c, ReduceOp::Max, "max", baseline_ref);
         bench_baracuda_one(c, ReduceKind::Mean, "mean");
         bench_cudnn_one(c, ReduceOp::Avg, "mean", baseline_ref);
-        // Phase 73.4: Prod completes the standard reduce set.
+        // Phase 73.4: Prod completes the basic reduce set.
         bench_baracuda_one(c, ReduceKind::Prod, "prod");
         bench_cudnn_one(c, ReduceOp::Mul, "prod", baseline_ref);
+        // Phase 73.6: Min + statistical / L2 reductions.
+        bench_baracuda_one(c, ReduceKind::Min, "min");
+        bench_cudnn_one(c, ReduceOp::Min, "min", baseline_ref);
+        bench_baracuda_one(c, ReduceKind::Var, "var");
+        // No direct cuDNN equivalent for sample variance.
+        bench_baracuda_one(c, ReduceKind::Std, "std");
+        // No direct cuDNN equivalent for sample standard deviation.
+        bench_baracuda_one(c, ReduceKind::Norm2, "norm2");
+        bench_cudnn_one(c, ReduceOp::Norm2, "norm2", baseline_ref);
+        bench_baracuda_one(c, ReduceKind::LogSumExp, "logsumexp");
+        // No direct cuDNN equivalent for logsumexp.
     }
 }
 

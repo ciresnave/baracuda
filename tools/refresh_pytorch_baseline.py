@@ -276,14 +276,23 @@ def rmsnorm_cases() -> Iterable[tuple[str, str, str, Callable[[], None]]]:
 
 
 def reduce_cases() -> Iterable[tuple[str, str, str, Callable[[], None]]]:
-    """`torch.sum/amax/mean/prod(x, dim=-1)` over CROSS_SEQLEN × CROSS_HIDDEN."""
+    """`torch.sum/amax/amin/mean/prod/var/std/norm/logsumexp(x, dim=-1)` over
+    CROSS_SEQLEN × CROSS_HIDDEN."""
     device = torch.device("cuda")
     fns: tuple[tuple[str, Callable[[torch.Tensor], torch.Tensor]], ...] = (
         ("reduce_sum", lambda t: torch.sum(t, dim=-1)),
         ("reduce_max", lambda t: torch.amax(t, dim=-1)),
         ("reduce_mean", lambda t: torch.mean(t, dim=-1)),
-        # Phase 73.4: add Prod to complete the standard reduce set.
+        # Phase 73.4: Prod completes the basic reduce set.
         ("reduce_prod", lambda t: torch.prod(t, dim=-1)),
+        # Phase 73.6: Min + statistical / L2 reductions.
+        ("reduce_min", lambda t: torch.amin(t, dim=-1)),
+        # Bessel-corrected sample variance / std (correction=1) to match
+        # baracuda's `correction: 1` in the bench.
+        ("reduce_var", lambda t: torch.var(t, dim=-1, unbiased=True)),
+        ("reduce_std", lambda t: torch.std(t, dim=-1, unbiased=True)),
+        ("reduce_norm2", lambda t: torch.linalg.vector_norm(t, ord=2, dim=-1)),
+        ("reduce_logsumexp", lambda t: torch.logsumexp(t, dim=-1)),
     )
     for op_name, fn in fns:
         for rows in NORM_R_SWEEP:
@@ -562,10 +571,28 @@ def main() -> int:
                 }
             )
 
-    payload = {"metadata": _metadata(args.samples, args.inner), "results": results}
+    # Merge with the existing baseline, replacing only the (op, shape, dtype)
+    # keys that this run measured. This lets `--ops <subset>` refresh just
+    # those ops without wiping coverage of the ones we didn't ask for.
+    merged: dict[tuple[str, str, str], dict[str, object]] = {}
+    if output_path.exists():
+        try:
+            existing = json.loads(output_path.read_text(encoding="utf-8"))
+            for entry in existing.get("results", []):
+                key = (entry["op"], entry["shape"], entry["dtype"])
+                merged[key] = entry
+        except (json.JSONDecodeError, KeyError) as e:
+            print(f"WARN: ignoring existing {output_path} ({e}); writing fresh", file=sys.stderr)
+    for entry in results:
+        key = (entry["op"], entry["shape"], entry["dtype"])
+        merged[key] = entry
+    payload = {
+        "metadata": _metadata(args.samples, args.inner),
+        "results": list(merged.values()),
+    }
     output_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
     print()
-    print(f"Wrote {len(results)} cells to {output_path}")
+    print(f"Wrote {len(merged)} cells to {output_path} ({len(results)} refreshed this run)")
     return 0
 
 

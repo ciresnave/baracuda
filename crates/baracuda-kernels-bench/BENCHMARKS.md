@@ -27,7 +27,7 @@ hand-maintained roll-up.
 | `rmsnorm` | RMSNorm f32 / f16 / bf16 | self (no library equiv) | rows × hidden, same as softmax |
 | `conv2d_vs_cudnn` | Conv2d f32 / f16 | raw cuDNN `convolution_forward` (baracuda is cuDNN-backed — measures wrapper overhead) | ResNet-50 picks (3) |
 | `pool_vs_cudnn` | MaxPool2d f32 / f16 | raw cuDNN `pooling_forward` | ResNet-50 picks (3) |
-| `reductions_vs_cudnn` | Sum / Max / Mean / Prod (Phase 73.4) f32 | cuDNN `reduce_tensor` | rows × hidden, same as softmax |
+| `reductions_vs_cudnn` (Phase 73.6) | Sum / Max / Min / Mean / Prod / Var / Std / Norm2 / LogSumExp × f32 | cuDNN `reduce_tensor` where available (Sum/Max/Min/Mean/Prod/Norm2; Var/Std/LogSumExp have no cuDNN equivalent) | rows × hidden, same as softmax |
 | `elementwise` (Phase 73.5) | 33 ops × f32 / f16 — activations (ReLU/GELU/Silu/Tanh/Sigmoid/Mish/Hardswish/Hardsigmoid/Hardtanh/LeakyReLU/Elu/Selu/ReLU6/Softplus/Softsign/GELU-Tanh), math unaries (Abs/Neg/Sign/Reciprocal/Sqrt/Rsqrt/Square/Exp/Log/Sin/Cos/Erf), binaries (Add/Sub/Mul/Div/Maximum/Minimum/Pow) | self | numel ∈ {1M, 16M} |
 | `sdpa_gqa` | Flash SDPA + GQA broadcast (f16 / bf16) | self | H_q=32, H_kv ∈ {32, 1}, Q=K=2048, D=128 |
 
@@ -411,34 +411,34 @@ Speedup column convention: `library_ns / baracuda_ns`.
 
 | dtype | shape | baracuda | cuDNN | cuDNN/baracuda | PyTorch | PyTorch/baracuda |
 | --- | --- | --- | --- | --- | --- | --- |
-| f32 | `R512_H1024` | 106.0μs | 41.9μs | 0.40× | 22.1μs | 0.21× |
-| f32 | `R512_H4096` | 414.5μs | 164.0μs | 0.40× | 23.3μs | 0.06× |
-| f32 | `R2048_H1024` | 105.9μs | 50.6μs | 0.48× | 21.4μs | 0.20× |
-| f32 | `R2048_H4096` | 462.0μs | 1.05ms | **2.27×** | 31.8μs | 0.07× |
-| f32 | `R4096_H1024` | 106.6μs | 224.7μs | **2.11×** | 22.8μs | 0.21× |
-| f32 | `R4096_H4096` | 890.3μs | 1.76ms | **1.97×** | 366.1μs | 0.41× |
+| f32 | `R512_H1024` | 167.8μs | 41.8μs | 0.25× | 19.9μs | 0.12× |
+| f32 | `R512_H4096` | 413.1μs | 155.9μs | 0.38× | 21.0μs | 0.05× |
+| f32 | `R2048_H1024` | 105.5μs | 50.6μs | 0.48× | 23.1μs | 0.22× |
+| f32 | `R2048_H4096` | 435.5μs | 901.6μs | **2.07×** | 30.9μs | 0.07× |
+| f32 | `R4096_H1024` | 105.4μs | 187.4μs | **1.78×** | 20.9μs | 0.20× |
+| f32 | `R4096_H4096` | 777.2μs | 1.84ms | **2.36×** | 365.5μs | 0.47× |
 
 ### `reduce_max`
 
 | dtype | shape | baracuda | cuDNN | cuDNN/baracuda | PyTorch | PyTorch/baracuda |
 | --- | --- | --- | --- | --- | --- | --- |
-| f32 | `R512_H1024` | 105.9μs | 50.0μs | 0.47× | 22.3μs | 0.21× |
-| f32 | `R512_H4096` | 414.5μs | 181.0μs | 0.44× | 22.7μs | 0.05× |
-| f32 | `R2048_H1024` | 105.9μs | 53.7μs | 0.51× | 22.2μs | 0.21× |
-| f32 | `R2048_H4096` | 461.6μs | 1.09ms | **2.36×** | 33.0μs | 0.07× |
-| f32 | `R4096_H1024` | 106.5μs | 227.1μs | **2.13×** | 22.7μs | 0.21× |
-| f32 | `R4096_H4096` | 907.5μs | 1.76ms | **1.94×** | 366.8μs | 0.40× |
+| f32 | `R512_H1024` | 105.7μs | 53.7μs | 0.51× | 20.3μs | 0.19× |
+| f32 | `R512_H4096` | 412.4μs | 173.8μs | 0.42× | 21.7μs | 0.05× |
+| f32 | `R2048_H1024` | 105.5μs | 53.7μs | 0.51× | 21.7μs | 0.21× |
+| f32 | `R2048_H4096` | 435.9μs | 920.1μs | **2.11×** | 30.9μs | 0.07× |
+| f32 | `R4096_H1024` | 106.8μs | 211.5μs | **1.98×** | 20.5μs | 0.19× |
+| f32 | `R4096_H4096` | 770.3μs | 1.74ms | **2.25×** | 365.5μs | 0.47× |
 
 ### `reduce_mean`
 
 | dtype | shape | baracuda | cuDNN | cuDNN/baracuda | PyTorch | PyTorch/baracuda |
 | --- | --- | --- | --- | --- | --- | --- |
-| f32 | `R512_H1024` | 105.9μs | 41.7μs | 0.39× | 21.9μs | 0.21× |
-| f32 | `R512_H4096` | 414.5μs | 161.9μs | 0.39× | 22.4μs | 0.05× |
-| f32 | `R2048_H1024` | 105.9μs | 50.7μs | 0.48× | 21.9μs | 0.21× |
-| f32 | `R2048_H4096` | 464.2μs | 1.08ms | **2.32×** | 34.6μs | 0.07× |
-| f32 | `R4096_H1024` | 107.2μs | 226.0μs | **2.11×** | 22.3μs | 0.21× |
-| f32 | `R4096_H4096` | 873.8μs | 1.76ms | **2.01×** | 365.8μs | 0.42× |
+| f32 | `R512_H1024` | 105.4μs | 54.1μs | 0.51× | 20.5μs | 0.19× |
+| f32 | `R512_H4096` | 413.1μs | 157.1μs | 0.38× | 19.5μs | 0.05× |
+| f32 | `R2048_H1024` | 105.5μs | 51.2μs | 0.49× | 19.4μs | 0.18× |
+| f32 | `R2048_H4096` | 441.0μs | 896.2μs | **2.03×** | 34.3μs | 0.08× |
+| f32 | `R4096_H1024` | 106.5μs | 215.1μs | **2.02×** | 18.8μs | 0.18× |
+| f32 | `R4096_H4096` | 778.3μs | 1.84ms | **2.37×** | 315.0μs | 0.40× |
 
 ### `add`
 
@@ -686,16 +686,71 @@ Speedup column convention: `library_ns / baracuda_ns`.
 | f16 | `N1048576` | 15.7μs | 17.2μs | **1.10×** |
 | f16 | `N16777216` | 381.9μs | 298.1μs | 0.78× |
 
+### `reduce_logsumexp`
+
+| dtype | shape | baracuda |
+| --- | --- | --- |
+| f32 | `R512_H1024` | 224.9μs |
+| f32 | `R512_H4096` | 821.5μs |
+| f32 | `R2048_H1024` | 207.9μs |
+| f32 | `R2048_H4096` | 831.2μs |
+| f32 | `R4096_H1024` | 213.9μs |
+| f32 | `R4096_H4096` | 1.57ms |
+
+### `reduce_min`
+
+| dtype | shape | baracuda | cuDNN | cuDNN/baracuda | PyTorch | PyTorch/baracuda |
+| --- | --- | --- | --- | --- | --- | --- |
+| f32 | `R512_H1024` | 116.6μs | 45.4μs | 0.39× | 18.9μs | 0.16× |
+| f32 | `R512_H4096` | 412.5μs | 167.2μs | 0.41× | 18.8μs | 0.05× |
+| f32 | `R2048_H1024` | 105.4μs | 53.8μs | 0.51× | 19.4μs | 0.18× |
+| f32 | `R2048_H4096` | 435.9μs | 931.3μs | **2.14×** | 33.9μs | 0.08× |
+| f32 | `R4096_H1024` | 105.6μs | 264.8μs | **2.51×** | 18.7μs | 0.18× |
+| f32 | `R4096_H4096` | 780.6μs | 1.86ms | **2.39×** | 314.9μs | 0.40× |
+
+### `reduce_norm2`
+
+| dtype | shape | baracuda | cuDNN | cuDNN/baracuda | PyTorch | PyTorch/baracuda |
+| --- | --- | --- | --- | --- | --- | --- |
+| f32 | `R512_H1024` | 113.3μs | 42.1μs | 0.37× | 20.4μs | 0.18× |
+| f32 | `R512_H4096` | 412.7μs | 162.2μs | 0.39× | 20.4μs | 0.05× |
+| f32 | `R2048_H1024` | 105.4μs | 50.9μs | 0.48× | 22.9μs | 0.22× |
+| f32 | `R2048_H4096` | 438.6μs | 892.3μs | **2.03×** | 32.0μs | 0.07× |
+| f32 | `R4096_H1024` | 106.7μs | 224.7μs | **2.11×** | 21.8μs | 0.20× |
+| f32 | `R4096_H4096` | 767.3μs | 1.83ms | **2.38×** | 365.1μs | 0.48× |
+
 ### `reduce_prod`
 
 | dtype | shape | baracuda | cuDNN | cuDNN/baracuda | PyTorch | PyTorch/baracuda |
 | --- | --- | --- | --- | --- | --- | --- |
-| f32 | `R512_H1024` | 106.0μs | 42.2μs | 0.40× | 21.1μs | 0.20× |
-| f32 | `R512_H4096` | 414.7μs | 159.2μs | 0.38× | 21.8μs | 0.05× |
-| f32 | `R2048_H1024` | 106.2μs | 51.3μs | 0.48× | 21.9μs | 0.21× |
-| f32 | `R2048_H4096` | 464.0μs | 1.08ms | **2.33×** | 34.2μs | 0.07× |
-| f32 | `R4096_H1024` | 108.5μs | 225.7μs | **2.08×** | 21.9μs | 0.20× |
-| f32 | `R4096_H4096` | 873.3μs | 1.76ms | **2.01×** | 365.5μs | 0.42× |
+| f32 | `R512_H1024` | 105.8μs | 56.8μs | 0.54× | 19.8μs | 0.19× |
+| f32 | `R512_H4096` | 412.9μs | 156.3μs | 0.38× | 19.8μs | 0.05× |
+| f32 | `R2048_H1024` | 105.5μs | 51.0μs | 0.48× | 19.7μs | 0.19× |
+| f32 | `R2048_H4096` | 437.7μs | 902.8μs | **2.06×** | 41.5μs | 0.09× |
+| f32 | `R4096_H1024` | 106.1μs | 219.6μs | **2.07×** | 20.2μs | 0.19× |
+| f32 | `R4096_H4096` | 779.2μs | 1.86ms | **2.39×** | 314.4μs | 0.40× |
+
+### `reduce_std`
+
+| dtype | shape | baracuda |
+| --- | --- | --- |
+| f32 | `R512_H1024` | 195.4μs |
+| f32 | `R512_H4096` | 658.7μs |
+| f32 | `R2048_H1024` | 166.5μs |
+| f32 | `R2048_H4096` | 761.2μs |
+| f32 | `R4096_H1024` | 178.3μs |
+| f32 | `R4096_H4096` | 1.22ms |
+
+### `reduce_var`
+
+| dtype | shape | baracuda |
+| --- | --- | --- |
+| f32 | `R512_H1024` | 167.3μs |
+| f32 | `R512_H4096` | 661.1μs |
+| f32 | `R2048_H1024` | 167.6μs |
+| f32 | `R2048_H4096` | 758.5μs |
+| f32 | `R4096_H1024` | 179.8μs |
+| f32 | `R4096_H4096` | 1.21ms |
 
 ### `relu6`
 
