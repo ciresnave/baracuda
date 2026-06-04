@@ -17,6 +17,7 @@ struct ProdReduce {
         return acc;
     }
     __device__ __forceinline__ T operator()(T acc, T x) const { return acc * x; }
+    static __device__ __forceinline__ T merge(T a, T b) { return a * b; }
 };
 
 template <>
@@ -27,6 +28,9 @@ struct ProdReduce<__half> {
     }
     __device__ __forceinline__ __half operator()(__half acc, __half x) const {
         return __float2half(__half2float(acc) * __half2float(x));
+    }
+    static __device__ __forceinline__ __half merge(__half a, __half b) {
+        return __float2half(__half2float(a) * __half2float(b));
     }
 };
 
@@ -44,6 +48,11 @@ struct ProdReduce<__nv_bfloat16> {
         __nv_bfloat16 acc, __nv_bfloat16 x) const
     {
         return __float2bfloat16(__bfloat162float(acc) * __bfloat162float(x));
+    }
+    static __device__ __forceinline__ __nv_bfloat16 merge(
+        __nv_bfloat16 a, __nv_bfloat16 b)
+    {
+        return __float2bfloat16(__bfloat162float(a) * __bfloat162float(b));
     }
 };
 

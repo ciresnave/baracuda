@@ -22,6 +22,7 @@ struct MinReduceInt {
     static __device__ __forceinline__ T init();
     static __device__ __forceinline__ T finalize(T acc, int32_t /*extent*/) { return acc; }
     __device__ __forceinline__ T operator()(T acc, T x) const { return (x < acc) ? x : acc; }
+    static __device__ __forceinline__ T merge(T a, T b) { return (b < a) ? b : a; }
 };
 
 template <> __device__ __forceinline__ uint8_t  MinReduceInt<uint8_t>::init()  { return UINT8_MAX;  }

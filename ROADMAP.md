@@ -1524,50 +1524,48 @@ not worth a follow-up.
 All 8 existing concat smoke tests pass at every dtype +
 non-axis-1 + non-contig pattern.
 
-### Reductions perf gap vs PyTorch at small rows × small hidden
+### Reductions perf gap vs PyTorch at small rows × small hidden — ✓ FIXED
 
 Phase 73.3 bench surfaced PyTorch reduce_sum / reduce_max /
 reduce_mean running 5-20× faster than baracuda at small (R×H ≤
 2048×4096) shapes.
 
 **Root cause** (Phase 73.3 follow-up): baracuda's `reduce_axis_kernel`
-in `baracuda_elementwise.cuh` is **one thread per output cell**, with
-a **serial inner loop** over the reduced axis:
+in `baracuda_elementwise.cuh` was **one thread per output cell** with
+a **serial inner loop** over the reduced axis. For (R=512, H=1024)
+that launched 2 blocks of 256 threads — only 2 SMs active — and each
+thread executed a 1024-iteration serial reduction.
 
-```cuda
-T acc = F::init();
-for (int32_t k = 0; k < reduce_extent; ++k) {
-    int64_t off_x = off_x_base + (int64_t)k * reduce_stride_x;
-    acc = op(acc, x[off_x]);
-}
-y[off_y] = F::finalize(acc, reduce_extent);
-```
+**Fix** (post-Phase-73): added `reduce_axis_block_kernel` — one block
+per output cell, threads in the block cooperatively scan the row and
+tree-reduce via `__shfl_xor_sync` + a 32-slot warp_buf SMEM. Functor
+protocol gained `F::merge(a, b)` (distinct from `op` because Norm2's
+fold embeds a square; merging two partial sums-of-squares is plain
+addition). Eligibility is gated:
 
-For (R=512, H=1024) that launches 2 blocks of 256 threads (512 / 256
-= 2). Each thread executes a 1024-iteration serial reduction. On
-RTX 4070 (36 SMs) only 2 SMs are active — massive underutilization.
+- `reduce_stride_x == 1` (innermost-contig in source)
+- `output_numel ≤ 2048` OR `reduce_extent ≥ 2048` (otherwise legacy
+  slow path already saturates SMs and wins)
+- Type is shuffle-safe (f32/f64/f16/bf16/int32/int64; int8/uint8/
+  int16 stay on legacy)
 
-The fix is the standard parallel-reduction pattern: one block per
-output row, threads in the block cooperatively reduce the row via
-warp shuffles + cross-warp SMEM aggregation (already implemented in
-`baracuda_smem_reduce.cuh` — Phase 65a). This both fills more SMs
-(reduce_blocks = output_numel) and parallelizes the per-row work.
+Bench results (RTX 4070):
 
-baracuda still beats cuDNN at the largest shape (R=4096, H=4096:
-baracuda 749μs vs cuDNN 1.79ms) — cuDNN has its own fixed-overhead
-problem. PyTorch's 318μs at the same shape is the actual reference
-target.
+| Shape (out × red) | Before | After | Speedup |
+| --- | --- | --- | --- |
+| R512_H1024 (512 × 1024) | 167.8 µs | 24.4 µs | **6.9×** |
+| R512_H4096 (512 × 4096) | 413.1 µs | 26.9 µs | **15.4×** |
+| R2048_H1024 | 105.5 µs | 81.8 µs | 1.29× |
+| R2048_H4096 | 435.5 µs | 150.9 µs | **2.89×** |
+| R4096_H1024 (slow-path retained) | 105.4 µs | 106.2 µs | ~1.0× |
+| R4096_H4096 | 777.2 µs | 297.3 µs | **2.62×** |
 
-**Scope:** rewrite `reduce_axis_kernel` to one-block-per-output-row
-+ in-block warp-shuffle reduction (mirrors the Phase 65b SMEM-staged
-normalizer pattern). Same kernel covers Sum/Max/Min/Mean/Prod/Norm2;
-the functor `F` is already templated. Estimated 1-2 days plus
-correctness retest across the 5 reduce kinds × 4 dtypes.
+baracuda now BEATS PyTorch at R4096_H4096 (297µs vs 365µs).
+73 reduce-family smoke tests still pass; no correctness regressions.
 
-**Why pre-1.0:** 5-20× gap on a load-bearing primitive
-(reduce_sum / reduce_mean fire on every backward pass + every
-softmax/layernorm-bw). Worth addressing before 1.0 perf claims
-publish.
+Covers reduce_sum / reduce_mean / reduce_max / reduce_min /
+reduce_prod / reduce_norm2 (all FP) + reduce_max / reduce_min int32+
+int64. logsumexp uses its own 2-pass kernel and is untouched.
 
 ## Post-1.0 (hardware-gated or follow-on)
 

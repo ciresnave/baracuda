@@ -26,6 +26,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <type_traits>
 #include <cuda_runtime.h>
 #include <cuda_fp16.h>
 #include <cuda_bf16.h>
@@ -2690,6 +2691,88 @@ __global__ void reduce_axis_kernel(
     }
 }
 
+// Block-per-row reduce kernel — Phase 73-followup fast path. One block
+// per output cell; threads in the block cooperatively scan the
+// reduce-axis slice and tree-reduce within the block via
+// `__shfl_xor_sync` + a shared warp_buf. The per-thread fold uses
+// `F::op` (acc + x for Sum, acc + x*x for Norm2, etc.); the cross-
+// thread merge uses `F::merge` (a + b for Sum/Norm2/Mean, max(a,b)
+// for Max, etc.) — distinct from op because Norm2-style functors
+// embed an element-only transform in op that must not be re-applied
+// during merge.
+//
+// Eligibility (caller-checked): reduce_stride_x == 1 (innermost-
+// contig in source for the reduce axis), reduce_extent >= 64, and
+// output_numel fits in a single grid dim.
+template <typename T, typename F>
+__global__ void reduce_axis_block_kernel(
+    const T* __restrict__ x,
+    T* __restrict__ y,
+    int64_t output_numel,
+    int32_t rank,
+    DimsI32 output_shape,
+    DimsI64 stride_x,
+    DimsI64 stride_y,
+    int32_t reduce_axis,
+    int32_t reduce_extent)
+{
+    int64_t out_idx = (int64_t)blockIdx.x;
+    if (out_idx >= output_numel) return;
+
+    // Unravel output coord — same as the slow kernel, but only per
+    // block (not per thread).
+    int64_t linear = out_idx;
+    int64_t off_y = 0;
+    int64_t off_x_base = 0;
+    for (int d = rank - 1; d >= 0; --d) {
+        int32_t s = output_shape.v[d];
+        int64_t coord = (s == 0) ? 0 : (linear % (int64_t)s);
+        if (s != 0) linear /= (int64_t)s;
+        off_y += coord * stride_y.v[d];
+        if (d != reduce_axis) {
+            off_x_base += coord * stride_x.v[d];
+        }
+    }
+
+    F op{};
+    T acc = F::init();
+
+    // Per-thread fold over a strided slice of the contiguous row.
+    for (int32_t k = (int32_t)threadIdx.x; k < reduce_extent;
+         k += (int32_t)blockDim.x)
+    {
+        acc = op(acc, x[off_x_base + (int64_t)k]);
+    }
+
+    // Tree-merge across the warp via shuffles using F::merge.
+    #pragma unroll
+    for (int delta = 16; delta > 0; delta >>= 1) {
+        T peer = __shfl_xor_sync(0xffffffff, acc, delta, 32);
+        acc = F::merge(acc, peer);
+    }
+
+    // Cross-warp merge via __shared__ warp_buf.
+    __shared__ T warp_buf[32];  // 32 = max warps per block (blockDim.x ≤ 1024)
+    int lane = (int)threadIdx.x & 31;
+    int warp = (int)threadIdx.x >> 5;
+    int num_warps = ((int)blockDim.x + 31) >> 5;
+
+    if (lane == 0) warp_buf[warp] = acc;
+    __syncthreads();
+
+    if (warp == 0) {
+        T v = (lane < num_warps) ? warp_buf[lane] : F::init();
+        #pragma unroll
+        for (int delta = 16; delta > 0; delta >>= 1) {
+            T peer = __shfl_xor_sync(0xffffffff, v, delta, 32);
+            v = F::merge(v, peer);
+        }
+        if (lane == 0) {
+            y[off_y] = F::finalize(v, reduce_extent);
+        }
+    }
+}
+
 template <typename T, typename F>
 __host__ inline int32_t launch_reduce_axis(
     const T* x, T* y,
@@ -2712,6 +2795,57 @@ __host__ inline int32_t launch_reduce_axis(
         sx.v[i]        = stride_x_host[i];
         sy.v[i]        = stride_y_host[i];
     }
+
+    // Fast path: reduce axis is innermost-contiguous in source. The
+    // fast kernel launches one block per output cell — useful when:
+    //   (a) output_numel is small (the legacy slow kernel runs 1 thread
+    //       per output cell + serial inner loop, which is thread-starved
+    //       for output_numel ≲ 2k), or
+    //   (b) reduce_extent is large enough that each block does enough
+    //       work to amortize the per-block sync + warp_buf overhead.
+    // For many short rows (e.g. 4096×1024) the legacy slow path
+    // saturates SMs with low overhead and wins — keep it for those.
+    //
+    // The fast kernel uses `__shfl_xor_sync<T>` for cross-warp merge;
+    // gate by type to types with known-safe shuffle overloads (float,
+    // double, __half, __nv_bfloat16, and ≥32-bit integers). Smaller
+    // ints (int8/uint8/int16) fall through to the legacy kernel.
+    constexpr bool kFastShuffleSafe =
+        std::is_same<T, float>::value ||
+        std::is_same<T, double>::value ||
+        std::is_same<T, __half>::value ||
+        std::is_same<T, __nv_bfloat16>::value ||
+        (std::is_integral<T>::value && sizeof(T) >= 4);
+    constexpr int64_t kFastMaxGrid = (int64_t)INT32_MAX;
+    constexpr int64_t kFastOutputCap = 2048;     // legacy is thread-starved below this
+    constexpr int32_t kFastReduceCap = 2048;     // reduce ≥ this amortizes per-block sync
+    if constexpr (kFastShuffleSafe) {
+        const bool fast_eligible =
+            (reduce_stride_x == 1) &&
+            (output_numel > 0) &&
+            (output_numel <= kFastMaxGrid) &&
+            ((output_numel <= kFastOutputCap) ||
+             (reduce_extent >= kFastReduceCap));
+        if (fast_eligible) {
+            // Pick block size: 256 by default; trim to multiple-of-warp
+            // ≤ reduce_extent so we don't waste threads on small rows.
+            int kBlock = 256;
+            if (reduce_extent < kBlock) {
+                kBlock = ((reduce_extent + 31) / 32) * 32;
+                if (kBlock < 32) kBlock = 32;
+            }
+            int blocks = (int)output_numel;
+            reduce_axis_block_kernel<T, F><<<blocks, kBlock, 0, stream>>>(
+                x, y, output_numel, rank, out_shape, sx, sy,
+                reduce_axis, reduce_extent);
+            cudaError_t err = cudaGetLastError();
+            return (err == cudaSuccess) ? 0 : 5;
+        }
+    }
+
+    // Legacy path: one thread per output cell + serial inner loop.
+    // Kept for the non-contig-reduce-axis case (stride != 1) and for
+    // tiny rows where the block launch overhead dominates.
     constexpr int kBlock = 256;
     constexpr int64_t kMaxBlocks = 65535;
     int64_t blocks_i64 = (output_numel + kBlock - 1) / kBlock;

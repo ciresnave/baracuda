@@ -19,6 +19,9 @@ namespace baracuda { namespace elementwise {
 // generic body works for f32 / f64 (single-line `sqrtf` / `sqrt`
 // intrinsic at finalize); f16 / bf16 specialize to detour through f32
 // for both the square-accumulate step AND the final sqrt.
+// Note: `merge` is intentionally `a + b` (plain sum), NOT `op(a, x)`.
+// The op embeds a square (`acc + x*x`) for the fold; once two threads
+// hold partial sums-of-squares, merging is plain addition.
 template <typename T>
 struct Norm2Reduce {
     static __device__ __forceinline__ T init() { return T(0); }
@@ -28,6 +31,7 @@ struct Norm2Reduce {
         return (T)sqrt((double)acc);
     }
     __device__ __forceinline__ T operator()(T acc, T x) const { return acc + x * x; }
+    static __device__ __forceinline__ T merge(T a, T b) { return a + b; }
 };
 
 template <>
@@ -39,6 +43,7 @@ struct Norm2Reduce<float> {
     __device__ __forceinline__ float operator()(float acc, float x) const {
         return acc + x * x;
     }
+    static __device__ __forceinline__ float merge(float a, float b) { return a + b; }
 };
 
 template <>
@@ -51,6 +56,9 @@ struct Norm2Reduce<__half> {
         float a  = __half2float(acc);
         float xf = __half2float(x);
         return __float2half(a + xf * xf);
+    }
+    static __device__ __forceinline__ __half merge(__half a, __half b) {
+        return __float2half(__half2float(a) + __half2float(b));
     }
 };
 
@@ -70,6 +78,11 @@ struct Norm2Reduce<__nv_bfloat16> {
         float a  = __bfloat162float(acc);
         float xf = __bfloat162float(x);
         return __float2bfloat16(a + xf * xf);
+    }
+    static __device__ __forceinline__ __nv_bfloat16 merge(
+        __nv_bfloat16 a, __nv_bfloat16 b)
+    {
+        return __float2bfloat16(__bfloat162float(a) + __bfloat162float(b));
     }
 };
 
