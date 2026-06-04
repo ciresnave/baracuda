@@ -32,6 +32,7 @@ hand-maintained roll-up.
 | `sdpa_gqa` | Flash SDPA + GQA broadcast (f16 / bf16) | self | H_q=32, H_kv ∈ {32, 1}, Q=K=2048, D=128 |
 | `concat` (Phase 73.8) | 2-input torch.cat × f32 / f16 | self (no library equiv) | KV-cache decode (BH32_Ka2047_Kb1_D128) + mid-seq joins |
 | `embedding` (Phase 73.8) | F.embedding × f32 / f16 | self (no library equiv) | Llama-2 7B decode (V32000_D4096_N1) + prefill (N2048) + smaller dense |
+| `masked_fill` (Phase 73.8) | tensor.masked_fill(mask, -inf) × f32 | self (no library equiv) | rows × hidden, same as softmax |
 
 Also see the Phase 10 baseline benches (`gemm.rs`, `flash_attention.rs`,
 `conv2d.rs`) for wider per-dtype shape sweeps without the cross-impl
@@ -666,6 +667,17 @@ Speedup column convention: `library_ns / baracuda_ns`.
 | f16 | `R2048_C4096` | 87.9μs | 59.9μs | 0.68× | 144.3μs | **1.64×** |
 | f16 | `R4096_C1024` | 65.2μs | 92.7μs | **1.42×** | 33.4μs | 0.51× |
 | f16 | `R4096_C4096` | 477.8μs | 541.9μs | **1.13×** | 471.6μs | ≈ |
+
+### `masked_fill`
+
+| dtype | shape | baracuda | PyTorch | PyTorch/baracuda |
+| --- | --- | --- | --- | --- |
+| f32 | `R512_H1024` | 15.5μs | 43.3μs | **2.79×** |
+| f32 | `R512_H4096` | 30.8μs | 38.1μs | **1.24×** |
+| f32 | `R2048_H1024` | 29.0μs | 40.5μs | **1.40×** |
+| f32 | `R2048_H4096` | 360.6μs | 633.7μs | **1.76×** |
+| f32 | `R4096_H1024` | 174.8μs | 134.9μs | 0.77× |
+| f32 | `R4096_H4096` | 717.5μs | 1.26ms | **1.76×** |
 
 ### `maximum`
 

@@ -8,7 +8,7 @@
       8,
       9
     ],
-    "generated_at_utc": "2026-06-04T14:54:50+00:00",
+    "generated_at_utc": "2026-06-04T14:57:33+00:00",
     "sample_count": 11,
     "inner_iters": 50,
     "warmup_launches": 10,
@@ -1838,6 +1838,42 @@
       "shape": "V8192_D1024_N512",
       "dtype": "f16",
       "median_ns": 53704.0
+    },
+    {
+      "op": "masked_fill",
+      "shape": "R512_H1024",
+      "dtype": "f32",
+      "median_ns": 43316.0
+    },
+    {
+      "op": "masked_fill",
+      "shape": "R512_H4096",
+      "dtype": "f32",
+      "median_ns": 38074.0
+    },
+    {
+      "op": "masked_fill",
+      "shape": "R2048_H1024",
+      "dtype": "f32",
+      "median_ns": 40516.0
+    },
+    {
+      "op": "masked_fill",
+      "shape": "R2048_H4096",
+      "dtype": "f32",
+      "median_ns": 633674.0
+    },
+    {
+      "op": "masked_fill",
+      "shape": "R4096_H1024",
+      "dtype": "f32",
+      "median_ns": 134886.0
+    },
+    {
+      "op": "masked_fill",
+      "shape": "R4096_H4096",
+      "dtype": "f32",
+      "median_ns": 1261924.0
     }
   ]
 }

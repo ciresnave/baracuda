@@ -440,6 +440,24 @@ def embedding_cases() -> Iterable[tuple[str, str, str, Callable[[], None]]]:
             yield ("embedding", shape, dtype_name, launch)
 
 
+def masked_fill_cases() -> Iterable[tuple[str, str, str, Callable[[], None]]]:
+    """`tensor.masked_fill(mask, -inf)` over CROSS_SEQLEN × CROSS_HIDDEN.
+
+    Same shape sweep as softmax / reductions / layernorm so the rows
+    align in BENCHMARKS.md. Bench is f32 only — baracuda's
+    `MaskedFillDescriptor` helpers don't ship f16 at this layer."""
+    device = torch.device("cuda")
+    for rows in NORM_R_SWEEP:
+        for hidden in NORM_H_SWEEP:
+            shape = f"R{rows}_H{hidden}"
+            # Half-and-half mask, matches the Rust side's `(i & 1)` pattern.
+            mask = torch.zeros((rows, hidden), dtype=torch.bool, device=device)
+            mask[:, 1::2] = True
+            src = torch.ones((rows, hidden), dtype=torch.float32, device=device)
+            launch = lambda s=src, m=mask: s.masked_fill(m, float("-inf"))
+            yield ("masked_fill", shape, "f32", launch)
+
+
 def concat_cases() -> Iterable[tuple[str, str, str, Callable[[], None]]]:
     """`torch.cat([a, b], dim=1)` over CONCAT_SWEEP — KV-cache concat
     pattern. Shape label matches `BH{bh}_Ka{ka}_Kb{kb}_D{d}` from the
@@ -506,6 +524,7 @@ OP_REGISTRY: dict[str, Callable[[], Iterable[tuple[str, str, str, Callable[[], N
     "avgpool2d": avgpool2d_cases,
     "concat": concat_cases,
     "embedding": embedding_cases,
+    "masked_fill": masked_fill_cases,
     "sdpa": sdpa_cases,
 }
 

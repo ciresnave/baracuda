@@ -192,6 +192,10 @@ harness = false
 name = "embedding"
 harness = false
 
+[[bench]]
+name = "masked_fill"
+harness = false
+
 [package.metadata.docs.rs]
 # This crate is a bench harness — no docs to publish. Keep the metadata
 # minimal so docs.rs doesn't try to build benchmarks.
