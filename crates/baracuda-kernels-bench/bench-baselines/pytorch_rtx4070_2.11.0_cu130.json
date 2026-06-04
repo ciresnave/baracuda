@@ -8,7 +8,7 @@
       8,
       9
     ],
-    "generated_at_utc": "2026-06-04T14:43:44+00:00",
+    "generated_at_utc": "2026-06-04T14:48:44+00:00",
     "sample_count": 11,
     "inner_iters": 50,
     "warmup_launches": 10,
@@ -1730,6 +1730,42 @@
       "shape": "Hq32_Hkv1_Q2048_D128",
       "dtype": "bf16",
       "median_ns": 2512882.0
+    },
+    {
+      "op": "avgpool2d",
+      "shape": "N1_C64_H56_W56_K3_S2",
+      "dtype": "f32",
+      "median_ns": 18206.0
+    },
+    {
+      "op": "avgpool2d",
+      "shape": "N1_C64_H56_W56_K3_S2",
+      "dtype": "f16",
+      "median_ns": 17088.0
+    },
+    {
+      "op": "avgpool2d",
+      "shape": "N1_C128_H28_W28_K3_S2",
+      "dtype": "f32",
+      "median_ns": 17738.0
+    },
+    {
+      "op": "avgpool2d",
+      "shape": "N1_C128_H28_W28_K3_S2",
+      "dtype": "f16",
+      "median_ns": 18088.0
+    },
+    {
+      "op": "avgpool2d",
+      "shape": "N1_C256_H14_W14_K3_S2",
+      "dtype": "f32",
+      "median_ns": 18138.0
+    },
+    {
+      "op": "avgpool2d",
+      "shape": "N1_C256_H14_W14_K3_S2",
+      "dtype": "f16",
+      "median_ns": 17558.0
     }
   ]
 }

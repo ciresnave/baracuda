@@ -393,6 +393,22 @@ def maxpool2d_cases() -> Iterable[tuple[str, str, str, Callable[[], None]]]:
             yield ("maxpool2d", shape, dtype_name, launch)
 
 
+def avgpool2d_cases() -> Iterable[tuple[str, str, str, Callable[[], None]]]:
+    """`F.avg_pool2d(x, kernel_size=k, stride=s, padding=p, count_include_pad=True)`
+    over POOL_SWEEP. `count_include_pad=True` matches both PyTorch's default
+    AND the cuDNN `AverageCountIncludePadding` mode the bench uses, so the
+    three-way comparison is apples-to-apples on the denominator semantics."""
+    device = torch.device("cuda")
+    for (n, c, h, w, k, s, p) in POOL_SWEEP:
+        shape = f"N{n}_C{c}_H{h}_W{w}_K{k}_S{s}"
+        for dtype_name, dtype in POOL_DTYPES:
+            x = torch.randn((n, c, h, w), dtype=dtype, device=device)
+            launch = lambda x=x, k=k, s=s, p=p: torch.nn.functional.avg_pool2d(
+                x, kernel_size=k, stride=s, padding=p, count_include_pad=True
+            )
+            yield ("avgpool2d", shape, dtype_name, launch)
+
+
 def sdpa_cases() -> Iterable[tuple[str, str, str, Callable[[], None]]]:
     """`F.scaled_dot_product_attention(q, k, v, is_causal=True)` with
     GQA broadcasting. PyTorch supports GQA natively by accepting K/V
@@ -442,6 +458,7 @@ OP_REGISTRY: dict[str, Callable[[], Iterable[tuple[str, str, str, Callable[[], N
     "elementwise": elementwise_cases,
     "conv2d": conv2d_cases,
     "maxpool2d": maxpool2d_cases,
+    "avgpool2d": avgpool2d_cases,
     "sdpa": sdpa_cases,
 }
 

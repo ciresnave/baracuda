@@ -26,7 +26,7 @@ hand-maintained roll-up.
 | `layernorm_vs_cudnn` | LayerNorm f32 / f16 | self (cuDNN classic LN not wired) | rows × hidden, same as softmax |
 | `rmsnorm` | RMSNorm f32 / f16 / bf16 | self (no library equiv) | rows × hidden, same as softmax |
 | `conv2d_vs_cudnn` | Conv2d f32 / f16 | raw cuDNN `convolution_forward` (baracuda is cuDNN-backed — measures wrapper overhead) | ResNet-50 picks (3) |
-| `pool_vs_cudnn` | MaxPool2d f32 / f16 | raw cuDNN `pooling_forward` | ResNet-50 picks (3) |
+| `pool_vs_cudnn` (Phase 73.7) | MaxPool2d + AvgPool2d (count-include-pad) × f32 / f16 | raw cuDNN `pooling_forward` | ResNet-50 picks (3) |
 | `reductions_vs_cudnn` (Phase 73.6) | Sum / Max / Min / Mean / Prod / Var / Std / Norm2 / LogSumExp × f32 | cuDNN `reduce_tensor` where available (Sum/Max/Min/Mean/Prod/Norm2; Var/Std/LogSumExp have no cuDNN equivalent) | rows × hidden, same as softmax |
 | `elementwise` (Phase 73.5) | 33 ops × f32 / f16 — activations (ReLU/GELU/Silu/Tanh/Sigmoid/Mish/Hardswish/Hardsigmoid/Hardtanh/LeakyReLU/Elu/Selu/ReLU6/Softplus/Softsign/GELU-Tanh), math unaries (Abs/Neg/Sign/Reciprocal/Sqrt/Rsqrt/Square/Exp/Log/Sin/Cos/Erf), binaries (Add/Sub/Mul/Div/Maximum/Minimum/Pow) | self | numel ∈ {1M, 16M} |
 | `sdpa_gqa` | Flash SDPA + GQA broadcast (f16 / bf16) | self | H_q=32, H_kv ∈ {32, 1}, Q=K=2048, D=128 |
@@ -491,12 +491,12 @@ Speedup column convention: `library_ns / baracuda_ns`.
 
 | dtype | shape | baracuda | cuDNN | cuDNN/baracuda | PyTorch | PyTorch/baracuda |
 | --- | --- | --- | --- | --- | --- | --- |
-| f32 | `N1_C64_H56_W56_K3_S2` | 14.1μs | 14.0μs | ≈ | 21.7μs | **1.54×** |
-| f32 | `N1_C128_H28_W28_K3_S2` | 13.6μs | 15.0μs | **1.10×** | 25.3μs | **1.86×** |
-| f32 | `N1_C256_H14_W14_K3_S2` | 17.7μs | 15.4μs | 0.87× | 21.6μs | **1.22×** |
-| f16 | `N1_C64_H56_W56_K3_S2` | 14.8μs | 13.6μs | 0.92× | 22.5μs | **1.52×** |
-| f16 | `N1_C128_H28_W28_K3_S2` | 13.6μs | 13.3μs | ≈ | 23.1μs | **1.70×** |
-| f16 | `N1_C256_H14_W14_K3_S2` | 16.7μs | 14.0μs | 0.84× | 24.6μs | **1.47×** |
+| f32 | `N1_C64_H56_W56_K3_S2` | 15.0μs | 15.9μs | **1.07×** | 20.1μs | **1.35×** |
+| f32 | `N1_C128_H28_W28_K3_S2` | 12.3μs | 13.2μs | **1.07×** | 19.6μs | **1.59×** |
+| f32 | `N1_C256_H14_W14_K3_S2` | 12.6μs | 12.2μs | ≈ | 20.5μs | **1.62×** |
+| f16 | `N1_C64_H56_W56_K3_S2` | 13.6μs | 13.8μs | ≈ | 20.2μs | **1.49×** |
+| f16 | `N1_C128_H28_W28_K3_S2` | 14.9μs | 14.7μs | ≈ | 19.8μs | **1.33×** |
+| f16 | `N1_C256_H14_W14_K3_S2` | 15.0μs | 12.4μs | 0.83× | 21.1μs | **1.41×** |
 
 ### `flash_sdpa_gqa`
 
@@ -515,6 +515,17 @@ Speedup column convention: `library_ns / baracuda_ns`.
 | f32 | `N16777216` | 769.8μs | 591.1μs | 0.77× |
 | f16 | `N1048576` | 13.3μs | 17.5μs | **1.31×** |
 | f16 | `N16777216` | 325.2μs | 300.9μs | 0.93× |
+
+### `avgpool2d`
+
+| dtype | shape | baracuda | cuDNN | cuDNN/baracuda | PyTorch | PyTorch/baracuda |
+| --- | --- | --- | --- | --- | --- | --- |
+| f32 | `N1_C64_H56_W56_K3_S2` | 12.9μs | 12.4μs | ≈ | 18.2μs | **1.41×** |
+| f32 | `N1_C128_H28_W28_K3_S2` | 12.3μs | 45.5μs | **3.71×** | 17.7μs | **1.45×** |
+| f32 | `N1_C256_H14_W14_K3_S2` | 11.8μs | 12.1μs | ≈ | 18.1μs | **1.54×** |
+| f16 | `N1_C64_H56_W56_K3_S2` | 12.9μs | 13.0μs | ≈ | 17.1μs | **1.32×** |
+| f16 | `N1_C128_H28_W28_K3_S2` | 12.3μs | 11.8μs | ≈ | 18.1μs | **1.47×** |
+| f16 | `N1_C256_H14_W14_K3_S2` | 12.4μs | 12.2μs | ≈ | 17.6μs | **1.42×** |
 
 ### `cos`
 
