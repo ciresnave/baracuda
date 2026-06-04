@@ -1483,9 +1483,46 @@ plan-selection logic.
 
 Phase 73.3 bench surfaced PyTorch reduce_sum / reduce_max /
 reduce_mean running 5-20× faster than baracuda at small (R×H ≤
-2048×4096) shapes. baracuda's reductions are tuned for the large
-case where they're 2-2.4× faster than cuDNN; small-shape regression
-suggests a kernel-selection heuristic gap. Worth profiling.
+2048×4096) shapes.
+
+**Root cause** (Phase 73.3 follow-up): baracuda's `reduce_axis_kernel`
+in `baracuda_elementwise.cuh` is **one thread per output cell**, with
+a **serial inner loop** over the reduced axis:
+
+```cuda
+T acc = F::init();
+for (int32_t k = 0; k < reduce_extent; ++k) {
+    int64_t off_x = off_x_base + (int64_t)k * reduce_stride_x;
+    acc = op(acc, x[off_x]);
+}
+y[off_y] = F::finalize(acc, reduce_extent);
+```
+
+For (R=512, H=1024) that launches 2 blocks of 256 threads (512 / 256
+= 2). Each thread executes a 1024-iteration serial reduction. On
+RTX 4070 (36 SMs) only 2 SMs are active — massive underutilization.
+
+The fix is the standard parallel-reduction pattern: one block per
+output row, threads in the block cooperatively reduce the row via
+warp shuffles + cross-warp SMEM aggregation (already implemented in
+`baracuda_smem_reduce.cuh` — Phase 65a). This both fills more SMs
+(reduce_blocks = output_numel) and parallelizes the per-row work.
+
+baracuda still beats cuDNN at the largest shape (R=4096, H=4096:
+baracuda 749μs vs cuDNN 1.79ms) — cuDNN has its own fixed-overhead
+problem. PyTorch's 318μs at the same shape is the actual reference
+target.
+
+**Scope:** rewrite `reduce_axis_kernel` to one-block-per-output-row
++ in-block warp-shuffle reduction (mirrors the Phase 65b SMEM-staged
+normalizer pattern). Same kernel covers Sum/Max/Min/Mean/Prod/Norm2;
+the functor `F` is already templated. Estimated 1-2 days plus
+correctness retest across the 5 reduce kinds × 4 dtypes.
+
+**Why pre-1.0:** 5-20× gap on a load-bearing primitive
+(reduce_sum / reduce_mean fire on every backward pass + every
+softmax/layernorm-bw). Worth addressing before 1.0 perf claims
+publish.
 
 ## Post-1.0 (hardware-gated or follow-on)
 
