@@ -54,9 +54,13 @@ $order = @(
     "baracuda-build",
     "baracuda-cutlass-sys",
     "baracuda-forge",
-    "baracuda-kernels-sys",
+    # NOTE: baracuda-cutlass-kernels-sys MUST precede baracuda-kernels-sys —
+    # kernels-sys gained a normal dep on cutlass-kernels-sys (Phase 24). The
+    # alpha.65 first run had these reversed and kernels-sys failed on the
+    # index race; corrected here.
     "baracuda-types-derive",
     "baracuda-cutlass-kernels-sys",
+    "baracuda-kernels-sys",
     "baracuda-types",
     "baracuda-core",
 
@@ -111,10 +115,10 @@ $order = @(
     "baracuda-cusparse",
     "baracuda-cutensor",
     "baracuda-cublas",                      # before cutlass (cutlass depends on cublas)
+    "baracuda-ozimmu",                      # before cutlass (cutlass `ozimmu` feature depends on it)
     "baracuda-cutlass",                     # before kernels (kernels depends on cutlass)
     "baracuda-cuvs",
     "baracuda-cvcuda",
-    "baracuda-ozimmu",
     "baracuda-transformer-engine",
     "baracuda-nccl",
     "baracuda-nvshmem",
