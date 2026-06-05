@@ -142,11 +142,29 @@ fn bench<T>(
             let s = [BATCH, NUM_Q_HEADS, SEQ_LEN, HEAD_DIM];
             (s, contiguous_stride(s))
         } else if num_kv == 1 {
-            // Full MQA broadcast — KV physical (BATCH, 1, SEQ_LEN,
-            // HEAD_DIM); descriptor head stride = 0.
+            // Full MQA broadcast — KV physical buffer is
+            // [BATCH, 1, SEQ_LEN, HEAD_DIM]; the logical view advertises
+            // NUM_Q_HEADS heads with the head axis broadcast (stride 0).
+            //
+            // The strides MUST index the PHYSICAL single-head buffer:
+            //   stride[3] = 1            (D contig)
+            //   stride[2] = HEAD_DIM     (K row stride)
+            //   stride[1] = 0            (broadcast head)
+            //   stride[0] = SEQ * D      (batch stride into [B, 1, K, D])
+            //
+            // Note `stride[0]` is SEQ*D, NOT NUM_Q_HEADS*SEQ*D — the
+            // physical buffer has one KV head, so batch b lives at
+            // offset b * (SEQ * D). (Using the H-shaped contiguous
+            // stride here was a latent bug masked by BATCH==1; it would
+            // over-index for BATCH > 1. `is_full_mqa_broadcast` in the
+            // safe wrapper validates this.)
             let s = [BATCH, NUM_Q_HEADS, SEQ_LEN, HEAD_DIM];
-            let mut st = contiguous_stride(s);
-            st[1] = 0;
+            let st = [
+                (SEQ_LEN as i64) * (HEAD_DIM as i64), // batch → physical [B,1,K,D]
+                0,                                     // broadcast head
+                HEAD_DIM as i64,                       // K row
+                1,                                     // D
+            ];
             (s, st)
         } else {
             // Skip intermediate ratios — would require a contig

@@ -119,6 +119,56 @@ fn fa2_supports_head_dim(d: i32) -> bool {
     FA2_SUPPORTED_HEAD_DIMS.iter().any(|&v| v == d)
 }
 
+/// Physical buffer span of a rank-4 view: the highest element offset
+/// the view can address, plus 1. For a contiguous tensor this equals
+/// `numel()`; for a view with a zero-stride (broadcast) axis it is
+/// smaller — the broadcast axis contributes nothing to the maximum
+/// offset. Used for buffer-size validation so broadcast K/V (which
+/// advertise `[B, H, K, D]` but back only `[B, 1, K, D]`) aren't
+/// rejected by a `numel()`-based check.
+#[inline]
+fn physical_span(shape: &[i32; 4], stride: &[i64; 4]) -> i64 {
+    let mut span = 1_i64;
+    for d in 0..4 {
+        if shape[d] > 0 {
+            span += (shape[d] as i64 - 1) * stride[d];
+        }
+    }
+    span
+}
+
+/// Rank-3 variant of [`physical_span`] for the LSE tensor.
+#[inline]
+fn physical_span3(shape: &[i32; 3], stride: &[i64; 3]) -> i64 {
+    let mut span = 1_i64;
+    for d in 0..3 {
+        if shape[d] > 0 {
+            span += (shape[d] as i64 - 1) * stride[d];
+        }
+    }
+    span
+}
+
+/// Detect the full-MQA-broadcast convention on a rank-4 K/V tensor.
+///
+/// Returns `true` when the caller is encoding a single K/V head
+/// shared across all `num_heads` Q heads by passing shape
+/// `[B, num_heads, K_len, D]` with `stride[1] == 0` — the standard
+/// stride-broadcast pattern. The remaining axes must still describe
+/// a valid contig view (`stride[3] == 1`, `stride[2] == D`, `stride[0]`
+/// describes a valid batch step). Returns `false` for normal contig
+/// tensors and for any non-standard stride pattern.
+#[inline]
+fn is_full_mqa_broadcast<T: Element>(
+    t: &TensorRef<'_, T, 4>, num_heads: i32,
+) -> bool {
+    t.shape[1] == num_heads
+        && t.stride[1] == 0
+        && t.stride[3] == 1
+        && t.stride[2] == t.shape[3] as i64
+        && t.stride[0] == (t.shape[2] as i64) * (t.shape[3] as i64)
+}
+
 /// FA2 routing heuristic. Returns `true` when the shape + dtype falls
 /// in the long-context regime where FA2's CUTLASS-tuned tile sizing
 /// beats the bespoke kernel.
@@ -565,14 +615,39 @@ impl<T: Element> FlashSdpaPlan<T> {
                 "baracuda-kernels::FlashSdpaPlan: lse shape must be [B, H, Q]",
             ));
         }
+        // Q / Y / LSE must always be contiguous. K / V may be contiguous
+        // OR full-MQA-broadcast (shape[1] == num_heads, stride[1] == 0)
+        // — the broadcast case routes to the strided sibling plan in
+        // `run` (Phase 73 follow-up; closes the "FlashSdpaPlan GQA-
+        // broadcast routing gap" ROADMAP entry). Intermediate GQA
+        // (physical [B, H_kv, K, D] with H_kv < H_q) is handled
+        // separately by the FA2 backend path.
+        let k_is_broadcast = is_full_mqa_broadcast(&args.k, self.desc.num_heads);
+        let v_is_broadcast = is_full_mqa_broadcast(&args.v, self.desc.num_heads);
         if !args.q.is_contiguous()
-            || !args.k.is_contiguous()
-            || !args.v.is_contiguous()
             || !args.y.is_contiguous()
             || !args.lse.is_contiguous()
         {
             return Err(Error::Unsupported(
-                "baracuda-kernels::FlashSdpaPlan: trailblazer requires contiguous tensors",
+                "baracuda-kernels::FlashSdpaPlan: Q / y / LSE must be contiguous",
+            ));
+        }
+        if !args.k.is_contiguous() && !k_is_broadcast {
+            return Err(Error::Unsupported(
+                "baracuda-kernels::FlashSdpaPlan: K must be contiguous or full-MQA-broadcast \
+                 (shape[1] == num_heads with stride[1] == 0)",
+            ));
+        }
+        if !args.v.is_contiguous() && !v_is_broadcast {
+            return Err(Error::Unsupported(
+                "baracuda-kernels::FlashSdpaPlan: V must be contiguous or full-MQA-broadcast \
+                 (shape[1] == num_heads with stride[1] == 0)",
+            ));
+        }
+        if k_is_broadcast != v_is_broadcast {
+            return Err(Error::InvalidProblem(
+                "baracuda-kernels::FlashSdpaPlan: K and V must agree on broadcast convention \
+                 (both broadcast or both contiguous)",
             ));
         }
         // Phase 51 — validate the optional arbitrary mask.
@@ -619,11 +694,16 @@ impl<T: Element> FlashSdpaPlan<T> {
                 ));
             }
         }
-        let q_n = args.q.numel();
-        let k_n = args.k.numel();
-        let v_n = args.v.numel();
-        let y_n = args.y.numel();
-        let l_n = args.lse.numel();
+        // Buffer-size check uses the PHYSICAL span (highest addressable
+        // offset + 1), not `numel()`. For contig tensors the two are
+        // equal; for full-MQA-broadcast K/V (stride[1] == 0) the
+        // physical span correctly excludes the broadcast axis — the
+        // backing buffer is only [B, 1, K, D], not [B, H, K, D].
+        let q_n = physical_span(&args.q.shape, &args.q.stride);
+        let k_n = physical_span(&args.k.shape, &args.k.stride);
+        let v_n = physical_span(&args.v.shape, &args.v.stride);
+        let y_n = physical_span(&args.y.shape, &args.y.stride);
+        let l_n = physical_span3(&args.lse.shape, &args.lse.stride);
         if (args.q.data.len() as i64) < q_n
             || (args.k.data.len() as i64) < k_n
             || (args.v.data.len() as i64) < v_n
@@ -687,6 +767,41 @@ impl<T: Element> FlashSdpaPlan<T> {
         if args.y.numel() == 0 {
             return Ok(());
         }
+
+        // Phase 73 follow-up — full-MQA-broadcast routing. When K/V are
+        // passed as the stride-0 broadcast view (shape[1] == num_heads,
+        // stride[1] == 0), the underlying buffer is physically only
+        // [B, 1, K, D] (guaranteed by `is_full_mqa_broadcast`, which
+        // requires stride[0] == K*D). Neither the bespoke kernel (no
+        // GQA) nor FA2 (computes contiguous [B, H, K, D] strides from
+        // num_heads_k = shape[1] = H, reading out of bounds) can take
+        // the broadcast view directly. `run_broadcast_route` reinterprets
+        // the buffer as physical [B, 1, K, D] and routes to FA2 (which
+        // does MQA natively at any FA2 head_dim incl. 128) or, when FA2
+        // is unavailable / ineligible, to the sm89 strided sibling (which
+        // accepts the broadcast view but is SMEM-capped at head_dim ≤ 64
+        // on Ada).
+        //
+        // Mask + ALiBi aren't plumbed through this routing; bail clearly.
+        let needs_broadcast_route =
+            is_full_mqa_broadcast(&args.k, self.desc.num_heads)
+            || is_full_mqa_broadcast(&args.v, self.desc.num_heads);
+        if needs_broadcast_route {
+            if args.mask.is_some() {
+                return Err(Error::Unsupported(
+                    "baracuda-kernels::FlashSdpaPlan: mask+broadcast-K/V isn't supported; \
+                     rebuild K/V as physical [B, 1, K, D] and use FA2",
+                ));
+            }
+            if args.alibi_slopes.is_some() {
+                return Err(Error::Unsupported(
+                    "baracuda-kernels::FlashSdpaPlan: alibi+broadcast-K/V isn't supported; \
+                     rebuild K/V as physical [B, 1, K, D] and use FA2",
+                ));
+            }
+            return self.run_broadcast_route(stream, workspace, args);
+        }
+
         let stream_ptr = stream.as_raw() as *mut c_void;
         let q_ptr = args.q.data.as_raw().0 as *const c_void;
         let k_ptr = args.k.data.as_raw().0 as *const c_void;
@@ -831,6 +946,133 @@ impl<T: Element> FlashSdpaPlan<T> {
     /// sliding window (`desc.window_size_{left,right}`), and softcap
     /// (`desc.softcap`). Routes through the `_v2` FFI entry point that
     /// accepts the full feature set.
+    // ---------------------------------------------------------------------
+    // Phase 73 follow-up — full-MQA-broadcast routing
+    // ---------------------------------------------------------------------
+    /// Route a stride-0-broadcast K/V launch. The broadcast view aliases
+    /// a single physical KV head, so the backing buffer is exactly
+    /// `[B, 1, K, D]` contiguous (guaranteed by `is_full_mqa_broadcast`'s
+    /// `stride[0] == K*D` requirement). We reinterpret it as that physical
+    /// shape and dispatch:
+    ///
+    /// - **FA2** (preferred) — handles MQA natively (`num_heads_k = 1`,
+    ///   ratio = num_heads) at any FA2-eligible head_dim, including the
+    ///   common 128. Requires the `fa2` feature + f16/bf16.
+    /// - **sm89 strided sibling** (fallback) — accepts the broadcast view
+    ///   directly, but its cp.async double-buffered SMEM layout exceeds
+    ///   Ada's ~100 KB opt-in cap above head_dim 64, so it's gated to
+    ///   `d_k <= 64`.
+    /// - Otherwise a clear `Unsupported` error naming the head_dim limit.
+    fn run_broadcast_route(
+        &self,
+        stream: &Stream,
+        workspace: Workspace<'_>,
+        args: FlashSdpaArgs<'_, T>,
+    ) -> Result<()> {
+        // FA2 path: reinterpret the broadcast buffer as physical
+        // [B, 1, K, D] (shape[1] = 1) so FA2's internal contiguous-stride
+        // computation reads the right bytes, then let FA2's GQA machinery
+        // broadcast the single KV head across all Q heads.
+        //
+        // Gate on the SELECTED backend, not raw FA2 eligibility: the
+        // caller sized their `workspace` from `self.workspace_size()`,
+        // which only reports FA2's LSE scratch when `select` actually
+        // chose FA2 (large-shape regime). Routing a bespoke-selected
+        // plan (workspace_size == 0, caller passed Workspace::None) to
+        // FA2 would starve it of its LSE buffer. Small-shape broadcast
+        // falls through to the workspace-free sm89 sibling instead.
+        #[cfg(feature = "fa2")]
+        if matches!(self.backend, BackendChoice::FlashAttentionV2) {
+            let capturing = stream.is_capturing().unwrap_or(false);
+            if !capturing {
+                let kd = (self.desc.key_len as i64) * (self.desc.d_k as i64);
+                let k_shape = [self.desc.batch_size, 1, self.desc.key_len, self.desc.d_k];
+                let k_stride = [kd, kd, self.desc.d_k as i64, 1];
+                let v_shape = [self.desc.batch_size, 1, self.desc.key_len, self.desc.d_v];
+                let v_stride = [
+                    (self.desc.key_len as i64) * (self.desc.d_v as i64),
+                    (self.desc.key_len as i64) * (self.desc.d_v as i64),
+                    self.desc.d_v as i64,
+                    1,
+                ];
+                let phys_args = FlashSdpaArgs::<T> {
+                    q: args.q,
+                    k: TensorRef { data: args.k.data, shape: k_shape, stride: k_stride },
+                    v: TensorRef { data: args.v.data, shape: v_shape, stride: v_stride },
+                    y: args.y,
+                    lse: args.lse,
+                    mask: None,
+                    alibi_slopes: None,
+                };
+                return self.run_fa2(stream, workspace, &phys_args);
+            }
+            // Capturing: FA2 isn't capture-safe; fall through to sm89.
+        }
+
+        // sm89 strided sibling fallback (broadcast view passed as-is).
+        self.run_broadcast_sm89(stream, args)
+    }
+
+    #[cfg(feature = "sm89")]
+    fn run_broadcast_sm89(
+        &self,
+        stream: &Stream,
+        args: FlashSdpaArgs<'_, T>,
+    ) -> Result<()> {
+        if !matches!(T::KIND, ElementKind::F16 | ElementKind::Bf16) {
+            return Err(Error::Unsupported(
+                "baracuda-kernels::FlashSdpaPlan: full-MQA-broadcast routing requires f16/bf16",
+            ));
+        }
+        // Ada SMEM cap: the sm89 cp.async kernel needs
+        // 896*d_k + 17152 bytes (f16/bf16) per block, which exceeds the
+        // ~100 KB dynamic-SMEM opt-in above d_k 64. Reject larger head
+        // dims with an actionable message (the FA2 path above handles
+        // them when the `fa2` feature is on).
+        if self.desc.d_k > 64 {
+            return Err(Error::Unsupported(
+                "baracuda-kernels::FlashSdpaPlan: broadcast-K/V at head_dim > 64 needs the FA2 \
+                 backend (enable the `fa2` feature); the sm89 strided sibling is SMEM-capped \
+                 at head_dim <= 64 on Ada",
+            ));
+        }
+        let sibling_desc = super::flash_sdpa_sm89::FlashSdpaSm89Descriptor {
+            batch_size: self.desc.batch_size,
+            num_heads: self.desc.num_heads,
+            query_len: self.desc.query_len,
+            key_len: self.desc.key_len,
+            d_k: self.desc.d_k,
+            d_v: self.desc.d_v,
+            scale: self.desc.scale,
+            is_causal: self.desc.is_causal,
+            element: self.desc.element,
+        };
+        let sibling_plan = super::flash_sdpa_sm89::FlashSdpaSm89Plan::<T>::select(
+            stream, &sibling_desc, PlanPreference::default(),
+        )?;
+        let sibling_args = super::flash_sdpa_sm89::FlashSdpaSm89Args::<T> {
+            q: args.q,
+            k: args.k,
+            v: args.v,
+            y: args.y,
+            lse: args.lse,
+        };
+        sibling_plan.run(stream, Workspace::None, sibling_args)
+    }
+
+    #[cfg(not(feature = "sm89"))]
+    fn run_broadcast_sm89(
+        &self,
+        _stream: &Stream,
+        _args: FlashSdpaArgs<'_, T>,
+    ) -> Result<()> {
+        Err(Error::Unsupported(
+            "baracuda-kernels::FlashSdpaPlan: full-MQA-broadcast K/V at this configuration \
+             requires either the `fa2` feature (any head_dim) or the `sm89` feature \
+             (head_dim <= 64); or pass physical [B, 1, K, D] K/V directly to the FA2 path",
+        ))
+    }
+
     #[cfg(feature = "fa2")]
     fn run_fa2(
         &self,
