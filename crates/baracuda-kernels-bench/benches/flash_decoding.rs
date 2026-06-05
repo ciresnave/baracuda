@@ -217,11 +217,126 @@ fn bench<T>(
     }
 }
 
+/// GQA decoding bench — explicit (H_q, H_kv) sweep covering the
+/// Llama 3 / Mistral / MQA shapes the dispatch should route to the
+/// WMMA kernel. Bench cells compare baracuda (TC path) against the
+/// SIMT-only baseline that the launcher would have picked at
+/// `group_size == 1` (no FlashSdpaPlan reference here — that kernel
+/// can't express partial GQA and would be apples-to-oranges).
+fn bench_gqa<T>(
+    c: &mut Criterion,
+    dtype_label: &str,
+    fill: T,
+) where
+    T: baracuda_kernels::Element + Copy + 'static,
+{
+    let (ctx, stream) = setup_device();
+    const GQA_SWEEP: &[(i32, i32, &str)] = &[
+        // (H_q, H_kv, model-class label) — group = H_q / H_kv
+        (32, 8, "llama3-8b"),       // group=4
+        (64, 8, "llama3-70b"),      // group=8
+        (32, 4, "qwen2-14b"),       // group=8
+        (32, 2, "mqa-group16"),     // group=16
+    ];
+    let k_sweep: &[i32] = &[1024, 2048, 4096, 8192];
+
+    for &(h_q, h_kv, model_label) in GQA_SWEEP {
+        for &k_len in k_sweep {
+            let label = format!(
+                "{model_label}_Hq{h_q}_Hkv{h_kv}_K{k_len}_D{HEAD_DIM}"
+            );
+
+            let q_numel = (BATCH * h_q * HEAD_DIM) as usize;
+            let kv_numel = (BATCH * h_kv * k_len * HEAD_DIM) as usize;
+            let host_q: Vec<T> = vec![fill; q_numel];
+            let host_kv: Vec<T> = vec![fill; kv_numel];
+
+            let dq = match DeviceBuffer::from_slice(&ctx, &host_q) { Ok(b) => b, Err(_) => continue };
+            let dk = match DeviceBuffer::from_slice(&ctx, &host_kv) { Ok(b) => b, Err(_) => continue };
+            let dv = match DeviceBuffer::from_slice(&ctx, &host_kv) { Ok(b) => b, Err(_) => continue };
+            let mut dy: DeviceBuffer<T> =
+                match DeviceBuffer::zeros(&ctx, q_numel) { Ok(b) => b, Err(_) => continue };
+
+            let fd_desc = FlashDecodingDescriptor::new_gqa(BATCH, h_q, h_kv, k_len, HEAD_DIM, T::KIND);
+            let fd_plan = match FlashDecodingPlan::<T>::select(&stream, &fd_desc, PlanPreference::default()) {
+                Ok(p) => p,
+                Err(e) => {
+                    eprintln!("flash_decoding gqa: skipping {label}/{dtype_label}: {e:?}");
+                    continue;
+                }
+            };
+            let mut fd_ws: DeviceBuffer<u8> =
+                match DeviceBuffer::zeros(&ctx, fd_plan.workspace_size()) { Ok(b) => b, Err(_) => continue };
+
+            let sq = [BATCH, h_q, HEAD_DIM];
+            let sk = [BATCH, h_kv, k_len, HEAD_DIM];
+            let sv = sk;
+            let sy = sq;
+
+            warmup(&stream, || {
+                let args = FlashDecodingArgs::<T> {
+                    q: TensorRef { data: dq.as_slice(), shape: sq, stride: contiguous_stride(sq) },
+                    k: TensorRef { data: dk.as_slice(), shape: sk, stride: contiguous_stride(sk) },
+                    v: TensorRef { data: dv.as_slice(), shape: sv, stride: contiguous_stride(sv) },
+                    y: TensorMut { data: dy.as_slice_mut(), shape: sy, stride: contiguous_stride(sy) },
+                };
+                fd_plan
+                    .run(&stream, Workspace::Borrowed(fd_ws.as_slice_mut()), args)
+                    .expect("fd run");
+            });
+            let fd_ns = measure_median_ns(&ctx, &stream, 11, 20, || {
+                let args = FlashDecodingArgs::<T> {
+                    q: TensorRef { data: dq.as_slice(), shape: sq, stride: contiguous_stride(sq) },
+                    k: TensorRef { data: dk.as_slice(), shape: sk, stride: contiguous_stride(sk) },
+                    v: TensorRef { data: dv.as_slice(), shape: sv, stride: contiguous_stride(sv) },
+                    y: TensorMut { data: dy.as_slice_mut(), shape: sy, stride: contiguous_stride(sy) },
+                };
+                fd_plan
+                    .run(&stream, Workspace::Borrowed(fd_ws.as_slice_mut()), args)
+                    .expect("fd run");
+            });
+
+            append_csv_row(
+                BENCH_NAME,
+                &PhaseTwentyNineRow {
+                    op: "flash_decoding_gqa",
+                    shape: label.clone(),
+                    dtype: leak_str(dtype_label),
+                    baracuda_ns: fd_ns,
+                    reference_ns: None,
+                    reference: "",
+                    pytorch_ns: None,
+                },
+            );
+
+            let mut group = c.benchmark_group(format!("flash_decoding_gqa/{dtype_label}"));
+            group.bench_with_input(BenchmarkId::new("baracuda", &label), &(), |bb, _| {
+                bb.iter_custom(|iters| {
+                    time_with_events(&ctx, &stream, iters, || {
+                        let args = FlashDecodingArgs::<T> {
+                            q: TensorRef { data: dq.as_slice(), shape: sq, stride: contiguous_stride(sq) },
+                            k: TensorRef { data: dk.as_slice(), shape: sk, stride: contiguous_stride(sk) },
+                            v: TensorRef { data: dv.as_slice(), shape: sv, stride: contiguous_stride(sv) },
+                            y: TensorMut { data: dy.as_slice_mut(), shape: sy, stride: contiguous_stride(sy) },
+                        };
+                        fd_plan
+                            .run(&stream, Workspace::Borrowed(fd_ws.as_slice_mut()), args)
+                            .expect("fd run");
+                    })
+                });
+            });
+            group.finish();
+        }
+    }
+}
+
 /// Top-level criterion entry — invoked by criterion_main!.
 fn benches(c: &mut Criterion) {
     let baseline = PytorchBaseline::load_default();
     bench::<f16>(c, "f16", f16::from_f32(0.01), baseline.as_ref());
     bench::<bf16>(c, "bf16", bf16::from_f32(0.01), baseline.as_ref());
+    bench_gqa::<f16>(c, "f16", f16::from_f32(0.01));
+    bench_gqa::<bf16>(c, "bf16", bf16::from_f32(0.01));
 }
 
 // `criterion_group!` expands into a `pub fn` whose signature is fixed

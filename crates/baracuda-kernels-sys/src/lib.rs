@@ -44464,6 +44464,7 @@ unsafe extern "C" {
         workspace_bytes: usize,
         batch: i32,
         heads: i32,
+        num_kv_heads: i32,
         k_len: i32,
         head_dim: i32,
         q_b_stride: i64,
@@ -44483,6 +44484,7 @@ unsafe extern "C" {
     pub fn baracuda_kernels_flash_decoding_f16_can_implement(
         batch: i32,
         heads: i32,
+        num_kv_heads: i32,
         k_len: i32,
         head_dim: i32,
     ) -> i32;
@@ -44504,6 +44506,7 @@ unsafe extern "C" {
         workspace_bytes: usize,
         batch: i32,
         heads: i32,
+        num_kv_heads: i32,
         k_len: i32,
         head_dim: i32,
         q_b_stride: i64,
@@ -44523,6 +44526,7 @@ unsafe extern "C" {
     pub fn baracuda_kernels_flash_decoding_bf16_can_implement(
         batch: i32,
         heads: i32,
+        num_kv_heads: i32,
         k_len: i32,
         head_dim: i32,
     ) -> i32;

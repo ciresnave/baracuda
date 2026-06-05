@@ -67,12 +67,24 @@ pub const FLASH_DECODING_MAX_D: i32 = 128;
 const CHUNK_K: i32 = 256;
 
 /// Descriptor for a FlashDecoding op.
+///
+/// `num_kv_heads` is the GQA grouping signal: when it equals `num_heads`
+/// the workload is full MHA; when it's smaller (e.g. 8 for Llama 3 8B
+/// at H_q=32) every K/V head is shared by `group_size = num_heads /
+/// num_kv_heads` Q heads. The launcher uses `group_size` to pick
+/// between the warp-cooperative SIMT kernel (Tier-1) and the
+/// GQA-batched WMMA kernel (Tier-2, gated on group_size ≥ 4 +
+/// head_dim aligned to 16).
 #[derive(Copy, Clone, Debug)]
 pub struct FlashDecodingDescriptor {
     /// Batch size (`B`).
     pub batch_size: i32,
-    /// Number of query / output heads (`H`).
+    /// Number of query / output heads (`H_q`).
     pub num_heads: i32,
+    /// Number of K/V heads (`H_kv`). Must divide `num_heads` evenly.
+    /// `num_kv_heads == num_heads` → pure MHA. `num_kv_heads == 1` →
+    /// MQA. `num_kv_heads < num_heads && > 1` → GQA.
+    pub num_kv_heads: i32,
     /// K/V sequence length (the full attended prefix, not just the new
     /// step). Arbitrary; the split-K factor adapts via [`CHUNK_K`].
     pub k_len: i32,
@@ -87,11 +99,43 @@ pub struct FlashDecodingDescriptor {
 }
 
 impl FlashDecodingDescriptor {
-    /// Convenience constructor with the standard `1/sqrt(D)` scale.
+    /// Convenience constructor for pure MHA (`num_kv_heads == num_heads`)
+    /// with the standard `1/sqrt(D)` scale.
     #[inline]
     pub fn new(batch_size: i32, num_heads: i32, k_len: i32, head_dim: i32, element: ElementKind) -> Self {
         let scale = 1.0_f32 / (head_dim as f32).sqrt();
-        Self { batch_size, num_heads, k_len, head_dim, scale, element }
+        Self {
+            batch_size,
+            num_heads,
+            num_kv_heads: num_heads,
+            k_len,
+            head_dim,
+            scale,
+            element,
+        }
+    }
+
+    /// Convenience constructor for GQA / MQA. `num_kv_heads` must
+    /// divide `num_heads`.
+    #[inline]
+    pub fn new_gqa(
+        batch_size: i32,
+        num_heads: i32,
+        num_kv_heads: i32,
+        k_len: i32,
+        head_dim: i32,
+        element: ElementKind,
+    ) -> Self {
+        let scale = 1.0_f32 / (head_dim as f32).sqrt();
+        Self {
+            batch_size,
+            num_heads,
+            num_kv_heads,
+            k_len,
+            head_dim,
+            scale,
+            element,
+        }
     }
 
     /// Builder: override the score scale (e.g. for QK-norm models that
@@ -101,24 +145,37 @@ impl FlashDecodingDescriptor {
         self.scale = scale;
         self
     }
+
+    /// GQA group size — number of Q heads sharing each K/V head.
+    #[inline]
+    pub fn group_size(&self) -> i32 {
+        if self.num_kv_heads == 0 {
+            0
+        } else {
+            self.num_heads / self.num_kv_heads
+        }
+    }
 }
 
 /// Args bundle for a FlashDecoding launch.
 ///
 /// Q is rank-3 because `seq_q == 1` is encoded in the descriptor — no
 /// need to thread a unit axis through the API.
+///
+/// K/V take shape `[B, H_kv, K_len, D]` (the PHYSICAL layout, not the
+/// broadcast-replicated H_q view). The kernel handles the Q→KV head
+/// mapping via integer division `kv_head = q_head / group_size`. For
+/// pure MHA the caller just passes `H_kv == H_q` and the same data
+/// shape as before.
 pub struct FlashDecodingArgs<'a, T: Element> {
-    /// Query tensor — shape `[B, H, D]`, contiguous (or arbitrary
-    /// strides — the kernel reads via the supplied strides).
+    /// Query tensor — shape `[B, H_q, D]`. Arbitrary strides via the
+    /// supplied stride array; typical case is contig.
     pub q: TensorRef<'a, T, 3>,
-    /// Key tensor — shape `[B, H, K_len, D]`. Stride-0 on dim 1 is
-    /// honored (GQA broadcast).
+    /// Key tensor — shape `[B, H_kv, K_len, D]`, physical layout.
     pub k: TensorRef<'a, T, 4>,
-    /// Value tensor — shape `[B, H, K_len, D]`. Same stride contract
-    /// as K.
+    /// Value tensor — shape `[B, H_kv, K_len, D]`, physical layout.
     pub v: TensorRef<'a, T, 4>,
-    /// Output tensor — shape `[B, H, D]`, contiguous (or arbitrary
-    /// strides).
+    /// Output tensor — shape `[B, H_q, D]`.
     pub y: TensorMut<'a, T, 3>,
 }
 
@@ -162,11 +219,17 @@ impl<T: Element> FlashDecodingPlan<T> {
         }
         if desc.batch_size <= 0
             || desc.num_heads <= 0
+            || desc.num_kv_heads <= 0
             || desc.k_len < 0
             || desc.head_dim <= 0
         {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::FlashDecodingPlan: extents must be positive (k_len may be 0)",
+            ));
+        }
+        if desc.num_heads % desc.num_kv_heads != 0 {
+            return Err(Error::InvalidProblem(
+                "baracuda-kernels::FlashDecodingPlan: num_heads must be a multiple of num_kv_heads",
             ));
         }
         if desc.head_dim > FLASH_DECODING_MAX_D {
@@ -208,27 +271,28 @@ impl<T: Element> FlashDecodingPlan<T> {
     pub fn can_implement(&self, args: &FlashDecodingArgs<'_, T>) -> Result<()> {
         let d = self.desc.head_dim;
         let b = self.desc.batch_size;
-        let h = self.desc.num_heads;
+        let h_q = self.desc.num_heads;
+        let h_kv = self.desc.num_kv_heads;
         let k = self.desc.k_len;
 
-        if args.q.shape != [b, h, d] {
+        if args.q.shape != [b, h_q, d] {
             return Err(Error::InvalidProblem(
-                "FlashDecodingPlan: q.shape mismatch (expected [B, H, D])",
+                "FlashDecodingPlan: q.shape mismatch (expected [B, H_q, D])",
             ));
         }
-        if args.y.shape != [b, h, d] {
+        if args.y.shape != [b, h_q, d] {
             return Err(Error::InvalidProblem(
-                "FlashDecodingPlan: y.shape mismatch (expected [B, H, D])",
+                "FlashDecodingPlan: y.shape mismatch (expected [B, H_q, D])",
             ));
         }
-        if args.k.shape != [b, h, k, d] {
+        if args.k.shape != [b, h_kv, k, d] {
             return Err(Error::InvalidProblem(
-                "FlashDecodingPlan: k.shape mismatch (expected [B, H, K_len, D])",
+                "FlashDecodingPlan: k.shape mismatch (expected [B, H_kv, K_len, D])",
             ));
         }
-        if args.v.shape != [b, h, k, d] {
+        if args.v.shape != [b, h_kv, k, d] {
             return Err(Error::InvalidProblem(
-                "FlashDecodingPlan: v.shape mismatch (expected [B, H, K_len, D])",
+                "FlashDecodingPlan: v.shape mismatch (expected [B, H_kv, K_len, D])",
             ));
         }
         Ok(())
@@ -308,6 +372,7 @@ impl<T: Element> FlashDecodingPlan<T> {
                     ws_bytes,
                     self.desc.batch_size,
                     self.desc.num_heads,
+                    self.desc.num_kv_heads,
                     self.desc.k_len,
                     self.desc.head_dim,
                     args.q.stride[0],
@@ -332,6 +397,7 @@ impl<T: Element> FlashDecodingPlan<T> {
                     ws_bytes,
                     self.desc.batch_size,
                     self.desc.num_heads,
+                    self.desc.num_kv_heads,
                     self.desc.k_len,
                     self.desc.head_dim,
                     args.q.stride[0],
