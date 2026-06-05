@@ -373,13 +373,37 @@ __global__ void flash_decoding_split_kernel_tc(
     // (h_kv+1)*group_size).
     const int q_head_base = h_kv * group_size;
 
-    // SMEM allocations. sQ/sK/sV use the kernel's element type T;
-    // sScores and sO accumulate in float.
-    __shared__ T     sQ[kWmmaM * kMaxD];        // padded to M=16
-    __shared__ T     sK_tile[kWmmaN * kMaxD];
-    __shared__ T     sV_tile[kWmmaN * kMaxD];
-    __shared__ float sScores[kWmmaM * kChunkK]; // 16 × 256
+    // SMEM allocations — Tier-2 v2 (warp-parallel + smaller round-trip).
+    //
+    //   sQ                : kWmmaM × kMaxD × sizeof(T)     = 4 KB (f16)
+    //   sKV_tile          : num_warps × kWmmaN × kMaxD × sizeof(T)
+    //                                                       = 16 KB (f16, partitioned per warp during QK^T)
+    //   sScores           : kWmmaM × kChunkK × sizeof(float) = 16 KB
+    //   sO                : kWmmaM × kMaxD × sizeof(float)  = 8 KB
+    //   sP_warp_scratch   : num_warps × kWmmaM × kWmmaK × sizeof(T) = 2 KB
+    //   sMaxRow / sSumRow : trivial
+    //   ---
+    //   Total ≈ 47 KB — fits in 48 KB default SMEM.
+    //
+    // sKV_tile alternates roles:
+    //   - During QK^T pass: partitioned across warps. Each of 4 warps
+    //     owns its own 16-K-row slot at [warp_id * kWmmaN * head_dim].
+    //     All 4 warps load + mma in parallel.
+    //   - During PV pass: only the first 4 KB (one shared kWmmaK-row
+    //     sub-tile of V) is used at a time. The per-warp partitioning
+    //     from QK^T is gone — V is loaded cooperatively into the same
+    //     buffer base.
+    //
+    // sP_warp_scratch replaces the v1 kernel's 8 KB shared sP buffer.
+    // Each warp converts ONLY the 16-K-col slice of sScores it needs
+    // for its current mma into a tiny per-warp scratch slot. Saves
+    // 6 KB of SMEM that funds the per-warp K-tile partitioning.
+    constexpr int kSmemPerWarp = kWmmaN * kMaxD;  // 16 × 128 = 2048 T-elts
+    __shared__ T     sQ[kWmmaM * kMaxD];
+    __shared__ T     sKV_tile[4 * kSmemPerWarp]; // num_warps == 4 hard-coded
+    __shared__ float sScores[kWmmaM * kChunkK];
     __shared__ float sO[kWmmaM * kMaxD];
+    __shared__ T     sP_warp_scratch[4 * kWmmaM * kWmmaK];
     __shared__ float sMaxRow[kWmmaM];
     __shared__ float sSumRow[kWmmaM];
 
@@ -435,106 +459,62 @@ __global__ void flash_decoding_split_kernel_tc(
 
     // ==========================================================================
     // Pass 1 — compute all chunk_len scores into sScores via WMMA mma.
-    // Stream K through SMEM in N-tiles of width kWmmaN = 16.
+    //
+    // Warp-parallel version: each of the 4 warps owns its own
+    // 16-K-row slot in sKV_tile and runs its own mma chain in
+    // parallel. For each outer iteration:
+    //   1. Each warp loads its 16 K-rows into sKV_tile[warp_id * slot..]
+    //      cooperatively across its 32 lanes (no inter-warp coordination
+    //      during the load itself).
+    //   2. __syncthreads to publish all 4 warps' K-tiles.
+    //   3. All 4 warps run mma in parallel: warp_id owns N-tile
+    //      (n_base + warp_id * kWmmaN). Each walks head_dim / kWmmaK
+    //      sub-mmas in the K-reduction direction.
+    //   4. Each warp store_matrix_sync to sScores at its column offset.
+    // Outer-iter count: chunk_len / (num_warps * kWmmaN) = 256 / 64 = 4
+    // for the max chunk. Per outer iter, all 4 warps active throughout.
     // ==========================================================================
-    //
-    // For each N-tile (16 K-rows):
-    //   1. Coop-load sK_tile [16, head_dim].
-    //   2. For each warp w: compute fragment of S[0..16, w*kWmmaN..(w+1)*kWmmaN].
-    //      Wait — N-tile width is 16; with 4 warps each warp would handle
-    //      4 N-cols. Tiny. Instead let each warp process a different N-tile.
-    //
-    // Strategy: 4 warps × 1 N-tile each per outer iteration → 4 N-tiles per
-    // outer step → chunk_len / 64 outer steps for chunk_len = 256 → 4 steps.
-    //
-    // Each warp does the full QK^T mma for ONE [16, 16] N-tile, walking
-    // (head_dim / kWmmaK) K-tiles in the reduction direction.
 
     for (int n_base = 0; n_base < chunk_len; n_base += num_warps * kWmmaN) {
-        const int n_warp = n_base + warp_id * kWmmaN;
+        const int n_warp     = n_base + warp_id * kWmmaN;
         const bool warp_active = (n_warp < chunk_len);
+        T* const my_k_slot   = &sKV_tile[warp_id * kSmemPerWarp];
 
-        // Coop-load 4 K sub-tiles (one per warp) cooperatively into
-        // sK_tile[warp_id][16, head_dim]. We split sK_tile across warps
-        // by reusing the same SMEM with offset. Actually: simpler —
-        // allocate sK_tile as [num_warps × kWmmaN × head_dim] mentally
-        // and load per warp. SMEM budget allows this if kWmmaN=16,
-        // num_warps=4: 4*16*128*2 = 16 KB ✓.
-        //
-        // For simplicity in this Tier-1 cut, use the SAME sK_tile for
-        // all warps (one N-tile at a time per warp). Outer loop iterates
-        // num_warps × kWmmaN at a time but each warp processes one
-        // N-tile from the shared sK_tile sequentially.
-        //
-        // Actually that adds num_warps × syncs. Cleaner: allocate
-        // sK_tile slice per warp.
-
-        for (int w_inner = 0; w_inner < num_warps; ++w_inner) {
-            const int n_tile_start = n_base + w_inner * kWmmaN;
-            if (n_tile_start >= chunk_len) break;
-
-            // Coop-load this N-tile into sK_tile.
-            for (int i = tid; i < kWmmaN * head_dim; i += blockDim.x) {
-                int row = i / head_dim;
-                int d   = i % head_dim;
-                int k_abs = n_tile_start + row;
-                if (k_abs < k_end) {
-                    sK_tile[row * head_dim + d] =
-                        k_bh[(int64_t)k_abs * k_seq_stride + d];
-                } else {
-                    sK_tile[row * head_dim + d] = tc::ToHalf<T>::cvt(0.0f);
-                }
+        // Each warp loads its OWN 16-K-row slot. 32 lanes cooperate
+        // within the warp; no cross-warp coordination needed for the
+        // load itself.
+        for (int i = lane; i < kWmmaN * head_dim; i += 32) {
+            const int row = i / head_dim;
+            const int d   = i % head_dim;
+            const int k_abs = k_start + n_warp + row;
+            if (warp_active && k_abs < k_end) {
+                my_k_slot[row * head_dim + d] =
+                    k_bh[(int64_t)k_abs * k_seq_stride + d];
+            } else {
+                my_k_slot[row * head_dim + d] = tc::ToHalf<T>::cvt(0.0f);
             }
-            __syncthreads();
-
-            // Each warp computes QK^T for ITS assigned N-tile (= the
-            // currently-loaded sK_tile). All warps reduce over the K
-            // (head_dim) direction.
-            //
-            // Wait — re-reading: we WANT each warp to process a
-            // DIFFERENT N-tile in parallel, not the same one.
-            // Simpler reorganization: 1 outer K-load is shared by all
-            // warps, all warps compute the SAME N-tile of S, then we
-            // shift. That wastes warps. Skip.
-            //
-            // Correct approach: warp `warp_id` owns N-tile
-            // (n_base + warp_id * kWmmaN). Each warp loads its OWN
-            // sK_tile slice — needs num_warps separate slices.
-            //
-            // OK rewriting below with the right SMEM layout. For
-            // now: only warp `w_inner` does mma; others idle. Suboptimal
-            // but correct.
-            if (warp_id == w_inner && warp_active && n_tile_start == n_warp) {
-                wmma::fragment<wmma::matrix_a, kWmmaM, kWmmaN, kWmmaK, T,
-                               wmma::row_major> q_frag;
-                wmma::fragment<wmma::matrix_b, kWmmaM, kWmmaN, kWmmaK, T,
-                               wmma::col_major> k_frag;
-                wmma::fragment<wmma::accumulator, kWmmaM, kWmmaN, kWmmaK, float> c_frag;
-                wmma::fill_fragment(c_frag, 0.0f);
-
-                for (int kk = 0; kk < head_dim; kk += kWmmaK) {
-                    // A = sQ[0..M, kk..kk+K] row-major, ld = head_dim
-                    wmma::load_matrix_sync(q_frag, sQ + kk, head_dim);
-                    // B = K^T[kk..kk+K, n_warp..n_warp+N]. K stored row-
-                    // major as [kWmmaN, head_dim] = K[k_abs, d]. To get
-                    // K^T as col-major, we read sK_tile row-major and
-                    // use the col_major layout tag — wmma reads it as
-                    // K[d, kk+...] effectively transposed. The ld for
-                    // col-major B is head_dim (the stride between rows
-                    // of K).
-                    wmma::load_matrix_sync(k_frag, sK_tile + kk, head_dim);
-                    wmma::mma_sync(c_frag, q_frag, k_frag, c_frag);
-                }
-
-                // Store C [16, 16] into sScores at the right N-offset.
-                // We can write directly via store_matrix_sync to the
-                // sScores buffer at column n_warp.
-                wmma::store_matrix_sync(
-                    &sScores[0 * kChunkK + n_warp],
-                    c_frag, kChunkK, wmma::mem_row_major);
-            }
-            __syncthreads();
         }
+        __syncthreads();
+
+        // All warps mma in parallel.
+        if (warp_active) {
+            wmma::fragment<wmma::matrix_a, kWmmaM, kWmmaN, kWmmaK, T,
+                           wmma::row_major> q_frag;
+            wmma::fragment<wmma::matrix_b, kWmmaM, kWmmaN, kWmmaK, T,
+                           wmma::col_major> k_frag;
+            wmma::fragment<wmma::accumulator, kWmmaM, kWmmaN, kWmmaK, float> c_frag;
+            wmma::fill_fragment(c_frag, 0.0f);
+
+            for (int kk = 0; kk < head_dim; kk += kWmmaK) {
+                wmma::load_matrix_sync(q_frag, sQ + kk, head_dim);
+                wmma::load_matrix_sync(k_frag, my_k_slot + kk, head_dim);
+                wmma::mma_sync(c_frag, q_frag, k_frag, c_frag);
+            }
+            wmma::store_matrix_sync(
+                &sScores[0 * kChunkK + n_warp],
+                c_frag, kChunkK, wmma::mem_row_major);
+        }
+        __syncthreads();
     }
 
     // Apply scale + chunk-tail mask (sScores beyond chunk_len → -inf).
@@ -586,41 +566,26 @@ __global__ void flash_decoding_split_kernel_tc(
 
     // ==========================================================================
     // Pass 2 — accumulate sO = P @ V via WMMA mma.
+    //
+    // Two tweaks over the v1 PV layout:
+    //   - V reuses sKV_tile's first kWmmaK × head_dim slot
+    //     (loaded cooperatively across all 4 warps, no partitioning).
+    //   - sP lives in a tiny per-warp 16×16 scratch (2 KB total)
+    //     instead of a full 8 KB shared sP buffer. Each warp converts
+    //     ONLY the sScores slice it actively mma's against.
+    //
+    // For head_dim = 128: 8 N-tiles to cover. With 4 warps and 2
+    // N-tiles per warp, each iteration of the outer (k_sub) loop has
+    // every warp working.
     // ==========================================================================
-    //
-    // P is in sScores [kWmmaM, chunk_len]. V is in global, streamed
-    // through sV_tile in K-direction sub-tiles of kWmmaK = 16 K-rows.
-    // For each K sub-tile: each warp accumulates 1 N-tile of output
-    // (kWmmaN = 16 D-elements).
-    //
-    // For head_dim = 128: 128 / 16 = 8 N-tiles to cover. 4 warps × 2
-    // N-tiles each per outer step → 1 outer iteration per K sub-tile.
-
-    // We need sP in T (half/bf16) for the WMMA A fragment. Convert
-    // sScores → a half-precision buffer. Reuse sK_tile as sP storage
-    // for the conversion (sK_tile is at least kWmmaN × head_dim ≥
-    // 16 × 128 = 2048 elements; we need kWmmaM × chunk_len = 16 × 256
-    // = 4096. Won't fit).
-    //
-    // Allocate sP separately. SMEM was already at ~36 KB; add another
-    // 16*256*2 = 8 KB → 44 KB. Tight but fits in 48 KB.
-
-    __shared__ T sP[kWmmaM * kChunkK];
-
-    for (int i = tid; i < kWmmaM * kChunkK; i += blockDim.x) {
-        sP[i] = tc::ToHalf<T>::cvt(sScores[i]);
-    }
-    __syncthreads();
-
-    // For each K sub-tile in the chunk, all warps cooperatively load
-    // sV_tile, then each warp accumulates its N-tile of the output.
+    T* const sV_tile = &sKV_tile[0];  // reuse, only first 4 KB needed
     const int n_tiles_per_d = head_dim / kWmmaN;     // 8 for D=128
     const int n_tiles_per_warp = (n_tiles_per_d + num_warps - 1) / num_warps;
 
     for (int k_sub = 0; k_sub < chunk_len; k_sub += kWmmaK) {
         const int rows_to_load = min(kWmmaK, chunk_len - k_sub);
 
-        // Coop-load V sub-tile [kWmmaK, head_dim].
+        // Coop-load V sub-tile [kWmmaK, head_dim] using all threads.
         for (int i = tid; i < kWmmaK * head_dim; i += blockDim.x) {
             int row = i / head_dim;
             int d   = i % head_dim;
@@ -631,6 +596,17 @@ __global__ void flash_decoding_split_kernel_tc(
             } else {
                 sV_tile[row * head_dim + d] = tc::ToHalf<T>::cvt(0.0f);
             }
+        }
+
+        // Each warp converts its needed P slice — kWmmaM × kWmmaK = 256
+        // fp32 cells from sScores[:, k_sub:k_sub+16] → its per-warp
+        // sP slot. 32 lanes × 8 cells each.
+        T* const my_p_slot = &sP_warp_scratch[warp_id * kWmmaM * kWmmaK];
+        for (int i = lane; i < kWmmaM * kWmmaK; i += 32) {
+            const int m = i / kWmmaK;
+            const int k_in_sub = i % kWmmaK;
+            my_p_slot[i] = tc::ToHalf<T>::cvt(
+                sScores[m * kChunkK + k_sub + k_in_sub]);
         }
         __syncthreads();
 
@@ -650,10 +626,9 @@ __global__ void flash_decoding_split_kernel_tc(
             wmma::load_matrix_sync(
                 o_frag, &sO[0 * head_dim + d_base], head_dim,
                 wmma::mem_row_major);
-
-            // P fragment: sP[0..M, k_sub..k_sub+K]. ld = kChunkK.
-            wmma::load_matrix_sync(p_frag, sP + k_sub, kChunkK);
-            // V fragment: sV_tile[0..K, d_base..d_base+N], row_major, ld = head_dim.
+            // P fragment from per-warp scratch (ld = kWmmaK, tight).
+            wmma::load_matrix_sync(p_frag, my_p_slot, kWmmaK);
+            // V fragment from shared sV_tile.
             wmma::load_matrix_sync(v_frag, sV_tile + d_base, head_dim);
             wmma::mma_sync(o_frag, p_frag, v_frag, o_frag);
 
@@ -770,52 +745,41 @@ __host__ inline size_t flash_decoding_workspace_bytes(
          * (size_t)(2 + head_dim) * sizeof(float);
 }
 
-// TC (tensor-core / WMMA) dispatch — DISABLED in single-batch decode.
+// TC (tensor-core / WMMA) dispatch — DISABLED at single-batch decode.
 //
-// The WMMA kernel `flash_decoding_split_kernel_tc` below is preserved
-// for reference. Empirical benchmark (RTX 4070, 2026-06-04) showed it
-// LOSES to the warp-cooperative SIMT kernel at every tested GQA shape:
+// Two iterations of the WMMA kernel were benchmarked vs SIMT-GQA on
+// RTX 4070 (full results in commit-message tables):
 //
-//   Shape (Hq, Hkv, K)         TC       SIMT-GQA   Winner
-//   llama3-8b   (32, 8, 4096)  229µs    78µs       SIMT 2.94×
-//   llama3-8b   (32, 8, 8192)  444µs    137µs      SIMT 3.24×
-//   llama3-70b  (64, 8, 4096)  231µs    132µs      SIMT 1.75×
-//   llama3-70b  (64, 8, 8192)  448µs    252µs      SIMT 1.78×
-//   qwen2-14b   (32, 4, 8192)  231µs    134µs      SIMT 1.73×
+//   v1 (warp-sequentialized QK^T, 8 KB shared sP):
+//     llama3-70b K=4096: 231µs  vs SIMT 132µs  (SIMT 1.75× faster)
+//     llama3-70b K=8192: 448µs  vs SIMT 252µs  (SIMT 1.78× faster)
+//     qwen2-14b  K=8192: 231µs  vs SIMT 134µs  (SIMT 1.73× faster)
 //
-// Why TC loses (analyzed in commit message of the Phase 73-followup
-// GQA work):
+//   v2 (warp-parallel QK^T, per-warp 2 KB sP scratch):
+//     llama3-70b K=4096: 165µs  vs SIMT 132µs  (SIMT 1.25× faster)
+//     llama3-70b K=8192: 442µs  vs SIMT 252µs  (SIMT 1.75× faster)
+//     qwen2-14b  K=8192: 166µs  vs SIMT 134µs  (SIMT 1.24× faster)
 //
-//   1. Decode is bandwidth/L2-bound at the tested shapes. Tensor cores
-//      attack compute throughput — useless for a non-compute-bound
-//      workload.
+// v2 closed real per-kernel gaps (1.13-1.41× faster than v1) but no
+// tested GQA shape edges SIMT-GQA. The structural ceiling holds:
 //
-//   2. TC grid is (num_splits, H_kv, B); SIMT grid is (num_splits,
-//      H_q, B). With B=1 and H_kv ≤ H_q the TC grid undersaturates
-//      RTX 4070's 36 SMs (e.g. 32 blocks for H_kv=8, K=1024). The
-//      SIMT grid has group_size× more blocks → fully saturates SMs
-//      and amortizes per-block fixed costs better.
+//   1. Single-batch decode at GQA group_size=4-8 fills only 4-8 of
+//      WMMA's 16 M-tile rows. Throughput penalty (16-group)/16 = 50-75%.
 //
-//   3. TC kernel adds fp32→fp16→fp32 round-trips (sScores fp32 →
-//      sP fp16 fragment-load → mma → sO fp32) that the SIMT path
-//      doesn't have.
+//   2. Decode is bandwidth/L2-bound at the tested shapes. Tensor cores
+//      attack compute — useless when compute isn't the bottleneck.
 //
-//   4. The WMMA M-tile is 16 rows; at single-batch decode, only
-//      `group_size` rows are meaningful (4-8 for Llama 3). The
-//      remaining 8-12 M-rows are pure padding — tensor cores process
-//      them but their output is thrown away. Throughput penalty
-//      proportional to (16 - group_size) / 16.
+//   3. TC grid is (num_splits, H_kv, B); SIMT is (num_splits, H_q, B).
+//      With B=1 and H_kv ≤ H_q the TC grid has group_size× fewer
+//      blocks. SIMT's higher block count + L2 reuse wins.
 //
-// The TC kernel would compete (and likely win) at MULTI-BATCH decode
-// (B ≥ 8) where the M-tile fills with B × group_size rows. That
-// workload is owned by `BatchPagedDecodePlan` (Phase 46, FlashInfer
-// vendored) — a different op family with explicit paged-KV layout.
+// The v2 kernel (`flash_decoding_split_kernel_tc` below) and dispatch
+// helper stay in the tree as documented reference. Re-enabling is one
+// line. Likely worth re-evaluating only at multi-batch decode (B ≥ 8)
+// where the M-tile fills with B × group_size rows — but that workload
+// is owned by `BatchPagedDecodePlan` (Phase 46 FlashInfer vendored).
 //
-// Keeping the WMMA kernel code in this file: it compiles, smoke tests
-// pass, and the design serves as a worked example for future
-// optimizers. If a multi-batch contig decode plan is added later, the
-// kernel + dispatch can be re-enabled by changing the body of this
-// function. Until then it's documented dead code.
+// constexpr int kMinTcBlocks = 72;  // RTX 4070-tuned block-count gate
 __host__ inline bool flash_decoding_should_use_tc(
     int32_t /*group_size*/, int32_t /*head_dim*/,
     int32_t /*batch*/, int32_t /*num_kv_heads*/, int32_t /*num_splits*/)
