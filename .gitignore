@@ -55,3 +55,6 @@ criterion/
 # ---- OS / build-tool cruft -----------------------------------------------
 *.log
 /tmp/
+
+# ---- Claude Code session-local state -------------------------------------
+.claude/

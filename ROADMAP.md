@@ -1440,7 +1440,14 @@ Pairs with the cuDNN strided siblings item above.
 load-bearing for 1.0 if downstream is willing to make layout
 decisions itself.
 
-### Flash SDPA perf gap at Hq=Hkv=32, Q=K=2048, D=128, f16
+### Flash SDPA perf gap at Hq=Hkv=32, Q=K=2048, D=128, f16 — ✓ FIXED
+
+**Fix** (commit `833f862`, 2026-06-04): `fa2` enabled as a default
+cargo feature. The `should_use_fa2` heuristic auto-routes the
+standard MHA shape to FA2 → **1.66ms (50% faster than PyTorch)**.
+The original analysis below is preserved for the record.
+
+---
 
 Phase 73.3 bench surfaced a **~100× perf gap** vs PyTorch at the
 plain-MHA shape: baracuda reports ~270ms per launch, PyTorch reports
@@ -1531,27 +1538,71 @@ even if the fix is "enable a feature flag." Recommendation: pick
 pay the build-cost tax. The bench evidence now backs whichever
 direction you choose.
 
-### `FlashSdpaPlan` GQA-broadcast routing gap
+### `FlashSdpaPlan` GQA-broadcast routing gap — ✓ FIXED
+
+**Fix** (2026-06-05, Phase 73 follow-up): `FlashSdpaPlan::can_implement`
+now accepts the full-MQA-broadcast convention on K/V (shape[1] ==
+num_heads with stride[1] == 0), validated via `is_full_mqa_broadcast()`
+(requires stride[0] == K*D, stride[2] == D, stride[3] == 1 — i.e. a
+physical `[B, 1, K, D]` buffer viewed with a broadcast H axis). The
+buffer-size check uses a new `physical_span()` helper (highest
+addressable offset + 1) instead of `numel()`, so the broadcast
+view's `[B, H, K, D]`-advertised numel doesn't false-trigger
+`BufferTooSmall`.
+
+**Important correction to this entry's original premise** (below):
+the claim that "the sm89 strided sibling already supports broadcast,
+just wire the routing" was WRONG for the common head_dim.
+`FlashSdpaSm89Plan`'s cp.async double-buffered kernel needs
+`896*d_k + 17152` bytes of SMEM per block (f16/bf16) — ~129 KB at
+d_k=128, which EXCEEDS Ada's ~100 KB dynamic-SMEM opt-in cap. The
+sm89 strided sibling can only run **d_k ≤ 64**; at d_k=128 it fails
+with `CutlassInternal(1001)` (cudaErrorInvalidValue at launch). The
+original ROADMAP premise was discovered to be false during this fix.
+
+`FlashSdpaPlan::run` therefore routes by SELECTED backend:
+
+- **FA2 selected** (large shape): reinterpret the broadcast buffer
+  as physical `[B, 1, K, D]` (shape[1] = 1) and call `run_fa2`. FA2
+  does MQA natively (num_heads_k = 1, ratio = H) at any FA2 head_dim
+  including 128. This is the common-case path.
+- **bespoke selected** (small shape): route the broadcast view to
+  the sm89 strided sibling, gated to `d_k ≤ 64`; clear error above.
+
+Routing keys on the SELECTED backend (not raw FA2 eligibility)
+because the caller sizes their workspace from `plan.workspace_size()`,
+which only reports FA2's LSE scratch when `select` chose FA2.
+
+Mask + ALiBi aren't plumbed — the routing errors out cleanly with
+a pointer to the right alternative.
+
+**Measured** (Hq=32, Q=K=2048, D=128 — the bench shape): broadcast
+Hkv=1 routes to FA2 MQA → f16 1.68ms (**1.52× faster than PyTorch's
+2.56ms**), bf16 1.49× faster. Two smoke tests cover both routes
+(`..._small_sm89` D=32, `..._large_fa2` D=128). This closes the
+`sdpa_gqa.rs` bench's previously-"skipped" Hkv=1 cell.
+
+Intermediate GQA (shape[1] == H_kv with H_kv < H_q, partial
+broadcast that can't be expressed as a single stride) is handled
+separately by the FA2 backend's native `h_h_k_ratio` mechanism,
+or by `FlashDecodingPlan` at the seq_q=1 decode path (Phase 73
+follow-up's other deliverable).
+
+---
+
+The original analysis (preserved for record):
 
 **Root cause** (Phase 73.3 follow-up): the public `FlashSdpaPlan`
-rejects non-contiguous K/V tensors at `can_implement` ("trailblazer
+rejected non-contiguous K/V tensors at `can_implement` ("trailblazer
 requires contiguous tensors"), even though the strided sibling
 `FlashSdpaSm89Plan` already supports the GQA broadcast case via the
 Phase 17 template-bool `gqa_broadcast` switch. The safe-wrapper
-layer doesn't route to the sibling when broadcast is detected.
+layer didn't route to the sibling when broadcast was detected.
 
 The `sdpa_gqa.rs` bench was the test that surfaced this — its
-Hkv=1 full-MQA-broadcast case sets `stride[1] = 0` on K/V, hits
-the rejection, and panics. As an immediate mitigation the bench now
-catches the rejection, emits a `reference: "skipped"` row, and
-continues; the underlying baracuda gap remains.
-
-**Fix scope:** make `FlashSdpaPlan::can_implement` accept stride-0
-on K/V's head axis when the strided sibling can handle it, and
-route `run` through `FlashSdpaSm89Plan` in that case. Or, more
-broadly: unify the two plans so users don't have to pick. Either
-way, plain end-user MQA / GQA inference should not require manual
-plan-selection logic.
+Hkv=1 full-MQA-broadcast case sets `stride[1] = 0` on K/V, hit
+the rejection, and panicked. The bench grew a defensive skip path
+that's now dead code (kept as belt-and-suspenders).
 
 ### `ConcatPlan` perf gap on KV-cache-typical shapes — ✓ FIXED
 
@@ -1597,6 +1648,53 @@ not worth a follow-up.
 
 All 8 existing concat smoke tests pass at every dtype +
 non-axis-1 + non-contig pattern.
+
+### `FlashDecodingPlan` — new op family for seq_q=1 decode — ✓ SHIPPED
+
+Phase 73 follow-up landed a focused split-K decode kernel
+(`FlashDecodingPlan`) that replaces `FlashSdpaPlan` and FA2 at the
+decode regime where seq_q=1 wastes 63/64 of a 64-row q-tile.
+
+**Algorithm:** split kernel (one block per (b, h, k_split), online
+softmax within chunk) + combine kernel (one block per (b, h),
+merges per-split partials). Standard Flash-Decoding (Dao 2023).
+
+**Tier-1 scope:** f16/bf16, head_dim ≤ 128, seq_q == 1. GQA via
+the explicit `num_kv_heads` descriptor field (K/V take shape
+`[B, H_kv, K, D]`; kernel handles Q→KV mapping via integer
+division).
+
+**Bench results (RTX 4070):**
+
+vs the legacy `FlashSdpaPlan` (which decode previously fell back to):
+
+| Shape | FlashSdpa | FlashDecoding | Speedup |
+| --- | --- | --- | --- |
+| B1_H32_K1024 f16 | 1.31ms | 52.6µs | **24.9×** |
+| B1_H32_K2048 f16 | 1.77ms | 53.3µs | **33.1×** |
+| B1_H32_K4096 f16 | 4.81ms | 289µs | **16.7×** |
+| B1_H32_K8192 f16 | 9.62ms | 552µs | **17.4×** |
+
+Plus a **4×** speedup at GQA shapes (Llama-3-8B/70B/qwen2-14b
+sweep) versus the MHA-SIMT baseline, because GQA cuts the KV
+footprint 4-8× and the new API expresses it properly.
+
+**WMMA experiment (v1 + v2): negative result.** Two iterations of
+a tensor-core kernel were written, smoke-tested, and benchmarked
+across GQA shapes. At single-batch decode the M-tile is only
+25-50% utilized (group_size of 4-8 out of WMMA's M=16) and the
+kernel is bandwidth-bound regardless — SIMT-GQA wins by 1.24-2.87×
+at every benchmarked shape. The v2 kernel + dispatch helper stay
+in the tree as documented reference with `should_use_tc → false`.
+Likely worth re-evaluating only at multi-batch decode (B ≥ 8)
+where the M-tile fills properly — that workload is owned by
+`BatchPagedDecodePlan` (Phase 46 FlashInfer vendored).
+
+**Commits:** `7fbcd5d` (initial kernel), `460a018` (warp-coop QK^T,
+2-2.6× extra), `9327f6d` (GQA-aware API, 4× win at GQA shapes),
+`89b74e1` (WMMA v2, kept as reference).
+
+---
 
 ### Reductions perf gap vs PyTorch at small rows × small hidden — ✓ FIXED
 

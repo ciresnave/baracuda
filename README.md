@@ -8,9 +8,9 @@
 A unified Rust ML-op facade over the NVIDIA CUDA ecosystem.
 
 ![License](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue)
-![Status](https://img.shields.io/badge/status-alpha.64-orange)
+![Status](https://img.shields.io/badge/status-alpha.65-orange)
 ![CUDA](https://img.shields.io/badge/CUDA-12.x-76b900)
-![Tests](https://img.shields.io/badge/regression-2152%2F0-success)
+![Tests](https://img.shields.io/badge/regression-2250%2B%2F0-success)
 
 ## What baracuda is
 
@@ -40,9 +40,17 @@ talk to one library directly.
 
 ## Status
 
-**In active development — alpha.64.** **2240+ GPU tests passing,
+**In active development — alpha.65.** **2250+ GPU tests passing,
 zero failures** across the 6 critical test crates on an RTX 4070
-(sm_89). Phase 63 (alpha.63, Fuel-ask) closes the FlashAttention
+(sm_89). Phase 73 follow-up (alpha.65) lands a **17-33× decode
+speedup** via a focused FlashDecodingPlan (split-K, seq_q=1),
+**4× win at GQA shapes** via the new `num_kv_heads` descriptor
+field, the long-awaited `FlashSdpaPlan` GQA-broadcast routing fix,
+and a SDPA gap closure that makes baracuda's standard MHA shape
+**50% faster than PyTorch** by making `fa2` a default feature. The
+ConcatPlan (KV-cache decode) and reduce_axis (small-shape rows)
+kernels also got significant rewrites — 13× and 2.6-15.4×
+respectively. Phase 63 (alpha.63, Fuel-ask) closes the FlashAttention
 saved-tensor wiring gap: **NEW
 `baracuda_kernels_fa2_sdpa_lse_size(batch, num_heads, seq_q) -> usize`**
 dense LSE pre-allocation helper (sibling of the existing varlen
