@@ -7,7 +7,7 @@ effort within each category. Authoritative status per op lives in
 [`OP-MATRIX.md`](OP-MATRIX.md); historical phase summaries live in
 [`ARCHITECTURE.md`](ARCHITECTURE.md).
 
-The current tag is **v0.0.1-alpha.63** with **2240+ GPU tests
+The current release is **v0.0.1-alpha.66** with **2250+ GPU tests
 passing, zero failures** across the 6 critical test crates
 (baracuda-kernels, baracuda-optim, baracuda-megatron, baracuda-nccl,
 baracuda-transformer-engine, baracuda-ozimmu) on RTX 4070 (sm_89).
@@ -73,6 +73,25 @@ investment: 8 new aliasing-contract proof tests in
 covering the 5 safe families. No new FFI symbols, no new CUDA
 kernels — pure documentation + test work consolidating the
 in-place coverage matrix.
+
+**alpha.66 (Fuel-ask)** exposes per-device VRAM queries on the
+Driver-API `Device`: `vram_free()` / `vram_total()` / `vram_info()`
+wrapping `cuMemGetInfo_v2`. `vram_info()` is the core accessor (one
+driver call returning `(free, total)`); the split accessors delegate
+to it. Cheap (single driver call, no kernel launch or stream sync) so
+callers can poll at sub-realize granularity without caching; errors
+surface as typed `Error`s (e.g. `CUDA_ERROR_DEINITIALIZED` after
+`cuCtxDestroy`) rather than panicking. Mirrors the shape Fuel already
+gets from Vulkan's `VK_EXT_memory_budget` so the optimizer's
+backend-selector (Picker 2 / `VramPressureSelector`) needs no
+per-backend branches. **Current-context caveat documented**:
+`cuMemGetInfo` takes no device argument and reports for the context
+active on the calling thread, so the numbers describe `self` only when
+the caller has this device's context current; `total_memory()`
+(`cuDeviceTotalMem`) remains the per-device, context-independent total.
+No new FFI symbols (the `cuMemGetInfo_v2` PFN already existed); 1 new
+GPU smoke test (RTX 4070) asserting the three accessors agree with each
+other and with `cuDeviceTotalMem`.
 
 **Phase 63 (alpha.63, Fuel-ask)** closes the FlashAttention
 saved-tensor wiring gap for downstream autograd integration. NEW

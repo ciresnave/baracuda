@@ -1,6 +1,6 @@
 [package]
 name = "baracuda-kernels-bench"
-version = "0.0.1-alpha.65"
+version = "0.0.1-alpha.66"
 description = "Benchmark harness for baracuda-kernels — CUDA-event-timed throughput sweeps across GEMM, Flash Attention, and Conv2d at LLM-typical / ResNet-typical shapes. Phase 10 Milestone 10.1 of the baracuda CUDA stack."
 edition.workspace = true
 rust-version.workspace = true

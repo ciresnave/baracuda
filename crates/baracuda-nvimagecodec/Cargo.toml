@@ -1,6 +1,6 @@
 [package]
 name = "baracuda-nvimagecodec"
-version = "0.0.1-alpha.65"
+version = "0.0.1-alpha.66"
 description = "Safe Rust wrappers for NVIDIA nvImageCodec (unified GPU image decode)."
 edition.workspace = true
 rust-version.workspace = true

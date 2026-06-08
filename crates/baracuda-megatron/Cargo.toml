@@ -1,6 +1,6 @@
 [package]
 name = "baracuda-megatron"
-version = "0.0.1-alpha.65"
+version = "0.0.1-alpha.66"
 description = "Megatron-LM-style tensor-parallel primitives (Column / Row Parallel Linear) for the baracuda CUDA stack. Pure-composition crate — local GEMM via baracuda-cublas + cross-rank collectives via baracuda-nccl. No new CUDA kernels. NEW in Phase 57; deliberate scope expansion (distributed-training-framework-adjacent). Off-by-default in baracuda-kernels via the `megatron_tp` cargo feature so non-distributed consumers don't pay the dep surface cost. Algorithmic reference: Shoeybi et al. arXiv:1909.08053 (NVIDIA Megatron-LM, Apache-2.0)."
 readme = "README.md"
 edition.workspace = true

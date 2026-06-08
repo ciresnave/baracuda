@@ -1,6 +1,6 @@
 [package]
 name = "baracuda-ozimmu-sys"
-version = "0.0.1-alpha.65"
+version = "0.0.1-alpha.66"
 description = "Build + raw FFI bindings to baracuda's clean-fork of Hiroyuki Ootomo's ozIMMU — the Ozaki-scheme FP64 GEMM library that synthesizes a DGEMM from S² int8 tensor-core matmuls. Phase 44b internalized the upstream sources under `cuda/` (no more `vendor/` subdir; cutf submodule eliminated). Linked statically into the baracuda CUDA stack; consumed by the safe wrapper crate `baracuda-ozimmu`. MIT-licensed (original ozIMMU MIT — see `ATTRIBUTION.md`)."
 readme = "README.md"
 edition.workspace = true
