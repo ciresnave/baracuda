@@ -69,9 +69,9 @@ $order = @(
     "baracuda-nccl",
     "baracuda-nvshmem",
     "baracuda-optim",
+    "baracuda-megatron",   # MUST precede kernels (kernels optional-deps megatron via megatron_tp)
     "baracuda-kernels",
     "baracuda-flashinfer",
-    "baracuda-megatron",
     "baracuda-npp",
     "baracuda-nvcomp",
     "baracuda-nvimagecodec",

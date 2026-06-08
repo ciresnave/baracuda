@@ -97,9 +97,15 @@ $order = @(
     "baracuda-nccl",
     "baracuda-nvshmem",
     "baracuda-optim",
-    "baracuda-kernels",                     # before flashinfer + megatron
-    "baracuda-flashinfer",
+    # baracuda-megatron MUST precede baracuda-kernels: kernels has an OPTIONAL
+    # dep on megatron via the `megatron_tp` feature, and cargo resolves optional
+    # deps against the index at publish time. The alpha.65 order had megatron
+    # AFTER kernels — it only "worked" because the retry republished kernels
+    # once megatron had landed. megatron's own deps (cublas, nccl) already
+    # precede this point, so moving it up is safe.
     "baracuda-megatron",
+    "baracuda-kernels",                     # before flashinfer
+    "baracuda-flashinfer",
     "baracuda-npp",
     "baracuda-nvcomp",
     "baracuda-nvimagecodec",
