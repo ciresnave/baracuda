@@ -60,6 +60,27 @@ fn mem_get_info_reports_sensible_sizes() {
 }
 
 #[test]
+#[ignore = "requires an NVIDIA GPU"]
+fn device_vram_methods_agree_with_mem_get_info() {
+    let (dev, _ctx, _stream) = setup().expect("setup");
+
+    // Combined accessor.
+    let (free, total) = dev.vram_info().expect("vram_info");
+    assert!(total > 0);
+    assert!(free <= total);
+    assert!(total > 512 * 1024 * 1024, "tiny total mem? {total}");
+
+    // Split accessors return the same fields (free may drift slightly
+    // between calls as the driver reclaims memory, so only assert total,
+    // which is static, and that free stays within bounds).
+    assert_eq!(dev.vram_total().expect("vram_total"), total);
+    assert!(dev.vram_free().expect("vram_free") <= total);
+
+    // total reported here matches cuDeviceTotalMem for the active device.
+    assert_eq!(dev.total_memory().expect("total_memory"), total);
+}
+
+#[test]
 #[ignore = "requires an NVIDIA GPU with managed-memory support"]
 fn managed_buffer_round_trip() {
     let (dev, ctx, stream) = setup().expect("setup");

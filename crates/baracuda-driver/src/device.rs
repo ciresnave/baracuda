@@ -77,6 +77,56 @@ impl Device {
         Ok(bytes as u64)
     }
 
+    /// Free and total VRAM, in bytes, as `(free, total)`.
+    ///
+    /// Wraps `cuMemGetInfo_v2`. This is a single, cheap driver call — no
+    /// kernel launch and no stream synchronization — so it's fine to poll
+    /// at sub-realize granularity without caching.
+    ///
+    /// # Current-context semantics
+    ///
+    /// `cuMemGetInfo` reports for the CUDA context **currently active on the
+    /// calling thread**, not for `self` as such (the driver call takes no
+    /// device argument). For the numbers to describe `self`, the caller must
+    /// have this device's context active on the calling thread — e.g. via
+    /// [`Context`](crate::Context) or primary-context reuse. For a strictly
+    /// per-device total that is independent of the current context, use
+    /// [`total_memory`](Self::total_memory) (wraps `cuDeviceTotalMem`).
+    ///
+    /// Errors surface as typed [`Error`](crate::Error)s rather than panics:
+    /// e.g. once the context is torn down with `cuCtxDestroy`, this returns
+    /// `Err` carrying `CUDA_ERROR_DEINITIALIZED`.
+    pub fn vram_info(&self) -> Result<(u64, u64)> {
+        let d = driver()?;
+        let cu = d.cu_mem_get_info()?;
+        let mut free: usize = 0;
+        let mut total: usize = 0;
+        // SAFETY: both pointers address writable `usize` slots; cuMemGetInfo
+        // writes a `size_t` to each.
+        check(unsafe { cu(&mut free, &mut total) })?;
+        Ok((free as u64, total as u64))
+    }
+
+    /// Free VRAM in bytes on this device.
+    ///
+    /// Convenience accessor for the `free` half of [`vram_info`](Self::vram_info);
+    /// see its docs for the current-context semantics. Each call is one
+    /// `cuMemGetInfo_v2`; call `vram_info` instead when you want both halves
+    /// without a second driver call.
+    pub fn vram_free(&self) -> Result<u64> {
+        self.vram_info().map(|(free, _total)| free)
+    }
+
+    /// Total VRAM in bytes on this device.
+    ///
+    /// Convenience accessor for the `total` half of [`vram_info`](Self::vram_info);
+    /// see its docs for the current-context semantics. For a strictly
+    /// per-device total independent of the current context, prefer
+    /// [`total_memory`](Self::total_memory).
+    pub fn vram_total(&self) -> Result<u64> {
+        self.vram_info().map(|(_free, total)| total)
+    }
+
     /// Compute capability as `(major, minor)`, e.g. `(9, 0)` for Hopper.
     pub fn compute_capability(&self) -> Result<(u32, u32)> {
         let major = self.attribute(Attr::COMPUTE_CAPABILITY_MAJOR)?;
