@@ -86,7 +86,9 @@ fn bincount_i32_empty_input() {
     let dev_x: DeviceBuffer<i32> = DeviceBuffer::zeros(&ctx, 1).expect("alloc");
     let mut dev_out: DeviceBuffer<i32> =
         DeviceBuffer::zeros(&ctx, num_bins as usize).expect("alloc");
-    // Pre-fill output to verify the kernel observes n=0 and doesn't touch memory.
+    // Pre-fill output to verify the launcher zero-initializes the bins
+    // even at n=0 (the launcher always memsets before counting — bins
+    // are kernel-owned output, accumulated via atomicAdd).
     let presets = vec![7_i32; num_bins as usize];
     dev_out.copy_from_host(&presets).expect("preset");
 
@@ -106,9 +108,13 @@ fn bincount_i32_empty_input() {
     let mut got = vec![0_i32; num_bins as usize];
     dev_out.copy_to_host(&mut got).expect("dl");
 
-    // Contract: n=0 leaves output untouched (callers are responsible
-    // for zeroing if they want zeros). Our preset survives.
-    assert_eq!(got, presets, "bincount_i32 n=0 should not write to output");
+    // Contract: bincount of an empty input is all-zero counts (matches
+    // PyTorch's `bincount` on an empty tensor with `minlength`). The
+    // launcher owns the bins buffer — `launch_bincount` memsets it to
+    // zero unconditionally before (not) counting, so the preset is
+    // overwritten with zeros.
+    let expected = vec![0_i32; num_bins as usize];
+    assert_eq!(got, expected, "bincount_i32 n=0 must produce all-zero counts");
 }
 
 #[test]

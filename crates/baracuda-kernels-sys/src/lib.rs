@@ -31336,11 +31336,19 @@ unsafe extern "C" {
 
 // ----------------------------------------------------------------------------
 // Unary `gelu` — `y = gelu(x)` across f32 / f16 / bf16 / f64.
+//
+// ERF-EXACT gelu (`0.5·x·(1+erf(x/√2))`) — NOT the tanh approximation.
+// `unary_gelu_erf_*` is a bit-identical alias; use `unary_gelu_tanh_*`
+// for the tanh flavor.
 // ----------------------------------------------------------------------------
 
 #[cfg(any(feature = "sm80", feature = "sm89", feature = "sm90a"))]
 unsafe extern "C" {
     /// Unary elementwise `gelu`, f32 dtype, contiguous fast path.
+    ///
+    /// ERF-EXACT gelu (`0.5·x·(1+erf(x/√2))`) — NOT the tanh
+    /// approximation. `unary_gelu_erf_*` is a bit-identical alias; use
+    /// `unary_gelu_tanh_*` for the tanh flavor.
     ///
     /// # Safety
     /// Same device-pointer / stream contract as the unary-neg trailblazer.
@@ -31396,6 +31404,10 @@ unsafe extern "C" {
 
     /// Unary elementwise `gelu`, f16 dtype, contiguous fast path.
     ///
+    /// ERF-EXACT gelu (`0.5·x·(1+erf(x/√2))`) — NOT the tanh
+    /// approximation. `unary_gelu_erf_*` is a bit-identical alias; use
+    /// `unary_gelu_tanh_*` for the tanh flavor.
+    ///
     /// # Safety
     /// Same device-pointer / stream contract as the unary-neg trailblazer. `x` / `y` point to `__half` storage.
     pub fn baracuda_kernels_unary_gelu_f16_run(
@@ -31450,6 +31462,10 @@ unsafe extern "C" {
 
     /// Unary elementwise `gelu`, bf16 dtype, contiguous fast path.
     ///
+    /// ERF-EXACT gelu (`0.5·x·(1+erf(x/√2))`) — NOT the tanh
+    /// approximation. `unary_gelu_erf_*` is a bit-identical alias; use
+    /// `unary_gelu_tanh_*` for the tanh flavor.
+    ///
     /// # Safety
     /// Same device-pointer / stream contract as the unary-neg trailblazer. `x` / `y` point to `__nv_bfloat16` storage.
     pub fn baracuda_kernels_unary_gelu_bf16_run(
@@ -31503,6 +31519,10 @@ unsafe extern "C" {
     ) -> i32;
 
     /// Unary elementwise `gelu`, f64 dtype, contiguous fast path.
+    ///
+    /// ERF-EXACT gelu (`0.5·x·(1+erf(x/√2))`) — NOT the tanh
+    /// approximation. `unary_gelu_erf_*` is a bit-identical alias; use
+    /// `unary_gelu_tanh_*` for the tanh flavor.
     ///
     /// # Safety
     /// Same device-pointer / stream contract as the unary-neg trailblazer. `x` / `y` point to `double` storage.
@@ -31560,11 +31580,17 @@ unsafe extern "C" {
 
 // ----------------------------------------------------------------------------
 // Unary `gelu_tanh` — `y = gelu_tanh(x)` across f32 / f16 / bf16 / f64.
+//
+// Tanh APPROXIMATION of gelu (`0.5·x·(1+tanh(√(2/π)·(x+0.044715·x³)))`)
+// — diverges from the erf-exact `unary_gelu_*` by up to ~1e-4.
 // ----------------------------------------------------------------------------
 
 #[cfg(any(feature = "sm80", feature = "sm89", feature = "sm90a"))]
 unsafe extern "C" {
     /// Unary elementwise `gelu_tanh`, f32 dtype, contiguous fast path.
+    ///
+    /// Tanh APPROXIMATION of gelu — diverges from the erf-exact
+    /// `unary_gelu_*` by up to ~1e-4.
     ///
     /// # Safety
     /// Same device-pointer / stream contract as the unary-neg trailblazer.
@@ -31620,6 +31646,9 @@ unsafe extern "C" {
 
     /// Unary elementwise `gelu_tanh`, f16 dtype, contiguous fast path.
     ///
+    /// Tanh APPROXIMATION of gelu — diverges from the erf-exact
+    /// `unary_gelu_*` by up to ~1e-4.
+    ///
     /// # Safety
     /// Same device-pointer / stream contract as the unary-neg trailblazer. `x` / `y` point to `__half` storage.
     pub fn baracuda_kernels_unary_gelu_tanh_f16_run(
@@ -31674,6 +31703,9 @@ unsafe extern "C" {
 
     /// Unary elementwise `gelu_tanh`, bf16 dtype, contiguous fast path.
     ///
+    /// Tanh APPROXIMATION of gelu — diverges from the erf-exact
+    /// `unary_gelu_*` by up to ~1e-4.
+    ///
     /// # Safety
     /// Same device-pointer / stream contract as the unary-neg trailblazer. `x` / `y` point to `__nv_bfloat16` storage.
     pub fn baracuda_kernels_unary_gelu_tanh_bf16_run(
@@ -31727,6 +31759,9 @@ unsafe extern "C" {
     ) -> i32;
 
     /// Unary elementwise `gelu_tanh`, f64 dtype, contiguous fast path.
+    ///
+    /// Tanh APPROXIMATION of gelu — diverges from the erf-exact
+    /// `unary_gelu_*` by up to ~1e-4.
     ///
     /// # Safety
     /// Same device-pointer / stream contract as the unary-neg trailblazer. `x` / `y` point to `double` storage.
@@ -39117,7 +39152,11 @@ unsafe extern "C" {
     // duplication is intentional (Fuel ask); a future consolidation
     // may make `unary_gelu_*` an alias of `unary_gelu_erf_*`.
 
-    /// `unary_gelu_erf`, f32, contig. Bit-identical to `unary_gelu_f32`.
+    /// `unary_gelu_erf`, f32, contig.
+    ///
+    /// Bit-identical alias of `unary_gelu_*` (ERF-EXACT flavor) —
+    /// added in Phase 31 so consumers can bind the flavor
+    /// unambiguously by name.
     pub fn baracuda_kernels_unary_gelu_erf_f32_run(
         numel: i64, x: *const c_void, y: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
@@ -39148,6 +39187,10 @@ unsafe extern "C" {
     ) -> i32;
 
     /// `unary_gelu_erf`, f16, contig.
+    ///
+    /// Bit-identical alias of `unary_gelu_*` (ERF-EXACT flavor) —
+    /// added in Phase 31 so consumers can bind the flavor
+    /// unambiguously by name.
     pub fn baracuda_kernels_unary_gelu_erf_f16_run(
         numel: i64, x: *const c_void, y: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
@@ -39179,6 +39222,10 @@ unsafe extern "C" {
     ) -> i32;
 
     /// `unary_gelu_erf`, bf16, contig.
+    ///
+    /// Bit-identical alias of `unary_gelu_*` (ERF-EXACT flavor) —
+    /// added in Phase 31 so consumers can bind the flavor
+    /// unambiguously by name.
     pub fn baracuda_kernels_unary_gelu_erf_bf16_run(
         numel: i64, x: *const c_void, y: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
@@ -39210,6 +39257,10 @@ unsafe extern "C" {
     ) -> i32;
 
     /// `unary_gelu_erf`, f64, contig.
+    ///
+    /// Bit-identical alias of `unary_gelu_*` (ERF-EXACT flavor) —
+    /// added in Phase 31 so consumers can bind the flavor
+    /// unambiguously by name.
     pub fn baracuda_kernels_unary_gelu_erf_f64_run(
         numel: i64, x: *const c_void, y: *mut c_void,
         workspace: *mut c_void, workspace_bytes: usize, stream: *mut c_void,
@@ -47097,6 +47148,33 @@ unsafe extern "C" {
         b: *const c_void, b_type: i32, ldb: i32,
         beta: *const c_void,
         c: *mut c_void, c_type: i32, ldc: i32,
+        compute_type: i32, algo: i32,
+    ) -> i32;
+
+    /// `cublasGemmStridedBatchedEx` — mixed-precision strided-batched
+    /// GEMM with explicit dtype tags (Phase 74). The `Ex` sibling of
+    /// [`cublasSgemmStridedBatched`]: each batch slot `i` computes
+    /// `C[i] := α · op(A[i]) · op(B[i]) + β · C[i]` where the slot-`i`
+    /// operand is reached by adding `i * stride_*` (in **elements**) to
+    /// the base pointer. `stride_a` / `stride_b` may be `0` to broadcast
+    /// one matrix across all slots; `stride_c` must step disjoint
+    /// output regions.
+    ///
+    /// # Safety
+    /// `handle` is a live cuBLAS handle bound to the desired stream.
+    /// `alpha`/`beta` are host pointers; their type must match
+    /// `compute_type`. `a`/`b`/`c` are device pointers; their element
+    /// type must match the respective `cudaDataType` tags.
+    pub fn cublasGemmStridedBatchedEx(
+        handle: cublasHandle_t,
+        transa: i32, transb: i32,
+        m: i32, n: i32, k: i32,
+        alpha: *const c_void,
+        a: *const c_void, a_type: i32, lda: i32, stride_a: i64,
+        b: *const c_void, b_type: i32, ldb: i32, stride_b: i64,
+        beta: *const c_void,
+        c: *mut c_void, c_type: i32, ldc: i32, stride_c: i64,
+        batch_count: i32,
         compute_type: i32, algo: i32,
     ) -> i32;
 
@@ -63737,6 +63815,19 @@ pub use curand_facade::*;
 mod cutlass_reexport;
 #[cfg(any(feature = "sm80", feature = "sm90a"))]
 pub use cutlass_reexport::*;
+
+// Phase 74 — dense FP GEMM FFI facade (cuBLAS-backed). Pure-Rust
+// `#[no_mangle]` wrappers exposing a plain dense f32/f64/f16/bf16 GEMM
+// family (`baracuda_kernels_gemm_dense_*`) with runtime layout tags
+// (RRR / RCR / CRR), flexible leading dims, and strided-batch folded
+// into the base symbol. Closes the Fuel 2026-06-10 ask — the last
+// non-baracuda CUDA surface in Fuel (its own cuBLAS MatMul wrapper).
+// No feature gate — cuBLAS ships with the CUDA toolkit and is already
+// on this crate's link line. See module docs for the pooled-handle
+// lifecycle (deliberate deviation from the transient-handle facade
+// convention: GEMM is too hot for per-call create/destroy).
+mod gemm_dense_cublas_facade;
+pub use gemm_dense_cublas_facade::*;
 
 // =============================================================================
 // Phase 53 — bitsandbytes NF4 (NormalFloat 4-bit) dequant + GEMV.

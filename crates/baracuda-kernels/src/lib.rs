@@ -73,8 +73,8 @@ pub use baracuda_kernels_types::{
     IndexOutputKind, IndexingKind,
     IntElement, KernelDtype, KernelSku, LayoutSku, LinalgKind, LossKind, LossReduction,
     MathPrecision, MatrixMut, MatrixRef, MoeKind, NormalizationKind, OpCategory, PadMode,
-    PlanPreference, PoolKind, PrecisionGuarantee, QuantizeKind, RandomKind, ReduceKind, S4, S8,
-    ScalarType, ScanKind, SegmentKind,
+    PlanPreference, PoolKind, PrecisionGuarantee, QuantizeKind, RandomKind, ReduceKind,
+    ReduceToOp, S4, S8, ScalarType, ScanKind, SegmentKind,
     ShapeLayoutKind, SoftmaxKind, SortKind, TensorMut, TensorRef, TernaryKind, U4, U8, UnaryKind,
     VectorRef, Workspace,
 };
@@ -88,13 +88,15 @@ pub use baracuda_cutlass::{
     PreparedGroupedGemm, Result,
 };
 
-// Unified GEMM plan dispatchers. Today exposes only `IntGemmPlan` (RCR
-// → CUTLASS, RRR → bespoke); float GEMM and the FP8 / int4 / bin
-// dispatchers join later.
+// Unified GEMM plan dispatchers: the quantized / packed families
+// (int / fp8 / int4 / bin / sparse24) plus, since Phase 74, the plain
+// dense FP family (`DenseGemmPlan` — cuBLAS-backed, RRR / RCR / CRR,
+// strided-batch).
 pub mod gemm;
 
 pub use gemm::{
-    BinGemmArgs, BinGemmDescriptor, BinGemmPlan, Fp8GemmArgs, Fp8GemmDescriptor, Fp8GemmPlan,
+    BinGemmArgs, BinGemmDescriptor, BinGemmPlan, DenseGemmArgs, DenseGemmDescriptor,
+    DenseGemmLayout, DenseGemmPlan, Fp8GemmArgs, Fp8GemmDescriptor, Fp8GemmPlan,
     GemmSparse24Args, GemmSparse24Descriptor, GemmSparse24Plan, Int4GemmArgs, Int4GemmDescriptor,
     Int4GemmPlan, IntGemmArgs, IntGemmDescriptor, IntGemmPlan,
 };
@@ -163,7 +165,7 @@ pub use reduce::{
     ArgReduceArgs, ArgReduceDescriptor, ArgReducePlan, BoolReduceArgs, BoolReduceDescriptor,
     BoolReducePlan, CountReduceArgs, CountReduceDescriptor, CountReducePlan, ReduceArgs,
     ReduceBackwardArgs, ReduceBackwardDescriptor, ReduceBackwardPlan, ReduceDescriptor, ReducePlan,
-    TraceArgs, TraceDescriptor, TracePlan,
+    ReduceToArgs, ReduceToDescriptor, ReduceToPlan, TraceArgs, TraceDescriptor, TracePlan,
 };
 
 // Scan (associative prefix) op family — Phase 4 (Category F).

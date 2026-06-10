@@ -221,9 +221,15 @@ pub enum UnaryKind {
     // ---- Category B': activations (unparameterized) ----
     /// `y = relu(x) = max(x, 0)`.
     Relu = 100,
-    /// `y = gelu(x)` — exact (erf-based) Gaussian Error Linear Unit.
+    /// `y = gelu(x)` — ERF-EXACT Gaussian Error Linear Unit,
+    /// `0.5·x·(1+erf(x/√2))` — NOT the tanh approximation (that's
+    /// [`Self::GeluTanh`]). The sys-level `unary_gelu_erf_*` symbols
+    /// are a bit-identical alias of the `unary_gelu_*` symbols this
+    /// variant dispatches to.
     Gelu = 101,
-    /// `y = gelu_tanh(x)` — tanh-approximate GELU.
+    /// `y = gelu_tanh(x)` — tanh APPROXIMATION of gelu,
+    /// `0.5·x·(1+tanh(√(2/π)·(x+0.044715·x³)))`. Diverges from the
+    /// erf-exact [`Self::Gelu`] by up to ~1e-4.
     GeluTanh = 102,
     /// `y = silu(x) = x · sigmoid(x)`. Also known as Swish-1.
     Silu = 103,
@@ -283,6 +289,12 @@ pub enum UnaryKind {
     /// Reasonable |n| values round-trip through f32 exactly (≤ 2^24).
     /// Phase 12.1 wires `{f32, f16, bf16, f64}` through `UnaryParamPlan`.
     PowI = 121,
+    /// `y = step(x) = 1 if x > 0 else 0` — Heaviside step function.
+    /// `step(0) = 0` and `step(-0.0) = 0` (`x > 0` is false at both
+    /// zeros); NaN → 0 (`NaN > 0` is false), matching PyTorch's
+    /// `heaviside(x, values=0)` for the `>` branch. Wires the Phase 31
+    /// `unary_step_*` kernels.
+    Step = 122,
 
     // ---- Category B: dtype / scalar-shape ops ----
     /// `y = (TOut) x` — dtype conversion. Heterogeneous input / output
@@ -501,6 +513,42 @@ pub enum ReduceKind {
     /// `ReducePlan`); the discriminant lives here for telemetry /
     /// SKU-tagging consistency with the rest of the reduction family.
     CountNonzero = 14,
+}
+
+/// Broadcast-reverse reduction op discriminant — `ReduceToPlan`.
+///
+/// The autograd primitive that undoes a forward `BroadcastTo`: for
+/// each output cell, reduce every input cell that broadcasts TO it.
+/// Distinct from [`ReduceKind`] because the reduction collapses an
+/// arbitrary *set* of axes in one launch (every dim where
+/// `output_shape[d] == 1` while `input_shape[d] != 1`) rather than a
+/// single `reduce_axis`, so dispatch goes through its own plan shape
+/// (`ReduceToPlan<T, N>` in `baracuda-kernels`).
+///
+/// Discriminants mirror [`ReduceKind`]'s values for the same logical
+/// op so `KernelSku::op` tags consistently across the reduction
+/// family (hence the gap at 1 — there is no broadcast-reverse Mean).
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
+#[repr(u16)]
+#[non_exhaustive]
+pub enum ReduceToOp {
+    /// Sum over the broadcast set. Identity on an empty reduce set
+    /// (any reduced `input_shape[d] == 0`): `0`.
+    Sum = 0,
+    /// Maximum over the broadcast set. Identity on an empty reduce
+    /// set: `-FLT_MAX` / `-DBL_MAX` per the kernel's `AccMax` policy —
+    /// the most-negative *finite* value for f32 / f64 outputs. For
+    /// f16 / bf16 the f32 identity overflows the storage dtype on the
+    /// final narrowing store and lands as `-inf`.
+    Max = 2,
+    /// Minimum over the broadcast set. Identity on an empty reduce
+    /// set: `+FLT_MAX` / `+DBL_MAX` per the kernel's `AccMin` policy —
+    /// the most-positive *finite* value for f32 / f64 outputs; `+inf`
+    /// for f16 / bf16 (same narrowing overflow as [`Self::Max`]).
+    Min = 3,
+    /// Product over the broadcast set. Identity on an empty reduce
+    /// set: `1`.
+    Prod = 4,
 }
 
 /// Softmax-family op discriminant — category H from the comprehensive

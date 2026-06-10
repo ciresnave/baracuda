@@ -2,7 +2,9 @@
 //!
 //! Output shape differs from input: the reduced axis collapses to size
 //! 1 (keepdim convention). Single-axis reductions today; full-tensor
-//! and multi-axis reductions reduce to repeated single-axis ops.
+//! and multi-axis reductions reduce to repeated single-axis ops —
+//! except the broadcast-reverse [`ReduceToPlan`], which collapses
+//! every broadcast dim in one launch.
 //!
 //! Today wired:
 //!
@@ -24,6 +26,12 @@
 //! - **[`TracePlan`]** — scalar `trace(M)` for rank-2 matrices (both
 //!   axes reduced along the diagonal).
 //!
+//! - **[`ReduceToPlan`]** — broadcast-reverse `{Sum, Max, Min, Prod} ×
+//!   {f32, f16, bf16, f64}` (16 cells). Collapses every broadcast dim
+//!   in one launch (the inverse of a forward `BroadcastTo` — autograd's
+//!   `ReduceSumTo` / `ReduceMaxTo`); Phase 74 facade over the Phase 31 /
+//!   37 `reduce_*_to_*` FFI symbols.
+//!
 //! All reduction FW + BW are deterministic and bit-stable on the same
 //! hardware (no atomic-add; one-block-per-output-cell or one-thread-per-
 //! output-cell). f16 / bf16 accumulate in f32 (FP detour); f64 keeps
@@ -34,6 +42,7 @@ pub mod axis;
 pub mod axis_backward;
 pub mod bool_axis;
 pub mod count_axis;
+pub mod reduce_to;
 pub mod trace;
 
 pub use arg_axis::{ArgReduceArgs, ArgReduceDescriptor, ArgReducePlan};
@@ -41,4 +50,5 @@ pub use axis::{ReduceArgs, ReduceDescriptor, ReducePlan};
 pub use axis_backward::{ReduceBackwardArgs, ReduceBackwardDescriptor, ReduceBackwardPlan};
 pub use bool_axis::{BoolReduceArgs, BoolReduceDescriptor, BoolReducePlan};
 pub use count_axis::{CountReduceArgs, CountReduceDescriptor, CountReducePlan};
+pub use reduce_to::{ReduceToArgs, ReduceToDescriptor, ReduceToPlan};
 pub use trace::{TraceArgs, TraceDescriptor, TracePlan};

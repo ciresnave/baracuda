@@ -625,10 +625,11 @@ and bench-driven perf wins. Highlights:
 - **Phase 63 (alpha.63)** — FA2 saved-tensor wiring for downstream
   autograd.
 
-### Phases 64-71 — released-with the next alpha
+### Phases 64-74 — recent release history
 
-Currently accumulating into the next published alpha (no version
-bump yet — see `CHANGELOG.md`).
+Phases 64-71 shipped with alpha.64; Phases 72-73 shipped with
+alpha.65; alpha.66 added the driver VRAM introspection (Fuel ask);
+Phase 74 shipped with alpha.67 (see `CHANGELOG.md`).
 
 - **Phase 64** — Extended in-place aliasing docs for Cast / Where /
   Triu / Tril / Activation BW / Fill (safe); Flip / Roll / Permute /
@@ -645,6 +646,18 @@ bump yet — see `CHANGELOG.md`).
 - **Phase 69** — NVSHMEM host-side wrapper pair.
 - **Phase 70** — nvImageCodec sys + safe wrapper (supersedes nvJPEG).
 - **Phase 71** — RAPIDS cuVS GPU vector-search pair.
+- **Phase 72** — Strided FFI siblings for the normalizer + shape-op
+  families (88 new FFI symbols; alpha.65).
+- **Phase 73** — Cross-impl bench follow-ups: `FlashDecodingPlan`
+  (split-K seq_q=1 decode, 12-16×), warp-cooperative QKᵀ, concat +
+  reduce perf closures (alpha.65).
+- **Phase 74** — Fuel dense-FP-GEMM + reduce-to closure: NEW
+  cuBLAS-backed `baracuda_kernels_gemm_dense_*` FFI family
+  (f32/f64/f16/bf16 × RRR/RCR/CRR × strided-batch, 12 symbols) +
+  `DenseGemmPlan<T>`; NEW `ReduceToPlan<T, N>` + `UnaryKind::Step`
+  facades over the existing Phase 31/37 sys symbols; gelu flavor
+  doc disambiguation. See
+  `docs/fuel-reply-fp-gemm-reduce-to-2026-06-10.md`.
 
 ### Outstanding work
 
@@ -655,6 +668,6 @@ The original "Phase 11 = Hopper sm_90a" and "Phase 12 = 1.0 freeze"
 items remain valid targets but are sequenced behind ongoing
 downstream-driven work.
 
-The current published tag is **v0.0.1-alpha.63**. Phases 64-71 are
-queued for the next alpha; consult `CHANGELOG.md` for the
-release-by-release detail.
+The current published tag is **v0.0.1-alpha.67** (Phase 74 — Fuel
+dense-FP-GEMM + reduce-to facade closure); consult `CHANGELOG.md`
+for the release-by-release detail.

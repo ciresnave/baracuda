@@ -8,9 +8,9 @@
 A unified Rust ML-op facade over the NVIDIA CUDA ecosystem.
 
 ![License](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue)
-![Status](https://img.shields.io/badge/status-alpha.66-orange)
+![Status](https://img.shields.io/badge/status-alpha.67-orange)
 ![CUDA](https://img.shields.io/badge/CUDA-12.x-76b900)
-![Tests](https://img.shields.io/badge/regression-2250%2B%2F0-success)
+![Tests](https://img.shields.io/badge/regression-2280%2B%2F0-success)
 
 ## What baracuda is
 
@@ -40,13 +40,22 @@ talk to one library directly.
 
 ## Status
 
-**In active development — alpha.66.** **2250+ GPU tests passing,
+**In active development — alpha.67.** **2280+ GPU tests passing,
 zero failures** across the 6 critical test crates on an RTX 4070
-(sm_89). alpha.66 (Fuel-ask) exposes **per-device VRAM queries** on
-the Driver-API `Device` — `vram_free()` / `vram_total()` /
-`vram_info()` wrap `cuMemGetInfo_v2` so downstream optimizers can read
-runtime memory pressure without round-tripping through a failed
-allocation. Phase 73 follow-up (alpha.65) lands a **17-33× decode
+(sm_89; the `baracuda-kernels` suite alone is 2180/0 across 513 test
+binaries). alpha.67 (Phase 74, Fuel-ask) ships the **plain dense FP
+GEMM family**: 12 cuBLAS-backed flat C symbols
+(`baracuda_kernels_gemm_dense_{f32, f64, f16, bf16}_*`) with
+RRR / RCR / **CRR** layouts, flexible leading dims, and
+strided-batch folded into the base signature — plus the
+`DenseGemmPlan<T>` typed plan, the `ReduceToPlan<T, N>`
+broadcast-reverse reduction facade, `UnaryKind::Step`, and gelu
+flavor-disambiguation docs. This closes the last non-baracuda CUDA
+surface in Fuel (its own cuBLAS MatMul wrapper). alpha.66 (Fuel-ask)
+exposed **per-device VRAM queries** on the Driver-API `Device` —
+`vram_free()` / `vram_total()` / `vram_info()` wrap
+`cuMemGetInfo_v2` so downstream optimizers can read runtime memory
+pressure without round-tripping through a failed allocation. Phase 73 follow-up (alpha.65) lands a **17-33× decode
 speedup** via a focused FlashDecodingPlan (split-K, seq_q=1),
 **4× win at GQA shapes** via the new `num_kv_heads` descriptor
 field, the long-awaited `FlashSdpaPlan` GQA-broadcast routing fix,

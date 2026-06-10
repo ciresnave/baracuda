@@ -8,7 +8,56 @@ alpha represents one or more completed phases.
 The phase numbering is Fuel-driven (Fuel is baracuda's primary downstream
 consumer); see `ROADMAP.md` for the active phase board.
 
-## Unreleased
+## 0.0.1-alpha.67 — 2026-06-10 (Phase 74 — Fuel dense FP GEMM + reduce-to closure)
+
+### Added — kernels
+
+- **Phase 74 — Fuel dense-FP-GEMM + reduce-to facade closure** (Fuel
+  ask 2026-06-10; full consumer reply in
+  `docs/fuel-reply-fp-gemm-reduce-to-2026-06-10.md`):
+  - NEW `gemm_dense_cublas_facade` in `baracuda-kernels-sys` — **12
+    flat C symbols** `baracuda_kernels_gemm_dense_{f32, f64, f16,
+    bf16}_{run, can_implement, workspace_size}`, cuBLAS-backed
+    (`cublasGemmEx` / newly-declared `cublasGemmStridedBatchedEx`).
+    Row-major dense GEMM with runtime layout tag (RRR / RCR / CRR),
+    flexible leading dims, strided-batch folded into the base symbol
+    (`stride 0` = broadcast). f16/bf16 accumulate in f32; f32 is true
+    IEEE binary32 (default math mode, NOT TF32); f64 = `COMPUTE_64F`.
+    Lock-free context-keyed cuBLAS handle pool (hot-path deviation
+    from the transient-handle facade convention; documented hazards).
+  - NEW `DenseGemmPlan<T>` typed plan over the same symbols, with
+    buffer-bounds (`BufferTooSmall`) validation at the safe layer and
+    plan-local `DenseGemmLayout` (CRR has no `LayoutSku` variant yet).
+  - NEW `ReduceToPlan<T, N>` facade (`{Sum, Max, Min, Prod} × {f32,
+    f64, f16, bf16}`) + `ReduceToOp` in `baracuda-kernels-types` over
+    the existing Phase 31/37 `reduce_*_to_*` FFI symbols (no new
+    kernels — closes the sys-only facade gap that hid the capability
+    from Fuel's alpha.66 audit).
+  - `UnaryKind::Step` now dispatches through `UnaryPlan` (contig +
+    strided × 4 dtypes; the kernels shipped in Phase 31).
+  - Gelu flavor disambiguation docs on `unary_gelu_*` /
+    `unary_gelu_erf_*` (bit-identical erf-exact twins) /
+    `unary_gelu_tanh_*` (tanh approximation) and
+    `UnaryKind::{Gelu, GeluTanh}`.
+  - Tests: `dense_gemm_smoke` (3 layouts vs f64 CPU ref, padded lds,
+    β-accumulate, strided batch + broadcast, all dtypes, direct-FFI
+    binding-table shape, rejection matrix), `reduce_to_plan_smoke`,
+    `unary_step_smoke` plan-level extension. All green on RTX 4070.
+
+## 0.0.1-alpha.66 — 2026-06-07 (driver VRAM introspection)
+
+- **`Device::vram_info` / `vram_free` / `vram_total`** wrapping
+  `cuMemGetInfo_v2` (Fuel ask — powers Fuel's `BackendRuntime` and
+  VRAM-pressure backend selection). Current-context caveat
+  documented. See `ROADMAP.md` for detail.
+
+## 0.0.1-alpha.65 — 2026-06-05 (Phases 72 + 73)
+
+- **Phase 73 — Cross-impl bench follow-ups**: `FlashDecodingPlan`
+  (split-K seq_q=1 decode, 12-16× vs the pre-fix path),
+  warp-cooperative QKᵀ (2-2.6× at K≤2048), concat + reduce perf
+  closures, `fa2` promoted to a default feature. See `ROADMAP.md`
+  for the per-item detail.
 
 ### Added — kernels
 

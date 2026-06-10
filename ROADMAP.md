@@ -7,16 +7,18 @@ effort within each category. Authoritative status per op lives in
 [`OP-MATRIX.md`](OP-MATRIX.md); historical phase summaries live in
 [`ARCHITECTURE.md`](ARCHITECTURE.md).
 
-The current release is **v0.0.1-alpha.66** with **2250+ GPU tests
+The current release is **v0.0.1-alpha.67** with **2280+ GPU tests
 passing, zero failures** across the 6 critical test crates
 (baracuda-kernels, baracuda-optim, baracuda-megatron, baracuda-nccl,
-baracuda-transformer-engine, baracuda-ozimmu) on RTX 4070 (sm_89).
-Phase 64 work is **in progress (no version bump yet)** — Fuel is
-adding a large batch of in-place ops; baracuda is accumulating
-in-place-coverage closures across multiple kernel families before
-the next release.
+baracuda-transformer-engine, baracuda-ozimmu) on RTX 4070 (sm_89);
+the `baracuda-kernels` suite alone is 2180/0 across 513 binaries.
+alpha.67 ships Phase 74 (Fuel dense-FP-GEMM + reduce-to facade
+closure — see the Phase 74 entry below). Phases 64-71 shipped with
+alpha.64 and 72-73 with alpha.65 (the two phase write-ups below are
+kept for technical reference; their "in-progress" framing predates
+those releases).
 
-**Phase 65a (in-progress, no version bump)** — SMEM staging
+**Phase 65a (shipped alpha.64)** — SMEM staging
 infrastructure for the normalizer-family retrofit. Adds two
 reusable kernel-helper headers under
 `crates/baracuda-kernels-sys/kernels/include/`:
@@ -50,8 +52,59 @@ for same-pointer aliasing. The retrofit fixes this for the
 common case + ships a `_max_inplace_dim` helper so callers can
 check before dispatch.
 
-**Phase 64 (in-progress, no version bump — accumulating for next
-release)** closes baracuda's documentation gap on five additional
+**Phase 74 (complete; shipped alpha.67, 2026-06-10)** closes Fuel's
+2026-06-10 coordinated ask (dense FP GEMM +
+broadcast-reverse reductions; see
+`docs/fuel-reply-fp-gemm-reduce-to-2026-06-10.md` for the full
+consumer-facing reply). The goal it serves: after Fuel binds these,
+their `register_cuda_kernels` shrinks to `Op::Copy` D2H only — no
+non-baracuda CUDA code left in Fuel.
+
+- **Dense FP GEMM family** (the real gap): NEW
+  `gemm_dense_cublas_facade` in `baracuda-kernels-sys` — 12 flat C
+  symbols `baracuda_kernels_gemm_dense_{f32, f64, f16, bf16}_{run,
+  can_implement, workspace_size}`, cuBLAS-backed (`cublasGemmEx` /
+  `cublasGemmStridedBatchedEx`, the latter newly declared). Layouts
+  RRR / RCR / **CRR** as a runtime tag (CRR = col-major A, the
+  grad-weight shape — first family to offer it), flexible leading
+  dims (row-slice views, the Fuel noncontig-matmul cases), batch
+  folded into the base symbol with element strides (`stride 0` =
+  broadcast). f16/bf16 accumulate in f32; **f32 is true IEEE
+  binary32** (default math mode, NOT TF32 — differs from
+  `GemmPlan<f32>`'s CUTLASS TF32 SKU); f64 = `COMPUTE_64F`.
+  Handle lifecycle is a lock-free context-keyed handle POOL (a
+  deliberate deviation from the transient-handle facade convention —
+  GEMM is too hot for per-call `cublasCreate`/`Destroy`, whose
+  destroy hides a device-syncing `cudaFree`). NEW typed plan
+  `DenseGemmPlan<T>` in `baracuda-kernels/src/gemm/dense_gemm.rs`
+  over the same symbols, with plan-local `DenseGemmLayout`
+  (`LayoutSku` has no `Crr`; unifying the vocabularies stays with
+  the layout-planner backlog item).
+- **Reduce-to-shape (Ask 2) needed ZERO kernel work** — Fuel's audit
+  premise was stale: `reduce_{sum,max}_to_{f32,f64,f16,bf16}`
+  shipped in alpha.46 (Phase 31) and `{min,prod}` in alpha.52
+  (Phase 37), exactly the requested contract. The audit missed them
+  because the symbols were sys-only. Facade-gap class closed: NEW
+  `ReduceToPlan<T, N>` (`{Sum, Max, Min, Prod} × 4 FP dtypes`, NEW
+  `ReduceToOp` in kernels-types) + `UnaryKind::Step` now dispatching
+  through `UnaryPlan` (contig + strided, 4 dtypes — the other
+  sys-only facade gap Fuel flagged).
+- **Gelu flavor docs** (Fuel info item): explicit erf-exact /
+  bit-identical-alias / tanh-approximation notes on all three
+  `unary_gelu*` sys families + `UnaryKind::{Gelu, GeluTanh}` —
+  prevents the next consumer repeating Fuel's 2-week tanh-flavor
+  mis-registration. No deprecation of the erf twins in the alphas.
+- Tests: `dense_gemm_smoke` (15: 3 layouts vs f64 CPU ref, padded
+  lds, β-accumulate, strided batch + broadcast, f64/f16/bf16,
+  direct-FFI binding-table shape, can_implement + BufferTooSmall
+  rejections, 12-thread handle-pool concurrency),
+  `reduce_to_plan_smoke` (8: plan-level, incl. strided input,
+  stride-0 broadcast input + empty-set identity),
+  `unary_step_smoke` extended with plan-level cases (incl. NaN /
+  ±0.0 inputs).
+
+**Phase 64 (shipped alpha.64)** closes baracuda's documentation gap
+on five additional
 kernel families that are structurally per-thread-isolated and
 therefore safe to dispatch with same-pointer aliasing, but lacked
 the explicit FFI-level aliasing contract. Documented as stable

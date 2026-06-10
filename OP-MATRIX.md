@@ -34,6 +34,7 @@ Dtype shorthand:
 | Op | Backend | Dtypes | Shapes / Limits | FW | BW | Notes |
 |----|---------|--------|-----------------|----|----|-------|
 | `GemmPlan` | Cutlass | `{f16, bf16, f32 (TF32), F32Strict (SIMT), f64}` | M/N/K ≥ 1 | ✓ | N/A (inference) | Re-export of `baracuda_cutlass::GemmPlan`. Layouts `{Rcr, Rrr}`. Full bias-family epilogue: `{Identity, Bias, BiasRelu, BiasGelu, BiasSilu}`. F64 routes to cuBLAS DGEMM. |
+| `DenseGemmPlan<T>` | cuBLAS | `{f32 (IEEE binary32 — NOT TF32), f64, f16, bf16}`; halves accumulate in f32 | M/N/K/batch ≥ 0; `ld` ≥ layout minimum, fits i32 | ✓ | N/A | Phase 74. Plain dense family with layouts `{Rrr, Rcr, Crr}` (CRR = col-major A, the grad-weight shape — unique to this family), flexible leading dims (row-slice views), strided-batch folded into the descriptor (`stride_a/b = 0` broadcasts). Identity epilogue only (`α`/`β`; `β ≠ 0` accumulates into `D` in place). FFI twins: `baracuda_kernels_gemm_dense_*` (12 symbols). |
 | `BatchedGemmPlan` | Cutlass | same as `GemmPlan` | uniform M/N/K across batch | ✓ | N/A | Same SKU surface as `GemmPlan` with a fixed batch stride. |
 | `GroupedGemmPlan` | Cutlass | `{f16, bf16, f32, f64}` | per-problem M/N/K | ✓ | N/A | Variable-shape grouped GEMM. Three scheduling modes (`Device`, `Host`, `Persistent`). |
 | `IntGemmPlan<T, BT>` | Bespoke (RRR) + Cutlass (RCR) | `T ∈ {s8, u8}` × `BT ∈ {f32, i32}` | M/N/K ≥ 1, 8B-aligned | ✓ | N/A | W8A8 dispatcher. RCR delegates to `baracuda-cutlass`; RRR uses `mma.sync.m16n8k32.row.col.satfinite`. Full bias-family epilogue. |
@@ -89,6 +90,7 @@ Dtype shorthand:
 | `ArgReducePlan<T, N, I>` | Bespoke | FP-family input → `I ∈ {u32, i32, i64}` output | rank ≤ 8 | ✓ | N/A | Kinds: `{ArgMax, ArgMin}`. Reduce axis must be non-empty. Phase 12.2 added u32/i32 output dtypes via new `IndexOutputElement` sealed trait (default `I = i64` preserves source-compat). |
 | `BoolReducePlan<T, N>` | Bespoke | `{f32, f16, bf16, f64, i32, i64, Bool}` input → `Bool` output | rank ≤ 8 | ✓ | N/A | Kinds: `{Any, All}`. Pure integer AND/OR — bit-stable, deterministic. |
 | `CountReducePlan<T, N>` | Bespoke | `{f32, f16, bf16, f64, i32, i64, Bool}` input → `i64` output | rank ≤ 8 | ✓ | N/A | Kind: `CountNonzero`. i64 accumulator. |
+| `ReduceToPlan<T, N>` | Bespoke | `{f32, f16, bf16, f64}`; halves accumulate in f32 | rank ≤ 8; per-dim `out[d] ∈ {1, in[d]}` | ✓ | N/A (is itself the BW of broadcast) | Kinds: `{Sum, Max, Min, Prod}`. Broadcast-reverse (autograd's `ReduceSumTo`/`ReduceMaxTo`) — collapses every broadcast dim in one launch. Strided input OK; output contiguous. Kernels shipped Phase 31/37 (`reduce_*_to_*` FFI); Phase 74 added this plan facade. Empty reduce set → identity (`0`/`1` for Sum/Prod; `∓FLT_MAX`/`∓DBL_MAX` for Max/Min on f32/f64 — narrows to `∓inf` on f16/bf16 store). |
 | `TracePlan<T>` | Bespoke | FP-family | rank-2 only | ✓ | N/A | Sum of diagonal (both axes reduced). Scalar output. |
 
 ---

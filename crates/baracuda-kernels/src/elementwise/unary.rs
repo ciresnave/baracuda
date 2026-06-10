@@ -148,6 +148,7 @@ impl<T: Element, const N: usize> UnaryPlan<T, N> {
                 | UnaryKind::Elu
                 | UnaryKind::Hardshrink
                 | UnaryKind::Softshrink
+                | UnaryKind::Step
         );
         let dtype_in_scope = matches!(
             T::KIND,
@@ -1428,6 +1429,27 @@ impl<T: Element, const N: usize> UnaryPlan<T, N> {
             },
             (UnaryKind::Softshrink, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_softshrink_f64_run(
+                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                )
+            },
+            // Step (Heaviside; step(0) = 0, NaN → 0) × {f32, f16, bf16, f64}
+            (UnaryKind::Step, ElementKind::F32) => unsafe {
+                baracuda_kernels_sys::baracuda_kernels_unary_step_f32_run(
+                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                )
+            },
+            (UnaryKind::Step, ElementKind::F16) => unsafe {
+                baracuda_kernels_sys::baracuda_kernels_unary_step_f16_run(
+                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                )
+            },
+            (UnaryKind::Step, ElementKind::Bf16) => unsafe {
+                baracuda_kernels_sys::baracuda_kernels_unary_step_bf16_run(
+                    numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                )
+            },
+            (UnaryKind::Step, ElementKind::F64) => unsafe {
+                baracuda_kernels_sys::baracuda_kernels_unary_step_f64_run(
                     numel, x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
                 )
             },
@@ -2840,6 +2862,31 @@ impl<T: Element, const N: usize> UnaryPlan<T, N> {
             },
             (UnaryKind::Softshrink, ElementKind::F64) => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unary_softshrink_f64_strided_run(
+                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
+                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                )
+            },
+            // Step (Heaviside; step(0) = 0, NaN → 0) × {f32, f16, bf16, f64}
+            (UnaryKind::Step, ElementKind::F32) => unsafe {
+                baracuda_kernels_sys::baracuda_kernels_unary_step_f32_strided_run(
+                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
+                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                )
+            },
+            (UnaryKind::Step, ElementKind::F16) => unsafe {
+                baracuda_kernels_sys::baracuda_kernels_unary_step_f16_strided_run(
+                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
+                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                )
+            },
+            (UnaryKind::Step, ElementKind::Bf16) => unsafe {
+                baracuda_kernels_sys::baracuda_kernels_unary_step_bf16_strided_run(
+                    numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
+                    x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
+                )
+            },
+            (UnaryKind::Step, ElementKind::F64) => unsafe {
+                baracuda_kernels_sys::baracuda_kernels_unary_step_f64_strided_run(
                     numel, rank, shape.as_ptr(), stride_x.as_ptr(), stride_y.as_ptr(),
                     x_ptr, y_ptr, core::ptr::null_mut(), 0, stream_ptr,
                 )
