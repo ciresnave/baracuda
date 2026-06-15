@@ -496,6 +496,7 @@ impl KernelBuilder {
                     command.arg("-Xcompiler").arg("-fPIC");
                 } else {
                     command.arg("-D_USE_MATH_DEFINES");
+                    msvc_cccl_args(&mut command);
                 }
 
                 if let Some(threads) = nvcc_threads {
@@ -633,6 +634,7 @@ impl KernelBuilder {
 
         let dep_args = self.dependencies.fetch_all(&self.out_dir)?;
         let ccbin_env = std::env::var("NVCC_CCBIN").ok();
+        let is_msvc = std::env::var("TARGET").ok().is_some_and(|t| t.contains("msvc"));
         let nvcc_threads = self.parallel.nvcc_threads();
         let watch_hash = hash_paths(self.sources.watch_paths());
         let mut cache = BuildCache::load(&self.out_dir);
@@ -713,6 +715,10 @@ impl KernelBuilder {
                     command
                         .arg("-allow-unsupported-compiler")
                         .args(["-ccbin", ccbin]);
+                }
+
+                if is_msvc {
+                    msvc_cccl_args(&mut command);
                 }
 
                 if let Some(threads) = nvcc_threads {
@@ -807,6 +813,38 @@ impl KernelBuilder {
 
         self.out_dir.join(format!("{}-{:x}.o", stem, hash))
     }
+}
+
+/// Append the nvcc flags CCCL-heavy translation units require on MSVC hosts.
+///
+/// CUDA 12.5+ (and every CUDA 13.x, including the 13.3 the Fuel team hit)
+/// bundles a CCCL whose `<cuda/std/__cccl/preprocessor.h>` opens with a hard
+/// `#error` (MSVC `fatal error C1189`) when the host `cl.exe` is driving its
+/// legacy *traditional* preprocessor:
+///
+/// ```text
+/// #if defined(_MSC_VER) && !defined(__clang__)
+/// #  if (!defined(_MSVC_TRADITIONAL) || _MSVC_TRADITIONAL == 1) \
+///     && !defined(CCCL_IGNORE_MSVC_TRADITIONAL_PREPROCESSOR_WARNING)
+/// #    error MSVC/cl.exe with traditional preprocessor is used ...
+/// ```
+///
+/// CUTLASS (here) and cub/thrust (in `baracuda-kernels-sys`) pull this header
+/// in transitively, so *every* CCCL-touching `.cu` fails to compile. We pass
+/// `-Xcompiler /Zc:preprocessor`, which flips `cl.exe` to its standard-
+/// conforming preprocessor (defining `_MSVC_TRADITIONAL=0`). That is both the
+/// fix CCCL's own message recommends and the one CUTLASS's variadic-macro-heavy
+/// headers actually need — unlike defining
+/// `CCCL_IGNORE_MSVC_TRADITIONAL_PREPROCESSOR_WARNING`, which only silences the
+/// guard while leaving the non-conformant preprocessor (and its latent macro-
+/// expansion bugs) in place. Verified against nvcc 13.3 + MSVC 19.5x: the flag
+/// clears the error in both the host and device front-end passes.
+///
+/// No-op gate: callers invoke this only on MSVC targets. `/Zc:preprocessor`
+/// needs VS 2019 16.5+, which every CUDA-12/13-supported MSVC comfortably
+/// exceeds, so it is always safe to pass here.
+fn msvc_cccl_args(command: &mut Command) {
+    command.arg("-Xcompiler").arg("/Zc:preprocessor");
 }
 
 /// Locate the MSVC archiver (`lib.exe`) at build time.

@@ -22,6 +22,21 @@ const CUTLASS_DEFAULT_TAG: &str = "v4.2.0";
 const CUTLASS_2_11_TAG: &str = "v2.11.0";
 const CUTLASS_INCLUDE_PATHS: &[&str] = &["include", "tools/util/include"];
 
+/// Supported CUTLASS version range for the curated `baracuda-cutlass-kernels-sys`
+/// kernel set, when building against a CUTLASS-4 line (the `cutlass-2-11`
+/// feature is a separate, independently-pinned compatibility path and is not
+/// range-checked here).
+///
+/// - Below the minimum → hard error: the validated baseline is v4.2.0, and the
+///   kernels' API assumptions (plus the vendored SIMT broadcast-epilogue
+///   specialization in `baracuda_simt_broadcast_epilogue.h`) are not known to
+///   hold on older releases.
+/// - Above the maximum → warning only: the kernel-critical headers were verified
+///   byte-identical (apart from copyright) across v4.1.0–v4.5.1, so newer 4.x
+///   *may* still compile — we allow it but flag it as unverified.
+const CUTLASS_MIN_SUPPORTED: (u32, u32, u32) = (4, 2, 0);
+const CUTLASS_MAX_SUPPORTED: (u32, u32, u32) = (4, 5, 2);
+
 fn main() {
     println!("cargo:rerun-if-changed=build.rs");
     println!("cargo:rerun-if-env-changed=CUTLASS_DIR");
@@ -84,6 +99,7 @@ fn run() -> Result<(), String> {
             ));
         }
         println!("cargo:warning=baracuda-cutlass-sys: using CUTLASS_DIR={}", root.display());
+        check_cutlass_version(&include)?;
         emit_cargo_keys(&root, &include, "CUTLASS_DIR");
         return Ok(());
     }
@@ -121,6 +137,7 @@ fn run() -> Result<(), String> {
         target.label(),
         dep_dir.display()
     );
+    check_cutlass_version(&include)?;
     emit_cargo_keys(&dep_dir, &include, target.label());
 
     Ok(())
@@ -388,6 +405,90 @@ fn emit_cargo_keys(root: &Path, include: &Path, version_label: &str) {
         root.display()
     );
     println!("cargo:rustc-env=BARACUDA_CUTLASS_VERSION={version_label}");
+}
+
+/// Read `include/cutlass/version.h` and enforce [`CUTLASS_MIN_SUPPORTED`] ..=
+/// [`CUTLASS_MAX_SUPPORTED`].
+///
+/// `< min` is a hard error; `> max` is a warning (build proceeds); in range is
+/// confirmed with an informational note. A `version.h` that can't be read or
+/// parsed is treated as "unknown" — we warn and allow rather than break a build
+/// over an unexpected header format. Skipped entirely for the `cutlass-2-11`
+/// compatibility line, whose version lives outside this range by design.
+fn check_cutlass_version(include: &Path) -> Result<(), String> {
+    if cfg!(feature = "cutlass-2-11") {
+        return Ok(());
+    }
+
+    let (min, max) = (CUTLASS_MIN_SUPPORTED, CUTLASS_MAX_SUPPORTED);
+    let fmt = |v: (u32, u32, u32)| format!("{}.{}.{}", v.0, v.1, v.2);
+    let version_h = include.join("cutlass").join("version.h");
+
+    let Some(v) = parse_cutlass_version(&version_h) else {
+        println!(
+            "cargo:warning=baracuda-cutlass-sys: could not determine CUTLASS version from {} \
+             (supported range {}..={}); proceeding without a version check.",
+            version_h.display(),
+            fmt(min),
+            fmt(max),
+        );
+        return Ok(());
+    };
+
+    if v < min {
+        return Err(format!(
+            "CUTLASS {} is below the minimum supported version {}. The curated \
+             baracuda-cutlass-kernels-sys kernels (and the vendored SIMT broadcast-epilogue \
+             specialization) target the v{} API and are not expected to compile against older \
+             releases. Point CUTLASS_DIR at v{} or newer, or unset it to fetch the pinned default.",
+            fmt(v),
+            fmt(min),
+            fmt(min),
+            fmt(min),
+        ));
+    }
+
+    if v > max {
+        println!(
+            "cargo:warning=baracuda-cutlass-sys: CUTLASS {} is newer than the highest verified \
+             version {}. The curated kernels may still build — the kernel-critical headers were \
+             unchanged across v4.1–v4.5 — but this combination is unverified.",
+            fmt(v),
+            fmt(max),
+        );
+    } else {
+        println!(
+            "cargo:warning=baracuda-cutlass-sys: CUTLASS {} is within the supported range {}..={}.",
+            fmt(v),
+            fmt(min),
+            fmt(max),
+        );
+    }
+
+    Ok(())
+}
+
+/// Parse `CUTLASS_MAJOR` / `CUTLASS_MINOR` / `CUTLASS_PATCH` from a CUTLASS
+/// `version.h`. Returns `None` if the file is unreadable or any field is missing.
+fn parse_cutlass_version(version_h: &Path) -> Option<(u32, u32, u32)> {
+    let text = fs::read_to_string(version_h).ok()?;
+    let field = |name: &str| -> Option<u32> {
+        for line in text.lines() {
+            let Some(rest) = line.trim().strip_prefix("#define") else {
+                continue;
+            };
+            let mut toks = rest.split_whitespace();
+            if toks.next() == Some(name) {
+                return toks.next().and_then(|t| t.parse::<u32>().ok());
+            }
+        }
+        None
+    };
+    Some((
+        field("CUTLASS_MAJOR")?,
+        field("CUTLASS_MINOR")?,
+        field("CUTLASS_PATCH")?,
+    ))
 }
 
 fn git_invocation_error(operation: &str, err: io::Error) -> String {

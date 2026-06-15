@@ -8,6 +8,39 @@ alpha represents one or more completed phases.
 The phase numbering is Fuel-driven (Fuel is baracuda's primary downstream
 consumer); see `ROADMAP.md` for the active phase board.
 
+## 0.0.1-alpha.68 — 2026-06-15 (Fuel — CUDA 13.3 / CCCL MSVC build fix)
+
+Build-system release driven by the Fuel team's CUDA 13.3 upgrade. No kernel
+or public API surface changes; the existing CUTLASS GEMM kernels were
+verified end-to-end (102 GPU smoke tests each) against CUTLASS v4.2.0 and
+4.5.2 on driver 610.47.
+
+### Fixed — build
+
+- **CUDA 13.3 CCCL traditional-preprocessor hard error.** CUDA 12.5+ / 13.x
+  bundle a CCCL whose `<cuda/std/__cccl/preprocessor.h>` raises a hard
+  `#error` (MSVC `C1189`) under cl.exe's legacy "traditional" preprocessor,
+  breaking every CCCL-using `.cu` (CUTLASS, cub/thrust). `baracuda-forge` now
+  passes `-Xcompiler /Zc:preprocessor` on MSVC hosts (in both `build_lib` and
+  `build_ptx`), switching cl.exe to the standard-conforming preprocessor —
+  NVIDIA's recommended fix. All forge consumers inherit it.
+- **`cudart.lib` link-search.** `baracuda-cutlass-kernels-sys` now emits a
+  `rustc-link-search` for the detected CUDA toolkit lib dir, so a binary that
+  depends on `baracuda-cutlass` (but not `baracuda-kernels-sys`) links
+  `cudart` without requiring the CUDA lib dir to already be on `LIB`.
+- **`baracuda-build` Windows lib-dir detection.** `pick_lib_dir` returned the
+  bare `lib` rather than `lib\x64` on Windows (where the import libraries
+  live), contradicting `CudaInstall::lib`'s documented contract and making
+  `CudaToolkit::detect()` disagree with `from_nvcc_path()`. It now prefers
+  `lib\x64`; Linux ordering is unchanged. Regression-tested.
+
+### Added
+
+- **CUTLASS version guard** in `baracuda-cutlass-sys`: a `CUTLASS_DIR`
+  checkout below v4.2.0 is rejected with a hard error, above v4.5.2 warns
+  (the curated kernels are verified across the 4.2–4.5.2 range), and an
+  in-range version is confirmed.
+
 ## 0.0.1-alpha.67 — 2026-06-10 (Phase 74 — Fuel dense FP GEMM + reduce-to closure)
 
 ### Added — kernels

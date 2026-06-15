@@ -1352,6 +1352,43 @@ this; absolute URLs are the workaround.
 the broken image on crates.io. The README badge-update memory
 entry was created in the same session.
 
+### 9.10 CUDA 13.x CCCL hard-errors on MSVC's traditional preprocessor
+
+**Mistake.** `baracuda-cutlass-kernels-sys` (and any cub/thrust-using
+kernel in `baracuda-kernels-sys`) compiled fine under CUDA 12.x but
+failed to build under CUDA 13.3 on Windows/MSVC. `baracuda-forge`
+drove nvcc without `/Zc:preprocessor` and offered no way to inject
+extra defines, so the Fuel team's attempt to set
+`CCCL_IGNORE_MSVC_TRADITIONAL_PREPROCESSOR_WARNING` never reached the
+nvcc command line.
+
+**Fingerprint.** `fatal error C1189: #error: MSVC/cl.exe with
+traditional preprocessor is used ...` pointing at
+`include/cccl/cuda/std/__cccl/preprocessor.h(20)`. Every CCCL-touching
+`.cu` fails identically; CUTLASS and cub/thrust pull this header in
+transitively. The error fires in both the host and device front-end
+passes (it is a pure preprocessor `#if`, keyed on `_MSC_VER` &&
+!`__clang__` && (`!defined(_MSVC_TRADITIONAL)` || `_MSVC_TRADITIONAL == 1`)).
+
+**Fix.** Pass `-Xcompiler /Zc:preprocessor` to nvcc on MSVC hosts —
+done once in `baracuda-forge`'s `build_lib` / `build_ptx` MSVC branch
+(`msvc_cccl_args`), next to the existing `-D_USE_MATH_DEFINES`, so all
+forge consumers inherit it. This flips `cl.exe` to its standard-
+conforming preprocessor (defining `_MSVC_TRADITIONAL=0`), which is what
+CCCL's own message recommends.
+
+**Why `/Zc:preprocessor`, not the ignore define.** Defining
+`CCCL_IGNORE_MSVC_TRADITIONAL_PREPROCESSOR_WARNING` only silences the
+guard; it leaves the non-conformant preprocessor active, which CUTLASS's
+variadic-macro-heavy headers can still miscompile. `/Zc:preprocessor`
+fixes the underlying cause and needs only VS 2019 16.5+ (every
+CUDA-12/13-supported MSVC clears that). Verified on nvcc 13.3 +
+MSVC 19.5x: a `<cuda/functional>` TU goes from C1189 to a clean object.
+
+**Where first hit.** Fuel team CUDA 13.3 build, 2026. The fix lives in
+`baracuda-forge` because both CCCL-heavy sys-crates route through the
+same `KernelBuilder` nvcc chokepoint.
+
 ---
 
 ## Appendix: source map

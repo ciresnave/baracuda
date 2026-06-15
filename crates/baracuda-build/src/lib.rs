@@ -128,7 +128,19 @@ fn pick_nvcc(root: &Path) -> Option<PathBuf> {
 }
 
 fn pick_lib_dir(root: &Path) -> Option<PathBuf> {
-    for sub in &["lib64", "lib", "targets/x86_64-linux/lib", "lib/x64", "bin"] {
+    // Return the directory that actually holds the import/link libraries, in
+    // priority order. On Windows that is `lib\x64` — the bare `lib` is only its
+    // parent and contains no `.lib`, so `lib\x64` must be tried *before* `lib`
+    // (an earlier ordering returned `lib`, breaking `cudart.lib` resolution and
+    // contradicting `CudaInstall::lib`'s documented contract). On Linux the
+    // libraries live in `lib64` or the target-triple dir. `bin` is a last-ditch
+    // fallback for unusual layouts. Linux ordering is preserved exactly.
+    let candidates: &[&str] = if cfg!(target_os = "windows") {
+        &["lib/x64", "lib", "bin"]
+    } else {
+        &["lib64", "lib", "targets/x86_64-linux/lib", "bin"]
+    };
+    for sub in candidates {
         let p = root.join(sub);
         if p.is_dir() {
             return Some(p);
@@ -319,5 +331,27 @@ mod tests {
     #[test]
     fn parse_nvcc_version_returns_none_for_unrelated_output() {
         assert_eq!(parse_nvcc_version("hello world"), None);
+    }
+
+    #[test]
+    fn pick_lib_dir_prefers_arch_specific_subdir() {
+        let tmp = std::env::temp_dir()
+            .join(format!("baracuda-build-libdir-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&tmp);
+
+        if cfg!(target_os = "windows") {
+            // A real Windows toolkit has both `lib` and `lib\x64`; the import
+            // libraries (e.g. cudart.lib) live in `lib\x64`. Regression guard:
+            // the bare `lib` must NOT win over `lib\x64`.
+            fs::create_dir_all(tmp.join("lib").join("x64")).unwrap();
+            assert_eq!(pick_lib_dir(&tmp), Some(tmp.join("lib").join("x64")));
+        } else {
+            // Linux: `lib64` is the canonical lib dir and must win over `lib`.
+            fs::create_dir_all(tmp.join("lib64")).unwrap();
+            fs::create_dir_all(tmp.join("lib")).unwrap();
+            assert_eq!(pick_lib_dir(&tmp), Some(tmp.join("lib64")));
+        }
+
+        let _ = fs::remove_dir_all(&tmp);
     }
 }

@@ -89,6 +89,41 @@ fn main() {
     println!("cargo:rustc-link-search=native={out_dir}");
     println!("cargo:rustc-link-lib=static={lib_name}");
 
+    // Put the CUDA toolkit's lib directory on the linker search path so
+    // `cudart` resolves without relying on the ambient `LIB` (Windows) /
+    // `LIBRARY_PATH` (Linux) environment. A downstream binary that depends on
+    // `baracuda-cutlass` but *not* `baracuda-kernels-sys` has nothing else
+    // contributing this path, so it would otherwise fail to link with
+    // `LNK1181: cannot open input file 'cudart.lib'` whenever the CUDA lib dir
+    // isn't already on `LIB` (e.g. a build invoked from a plain VS dev shell
+    // rather than one with the CUDA paths layered in).
+    //
+    // Reuse baracuda-forge's toolkit detection — it already located nvcc to
+    // drive the build above, and exposes the matching lib dir (`lib/x64` on
+    // Windows, `lib64` on Linux). Best-effort: a detection miss just falls
+    // back to the linker's existing search path, never worse than before.
+    match baracuda_forge::CudaToolkit::detect() {
+        Ok(toolkit) if toolkit.lib_dir.is_dir() => {
+            // forge's `lib_dir` resolves to the import-library directory
+            // (`lib\x64` on Windows, `lib64` on Linux) where `cudart.lib`
+            // lives, regardless of detection path.
+            println!("cargo:rustc-link-search=native={}", toolkit.lib_dir.display());
+        }
+        Ok(toolkit) => {
+            println!(
+                "cargo:warning=baracuda-cutlass-kernels-sys: CUDA lib dir {} not found; \
+                 relying on the linker's existing search path for cudart.",
+                toolkit.lib_dir.display()
+            );
+        }
+        Err(e) => {
+            println!(
+                "cargo:warning=baracuda-cutlass-kernels-sys: could not detect the CUDA toolkit \
+                 lib dir ({e}); relying on the linker's existing search path for cudart."
+            );
+        }
+    }
+
     // CUTLASS GEMMs depend on the CUDA Runtime (cudart) for stream types
     // and a handful of helpers that the kernel objects reference.
     println!("cargo:rustc-link-lib=dylib=cudart");
