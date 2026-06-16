@@ -189,7 +189,11 @@ mod tests {
         // ensure_repr_c_or_transparent permits the attribute…
         ensure_repr_c_or_transparent(&input).expect("repr(C) attr alone passes that check");
         // …but the data-shape check on the enum body rejects.
-        let err = collect_field_types(&input).expect_err("enum body must be rejected");
+        // `.err().expect(..)` rather than `.expect_err(..)`: the latter requires
+        // the Ok type (`Vec<syn::Type>`) to be `Debug`, which needs syn's
+        // `extra-traits` feature (only present here by cross-crate feature
+        // unification in a full-workspace build, so `-p` checks failed).
+        let err = collect_field_types(&input).err().expect("enum body must be rejected");
         assert!(err.to_string().contains("enums"), "msg: {}", err);
     }
 
@@ -199,7 +203,7 @@ mod tests {
             #[repr(C)]
             union U { a: u32, b: f32 }
         };
-        let err = collect_field_types(&input).expect_err("union body must be rejected");
+        let err = collect_field_types(&input).err().expect("union body must be rejected");
         assert!(err.to_string().contains("unions"), "msg: {}", err);
     }
 
