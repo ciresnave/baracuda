@@ -24,8 +24,16 @@ syn.workspace = true
 # `::baracuda_types::DeviceRepr`. A dev-dep cycle back to the parent
 # crate is legal in Cargo and only affects the test build, not the
 # publish artifact.
+#
+# Declared path-only (NOT `workspace = true`) on purpose: a versioned
+# requirement here makes `cargo publish` (1.90+) refuse to publish this
+# crate until `baracuda-types` of the same version is already on the
+# registry — but `baracuda-types` depends on this crate, so neither can
+# go first. cargo drops path-only dev-dependencies from the published
+# manifest, which breaks that publish cycle while keeping `cargo test`
+# working locally.
 [dev-dependencies]
-baracuda-types = { workspace = true, features = ["derive"] }
+baracuda-types = { path = "../baracuda-types", features = ["derive"] }
 
 [lints]
 workspace = true
