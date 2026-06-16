@@ -18,7 +18,7 @@ baracuda-cutensor-sys.workspace = true
 thiserror.workspace = true
 
 [dev-dependencies]
-baracuda-runtime.workspace = true
+baracuda-runtime = { path = "../baracuda-runtime" }  # path-only: avoid publish cycle on cargo 1.90+ (dev-dep, dropped from published manifest)
 
 [lints]
 workspace = true

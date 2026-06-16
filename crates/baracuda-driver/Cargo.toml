@@ -25,7 +25,7 @@ futures-core = { workspace = true, optional = true }
 [dev-dependencies]
 # `wave2_smoke` uses NVRTC to compile a fixture kernel at test time,
 # avoiding hand-written PTX fragility.
-baracuda-nvrtc.workspace = true
+baracuda-nvrtc = { path = "../baracuda-nvrtc" }  # path-only: avoid publish cycle on cargo 1.90+ (dev-dep, dropped from published manifest)
 
 [lints]
 workspace = true
