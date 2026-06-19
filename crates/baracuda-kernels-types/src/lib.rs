@@ -59,6 +59,7 @@ pub mod matrix;
 pub mod ops;
 pub mod plan;
 pub mod sku;
+pub mod structure_key;
 pub mod tensor;
 
 pub use element::{
@@ -78,4 +79,9 @@ pub use ops::{
 };
 pub use plan::{PlanPreference, PrecisionGuarantee, Workspace};
 pub use sku::{BackendKind, KernelSku, OpCategory};
+pub use structure_key::{
+    structure_key, AxisMask, Contiguity, DivBucket, IdxWidth, OperandDesc, OperandKey, QuantFacts,
+    QuantFamily, ScalePlacement, StructureKey, SymExtent, SymKind, VecWidth, WorkClass, MAX_OPERANDS,
+    MAX_RANK, STRUCTURE_KEY_VERSION,
+};
 pub use tensor::{contiguous_stride, strides_equal, TensorMut, TensorRef};
