@@ -362,6 +362,26 @@ family that already has a contiguous + strided sibling (the oracle):
 
 ---
 
+### Result (2026-06-19 · RTX 4070 Laptop · sm_89)
+
+First measurement — contiguous 4-D f32 `y = a + b` (64 Mi elems, 256 MiB/buffer):
+the generic strided sibling (runtime-rank coord-unravel per element) vs two
+specialized forms. Source: [`experiments/elementwise_specialization.cu`](experiments/elementwise_specialization.cu).
+
+| kernel | time | bandwidth | vs generic |
+|---|---|---|---|
+| `generic_strided` (unravel) | 6.91 ms | 116.5 GB/s | 1.00× |
+| `specialized_scalar` (linear) | 3.89 ms | 207.3 GB/s | **1.78×** |
+| `specialized_vec4` (linear + v4) | 3.41 ms | 235.9 GB/s | **2.03×** |
+
+**Verdict: GO.** ~2× on the *most basic* case, all outputs correct. The win is
+mostly **unravel elimination** — 1.78× from dropping the 4 divmods/element a
+generic kernel pays because it cannot know the data is contiguous — with
+vectorization adding the rest (→ 2.03×, ≈ 92 % of the card's ~256 GB/s ceiling,
+i.e. memory-bound with no further to go). Broadcast/transpose cases, where the
+generic kernel also re-loads or strides badly, should exceed this. The thesis
+holds; generalize with confidence.
+
 ## Open questions
 
 - Algorithm IR: adopt/adapt an existing tensor-expression IR (Triton-like,
