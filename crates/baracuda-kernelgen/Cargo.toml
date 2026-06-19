@@ -1,0 +1,17 @@
+[package]
+name = "baracuda-kernelgen"
+version = "0.0.1-alpha.68"
+description = "Build-time generator that emits specialized CUDA kernels (and, next, their FKC contracts) from an op's abstract IR fanned out across StructureKey cells. Dev/build tool — not published; its artifacts ship inside baracuda-kernels-sys."
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+publish = false
+
+[dependencies]
+baracuda-kernels-types = { workspace = true }
+
+[lints]
+workspace = true

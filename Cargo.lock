@@ -439,6 +439,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "baracuda-kernelgen"
+version = "0.0.1-alpha.68"
+dependencies = [
+ "baracuda-kernels-types",
+]
+
+[[package]]
 name = "baracuda-kernels"
 version = "0.0.1-alpha.68"
 dependencies = [
