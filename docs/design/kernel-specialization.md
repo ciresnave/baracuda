@@ -382,6 +382,64 @@ i.e. memory-bound with no further to go). Broadcast/transpose cases, where the
 generic kernel also re-loads or strides badly, should exceed this. The thesis
 holds; generalize with confidence.
 
+## 12. As-built — the `baracuda-kernelgen` crate
+
+The generator is the `baracuda-kernelgen` crate (`publish = false`, dev/build
+tool). Its shape realizes §10's algorithm/schedule split:
+
+- **`ir`** — the op *algorithm*: `ScalarExpr` (a value DAG of `Input(i)`,
+  `Const(f64)`, `Unary(UnaryOp, _)`, and `Add/Sub/Mul/Div`), an `Expr` eDSL
+  (operator overloads + `.relu()`/`.silu()`/… methods), and `OpDef` (name,
+  `n_inputs`, body, dtypes, `Access`). Backend-neutral.
+- **`plan`** — the *schedule* decision: `build_plan(op, key)` maps a
+  `StructureKey` cell to a `KernelPlan` whose `Schedule` is `Vectorized{width}`
+  (all-contiguous; width = the narrowest operand vector width), `Scalar`
+  (contiguous, no vec), or `Strided` (any non-contiguous operand). Backend-neutral.
+- **`backend`** — the `Backend` trait + the neutral `lower_expr`. Arithmetic is
+  universal infix; the `leaf` accessor and the `unary` spelling are the two
+  backend-injected seams (transcendentals like `expf` are not portable).
+- **`cuda`** — the only language-specific module: dtype→ctype mapping, the three
+  schedule emitters, the unary lowering.
+- **`pattern`** — `derive_pattern(op)` → a Fuel FKC `pattern:` tree + `to_fkc`.
+
+### Schedule × dtype coverage (CUDA backend)
+
+| schedule | emits | dtypes |
+|---|---|---|
+| Vectorized | linear `float4`(V4) / `double2`(V2) loop | f32 (V4), f64 (V2); f16/bf16 key as V8 but fall back to Scalar — packed `half2` SIMD is a follow-up |
+| Scalar | linear one-element loop | f32/f16/bf16/f64/i32/i64 (infix arithmetic via each dtype's operators) |
+| Strided | rank-unrolled coord-unravel; broadcast axes drop their offset terms; a fully-broadcast operand is hoisted to a loop-invariant load | f32/f16/bf16/f64 |
+
+Unary math: f32/f64 native (`expf`/`fmaxf` vs `exp`/`fmax`); f16/bf16 compute in
+float (convert → f32 math → convert), correct for every op.
+
+### FKC pattern emission
+
+`derive_pattern` emits a §3 `pattern:` for the slice the IR can express today —
+**pure-tensor elementwise + activation epilogues**: each arithmetic/unary node →
+an `Op` node (names from FKC §4.1), each `Input(i)` → `bind: i`, a reused input →
+a repeated `bind` (node-identity for free), interior nodes → `consumers: 1`.
+Adversarially verified conformant against the FKC §3 grammar. **Not yet
+emittable**, and why: scalar-param ops (`AddScalar`/…) need a runtime-scalar
+*param* IR node distinct from the baked `Const`; norm/fused-linear patterns need
+`ORDER 3` below plus Fuel's spec fixes (review items A1/E2/E3); commutative
+ordering is emitted one way pending Fuel E1.
+
+### IR roadmap (status)
+
+- **ORDER 1 — `Const`**: done.
+- **ORDER 2 — `Unary`** (activations): done.
+- **ORDER 3 — reductions / layout / `MatMul`**: pending — the dedicated
+  norm/fused-linear workstream (`Access::Reduction` + reduction nodes carrying
+  `.axis`, a DAG IR with consumer counts, layout nodes with shape facts,
+  `MatMul`). After it, the FKC §8 RmsNorm/FusedLinear targets derive.
+
+### Validation (sm_89, RTX 4070)
+
+Go/no-go 2.03× (§11 Result); strided/broadcast `out[i,j] = in0[i,j] + scalar`
+correct; f16 `relu(1+2) = 3.0` correct (compute-in-float round-trip); every
+generated kernel compiles under nvcc.
+
 ## Open questions
 
 - Algorithm IR: adopt/adapt an existing tensor-expression IR (Triton-like,
