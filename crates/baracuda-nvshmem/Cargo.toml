@@ -1,6 +1,6 @@
 [package]
 name = "baracuda-nvshmem"
-version = "0.0.1-alpha.68"
+version = "0.0.1-alpha.69"
 description = "Safe Rust wrappers for NVIDIA NVSHMEM host API (symmetric-heap one-sided GPU communication)."
 edition.workspace = true
 rust-version.workspace = true

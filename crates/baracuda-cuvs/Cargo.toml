@@ -1,6 +1,6 @@
 [package]
 name = "baracuda-cuvs"
-version = "0.0.1-alpha.68"
+version = "0.0.1-alpha.69"
 description = "Safe Rust wrappers for NVIDIA cuVS (GPU vector search / approximate nearest neighbours)."
 edition.workspace = true
 rust-version.workspace = true

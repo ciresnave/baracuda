@@ -8,6 +8,44 @@ alpha represents one or more completed phases.
 The phase numbering is Fuel-driven (Fuel is baracuda's primary downstream
 consumer); see `ROADMAP.md` for the active phase board.
 
+## 0.0.1-alpha.69 — 2026-06-20 (Fuel — Profile v1 kernel-seam: handshake + structure_key + FKC generator)
+
+Kernel-specialization / Baracuda↔Fuel **Profile v1** release. The cross-project
+kernel-seam contract (FDX tensor ABI + FKC kernel contracts + telemetry + a
+connect-time version handshake) was ratified by all parties (Fuel, Baracuda,
+Vulkane); this ships Baracuda's conforming surface, reconciled against the FKC
+fusion-patterns spec rev 4.
+
+### Added
+
+- **`baracuda-seam`** (new crate) — the Profile v1 kernel-seam handshake: the
+  frozen 56-byte `#[repr(C)] SeamHello` negotiation envelope plus the out-param
+  C-ABI entry point `baracuda_seam_hello()` that Fuel reads to negotiate a seam
+  profile and capability set (Kernel-Seam Interop §3.1/§3.5). Capability bits
+  reuse the FDX `BackendProbe` tokens.
+- **`structure_key` + `structure_key_token`** (`baracuda-kernels-types`) — the
+  canonical input/output layout-class join token, computed once by Baracuda from
+  a minimal `OperandDesc` projection and called by Fuel for triple duty
+  (telemetry tagging, FKC admissibility predicate, runtime dispatch), with a
+  lossless string codec. `structure_key_token` is the one-call cross-boundary
+  entry point.
+- **`baracuda-kernelgen`** (dev tool, `publish = false`) — the AOT
+  kernel-specialization generator: an abstract op IR lowered to CUDA, three
+  schedules (vectorized `float4`/`double2` / scalar / strided+broadcast),
+  f16/bf16/f32/f64 dtype breadth, and full **FKC contract emission** (provider
+  front-matter + `accept`/`return`/`op_params`/`caps`/`cost`/`precision`/
+  `determinism` + a declarative `pattern:` block with `extract:` for scalar
+  params) plus the `link_registry` roster. Go/no-go validated at **2.03×** on
+  sm_89; emitters audited conformant against FKC fusion-patterns rev 4 (incl. a
+  GELU-flavor fix — exact-erf kernels now emit `GeluErf`, not the tanh-name
+  `Gelu`).
+
+### Fixed
+
+- **`StructureKey.rank`** is the raw iteration rank (the widest operand rank),
+  renamed from `eff_rank` so the field no longer implies the (deferred)
+  contiguous-axis collapse.
+
 ## 0.0.1-alpha.68 — 2026-06-15 (Fuel — CUDA 13.3 / CCCL MSVC build fix)
 
 Build-system release driven by the Fuel team's CUDA 13.3 upgrade. No kernel
