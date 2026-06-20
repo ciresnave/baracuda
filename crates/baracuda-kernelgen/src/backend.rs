@@ -43,7 +43,23 @@ pub fn lower_expr(
 ) -> String {
     match e {
         ScalarExpr::Input(i) => leaf(*i),
-        ScalarExpr::Const(v) => format!("{v:?}"),
+        // `{v:?}` emits `inf`/`NaN`, which aren't valid C literals; map to the
+        // standard macros. (The f32 `f`-suffix vs double-promotion is dtype-
+        // dependent and tracked as a follow-up — it's a perf, not correctness,
+        // concern since the result narrows back.)
+        ScalarExpr::Const(v) => {
+            if v.is_nan() {
+                "NAN".to_string()
+            } else if v.is_infinite() {
+                if *v > 0.0 {
+                    "INFINITY".to_string()
+                } else {
+                    "-INFINITY".to_string()
+                }
+            } else {
+                format!("{v:?}")
+            }
+        }
         ScalarExpr::Unary(op, x) => unary(*op, lower_expr(x, leaf, unary)),
         ScalarExpr::Add(a, b) => {
             format!("({} + {})", lower_expr(a, leaf, unary), lower_expr(b, leaf, unary))

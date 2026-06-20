@@ -248,7 +248,10 @@ fn unary_f32(op: UnaryOp, x: String) -> String {
         UnaryOp::Log => format!("logf({x})"),
         UnaryOp::Tanh => format!("tanhf({x})"),
         UnaryOp::Sigmoid => format!("(1.0f/(1.0f+expf(-{x})))"),
-        UnaryOp::Relu => format!("fmaxf({x}, 0.0f)"),
+        // NaN-propagating: `NaN < 0` is false, so NaN passes through (matches
+        // PyTorch). `fmaxf(x,0)` would scrub NaN to 0. (Inner duplicated — the
+        // temp-binding pass that fixes recompute is a follow-up.)
+        UnaryOp::Relu => format!("({x} < 0.0f ? 0.0f : {x})"),
         UnaryOp::Erf => format!("erff({x})"),
         UnaryOp::Gelu => format!("(0.5f*{x}*(1.0f+erff({x}*0.70710678f)))"),
         UnaryOp::Silu => format!("({x}*(1.0f/(1.0f+expf(-{x}))))"),
@@ -268,7 +271,7 @@ fn unary_f64(op: UnaryOp, x: String) -> String {
         UnaryOp::Log => format!("log({x})"),
         UnaryOp::Tanh => format!("tanh({x})"),
         UnaryOp::Sigmoid => format!("(1.0/(1.0+exp(-{x})))"),
-        UnaryOp::Relu => format!("fmax({x}, 0.0)"),
+        UnaryOp::Relu => format!("({x} < 0.0 ? 0.0 : {x})"),
         UnaryOp::Erf => format!("erf({x})"),
         UnaryOp::Gelu => format!("(0.5*{x}*(1.0+erf({x}*0.7071067811865476)))"),
         UnaryOp::Silu => format!("({x}*(1.0/(1.0+exp(-{x}))))"),
@@ -392,7 +395,10 @@ mod tests {
         let a = OperandDesc::new(1, &[1 << 20], &[1], ElementKind::F32, 256);
         let key = structure_key(OpCategory::BinaryElementwise, &[a, a, a], ArchSku::Sm89);
         let k = generate(&op, &key, &Cuda);
-        assert!(k.source.contains("vo.x = fmaxf((v0.x + v1.x), 0.0f);"));
+        // NaN-propagating relu (select, not fmaxf).
+        assert!(k
+            .source
+            .contains("vo.x = ((v0.x + v1.x) < 0.0f ? 0.0f : (v0.x + v1.x));"));
     }
 
     #[test]
@@ -408,8 +414,7 @@ mod tests {
         let key = structure_key(OpCategory::BinaryElementwise, &[a, a, a], ArchSku::Sm89);
         let k = generate(&op, &key, &Cuda);
         assert!(k.source.contains("#include <cuda_fp16.h>"));
-        assert!(k
-            .source
-            .contains("__float2half(fmaxf(__half2float((in0[i] + in1[i])), 0.0f))"));
+        assert!(k.source.contains("__half2float((in0[i] + in1[i]))"));
+        assert!(k.source.contains("< 0.0f ? 0.0f :")); // NaN-propagating relu, in float
     }
 }
