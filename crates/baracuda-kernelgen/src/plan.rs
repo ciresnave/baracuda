@@ -58,13 +58,14 @@ pub fn build_plan<'a>(op: &'a OpDef, key: &StructureKey) -> KernelPlan<'a> {
         "v1 schedules elementwise ops only"
     );
     let n = key.n_operands as usize;
-    let all_contig_v4 = n > 0
-        && (0..n).all(|k| {
-            let o = key.operands[k];
-            o.contig == Contiguity::Contig && o.vec_width == VecWidth::V4
-        });
-    let schedule = if all_contig_v4 {
-        Schedule::Vectorized { width: 4 }
+    let all_contig = n > 0 && (0..n).all(|k| key.operands[k].contig == Contiguity::Contig);
+    // The kernel vectorizes at the *narrowest* width every operand supports.
+    let min_width = (0..n)
+        .map(|k| vec_width_elems(key.operands[k].vec_width))
+        .min()
+        .unwrap_or(1);
+    let schedule = if all_contig && min_width >= 2 {
+        Schedule::Vectorized { width: min_width }
     } else {
         Schedule::Scalar
     };
@@ -75,5 +76,15 @@ pub fn build_plan<'a>(op: &'a OpDef, key: &StructureKey) -> KernelPlan<'a> {
         schedule,
         cell: key.to_token(),
         body: &op.body,
+    }
+}
+
+/// Vector width in elements for a [`VecWidth`] bucket.
+fn vec_width_elems(v: VecWidth) -> u32 {
+    match v {
+        VecWidth::V8 => 8,
+        VecWidth::V4 => 4,
+        VecWidth::V2 => 2,
+        VecWidth::Scalar => 1,
     }
 }

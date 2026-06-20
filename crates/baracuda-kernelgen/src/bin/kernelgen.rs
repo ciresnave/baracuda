@@ -13,19 +13,21 @@ fn main() {
     let out_dir = std::env::args().nth(1).unwrap_or_else(|| "generated".to_string());
     fs::create_dir_all(&out_dir).expect("create out dir");
 
-    // v1 pilot op: elementwise add over f32.
-    let add = OpDef::elementwise("add", 2, &[ElementKind::F32], input(0) + input(1));
+    // v1 pilot op: elementwise add, fanned out over a few dtype cells.
+    let dtypes = [ElementKind::F32, ElementKind::F16, ElementKind::F64];
+    let add = OpDef::elementwise("add", 2, &dtypes, input(0) + input(1));
 
-    // A contiguous 1-D f32 cell, 256-byte aligned, extent %4 → V4.
-    let operand = OperandDesc::new(1, &[1 << 20], &[1], ElementKind::F32, 256);
-    let key = structure_key(
-        OpCategory::BinaryElementwise,
-        &[operand, operand, operand],
-        ArchSku::Sm89,
-    );
-
-    let kernel = generate(&add, &key, &Cuda);
-    let path = format!("{out_dir}/{}.cu", kernel.name);
-    fs::write(&path, &kernel.source).expect("write kernel");
-    println!("generated {path}  (backend cuda, cell {})", key.to_token());
+    for dt in dtypes {
+        // A contiguous 1-D cell, 256-byte aligned, extent %8.
+        let operand = OperandDesc::new(1, &[1 << 20], &[1], dt, 256);
+        let key = structure_key(
+            OpCategory::BinaryElementwise,
+            &[operand, operand, operand],
+            ArchSku::Sm89,
+        );
+        let kernel = generate(&add, &key, &Cuda);
+        let path = format!("{out_dir}/{}.cu", kernel.name);
+        fs::write(&path, &kernel.source).expect("write kernel");
+        println!("generated {path}  (cell {})", key.to_token());
+    }
 }
