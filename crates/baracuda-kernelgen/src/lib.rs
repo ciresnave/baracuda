@@ -35,7 +35,7 @@ pub mod plan;
 
 pub use backend::{Backend, GeneratedKernel};
 pub use cuda::Cuda;
-pub use ir::{input, konst, Access, Expr, OpDef, ScalarExpr, UnaryOp};
+pub use ir::{input, konst, param, Access, Expr, OpDef, ScalarExpr, UnaryOp};
 pub use pattern::{derive_pattern, to_fkc, PatternError, PatternNode};
 pub use plan::{build_plan, KernelPlan, Schedule};
 

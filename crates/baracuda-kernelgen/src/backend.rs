@@ -43,6 +43,7 @@ pub fn lower_expr(
 ) -> String {
     match e {
         ScalarExpr::Input(i) => leaf(*i),
+        ScalarExpr::Param(i) => format!("p{i}"),
         // `{v:?}` emits `inf`/`NaN`, which aren't valid C literals; map to the
         // standard macros. (The f32 `f`-suffix vs double-promotion is dtype-
         // dependent and tracked as a follow-up — it's a perf, not correctness,

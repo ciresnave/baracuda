@@ -5,7 +5,7 @@
 //! matrix (ops × structure cells, eventually fed from Fuel telemetry) and a
 //! `--backend` selector replace the hardcoded pilot next.
 
-use baracuda_kernelgen::{derive_pattern, generate, input, to_fkc, Cuda, OpDef};
+use baracuda_kernelgen::{derive_pattern, generate, input, param, to_fkc, Cuda, OpDef};
 use baracuda_kernels_types::{structure_key, ArchSku, ElementKind, OpCategory, OperandDesc};
 use std::fs;
 
@@ -66,4 +66,17 @@ fn main() {
     if let Ok(pat) = derive_pattern(&relu_add) {
         fs::write(format!("{out_dir}/relu_add.fkc.pattern"), to_fkc(&pat)).expect("write pattern");
     }
+
+    // Parametric op: relu(x * p0 + p1), f32 — runtime scalar params.
+    let affine_relu = OpDef::elementwise(
+        "affine_relu",
+        1,
+        &[ElementKind::F32],
+        (input(0) * param(0) + param(1)).relu(),
+    );
+    let ao = OperandDesc::new(1, &[1 << 20], &[1], ElementKind::F32, 256);
+    let akey = structure_key(OpCategory::UnaryElementwise, &[ao, ao], ArchSku::Sm89);
+    let ak = generate(&affine_relu, &akey, &Cuda);
+    fs::write(format!("{out_dir}/{}.cu", ak.name), &ak.source).expect("write kernel");
+    println!("generated {out_dir}/{}.cu", ak.name);
 }

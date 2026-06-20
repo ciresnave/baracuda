@@ -19,6 +19,11 @@ pub enum ScalarExpr {
     Input(u8),
     /// A compile-time scalar constant — the same value at every coordinate.
     Const(f64),
+    /// A runtime scalar parameter — the op's `p{i}` launch argument. Distinct
+    /// from [`ScalarExpr::Const`]: a `Const` is folded into the kernel, a
+    /// `Param` is passed at launch (and, in a fused graph, comes from an
+    /// `AddScalar`/`MulScalar` attribute via the pattern's `extract:`).
+    Param(u8),
     /// Sum of two sub-expressions.
     Add(Box<ScalarExpr>, Box<ScalarExpr>),
     /// Difference of two sub-expressions.
@@ -81,6 +86,13 @@ pub fn input(i: u8) -> Expr {
 #[must_use]
 pub fn konst(v: f64) -> Expr {
     Expr(ScalarExpr::Const(v))
+}
+
+/// A runtime scalar-parameter leaf — the op's `p{i}` launch argument
+/// (e.g. `input(0) * param(0) + param(1)`).
+#[must_use]
+pub fn param(i: u8) -> Expr {
+    Expr(ScalarExpr::Param(i))
 }
 
 impl std::ops::Add for Expr {

@@ -91,7 +91,7 @@ fn walk(e: &ScalarExpr, is_root: bool) -> Result<PatternNode, PatternError> {
     let consumers = if is_root { None } else { Some(1) };
     match e {
         ScalarExpr::Input(i) => Ok(PatternNode::Bind(*i)),
-        ScalarExpr::Const(_) => Err(PatternError::ScalarParamUnsupported),
+        ScalarExpr::Const(_) | ScalarExpr::Param(_) => Err(PatternError::ScalarParamUnsupported),
         ScalarExpr::Add(a, b) => op_node("Add", a, b, consumers),
         ScalarExpr::Sub(a, b) => op_node("Sub", a, b, consumers),
         ScalarExpr::Mul(a, b) => op_node("Mul", a, b, consumers),

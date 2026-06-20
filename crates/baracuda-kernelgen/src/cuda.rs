@@ -7,7 +7,7 @@
 //! `__half` / `__nv_bfloat16` the same as for `float`.
 
 use crate::backend::{lower_expr, Backend, GeneratedKernel};
-use crate::ir::UnaryOp;
+use crate::ir::{ScalarExpr, UnaryOp};
 use crate::plan::{KernelPlan, Schedule};
 use baracuda_kernels_types::{ElementKind, OperandKey};
 
@@ -24,6 +24,12 @@ impl Backend for Cuda {
         let Some(ctype) = scalar_ctype(plan.dtype) else {
             panic!("cuda backend: unsupported dtype {:?}", plan.dtype);
         };
+        assert!(
+            params_used(plan.body).is_empty()
+                || matches!(plan.dtype, ElementKind::F32 | ElementKind::F32Strict),
+            "cuda backend v1: scalar params are f32-only for now (dtype {:?})",
+            plan.dtype
+        );
         match plan.schedule {
             Schedule::Vectorized { width } => match vector_type(plan.dtype, width) {
                 Some((vty, lanes)) => emit_vectorized(plan, vty, lanes),
@@ -116,7 +122,7 @@ fn emit_vectorized(plan: &KernelPlan<'_>, vty: &str, lanes: &[&str]) -> Generate
         s.push_str(&format!("    const {vty}* __restrict__ in{i},\n"));
     }
     s.push_str(&format!("    {vty}* __restrict__ out,\n"));
-    s.push_str("    int64_t nv)\n{\n");
+    s.push_str(&format!("    int64_t nv{})\n{{\n", param_args(plan.body)));
     s.push_str("    int64_t i = (int64_t)blockIdx.x * blockDim.x + threadIdx.x;\n");
     s.push_str("    int64_t step = (int64_t)gridDim.x * blockDim.x;\n");
     s.push_str("    for (; i < nv; i += step) {\n");
@@ -140,7 +146,7 @@ fn emit_scalar(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
         s.push_str(&format!("    const {ctype}* __restrict__ in{i},\n"));
     }
     s.push_str(&format!("    {ctype}* __restrict__ out,\n"));
-    s.push_str("    int64_t n)\n{\n");
+    s.push_str(&format!("    int64_t n{})\n{{\n", param_args(plan.body)));
     s.push_str("    int64_t i = (int64_t)blockIdx.x * blockDim.x + threadIdx.x;\n");
     s.push_str("    int64_t step = (int64_t)gridDim.x * blockDim.x;\n");
     let acc = |idx: u8| format!("in{idx}[i]");
@@ -171,7 +177,7 @@ fn emit_strided(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
         s.push_str(&format!("    const int64_t* __restrict__ s{i},\n"));
     }
     s.push_str("    const int64_t* __restrict__ so,\n");
-    s.push_str("    int64_t n)\n{\n");
+    s.push_str(&format!("    int64_t n{})\n{{\n", param_args(plan.body)));
     // Hoist fully-broadcast inputs: their offset is loop-invariant, load once.
     for k in 0..n {
         if is_fully_broadcast(plan.key.operands[k], rank) {
@@ -299,9 +305,41 @@ fn cuda_unary(op: UnaryOp, x: String, dtype: ElementKind) -> String {
     }
 }
 
+/// Runtime scalar-param indices used by `e`, ascending + unique.
+fn params_used(e: &ScalarExpr) -> Vec<u8> {
+    fn rec(e: &ScalarExpr, out: &mut std::collections::BTreeSet<u8>) {
+        match e {
+            ScalarExpr::Param(i) => {
+                out.insert(*i);
+            }
+            ScalarExpr::Unary(_, x) => rec(x, out),
+            ScalarExpr::Add(a, b)
+            | ScalarExpr::Sub(a, b)
+            | ScalarExpr::Mul(a, b)
+            | ScalarExpr::Div(a, b) => {
+                rec(a, out);
+                rec(b, out);
+            }
+            ScalarExpr::Input(_) | ScalarExpr::Const(_) => {}
+        }
+    }
+    let mut set = std::collections::BTreeSet::new();
+    rec(e, &mut set);
+    set.into_iter().collect()
+}
+
+/// The trailing `, float p0, float p1, …` kernel-signature suffix for the op's
+/// runtime scalar params (empty when the op has none).
+fn param_args(e: &ScalarExpr) -> String {
+    params_used(e)
+        .iter()
+        .map(|i| format!(", float p{i}"))
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
-    use crate::ir::{input, OpDef};
+    use crate::ir::{input, param, OpDef};
     use crate::{generate, Cuda};
     use baracuda_kernels_types::{structure_key, ArchSku, ElementKind, OpCategory, OperandDesc};
 
@@ -416,5 +454,21 @@ mod tests {
         assert!(k.source.contains("#include <cuda_fp16.h>"));
         assert!(k.source.contains("__half2float((in0[i] + in1[i]))"));
         assert!(k.source.contains("< 0.0f ? 0.0f :")); // NaN-propagating relu, in float
+    }
+
+    #[test]
+    fn scalar_param_kernel() {
+        // y = relu(x * p0 + p1) — one input, two runtime scalar params.
+        let op = OpDef::elementwise(
+            "affine_relu",
+            1,
+            &[ElementKind::F32],
+            (input(0) * param(0) + param(1)).relu(),
+        );
+        let a = OperandDesc::new(1, &[1 << 20], &[1], ElementKind::F32, 256);
+        let key = structure_key(OpCategory::UnaryElementwise, &[a, a], ArchSku::Sm89);
+        let k = generate(&op, &key, &Cuda);
+        assert!(k.source.contains("int64_t nv, float p0, float p1)"));
+        assert!(k.source.contains("((v0.x * p0) + p1)"));
     }
 }
