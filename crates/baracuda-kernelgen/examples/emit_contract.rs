@@ -38,8 +38,10 @@ fn main() {
     for (op, n) in [(&add, 3usize), (&relu_add, 3), (&affine_silu, 2)] {
         let key = cell(n, OpCategory::BinaryElementwise);
         let kernel = generate(op, &key, &Cuda);
-        print!("{}", contract(op, &key, &kernel, "cuda"));
-        println!();
+        if let Some(c) = contract(op, &key, &kernel, "cuda") {
+            print!("{c}");
+            println!();
+        }
         registry.push(link_entry(op, &key, &kernel));
     }
 

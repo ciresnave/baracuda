@@ -64,8 +64,8 @@ pub enum UnaryOp {
     Relu,
     /// Gauss error function.
     Erf,
-    /// Exact (erf-based) GELU. (FKC §4.1 names `Gelu` vs `GeluErf` — the bare
-    /// `Gelu` flavor mapping is pending Fuel review item E2.)
+    /// Exact (erf-based) GELU — emits the FKC §4.1 `GeluErf` op (bare `Gelu` is
+    /// the tanh approximation, per §4.1's B6/E2 resolution).
     Gelu,
     /// SiLU / swish `x·sigmoid(x)`.
     Silu,

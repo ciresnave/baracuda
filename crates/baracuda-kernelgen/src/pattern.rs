@@ -22,14 +22,13 @@
 //! `extract:` path (FKC §6). Compile-time scalar *constants*
 //! ([`ScalarExpr::Const`]) have no graph-`Op` form yet and are rejected.
 //!
-//! Commutative operands (`Add`/`Mul`) are emitted in a **canonical order**
-//! (§3a.2a): Fuel canonicalizes commutative operands before matching, so we sort
-//! ours to the same order — two authorings of one expression (`a*b + c` vs
-//! `c + a*b`) therefore emit one identical pattern, and match a graph written
-//! either way. The ordering key is **provisional** — graph ops before leaves,
-//! then by op name / leaf index — pending the exact key named in the full rev-4
-//! `fkc-fusion-patterns.md` ("the same canonicalization `structure_key` uses");
-//! reconciling it is a one-function change ([`canonicalize`]'s `sig`).
+//! Commutative operands (`Add`/`Mul`) are emitted in a deterministic internal
+//! order, so two authorings of one expression (`a*b + c` vs `c + a*b`) emit
+//! byte-identical YAML (clean diffs, caching, golden tests). This is **not** a
+//! matching requirement: per FKC rev-4 §3a.2a Fuel canonicalizes *both* the
+//! imported pattern and the user graph into one order before matching, so any
+//! single emitted ordering matches regardless. The ordering key here
+//! ([`canonicalize`]'s `sig`) is Baracuda-internal and need not equal Fuel's.
 
 use crate::ir::{Access, OpDef, ScalarExpr, UnaryOp};
 use std::collections::BTreeSet;
@@ -81,8 +80,9 @@ pub fn derive_pattern(op: &OpDef) -> Result<PatternNode, PatternError> {
     if !matches!(op.access, Access::Elementwise) {
         return Err(PatternError::NotElementwise);
     }
-    // Canonicalize commutative operands first, so the derived paths/extracts are
-    // computed on the same operand order Fuel matches against (§3a.2a).
+    // Canonicalize commutative operands first so two authorings of one body
+    // produce byte-identical paths/extracts/YAML (internal determinism); per
+    // §3a.2a Fuel canonicalizes the pattern on import, so either order matches.
     let body = canonicalize(&op.body);
     let mut extracts = Vec::new();
     let mut root = walk(&body, true, &[], &mut extracts)?;
@@ -111,10 +111,11 @@ pub fn derive_pattern(op: &OpDef) -> Result<PatternNode, PatternError> {
 /// (children canonicalized first, so the sort key is stable). Non-commutative
 /// nodes (`Sub`/`Div`/`Unary`) keep their operand order; leaves are unchanged.
 ///
-/// This realizes the FKC §3a.2a contract on our side: Fuel canonicalizes a
-/// graph's commutative operands before matching, so a pattern must present its
-/// operands in that same order. The order *value* (via [`sig`]) is provisional —
-/// pinned to the exact §3a.2a key when the full rev-4 spec lands.
+/// Under FKC §3a.2a both sides canonicalize identically — Fuel canonicalizes the
+/// imported pattern *and* the user graph before matching — so any single operand
+/// order matches. We pick a deterministic one purely for reproducible output
+/// (not for match correctness); the order *value* (via [`sig`]) need not equal
+/// Fuel's key.
 fn canonicalize(e: &ScalarExpr) -> ScalarExpr {
     match e {
         ScalarExpr::Add(a, b) => {
@@ -145,10 +146,11 @@ fn order2(a: ScalarExpr, b: ScalarExpr) -> (ScalarExpr, ScalarExpr) {
     }
 }
 
-/// Deterministic structural sort key (the **provisional** §3a.2a order). The `0`
-/// prefix on graph ops vs the `1` prefix on leaves makes ops sort before leaves;
-/// within each, the recursive form / leaf index breaks ties. Pure function of
-/// structure, so a pattern and a graph subtree of the same shape sort alike.
+/// Deterministic structural sort key for internal ordering only (need not equal
+/// Fuel's §3a.2a key). The `0` prefix on graph ops vs the `1` prefix on leaves
+/// makes ops sort before leaves; within each, the recursive form / leaf index
+/// breaks ties. Pure function of structure, so two authorings of the same
+/// expression sort alike and emit identical YAML.
 fn sig(e: &ScalarExpr) -> String {
     match e {
         ScalarExpr::Add(a, b) => format!("0Add({},{})", sig(a), sig(b)),
@@ -186,8 +188,10 @@ fn walk(
     }
 }
 
-/// FKC §4.1 graph-`Op` name for a [`UnaryOp`]. (The bare-`Gelu` flavor mapping is
-/// pending Fuel review item E2.)
+/// FKC §4.1 graph-`Op` name for a [`UnaryOp`]. Per §4.1 (B6/E2 resolution) bare
+/// `Gelu` is the **tanh** approximation and `GeluErf` is the **exact erf** form;
+/// our [`UnaryOp::Gelu`] lowers to exact erf (see `cuda.rs`), so it emits
+/// `GeluErf` — emitting bare `Gelu` would misroute it to tanh-GELU subgraphs.
 fn unary_name(op: UnaryOp) -> &'static str {
     match op {
         UnaryOp::Neg => "Neg",
@@ -202,7 +206,7 @@ fn unary_name(op: UnaryOp) -> &'static str {
         UnaryOp::Sigmoid => "Sigmoid",
         UnaryOp::Relu => "Relu",
         UnaryOp::Erf => "Erf",
-        UnaryOp::Gelu => "Gelu",
+        UnaryOp::Gelu => "GeluErf",
         UnaryOp::Silu => "Silu",
     }
 }
@@ -450,9 +454,27 @@ pattern:
     }
 
     #[test]
+    fn gelu_emits_geluerf_exact_flavor() {
+        // UnaryOp::Gelu lowers to exact erf (cuda.rs); FKC §4.1 names that flavor
+        // `GeluErf`, while bare `Gelu` is the tanh approximation. A fused gelu must
+        // emit GeluErf or Fuel would misroute it to tanh-GELU subgraphs.
+        let op = OpDef::elementwise(
+            "gelu_add",
+            2,
+            &[ElementKind::F32],
+            (input(0) + input(1)).gelu(),
+        );
+        let fkc = to_fkc(&derive_pattern(&op).unwrap());
+        assert!(fkc.contains("op: GeluErf"));
+        assert!(!fkc.contains("op: Gelu\n")); // never the bare (tanh) name
+    }
+
+    #[test]
     fn commutative_authorings_converge() {
-        // a*b + c  and  c + a*b  are the same math written two ways; canonical-
-        // ization (§3a.2a) must emit one identical pattern so either graph matches.
+        // a*b + c  and  c + a*b  are the same math written two ways; our canonical-
+        // ization emits one identical pattern for both (reproducible output).
+        // Matching itself doesn't require this — §3a.2a has Fuel canonicalize the
+        // imported pattern too — but byte-identical emission keeps diffs clean.
         let ab_c = OpDef::elementwise(
             "f",
             3,

@@ -60,17 +60,23 @@ pub fn contract(
     key: &StructureKey,
     kernel: &GeneratedKernel,
     backend_name: &str,
-) -> String {
+) -> Option<String> {
+    // Skip a cell whose dtype has no FKC §5 base-dtype spelling — an unbindable
+    // contract would corrupt the planner's honest miss signal (§4.3).
+    let dtype = fkc_dtype(key.dtype)?;
+
     let pattern = derive_pattern(op).ok();
     let n_ops = pattern.as_ref().map_or(0, count_ops);
     let is_fusion = n_ops > 1;
-    let op_line = match (&pattern, n_ops) {
+    let op_line = match &pattern {
         // exactly one graph op → a primitive identity (e.g. `Add`, `AddScalar`).
-        (Some(p), 1) => format!("op_kind: {}", root_op_name(p)),
+        Some(p) if n_ops == 1 => format!("op_kind: {}", root_op_name(p)),
         // ≥2 graph ops → a fused identity carried by the op's stable name.
-        (Some(_), _) => format!("fused_op: {}", op.name),
-        // body not expressible as a pattern → name it as a primitive identity.
-        (None, _) => format!("op_kind: {}", op.name),
+        Some(_) => format!("fused_op: {}", op.name),
+        // body not expressible as a pattern (Const / non-elementwise / bind
+        // mismatch) → not advertisable; skip rather than fake an op_kind from
+        // the op's free-form name (which is not an OpKind dispatch key).
+        None => return None,
     };
 
     let out_idx = key.n_operands.saturating_sub(1) as usize;
@@ -81,11 +87,11 @@ pub fn contract(
     s.push_str(&format!("kernel: {}_{}\n", op.name, cell_suffix(key)));
     s.push_str(&op_line);
     s.push('\n');
-    s.push_str(&format!("blurb: \"{}\"\n", blurb(op, key, is_fusion)));
+    s.push_str(&format!("blurb: \"{}\"\n", blurb(op, key, dtype, is_fusion)));
     // ImplId tuple (FKC §4.11), kept as five separable fields.
     s.push_str(&format!("backend: {backend_name}\n"));
     s.push_str("kernel_source: baracuda\n");
-    s.push_str(&format!("dtypes: [{}]\n", fkc_dtype(key.dtype)));
+    s.push_str(&format!("dtypes: [{dtype}]\n"));
     s.push_str(&format!("entry_point: {}\n", kernel.name));
     s.push_str(&format!(
         "kernel_revision_hash: \"{:016x}\"\n",
@@ -99,8 +105,7 @@ pub fn contract(
     s.push_str("  inputs:\n");
     for i in 0..op.n_inputs as usize {
         s.push_str(&format!(
-            "    - dtype: {}\n      layout: {}\n",
-            fkc_dtype(key.dtype),
+            "    - dtype: {dtype}\n      layout: {}\n",
             layout_token(key, i)
         ));
     }
@@ -109,7 +114,7 @@ pub fn contract(
         s.push_str("op_params:\n");
         for p in &params {
             // v1 scalar params are f32 launch arguments (the `extract:` carrier).
-            s.push_str(&format!("  - name: param{p}\n    dtype: {}\n", fkc_dtype(ElementKind::F32)));
+            s.push_str(&format!("  - name: param{p}\n    dtype: F32\n"));
         }
     }
 
@@ -145,7 +150,7 @@ pub fn contract(
     }
 
     s.push_str("```\n");
-    s
+    Some(s)
 }
 
 // ---------------------------------------------------------------------------
@@ -292,46 +297,41 @@ fn cell_suffix(key: &StructureKey) -> String {
     format!("{}_{}_{}", dtype_short(key.dtype), contig_short(o.contig), vec_short(o.vec_width))
 }
 
-fn blurb(op: &OpDef, key: &StructureKey, is_fusion: bool) -> String {
+fn blurb(op: &OpDef, key: &StructureKey, dtype: &str, is_fusion: bool) -> String {
     let kind = if is_fusion { "fused" } else { "elementwise" };
-    format!(
-        "{} {} ({}, {} layout).",
-        kind,
-        op.name,
-        fkc_dtype(key.dtype),
-        layout_token(key, 0)
-    )
+    format!("{} {} ({}, {} layout).", kind, op.name, dtype, layout_token(key, 0))
 }
 
 // ---------------------------------------------------------------------------
 // Leaf spellings (reconciled against the FKC annex; review item E5 for dtypes)
 // ---------------------------------------------------------------------------
 
-/// FDX-normative dtype token. `F32Strict` rides as `F32` (it is a precision mode,
-/// not a distinct wire dtype).
-fn fkc_dtype(dt: ElementKind) -> &'static str {
+/// FKC §5 logical-DType token, or `None` for a dtype with no §5 *base-dtype*
+/// slot (so the caller skips the cell rather than emit an unbindable contract).
+///
+/// Reconciled to FKC rev-4 §5 (review item E5): `Bool` → `U8` (Fuel has no Bool
+/// dtype — masks are U8), signed-8 → `I8`, `F32Strict` rides as `F32` (a
+/// precision mode, not a wire dtype). Packed sub-byte / quant payloads
+/// (`S4`/`U4`/`Bin`) ride the **FDX sidecar**, not a base dtype, so carry no
+/// token here; `Fp8E5M2` and complex have no §5 slot yet — all return `None`.
+fn fkc_dtype(dt: ElementKind) -> Option<&'static str> {
     use ElementKind::{
         Bf16, Bin, Bool, Complex32, Complex64, Fp8E4M3, Fp8E5M2, F16, F32, F32Strict, F64, I32,
         I64, S4, S8, U4, U8,
     };
-    match dt {
+    Some(match dt {
         F32 | F32Strict => "F32",
         F16 => "F16",
         Bf16 => "BF16",
         F64 => "F64",
         I32 => "I32",
         I64 => "I64",
-        S8 => "S8",
-        U8 => "U8",
-        Bool => "Bool",
+        S8 => "I8",        // §5: signed-8 spells I8
+        U8 | Bool => "U8", // §5 (B5/E5): Fuel has no Bool — masks are U8
         Fp8E4M3 => "F8E4M3",
-        Fp8E5M2 => "F8E5M2",
-        S4 => "S4",
-        U4 => "U4",
-        Bin => "Bin",
-        Complex32 => "C32",
-        Complex64 => "C64",
-    }
+        // No §5 base-dtype slot: FDX-sidecar payloads + unlisted fp8 / complex.
+        Fp8E5M2 | S4 | U4 | Bin | Complex32 | Complex64 => return None,
+    })
 }
 
 fn dtype_short(dt: ElementKind) -> &'static str {
@@ -433,7 +433,7 @@ mod tests {
         let op = OpDef::elementwise("add", 2, &[ElementKind::F32], input(0) + input(1));
         let key = key_for(3, OpCategory::BinaryElementwise);
         let kernel = generate(&op, &key, &Cuda);
-        let c = contract(&op, &key, &kernel, "cuda");
+        let c = contract(&op, &key, &kernel, "cuda").unwrap();
 
         // primitive → op_kind, no fused_op, no pattern block.
         assert!(c.contains("op_kind: Add"));
@@ -467,7 +467,7 @@ mod tests {
         );
         let key = key_for(3, OpCategory::BinaryElementwise);
         let kernel = generate(&op, &key, &Cuda);
-        let c = contract(&op, &key, &kernel, "cuda");
+        let c = contract(&op, &key, &kernel, "cuda").unwrap();
         assert!(c.contains("fused_op: relu_add"));
         assert!(!c.contains("op_kind:"));
         assert!(c.contains("pattern:"));
@@ -485,7 +485,7 @@ mod tests {
         );
         let key = key_for(2, OpCategory::UnaryElementwise);
         let kernel = generate(&op, &key, &Cuda);
-        let c = contract(&op, &key, &kernel, "cuda");
+        let c = contract(&op, &key, &kernel, "cuda").unwrap();
         assert!(c.contains("op_params:"));
         assert!(c.contains("name: param0"));
         assert!(c.contains("name: param1"));
@@ -497,5 +497,36 @@ mod tests {
     fn revision_hash_is_source_sensitive() {
         assert_ne!(revision_hash("kernel a"), revision_hash("kernel b"));
         assert_eq!(revision_hash("stable"), revision_hash("stable"));
+    }
+
+    fn key_dtype(dt: ElementKind, n_operands: usize) -> StructureKey {
+        let a = OperandDesc::new(2, &[128, 256], &[256, 1], dt, 256);
+        let operands: Vec<_> = std::iter::repeat_n(a, n_operands).collect();
+        structure_key(OpCategory::BinaryElementwise, &operands, ArchSku::Sm89)
+    }
+
+    // The dtype-classification tests don't exercise CUDA codegen (which rightly
+    // rejects Bool/Complex), only the contract's dtype channel — a stand-in kernel.
+    fn stub_kernel() -> GeneratedKernel {
+        GeneratedKernel { name: "k".into(), source: "s".into() }
+    }
+
+    #[test]
+    fn bool_dtype_maps_to_u8_not_bool() {
+        // §5 (B5/E5): Fuel has no Bool dtype — a provider's Bool rides as U8.
+        let op = OpDef::elementwise("eq", 2, &[ElementKind::Bool], input(0) + input(1));
+        let key = key_dtype(ElementKind::Bool, 3);
+        let c = contract(&op, &key, &stub_kernel(), "cuda").unwrap();
+        assert!(c.contains("dtypes: [U8]"));
+        assert!(!c.contains("Bool"));
+    }
+
+    #[test]
+    fn unsupported_dtype_yields_no_contract() {
+        // Complex has no FKC §5 base-dtype slot — skip the cell (honest miss),
+        // never emit an unbindable `dtypes: [C64]` contract.
+        let op = OpDef::elementwise("add", 2, &[ElementKind::Complex64], input(0) + input(1));
+        let key = key_dtype(ElementKind::Complex64, 3);
+        assert!(contract(&op, &key, &stub_kernel(), "cuda").is_none());
     }
 }
