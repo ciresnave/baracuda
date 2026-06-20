@@ -1,10 +1,11 @@
 //! `kernelgen` — thin CLI over the [`baracuda_kernelgen`] library.
 //!
 //! Usage: `kernelgen <out-dir>`. v1 emits the elementwise pilot cell (f32 `add`,
-//! contiguous + V4) into `<out-dir>`. The spec-driven matrix (ops × structure
-//! cells, eventually fed from Fuel telemetry) replaces the hardcoded pilot next.
+//! contiguous + V4) into `<out-dir>` via the CUDA backend. The spec-driven
+//! matrix (ops × structure cells, eventually fed from Fuel telemetry) and a
+//! `--backend` selector replace the hardcoded pilot next.
 
-use baracuda_kernelgen::{generate, input, OpDef};
+use baracuda_kernelgen::{generate, input, Cuda, OpDef};
 use baracuda_kernels_types::{structure_key, ArchSku, ElementKind, OpCategory, OperandDesc};
 use std::fs;
 
@@ -23,8 +24,8 @@ fn main() {
         ArchSku::Sm89,
     );
 
-    let kernel = generate(&add, &key);
+    let kernel = generate(&add, &key, &Cuda);
     let path = format!("{out_dir}/{}.cu", kernel.name);
     fs::write(&path, &kernel.source).expect("write kernel");
-    println!("generated {path}  (cell {})", key.to_token());
+    println!("generated {path}  (backend cuda, cell {})", key.to_token());
 }

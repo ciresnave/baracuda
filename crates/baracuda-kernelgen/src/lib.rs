@@ -2,27 +2,46 @@
 //!
 //! Build-time generator that turns an op's **abstract IR** (the algorithm) plus
 //! a [`baracuda_kernels_types::StructureKey`] cell (the schedule) into a
-//! specialized CUDA kernel — and, next, its FKC contract.
+//! specialized kernel — and, next, its FKC contract.
 //!
-//! Op logic is described as a backend-agnostic [`ir::ScalarExpr`] DAG rather
-//! than written as opaque CUDA, precisely so the emitter can *see the dataflow*
-//! and transform it: vectorize (splat the expression across lanes), hoist
-//! broadcast loads, fuse, and later retarget to other backends. A hand-written
-//! CUDA escape hatch is reserved for bespoke ops the IR can't yet express.
+//! The crate is **language-agnostic except for the lowering backend**:
 //!
-//! This is a dev/build tool (`publish = false`); the `.cu` / `.fkc` artifacts it
-//! emits are committed and ship inside `baracuda-kernels-sys`.
+//! - [`ir`] — the op IR (a [`ScalarExpr`] DAG). Backend-neutral.
+//! - [`plan`] — the schedule decision (`StructureKey` → [`KernelPlan`]). Neutral.
+//! - [`backend`] — the [`Backend`] trait + the neutral [`backend::lower_expr`].
+//! - [`cuda`] — the **only** backend-specific module today. Slang / SPIR-V /
+//!   Metal / CPU backends are additional [`Backend`] impls, no core changes.
+//!
+//! Op logic is described as IR rather than opaque CUDA precisely so the emitter
+//! can *see the dataflow* and transform it (vectorize, hoist, fuse) — and so the
+//! same op can be lowered to any backend. A hand-written escape hatch is
+//! reserved for bespoke ops the IR can't yet express.
+//!
+//! This is a dev/build tool (`publish = false`); the artifacts it emits are
+//! committed and ship inside `baracuda-kernels-sys`.
 //!
 //! ## Status (v1)
 //!
-//! Pilot scope: **f32 elementwise** ops, contiguous operands, emitted vectorized
-//! (`float4`) when the structure cell says V4 and scalar otherwise. Other
-//! dtypes, strided / broadcast schedules, reductions, and FKC-contract emission
-//! are the immediate next expansions — the IR and emitter are shaped to grow
-//! into them.
+//! Pilot scope: f32 elementwise ops, contiguous operands, emitted `float4`-
+//! vectorized when the cell says V4 and scalar otherwise, lowered to CUDA.
+//! Other dtypes, strided / broadcast / reduction schedules, additional
+//! backends, FKC emission, and the algebraic optimizer are the growth path.
 
-pub mod emit;
+pub mod backend;
+pub mod cuda;
 pub mod ir;
+pub mod plan;
 
-pub use emit::{generate, GeneratedKernel};
+pub use backend::{Backend, GeneratedKernel};
+pub use cuda::Cuda;
 pub use ir::{input, Access, Expr, OpDef, ScalarExpr};
+pub use plan::{build_plan, KernelPlan, Schedule};
+
+use baracuda_kernels_types::StructureKey;
+
+/// Generate a specialized kernel for `op` at structure cell `key`, lowered by
+/// `backend`. Convenience over [`build_plan`] followed by [`Backend::lower`].
+#[must_use]
+pub fn generate(op: &OpDef, key: &StructureKey, backend: &dyn Backend) -> GeneratedKernel {
+    backend.lower(&build_plan(op, key))
+}
