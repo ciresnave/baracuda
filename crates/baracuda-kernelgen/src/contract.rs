@@ -414,7 +414,7 @@ mod tests {
 
     fn key_for(n_operands: usize, op_cat: OpCategory) -> StructureKey {
         let a = OperandDesc::new(2, &[128, 256], &[256, 1], ElementKind::F32, 256);
-        let operands: Vec<_> = std::iter::repeat(a).take(n_operands).collect();
+        let operands: Vec<_> = std::iter::repeat_n(a, n_operands).collect();
         structure_key(op_cat, &operands, ArchSku::Sm89)
     }
 
