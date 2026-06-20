@@ -8,7 +8,7 @@
 //! this generator eventually target backends beyond CUDA (and move out of
 //! Baracuda) without a rewrite.
 
-use crate::ir::ScalarExpr;
+use crate::ir::{ScalarExpr, UnaryOp};
 
 /// A generated kernel: its exported symbol name and source text.
 #[derive(Clone, Debug)]
@@ -29,19 +29,33 @@ pub trait Backend {
 
 /// Lower a [`ScalarExpr`] DAG to an infix expression string.
 ///
-/// **Language-neutral**: `+ - * /` and parenthesization are common to CUDA,
-/// Slang, HLSL, Metal, and GLSL, so the only backend-specific input is `acc` —
-/// how input operand `i`'s value is named at the current position (e.g.
-/// `in0[i]` scalar, `v0.x` for a vector lane). That single seam is why the math
-/// half of codegen is portable while the memory/launch half is not.
+/// Two backend seams, because the math half splits cleanly: `+ - * /` and
+/// parenthesization are **universal** across CUDA/Slang/HLSL/Metal/GLSL, so
+/// only `leaf` (how input operand `i`'s value is named — `in0[i]` scalar, `v0.x`
+/// for a vector lane) is backend-specific for those. Transcendentals are **not**
+/// universal (`expf` is CUDA-specific), so `unary` is a second backend-injected
+/// seam: it spells a [`UnaryOp`] applied to an already-lowered inner string.
 #[must_use]
-pub fn lower_expr(e: &ScalarExpr, acc: &dyn Fn(u8) -> String) -> String {
+pub fn lower_expr(
+    e: &ScalarExpr,
+    leaf: &dyn Fn(u8) -> String,
+    unary: &dyn Fn(UnaryOp, String) -> String,
+) -> String {
     match e {
-        ScalarExpr::Input(i) => acc(*i),
+        ScalarExpr::Input(i) => leaf(*i),
         ScalarExpr::Const(v) => format!("{v:?}"),
-        ScalarExpr::Add(a, b) => format!("({} + {})", lower_expr(a, acc), lower_expr(b, acc)),
-        ScalarExpr::Sub(a, b) => format!("({} - {})", lower_expr(a, acc), lower_expr(b, acc)),
-        ScalarExpr::Mul(a, b) => format!("({} * {})", lower_expr(a, acc), lower_expr(b, acc)),
-        ScalarExpr::Div(a, b) => format!("({} / {})", lower_expr(a, acc), lower_expr(b, acc)),
+        ScalarExpr::Unary(op, x) => unary(*op, lower_expr(x, leaf, unary)),
+        ScalarExpr::Add(a, b) => {
+            format!("({} + {})", lower_expr(a, leaf, unary), lower_expr(b, leaf, unary))
+        }
+        ScalarExpr::Sub(a, b) => {
+            format!("({} - {})", lower_expr(a, leaf, unary), lower_expr(b, leaf, unary))
+        }
+        ScalarExpr::Mul(a, b) => {
+            format!("({} * {})", lower_expr(a, leaf, unary), lower_expr(b, leaf, unary))
+        }
+        ScalarExpr::Div(a, b) => {
+            format!("({} / {})", lower_expr(a, leaf, unary), lower_expr(b, leaf, unary))
+        }
     }
 }

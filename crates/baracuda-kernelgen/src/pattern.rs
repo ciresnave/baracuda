@@ -25,7 +25,7 @@
 //! canonicalizes commutative operands before matching (review item E1); when
 //! that lands it is a one-line change to the canonical order here.
 
-use crate::ir::{Access, OpDef, ScalarExpr};
+use crate::ir::{Access, OpDef, ScalarExpr, UnaryOp};
 use std::collections::BTreeSet;
 
 /// A node in a derived FKC pattern tree (the v1 subset: `Op` + `bind`).
@@ -96,6 +96,32 @@ fn walk(e: &ScalarExpr, is_root: bool) -> Result<PatternNode, PatternError> {
         ScalarExpr::Sub(a, b) => op_node("Sub", a, b, consumers),
         ScalarExpr::Mul(a, b) => op_node("Mul", a, b, consumers),
         ScalarExpr::Div(a, b) => op_node("Div", a, b, consumers),
+        ScalarExpr::Unary(op, x) => Ok(PatternNode::Op {
+            op: unary_name(*op).to_string(),
+            operands: vec![walk(x, false)?],
+            consumers,
+        }),
+    }
+}
+
+/// FKC §4.1 graph-`Op` name for a [`UnaryOp`]. (The bare-`Gelu` flavor mapping is
+/// pending Fuel review item E2.)
+fn unary_name(op: UnaryOp) -> &'static str {
+    match op {
+        UnaryOp::Neg => "Neg",
+        UnaryOp::Abs => "Abs",
+        UnaryOp::Sqr => "Sqr",
+        UnaryOp::Sqrt => "Sqrt",
+        UnaryOp::Rsqrt => "Rsqrt",
+        UnaryOp::Recip => "Recip",
+        UnaryOp::Exp => "Exp",
+        UnaryOp::Log => "Log",
+        UnaryOp::Tanh => "Tanh",
+        UnaryOp::Sigmoid => "Sigmoid",
+        UnaryOp::Relu => "Relu",
+        UnaryOp::Erf => "Erf",
+        UnaryOp::Gelu => "Gelu",
+        UnaryOp::Silu => "Silu",
     }
 }
 
@@ -241,5 +267,28 @@ pattern:
                 got: vec![0, 1]
             })
         );
+    }
+
+    #[test]
+    fn activation_chain_pattern() {
+        // y = silu(a + b)  ->  root Silu, interior Add(bind0, bind1).
+        let op = OpDef::elementwise(
+            "silu_add",
+            2,
+            &[ElementKind::F32],
+            (input(0) + input(1)).silu(),
+        );
+        let expected = "\
+pattern:
+  root:
+    op: Silu
+    operands:
+      - op: Add
+        consumers: 1
+        operands:
+          - bind: 0
+          - bind: 1
+";
+        assert_eq!(to_fkc(&derive_pattern(&op).unwrap()), expected);
     }
 }

@@ -7,6 +7,7 @@
 //! `__half` / `__nv_bfloat16` the same as for `float`.
 
 use crate::backend::{lower_expr, Backend, GeneratedKernel};
+use crate::ir::{ScalarExpr, UnaryOp};
 use crate::plan::{KernelPlan, Schedule};
 use baracuda_kernels_types::{ElementKind, OperandKey};
 
@@ -23,6 +24,12 @@ impl Backend for Cuda {
         let Some(ctype) = scalar_ctype(plan.dtype) else {
             panic!("cuda backend: unsupported dtype {:?}", plan.dtype);
         };
+        assert!(
+            !contains_unary(plan.body)
+                || matches!(plan.dtype, ElementKind::F32 | ElementKind::F32Strict),
+            "cuda backend v1: unary math is f32-only for now (dtype {:?})",
+            plan.dtype
+        );
         match plan.schedule {
             Schedule::Vectorized { width } => match vector_type(plan.dtype, width) {
                 Some((vty, lanes)) => emit_vectorized(plan, vty, lanes),
@@ -125,7 +132,7 @@ fn emit_vectorized(plan: &KernelPlan<'_>, vty: &str, lanes: &[&str]) -> Generate
     s.push_str(&format!("        {vty} vo;\n"));
     for lane in lanes {
         let acc = |idx: u8| format!("v{idx}.{lane}");
-        s.push_str(&format!("        vo.{lane} = {};\n", lower_expr(plan.body, &acc)));
+        s.push_str(&format!("        vo.{lane} = {};\n", lower_expr(plan.body, &acc, &cuda_unary_f32)));
     }
     s.push_str("        out[i] = vo;\n    }\n}\n");
     GeneratedKernel { name, source: s }
@@ -145,7 +152,7 @@ fn emit_scalar(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
     let acc = |idx: u8| format!("in{idx}[i]");
     s.push_str(&format!(
         "    for (; i < n; i += step) out[i] = {};\n",
-        lower_expr(plan.body, &acc)
+        lower_expr(plan.body, &acc, &cuda_unary_f32)
     ));
     s.push_str("}\n");
     GeneratedKernel { name, source: s }
@@ -202,7 +209,7 @@ fn emit_strided(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
             format!("in{idx}[o{idx}]")
         }
     };
-    s.push_str(&format!("        out[oo] = {};\n", lower_expr(plan.body, &acc)));
+    s.push_str(&format!("        out[oo] = {};\n", lower_expr(plan.body, &acc, &cuda_unary_f32)));
     s.push_str("    }\n}\n");
     GeneratedKernel { name, source: s }
 }
@@ -227,6 +234,42 @@ fn offset_expr(o: OperandKey, stride_arr: &str, rank: usize) -> String {
         "0".to_string()
     } else {
         terms.join(" + ")
+    }
+}
+
+/// Spell a [`UnaryOp`] applied to an already-lowered f32 inner expression.
+/// Inner strings are atomic or parenthesized, so the function-call forms need no
+/// extra wrapping; the operator forms wrap themselves. (`Sigmoid`/`Gelu`/`Silu`
+/// reference the inner twice — fine for an atomic load; a temp-binding pass to
+/// avoid recompute on compound inners is a follow-up.)
+fn cuda_unary_f32(op: UnaryOp, x: String) -> String {
+    match op {
+        UnaryOp::Neg => format!("(-{x})"),
+        UnaryOp::Abs => format!("fabsf({x})"),
+        UnaryOp::Sqr => format!("({x}*{x})"),
+        UnaryOp::Sqrt => format!("sqrtf({x})"),
+        UnaryOp::Rsqrt => format!("rsqrtf({x})"),
+        UnaryOp::Recip => format!("(1.0f/{x})"),
+        UnaryOp::Exp => format!("expf({x})"),
+        UnaryOp::Log => format!("logf({x})"),
+        UnaryOp::Tanh => format!("tanhf({x})"),
+        UnaryOp::Sigmoid => format!("(1.0f/(1.0f+expf(-{x})))"),
+        UnaryOp::Relu => format!("fmaxf({x}, 0.0f)"),
+        UnaryOp::Erf => format!("erff({x})"),
+        UnaryOp::Gelu => format!("(0.5f*{x}*(1.0f+erff({x}*0.70710678f)))"),
+        UnaryOp::Silu => format!("({x}*(1.0f/(1.0f+expf(-{x}))))"),
+    }
+}
+
+/// `true` if `e` contains any unary node (gates the f32-only restriction).
+fn contains_unary(e: &ScalarExpr) -> bool {
+    match e {
+        ScalarExpr::Unary(..) => true,
+        ScalarExpr::Add(a, b)
+        | ScalarExpr::Sub(a, b)
+        | ScalarExpr::Mul(a, b)
+        | ScalarExpr::Div(a, b) => contains_unary(a) || contains_unary(b),
+        ScalarExpr::Input(_) | ScalarExpr::Const(_) => false,
     }
 }
 
@@ -312,5 +355,20 @@ mod tests {
         let key = structure_key(OpCategory::TernaryElementwise, &[a, a, a, a], ArchSku::Sm89);
         let k = generate(&fma, &key, &Cuda);
         assert!(k.source.contains("vo.y = ((v0.y * v1.y) + v2.y);"));
+    }
+
+    #[test]
+    fn f32_unary_relu_lowers() {
+        // y = relu(a + b), contiguous f32 V4.
+        let op = OpDef::elementwise(
+            "relu_add",
+            2,
+            &[ElementKind::F32],
+            (input(0) + input(1)).relu(),
+        );
+        let a = OperandDesc::new(1, &[1 << 20], &[1], ElementKind::F32, 256);
+        let key = structure_key(OpCategory::BinaryElementwise, &[a, a, a], ArchSku::Sm89);
+        let k = generate(&op, &key, &Cuda);
+        assert!(k.source.contains("vo.x = fmaxf((v0.x + v1.x), 0.0f);"));
     }
 }

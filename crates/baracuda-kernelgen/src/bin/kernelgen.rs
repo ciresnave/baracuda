@@ -47,4 +47,21 @@ fn main() {
         fs::write(&ppath, to_fkc(&pat)).expect("write pattern");
         println!("derived FKC pattern -> {ppath}");
     }
+
+    // An activation-epilogue op: relu(a + b), f32 contiguous.
+    let relu_add = OpDef::elementwise(
+        "relu_add",
+        2,
+        &[ElementKind::F32],
+        (input(0) + input(1)).relu(),
+    );
+    let ro = OperandDesc::new(1, &[1 << 20], &[1], ElementKind::F32, 256);
+    let rkey = structure_key(OpCategory::BinaryElementwise, &[ro, ro, ro], ArchSku::Sm89);
+    let rk = generate(&relu_add, &rkey, &Cuda);
+    let rpath = format!("{out_dir}/{}.cu", rk.name);
+    fs::write(&rpath, &rk.source).expect("write kernel");
+    println!("generated {rpath}");
+    if let Ok(pat) = derive_pattern(&relu_add) {
+        fs::write(format!("{out_dir}/relu_add.fkc.pattern"), to_fkc(&pat)).expect("write pattern");
+    }
 }

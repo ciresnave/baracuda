@@ -27,6 +27,43 @@ pub enum ScalarExpr {
     Mul(Box<ScalarExpr>, Box<ScalarExpr>),
     /// Quotient of two sub-expressions.
     Div(Box<ScalarExpr>, Box<ScalarExpr>),
+    /// A unary math / activation op applied to a sub-expression.
+    Unary(UnaryOp, Box<ScalarExpr>),
+}
+
+/// A unary math / activation op. Variant names line up with the FKC §4.1
+/// graph-`Op` vocabulary, so [`crate::derive_pattern`] maps them by name.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum UnaryOp {
+    /// Negation `-x`.
+    Neg,
+    /// Absolute value `|x|`.
+    Abs,
+    /// Square `x²`.
+    Sqr,
+    /// Square root `√x`.
+    Sqrt,
+    /// Reciprocal square root `1/√x`.
+    Rsqrt,
+    /// Reciprocal `1/x`.
+    Recip,
+    /// Natural exponential `eˣ`.
+    Exp,
+    /// Natural logarithm `ln x`.
+    Log,
+    /// Hyperbolic tangent.
+    Tanh,
+    /// Logistic sigmoid `1/(1+e⁻ˣ)`.
+    Sigmoid,
+    /// Rectified linear unit `max(x, 0)`.
+    Relu,
+    /// Gauss error function.
+    Erf,
+    /// Exact (erf-based) GELU. (FKC §4.1 names `Gelu` vs `GeluErf` — the bare
+    /// `Gelu` flavor mapping is pending Fuel review item E2.)
+    Gelu,
+    /// SiLU / swish `x·sigmoid(x)`.
+    Silu,
 }
 
 /// Ergonomic builder handle wrapping a [`ScalarExpr`]. Overloads arithmetic so
@@ -68,6 +105,49 @@ impl std::ops::Div for Expr {
     type Output = Expr;
     fn div(self, rhs: Expr) -> Expr {
         Expr(ScalarExpr::Div(Box::new(self.0), Box::new(rhs.0)))
+    }
+}
+
+impl Expr {
+    /// Apply a unary op to this expression (`expr.unary(UnaryOp::Relu)`).
+    #[must_use]
+    pub fn unary(self, op: UnaryOp) -> Expr {
+        Expr(ScalarExpr::Unary(op, Box::new(self.0)))
+    }
+    /// ReLU `max(x, 0)`.
+    #[must_use]
+    pub fn relu(self) -> Expr {
+        self.unary(UnaryOp::Relu)
+    }
+    /// SiLU / swish `x·sigmoid(x)`.
+    #[must_use]
+    pub fn silu(self) -> Expr {
+        self.unary(UnaryOp::Silu)
+    }
+    /// Exact (erf-based) GELU.
+    #[must_use]
+    pub fn gelu(self) -> Expr {
+        self.unary(UnaryOp::Gelu)
+    }
+    /// Logistic sigmoid.
+    #[must_use]
+    pub fn sigmoid(self) -> Expr {
+        self.unary(UnaryOp::Sigmoid)
+    }
+    /// Hyperbolic tangent.
+    #[must_use]
+    pub fn tanh(self) -> Expr {
+        self.unary(UnaryOp::Tanh)
+    }
+    /// Natural exponential.
+    #[must_use]
+    pub fn exp(self) -> Expr {
+        self.unary(UnaryOp::Exp)
+    }
+    /// Square root.
+    #[must_use]
+    pub fn sqrt(self) -> Expr {
+        self.unary(UnaryOp::Sqrt)
     }
 }
 
