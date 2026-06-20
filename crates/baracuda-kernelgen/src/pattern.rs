@@ -40,6 +40,10 @@ pub enum PatternNode {
         /// Consumer-count guard: `Some(1)` on interior nodes (sole-consumer),
         /// `None` (default `any`) on the root.
         consumers: Option<u32>,
+        /// `extract:` entries `(field, path)` — one per scalar-param
+        /// (`AddScalar`/`MulScalar`) value pulled into `op_params`. Collected
+        /// onto the root (paths anchored there, per FKC §6); empty on most nodes.
+        extract: Vec<(String, String)>,
     },
     /// A leaf binding the producer here as the fused op's `input[index]`.
     Bind(u8),
@@ -71,7 +75,13 @@ pub fn derive_pattern(op: &OpDef) -> Result<PatternNode, PatternError> {
     if !matches!(op.access, Access::Elementwise) {
         return Err(PatternError::NotElementwise);
     }
-    let root = walk(&op.body, true)?;
+    let mut extracts = Vec::new();
+    let mut root = walk(&op.body, true, &[], &mut extracts)?;
+    // Scalar-param values are pulled via `extract:` on the root (FKC §6).
+    if let PatternNode::Op { extract, .. } = &mut root {
+        extracts.sort();
+        *extract = extracts;
+    }
     // The bound input indices must be exactly [0, n_inputs) — total only for a
     // body referencing each input exactly the right set; otherwise FKC §3.2's
     // "bind set MUST equal [0, N)" would reject it at import, so we reject here.
@@ -87,20 +97,27 @@ pub fn derive_pattern(op: &OpDef) -> Result<PatternNode, PatternError> {
     Ok(root)
 }
 
-fn walk(e: &ScalarExpr, is_root: bool) -> Result<PatternNode, PatternError> {
+fn walk(
+    e: &ScalarExpr,
+    is_root: bool,
+    path: &[usize],
+    extracts: &mut Vec<(String, String)>,
+) -> Result<PatternNode, PatternError> {
     let consumers = if is_root { None } else { Some(1) };
     match e {
         ScalarExpr::Input(i) => Ok(PatternNode::Bind(*i)),
+        // A bare Const or a standalone Param (not the scalar of an Add/Mul) has
+        // no graph-Op form.
         ScalarExpr::Const(_) | ScalarExpr::Param(_) => Err(PatternError::ScalarParamUnsupported),
-        ScalarExpr::Add(a, b) => op_node("Add", a, b, consumers),
-        ScalarExpr::Sub(a, b) => op_node("Sub", a, b, consumers),
-        ScalarExpr::Mul(a, b) => op_node("Mul", a, b, consumers),
-        ScalarExpr::Div(a, b) => op_node("Div", a, b, consumers),
-        ScalarExpr::Unary(op, x) => Ok(PatternNode::Op {
-            op: unary_name(*op).to_string(),
-            operands: vec![walk(x, false)?],
+        ScalarExpr::Add(a, b) => scalar_binop("Add", "AddScalar", a, b, path, consumers, extracts),
+        ScalarExpr::Mul(a, b) => scalar_binop("Mul", "MulScalar", a, b, path, consumers, extracts),
+        ScalarExpr::Sub(a, b) => plain_binop("Sub", a, b, path, consumers, extracts),
+        ScalarExpr::Div(a, b) => plain_binop("Div", a, b, path, consumers, extracts),
+        ScalarExpr::Unary(op, x) => Ok(op_node(
+            unary_name(*op),
+            vec![walk(x, false, &child(path, 0), extracts)?],
             consumers,
-        }),
+        )),
     }
 }
 
@@ -125,17 +142,83 @@ fn unary_name(op: UnaryOp) -> &'static str {
     }
 }
 
-fn op_node(
+/// `Add`/`Mul` with exactly one runtime `Param` operand is the FKC §4.1
+/// scalar-param op (`AddScalar`/`MulScalar`): the tensor is the sole operand and
+/// the scalar is pulled via `extract` (`<path-to-this-node>.value`, §6). Otherwise
+/// a plain binary op.
+fn scalar_binop(
+    tensor_op: &str,
+    scalar_op: &str,
+    a: &ScalarExpr,
+    b: &ScalarExpr,
+    path: &[usize],
+    consumers: Option<u32>,
+    extracts: &mut Vec<(String, String)>,
+) -> Result<PatternNode, PatternError> {
+    let (tensor, pidx) = match (as_param(a), as_param(b)) {
+        // Two scalars leave no tensor operand — not an elementwise op.
+        (Some(_), Some(_)) => return Err(PatternError::ScalarParamUnsupported),
+        (None, Some(i)) => (a, i),
+        (Some(i), None) => (b, i),
+        (None, None) => return plain_binop(tensor_op, a, b, path, consumers, extracts),
+    };
+    let operand = walk(tensor, false, &child(path, 0), extracts)?;
+    extracts.push((format!("param{pidx}"), format!("{}.value", path_str(path))));
+    Ok(op_node(scalar_op, vec![operand], consumers))
+}
+
+/// A binary op of two tensors (`Sub`/`Div`, or `Add`/`Mul` of two tensors). A
+/// `Param` here has no §4.1 form (there is no `SubScalar`/`DivScalar`), so reject.
+fn plain_binop(
     name: &str,
     a: &ScalarExpr,
     b: &ScalarExpr,
+    path: &[usize],
     consumers: Option<u32>,
+    extracts: &mut Vec<(String, String)>,
 ) -> Result<PatternNode, PatternError> {
-    Ok(PatternNode::Op {
-        op: name.to_string(),
-        operands: vec![walk(a, false)?, walk(b, false)?],
+    if as_param(a).is_some() || as_param(b).is_some() {
+        return Err(PatternError::ScalarParamUnsupported);
+    }
+    let ca = walk(a, false, &child(path, 0), extracts)?;
+    let cb = walk(b, false, &child(path, 1), extracts)?;
+    Ok(op_node(name, vec![ca, cb], consumers))
+}
+
+fn op_node(op: &str, operands: Vec<PatternNode>, consumers: Option<u32>) -> PatternNode {
+    PatternNode::Op {
+        op: op.to_string(),
+        operands,
         consumers,
-    })
+        extract: Vec::new(),
+    }
+}
+
+fn as_param(e: &ScalarExpr) -> Option<u8> {
+    if let ScalarExpr::Param(i) = e {
+        Some(*i)
+    } else {
+        None
+    }
+}
+
+fn child(path: &[usize], j: usize) -> Vec<usize> {
+    let mut p = path.to_vec();
+    p.push(j);
+    p
+}
+
+/// FKC §6 path from the root to a node at `path`: `self` for the root, else
+/// `operand(j0).operand(j1)…`.
+fn path_str(path: &[usize]) -> String {
+    if path.is_empty() {
+        "self".to_string()
+    } else {
+        path.iter()
+            .map(|j| format!("operand({j})"))
+            .collect::<Vec<_>>()
+            .join(".")
+    }
 }
 
 fn collect_binds(node: &PatternNode, out: &mut BTreeSet<u8>) {
@@ -173,10 +256,19 @@ fn node_lines(node: &PatternNode) -> Vec<String> {
             op,
             operands,
             consumers,
+            extract,
         } => {
             let mut lines = vec![format!("op: {op}")];
             if let Some(c) = consumers {
                 lines.push(format!("consumers: {c}"));
+            }
+            if !extract.is_empty() {
+                let entries = extract
+                    .iter()
+                    .map(|(f, p)| format!("{f}: \"{p}\""))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                lines.push(format!("extract: {{ {entries} }}"));
             }
             if !operands.is_empty() {
                 lines.push("operands:".to_string());
@@ -198,7 +290,7 @@ fn node_lines(node: &PatternNode) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ir::{input, konst, OpDef};
+    use crate::ir::{input, konst, param, OpDef};
     use baracuda_kernels_types::ElementKind;
 
     #[test]
@@ -290,5 +382,34 @@ pattern:
           - bind: 1
 ";
         assert_eq!(to_fkc(&derive_pattern(&op).unwrap()), expected);
+    }
+
+    #[test]
+    fn add_scalar_root_self_extract() {
+        // y = x + p0  ->  root AddScalar over bind 0, scalar via `self.value`.
+        let op = OpDef::elementwise("add_p", 1, &[ElementKind::F32], input(0) + param(0));
+        let fkc = to_fkc(&derive_pattern(&op).unwrap());
+        assert!(fkc.contains("op: AddScalar"));
+        assert!(fkc.contains("extract: { param0: \"self.value\" }"));
+        assert!(fkc.contains("- bind: 0"));
+    }
+
+    #[test]
+    fn affine_relu_pattern_with_extracts() {
+        // y = relu(x * p0 + p1)  ->  Relu(AddScalar(MulScalar(x))); the two
+        // scalars are pulled onto the root via paths from it (FKC §6).
+        let op = OpDef::elementwise(
+            "affine_relu",
+            1,
+            &[ElementKind::F32],
+            (input(0) * param(0) + param(1)).relu(),
+        );
+        let fkc = to_fkc(&derive_pattern(&op).unwrap());
+        assert!(fkc.contains("op: Relu"));
+        assert!(fkc.contains("op: AddScalar"));
+        assert!(fkc.contains("op: MulScalar"));
+        assert!(fkc.contains(
+            "extract: { param0: \"operand(0).operand(0).value\", param1: \"operand(0).value\" }"
+        ));
     }
 }
