@@ -21,8 +21,13 @@ pub enum Schedule {
         /// Vector width in elements.
         width: u32,
     },
-    /// Linear access, one element at a time.
+    /// Linear access, one element at a time. Contiguous operands only.
     Scalar,
+    /// Per-element coordinate unravel over the cell's iteration rank — for
+    /// non-contiguous operands (strided / broadcast). The emitter specializes
+    /// it per cell: the rank is unrolled, broadcast axes drop their offset
+    /// terms, and a fully-broadcast operand is hoisted to a loop-invariant load.
+    Strided,
 }
 
 /// A language-agnostic description of the kernel to emit.
@@ -36,8 +41,10 @@ pub struct KernelPlan<'a> {
     pub dtype: ElementKind,
     /// The chosen schedule.
     pub schedule: Schedule,
-    /// The [`StructureKey`] token of the cell this plan targets (traceability).
-    pub cell: String,
+    /// The structure cell this plan targets. Backends read structural detail
+    /// from it (rank, per-operand broadcast mask, flip) for strided lowering,
+    /// and its token for traceability.
+    pub key: &'a StructureKey,
     /// Output `= body`, evaluated per coordinate.
     pub body: &'a ScalarExpr,
 }
@@ -52,7 +59,7 @@ pub struct KernelPlan<'a> {
 /// # Panics
 /// Panics if the op is not elementwise (the only access pattern v1 schedules).
 #[must_use]
-pub fn build_plan<'a>(op: &'a OpDef, key: &StructureKey) -> KernelPlan<'a> {
+pub fn build_plan<'a>(op: &'a OpDef, key: &'a StructureKey) -> KernelPlan<'a> {
     assert!(
         matches!(op.access, Access::Elementwise),
         "v1 schedules elementwise ops only"
@@ -64,7 +71,9 @@ pub fn build_plan<'a>(op: &'a OpDef, key: &StructureKey) -> KernelPlan<'a> {
         .map(|k| vec_width_elems(key.operands[k].vec_width))
         .min()
         .unwrap_or(1);
-    let schedule = if all_contig && min_width >= 2 {
+    let schedule = if !all_contig {
+        Schedule::Strided
+    } else if min_width >= 2 {
         Schedule::Vectorized { width: min_width }
     } else {
         Schedule::Scalar
@@ -74,7 +83,7 @@ pub fn build_plan<'a>(op: &'a OpDef, key: &StructureKey) -> KernelPlan<'a> {
         n_inputs: op.n_inputs,
         dtype: key.dtype,
         schedule,
-        cell: key.to_token(),
+        key,
         body: &op.body,
     }
 }

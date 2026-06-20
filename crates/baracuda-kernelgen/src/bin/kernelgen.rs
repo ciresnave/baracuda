@@ -30,4 +30,14 @@ fn main() {
         fs::write(&path, &kernel.source).expect("write kernel");
         println!("generated {path}  (cell {})", key.to_token());
     }
+
+    // A broadcast cell: in1 is a fully-broadcast scalar over a 2-D f32 output.
+    let a = OperandDesc::new(2, &[4, 8], &[8, 1], ElementKind::F32, 256);
+    let b = OperandDesc::new(2, &[4, 8], &[0, 0], ElementKind::F32, 256);
+    let out = OperandDesc::new(2, &[4, 8], &[8, 1], ElementKind::F32, 256);
+    let bkey = structure_key(OpCategory::BinaryElementwise, &[a, b, out], ArchSku::Sm89);
+    let bk = generate(&add, &bkey, &Cuda);
+    let bpath = format!("{out_dir}/{}.cu", bk.name);
+    fs::write(&bpath, &bk.source).expect("write kernel");
+    println!("generated {bpath}  (cell {})", bkey.to_token());
 }
