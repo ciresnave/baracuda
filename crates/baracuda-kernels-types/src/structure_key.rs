@@ -200,9 +200,11 @@ pub struct StructureKey {
     pub idx: IdxWidth,
     /// Total-work size class.
     pub work: WorkClass,
-    /// Effective rank after squeezing size-1 axes and merging adjacent
-    /// contiguous axes.
-    pub eff_rank: u8,
+    /// Raw iteration rank — the maximum operand rank (for elementwise ops the
+    /// operands are rank-aligned, broadcasting via stride 0, so this is the
+    /// shared logical rank the strided schedules unravel over). Size-1 squeeze
+    /// and contiguous-axis collapse are deferred optimizations.
+    pub rank: u8,
     /// Number of valid entries in [`StructureKey::operands`].
     pub n_operands: u8,
     /// Per-operand sub-keys; only `operands[0..n_operands]` are meaningful, the
@@ -401,10 +403,12 @@ pub fn structure_key(op: OpCategory, operands: &[OperandDesc], arch: ArchSku) ->
         IdxWidth::Idx32
     };
 
-    let (dtype, work, eff_rank) = match operands.first() {
-        Some(p) => (p.dtype, work_class(p), effective_rank(p)),
-        None => (ElementKind::F32, WorkClass::OneWarp, 0),
+    let (dtype, work) = match operands.first() {
+        Some(p) => (p.dtype, work_class(p)),
+        None => (ElementKind::F32, WorkClass::OneWarp),
     };
+    // Raw iteration rank = the widest operand rank (output rank for elementwise).
+    let rank = operands.iter().map(|o| o.rank).max().unwrap_or(0);
 
     StructureKey {
         version: STRUCTURE_KEY_VERSION,
@@ -413,7 +417,7 @@ pub fn structure_key(op: OpCategory, operands: &[OperandDesc], arch: ArchSku) ->
         arch,
         idx,
         work,
-        eff_rank,
+        rank,
         n_operands: n as u8,
         operands: keys,
         reduce_axes: AxisMask::EMPTY, // reduction keying: follow-up
@@ -554,32 +558,6 @@ fn work_class(od: &OperandDesc) -> WorkClass {
     }
 }
 
-/// Effective rank = number of contiguity runs among the non-unit axes (adjacent
-/// row-major-contiguous axes merge into one).
-fn effective_rank(od: &OperandDesc) -> u8 {
-    let rank = od.rank as usize;
-    let mut eff: u8 = 0;
-    let mut prev: Option<usize> = None;
-    for d in 0..rank {
-        if od.shape[d] <= 1 {
-            continue;
-        }
-        match prev {
-            Some(p) => {
-                // p (outer) merges with d (inner) iff |stride[p]| == |stride[d]|·shape[d].
-                let merges =
-                    od.strides[p].abs() == od.strides[d].abs().saturating_mul(od.shape[d].max(0));
-                if !merges {
-                    eff += 1;
-                }
-            }
-            None => eff += 1,
-        }
-        prev = Some(d);
-    }
-    eff
-}
-
 /// Byte size of a byte-addressable dtype, or `None` for sub-byte dtypes (which
 /// are treated as non-vectorizable in v1).
 fn dtype_size_bytes(dt: ElementKind) -> Option<u32> {
@@ -636,7 +614,7 @@ impl StructureKey {
             arch_code(self.arch),
             idx_code(self.idx),
             work_code(self.work),
-            self.eff_rank,
+            self.rank,
             ops,
             reduce,
         )
@@ -666,7 +644,7 @@ impl StructureKey {
             "grid" => WorkClass::GridStride,
             _ => return None,
         };
-        let eff_rank: u8 = parts[6].strip_prefix('r')?.parse().ok()?;
+        let rank: u8 = parts[6].strip_prefix('r')?.parse().ok()?;
 
         let mut operands = [OperandKey::default(); MAX_OPERANDS];
         let mut n_operands = 0u8;
@@ -689,7 +667,7 @@ impl StructureKey {
             arch,
             idx,
             work,
-            eff_rank,
+            rank,
             n_operands,
             operands,
             reduce_axes,
@@ -934,7 +912,7 @@ mod tests {
         assert_eq!(k.operands[0].inner_div, DivBucket::Div16);
         assert_eq!(k.idx, IdxWidth::Idx32);
         assert_eq!(k.work, WorkClass::GridStride);
-        assert_eq!(k.eff_rank, 1); // contiguous 2-D collapses to rank 1
+        assert_eq!(k.rank, 2); // raw iteration rank (collapse is deferred)
         assert!(!k.operands[0].flipped);
     }
 
@@ -1000,7 +978,7 @@ mod tests {
     fn scalar_operand_is_contiguous() {
         let s = od(&[], &[], ElementKind::F32, 256);
         let k = structure_key(OpCategory::UnaryElementwise, &[s, s], ArchSku::Sm80);
-        assert_eq!(k.eff_rank, 0);
+        assert_eq!(k.rank, 0);
         assert_eq!(k.operands[0].contig, Contiguity::Contig);
         assert_eq!(k.work, WorkClass::OneWarp);
     }
