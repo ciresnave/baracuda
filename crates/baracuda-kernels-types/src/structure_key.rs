@@ -424,6 +424,33 @@ pub fn structure_key(op: OpCategory, operands: &[OperandDesc], arch: ArchSku) ->
     }
 }
 
+/// Convenience: compute the [`StructureKey`] and return its wire token in one
+/// call — the form a caller's trampoline uses to tag a dispatch/miss record or
+/// match an FKC `accept` predicate. Equivalent to
+/// `structure_key(op, operands, arch).to_token()`.
+///
+/// This is the **single canonical entry point** for the cross-boundary use: Fuel
+/// builds each [`OperandDesc`] from its `FdxOperandDesc` (rank, shape, strides,
+/// dtype, alignment — plus quant / symbolic facts when present) and calls this,
+/// rather than re-deriving the key, so the build matrix and the runtime lookup
+/// join on the same token by construction. (Two Rust projects integrate via this
+/// callable directly; an FFI C-ABI trampoline would additionally need the FDX
+/// numeric dtype codes — review item E5 — and is deferred to that.)
+///
+/// ```
+/// use baracuda_kernels_types::{
+///     structure_key_token, ArchSku, ElementKind, OpCategory, OperandDesc,
+/// };
+/// // a [128, 256] row-major f32 (in, in, out) triple for a binary elementwise add.
+/// let a = OperandDesc::new(2, &[128, 256], &[256, 1], ElementKind::F32, 256);
+/// let token = structure_key_token(OpCategory::BinaryElementwise, &[a, a, a], ArchSku::Sm89);
+/// assert!(token.starts_with("sk1|bin|f32|sm89|"));
+/// ```
+#[must_use]
+pub fn structure_key_token(op: OpCategory, operands: &[OperandDesc], arch: ArchSku) -> String {
+    structure_key(op, operands, arch).to_token()
+}
+
 /// Innermost non-unit axis of an operand, or `None` if the operand is all
 /// size-≤1 axes (a scalar).
 fn inner_axis(od: &OperandDesc) -> Option<usize> {
