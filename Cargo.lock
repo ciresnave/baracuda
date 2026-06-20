@@ -760,6 +760,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "baracuda-seam"
+version = "0.0.1-alpha.68"
+
+[[package]]
 name = "baracuda-tensorrt"
 version = "0.0.1-alpha.68"
 dependencies = [

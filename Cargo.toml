@@ -31,6 +31,7 @@ baracuda-kernels-types = { version = "0.0.1-alpha.68", path = "crates/baracuda-k
 baracuda-kernels-sys = { version = "0.0.1-alpha.68", path = "crates/baracuda-kernels-sys" }
 baracuda-kernels = { version = "0.0.1-alpha.68", path = "crates/baracuda-kernels" }
 baracuda-kernels-bench = { version = "0.0.1-alpha.68", path = "crates/baracuda-kernels-bench" }
+baracuda-seam = { version = "0.0.1-alpha.68", path = "crates/baracuda-seam" }
 baracuda-cuda-sys = { version = "0.0.1-alpha.68", path = "crates/baracuda-cuda-sys" }
 baracuda-driver = { version = "0.0.1-alpha.68", path = "crates/baracuda-driver" }
 baracuda-runtime = { version = "0.0.1-alpha.68", path = "crates/baracuda-runtime" }
