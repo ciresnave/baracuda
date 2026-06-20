@@ -3,7 +3,10 @@
 //!
 //! `cargo run -p baracuda-kernelgen --example emit_contract`
 
-use baracuda_kernelgen::{contract, front_matter, generate, input, param, Cuda, OpDef};
+use baracuda_kernelgen::{
+    contract, emit_link_registry, front_matter, generate, input, link_entry, param, Cuda, LinkEntry,
+    OpDef,
+};
 use baracuda_kernels_types::{structure_key, ArchSku, ElementKind, OpCategory, OperandDesc};
 
 fn cell(n_operands: usize, op: OpCategory) -> baracuda_kernels_types::StructureKey {
@@ -31,10 +34,16 @@ fn main() {
         (input(0) * param(0) + param(1)).silu(),
     );
 
+    let mut registry: Vec<LinkEntry> = Vec::new();
     for (op, n) in [(&add, 3usize), (&relu_add, 3), (&affine_silu, 2)] {
         let key = cell(n, OpCategory::BinaryElementwise);
         let kernel = generate(op, &key, &Cuda);
         print!("{}", contract(op, &key, &kernel, "cuda"));
         println!();
+        registry.push(link_entry(op, &key, &kernel));
     }
+
+    // The link registry that resolves these entry_points at module load.
+    println!("<!-- generated link_registry.rs -->");
+    print!("{}", emit_link_registry(&registry));
 }

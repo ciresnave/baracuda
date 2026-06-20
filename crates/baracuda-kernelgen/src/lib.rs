@@ -31,6 +31,7 @@ pub mod backend;
 pub mod contract;
 pub mod cuda;
 pub mod ir;
+pub mod link;
 pub mod pattern;
 pub mod plan;
 
@@ -38,6 +39,7 @@ pub use backend::{Backend, GeneratedKernel};
 pub use contract::{contract, front_matter};
 pub use cuda::Cuda;
 pub use ir::{input, konst, param, Access, Expr, OpDef, ScalarExpr, UnaryOp};
+pub use link::{emit_link_registry, link_entry, LinkEntry};
 pub use pattern::{derive_pattern, to_fkc, PatternError, PatternNode};
 pub use plan::{build_plan, KernelPlan, Schedule};
 

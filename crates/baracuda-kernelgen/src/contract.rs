@@ -394,7 +394,7 @@ fn dtype_size(dt: ElementKind) -> u32 {
 
 /// 64-bit FNV-1a over the kernel source — the `ImplId.kernel_revision_hash` base.
 /// Stable and dependency-free (unlike `DefaultHasher`, which is unspecified).
-fn revision_hash(src: &str) -> u64 {
+pub(crate) fn revision_hash(src: &str) -> u64 {
     let mut h: u64 = 0xcbf2_9ce4_8422_2325;
     for b in src.bytes() {
         h ^= u64::from(b);
