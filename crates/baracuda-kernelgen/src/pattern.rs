@@ -17,13 +17,19 @@
 //!
 //! # Scope (v1)
 //!
-//! Pure-tensor elementwise bodies only. Scalar constants
-//! ([`ScalarExpr::Const`]) map to Fuel's `AddScalar`/`MulScalar`/… graph ops
-//! with an `extract:` path — deferred until the op-attribute bridge lands; the
-//! walker rejects a `Const`-bearing body for now. Commutative operand ordering
-//! is emitted in the body's natural order, pending Fuel's answer on whether it
-//! canonicalizes commutative operands before matching (review item E1); when
-//! that lands it is a one-line change to the canonical order here.
+//! Pure-tensor elementwise bodies, plus runtime scalar params
+//! ([`ScalarExpr::Param`]) which lower to `AddScalar`/`MulScalar` with an
+//! `extract:` path (FKC §6). Compile-time scalar *constants*
+//! ([`ScalarExpr::Const`]) have no graph-`Op` form yet and are rejected.
+//!
+//! Commutative operands (`Add`/`Mul`) are emitted in a **canonical order**
+//! (§3a.2a): Fuel canonicalizes commutative operands before matching, so we sort
+//! ours to the same order — two authorings of one expression (`a*b + c` vs
+//! `c + a*b`) therefore emit one identical pattern, and match a graph written
+//! either way. The ordering key is **provisional** — graph ops before leaves,
+//! then by op name / leaf index — pending the exact key named in the full rev-4
+//! `fkc-fusion-patterns.md` ("the same canonicalization `structure_key` uses");
+//! reconciling it is a one-function change ([`canonicalize`]'s `sig`).
 
 use crate::ir::{Access, OpDef, ScalarExpr, UnaryOp};
 use std::collections::BTreeSet;
@@ -75,8 +81,11 @@ pub fn derive_pattern(op: &OpDef) -> Result<PatternNode, PatternError> {
     if !matches!(op.access, Access::Elementwise) {
         return Err(PatternError::NotElementwise);
     }
+    // Canonicalize commutative operands first, so the derived paths/extracts are
+    // computed on the same operand order Fuel matches against (§3a.2a).
+    let body = canonicalize(&op.body);
     let mut extracts = Vec::new();
-    let mut root = walk(&op.body, true, &[], &mut extracts)?;
+    let mut root = walk(&body, true, &[], &mut extracts)?;
     // Scalar-param values are pulled via `extract:` on the root (FKC §6).
     if let PatternNode::Op { extract, .. } = &mut root {
         extracts.sort();
@@ -95,6 +104,62 @@ pub fn derive_pattern(op: &OpDef) -> Result<PatternNode, PatternError> {
         });
     }
     Ok(root)
+}
+
+/// Rewrite a body into canonical form by sorting the operands of every
+/// commutative node (`Add`/`Mul`) to a deterministic order, bottom-up
+/// (children canonicalized first, so the sort key is stable). Non-commutative
+/// nodes (`Sub`/`Div`/`Unary`) keep their operand order; leaves are unchanged.
+///
+/// This realizes the FKC §3a.2a contract on our side: Fuel canonicalizes a
+/// graph's commutative operands before matching, so a pattern must present its
+/// operands in that same order. The order *value* (via [`sig`]) is provisional —
+/// pinned to the exact §3a.2a key when the full rev-4 spec lands.
+fn canonicalize(e: &ScalarExpr) -> ScalarExpr {
+    match e {
+        ScalarExpr::Add(a, b) => {
+            let (lo, hi) = order2(canonicalize(a), canonicalize(b));
+            ScalarExpr::Add(Box::new(lo), Box::new(hi))
+        }
+        ScalarExpr::Mul(a, b) => {
+            let (lo, hi) = order2(canonicalize(a), canonicalize(b));
+            ScalarExpr::Mul(Box::new(lo), Box::new(hi))
+        }
+        ScalarExpr::Sub(a, b) => {
+            ScalarExpr::Sub(Box::new(canonicalize(a)), Box::new(canonicalize(b)))
+        }
+        ScalarExpr::Div(a, b) => {
+            ScalarExpr::Div(Box::new(canonicalize(a)), Box::new(canonicalize(b)))
+        }
+        ScalarExpr::Unary(op, x) => ScalarExpr::Unary(*op, Box::new(canonicalize(x))),
+        ScalarExpr::Input(_) | ScalarExpr::Const(_) | ScalarExpr::Param(_) => e.clone(),
+    }
+}
+
+/// Order two already-canonicalized operands ascending by [`sig`].
+fn order2(a: ScalarExpr, b: ScalarExpr) -> (ScalarExpr, ScalarExpr) {
+    if sig(&a) <= sig(&b) {
+        (a, b)
+    } else {
+        (b, a)
+    }
+}
+
+/// Deterministic structural sort key (the **provisional** §3a.2a order). The `0`
+/// prefix on graph ops vs the `1` prefix on leaves makes ops sort before leaves;
+/// within each, the recursive form / leaf index breaks ties. Pure function of
+/// structure, so a pattern and a graph subtree of the same shape sort alike.
+fn sig(e: &ScalarExpr) -> String {
+    match e {
+        ScalarExpr::Add(a, b) => format!("0Add({},{})", sig(a), sig(b)),
+        ScalarExpr::Sub(a, b) => format!("0Sub({},{})", sig(a), sig(b)),
+        ScalarExpr::Mul(a, b) => format!("0Mul({},{})", sig(a), sig(b)),
+        ScalarExpr::Div(a, b) => format!("0Div({},{})", sig(a), sig(b)),
+        ScalarExpr::Unary(op, x) => format!("0U{op:?}({})", sig(x)),
+        ScalarExpr::Input(i) => format!("1I{i:03}"),
+        ScalarExpr::Param(i) => format!("1P{i:03}"),
+        ScalarExpr::Const(v) => format!("1C{v:?}"),
+    }
 }
 
 fn walk(
@@ -382,6 +447,35 @@ pattern:
           - bind: 1
 ";
         assert_eq!(to_fkc(&derive_pattern(&op).unwrap()), expected);
+    }
+
+    #[test]
+    fn commutative_authorings_converge() {
+        // a*b + c  and  c + a*b  are the same math written two ways; canonical-
+        // ization (§3a.2a) must emit one identical pattern so either graph matches.
+        let ab_c = OpDef::elementwise(
+            "f",
+            3,
+            &[ElementKind::F32],
+            input(0) * input(1) + input(2),
+        );
+        let c_ab = OpDef::elementwise(
+            "f",
+            3,
+            &[ElementKind::F32],
+            input(2) + input(0) * input(1),
+        );
+        assert_eq!(
+            to_fkc(&derive_pattern(&ab_c).unwrap()),
+            to_fkc(&derive_pattern(&c_ab).unwrap())
+        );
+        // commutative `a + b` vs `b + a` likewise.
+        let ab = OpDef::elementwise("g", 2, &[ElementKind::F32], input(0) + input(1));
+        let ba = OpDef::elementwise("g", 2, &[ElementKind::F32], input(1) + input(0));
+        assert_eq!(
+            to_fkc(&derive_pattern(&ab).unwrap()),
+            to_fkc(&derive_pattern(&ba).unwrap())
+        );
     }
 
     #[test]
