@@ -7,7 +7,7 @@
 //! `__half` / `__nv_bfloat16` the same as for `float`.
 
 use crate::backend::{lower_expr, Backend, GeneratedKernel};
-use crate::ir::{ScalarExpr, UnaryOp};
+use crate::ir::UnaryOp;
 use crate::plan::{KernelPlan, Schedule};
 use baracuda_kernels_types::{ElementKind, OperandKey};
 
@@ -24,12 +24,6 @@ impl Backend for Cuda {
         let Some(ctype) = scalar_ctype(plan.dtype) else {
             panic!("cuda backend: unsupported dtype {:?}", plan.dtype);
         };
-        assert!(
-            !contains_unary(plan.body)
-                || matches!(plan.dtype, ElementKind::F32 | ElementKind::F32Strict),
-            "cuda backend v1: unary math is f32-only for now (dtype {:?})",
-            plan.dtype
-        );
         match plan.schedule {
             Schedule::Vectorized { width } => match vector_type(plan.dtype, width) {
                 Some((vty, lanes)) => emit_vectorized(plan, vty, lanes),
@@ -132,7 +126,7 @@ fn emit_vectorized(plan: &KernelPlan<'_>, vty: &str, lanes: &[&str]) -> Generate
     s.push_str(&format!("        {vty} vo;\n"));
     for lane in lanes {
         let acc = |idx: u8| format!("v{idx}.{lane}");
-        s.push_str(&format!("        vo.{lane} = {};\n", lower_expr(plan.body, &acc, &cuda_unary_f32)));
+        s.push_str(&format!("        vo.{lane} = {};\n", lower_expr(plan.body, &acc, &|op, x| cuda_unary(op, x, plan.dtype))));
     }
     s.push_str("        out[i] = vo;\n    }\n}\n");
     GeneratedKernel { name, source: s }
@@ -152,7 +146,7 @@ fn emit_scalar(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
     let acc = |idx: u8| format!("in{idx}[i]");
     s.push_str(&format!(
         "    for (; i < n; i += step) out[i] = {};\n",
-        lower_expr(plan.body, &acc, &cuda_unary_f32)
+        lower_expr(plan.body, &acc, &|op, x| cuda_unary(op, x, plan.dtype))
     ));
     s.push_str("}\n");
     GeneratedKernel { name, source: s }
@@ -209,7 +203,7 @@ fn emit_strided(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
             format!("in{idx}[o{idx}]")
         }
     };
-    s.push_str(&format!("        out[oo] = {};\n", lower_expr(plan.body, &acc, &cuda_unary_f32)));
+    s.push_str(&format!("        out[oo] = {};\n", lower_expr(plan.body, &acc, &|op, x| cuda_unary(op, x, plan.dtype))));
     s.push_str("    }\n}\n");
     GeneratedKernel { name, source: s }
 }
@@ -242,7 +236,7 @@ fn offset_expr(o: OperandKey, stride_arr: &str, rank: usize) -> String {
 /// extra wrapping; the operator forms wrap themselves. (`Sigmoid`/`Gelu`/`Silu`
 /// reference the inner twice — fine for an atomic load; a temp-binding pass to
 /// avoid recompute on compound inners is a follow-up.)
-fn cuda_unary_f32(op: UnaryOp, x: String) -> String {
+fn unary_f32(op: UnaryOp, x: String) -> String {
     match op {
         UnaryOp::Neg => format!("(-{x})"),
         UnaryOp::Abs => format!("fabsf({x})"),
@@ -261,15 +255,44 @@ fn cuda_unary_f32(op: UnaryOp, x: String) -> String {
     }
 }
 
-/// `true` if `e` contains any unary node (gates the f32-only restriction).
-fn contains_unary(e: &ScalarExpr) -> bool {
-    match e {
-        ScalarExpr::Unary(..) => true,
-        ScalarExpr::Add(a, b)
-        | ScalarExpr::Sub(a, b)
-        | ScalarExpr::Mul(a, b)
-        | ScalarExpr::Div(a, b) => contains_unary(a) || contains_unary(b),
-        ScalarExpr::Input(_) | ScalarExpr::Const(_) => false,
+/// Same as [`unary_f32`] but with f64 math-function names and double literals.
+fn unary_f64(op: UnaryOp, x: String) -> String {
+    match op {
+        UnaryOp::Neg => format!("(-{x})"),
+        UnaryOp::Abs => format!("fabs({x})"),
+        UnaryOp::Sqr => format!("({x}*{x})"),
+        UnaryOp::Sqrt => format!("sqrt({x})"),
+        UnaryOp::Rsqrt => format!("rsqrt({x})"),
+        UnaryOp::Recip => format!("(1.0/{x})"),
+        UnaryOp::Exp => format!("exp({x})"),
+        UnaryOp::Log => format!("log({x})"),
+        UnaryOp::Tanh => format!("tanh({x})"),
+        UnaryOp::Sigmoid => format!("(1.0/(1.0+exp(-{x})))"),
+        UnaryOp::Relu => format!("fmax({x}, 0.0)"),
+        UnaryOp::Erf => format!("erf({x})"),
+        UnaryOp::Gelu => format!("(0.5*{x}*(1.0+erf({x}*0.7071067811865476)))"),
+        UnaryOp::Silu => format!("({x}*(1.0/(1.0+exp(-{x}))))"),
+    }
+}
+
+/// Lower a unary op for `dtype`. f32/f64 use native math; f16/bf16 compute in
+/// float (convert → f32 math → convert) — correct for every op, and it avoids
+/// the incomplete `__half2` math-intrinsic set (no `h2tanh`/`h2erf`). Packed
+/// `__half2` SIMD is a perf follow-up. Integer dtypes have no unary math.
+fn cuda_unary(op: UnaryOp, x: String, dtype: ElementKind) -> String {
+    match dtype {
+        ElementKind::F32 | ElementKind::F32Strict => unary_f32(op, x),
+        ElementKind::F64 => unary_f64(op, x),
+        ElementKind::F16 => {
+            format!("__float2half({})", unary_f32(op, format!("__half2float({x})")))
+        }
+        ElementKind::Bf16 => {
+            format!(
+                "__float2bfloat16({})",
+                unary_f32(op, format!("__bfloat162float({x})"))
+            )
+        }
+        other => panic!("cuda backend: no unary math for dtype {other:?}"),
     }
 }
 
@@ -370,5 +393,23 @@ mod tests {
         let key = structure_key(OpCategory::BinaryElementwise, &[a, a, a], ArchSku::Sm89);
         let k = generate(&op, &key, &Cuda);
         assert!(k.source.contains("vo.x = fmaxf((v0.x + v1.x), 0.0f);"));
+    }
+
+    #[test]
+    fn f16_unary_computes_in_float() {
+        // f16 has no half2 path yet → scalar emit; unary computes in float.
+        let op = OpDef::elementwise(
+            "relu_add",
+            2,
+            &[ElementKind::F16],
+            (input(0) + input(1)).relu(),
+        );
+        let a = OperandDesc::new(1, &[1 << 20], &[1], ElementKind::F16, 256);
+        let key = structure_key(OpCategory::BinaryElementwise, &[a, a, a], ArchSku::Sm89);
+        let k = generate(&op, &key, &Cuda);
+        assert!(k.source.contains("#include <cuda_fp16.h>"));
+        assert!(k
+            .source
+            .contains("__float2half(fmaxf(__half2float((in0[i] + in1[i])), 0.0f))"));
     }
 }
