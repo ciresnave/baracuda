@@ -28,12 +28,14 @@
 //! backends, FKC emission, and the algebraic optimizer are the growth path.
 
 pub mod backend;
+pub mod contract;
 pub mod cuda;
 pub mod ir;
 pub mod pattern;
 pub mod plan;
 
 pub use backend::{Backend, GeneratedKernel};
+pub use contract::{contract, front_matter};
 pub use cuda::Cuda;
 pub use ir::{input, konst, param, Access, Expr, OpDef, ScalarExpr, UnaryOp};
 pub use pattern::{derive_pattern, to_fkc, PatternError, PatternNode};
