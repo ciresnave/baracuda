@@ -38,6 +38,7 @@ pub trait Backend {
 pub fn lower_expr(e: &ScalarExpr, acc: &dyn Fn(u8) -> String) -> String {
     match e {
         ScalarExpr::Input(i) => acc(*i),
+        ScalarExpr::Const(v) => format!("{v:?}"),
         ScalarExpr::Add(a, b) => format!("({} + {})", lower_expr(a, acc), lower_expr(b, acc)),
         ScalarExpr::Sub(a, b) => format!("({} - {})", lower_expr(a, acc), lower_expr(b, acc)),
         ScalarExpr::Mul(a, b) => format!("({} * {})", lower_expr(a, acc), lower_expr(b, acc)),

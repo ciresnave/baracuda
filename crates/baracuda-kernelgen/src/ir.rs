@@ -13,10 +13,12 @@ use baracuda_kernels_types::ElementKind;
 ///
 /// Backend-agnostic: the emitter lowers it to CUDA today (and other backends
 /// later) by walking the tree with a per-backend accessor for the leaves.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum ScalarExpr {
     /// The value of input operand `i` at the current coordinate.
     Input(u8),
+    /// A compile-time scalar constant — the same value at every coordinate.
+    Const(f64),
     /// Sum of two sub-expressions.
     Add(Box<ScalarExpr>, Box<ScalarExpr>),
     /// Difference of two sub-expressions.
@@ -36,6 +38,12 @@ pub struct Expr(pub ScalarExpr);
 #[must_use]
 pub fn input(i: u8) -> Expr {
     Expr(ScalarExpr::Input(i))
+}
+
+/// A compile-time scalar constant leaf (e.g. `input(0) * konst(0.5)`).
+#[must_use]
+pub fn konst(v: f64) -> Expr {
+    Expr(ScalarExpr::Const(v))
 }
 
 impl std::ops::Add for Expr {

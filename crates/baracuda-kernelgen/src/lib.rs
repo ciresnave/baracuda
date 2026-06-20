@@ -30,11 +30,13 @@
 pub mod backend;
 pub mod cuda;
 pub mod ir;
+pub mod pattern;
 pub mod plan;
 
 pub use backend::{Backend, GeneratedKernel};
 pub use cuda::Cuda;
-pub use ir::{input, Access, Expr, OpDef, ScalarExpr};
+pub use ir::{input, konst, Access, Expr, OpDef, ScalarExpr};
+pub use pattern::{derive_pattern, to_fkc, PatternError, PatternNode};
 pub use plan::{build_plan, KernelPlan, Schedule};
 
 use baracuda_kernels_types::StructureKey;
