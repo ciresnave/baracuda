@@ -290,21 +290,42 @@ pub fn synthesize(
 
     // --- Synthesis ----------------------------------------------------------
     let (op, derived) = region_to_op(&req.region, req.n_inputs, &req.fused_op_id, dtype)?;
+    synthesize_op(
+        op,
+        derived,
+        &req.operands,
+        req.op_category,
+        req.arch,
+        req.budget.max_compile_ms,
+        backend,
+        compiler,
+    )
+}
 
+/// Core synthesis shared by [`synthesize`] (our [`PatternNode`] region) and the
+/// `seam` front-end (Fuel's `fuel_kernel_seam_types::PatternNode` region): op IR +
+/// its canonical recipe pattern → optimized kernel → on-demand compile → FKC
+/// contract + recipe + link row. The §5.1 inward optimizer runs on the *kernel*
+/// body; `derived` (the original region) carries the recipe.
+fn synthesize_op(
+    op: OpDef,
+    derived: PatternNode,
+    operands: &[OperandDesc],
+    op_category: OpCategory,
+    arch: ArchSku,
+    max_compile_ms: u32,
+    backend: &dyn Backend,
+    compiler: &dyn Compiler,
+) -> Result<JitResponse, JitError> {
+    let dtype = operands.first().map_or(ElementKind::F32, |o| o.dtype);
     // CUDA backend dtype limits: a unary / binary-fn node needs a float dtype, and
-    // scalar params are f32-only. Reject an incompatible (dtype, op) region as an
-    // honest miss rather than panicking inside lowering (the trust-boundary rule).
+    // scalar params are f32-only — honest miss rather than a lowering panic.
     if !dtype_compatible(&op.body, dtype) {
         return Err(JitError::UnsupportedDtype);
     }
 
     // The schedule cell is keyed from Fuel's operand projection — never re-derived.
-    let key = structure_key(req.op_category, &req.operands, req.arch);
-
-    // §5.1: synthesize the *best* kernel — algebraically optimize the body for
-    // codegen (the inward e-graph). The recipe (pattern/decompose) below stays the
-    // ORIGINAL region so Fuel's matcher still recognizes the subgraph; only the
-    // emitted kernel computes the equivalent optimized form.
+    let key = structure_key(op_category, operands, arch);
     let kernel_op = OpDef {
         body: optimize(&op.body),
         ..op.clone()
@@ -312,18 +333,15 @@ pub fn synthesize(
     let kernel = generate(&kernel_op, &key, backend);
 
     let artifact = compiler
-        .compile(&kernel.source, &kernel.name, req.budget.max_compile_ms)
+        .compile(&kernel.source, &kernel.name, max_compile_ms)
         .map_err(JitError::Compile)?;
-
-    let contract =
-        contract(&op, &key, &kernel, backend.name()).ok_or(JitError::UnsupportedDtype)?;
+    let contract = contract(&op, &key, &kernel, backend.name()).ok_or(JitError::UnsupportedDtype)?;
 
     // Both recipe halves come from the SINGLE canonical pattern node, so they are
     // structurally identical and decompose carries the scalar `extract:` routing.
     let pattern = to_fkc(&derived);
     let decompose = to_fkc(&derived).replacen("pattern:", "decompose:", 1);
 
-    // The link row resolves entry_point -> KernelRef at load (FKC §12.6).
     let link = link_entry(&op, &key, &kernel);
     let kind = compiler.artifact_kind();
 
@@ -511,6 +529,185 @@ fn region_unary(op: &str) -> Option<UnaryOp> {
         "Step" => UnaryOp::Step,
         _ => return None,
     })
+}
+
+/// The direct-Rust §5 seam (`--features seam`): synthesize for a region in Fuel's
+/// frozen grammar (`fuel_kernel_seam_types`). Fuel owns the region grammar
+/// (`PatternNode`/`OpTag`); Baracuda owns the classifier input (`OperandDesc`).
+/// We convert Fuel's node to our internal node form and reuse the exact native
+/// `region_to_op` + core synthesis — no duplicated op logic.
+#[cfg(feature = "seam")]
+pub mod seam {
+    use super::*;
+    use fuel_kernel_seam_types::{OpTag, PatternNode as SeamNode};
+
+    /// Synthesize a kernel for a Fuel-chosen `region`. `operands` is the
+    /// inputs-then-output `OperandDesc` projection; `n_inputs = operands.len() - 1`.
+    ///
+    /// # Errors
+    /// See [`JitError`] — a malformed request, an op/dtype outside the
+    /// synthesizer's coverage (honest miss), or a compile failure.
+    #[allow(clippy::too_many_arguments)]
+    pub fn synthesize(
+        region: &SeamNode,
+        operands: &[OperandDesc],
+        op_category: OpCategory,
+        arch: ArchSku,
+        fused_op_id: &str,
+        max_compile_ms: u32,
+        backend: &dyn Backend,
+        compiler: &dyn Compiler,
+    ) -> Result<JitResponse, JitError> {
+        if operands.is_empty() || operands.len() > MAX_OPERANDS {
+            return Err(JitError::OperandArity {
+                n_inputs: 0,
+                operands: operands.len(),
+            });
+        }
+        if max_compile_ms == 0 {
+            return Err(JitError::Budget("max_compile_ms must be > 0".to_string()));
+        }
+        let dtype = operands[0].dtype;
+        if operands.iter().any(|o| o.dtype != dtype) {
+            return Err(JitError::MixedDtype);
+        }
+        let n_inputs = (operands.len() - 1) as u8;
+
+        let internal = to_internal(region)?;
+        let (op, derived) = region_to_op(&internal, n_inputs, fused_op_id, dtype)?;
+        synthesize_op(
+            op, derived, operands, op_category, arch, max_compile_ms, backend, compiler,
+        )
+    }
+
+    /// Convert a Fuel `PatternNode` (region direction) to Baracuda's internal node
+    /// (op vocabulary mapped by name). An `OpTag` the synthesizer doesn't cover and
+    /// the matcher-only `SeeThrough`/`Any` are honest `UnsupportedOp` misses.
+    fn to_internal(n: &SeamNode) -> Result<PatternNode, JitError> {
+        match n {
+            SeamNode::Bind { index } => Ok(PatternNode::Bind(*index)),
+            SeamNode::Op { op, operands, .. } => {
+                let name = optag_name(*op).ok_or_else(|| JitError::UnsupportedOp(format!("{op:?}")))?;
+                let ops = operands
+                    .iter()
+                    .map(to_internal)
+                    .collect::<Result<Vec<_>, _>>()?;
+                Ok(PatternNode::Op {
+                    op: name.to_string(),
+                    operands: ops,
+                    consumers: None,
+                    extract: Vec::new(),
+                })
+            }
+            SeamNode::SeeThrough { .. } => Err(JitError::UnsupportedOp("SeeThrough".to_string())),
+            SeamNode::Any => Err(JitError::UnsupportedOp("Any".to_string())),
+        }
+    }
+
+    /// `OpTag` → Baracuda's emitter op-name (what `region_to_op` parses). `None`
+    /// for any tag outside the increment-1 synthesizer coverage.
+    fn optag_name(op: OpTag) -> Option<&'static str> {
+        Some(match op {
+            OpTag::Add => "Add",
+            OpTag::Sub => "Sub",
+            OpTag::Mul => "Mul",
+            OpTag::Div => "Div",
+            OpTag::Maximum => "Maximum",
+            OpTag::Minimum => "Minimum",
+            OpTag::Pow => "Pow",
+            OpTag::Rem => "Rem",
+            OpTag::Neg => "Neg",
+            OpTag::Abs => "Abs",
+            OpTag::Sqr => "Sqr",
+            OpTag::Sqrt => "Sqrt",
+            OpTag::Rsqrt => "Rsqrt",
+            OpTag::Recip => "Recip",
+            OpTag::Exp => "Exp",
+            OpTag::Log => "Log",
+            OpTag::Sin => "Sin",
+            OpTag::Cos => "Cos",
+            OpTag::Tanh => "Tanh",
+            OpTag::Sigmoid => "Sigmoid",
+            OpTag::Silu => "Silu",
+            OpTag::GeluErf => "GeluErf",
+            OpTag::Relu => "Relu",
+            OpTag::Erf => "Erf",
+            OpTag::Step => "Step",
+            OpTag::Floor => "Floor",
+            OpTag::Ceil => "Ceil",
+            OpTag::Round => "Round",
+            OpTag::Sign => "Sign",
+            OpTag::AddScalar => "AddScalar",
+            OpTag::MulScalar => "MulScalar",
+            // Op::Gelu (tanh), PowI/Clamp, comparisons, Where/MaskedFill, reductions,
+            // MatMul, shape/layout, indexing, LogSoftmaxLastDim, Iota — not synthesized.
+            _ => return None,
+        })
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+        use crate::{Cuda, StubCompiler};
+        use fuel_kernel_seam_types::OpAttrs;
+
+        fn op(op: OpTag, operands: Vec<SeamNode>) -> SeamNode {
+            SeamNode::Op {
+                op,
+                operands,
+                attrs: OpAttrs::default(),
+            }
+        }
+
+        fn operands(dt: ElementKind, n: usize) -> Vec<OperandDesc> {
+            let a = OperandDesc::new(2, &[128, 256], &[256, 1], dt, 256);
+            std::iter::repeat_n(a, n).collect()
+        }
+
+        #[test]
+        fn synthesize_fuel_region() {
+            // relu(a + b) in Fuel's grammar -> a synthesized fused kernel.
+            let region = op(
+                OpTag::Relu,
+                vec![op(
+                    OpTag::Add,
+                    vec![SeamNode::Bind { index: 0 }, SeamNode::Bind { index: 1 }],
+                )],
+            );
+            let resp = synthesize(
+                &region,
+                &operands(ElementKind::F32, 3),
+                OpCategory::BinaryElementwise,
+                ArchSku::Sm89,
+                "jit_relu_add",
+                1000,
+                &Cuda,
+                &StubCompiler,
+            )
+            .unwrap();
+            assert!(resp.contract.contains("fused_op: jit_relu_add"));
+            assert!(resp.recipe.pattern.contains("op: Relu"));
+            assert!(resp.kernel.source.contains("__global__"));
+        }
+
+        #[test]
+        fn tanh_gelu_optag_is_unsupported() {
+            // Op::Gelu (tanh-approx) is a distinct tag we don't synthesize.
+            let region = op(OpTag::Gelu, vec![SeamNode::Bind { index: 0 }]);
+            let err = synthesize(
+                &region,
+                &operands(ElementKind::F32, 2),
+                OpCategory::UnaryElementwise,
+                ArchSku::Sm89,
+                "x",
+                1000,
+                &Cuda,
+                &StubCompiler,
+            )
+            .unwrap_err();
+            assert!(matches!(err, JitError::UnsupportedOp(_)));
+        }
+    }
 }
 
 #[cfg(test)]

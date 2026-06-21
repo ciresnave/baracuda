@@ -444,6 +444,7 @@ version = "0.0.1-alpha.69"
 dependencies = [
  "baracuda-kernels-types",
  "baracuda-nvrtc",
+ "fuel-kernel-seam-types",
 ]
 
 [[package]]
@@ -1101,6 +1102,12 @@ dependencies = [
  "libc",
  "winapi",
 ]
+
+[[package]]
+name = "fuel-kernel-seam-types"
+version = "0.10.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "862df2fe673037653822eea1224f1eeaef137648cca6dbb3a655e11061338f39"
 
 [[package]]
 name = "futures-core"

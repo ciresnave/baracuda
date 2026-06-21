@@ -15,10 +15,17 @@ publish = false
 # synthesis engine + StubCompiler build and test without a CUDA toolchain; enable
 # with `--features nvrtc` where nvrtc is available.
 nvrtc = ["dep:baracuda-nvrtc"]
+# Wire Fuel's frozen kernel-seam grammar (`fuel_kernel_seam_types::PatternNode`) as
+# the JIT region type — the direct-Rust §5 `seam::synthesize` entry point.
+seam = ["dep:fuel-kernel-seam-types"]
 
 [dependencies]
 baracuda-kernels-types = { workspace = true }
 baracuda-nvrtc = { workspace = true, optional = true }
+# Fuel's dependency-free std-POD grammar crate (OpTag / OpAttrs / PatternNode) — the
+# §5 shared wire vocabulary. crates.io version dep so the default build resolves
+# without a Fuel checkout (an unpublished path/git dep breaks workspace resolution).
+fuel-kernel-seam-types = { version = "0.10.2", optional = true }
 
 [lints]
 workspace = true
