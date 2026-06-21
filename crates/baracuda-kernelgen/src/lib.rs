@@ -42,8 +42,10 @@ pub use cuda::Cuda;
 pub use ir::{input, konst, param, Access, Expr, OpDef, ScalarExpr, UnaryOp};
 pub use jit::{
     synthesize, ArtifactKind, Compiler, JitBudget, JitError, JitRequest, JitResponse, Recipe,
-    SynthKernel,
+    SynthKernel, StubCompiler,
 };
+#[cfg(feature = "nvrtc")]
+pub use jit::NvrtcCompiler;
 pub use link::{emit_link_registry, link_entry, LinkEntry};
 pub use pattern::{derive_pattern, to_fkc, PatternError, PatternNode};
 pub use plan::{build_plan, KernelPlan, Schedule};

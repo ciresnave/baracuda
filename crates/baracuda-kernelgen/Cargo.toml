@@ -10,8 +10,15 @@ repository.workspace = true
 homepage.workspace = true
 publish = false
 
+[features]
+# Pull in the real on-demand nvrtc compiler (NvrtcCompiler). Off by default so the
+# synthesis engine + StubCompiler build and test without a CUDA toolchain; enable
+# with `--features nvrtc` where nvrtc is available.
+nvrtc = ["dep:baracuda-nvrtc"]
+
 [dependencies]
 baracuda-kernels-types = { workspace = true }
+baracuda-nvrtc = { workspace = true, optional = true }
 
 [lints]
 workspace = true

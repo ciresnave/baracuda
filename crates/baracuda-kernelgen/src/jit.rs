@@ -198,6 +198,60 @@ impl Compiler for StubCompiler {
     }
 }
 
+/// The production on-demand compiler: nvrtc source → PTX. Feature-gated
+/// (`--features nvrtc`) because it needs the nvrtc runtime; constructed per target
+/// arch (the `--gpu-architecture` flag the schedule was keyed for).
+#[cfg(feature = "nvrtc")]
+#[derive(Copy, Clone, Debug)]
+pub struct NvrtcCompiler {
+    arch: ArchSku,
+}
+
+#[cfg(feature = "nvrtc")]
+impl NvrtcCompiler {
+    /// A compiler targeting `arch` (the request's `target` SKU).
+    #[must_use]
+    pub fn new(arch: ArchSku) -> Self {
+        Self { arch }
+    }
+}
+
+#[cfg(feature = "nvrtc")]
+impl Compiler for NvrtcCompiler {
+    fn compile(&self, source: &str, entry: &str, _max_compile_ms: u32) -> Result<Vec<u8>, String> {
+        // nvrtc has no compile-deadline API; `max_compile_ms` gates optimization
+        // depth / the inward e-graph's iteration count at a coarser grain (future).
+        // Use the low-level path so a compilation error surfaces the nvrtc log.
+        use baracuda_nvrtc::Program;
+        let name = format!("{entry}.cu");
+        let prog = Program::new(source, &name).map_err(|e| format!("nvrtc({entry}) create: {e}"))?;
+        let arch = format!("--gpu-architecture={}", arch_flag(self.arch));
+        match prog.compile_raw(&[arch.as_str()]) {
+            Ok(()) => prog
+                .ptx()
+                .map(String::into_bytes)
+                .map_err(|e| format!("nvrtc({entry}) ptx: {e}")),
+            Err(e) => {
+                let log = prog.log().unwrap_or_default();
+                Err(format!("nvrtc({entry}): {e}\n--- nvrtc log ---\n{}", log.trim()))
+            }
+        }
+    }
+    fn artifact_kind(&self) -> ArtifactKind {
+        ArtifactKind::Ptx
+    }
+}
+
+/// `--gpu-architecture` flag for an [`ArchSku`].
+#[cfg(feature = "nvrtc")]
+fn arch_flag(arch: ArchSku) -> &'static str {
+    match arch {
+        ArchSku::Sm80 => "sm_80",
+        ArchSku::Sm89 => "sm_89",
+        ArchSku::Sm90a => "sm_90a",
+    }
+}
+
 /// Synthesize a [`JitResponse`] for a Fuel-chosen region. The synthesizer core:
 /// region → op IR → specialized kernel → on-demand compile → FKC contract +
 /// recipe + link row. The optimizer that §5.1 permits (an inward e-graph) would
@@ -514,5 +568,23 @@ mod tests {
             synthesize(&r, &Cuda, &StubCompiler).unwrap_err(),
             JitError::Budget(_)
         ));
+    }
+
+    /// End-to-end on-device synthesis: region → kernel → real nvrtc PTX. Ignored
+    /// by default (needs the nvrtc runtime + a CUDA install); run with
+    /// `cargo test -p baracuda-kernelgen --features nvrtc -- --ignored`.
+    #[cfg(feature = "nvrtc")]
+    #[test]
+    #[ignore = "requires nvrtc runtime + CUDA install"]
+    fn nvrtc_compiles_a_synthesized_kernel() {
+        let region = op_node(
+            "Relu",
+            vec![op_node("Add", vec![PatternNode::Bind(0), PatternNode::Bind(1)])],
+        );
+        let r = req(region, 2, ElementKind::F32, "jit_relu_add");
+        let resp = synthesize(&r, &Cuda, &NvrtcCompiler::new(ArchSku::Sm89)).unwrap();
+        assert_eq!(resp.kernel.kind, ArtifactKind::Ptx);
+        let ptx = String::from_utf8(resp.kernel.artifact).expect("PTX is utf-8 text");
+        assert!(ptx.contains(".entry"), "PTX should declare the kernel entry");
     }
 }

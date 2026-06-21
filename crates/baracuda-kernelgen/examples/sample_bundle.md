@@ -17,7 +17,7 @@ backend: cuda
 kernel_source: baracuda
 dtypes: [F32]
 entry_point: baracuda_gen_add_f32_co_v4
-kernel_revision_hash: "a12e882ce0730708"
+kernel_revision_hash: "4b5b337c13997f67"
 accept:
   structure_key: "sk1|bin|f32|sm89|i32|grid|r2|co/00/v4/d16/f;co/00/v4/d16/f;co/00/v4/d16/f|-"
   inputs:
@@ -54,7 +54,7 @@ backend: cuda
 kernel_source: baracuda
 dtypes: [F32]
 entry_point: baracuda_gen_relu_add_f32_co_v4
-kernel_revision_hash: "c531409189446700"
+kernel_revision_hash: "b6c275409f9d8497"
 accept:
   structure_key: "sk1|bin|f32|sm89|i32|grid|r2|co/00/v4/d16/f;co/00/v4/d16/f;co/00/v4/d16/f|-"
   inputs:
@@ -100,7 +100,7 @@ backend: cuda
 kernel_source: baracuda
 dtypes: [F32]
 entry_point: baracuda_gen_affine_silu_f32_co_v4
-kernel_revision_hash: "e32565ee77f3530a"
+kernel_revision_hash: "78de344453860aed"
 accept:
   structure_key: "sk1|bin|f32|sm89|i32|grid|r2|co/00/v4/d16/f;co/00/v4/d16/f|-"
   inputs:
@@ -152,7 +152,7 @@ pattern:
 
 /// `(entry_point, structure_key, revision_hash)` for every generated kernel.
 pub static BARACUDA_LINK_REGISTRY: &[(&str, &str, u64)] = &[
-    ("baracuda_gen_add_f32_co_v4", "sk1|bin|f32|sm89|i32|grid|r2|co/00/v4/d16/f;co/00/v4/d16/f;co/00/v4/d16/f|-", 0xa12e882ce0730708),
-    ("baracuda_gen_affine_silu_f32_co_v4", "sk1|bin|f32|sm89|i32|grid|r2|co/00/v4/d16/f;co/00/v4/d16/f|-", 0xe32565ee77f3530a),
-    ("baracuda_gen_relu_add_f32_co_v4", "sk1|bin|f32|sm89|i32|grid|r2|co/00/v4/d16/f;co/00/v4/d16/f;co/00/v4/d16/f|-", 0xc531409189446700),
+    ("baracuda_gen_add_f32_co_v4", "sk1|bin|f32|sm89|i32|grid|r2|co/00/v4/d16/f;co/00/v4/d16/f;co/00/v4/d16/f|-", 0x4b5b337c13997f67),
+    ("baracuda_gen_affine_silu_f32_co_v4", "sk1|bin|f32|sm89|i32|grid|r2|co/00/v4/d16/f;co/00/v4/d16/f|-", 0x78de344453860aed),
+    ("baracuda_gen_relu_add_f32_co_v4", "sk1|bin|f32|sm89|i32|grid|r2|co/00/v4/d16/f;co/00/v4/d16/f;co/00/v4/d16/f|-", 0xb6c275409f9d8497),
 ];

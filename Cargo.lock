@@ -443,6 +443,7 @@ name = "baracuda-kernelgen"
 version = "0.0.1-alpha.69"
 dependencies = [
  "baracuda-kernels-types",
+ "baracuda-nvrtc",
 ]
 
 [[package]]
