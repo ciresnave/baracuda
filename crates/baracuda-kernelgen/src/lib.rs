@@ -40,7 +40,7 @@ pub mod plan;
 pub use backend::{Backend, GeneratedKernel};
 pub use contract::{contract, front_matter};
 pub use cuda::Cuda;
-pub use ir::{input, konst, param, Access, Expr, OpDef, ScalarExpr, UnaryOp};
+pub use ir::{input, konst, param, Access, Expr, OpDef, ReduceOp, ScalarExpr, UnaryOp};
 pub use jit::{
     synthesize, ArtifactKind, Compiler, JitBudget, JitError, JitRequest, JitResponse, Recipe,
     SynthKernel, StubCompiler,

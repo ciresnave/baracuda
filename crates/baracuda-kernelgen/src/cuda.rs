@@ -7,9 +7,9 @@
 //! `__half` / `__nv_bfloat16` the same as for `float`.
 
 use crate::backend::{lower_expr, Backend, GeneratedKernel, Lowering};
-use crate::ir::{BinaryOp, ScalarExpr, UnaryOp};
+use crate::ir::{BinaryOp, ReduceOp, ScalarExpr, UnaryOp};
 use crate::plan::{KernelPlan, Schedule};
-use baracuda_kernels_types::{ElementKind, OperandKey};
+use baracuda_kernels_types::{Contiguity, ElementKind, OperandKey};
 
 /// The CUDA C++ backend. Lowers a [`KernelPlan`] to `.cu` source.
 #[derive(Copy, Clone, Debug, Default)]
@@ -40,6 +40,7 @@ impl Backend for Cuda {
             },
             Schedule::Scalar => emit_scalar(plan, ctype),
             Schedule::Strided => emit_strided(plan, ctype),
+            Schedule::Reduction { op } => emit_reduction(plan, ctype, op),
         }
     }
 }
@@ -235,6 +236,133 @@ fn emit_strided(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
                 binary: &|op, a, b| cuda_binary(op, a, b, plan.dtype),
             },
         )));
+    s.push_str("    }\n}\n");
+    GeneratedKernel { name, source: s }
+}
+
+/// Emit a **last-axis reduction**: one thread per output element, a sequential
+/// fold over the contiguous trailing axis (`k` elements). The accumulator is
+/// `float` — `double` for f64 and f32-strict (the strict mode wants a wide fold)
+/// — so f16/bf16/f32 inputs fold up-converted: more precise than folding in the
+/// narrow type, and it avoids the missing `__half2` reductions. The body computes
+/// the per-element pre-reduction expression; `Sum`/`Mean` fold from a 0 identity,
+/// `Max`/`Min` peel the first element under a `k > 0` guard (NaN-propagating, no
+/// ±∞ literal — header-light, and no out-of-bounds read on an empty axis).
+///
+/// v1 scope (asserted, AOT build-time — reductions are not in the JIT vocabulary,
+/// so these never fire across the `synthesize` trust boundary): a single input,
+/// all-contiguous operands, float dtype. Multi-input (weighted) reductions,
+/// strided/broadcast inputs, arbitrary axes, integer accumulation, and a
+/// block-parallel tree fold (lower error + speed) are follow-ups.
+fn emit_reduction(plan: &KernelPlan<'_>, ctype: &str, rop: ReduceOp) -> GeneratedKernel {
+    let tag = match rop {
+        ReduceOp::Sum => "sum",
+        ReduceOp::Mean => "mean",
+        ReduceOp::Max => "max",
+        ReduceOp::Min => "min",
+    };
+    let name = format!(
+        "baracuda_gen_{}_{}_reduce_{tag}",
+        plan.op_name,
+        dtype_tag(plan.dtype)
+    );
+    assert!(
+        matches!(
+            plan.dtype,
+            ElementKind::F16
+                | ElementKind::Bf16
+                | ElementKind::F32
+                | ElementKind::F32Strict
+                | ElementKind::F64
+        ),
+        "reduction v1: float dtypes only (int needs integer-typed accumulation — follow-up); got {:?}",
+        plan.dtype
+    );
+    assert!(
+        plan.n_inputs == 1,
+        "reduction v1: single-input only (multi-input needs per-operand stride/broadcast — follow-up); got {}",
+        plan.n_inputs
+    );
+    assert!(
+        (0..plan.key.n_operands as usize).all(|i| plan.key.operands[i].contig == Contiguity::Contig),
+        "reduction v1: contiguous operands only (base = o*k assumes a dense last axis); got a strided/broadcast cell"
+    );
+    let n = plan.n_inputs;
+    // Accumulate in double for f64 and f32-strict; float for f32/f16/bf16 (torch
+    // folds f16/bf16 in f32). The leaf load up-converts the input to that width,
+    // and the body is lowered in it (f32 math, or f64 for a double fold).
+    let dbl = matches!(plan.dtype, ElementKind::F64 | ElementKind::F32Strict);
+    let acc = if dbl { "double" } else { "float" };
+    let zero = if dbl { "0.0" } else { "0.0f" };
+    let load = |i: u8| match plan.dtype {
+        ElementKind::F16 => format!("__half2float(in{i}[idx])"),
+        ElementKind::Bf16 => format!("__bfloat162float(in{i}[idx])"),
+        ElementKind::F32Strict => format!("(double)in{i}[idx]"),
+        _ => format!("in{i}[idx]"), // f32 (float) / f64 (double) load natively
+    };
+    let elem = lower_expr(
+        plan.body,
+        &Lowering {
+            leaf: &load,
+            unary: &|op, x| if dbl { unary_f64(op, x) } else { unary_f32(op, x) },
+            binary: &|op, a, b| {
+                if dbl {
+                    binary_f64(op, a, b)
+                } else {
+                    binary_f32(op, a, b)
+                }
+            },
+        },
+    );
+
+    let mut s = header(plan, &name);
+    for i in 0..n {
+        s.push_str(&format!("    const {ctype}* __restrict__ in{i},\n"));
+    }
+    s.push_str(&format!("    {ctype}* __restrict__ out,\n"));
+    s.push_str(&format!(
+        "    long long n_out,\n    long long k{})\n{{\n",
+        param_args(plan.body)
+    ));
+    s.push_str("    long long o = (long long)blockIdx.x * blockDim.x + threadIdx.x;\n");
+    s.push_str("    long long stride = (long long)gridDim.x * blockDim.x;\n");
+    s.push_str("    for (; o < n_out; o += stride) {\n");
+    s.push_str("        long long base = o * k;\n");
+    match rop {
+        ReduceOp::Sum | ReduceOp::Mean => {
+            s.push_str(&format!("        {acc} acc = {zero};\n"));
+            s.push_str("        for (long long j = 0; j < k; ++j) {\n");
+            s.push_str("            long long idx = base + j;\n");
+            s.push_str(&format!("            acc += {elem};\n"));
+            s.push_str("        }\n");
+        }
+        ReduceOp::Max | ReduceOp::Min => {
+            let cmp = if matches!(rop, ReduceOp::Max) { ">" } else { "<" };
+            // Seed from the first element under a k>0 guard (no ±∞ literal, and no
+            // OOB read on an empty axis); a NaN element sticks (torch.amax/amin).
+            s.push_str(&format!("        {acc} acc = {zero};\n"));
+            s.push_str("        if (k > 0) {\n");
+            s.push_str("            long long idx = base;\n");
+            s.push_str(&format!("            acc = {elem};\n"));
+            s.push_str("            for (long long j = 1; j < k; ++j) {\n");
+            s.push_str("                idx = base + j;\n");
+            s.push_str(&format!("                {acc} e = {elem};\n"));
+            s.push_str(&format!("                acc = (e != e || e {cmp} acc) ? e : acc;\n"));
+            s.push_str("            }\n");
+            s.push_str("        }\n");
+        }
+    }
+    let finalized = if matches!(rop, ReduceOp::Mean) {
+        format!("acc / ({acc})k")
+    } else {
+        "acc".to_string()
+    };
+    let stored = match plan.dtype {
+        ElementKind::F16 => format!("__float2half({finalized})"),
+        ElementKind::Bf16 => format!("__float2bfloat16({finalized})"),
+        _ => finalized,
+    };
+    s.push_str(&format!("        out[o] = {stored};\n"));
     s.push_str("    }\n}\n");
     GeneratedKernel { name, source: s }
 }
@@ -578,5 +706,72 @@ mod tests {
         let k = generate(&op, &key, &Cuda);
         assert!(k.source.contains("long long nv, float p0, float p1)"));
         assert!(k.source.contains("((v0.x * p0) + p1)"));
+    }
+
+    fn reduce_key(in_dt: ElementKind) -> baracuda_kernels_types::StructureKey {
+        // [256, 128] contiguous input, [256] output — reduce the last axis.
+        let a = OperandDesc::new(2, &[256, 128], &[128, 1], in_dt, 256);
+        let out = OperandDesc::new(1, &[256], &[1], in_dt, 256);
+        structure_key(OpCategory::Reduction, &[a, out], ArchSku::Sm89)
+    }
+
+    #[test]
+    fn reduction_mean_of_squares_f32() {
+        use crate::ir::{ReduceOp, UnaryOp};
+        // mean(x²) over the last axis — the RmsNorm core.
+        let op = OpDef::reduction(
+            "ms",
+            1,
+            &[ElementKind::F32],
+            input(0).unary(UnaryOp::Sqr),
+            ReduceOp::Mean,
+        );
+        let k = generate(&op, &reduce_key(ElementKind::F32), &Cuda);
+        assert_eq!(k.name, "baracuda_gen_ms_f32_reduce_mean");
+        assert!(k.source.contains("long long n_out,"));
+        assert!(k.source.contains("    long long k)")); // runtime reduced extent
+        assert!(k.source.contains("float acc = 0.0f;"));
+        assert!(k.source.contains("long long idx = base + j;"));
+        assert!(k.source.contains("acc += (in0[idx]*in0[idx]);"));
+        assert!(k.source.contains("out[o] = acc / (float)k;"));
+    }
+
+    #[test]
+    fn reduction_max_peels_first_and_propagates_nan() {
+        use crate::ir::ReduceOp;
+        let op = OpDef::reduction("amax", 1, &[ElementKind::F32], input(0), ReduceOp::Max);
+        let k = generate(&op, &reduce_key(ElementKind::F32), &Cuda);
+        assert_eq!(k.name, "baracuda_gen_amax_f32_reduce_max");
+        assert!(!k.source.contains("INFINITY")); // seeded by the first element instead
+        assert!(k.source.contains("if (k > 0) {")); // empty-axis guard, no OOB seed read
+        assert!(k.source.contains("acc = in0[idx];")); // seed = first element
+        assert!(k.source.contains("for (long long j = 1; j < k; ++j)"));
+        // NaN-propagating select (e != e forces the swap), torch.amax semantics.
+        assert!(k.source.contains("acc = (e != e || e > acc) ? e : acc;"));
+    }
+
+    #[test]
+    fn reduction_f16_accumulates_in_float() {
+        use crate::ir::ReduceOp;
+        // f16 input/output, but the fold runs in float — precision + no __half2 sum.
+        let op = OpDef::reduction("s", 1, &[ElementKind::F16], input(0), ReduceOp::Sum);
+        let k = generate(&op, &reduce_key(ElementKind::F16), &Cuda);
+        assert!(k.source.contains("#include <cuda_fp16.h>"));
+        assert!(k.source.contains("const __half* __restrict__ in0"));
+        assert!(k.source.contains("float acc = 0.0f;")); // float acc, not __half
+        assert!(k.source.contains("acc += __half2float(in0[idx]);"));
+        assert!(k.source.contains("out[o] = __float2half(acc);"));
+    }
+
+    #[test]
+    fn reduction_f32strict_folds_in_double() {
+        use crate::ir::ReduceOp;
+        // Strict precision mode folds in double (a plain-float fold isn't reproducible
+        // / correctly-rounded), then stores the single-rounded result to the f32 out.
+        let op = OpDef::reduction("s", 1, &[ElementKind::F32Strict], input(0), ReduceOp::Sum);
+        let k = generate(&op, &reduce_key(ElementKind::F32Strict), &Cuda);
+        assert!(k.source.contains("double acc = 0.0;"));
+        assert!(k.source.contains("acc += (double)in0[idx];"));
+        assert!(k.source.contains("out[o] = acc;")); // double acc -> single round to float out
     }
 }

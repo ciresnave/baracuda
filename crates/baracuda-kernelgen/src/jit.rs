@@ -227,7 +227,16 @@ impl Compiler for NvrtcCompiler {
         let name = format!("{entry}.cu");
         let prog = Program::new(source, &name).map_err(|e| format!("nvrtc({entry}) create: {e}"))?;
         let arch = format!("--gpu-architecture={}", arch_flag(self.arch));
-        match prog.compile_raw(&[arch.as_str()]) {
+        let mut opts = vec![arch];
+        // fp16/bf16 kernels `#include <cuda_fp16.h>`/`<cuda_bf16.h>`; headerless
+        // nvrtc has no default search path, so point it at the CUDA include dir
+        // (env-detected) — without this, f16/bf16 JIT fails to find the header even
+        // though the AOT (nvcc) path compiles. Harmless for header-light f32 source.
+        if let Some(inc) = cuda_include_dir() {
+            opts.push(format!("-I{inc}"));
+        }
+        let opt_refs: Vec<&str> = opts.iter().map(String::as_str).collect();
+        match prog.compile_raw(&opt_refs) {
             Ok(()) => prog
                 .ptx()
                 .map(String::into_bytes)
@@ -241,6 +250,22 @@ impl Compiler for NvrtcCompiler {
     fn artifact_kind(&self) -> ArtifactKind {
         ArtifactKind::Ptx
     }
+}
+
+/// The CUDA toolkit `include/` directory (for nvrtc's `-I`), detected from the
+/// usual environment vars. `None` if unset/missing — header-light (f32/f64/int)
+/// kernels still compile; only the fp16/bf16 headers need it.
+#[cfg(feature = "nvrtc")]
+fn cuda_include_dir() -> Option<String> {
+    for var in ["CUDA_PATH", "CUDA_HOME", "CUDA_ROOT"] {
+        if let Ok(root) = std::env::var(var) {
+            let inc = std::path::Path::new(&root).join("include");
+            if inc.is_dir() {
+                return Some(inc.to_string_lossy().into_owned());
+            }
+        }
+    }
+    None
 }
 
 /// `--gpu-architecture` flag for an [`ArchSku`].
@@ -942,5 +967,40 @@ mod tests {
         let resp = synthesize(&r, &Cuda, &NvrtcCompiler::new(ArchSku::Sm89)).unwrap();
         assert_eq!(resp.kernel.kind, ArtifactKind::Ptx);
         assert!(String::from_utf8(resp.kernel.artifact).unwrap().contains(".entry"));
+    }
+
+    /// The reduction schedule compiles headerless under nvrtc too: f32 mean-of-
+    /// squares (no includes) and f16 sum (`__half2float` + the fp16 header nvrtc
+    /// bundles). Numeric correctness is proven separately via an nvcc host harness;
+    /// this guards the same headerless-portability property that the `cstdint`
+    /// regression taught us. Ignored (needs nvrtc + CUDA).
+    #[cfg(feature = "nvrtc")]
+    #[test]
+    #[ignore = "requires nvrtc runtime + CUDA install"]
+    fn nvrtc_compiles_reduction_kernels() {
+        use crate::ir::UnaryOp;
+        use crate::{generate, input, ReduceOp};
+        let cc = NvrtcCompiler::new(ArchSku::Sm89);
+        let red_key = |dt: ElementKind| {
+            let a = OperandDesc::new(2, &[256, 128], &[128, 1], dt, 256);
+            let out = OperandDesc::new(1, &[256], &[1], dt, 256);
+            structure_key(OpCategory::Reduction, &[a, out], ArchSku::Sm89)
+        };
+        // f32 mean-of-squares (the RmsNorm core) — header-light source.
+        let ms = OpDef::reduction(
+            "ms",
+            1,
+            &[ElementKind::F32],
+            input(0).unary(UnaryOp::Sqr),
+            ReduceOp::Mean,
+        );
+        let kf32 = generate(&ms, &red_key(ElementKind::F32), &Cuda);
+        let ptx = cc.compile(&kf32.source, &kf32.name, 5000).expect("f32 reduction compiles");
+        assert!(String::from_utf8(ptx).unwrap().contains(".entry"));
+        // f16 sum — exercises __half2float + cuda_fp16.h under headerless nvrtc.
+        let sum = OpDef::reduction("s", 1, &[ElementKind::F16], input(0), ReduceOp::Sum);
+        let kf16 = generate(&sum, &red_key(ElementKind::F16), &Cuda);
+        let ptx16 = cc.compile(&kf16.source, &kf16.name, 5000).expect("f16 reduction compiles");
+        assert!(String::from_utf8(ptx16).unwrap().contains(".entry"));
     }
 }

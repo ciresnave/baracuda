@@ -6,7 +6,7 @@
 //! lowers the plan to a concrete language. Choosing the schedule here, not in
 //! the backend, keeps the decision shared across every backend.
 
-use crate::ir::{Access, OpDef, ScalarExpr};
+use crate::ir::{Access, OpDef, ReduceOp, ScalarExpr};
 use baracuda_kernels_types::{Contiguity, ElementKind, StructureKey, VecWidth};
 
 /// How the kernel iterates the data — the backend-neutral schedule.
@@ -28,6 +28,13 @@ pub enum Schedule {
     /// it per cell: the rank is unrolled, broadcast axes drop their offset
     /// terms, and a fully-broadcast operand is hoisted to a loop-invariant load.
     Strided,
+    /// One thread per output element; sequential fold over the contiguous trailing
+    /// axis. The v1 reduction schedule — block/warp-parallel reduction is the perf
+    /// follow-up.
+    Reduction {
+        /// The associative combine to apply along the axis.
+        op: ReduceOp,
+    },
 }
 
 /// A language-agnostic description of the kernel to emit.
@@ -52,31 +59,31 @@ pub struct KernelPlan<'a> {
 /// Choose the schedule for `op` at structure cell `key` and return a neutral
 /// [`KernelPlan`].
 ///
-/// v1: elementwise — vectorized when every operand is `Contig` + `V4`, scalar
-/// otherwise. (Whether a backend can lower the chosen dtype is the backend's
+/// Elementwise ops vectorize when every operand is `Contig` + `V4`, scalar/strided
+/// otherwise. A reduction op maps straight to [`Schedule::Reduction`] (the fold is
+/// the schedule). (Whether a backend can lower the chosen dtype is the backend's
 /// call, not this function's.)
-///
-/// # Panics
-/// Panics if the op is not elementwise (the only access pattern v1 schedules).
 #[must_use]
 pub fn build_plan<'a>(op: &'a OpDef, key: &'a StructureKey) -> KernelPlan<'a> {
-    assert!(
-        matches!(op.access, Access::Elementwise),
-        "v1 schedules elementwise ops only"
-    );
-    let n = key.n_operands as usize;
-    let all_contig = n > 0 && (0..n).all(|k| key.operands[k].contig == Contiguity::Contig);
-    // The kernel vectorizes at the *narrowest* width every operand supports.
-    let min_width = (0..n)
-        .map(|k| vec_width_elems(key.operands[k].vec_width))
-        .min()
-        .unwrap_or(1);
-    let schedule = if !all_contig {
-        Schedule::Strided
-    } else if min_width >= 2 {
-        Schedule::Vectorized { width: min_width }
-    } else {
-        Schedule::Scalar
+    let schedule = match op.access {
+        Access::Reduction { op: rop } => Schedule::Reduction { op: rop },
+        Access::Elementwise => {
+            let n = key.n_operands as usize;
+            let all_contig =
+                n > 0 && (0..n).all(|k| key.operands[k].contig == Contiguity::Contig);
+            // The kernel vectorizes at the *narrowest* width every operand supports.
+            let min_width = (0..n)
+                .map(|k| vec_width_elems(key.operands[k].vec_width))
+                .min()
+                .unwrap_or(1);
+            if !all_contig {
+                Schedule::Strided
+            } else if min_width >= 2 {
+                Schedule::Vectorized { width: min_width }
+            } else {
+                Schedule::Scalar
+            }
+        }
     };
     KernelPlan {
         op_name: &op.name,

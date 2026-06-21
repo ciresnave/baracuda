@@ -103,6 +103,21 @@ pub enum BinaryOp {
     Rem,
 }
 
+/// The associative combine of an [`Access::Reduction`]. The identity is implied
+/// (`Sum`/`Mean` → 0; `Max`/`Min` peel the first element, so no ±∞ literal — that
+/// keeps the emitted source header-light under nvrtc).
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+pub enum ReduceOp {
+    /// Sum over the reduced axis (`SumDim`).
+    Sum,
+    /// Arithmetic mean — `sum / extent` (`MeanDim`).
+    Mean,
+    /// Maximum — NaN-propagating (`torch.amax`).
+    Max,
+    /// Minimum — NaN-propagating (`torch.amin`).
+    Min,
+}
+
 /// Ergonomic builder handle wrapping a [`ScalarExpr`]. Overloads arithmetic so
 /// op bodies read like math: `input(0) + input(1) * input(2)`.
 #[derive(Clone, Debug)]
@@ -229,13 +244,23 @@ impl Expr {
 /// Iteration / access pattern of an op — tells the emitter the loop-nest shape
 /// and which schedules are legal.
 ///
-/// `#[non_exhaustive]`: v1 is elementwise only; `Reduction { axes, combine,
-/// identity }`, windowed/stencil, and gather patterns are the growth path.
+/// `#[non_exhaustive]`: windowed/stencil and gather patterns are still the growth
+/// path; arbitrary/multiple reduction axes, strided-input reductions, and keepdim
+/// layout extend [`Access::Reduction`] later.
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum Access {
     /// Output coordinate equals input coordinate (a per-element map).
     Elementwise,
+    /// Reduce the **last (contiguous, trailing) axis** with `op`: each output
+    /// element is `op` folded over that axis's run of `body` values. v1 covers
+    /// the contiguous last-axis float-dtype case — the `MeanDim`/`SumDim` core of
+    /// RmsNorm/Softmax. Strided inputs, arbitrary/multiple axes, keepdim layout,
+    /// and integer accumulation are follow-ups.
+    Reduction {
+        /// The associative combine (+ implied identity).
+        op: ReduceOp,
+    },
 }
 
 /// An op definition — the **algorithm** half of the algorithm/schedule split.
@@ -268,6 +293,27 @@ impl OpDef {
             body: body.0,
             dtypes: dtypes.to_vec(),
             access: Access::Elementwise,
+        }
+    }
+
+    /// Build a **last-axis reduction** op: `body` is the per-element pre-reduction
+    /// expression (e.g. `input(0).unary(Sqr)` for a mean-of-squares), folded over
+    /// the contiguous trailing axis by `op`. The output holds one element per
+    /// outer coordinate. See [`Access::Reduction`] for the v1 scope.
+    #[must_use]
+    pub fn reduction(
+        name: &str,
+        n_inputs: u8,
+        dtypes: &[ElementKind],
+        body: Expr,
+        op: ReduceOp,
+    ) -> Self {
+        Self {
+            name: name.to_string(),
+            n_inputs,
+            body: body.0,
+            dtypes: dtypes.to_vec(),
+            access: Access::Reduction { op },
         }
     }
 }
