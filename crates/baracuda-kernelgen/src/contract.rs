@@ -23,7 +23,7 @@
 //! helpers below so reconciliation is a localized change.
 
 use crate::backend::GeneratedKernel;
-use crate::ir::{OpDef, ScalarExpr, UnaryOp};
+use crate::ir::{BinaryOp, OpDef, ScalarExpr, UnaryOp};
 use crate::pattern::{derive_pattern, to_fkc, PatternNode};
 use baracuda_kernels_types::{Contiguity, ElementKind, StructureKey, VecWidth};
 
@@ -192,7 +192,8 @@ fn scan_params(e: &ScalarExpr, out: &mut Vec<u8>) {
         ScalarExpr::Add(a, b)
         | ScalarExpr::Sub(a, b)
         | ScalarExpr::Mul(a, b)
-        | ScalarExpr::Div(a, b) => {
+        | ScalarExpr::Div(a, b)
+        | ScalarExpr::Binary(_, a, b) => {
             scan_params(a, out);
             scan_params(b, out);
         }
@@ -207,7 +208,8 @@ fn count_flops(e: &ScalarExpr) -> u32 {
         ScalarExpr::Add(a, b)
         | ScalarExpr::Sub(a, b)
         | ScalarExpr::Mul(a, b)
-        | ScalarExpr::Div(a, b) => 1 + count_flops(a) + count_flops(b),
+        | ScalarExpr::Div(a, b)
+        | ScalarExpr::Binary(_, a, b) => 1 + count_flops(a) + count_flops(b),
     }
 }
 
@@ -217,6 +219,10 @@ fn has_transcendental(e: &ScalarExpr) -> bool {
     match e {
         ScalarExpr::Input(_) | ScalarExpr::Const(_) | ScalarExpr::Param(_) => false,
         ScalarExpr::Unary(op, x) => is_transcendental(*op) || has_transcendental(x),
+        // `Pow` lowers to `powf` (a few ulp); `Max`/`Min`/`Rem` are exact.
+        ScalarExpr::Binary(op, a, b) => {
+            matches!(op, BinaryOp::Pow) || has_transcendental(a) || has_transcendental(b)
+        }
         ScalarExpr::Add(a, b)
         | ScalarExpr::Sub(a, b)
         | ScalarExpr::Mul(a, b)
@@ -235,6 +241,8 @@ fn is_transcendental(op: UnaryOp) -> bool {
             | UnaryOp::Gelu
             | UnaryOp::Silu
             | UnaryOp::Rsqrt
+            | UnaryOp::Sin
+            | UnaryOp::Cos
     )
 }
 

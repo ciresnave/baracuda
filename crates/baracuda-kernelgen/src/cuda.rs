@@ -6,8 +6,8 @@
 //! — and reused verbatim across dtypes, because CUDA overloads `+ - * /` for
 //! `__half` / `__nv_bfloat16` the same as for `float`.
 
-use crate::backend::{lower_expr, Backend, GeneratedKernel};
-use crate::ir::{ScalarExpr, UnaryOp};
+use crate::backend::{lower_expr, Backend, GeneratedKernel, Lowering};
+use crate::ir::{BinaryOp, ScalarExpr, UnaryOp};
 use crate::plan::{KernelPlan, Schedule};
 use baracuda_kernels_types::{ElementKind, OperandKey};
 
@@ -136,7 +136,14 @@ fn emit_vectorized(plan: &KernelPlan<'_>, vty: &str, lanes: &[&str]) -> Generate
     s.push_str(&format!("        {vty} vo;\n"));
     for lane in lanes {
         let acc = |idx: u8| format!("v{idx}.{lane}");
-        s.push_str(&format!("        vo.{lane} = {};\n", lower_expr(plan.body, &acc, &|op, x| cuda_unary(op, x, plan.dtype))));
+        s.push_str(&format!("        vo.{lane} = {};\n", lower_expr(
+            plan.body,
+            &Lowering {
+                leaf: &acc,
+                unary: &|op, x| cuda_unary(op, x, plan.dtype),
+                binary: &|op, a, b| cuda_binary(op, a, b, plan.dtype),
+            },
+        )));
     }
     s.push_str("        out[i] = vo;\n    }\n}\n");
     GeneratedKernel { name, source: s }
@@ -156,7 +163,14 @@ fn emit_scalar(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
     let acc = |idx: u8| format!("in{idx}[i]");
     s.push_str(&format!(
         "    for (; i < n; i += step) out[i] = {};\n",
-        lower_expr(plan.body, &acc, &|op, x| cuda_unary(op, x, plan.dtype))
+        lower_expr(
+            plan.body,
+            &Lowering {
+                leaf: &acc,
+                unary: &|op, x| cuda_unary(op, x, plan.dtype),
+                binary: &|op, a, b| cuda_binary(op, a, b, plan.dtype),
+            },
+        )
     ));
     s.push_str("}\n");
     GeneratedKernel { name, source: s }
@@ -213,7 +227,14 @@ fn emit_strided(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
             format!("in{idx}[o{idx}]")
         }
     };
-    s.push_str(&format!("        out[oo] = {};\n", lower_expr(plan.body, &acc, &|op, x| cuda_unary(op, x, plan.dtype))));
+    s.push_str(&format!("        out[oo] = {};\n", lower_expr(
+            plan.body,
+            &Lowering {
+                leaf: &acc,
+                unary: &|op, x| cuda_unary(op, x, plan.dtype),
+                binary: &|op, a, b| cuda_binary(op, a, b, plan.dtype),
+            },
+        )));
     s.push_str("    }\n}\n");
     GeneratedKernel { name, source: s }
 }
@@ -265,6 +286,13 @@ fn unary_f32(op: UnaryOp, x: String) -> String {
         UnaryOp::Erf => format!("erff({x})"),
         UnaryOp::Gelu => format!("(0.5f*{x}*(1.0f+erff({x}*0.70710678f)))"),
         UnaryOp::Silu => format!("({x}*(1.0f/(1.0f+expf(-{x}))))"),
+        UnaryOp::Sin => format!("sinf({x})"),
+        UnaryOp::Cos => format!("cosf({x})"),
+        UnaryOp::Floor => format!("floorf({x})"),
+        UnaryOp::Ceil => format!("ceilf({x})"),
+        UnaryOp::Round => format!("rintf({x})"), // ties to even
+        UnaryOp::Sign => format!("({x} > 0.0f ? 1.0f : ({x} < 0.0f ? -1.0f : 0.0f))"),
+        UnaryOp::Step => format!("({x} >= 0.0f ? 1.0f : 0.0f)"),
     }
 }
 
@@ -285,6 +313,13 @@ fn unary_f64(op: UnaryOp, x: String) -> String {
         UnaryOp::Erf => format!("erf({x})"),
         UnaryOp::Gelu => format!("(0.5*{x}*(1.0+erf({x}*0.7071067811865476)))"),
         UnaryOp::Silu => format!("({x}*(1.0/(1.0+exp(-{x}))))"),
+        UnaryOp::Sin => format!("sin({x})"),
+        UnaryOp::Cos => format!("cos({x})"),
+        UnaryOp::Floor => format!("floor({x})"),
+        UnaryOp::Ceil => format!("ceil({x})"),
+        UnaryOp::Round => format!("rint({x})"), // ties to even
+        UnaryOp::Sign => format!("({x} > 0.0 ? 1.0 : ({x} < 0.0 ? -1.0 : 0.0))"),
+        UnaryOp::Step => format!("({x} >= 0.0 ? 1.0 : 0.0)"),
     }
 }
 
@@ -309,6 +344,54 @@ fn cuda_unary(op: UnaryOp, x: String, dtype: ElementKind) -> String {
     }
 }
 
+/// Non-infix binary op in f32 math.
+///
+/// NOTE on NaN: `fmaxf`/`fminf` are IEEE `maxNum`/`minNum` — they return the
+/// non-NaN operand (NaN-*suppressing*). PyTorch's `maximum`/`minimum` *propagate*
+/// NaN. Confirm Fuel's `Op::Maximum`/`Minimum` semantics; if propagating, switch
+/// to a manual `a!=a ? a : (b!=b ? b : (a>b?a:b))` form (which needs the pending
+/// temp-binding pass to avoid the 3× operand recompute).
+fn binary_f32(op: BinaryOp, a: String, b: String) -> String {
+    match op {
+        BinaryOp::Max => format!("fmaxf({a}, {b})"),
+        BinaryOp::Min => format!("fminf({a}, {b})"),
+        BinaryOp::Pow => format!("powf({a}, {b})"),
+        BinaryOp::Rem => format!("fmodf({a}, {b})"), // truncated remainder (C fmod)
+    }
+}
+
+/// Same as [`binary_f32`] but with f64 math-function names.
+fn binary_f64(op: BinaryOp, a: String, b: String) -> String {
+    match op {
+        BinaryOp::Max => format!("fmax({a}, {b})"),
+        BinaryOp::Min => format!("fmin({a}, {b})"),
+        BinaryOp::Pow => format!("pow({a}, {b})"),
+        BinaryOp::Rem => format!("fmod({a}, {b})"),
+    }
+}
+
+/// Lower a non-infix binary op for `dtype` (f32/f64 native; f16/bf16 compute in
+/// float). Mirrors [`cuda_unary`]; integer binary-function math is a follow-up.
+fn cuda_binary(op: BinaryOp, a: String, b: String, dtype: ElementKind) -> String {
+    match dtype {
+        ElementKind::F32 | ElementKind::F32Strict => binary_f32(op, a, b),
+        ElementKind::F64 => binary_f64(op, a, b),
+        ElementKind::F16 => format!(
+            "__float2half({})",
+            binary_f32(op, format!("__half2float({a})"), format!("__half2float({b})"))
+        ),
+        ElementKind::Bf16 => format!(
+            "__float2bfloat16({})",
+            binary_f32(
+                op,
+                format!("__bfloat162float({a})"),
+                format!("__bfloat162float({b})")
+            )
+        ),
+        other => panic!("cuda backend: no binary math for dtype {other:?}"),
+    }
+}
+
 /// Runtime scalar-param indices used by `e`, ascending + unique.
 fn params_used(e: &ScalarExpr) -> Vec<u8> {
     fn rec(e: &ScalarExpr, out: &mut std::collections::BTreeSet<u8>) {
@@ -320,7 +403,8 @@ fn params_used(e: &ScalarExpr) -> Vec<u8> {
             ScalarExpr::Add(a, b)
             | ScalarExpr::Sub(a, b)
             | ScalarExpr::Mul(a, b)
-            | ScalarExpr::Div(a, b) => {
+            | ScalarExpr::Div(a, b)
+            | ScalarExpr::Binary(_, a, b) => {
                 rec(a, out);
                 rec(b, out);
             }

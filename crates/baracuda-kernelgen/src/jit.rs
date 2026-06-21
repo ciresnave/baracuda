@@ -26,7 +26,7 @@
 //! telemetry trigger are the growth path.
 
 use crate::contract::contract;
-use crate::ir::{Access, OpDef, ScalarExpr, UnaryOp};
+use crate::ir::{Access, BinaryOp, OpDef, ScalarExpr, UnaryOp};
 use crate::link::{link_entry, LinkEntry};
 use crate::optimize::optimize;
 use crate::pattern::{derive_pattern, to_fkc, PatternError, PatternNode};
@@ -389,7 +389,12 @@ fn synth_op(op: &str, operands: &[PatternNode], np: &mut u8) -> Result<ScalarExp
         let x = unary_operand(op, operands, np)?;
         return Ok(ScalarExpr::Unary(u, Box::new(x)));
     }
-    // Binary tensor ops.
+    // Non-infix binary fns (Maximum/Minimum/Pow/Rem) — two tensor operands.
+    if let Some(bop) = region_binary(op) {
+        let (a, b) = binary_operands(op, operands, np)?;
+        return Ok(ScalarExpr::Binary(bop, Box::new(a), Box::new(b)));
+    }
+    // Infix binary tensor ops.
     let ctor: fn(Box<ScalarExpr>, Box<ScalarExpr>) -> ScalarExpr = match op {
         "Add" => ScalarExpr::Add,
         "Sub" => ScalarExpr::Sub,
@@ -397,6 +402,16 @@ fn synth_op(op: &str, operands: &[PatternNode], np: &mut u8) -> Result<ScalarExp
         "Div" => ScalarExpr::Div,
         _ => return Err(JitError::UnsupportedOp(op.to_string())),
     };
+    let (a, b) = binary_operands(op, operands, np)?;
+    Ok(ctor(Box::new(a), Box::new(b)))
+}
+
+/// Resolve the exactly-two operands of a binary op, recursing into each.
+fn binary_operands(
+    op: &str,
+    operands: &[PatternNode],
+    np: &mut u8,
+) -> Result<(ScalarExpr, ScalarExpr), JitError> {
     if operands.len() != 2 {
         return Err(JitError::Arity {
             op: op.to_string(),
@@ -406,7 +421,18 @@ fn synth_op(op: &str, operands: &[PatternNode], np: &mut u8) -> Result<ScalarExp
     }
     let a = node_to_expr(&operands[0], np)?;
     let b = node_to_expr(&operands[1], np)?;
-    Ok(ctor(Box::new(a), Box::new(b)))
+    Ok((a, b))
+}
+
+/// Inverse of [`crate::pattern`]'s `binary_name`.
+fn region_binary(op: &str) -> Option<BinaryOp> {
+    Some(match op {
+        "Maximum" => BinaryOp::Max,
+        "Minimum" => BinaryOp::Min,
+        "Pow" => BinaryOp::Pow,
+        "Rem" => BinaryOp::Rem,
+        _ => return None,
+    })
 }
 
 fn unary_operand(op: &str, operands: &[PatternNode], np: &mut u8) -> Result<ScalarExpr, JitError> {
@@ -439,6 +465,13 @@ fn region_unary(op: &str) -> Option<UnaryOp> {
         "Erf" => UnaryOp::Erf,
         "GeluErf" => UnaryOp::Gelu,
         "Silu" => UnaryOp::Silu,
+        "Sin" => UnaryOp::Sin,
+        "Cos" => UnaryOp::Cos,
+        "Floor" => UnaryOp::Floor,
+        "Ceil" => UnaryOp::Ceil,
+        "Round" => UnaryOp::Round,
+        "Sign" => UnaryOp::Sign,
+        "Step" => UnaryOp::Step,
         _ => return None,
     })
 }
@@ -538,10 +571,26 @@ mod tests {
 
     #[test]
     fn unsupported_op_is_rejected() {
-        let region = op_node("Maximum", vec![PatternNode::Bind(0), PatternNode::Bind(1)]);
+        // MatMul is not an elementwise op we synthesize.
+        let region = op_node("MatMul", vec![PatternNode::Bind(0), PatternNode::Bind(1)]);
         let err = synthesize(&req(region, 2, ElementKind::F32, "x"), &Cuda, &StubCompiler)
             .unwrap_err();
-        assert_eq!(err, JitError::UnsupportedOp("Maximum".to_string()));
+        assert_eq!(err, JitError::UnsupportedOp("MatMul".to_string()));
+    }
+
+    #[test]
+    fn broadened_ops_synthesize() {
+        // The new binary fns + unary math now synthesize (no UnsupportedOp).
+        for (region, n, id) in [
+            (op_node("Maximum", vec![PatternNode::Bind(0), PatternNode::Bind(1)]), 2u8, "jit_max"),
+            (op_node("Pow", vec![PatternNode::Bind(0), PatternNode::Bind(1)]), 2, "jit_pow"),
+            (op_node("Floor", vec![PatternNode::Bind(0)]), 1, "jit_floor"),
+            (op_node("Sin", vec![PatternNode::Bind(0)]), 1, "jit_sin"),
+        ] {
+            let resp = synthesize(&req(region, n, ElementKind::F32, id), &Cuda, &StubCompiler)
+                .unwrap();
+            assert!(resp.kernel.source.contains("__global__"));
+        }
     }
 
     #[test]
@@ -611,5 +660,21 @@ mod tests {
         assert_eq!(resp.kernel.kind, ArtifactKind::Ptx);
         let ptx = String::from_utf8(resp.kernel.artifact).expect("PTX is utf-8 text");
         assert!(ptx.contains(".entry"), "PTX should declare the kernel entry");
+    }
+
+    /// The broadened ops compile under nvrtc too: max(sin(a), b) exercises a new
+    /// unary (`sinf`) and a new binary fn (`fmaxf`). Ignored (needs nvrtc + CUDA).
+    #[cfg(feature = "nvrtc")]
+    #[test]
+    #[ignore = "requires nvrtc runtime + CUDA install"]
+    fn nvrtc_compiles_broadened_ops() {
+        let region = op_node(
+            "Maximum",
+            vec![op_node("Sin", vec![PatternNode::Bind(0)]), PatternNode::Bind(1)],
+        );
+        let r = req(region, 2, ElementKind::F32, "jit_max_sin");
+        let resp = synthesize(&r, &Cuda, &NvrtcCompiler::new(ArchSku::Sm89)).unwrap();
+        assert_eq!(resp.kernel.kind, ArtifactKind::Ptx);
+        assert!(String::from_utf8(resp.kernel.artifact).unwrap().contains(".entry"));
     }
 }

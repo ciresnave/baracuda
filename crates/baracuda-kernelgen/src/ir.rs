@@ -34,6 +34,8 @@ pub enum ScalarExpr {
     Div(Box<ScalarExpr>, Box<ScalarExpr>),
     /// A unary math / activation op applied to a sub-expression.
     Unary(UnaryOp, Box<ScalarExpr>),
+    /// A non-infix binary op (`max`/`min`/`pow`/`rem`) — a backend function call.
+    Binary(BinaryOp, Box<ScalarExpr>, Box<ScalarExpr>),
 }
 
 /// A unary math / activation op. Variant names line up with the FKC §4.1
@@ -69,6 +71,35 @@ pub enum UnaryOp {
     Gelu,
     /// SiLU / swish `x·sigmoid(x)`.
     Silu,
+    /// Sine.
+    Sin,
+    /// Cosine.
+    Cos,
+    /// Floor — round toward −∞.
+    Floor,
+    /// Ceil — round toward +∞.
+    Ceil,
+    /// Round to nearest (ties to even).
+    Round,
+    /// Sign `−1 / 0 / +1`.
+    Sign,
+    /// Heaviside step `x ≥ 0 ? 1 : 0`.
+    Step,
+}
+
+/// A non-infix binary op — lowered as a backend **function call** (`fmaxf`,
+/// `powf`), unlike the infix arithmetic [`ScalarExpr::Add`]/`Sub`/`Mul`/`Div`.
+/// Variant names line up with the FKC §4.1 graph-`Op` vocabulary.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+pub enum BinaryOp {
+    /// Elementwise maximum (commutative).
+    Max,
+    /// Elementwise minimum (commutative).
+    Min,
+    /// Power `aᵇ` (not commutative).
+    Pow,
+    /// Floating remainder `a mod b` (not commutative).
+    Rem,
 }
 
 /// Ergonomic builder handle wrapping a [`ScalarExpr`]. Overloads arithmetic so
@@ -160,6 +191,37 @@ impl Expr {
     #[must_use]
     pub fn sqrt(self) -> Expr {
         self.unary(UnaryOp::Sqrt)
+    }
+    /// Sine.
+    #[must_use]
+    pub fn sin(self) -> Expr {
+        self.unary(UnaryOp::Sin)
+    }
+    /// Floor.
+    #[must_use]
+    pub fn floor(self) -> Expr {
+        self.unary(UnaryOp::Floor)
+    }
+
+    /// Apply a non-infix binary op (`expr.binary(BinaryOp::Max, rhs)`).
+    #[must_use]
+    pub fn binary(self, op: BinaryOp, rhs: Expr) -> Expr {
+        Expr(ScalarExpr::Binary(op, Box::new(self.0), Box::new(rhs.0)))
+    }
+    /// Elementwise maximum.
+    #[must_use]
+    pub fn max(self, rhs: Expr) -> Expr {
+        self.binary(BinaryOp::Max, rhs)
+    }
+    /// Elementwise minimum.
+    #[must_use]
+    pub fn min(self, rhs: Expr) -> Expr {
+        self.binary(BinaryOp::Min, rhs)
+    }
+    /// Power `aᵇ`.
+    #[must_use]
+    pub fn pow(self, rhs: Expr) -> Expr {
+        self.binary(BinaryOp::Pow, rhs)
     }
 }
 

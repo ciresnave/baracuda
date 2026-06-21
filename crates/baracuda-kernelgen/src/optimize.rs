@@ -21,7 +21,7 @@
 //! is the growth surface (factoring, FMA, perspective-diverse identities); the
 //! e-graph machinery underneath does not change as rules are added.
 
-use crate::ir::{ScalarExpr, UnaryOp};
+use crate::ir::{BinaryOp, ScalarExpr, UnaryOp};
 use std::collections::HashMap;
 
 type Id = usize;
@@ -37,6 +37,7 @@ enum ENode {
     Sub(Id, Id),
     Mul(Id, Id),
     Div(Id, Id),
+    Binary(BinaryOp, Id, Id),
     Unary(UnaryOp, Id),
 }
 
@@ -72,6 +73,7 @@ impl EGraph {
             ENode::Sub(a, b) => ENode::Sub(self.find(a), self.find(b)),
             ENode::Mul(a, b) => ENode::Mul(self.find(a), self.find(b)),
             ENode::Div(a, b) => ENode::Div(self.find(a), self.find(b)),
+            ENode::Binary(op, a, b) => ENode::Binary(op, self.find(a), self.find(b)),
             ENode::Unary(op, a) => ENode::Unary(op, self.find(a)),
             ref leaf => leaf.clone(),
         }
@@ -156,6 +158,10 @@ fn add_expr(eg: &mut EGraph, e: &ScalarExpr) -> Id {
             let (a, b) = (add_expr(eg, a), add_expr(eg, b));
             eg.add(ENode::Div(a, b))
         }
+        ScalarExpr::Binary(op, a, b) => {
+            let (a, b) = (add_expr(eg, a), add_expr(eg, b));
+            eg.add(ENode::Binary(*op, a, b))
+        }
         ScalarExpr::Unary(op, x) => {
             let x = add_expr(eg, x);
             eg.add(ENode::Unary(*op, x))
@@ -180,6 +186,36 @@ fn eval_unary(op: UnaryOp, v: f64) -> Option<f64> {
                 v
             }
         }
+        UnaryOp::Floor => v.floor(),
+        UnaryOp::Ceil => v.ceil(),
+        UnaryOp::Round => v.round_ties_even(),
+        UnaryOp::Sign => {
+            if v > 0.0 {
+                1.0
+            } else if v < 0.0 {
+                -1.0
+            } else {
+                0.0
+            }
+        }
+        UnaryOp::Step => {
+            if v >= 0.0 {
+                1.0
+            } else {
+                0.0
+            }
+        }
+        _ => return None, // Sin/Cos + the activations: transcendental, skip
+    })
+}
+
+/// Fold a non-infix binary op on two constants — `Max`/`Min` and integer-clean
+/// `Rem`; `Pow` is skipped (host-f64 vs device-f32), `Rem` by zero is skipped.
+fn eval_binary(op: BinaryOp, x: f64, y: f64) -> Option<f64> {
+    Some(match op {
+        BinaryOp::Max => x.max(y),
+        BinaryOp::Min => x.min(y),
+        BinaryOp::Rem if y != 0.0 => x % y,
         _ => return None,
     })
 }
@@ -257,6 +293,18 @@ fn rules(eg: &mut EGraph) -> bool {
                     changed |= eg.union(nid, c);
                 }
             }
+            ENode::Binary(op, a, b) => {
+                // max(x, x) = x ; min(x, x) = x
+                if matches!(op, BinaryOp::Max | BinaryOp::Min) && eg.find(a) == eg.find(b) {
+                    changed |= eg.union(nid, a);
+                }
+                if let (Some(x), Some(y)) = (eg.class_const(a), eg.class_const(b)) {
+                    if let Some(r) = eval_binary(op, x, y) {
+                        let c = eg.add(ENode::Const(r.to_bits()));
+                        changed |= eg.union(nid, c);
+                    }
+                }
+            }
             ENode::Unary(op, x) => {
                 if let Some(v) = eg.class_const(x) {
                     if let Some(r) = eval_unary(op, v) {
@@ -287,6 +335,11 @@ fn weight(n: &ENode) -> u64 {
         ENode::Input(_) | ENode::Param(_) | ENode::Const(_) => 1,
         ENode::Add(..) | ENode::Sub(..) | ENode::Mul(..) => 2,
         ENode::Div(..) => 8,
+        ENode::Binary(op, ..) => match op {
+            BinaryOp::Max | BinaryOp::Min => 2,
+            BinaryOp::Rem => 8,
+            BinaryOp::Pow => 16,
+        },
         ENode::Unary(op, _) => match op {
             UnaryOp::Neg | UnaryOp::Abs | UnaryOp::Relu => 1,
             UnaryOp::Sqr => 2,
@@ -298,7 +351,11 @@ fn weight(n: &ENode) -> u64 {
 
 fn children(n: &ENode) -> Vec<Id> {
     match *n {
-        ENode::Add(a, b) | ENode::Sub(a, b) | ENode::Mul(a, b) | ENode::Div(a, b) => vec![a, b],
+        ENode::Add(a, b)
+        | ENode::Sub(a, b)
+        | ENode::Mul(a, b)
+        | ENode::Div(a, b)
+        | ENode::Binary(_, a, b) => vec![a, b],
         ENode::Unary(_, a) => vec![a],
         _ => vec![],
     }
@@ -348,6 +405,9 @@ fn build(eg: &EGraph, c: Id, best: &HashMap<Id, (u64, ENode)>) -> ScalarExpr {
         ENode::Sub(a, b) => ScalarExpr::Sub(bx(build(eg, a, best)), bx(build(eg, b, best))),
         ENode::Mul(a, b) => ScalarExpr::Mul(bx(build(eg, a, best)), bx(build(eg, b, best))),
         ENode::Div(a, b) => ScalarExpr::Div(bx(build(eg, a, best)), bx(build(eg, b, best))),
+        ENode::Binary(op, a, b) => {
+            ScalarExpr::Binary(op, bx(build(eg, a, best)), bx(build(eg, b, best)))
+        }
         ENode::Unary(op, x) => ScalarExpr::Unary(op, bx(build(eg, x, best))),
     }
 }
@@ -429,6 +489,22 @@ mod tests {
     fn irreducible_body_is_unchanged() {
         let e = input(0) + input(1) * input(2);
         assert_eq!(opt(e.clone()), e.0);
+    }
+
+    #[test]
+    fn binary_fn_folds_and_simplifies() {
+        // const fold max/min; max(x,x) -> x.
+        assert_eq!(opt(konst(2.0).max(konst(5.0))), ScalarExpr::Const(5.0));
+        assert_eq!(opt(konst(2.0).min(konst(5.0))), ScalarExpr::Const(2.0));
+        let max_xx = ScalarExpr::Binary(
+            BinaryOp::Max,
+            Box::new(ScalarExpr::Input(0)),
+            Box::new(ScalarExpr::Input(0)),
+        );
+        assert_eq!(optimize(&max_xx), ScalarExpr::Input(0));
+        // Pow is not const-folded (host/device divergence) — stays symbolic.
+        let pow = opt(konst(2.0).pow(konst(3.0)));
+        assert!(matches!(pow, ScalarExpr::Binary(BinaryOp::Pow, _, _)));
     }
 
     #[test]

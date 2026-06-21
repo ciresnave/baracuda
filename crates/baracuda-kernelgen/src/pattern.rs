@@ -30,7 +30,7 @@
 //! single emitted ordering matches regardless. The ordering key here
 //! ([`canonicalize`]'s `sig`) is Baracuda-internal and need not equal Fuel's.
 
-use crate::ir::{Access, OpDef, ScalarExpr, UnaryOp};
+use crate::ir::{Access, BinaryOp, OpDef, ScalarExpr, UnaryOp};
 use std::collections::BTreeSet;
 
 /// A node in a derived FKC pattern tree (the v1 subset: `Op` + `bind`).
@@ -132,6 +132,16 @@ fn canonicalize(e: &ScalarExpr) -> ScalarExpr {
         ScalarExpr::Div(a, b) => {
             ScalarExpr::Div(Box::new(canonicalize(a)), Box::new(canonicalize(b)))
         }
+        ScalarExpr::Binary(op, a, b) => {
+            let (ca, cb) = (canonicalize(a), canonicalize(b));
+            if matches!(op, BinaryOp::Max | BinaryOp::Min) {
+                // commutative (like Add/Mul) — canonical operand order
+                let (lo, hi) = order2(ca, cb);
+                ScalarExpr::Binary(*op, Box::new(lo), Box::new(hi))
+            } else {
+                ScalarExpr::Binary(*op, Box::new(ca), Box::new(cb))
+            }
+        }
         ScalarExpr::Unary(op, x) => ScalarExpr::Unary(*op, Box::new(canonicalize(x))),
         ScalarExpr::Input(_) | ScalarExpr::Const(_) | ScalarExpr::Param(_) => e.clone(),
     }
@@ -157,6 +167,7 @@ fn sig(e: &ScalarExpr) -> String {
         ScalarExpr::Sub(a, b) => format!("0Sub({},{})", sig(a), sig(b)),
         ScalarExpr::Mul(a, b) => format!("0Mul({},{})", sig(a), sig(b)),
         ScalarExpr::Div(a, b) => format!("0Div({},{})", sig(a), sig(b)),
+        ScalarExpr::Binary(op, a, b) => format!("0B{op:?}({},{})", sig(a), sig(b)),
         ScalarExpr::Unary(op, x) => format!("0U{op:?}({})", sig(x)),
         ScalarExpr::Input(i) => format!("1I{i:03}"),
         ScalarExpr::Param(i) => format!("1P{i:03}"),
@@ -180,11 +191,26 @@ fn walk(
         ScalarExpr::Mul(a, b) => scalar_binop("Mul", "MulScalar", a, b, path, consumers, extracts),
         ScalarExpr::Sub(a, b) => plain_binop("Sub", a, b, path, consumers, extracts),
         ScalarExpr::Div(a, b) => plain_binop("Div", a, b, path, consumers, extracts),
+        // The non-infix binary fns have no scalar-param form in §4.1 (no
+        // MaxScalar/etc.), so a `Param` operand is rejected (plain_binop).
+        ScalarExpr::Binary(op, a, b) => {
+            plain_binop(binary_name(*op), a, b, path, consumers, extracts)
+        }
         ScalarExpr::Unary(op, x) => Ok(op_node(
             unary_name(*op),
             vec![walk(x, false, &child(path, 0), extracts)?],
             consumers,
         )),
+    }
+}
+
+/// FKC §4.1 graph-`Op` name for a [`BinaryOp`].
+fn binary_name(op: BinaryOp) -> &'static str {
+    match op {
+        BinaryOp::Max => "Maximum",
+        BinaryOp::Min => "Minimum",
+        BinaryOp::Pow => "Pow",
+        BinaryOp::Rem => "Rem",
     }
 }
 
@@ -208,6 +234,13 @@ fn unary_name(op: UnaryOp) -> &'static str {
         UnaryOp::Erf => "Erf",
         UnaryOp::Gelu => "GeluErf",
         UnaryOp::Silu => "Silu",
+        UnaryOp::Sin => "Sin",
+        UnaryOp::Cos => "Cos",
+        UnaryOp::Floor => "Floor",
+        UnaryOp::Ceil => "Ceil",
+        UnaryOp::Round => "Round",
+        UnaryOp::Sign => "Sign",
+        UnaryOp::Step => "Step",
     }
 }
 
@@ -451,6 +484,19 @@ pattern:
           - bind: 1
 ";
         assert_eq!(to_fkc(&derive_pattern(&op).unwrap()), expected);
+    }
+
+    #[test]
+    fn binary_fn_ops_emit_names_and_canonicalize() {
+        // max(a,b) -> "Maximum"; commutative, so max(a,b) and max(b,a) converge.
+        let ab = OpDef::elementwise("m", 2, &[ElementKind::F32], input(0).max(input(1)));
+        let ba = OpDef::elementwise("m", 2, &[ElementKind::F32], input(1).max(input(0)));
+        let fa = to_fkc(&derive_pattern(&ab).unwrap());
+        assert!(fa.contains("op: Maximum"));
+        assert_eq!(fa, to_fkc(&derive_pattern(&ba).unwrap()));
+        // Pow is non-commutative — the op name emits, order is positional.
+        let p = OpDef::elementwise("p", 2, &[ElementKind::F32], input(0).pow(input(1)));
+        assert!(to_fkc(&derive_pattern(&p).unwrap()).contains("op: Pow"));
     }
 
     #[test]

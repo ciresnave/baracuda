@@ -8,7 +8,7 @@
 //! this generator eventually target backends beyond CUDA (and move out of
 //! Baracuda) without a rewrite.
 
-use crate::ir::{ScalarExpr, UnaryOp};
+use crate::ir::{BinaryOp, ScalarExpr, UnaryOp};
 
 /// A generated kernel: its exported symbol name and source text.
 #[derive(Clone, Debug)]
@@ -27,22 +27,36 @@ pub trait Backend {
     fn lower(&self, plan: &crate::plan::KernelPlan<'_>) -> GeneratedKernel;
 }
 
-/// Lower a [`ScalarExpr`] DAG to an infix expression string.
+/// Backend-injected lowering closures for the **non-universal** parts of the
+/// math. Infix `+ - * /` and parenthesization are universal across
+/// CUDA/Slang/HLSL/Metal/GLSL and inlined directly; everything else is a seam:
 ///
-/// Two backend seams, because the math half splits cleanly: `+ - * /` and
-/// parenthesization are **universal** across CUDA/Slang/HLSL/Metal/GLSL, so
-/// only `leaf` (how input operand `i`'s value is named — `in0[i]` scalar, `v0.x`
-/// for a vector lane) is backend-specific for those. Transcendentals are **not**
-/// universal (`expf` is CUDA-specific), so `unary` is a second backend-injected
-/// seam: it spells a [`UnaryOp`] applied to an already-lowered inner string.
+/// - `leaf` — how input operand `i`'s value is named (`in0[i]` scalar, `v0.x`
+///   for a vector lane);
+/// - `unary` — spells a [`UnaryOp`] over an already-lowered inner string
+///   (`expf(...)` is CUDA-specific);
+/// - `binary` — spells a non-infix [`BinaryOp`] over two operand strings
+///   (`fmaxf(a, b)`, `powf(a, b)`).
+pub struct Lowering<'a> {
+    /// Operand-access spelling.
+    pub leaf: &'a dyn Fn(u8) -> String,
+    /// Unary-op spelling.
+    pub unary: &'a dyn Fn(UnaryOp, String) -> String,
+    /// Binary-function-op spelling.
+    pub binary: &'a dyn Fn(BinaryOp, String, String) -> String,
+}
+
+impl std::fmt::Debug for Lowering<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Lowering").finish_non_exhaustive()
+    }
+}
+
+/// Lower a [`ScalarExpr`] DAG to a backend expression string via `lo`'s seams.
 #[must_use]
-pub fn lower_expr(
-    e: &ScalarExpr,
-    leaf: &dyn Fn(u8) -> String,
-    unary: &dyn Fn(UnaryOp, String) -> String,
-) -> String {
+pub fn lower_expr(e: &ScalarExpr, lo: &Lowering<'_>) -> String {
     match e {
-        ScalarExpr::Input(i) => leaf(*i),
+        ScalarExpr::Input(i) => (lo.leaf)(*i),
         ScalarExpr::Param(i) => format!("p{i}"),
         // `{v:?}` emits `inf`/`NaN`, which aren't valid C literals; map to the
         // standard macros. (The f32 `f`-suffix vs double-promotion is dtype-
@@ -61,18 +75,11 @@ pub fn lower_expr(
                 format!("{v:?}")
             }
         }
-        ScalarExpr::Unary(op, x) => unary(*op, lower_expr(x, leaf, unary)),
-        ScalarExpr::Add(a, b) => {
-            format!("({} + {})", lower_expr(a, leaf, unary), lower_expr(b, leaf, unary))
-        }
-        ScalarExpr::Sub(a, b) => {
-            format!("({} - {})", lower_expr(a, leaf, unary), lower_expr(b, leaf, unary))
-        }
-        ScalarExpr::Mul(a, b) => {
-            format!("({} * {})", lower_expr(a, leaf, unary), lower_expr(b, leaf, unary))
-        }
-        ScalarExpr::Div(a, b) => {
-            format!("({} / {})", lower_expr(a, leaf, unary), lower_expr(b, leaf, unary))
-        }
+        ScalarExpr::Unary(op, x) => (lo.unary)(*op, lower_expr(x, lo)),
+        ScalarExpr::Binary(op, a, b) => (lo.binary)(*op, lower_expr(a, lo), lower_expr(b, lo)),
+        ScalarExpr::Add(a, b) => format!("({} + {})", lower_expr(a, lo), lower_expr(b, lo)),
+        ScalarExpr::Sub(a, b) => format!("({} - {})", lower_expr(a, lo), lower_expr(b, lo)),
+        ScalarExpr::Mul(a, b) => format!("({} * {})", lower_expr(a, lo), lower_expr(b, lo)),
+        ScalarExpr::Div(a, b) => format!("({} / {})", lower_expr(a, lo), lower_expr(b, lo)),
     }
 }
