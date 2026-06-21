@@ -219,7 +219,8 @@ fn eval_binary(op: BinaryOp, x: f64, y: f64) -> Option<f64> {
     Some(match op {
         BinaryOp::Max if !x.is_nan() && !y.is_nan() => x.max(y),
         BinaryOp::Min if !x.is_nan() && !y.is_nan() => x.min(y),
-        BinaryOp::Rem if y != 0.0 => x % y,
+        // floored remainder (torch.remainder), matching the kernel — not `x % y`
+        BinaryOp::Rem if y != 0.0 => x - (x / y).floor() * y,
         _ => return None,
     })
 }
@@ -522,6 +523,13 @@ mod tests {
         // Pow is not const-folded (host/device divergence) — stays symbolic.
         let pow = opt(konst(2.0).pow(konst(3.0)));
         assert!(matches!(pow, ScalarExpr::Binary(BinaryOp::Pow, _, _)));
+        // Rem is FLOORED (torch.remainder): -3 rem 2 = 1 (sign-of-divisor), not -1.
+        let rem = optimize(&ScalarExpr::Binary(
+            BinaryOp::Rem,
+            Box::new(ScalarExpr::Const(-3.0)),
+            Box::new(ScalarExpr::Const(2.0)),
+        ));
+        assert_eq!(rem, ScalarExpr::Const(1.0));
     }
 
     #[test]

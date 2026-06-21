@@ -98,9 +98,8 @@ pub enum BinaryOp {
     Min,
     /// Power `aᵇ` (not commutative).
     Pow,
-    /// Floating remainder — truncated, sign-of-dividend (`torch.fmod` / C `fmod`;
-    /// not commutative). The sign convention vs Fuel's `Op::Rem` is flagged for
-    /// confirmation (a sign-of-divisor `Op::Mod` would need a floored form).
+    /// Floored remainder — `a - floor(a/b)·b`, sign-of-divisor (`torch.remainder`,
+    /// Fuel's `Op::Rem`; not commutative). Distinct from C `fmod` (sign-of-dividend).
     Rem,
 }
 

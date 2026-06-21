@@ -357,7 +357,9 @@ fn binary_f32(op: BinaryOp, a: String, b: String) -> String {
         BinaryOp::Max => format!("({a} != {a} ? {a} : ({b} != {b} ? {b} : ({a} > {b} ? {a} : {b})))"),
         BinaryOp::Min => format!("({a} != {a} ? {a} : ({b} != {b} ? {b} : ({a} < {b} ? {a} : {b})))"),
         BinaryOp::Pow => format!("powf({a}, {b})"),
-        BinaryOp::Rem => format!("fmodf({a}, {b})"), // truncated, sign-of-dividend (torch.fmod)
+        // Floored remainder (torch.remainder, sign-of-divisor — Fuel's Op::Rem),
+        // not C fmodf (sign-of-dividend). Operands appear twice (temp-binding TODO).
+        BinaryOp::Rem => format!("({a} - floorf({a} / {b}) * {b})"),
     }
 }
 
@@ -367,7 +369,7 @@ fn binary_f64(op: BinaryOp, a: String, b: String) -> String {
         BinaryOp::Max => format!("({a} != {a} ? {a} : ({b} != {b} ? {b} : ({a} > {b} ? {a} : {b})))"),
         BinaryOp::Min => format!("({a} != {a} ? {a} : ({b} != {b} ? {b} : ({a} < {b} ? {a} : {b})))"),
         BinaryOp::Pow => format!("pow({a}, {b})"),
-        BinaryOp::Rem => format!("fmod({a}, {b})"),
+        BinaryOp::Rem => format!("({a} - floor({a} / {b}) * {b})"),
     }
 }
 
