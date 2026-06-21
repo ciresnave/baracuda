@@ -177,7 +177,8 @@ fn eval_unary(op: UnaryOp, v: f64) -> Option<f64> {
         UnaryOp::Abs => v.abs(),
         UnaryOp::Sqr => v * v,
         UnaryOp::Sqrt => v.sqrt(),
-        UnaryOp::Rsqrt => 1.0 / v.sqrt(),
+        // Rsqrt is NOT folded: device `rsqrtf` is an approximation (~2 ulp), so a
+        // host `1/sqrt(v)` fold would change the bits the kernel emits.
         UnaryOp::Recip => 1.0 / v,
         UnaryOp::Relu => {
             if v < 0.0 {
@@ -199,22 +200,25 @@ fn eval_unary(op: UnaryOp, v: f64) -> Option<f64> {
             }
         }
         UnaryOp::Step => {
-            if v >= 0.0 {
+            if v > 0.0 {
                 1.0
             } else {
                 0.0
             }
         }
-        _ => return None, // Sin/Cos + the activations: transcendental, skip
+        _ => return None, // Sin/Cos/Rsqrt + the activations: transcendental, skip
     })
 }
 
 /// Fold a non-infix binary op on two constants — `Max`/`Min` and integer-clean
 /// `Rem`; `Pow` is skipped (host-f64 vs device-f32), `Rem` by zero is skipped.
 fn eval_binary(op: BinaryOp, x: f64, y: f64) -> Option<f64> {
+    // Max/Min only fold when neither operand is NaN — the kernel propagates NaN
+    // (NaN-select), so folding a NaN operand away (host f64::max suppresses it)
+    // would disagree with the device.
     Some(match op {
-        BinaryOp::Max => x.max(y),
-        BinaryOp::Min => x.min(y),
+        BinaryOp::Max if !x.is_nan() && !y.is_nan() => x.max(y),
+        BinaryOp::Min if !x.is_nan() && !y.is_nan() => x.min(y),
         BinaryOp::Rem if y != 0.0 => x % y,
         _ => return None,
     })
@@ -342,9 +346,22 @@ fn weight(n: &ENode) -> u64 {
         },
         ENode::Unary(op, _) => match op {
             UnaryOp::Neg | UnaryOp::Abs | UnaryOp::Relu => 1,
-            UnaryOp::Sqr => 2,
+            UnaryOp::Sqr
+            | UnaryOp::Floor
+            | UnaryOp::Ceil
+            | UnaryOp::Round
+            | UnaryOp::Sign
+            | UnaryOp::Step => 2,
             UnaryOp::Sqrt | UnaryOp::Rsqrt | UnaryOp::Recip => 8,
-            _ => 16, // transcendental
+            UnaryOp::Exp
+            | UnaryOp::Log
+            | UnaryOp::Tanh
+            | UnaryOp::Sigmoid
+            | UnaryOp::Erf
+            | UnaryOp::Gelu
+            | UnaryOp::Silu
+            | UnaryOp::Sin
+            | UnaryOp::Cos => 16,
         },
     }
 }

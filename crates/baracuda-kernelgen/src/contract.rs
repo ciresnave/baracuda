@@ -213,48 +213,52 @@ fn count_flops(e: &ScalarExpr) -> u32 {
     }
 }
 
-/// `true` if the body contains a transcendental that lowers to a hardware/library
-/// approximation (a few ulp) rather than a correctly-rounded IEEE primitive.
-fn has_transcendental(e: &ScalarExpr) -> bool {
+/// Conservative max-ULP bound over the lowered body — a *declared upper bound*,
+/// the sum of the **vendor-approximate** ops' errors (transcendentals ~2 ulp,
+/// `powf` 4, `logf` 1, the hand-rolled `Sigmoid`/`Silu`/`Gelu` composites a bit
+/// higher). Correctly-rounded ops (the infix arithmetic, `Neg`/`Abs`/`Sqr`/`Sqrt`/
+/// `Recip`/`Relu`/`Floor`/`Ceil`/`Round`/`Sign`/`Step`, `Max`/`Min`/`Rem`)
+/// contribute 0, so a body with none is `correctly_rounded`. Over-stating is safe
+/// (the planner won't admit into a too-tight slot); under-stating is not.
+fn ulp_bound(e: &ScalarExpr) -> f64 {
     match e {
-        ScalarExpr::Input(_) | ScalarExpr::Const(_) | ScalarExpr::Param(_) => false,
-        ScalarExpr::Unary(op, x) => is_transcendental(*op) || has_transcendental(x),
-        // `Pow` lowers to `powf` (a few ulp); `Max`/`Min`/`Rem` are exact.
+        ScalarExpr::Input(_) | ScalarExpr::Const(_) | ScalarExpr::Param(_) => 0.0,
+        ScalarExpr::Unary(op, x) => ulp_bound(x) + unary_ulp(*op),
         ScalarExpr::Binary(op, a, b) => {
-            matches!(op, BinaryOp::Pow) || has_transcendental(a) || has_transcendental(b)
+            let here = if matches!(op, BinaryOp::Pow) { 4.0 } else { 0.0 };
+            ulp_bound(a) + ulp_bound(b) + here
         }
         ScalarExpr::Add(a, b)
         | ScalarExpr::Sub(a, b)
         | ScalarExpr::Mul(a, b)
-        | ScalarExpr::Div(a, b) => has_transcendental(a) || has_transcendental(b),
+        | ScalarExpr::Div(a, b) => ulp_bound(a) + ulp_bound(b),
     }
 }
 
-fn is_transcendental(op: UnaryOp) -> bool {
-    matches!(
-        op,
-        UnaryOp::Exp
-            | UnaryOp::Log
-            | UnaryOp::Tanh
-            | UnaryOp::Sigmoid
-            | UnaryOp::Erf
-            | UnaryOp::Gelu
-            | UnaryOp::Silu
-            | UnaryOp::Rsqrt
-            | UnaryOp::Sin
-            | UnaryOp::Cos
-    )
+/// Per-op CUDA f32 ULP error. Correctly-rounded / exact ops (`Neg`/`Abs`/`Sqr`/
+/// `Sqrt`/`Recip`/`Relu`/`Floor`/`Ceil`/`Round`/`Sign`/`Step`) are 0.
+fn unary_ulp(op: UnaryOp) -> f64 {
+    match op {
+        UnaryOp::Log => 1.0,
+        UnaryOp::Exp | UnaryOp::Tanh | UnaryOp::Erf | UnaryOp::Sin | UnaryOp::Cos | UnaryOp::Rsqrt => {
+            2.0
+        }
+        // composites of expf/erff + rounding — conservatively a bit higher
+        UnaryOp::Sigmoid | UnaryOp::Silu | UnaryOp::Gelu => 3.0,
+        _ => 0.0,
+    }
 }
 
-/// Precision contract: arithmetic + `Relu`/`Abs`/`Neg`/`Sqrt` are correctly
-/// rounded (0 ulp of the dtype, bit-reproducible); a transcendental relaxes to a
-/// small ulp bound. (`F32Strict` would force `correctly_rounded` regardless — it
+/// Precision contract: `correctly_rounded` (0 ulp, bit-reproducible) when the
+/// body is all correctly-rounded primitives, else `approximate` with the
+/// conservative [`ulp_bound`]. (`F32Strict` would force `correctly_rounded` — it
 /// is a precision mode, not a wire dtype.)
 fn precision_of(body: &ScalarExpr) -> (&'static str, Option<u32>) {
-    if has_transcendental(body) {
-        ("approximate", Some(2))
-    } else {
+    let u = ulp_bound(body);
+    if u <= 0.0 {
         ("correctly_rounded", Some(0))
+    } else {
+        ("approximate", Some(u.ceil() as u32))
     }
 }
 
@@ -498,7 +502,8 @@ mod tests {
         assert!(c.contains("name: param0"));
         assert!(c.contains("name: param1"));
         assert!(c.contains("mode: approximate"));
-        assert!(c.contains("max_ulp: 2"));
+        // silu(x*p0 + p1): the silu composite (~3 ulp); arithmetic is exact.
+        assert!(c.contains("max_ulp: 3"));
     }
 
     #[test]

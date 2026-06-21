@@ -500,6 +500,13 @@ pattern:
     }
 
     #[test]
+    fn binary_fn_with_param_operand_is_rejected() {
+        // max(x, p0) has no §4.1 scalar form (no MaxScalar) — rejected, not faked.
+        let op = OpDef::elementwise("mp", 1, &[ElementKind::F32], input(0).max(param(0)));
+        assert_eq!(derive_pattern(&op), Err(PatternError::ScalarParamUnsupported));
+    }
+
+    #[test]
     fn gelu_emits_geluerf_exact_flavor() {
         // UnaryOp::Gelu lowers to exact erf (cuda.rs); FKC §4.1 names that flavor
         // `GeluErf`, while bare `Gelu` is the tanh approximation. A fused gelu must

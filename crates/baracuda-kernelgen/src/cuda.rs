@@ -292,7 +292,7 @@ fn unary_f32(op: UnaryOp, x: String) -> String {
         UnaryOp::Ceil => format!("ceilf({x})"),
         UnaryOp::Round => format!("rintf({x})"), // ties to even
         UnaryOp::Sign => format!("({x} > 0.0f ? 1.0f : ({x} < 0.0f ? -1.0f : 0.0f))"),
-        UnaryOp::Step => format!("({x} >= 0.0f ? 1.0f : 0.0f)"),
+        UnaryOp::Step => format!("({x} > 0.0f ? 1.0f : 0.0f)"), // heaviside(x, 0): step(0)=0
     }
 }
 
@@ -319,7 +319,7 @@ fn unary_f64(op: UnaryOp, x: String) -> String {
         UnaryOp::Ceil => format!("ceil({x})"),
         UnaryOp::Round => format!("rint({x})"), // ties to even
         UnaryOp::Sign => format!("({x} > 0.0 ? 1.0 : ({x} < 0.0 ? -1.0 : 0.0))"),
-        UnaryOp::Step => format!("({x} >= 0.0 ? 1.0 : 0.0)"),
+        UnaryOp::Step => format!("({x} > 0.0 ? 1.0 : 0.0)"), // heaviside(x, 0): step(0)=0
     }
 }
 
@@ -346,25 +346,26 @@ fn cuda_unary(op: UnaryOp, x: String, dtype: ElementKind) -> String {
 
 /// Non-infix binary op in f32 math.
 ///
-/// NOTE on NaN: `fmaxf`/`fminf` are IEEE `maxNum`/`minNum` — they return the
-/// non-NaN operand (NaN-*suppressing*). PyTorch's `maximum`/`minimum` *propagate*
-/// NaN. Confirm Fuel's `Op::Maximum`/`Minimum` semantics; if propagating, switch
-/// to a manual `a!=a ? a : (b!=b ? b : (a>b?a:b))` form (which needs the pending
-/// temp-binding pass to avoid the 3× operand recompute).
+/// `Maximum`/`Minimum` are **NaN-propagating** (a NaN operand ⇒ NaN out) —
+/// matching `torch.maximum`/`minimum` and the house reference kernel
+/// `binary_maximum_fp.cu`, which deliberately reserves `fmaxf`/`fminf` (IEEE
+/// `maxNum`, NaN-*suppressing*) for a *separate* `Fmax`/`Fmin` op. So we emit the
+/// compare-select, not `fmaxf`. (Operands appear 3× — the deferred temp-binding
+/// pass, cf. relu/sigmoid, removes the recompute on compound inners.)
 fn binary_f32(op: BinaryOp, a: String, b: String) -> String {
     match op {
-        BinaryOp::Max => format!("fmaxf({a}, {b})"),
-        BinaryOp::Min => format!("fminf({a}, {b})"),
+        BinaryOp::Max => format!("({a} != {a} ? {a} : ({b} != {b} ? {b} : ({a} > {b} ? {a} : {b})))"),
+        BinaryOp::Min => format!("({a} != {a} ? {a} : ({b} != {b} ? {b} : ({a} < {b} ? {a} : {b})))"),
         BinaryOp::Pow => format!("powf({a}, {b})"),
-        BinaryOp::Rem => format!("fmodf({a}, {b})"), // truncated remainder (C fmod)
+        BinaryOp::Rem => format!("fmodf({a}, {b})"), // truncated, sign-of-dividend (torch.fmod)
     }
 }
 
 /// Same as [`binary_f32`] but with f64 math-function names.
 fn binary_f64(op: BinaryOp, a: String, b: String) -> String {
     match op {
-        BinaryOp::Max => format!("fmax({a}, {b})"),
-        BinaryOp::Min => format!("fmin({a}, {b})"),
+        BinaryOp::Max => format!("({a} != {a} ? {a} : ({b} != {b} ? {b} : ({a} > {b} ? {a} : {b})))"),
+        BinaryOp::Min => format!("({a} != {a} ? {a} : ({b} != {b} ? {b} : ({a} < {b} ? {a} : {b})))"),
         BinaryOp::Pow => format!("pow({a}, {b})"),
         BinaryOp::Rem => format!("fmod({a}, {b})"),
     }
@@ -447,6 +448,23 @@ mod tests {
         assert!(k.source.contains("float4 v0 = in0[i];"));
         assert!(k.source.contains("vo.x = (v0.x + v1.x);"));
         assert!(k.source.contains("vo.w = (v0.w + v1.w);"));
+    }
+
+    #[test]
+    fn maximum_propagates_nan_and_step_excludes_zero() {
+        use crate::ir::UnaryOp;
+        // Maximum: NaN-propagating compare-select, not fmaxf (the house convention).
+        let max = OpDef::elementwise("m", 2, &[ElementKind::F32], input(0).max(input(1)));
+        let km = generate(&max, &binary_key(ElementKind::F32), &Cuda);
+        assert!(!km.source.contains("fmaxf"));
+        assert!(km.source.contains("!=")); // the NaN check
+        // Step: heaviside(x, 0), strict `>` so step(0) = 0.
+        let step = OpDef::elementwise("s", 1, &[ElementKind::F32], input(0).unary(UnaryOp::Step));
+        let a = OperandDesc::new(1, &[1 << 20], &[1], ElementKind::F32, 256);
+        let key = structure_key(OpCategory::UnaryElementwise, &[a, a], ArchSku::Sm89);
+        let ks = generate(&step, &key, &Cuda);
+        assert!(ks.source.contains("> 0.0f ? 1.0f : 0.0f"));
+        assert!(!ks.source.contains(">= 0.0f"));
     }
 
     #[test]

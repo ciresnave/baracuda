@@ -291,6 +291,13 @@ pub fn synthesize(
     // --- Synthesis ----------------------------------------------------------
     let (op, derived) = region_to_op(&req.region, req.n_inputs, &req.fused_op_id, dtype)?;
 
+    // CUDA backend dtype limits: a unary / binary-fn node needs a float dtype, and
+    // scalar params are f32-only. Reject an incompatible (dtype, op) region as an
+    // honest miss rather than panicking inside lowering (the trust-boundary rule).
+    if !dtype_compatible(&op.body, dtype) {
+        return Err(JitError::UnsupportedDtype);
+    }
+
     // The schedule cell is keyed from Fuel's operand projection — never re-derived.
     let key = structure_key(req.op_category, &req.operands, req.arch);
 
@@ -422,6 +429,36 @@ fn binary_operands(
     let a = node_to_expr(&operands[0], np)?;
     let b = node_to_expr(&operands[1], np)?;
     Ok((a, b))
+}
+
+/// Whether the CUDA backend can lower `body` at `dtype`: unary / binary-fn nodes
+/// require a float dtype (`cuda_unary`/`cuda_binary` have no integer math), and a
+/// runtime scalar `Param` is f32-only. Pure infix arithmetic works at any dtype.
+fn dtype_compatible(body: &ScalarExpr, dtype: ElementKind) -> bool {
+    let is_float = matches!(
+        dtype,
+        ElementKind::F16
+            | ElementKind::Bf16
+            | ElementKind::F32
+            | ElementKind::F32Strict
+            | ElementKind::F64
+    );
+    let f32_only = matches!(dtype, ElementKind::F32 | ElementKind::F32Strict);
+    fn walk(e: &ScalarExpr, is_float: bool, f32_only: bool) -> bool {
+        match e {
+            ScalarExpr::Input(_) | ScalarExpr::Const(_) => true,
+            ScalarExpr::Param(_) => f32_only,
+            ScalarExpr::Unary(_, x) => is_float && walk(x, is_float, f32_only),
+            ScalarExpr::Binary(_, a, b) => {
+                is_float && walk(a, is_float, f32_only) && walk(b, is_float, f32_only)
+            }
+            ScalarExpr::Add(a, b)
+            | ScalarExpr::Sub(a, b)
+            | ScalarExpr::Mul(a, b)
+            | ScalarExpr::Div(a, b) => walk(a, is_float, f32_only) && walk(b, is_float, f32_only),
+        }
+    }
+    walk(body, is_float, f32_only)
 }
 
 /// Inverse of [`crate::pattern`]'s `binary_name`.
@@ -591,6 +628,38 @@ mod tests {
                 .unwrap();
             assert!(resp.kernel.source.contains("__global__"));
         }
+    }
+
+    #[test]
+    fn integer_unary_binary_is_honest_miss_not_panic() {
+        // int + a unary/binary fn has no CUDA math -> honest miss, never a panic.
+        let region = op_node("Maximum", vec![PatternNode::Bind(0), PatternNode::Bind(1)]);
+        assert_eq!(
+            synthesize(&req(region, 2, ElementKind::I32, "x"), &Cuda, &StubCompiler).unwrap_err(),
+            JitError::UnsupportedDtype
+        );
+        // pure int Add (infix) is fine.
+        let add = op_node("Add", vec![PatternNode::Bind(0), PatternNode::Bind(1)]);
+        assert!(synthesize(&req(add, 2, ElementKind::I32, "x"), &Cuda, &StubCompiler).is_ok());
+    }
+
+    #[test]
+    fn non_f32_scalar_param_is_honest_miss() {
+        // scalar params are f32-only; an f64 AddScalar region misses honestly.
+        let region = op_node("AddScalar", vec![PatternNode::Bind(0)]);
+        assert_eq!(
+            synthesize(&req(region, 1, ElementKind::F64, "x"), &Cuda, &StubCompiler).unwrap_err(),
+            JitError::UnsupportedDtype
+        );
+    }
+
+    #[test]
+    fn unknown_binary_name_is_unsupported() {
+        let region = op_node("Mod", vec![PatternNode::Bind(0), PatternNode::Bind(1)]);
+        assert_eq!(
+            synthesize(&req(region, 2, ElementKind::F32, "x"), &Cuda, &StubCompiler).unwrap_err(),
+            JitError::UnsupportedOp("Mod".to_string())
+        );
     }
 
     #[test]

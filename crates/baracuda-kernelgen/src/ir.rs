@@ -83,7 +83,7 @@ pub enum UnaryOp {
     Round,
     /// Sign `−1 / 0 / +1`.
     Sign,
-    /// Heaviside step `x ≥ 0 ? 1 : 0`.
+    /// Heaviside step `x > 0 ? 1 : 0` (`heaviside(x, values=0)`; `step(0) = 0`).
     Step,
 }
 
@@ -98,7 +98,9 @@ pub enum BinaryOp {
     Min,
     /// Power `aᵇ` (not commutative).
     Pow,
-    /// Floating remainder `a mod b` (not commutative).
+    /// Floating remainder — truncated, sign-of-dividend (`torch.fmod` / C `fmod`;
+    /// not commutative). The sign convention vs Fuel's `Op::Rem` is flagged for
+    /// confirmation (a sign-of-divisor `Op::Mod` would need a floored form).
     Rem,
 }
 
