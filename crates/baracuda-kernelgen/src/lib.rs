@@ -33,6 +33,7 @@ pub mod cuda;
 pub mod ir;
 pub mod jit;
 pub mod link;
+pub mod optimize;
 pub mod pattern;
 pub mod plan;
 
@@ -47,6 +48,7 @@ pub use jit::{
 #[cfg(feature = "nvrtc")]
 pub use jit::NvrtcCompiler;
 pub use link::{emit_link_registry, link_entry, LinkEntry};
+pub use optimize::optimize;
 pub use pattern::{derive_pattern, to_fkc, PatternError, PatternNode};
 pub use plan::{build_plan, KernelPlan, Schedule};
 

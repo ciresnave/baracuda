@@ -38,7 +38,7 @@ pub enum ScalarExpr {
 
 /// A unary math / activation op. Variant names line up with the FKC §4.1
 /// graph-`Op` vocabulary, so [`crate::derive_pattern`] maps them by name.
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub enum UnaryOp {
     /// Negation `-x`.
     Neg,

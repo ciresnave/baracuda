@@ -28,6 +28,7 @@
 use crate::contract::contract;
 use crate::ir::{Access, OpDef, ScalarExpr, UnaryOp};
 use crate::link::{link_entry, LinkEntry};
+use crate::optimize::optimize;
 use crate::pattern::{derive_pattern, to_fkc, PatternError, PatternNode};
 use crate::{generate, Backend};
 use baracuda_kernels_types::{
@@ -292,7 +293,16 @@ pub fn synthesize(
 
     // The schedule cell is keyed from Fuel's operand projection — never re-derived.
     let key = structure_key(req.op_category, &req.operands, req.arch);
-    let kernel = generate(&op, &key, backend);
+
+    // §5.1: synthesize the *best* kernel — algebraically optimize the body for
+    // codegen (the inward e-graph). The recipe (pattern/decompose) below stays the
+    // ORIGINAL region so Fuel's matcher still recognizes the subgraph; only the
+    // emitted kernel computes the equivalent optimized form.
+    let kernel_op = OpDef {
+        body: optimize(&op.body),
+        ..op.clone()
+    };
+    let kernel = generate(&kernel_op, &key, backend);
 
     let artifact = compiler
         .compile(&kernel.source, &kernel.name, req.budget.max_compile_ms)
@@ -509,6 +519,21 @@ mod tests {
             .unwrap();
         assert!(resp.recipe.pattern.contains("op: GeluErf"));
         assert!(resp.kernel.source.contains("erf"));
+    }
+
+    #[test]
+    fn inward_optimizer_simplifies_kernel_but_keeps_the_recipe() {
+        // Neg(Neg(x)) region: the inward e-graph (§5.1) cancels the double negation
+        // for codegen, but the recipe (pattern/decompose) must still describe the
+        // ORIGINAL region so Fuel's matcher recognizes it.
+        let region = op_node("Neg", vec![op_node("Neg", vec![PatternNode::Bind(0)])]);
+        let resp = synthesize(&req(region, 1, ElementKind::F32, "jit_negneg"), &Cuda, &StubCompiler)
+            .unwrap();
+        // kernel body is the optimized identity copy — no double negation emitted.
+        assert!(!resp.kernel.source.contains("-(-("));
+        // recipe still carries the original Neg subgraph.
+        assert_eq!(resp.recipe.pattern.matches("op: Neg").count(), 2);
+        assert!(resp.recipe.decompose.contains("op: Neg"));
     }
 
     #[test]
