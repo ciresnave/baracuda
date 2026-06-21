@@ -10,7 +10,7 @@
 //! A [`JitRequest`] carries that region (a graph-`Op` subgraph, the same shape
 //! [`derive_pattern`] emits — read in reverse), the operand projection that keys
 //! the schedule, and a target. [`synthesize`] turns it into a [`JitResponse`] =
-//! `(kernel + FKC contract + recipe)`, exactly the §5 shape. The heavy lifting
+//! `(kernel + FKC contract + recipe + link row)`, the §5 shape. The heavy lifting
 //! reuses the AOT generator ([`generate`], [`contract`], [`derive_pattern`]); the
 //! only new step is [`region_to_op`] (region → op IR) and the on-demand
 //! [`Compiler`] seam.
@@ -19,56 +19,71 @@
 //!
 //! The elementwise-epilogue vocabulary the IR already covers ([`ScalarExpr`]):
 //! `Add`/`Sub`/`Mul`/`Div`, the scalar-param ops `AddScalar`/`MulScalar`, and the
-//! unary math/activations. The on-demand compiler is behind a trait with a stub
-//! impl; the real nvrtc backend, the FFI wire surface (reconciling these Rust
-//! types with Fuel's `JitRequest`/`JitResponse`), an inward e-graph optimizer
-//! (§5.1 permits it), and the telemetry trigger are the growth path.
+//! unary math/activations, **single (uniform) dtype**. The on-demand compiler is
+//! behind a trait with a stub impl; the real nvrtc backend, the FFI wire surface
+//! (reconciling these Rust types with Fuel's `JitRequest`/`JitResponse`), an
+//! inward e-graph optimizer (§5.1 permits it), per-operand dtypes, and the
+//! telemetry trigger are the growth path.
 
 use crate::contract::contract;
 use crate::ir::{Access, OpDef, ScalarExpr, UnaryOp};
+use crate::link::{link_entry, LinkEntry};
 use crate::pattern::{derive_pattern, to_fkc, PatternError, PatternNode};
-use crate::{generate, Backend, Cuda};
-use baracuda_kernels_types::{structure_key, ArchSku, ElementKind, OpCategory, OperandDesc};
+use crate::{generate, Backend};
+use baracuda_kernels_types::{
+    structure_key, ArchSku, ElementKind, OpCategory, OperandDesc, MAX_OPERANDS,
+};
 
 /// A JIT synthesis request from Fuel (the strategist).
 #[derive(Clone, Debug)]
 pub struct JitRequest {
     /// The primitive subgraph to fuse — a graph-`Op` tree rooted at the sink,
     /// with `bind` leaves for the region's inputs (the §4.1 vocabulary; the same
-    /// node shape [`derive_pattern`] produces).
+    /// node shape [`derive_pattern`] produces). Per-node `consumers`/`extract`
+    /// are ignored — [`region_to_op`] regenerates them (see its docs).
     pub region: PatternNode,
-    /// Region input count; `bind` indices must be exactly `[0, n_inputs)`.
+    /// Region input count; `bind` indices must be exactly `[0, n_inputs)`, and
+    /// [`Self::operands`] must hold exactly `n_inputs + 1` entries.
     pub n_inputs: u8,
-    /// Op taxonomy for the structure key (drives schedule legality).
+    /// Op taxonomy for the structure key (drives schedule legality). Fuel's to
+    /// choose (strategist); the synthesizer does not second-guess it.
     pub op_category: OpCategory,
     /// Operand descriptors (inputs then output) — Fuel's `FdxOperandDesc`
-    /// projection, the input to [`structure_key`].
+    /// projection, the input to [`structure_key`]. Increment 1 requires a single
+    /// shared dtype across all operands.
     pub operands: Vec<OperandDesc>,
-    /// Target architecture.
+    /// Target compute capability — keys the schedule. The finer device identity
+    /// (ordinal / exact SM / driver) that §5.2's `target.device` carries is
+    /// folded into `arch` here; the real on-demand compiler (increment 2) will
+    /// refine it where the artifact must be SM-specific.
     pub arch: ArchSku,
     /// Stable identity to register the synthesized fused op under.
     pub fused_op_id: String,
-    /// Compile/resource budget (advisory; Fuel sets it).
+    /// Compile/resource budget (Fuel sets it). Threaded into [`Compiler::compile`].
     pub budget: JitBudget,
 }
 
 /// Compile-time / resource budget for a synthesis request.
 #[derive(Copy, Clone, Debug)]
 pub struct JitBudget {
-    /// Soft ceiling on on-demand compilation time.
+    /// Ceiling on on-demand compilation time. Must be `> 0`.
     pub max_compile_ms: u32,
 }
 
-/// The synthesizer's response — `(kernel + contract + recipe)`, the §5 shape.
+/// The synthesizer's response — `(kernel + contract + recipe + link)`, the §5 shape.
 #[derive(Clone, Debug)]
 pub struct JitResponse {
-    /// The synthesized kernel: entry-point symbol, source, and compiled artifact.
+    /// The synthesized kernel: entry-point symbol, source, compiled artifact, and
+    /// the artifact's provenance.
     pub kernel: SynthKernel,
-    /// The full FKC contract for the kernel (front-matter-less per-kernel block).
+    /// The full FKC contract for the kernel (the per-kernel block).
     pub contract: String,
     /// The declarative recipe — `pattern:` (recognize the region) + `decompose:`
     /// (expand back to it). Both halves, per the rev-4 recipe principle.
     pub recipe: Recipe,
+    /// The `link_registry` row that resolves the kernel's `entry_point` to a
+    /// `KernelRef` at load (FKC §12.6) — without it an adopted kernel is unbindable.
+    pub link: LinkEntry,
 }
 
 /// A synthesized kernel.
@@ -78,8 +93,22 @@ pub struct SynthKernel {
     pub entry_point: String,
     /// The generated backend source (`.cu`).
     pub source: String,
-    /// The compiled artifact (PTX / cubin) from the on-demand [`Compiler`].
+    /// The compiled artifact (PTX / cubin / stub) from the on-demand [`Compiler`].
     pub artifact: Vec<u8>,
+    /// What kind of artifact this is — a loader **must** refuse [`ArtifactKind::Stub`].
+    pub kind: ArtifactKind,
+}
+
+/// Provenance of a [`SynthKernel::artifact`].
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum ArtifactKind {
+    /// Compiled PTX (driver-JIT-linked; portable across SMs of the arch).
+    Ptx,
+    /// Compiled cubin (SM-specific machine code).
+    Cubin,
+    /// A stand-in artifact ([`StubCompiler`]) — **not loadable**; a device-module
+    /// loader must refuse it rather than feed it to the driver.
+    Stub,
 }
 
 /// The two-directional recipe (rev-4 §1): both mandatory for a fused op.
@@ -88,9 +117,10 @@ pub struct Recipe {
     /// The `pattern:` block — recognize the primitive subgraph.
     pub pattern: String,
     /// The `decompose:` block — expand the fused op back to that subgraph. For a
-    /// JIT'd op this is, by construction, the region itself (we synthesized the op
-    /// to be equivalent to exactly that subgraph). The declarative decompose
-    /// *format* is §9-deferred by Fuel, so this is the provisional structural form.
+    /// JIT'd op this is, by construction, the region itself. Derived from the same
+    /// canonical pattern node as [`Recipe::pattern`], so the two halves are
+    /// structurally identical and the scalar `extract:` routing is preserved. The
+    /// declarative decompose *format* is §9-deferred by Fuel (provisional header).
     pub decompose: String,
 }
 
@@ -108,6 +138,19 @@ pub enum JitError {
         /// Actual operand count.
         got: usize,
     },
+    /// `operands.len()` isn't `n_inputs + 1`, or exceeds [`MAX_OPERANDS`] — the
+    /// kernel signature and the `accept` predicate would describe different arities.
+    OperandArity {
+        /// Declared region input count.
+        n_inputs: u8,
+        /// Operand-projection length supplied.
+        operands: usize,
+    },
+    /// Region operands don't all share one dtype (increment-1 is uniform-dtype) —
+    /// rejected as an honest miss rather than mistyped.
+    MixedDtype,
+    /// The budget is meaningless (e.g. `max_compile_ms == 0`).
+    Budget(String),
     /// The region's bind set isn't `[0, n_inputs)` (rejected by [`derive_pattern`]).
     Pattern(PatternError),
     /// The target dtype has no FKC §5 base-dtype spelling — no contract.
@@ -126,67 +169,123 @@ impl From<PatternError> for JitError {
 /// impl drives nvrtc; tests use [`StubCompiler`]. Kept a trait so synthesis is
 /// testable without a CUDA toolchain and so a pre-built-variant cache can slot in.
 pub trait Compiler {
-    /// Compile `source` (exposing `entry`) to a device artifact.
+    /// Compile `source` (exposing `entry`) to a device artifact, within
+    /// `max_compile_ms` (the request budget; an impl may cap optimization or
+    /// abort on overrun).
     ///
     /// # Errors
     /// Returns the compiler diagnostic string on failure.
-    fn compile(&self, source: &str, entry: &str) -> Result<Vec<u8>, String>;
+    fn compile(&self, source: &str, entry: &str, max_compile_ms: u32) -> Result<Vec<u8>, String>;
+
+    /// Provenance of the artifacts this compiler emits. Defaults to
+    /// [`ArtifactKind::Ptx`]; [`StubCompiler`] overrides to [`ArtifactKind::Stub`].
+    fn artifact_kind(&self) -> ArtifactKind {
+        ArtifactKind::Ptx
+    }
 }
 
-/// A no-toolchain stand-in compiler for tests / dry-runs.
+/// A no-toolchain stand-in compiler for tests / dry-runs. Its artifact is tagged
+/// [`ArtifactKind::Stub`] so it can never be mistaken for loadable code.
 #[derive(Copy, Clone, Debug, Default)]
 pub struct StubCompiler;
 
 impl Compiler for StubCompiler {
-    fn compile(&self, source: &str, entry: &str) -> Result<Vec<u8>, String> {
+    fn compile(&self, source: &str, entry: &str, _max_compile_ms: u32) -> Result<Vec<u8>, String> {
         Ok(format!("// stub-ptx: {entry} from {}B source", source.len()).into_bytes())
+    }
+    fn artifact_kind(&self) -> ArtifactKind {
+        ArtifactKind::Stub
     }
 }
 
 /// Synthesize a [`JitResponse`] for a Fuel-chosen region. The synthesizer core:
 /// region → op IR → specialized kernel → on-demand compile → FKC contract +
-/// recipe. The optimizer that §5.1 permits (an inward e-graph) would sit between
-/// `region_to_op` and `generate`; increment 1 lowers the region directly.
+/// recipe + link row. The optimizer that §5.1 permits (an inward e-graph) would
+/// sit between `region_to_op` and `generate`; increment 1 lowers directly.
+///
+/// `backend` selects the lowering target (§5.2 `target.backend`); `compiler` is
+/// the matching on-demand toolchain. Both are injected so the engine is
+/// backend-agnostic and testable.
 ///
 /// # Errors
-/// See [`JitError`] — an unsupported op/dtype or a compile failure.
-pub fn synthesize(req: &JitRequest, compiler: &dyn Compiler) -> Result<JitResponse, JitError> {
-    let dtype = req.operands.first().map_or(ElementKind::F32, |o| o.dtype);
-    let op = region_to_op(&req.region, req.n_inputs, &req.fused_op_id, dtype)?;
+/// See [`JitError`] — a malformed request (arity / mixed dtype / zero budget), an
+/// unsupported op/dtype, or a compile failure.
+pub fn synthesize(
+    req: &JitRequest,
+    backend: &dyn Backend,
+    compiler: &dyn Compiler,
+) -> Result<JitResponse, JitError> {
+    // --- Trust-boundary validation of the Fuel-supplied request -------------
+    let expected = usize::from(req.n_inputs) + 1;
+    if req.operands.len() != expected || req.operands.len() > MAX_OPERANDS {
+        return Err(JitError::OperandArity {
+            n_inputs: req.n_inputs,
+            operands: req.operands.len(),
+        });
+    }
+    if req.budget.max_compile_ms == 0 {
+        return Err(JitError::Budget("max_compile_ms must be > 0".to_string()));
+    }
+    let dtype = req.operands[0].dtype; // operands non-empty: len == n_inputs + 1 >= 1
+    if req.operands.iter().any(|o| o.dtype != dtype) {
+        // Increment 1 is uniform-dtype (StructureKey carries one dtype slot); a
+        // mixed region would be mistyped + misdescribed, so miss honestly.
+        return Err(JitError::MixedDtype);
+    }
+
+    // --- Synthesis ----------------------------------------------------------
+    let (op, derived) = region_to_op(&req.region, req.n_inputs, &req.fused_op_id, dtype)?;
 
     // The schedule cell is keyed from Fuel's operand projection — never re-derived.
     let key = structure_key(req.op_category, &req.operands, req.arch);
-    let kernel = generate(&op, &key, &Cuda);
+    let kernel = generate(&op, &key, backend);
 
     let artifact = compiler
-        .compile(&kernel.source, &kernel.name)
+        .compile(&kernel.source, &kernel.name, req.budget.max_compile_ms)
         .map_err(JitError::Compile)?;
 
-    let contract = contract(&op, &key, &kernel, Cuda.name()).ok_or(JitError::UnsupportedDtype)?;
-    let pattern = to_fkc(&derive_pattern(&op)?);
-    let decompose = to_decompose(&req.region);
+    let contract =
+        contract(&op, &key, &kernel, backend.name()).ok_or(JitError::UnsupportedDtype)?;
+
+    // Both recipe halves come from the SINGLE canonical pattern node, so they are
+    // structurally identical and decompose carries the scalar `extract:` routing.
+    let pattern = to_fkc(&derived);
+    let decompose = to_fkc(&derived).replacen("pattern:", "decompose:", 1);
+
+    // The link row resolves entry_point -> KernelRef at load (FKC §12.6).
+    let link = link_entry(&op, &key, &kernel);
+    let kind = compiler.artifact_kind();
 
     Ok(JitResponse {
         kernel: SynthKernel {
             entry_point: kernel.name,
             source: kernel.source,
             artifact,
+            kind,
         },
         contract,
         recipe: Recipe { pattern, decompose },
+        link,
     })
 }
 
-/// Translate a region (graph-`Op` subgraph) into the op IR — the inverse of
-/// [`crate::pattern::derive_pattern`]'s walk. `bind: i` → `Input(i)`; a
-/// scalar-param op (`AddScalar`/`MulScalar`) → the arithmetic op with a runtime
-/// `Param` (the scalar is a launch arg, exactly as the AOT path treats it).
+/// Translate a region (graph-`Op` subgraph) into the op IR and its canonical
+/// pattern — the inverse of [`crate::pattern::derive_pattern`]'s walk. `bind: i`
+/// → `Input(i)`; a scalar-param op (`AddScalar`/`MulScalar`) → the arithmetic op
+/// with a runtime `Param` (the scalar is a launch arg, exactly as the AOT path
+/// treats it). The returned [`PatternNode`] is [`derive_pattern`]'s canonical
+/// form (which also performs the bind-set / elementwise validation).
+///
+/// The region's per-node `consumers`/`extract` fields are ignored and regenerated
+/// by `derive_pattern` under the sole-consumer rule — sound because the IR is a
+/// pure tree (no shared interiors), so the only fusable shape (sole-consumer
+/// interiors) is the only representable one.
 fn region_to_op(
     region: &PatternNode,
     n_inputs: u8,
     name: &str,
     dtype: ElementKind,
-) -> Result<OpDef, JitError> {
+) -> Result<(OpDef, PatternNode), JitError> {
     let mut next_param = 0u8;
     let body = node_to_expr(region, &mut next_param)?;
     let op = OpDef {
@@ -196,10 +295,10 @@ fn region_to_op(
         dtypes: vec![dtype],
         access: Access::Elementwise,
     };
-    // Reuse the AOT bind-set / elementwise validation: a region whose bind set
-    // isn't [0, n_inputs) is rejected here exactly as an imported pattern would be.
-    derive_pattern(&op)?;
-    Ok(op)
+    // Reuse the AOT bind-set / elementwise validation, and keep the canonical
+    // pattern (so synthesize derives it exactly once).
+    let pattern = derive_pattern(&op)?;
+    Ok((op, pattern))
 }
 
 fn node_to_expr(n: &PatternNode, next_param: &mut u8) -> Result<ScalarExpr, JitError> {
@@ -246,11 +345,7 @@ fn synth_op(op: &str, operands: &[PatternNode], np: &mut u8) -> Result<ScalarExp
     Ok(ctor(Box::new(a), Box::new(b)))
 }
 
-fn unary_operand(
-    op: &str,
-    operands: &[PatternNode],
-    np: &mut u8,
-) -> Result<ScalarExpr, JitError> {
+fn unary_operand(op: &str, operands: &[PatternNode], np: &mut u8) -> Result<ScalarExpr, JitError> {
     if operands.len() != 1 {
         return Err(JitError::Arity {
             op: op.to_string(),
@@ -284,16 +379,10 @@ fn region_unary(op: &str) -> Option<UnaryOp> {
     })
 }
 
-/// Emit the `decompose:` block: the fused op expands to exactly the region we
-/// fused. Same declarative node form as `pattern:`; only the header differs
-/// (the declarative decompose format is §9-deferred — provisional).
-fn to_decompose(region: &PatternNode) -> String {
-    to_fkc(region).replacen("pattern:", "decompose:", 1)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::Cuda;
 
     fn op_node(op: &str, operands: Vec<PatternNode>) -> PatternNode {
         PatternNode::Op {
@@ -320,39 +409,40 @@ mod tests {
 
     #[test]
     fn synthesize_fused_relu_add() {
-        // The region Fuel would send for a relu(a+b) fusion.
         let region = op_node(
             "Relu",
             vec![op_node("Add", vec![PatternNode::Bind(0), PatternNode::Bind(1)])],
         );
         let r = req(region, 2, ElementKind::F32, "jit_relu_add");
-        let resp = synthesize(&r, &StubCompiler).unwrap();
+        let resp = synthesize(&r, &Cuda, &StubCompiler).unwrap();
 
-        // a real, compiled, contracted, recipe-carrying fused kernel.
         assert!(resp.kernel.entry_point.contains("jit_relu_add"));
         assert!(resp.kernel.source.contains("__global__"));
+        assert_eq!(resp.kernel.kind, ArtifactKind::Stub); // provenance tagged
         assert!(!resp.kernel.artifact.is_empty());
         assert!(resp.contract.contains("fused_op: jit_relu_add"));
-        assert!(resp.contract.contains("dtypes: [F32]"));
         assert!(resp.recipe.pattern.contains("op: Relu"));
         assert!(resp.recipe.decompose.starts_with("decompose:"));
         assert!(resp.recipe.decompose.contains("op: Relu"));
+        // the link row makes entry_point resolvable at load.
+        assert_eq!(resp.link.entry_point, resp.kernel.entry_point);
+        assert!(resp.link.structure_key.starts_with("sk1|"));
     }
 
     #[test]
-    fn scalar_param_region_becomes_runtime_param() {
-        // AddScalar(MulScalar(x)) — affine, both scalars are runtime params.
+    fn scalar_param_region_and_decompose_carry_params() {
         let region = op_node(
             "AddScalar",
             vec![op_node("MulScalar", vec![PatternNode::Bind(0)])],
         );
         let r = req(region, 1, ElementKind::F32, "jit_affine");
-        let resp = synthesize(&r, &StubCompiler).unwrap();
-        // two op_params (the two scalars) + the source takes them as launch args.
+        let resp = synthesize(&r, &Cuda, &StubCompiler).unwrap();
         assert!(resp.contract.contains("name: param0"));
         assert!(resp.contract.contains("name: param1"));
         assert!(resp.recipe.pattern.contains("op: AddScalar"));
-        assert!(resp.recipe.pattern.contains("op: MulScalar"));
+        // decompose now derives from the same canonical node -> carries extract.
+        assert!(resp.recipe.decompose.contains("extract:"));
+        assert!(resp.recipe.decompose.contains("op: MulScalar"));
     }
 
     #[test]
@@ -361,24 +451,25 @@ mod tests {
             "GeluErf",
             vec![op_node("Add", vec![PatternNode::Bind(0), PatternNode::Bind(1)])],
         );
-        let resp = synthesize(&req(region, 2, ElementKind::F32, "jit_gelu"), &StubCompiler).unwrap();
+        let resp = synthesize(&req(region, 2, ElementKind::F32, "jit_gelu"), &Cuda, &StubCompiler)
+            .unwrap();
         assert!(resp.recipe.pattern.contains("op: GeluErf"));
-        assert!(resp.kernel.source.contains("erf")); // exact-erf math, not tanh
+        assert!(resp.kernel.source.contains("erf"));
     }
 
     #[test]
     fn unsupported_op_is_rejected() {
-        // Maximum has no increment-1 IR form.
         let region = op_node("Maximum", vec![PatternNode::Bind(0), PatternNode::Bind(1)]);
-        let err = synthesize(&req(region, 2, ElementKind::F32, "x"), &StubCompiler).unwrap_err();
+        let err = synthesize(&req(region, 2, ElementKind::F32, "x"), &Cuda, &StubCompiler)
+            .unwrap_err();
         assert_eq!(err, JitError::UnsupportedOp("Maximum".to_string()));
     }
 
     #[test]
     fn bare_gelu_tanh_flavor_is_rejected() {
-        // We only synthesize exact-erf GELU; bare `Gelu` (tanh) has no IR form.
         let region = op_node("Gelu", vec![PatternNode::Bind(0)]);
-        let err = synthesize(&req(region, 1, ElementKind::F32, "x"), &StubCompiler).unwrap_err();
+        let err = synthesize(&req(region, 1, ElementKind::F32, "x"), &Cuda, &StubCompiler)
+            .unwrap_err();
         assert_eq!(err, JitError::UnsupportedOp("Gelu".to_string()));
     }
 
@@ -386,12 +477,42 @@ mod tests {
     fn compile_failure_propagates() {
         struct Failing;
         impl Compiler for Failing {
-            fn compile(&self, _: &str, _: &str) -> Result<Vec<u8>, String> {
+            fn compile(&self, _: &str, _: &str, _: u32) -> Result<Vec<u8>, String> {
                 Err("ptxas: synthetic failure".to_string())
             }
         }
         let region = op_node("Relu", vec![PatternNode::Bind(0)]);
-        let err = synthesize(&req(region, 1, ElementKind::F32, "x"), &Failing).unwrap_err();
+        let err =
+            synthesize(&req(region, 1, ElementKind::F32, "x"), &Cuda, &Failing).unwrap_err();
         assert!(matches!(err, JitError::Compile(m) if m.contains("synthetic failure")));
+    }
+
+    #[test]
+    fn operand_arity_mismatch_is_rejected() {
+        // n_inputs says 2 (=> 3 operands expected) but only 2 operands supplied.
+        let region = op_node("Add", vec![PatternNode::Bind(0), PatternNode::Bind(1)]);
+        let mut r = req(region, 2, ElementKind::F32, "x");
+        r.operands.pop(); // now 2 operands, not 3
+        let err = synthesize(&r, &Cuda, &StubCompiler).unwrap_err();
+        assert_eq!(err, JitError::OperandArity { n_inputs: 2, operands: 2 });
+    }
+
+    #[test]
+    fn mixed_dtype_region_is_an_honest_miss() {
+        let region = op_node("Add", vec![PatternNode::Bind(0), PatternNode::Bind(1)]);
+        let mut r = req(region, 2, ElementKind::F32, "x");
+        r.operands[1] = OperandDesc::new(2, &[128, 256], &[256, 1], ElementKind::F16, 256);
+        assert_eq!(synthesize(&r, &Cuda, &StubCompiler).unwrap_err(), JitError::MixedDtype);
+    }
+
+    #[test]
+    fn zero_budget_is_rejected() {
+        let region = op_node("Relu", vec![PatternNode::Bind(0)]);
+        let mut r = req(region, 1, ElementKind::F32, "x");
+        r.budget.max_compile_ms = 0;
+        assert!(matches!(
+            synthesize(&r, &Cuda, &StubCompiler).unwrap_err(),
+            JitError::Budget(_)
+        ));
     }
 }

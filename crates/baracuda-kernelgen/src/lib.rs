@@ -40,7 +40,10 @@ pub use backend::{Backend, GeneratedKernel};
 pub use contract::{contract, front_matter};
 pub use cuda::Cuda;
 pub use ir::{input, konst, param, Access, Expr, OpDef, ScalarExpr, UnaryOp};
-pub use jit::{synthesize, Compiler, JitBudget, JitError, JitRequest, JitResponse, Recipe, SynthKernel};
+pub use jit::{
+    synthesize, ArtifactKind, Compiler, JitBudget, JitError, JitRequest, JitResponse, Recipe,
+    SynthKernel,
+};
 pub use link::{emit_link_registry, link_entry, LinkEntry};
 pub use pattern::{derive_pattern, to_fkc, PatternError, PatternNode};
 pub use plan::{build_plan, KernelPlan, Schedule};
