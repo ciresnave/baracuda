@@ -187,3 +187,12 @@ codegen-units = 1
 
 [profile.bench]
 lto = "thin"
+
+# The `fuel-kernel-seam` §5 envelope (crates.io, pulled only under `--features seam`
+# of baracuda-kernelgen) depends on `baracuda-kernels-types` from the registry.
+# Redirect that to our local workspace copy so the envelope's `OperandDesc`/`ArchSku`
+# are the SAME types as ours — otherwise the registry copy and our path copy are
+# distinct compilation units and the `Synthesizer` impl hits type mismatches. Only
+# consulted when the registry dep is in the graph (seam on); a no-op otherwise.
+[patch.crates-io]
+baracuda-kernels-types = { path = "crates/baracuda-kernels-types" }

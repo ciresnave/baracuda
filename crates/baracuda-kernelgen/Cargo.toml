@@ -16,8 +16,9 @@ publish = false
 # with `--features nvrtc` where nvrtc is available.
 nvrtc = ["dep:baracuda-nvrtc"]
 # Wire Fuel's frozen kernel-seam grammar (`fuel_kernel_seam_types::PatternNode`) as
-# the JIT region type — the direct-Rust §5 `seam::synthesize` entry point.
-seam = ["dep:fuel-kernel-seam-types"]
+# the JIT region type AND the live-call envelope (`fuel_kernel_seam::Synthesizer`,
+# `JitRequest`/`JitResponse`) — the direct-Rust §5 endpoint Fuel calls.
+seam = ["dep:fuel-kernel-seam-types", "dep:fuel-kernel-seam"]
 
 [dependencies]
 baracuda-kernels-types = { workspace = true }
@@ -26,6 +27,9 @@ baracuda-nvrtc = { workspace = true, optional = true }
 # §5 shared wire vocabulary. crates.io version dep so the default build resolves
 # without a Fuel checkout (an unpublished path/git dep breaks workspace resolution).
 fuel-kernel-seam-types = { version = "0.10.2", optional = true }
+# The §5 live-call envelope: JitRequest / JitResponse / the Synthesizer trait Fuel
+# calls. Depends only on fuel-kernel-seam-types + baracuda-kernels-types (no fuel-graph).
+fuel-kernel-seam = { version = "0.10.2", optional = true }
 
 [lints]
 workspace = true

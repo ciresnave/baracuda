@@ -69,18 +69,22 @@ pub const SEAM_CAP_DLPACK_EXT_AFFINE: u64 = 1 << 3;
 pub const SEAM_CAP_DLPACK_EXT_SYMBOLIC: u64 = 1 << 4;
 /// FDX gather / paged-blocks residency (`DlpackExtGather`).
 pub const SEAM_CAP_DLPACK_EXT_GATHER: u64 = 1 << 5;
-/// JIT-on-request endpoint implemented (§5). Off until both sides build it.
+/// JIT-on-request endpoint implemented (§5) — Baracuda's `Synthesizer` impl
+/// (`baracuda_kernelgen::jit::seam::BaracudaSynthesizer`) builds a kernel for a
+/// Fuel-chosen region against the published `fuel-kernel-seam` envelope.
 pub const SEAM_CAP_JIT_ON_REQUEST: u64 = 1 << 32;
 
 /// The capabilities Baracuda advertises at first connect: the FDX tokens for its
-/// shipped kernel families. `SeamCapJitOnRequest` is deliberately **off** (§5 is
-/// design-only until both sides build the base-emission seam).
+/// shipped kernel families **plus** `SeamCapJitOnRequest` — both halves of the §5
+/// seam are now live (Fuel published the `fuel-kernel-seam` envelope; Baracuda
+/// implements the `Synthesizer` it calls), so Fuel may issue JIT-on-request calls.
 pub const BARACUDA_CAPABILITIES: u64 = SEAM_CAP_DLPACK_EXT_V1
     | SEAM_CAP_DLPACK_EXT_MX
     | SEAM_CAP_DLPACK_EXT_GGML
     | SEAM_CAP_DLPACK_EXT_AFFINE
     | SEAM_CAP_DLPACK_EXT_SYMBOLIC
-    | SEAM_CAP_DLPACK_EXT_GATHER;
+    | SEAM_CAP_DLPACK_EXT_GATHER
+    | SEAM_CAP_JIT_ON_REQUEST;
 
 /// Build Baracuda's advertised `SeamHello`.
 #[must_use]
@@ -126,8 +130,8 @@ mod tests {
         assert_eq!(h.profiles_len, 1);
         assert_eq!(h.profiles[0], 1);
         assert_eq!(h.profiles[1], 0); // unused entries zeroed
-        // JIT off at first connect; FDX tokens on.
-        assert_eq!(h.capabilities & SEAM_CAP_JIT_ON_REQUEST, 0);
+        // §5 now live: JIT-on-request advertised, alongside the FDX tokens.
+        assert_ne!(h.capabilities & SEAM_CAP_JIT_ON_REQUEST, 0);
         assert_ne!(h.capabilities & SEAM_CAP_DLPACK_EXT_GGML, 0);
     }
 

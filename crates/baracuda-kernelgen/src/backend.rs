@@ -9,6 +9,7 @@
 //! Baracuda) without a rewrite.
 
 use crate::ir::{BinaryOp, ScalarExpr, UnaryOp};
+use baracuda_kernels_types::ElementKind;
 
 /// A generated kernel: its exported symbol name and source text.
 #[derive(Clone, Debug)]
@@ -25,6 +26,11 @@ pub trait Backend {
     fn name(&self) -> &str;
     /// Lower a kernel plan to source.
     fn lower(&self, plan: &crate::plan::KernelPlan<'_>) -> GeneratedKernel;
+    /// Whether the backend can lower `dtype` to a scalar type at all. The JIT
+    /// trust boundary checks this *before* [`Backend::lower`] so an unlowerable
+    /// dtype is a typed decline, not a lowering panic. (AOT op authoring is
+    /// trusted, so `lower` itself may still panic on a dtype it can't spell.)
+    fn supports_dtype(&self, dtype: ElementKind) -> bool;
 }
 
 /// Backend-injected lowering closures for the **non-universal** parts of the

@@ -20,6 +20,10 @@ impl Backend for Cuda {
         "cuda"
     }
 
+    fn supports_dtype(&self, dtype: ElementKind) -> bool {
+        scalar_ctype(dtype).is_some()
+    }
+
     fn lower(&self, plan: &KernelPlan<'_>) -> GeneratedKernel {
         let Some(ctype) = scalar_ctype(plan.dtype) else {
             panic!("cuda backend: unsupported dtype {:?}", plan.dtype);

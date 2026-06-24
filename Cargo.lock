@@ -444,6 +444,7 @@ version = "0.0.1-alpha.69"
 dependencies = [
  "baracuda-kernels-types",
  "baracuda-nvrtc",
+ "fuel-kernel-seam",
  "fuel-kernel-seam-types",
 ]
 
@@ -1101,6 +1102,16 @@ checksum = "9564fc758e15025b46aa6643b1b77d047d1a56a1aea6e01002ac0c7026876213"
 dependencies = [
  "libc",
  "winapi",
+]
+
+[[package]]
+name = "fuel-kernel-seam"
+version = "0.10.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "eb7c5cd680b80f8db17fa815c5a7ab3850c79af5adfd3775146455d919f79ac7"
+dependencies = [
+ "baracuda-kernels-types",
+ "fuel-kernel-seam-types",
 ]
 
 [[package]]

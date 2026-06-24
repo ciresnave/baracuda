@@ -343,6 +343,15 @@ fn synthesize_op(
     compiler: &dyn Compiler,
 ) -> Result<JitResponse, JitError> {
     let dtype = operands.first().map_or(ElementKind::F32, |o| o.dtype);
+    // Trust boundary, gate 1: the backend must be able to spell this dtype as a
+    // scalar type at all. `dtype_compatible` (gate 2) only checks unary/binary-fn
+    // float-ness and f32-only params, so it lets a PURE-INFIX body (Add/Sub/Mul/Div
+    // over binds, no fn/param) through for ANY dtype — a Bool/S8/Complex Add region
+    // would then panic in `scalar_ctype` during `generate`. Decline it here instead
+    // (the Synthesizer trait must never unwind across the boundary).
+    if !backend.supports_dtype(dtype) {
+        return Err(JitError::UnsupportedDtype);
+    }
     // CUDA backend dtype limits: a unary / binary-fn node needs a float dtype, and
     // scalar params are f32-only — honest miss rather than a lowering panic.
     if !dtype_compatible(&op.body, dtype) {
@@ -605,17 +614,31 @@ pub mod seam {
         )
     }
 
+    /// Max region nesting the seam will convert — a trust-boundary guard so a
+    /// pathologically deep region from Fuel can't overflow the stack (an
+    /// uncatchable abort, not a catchable panic) during the recursive conversion.
+    /// Elementwise fusion regions are shallow; 64 is far above any real subgraph.
+    const MAX_REGION_DEPTH: u32 = 64;
+
     /// Convert a Fuel `PatternNode` (region direction) to Baracuda's internal node
     /// (op vocabulary mapped by name). An `OpTag` the synthesizer doesn't cover and
-    /// the matcher-only `SeeThrough`/`Any` are honest `UnsupportedOp` misses.
+    /// the matcher-only `SeeThrough`/`Any` are honest `UnsupportedOp` misses; a
+    /// region nested past [`MAX_REGION_DEPTH`] is declined before it can overflow.
     fn to_internal(n: &SeamNode) -> Result<PatternNode, JitError> {
+        to_internal_at(n, 0)
+    }
+
+    fn to_internal_at(n: &SeamNode, depth: u32) -> Result<PatternNode, JitError> {
+        if depth > MAX_REGION_DEPTH {
+            return Err(JitError::UnsupportedOp("region nested past MAX_REGION_DEPTH".to_string()));
+        }
         match n {
             SeamNode::Bind { index } => Ok(PatternNode::Bind(*index)),
             SeamNode::Op { op, operands, .. } => {
                 let name = optag_name(*op).ok_or_else(|| JitError::UnsupportedOp(format!("{op:?}")))?;
                 let ops = operands
                     .iter()
-                    .map(to_internal)
+                    .map(|o| to_internal_at(o, depth + 1))
                     .collect::<Result<Vec<_>, _>>()?;
                 Ok(PatternNode::Op {
                     op: name.to_string(),
@@ -668,6 +691,153 @@ pub mod seam {
             // MatMul, shape/layout, indexing, LogSoftmaxLastDim, Iota — not synthesized.
             _ => return None,
         })
+    }
+
+    // ===== The live §5 call — the `fuel_kernel_seam::Synthesizer` Fuel invokes =====
+
+    use crate::Cuda;
+    // Alias the envelope types: their bare `JitRequest`/`JitResponse` names would
+    // shadow our own internal `jit::{JitRequest, JitResponse}` (glob-imported via
+    // `super::*`) across this whole module and silently retype the native core.
+    use fuel_kernel_seam::{
+        JitRequest as SeamRequest, JitResponse as SeamResponse, SynthesizedKernel, Synthesizer,
+    };
+    use std::collections::HashMap;
+    use std::sync::Mutex;
+
+    /// A synthesized kernel's full artifact, retained for the seam-call site to load
+    /// and bind. The envelope's [`SynthesizedKernel`] carries only the `entry_point`
+    /// (the wire stays light); the PTX/source/contract/recipe/link ride here, keyed
+    /// by it, fetched via [`BaracudaSynthesizer::take_kernel`].
+    #[derive(Clone, Debug)]
+    pub struct SynthArtifact {
+        /// The generated backend (`.cu`) source.
+        pub source: String,
+        /// The compiled artifact (PTX / cubin / stub).
+        pub artifact: Vec<u8>,
+        /// Artifact provenance — a loader **must** refuse [`ArtifactKind::Stub`].
+        pub kind: ArtifactKind,
+        /// The full FKC contract for the kernel.
+        pub contract: String,
+        /// The two-directional recipe (`pattern:` + `decompose:`).
+        pub recipe: Recipe,
+        /// The `link_registry` row resolving `entry_point` → `KernelRef` (FKC §12.6).
+        pub link: LinkEntry,
+    }
+
+    /// Baracuda's live JIT synthesizer — the [`Synthesizer`] Fuel calls (§5). Each
+    /// [`Synthesizer::synthesize`] adapts the envelope [`JitRequest`] to the native
+    /// [`synthesize`] core, returns a [`JitResponse`], and retains the compiled
+    /// artifact under its `entry_point` for the seam-call site to fetch
+    /// ([`Self::take_kernel`]) and bind (load PTX → `KernelRef` → Fuel's
+    /// `adopt_runtime_fused`). **Never panics** (the trait's contract): an
+    /// unbuildable / out-of-vocabulary / over-budget region is a typed
+    /// [`JitResponse::Declined`], not an error or a crash across the boundary.
+    #[derive(Debug)]
+    pub struct BaracudaSynthesizer {
+        max_compile_ms: u32,
+        registry: Mutex<HashMap<String, SynthArtifact>>,
+    }
+
+    impl BaracudaSynthesizer {
+        /// A synthesizer with the given on-demand compile budget (ms, must be `> 0`).
+        #[must_use]
+        pub fn new(max_compile_ms: u32) -> Self {
+            Self {
+                max_compile_ms,
+                registry: Mutex::new(HashMap::new()),
+            }
+        }
+
+        /// Fetch (and remove) the compiled artifact for `entry_point`. The seam-call
+        /// site calls this after a [`JitResponse::Synthesized`] (once cost-gating
+        /// adopts) to load the kernel and bind the `KernelRef`. Returns `None` if the
+        /// entry point was never synthesized or was already taken.
+        #[must_use]
+        pub fn take_kernel(&self, entry_point: &str) -> Option<SynthArtifact> {
+            self.registry.lock().unwrap_or_else(|e| e.into_inner()).remove(entry_point)
+        }
+    }
+
+    impl Synthesizer for BaracudaSynthesizer {
+        fn synthesize(&self, req: &SeamRequest) -> SeamResponse {
+            // The on-demand compiler: real nvrtc when compiled in, else a stub (a
+            // Stub artifact a loader must refuse — keeps the endpoint callable for
+            // wiring/tests without a CUDA toolchain).
+            #[cfg(feature = "nvrtc")]
+            let compiler = NvrtcCompiler::new(req.arch);
+            #[cfg(not(feature = "nvrtc"))]
+            let compiler = StubCompiler;
+
+            let n_inputs = req.operands.len().saturating_sub(1);
+            // The envelope carries no op category; elementwise schedule is layout-
+            // driven, so the category is a key tag — derive it from operand arity
+            // (clamped at ternary for 4+-input fused regions).
+            let op_category = match n_inputs {
+                0 | 1 => OpCategory::UnaryElementwise,
+                2 => OpCategory::BinaryElementwise,
+                _ => OpCategory::TernaryElementwise,
+            };
+            let fused_op_id = region_op_id(&req.region, &req.operands);
+
+            match crate::jit::seam::synthesize(
+                &req.region,
+                &req.operands,
+                op_category,
+                req.arch,
+                &fused_op_id,
+                self.max_compile_ms,
+                &Cuda,
+                &compiler,
+            ) {
+                Ok(resp) => {
+                    let entry_point = resp.kernel.entry_point.clone();
+                    // FKC cost-expr (Fuel's `cost_expr` core parses it, binding `n` =
+                    // out elem count): the fused op's single-pass memory traffic =
+                    // (inputs read + 1 output write) × n. Fuel cost-gates this against
+                    // the multi-pass primitive path it would otherwise run.
+                    let cost = format!("n * {}", n_inputs.max(1) + 1);
+                    self.registry.lock().unwrap_or_else(|e| e.into_inner()).insert(
+                        entry_point.clone(),
+                        SynthArtifact {
+                            source: resp.kernel.source,
+                            artifact: resp.kernel.artifact,
+                            kind: resp.kernel.kind,
+                            contract: resp.contract,
+                            recipe: resp.recipe,
+                            link: resp.link,
+                        },
+                    );
+                    SeamResponse::Synthesized(SynthesizedKernel {
+                        entry_point,
+                        pattern: req.region.clone(),
+                        cost,
+                    })
+                }
+                // Honest decline (the trait forbids panicking) — region op/dtype out
+                // of vocabulary, malformed request, over budget, or compile failure.
+                Err(e) => SeamResponse::Declined {
+                    reason: format!("{e:?}"),
+                },
+            }
+        }
+    }
+
+    /// A stable, readable kernel id for a region: `jit_<root-op>_<hash>`, where the
+    /// full 64-bit hash covers the region structure **and** the operand projection,
+    /// so distinct regions (or the same region at different layouts/dtypes) are
+    /// collision-resistant on one `entry_point`. (The id keys the artifact
+    /// `registry`, so a collision would silently overwrite a not-yet-taken kernel —
+    /// hence the full u64, not a truncated prefix.)
+    fn region_op_id(region: &SeamNode, operands: &[OperandDesc]) -> String {
+        use std::hash::{Hash, Hasher};
+        let root = match region {
+            SeamNode::Op { op, .. } => format!("{op:?}").to_lowercase(),
+            _ => "fused".to_string(),
+        };
+        let mut h = std::collections::hash_map::DefaultHasher::new();
+        format!("{region:?}|{operands:?}").hash(&mut h);
+        format!("jit_{root}_{:016x}", h.finish())
     }
 
     #[cfg(test)]
@@ -731,6 +901,102 @@ pub mod seam {
             )
             .unwrap_err();
             assert!(matches!(err, JitError::UnsupportedOp(_)));
+        }
+
+        #[test]
+        fn synthesizer_synthesizes_and_retains_artifact() {
+            // The live envelope path: a JitRequest -> Synthesized, with the compiled
+            // artifact retained under its entry_point for the seam-call site.
+            let region = op(
+                OpTag::Relu,
+                vec![op(
+                    OpTag::Add,
+                    vec![SeamNode::Bind { index: 0 }, SeamNode::Bind { index: 1 }],
+                )],
+            );
+            let synth = BaracudaSynthesizer::new(1000);
+            let req = SeamRequest {
+                region,
+                operands: operands(ElementKind::F32, 3),
+                arch: ArchSku::Sm89,
+            };
+            let SeamResponse::Synthesized(k) = synth.synthesize(&req) else {
+                panic!("expected Synthesized");
+            };
+            assert!(k.entry_point.starts_with("baracuda_gen_jit_relu_")); // stable id
+            assert_eq!(k.cost, "n * 3"); // 2 inputs + 1 output: a single fused pass
+            assert_eq!(k.pattern, req.region); // the re-fuse pattern is the region
+            // the artifact is retained for the seam-call site to load, then consumed.
+            let art = synth.take_kernel(&k.entry_point).expect("artifact retained");
+            assert!(art.source.contains("__global__"));
+            assert!(synth.take_kernel(&k.entry_point).is_none()); // consumed
+        }
+
+        #[test]
+        fn synthesizer_declines_never_panics() {
+            // An out-of-vocabulary region (Op::Gelu tanh) is an honest Declined, never
+            // an error or a panic across the trait boundary.
+            let synth = BaracudaSynthesizer::new(1000);
+            let req = SeamRequest {
+                region: op(OpTag::Gelu, vec![SeamNode::Bind { index: 0 }]),
+                operands: operands(ElementKind::F32, 2),
+                arch: ArchSku::Sm89,
+            };
+            assert!(matches!(synth.synthesize(&req), SeamResponse::Declined { .. }));
+        }
+
+        #[test]
+        fn synthesizer_declines_unlowerable_dtype_never_panics() {
+            // Regression (adversarial review): a PURE-INFIX region (Add over binds —
+            // no unary/binary-fn, no Param) at a dtype the CUDA backend can't spell as
+            // a scalar (Bool / S8 / Complex64) used to PANIC in scalar_ctype during
+            // `generate`, because dtype_compatible lets pure-infix bodies through for
+            // ANY dtype. The backend dtype-lowerability gate must Decline, never unwind
+            // across the trait boundary (which would crash the host).
+            let synth = BaracudaSynthesizer::new(1000);
+            let region = op(
+                OpTag::Add,
+                vec![SeamNode::Bind { index: 0 }, SeamNode::Bind { index: 1 }],
+            );
+            for dt in [ElementKind::Bool, ElementKind::S8, ElementKind::Complex64] {
+                let req = SeamRequest {
+                    region: region.clone(),
+                    operands: operands(dt, 3),
+                    arch: ArchSku::Sm89,
+                };
+                assert!(
+                    matches!(synth.synthesize(&req), SeamResponse::Declined { .. }),
+                    "{dt:?} must Decline, not panic",
+                );
+            }
+        }
+
+        /// End-to-end live path on-device: a Fuel `JitRequest` through the
+        /// `Synthesizer` impl yields a real nvrtc PTX artifact (retrievable for the
+        /// seam-call site to bind). Ignored (needs nvrtc + CUDA).
+        #[cfg(feature = "nvrtc")]
+        #[test]
+        #[ignore = "requires nvrtc runtime + CUDA install"]
+        fn synthesizer_produces_real_ptx_on_device() {
+            let region = op(
+                OpTag::Relu,
+                vec![op(
+                    OpTag::Add,
+                    vec![SeamNode::Bind { index: 0 }, SeamNode::Bind { index: 1 }],
+                )],
+            );
+            let synth = BaracudaSynthesizer::new(5000);
+            let req = SeamRequest {
+                region,
+                operands: operands(ElementKind::F32, 3),
+                arch: ArchSku::Sm89,
+            };
+            let SeamResponse::Synthesized(k) = synth.synthesize(&req) else {
+                panic!("expected Synthesized");
+            };
+            let art = synth.take_kernel(&k.entry_point).expect("artifact retained");
+            assert_eq!(art.kind, ArtifactKind::Ptx);
+            assert!(String::from_utf8(art.artifact).unwrap().contains(".entry"));
         }
     }
 }
