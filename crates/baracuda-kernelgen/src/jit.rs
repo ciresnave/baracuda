@@ -1320,6 +1320,10 @@ mod tests {
             (sm(ElementKind::F32), ElementKind::F32, OpCategory::Softmax),
             // f16: exercises __half2float + cuda_fp16.h under headerless nvrtc.
             (rms(ElementKind::F16), ElementKind::F16, OpCategory::Normalization),
+            // f64 / f32-strict: the double accumulator path relies on the `double`
+            // __shfl_down_sync overload compiling headerless (the critics' flag).
+            (rms(ElementKind::F64), ElementKind::F64, OpCategory::Normalization),
+            (sm(ElementKind::F32Strict), ElementKind::F32Strict, OpCategory::Softmax),
         ] {
             let k = generate(&op, &key(dt, cat), &Cuda);
             let ptx = cc
