@@ -187,7 +187,7 @@ fn params_used(body: &ScalarExpr) -> Vec<u8> {
 fn scan_params(e: &ScalarExpr, out: &mut Vec<u8>) {
     match e {
         ScalarExpr::Param(i) => out.push(*i),
-        ScalarExpr::Input(_) | ScalarExpr::Const(_) => {}
+        ScalarExpr::Input(_) | ScalarExpr::Const(_) | ScalarExpr::Reduced(_) => {}
         ScalarExpr::Unary(_, x) => scan_params(x, out),
         ScalarExpr::Add(a, b)
         | ScalarExpr::Sub(a, b)
@@ -203,7 +203,7 @@ fn scan_params(e: &ScalarExpr, out: &mut Vec<u8>) {
 /// Declared flop count per output element: one per arithmetic / unary node.
 fn count_flops(e: &ScalarExpr) -> u32 {
     match e {
-        ScalarExpr::Input(_) | ScalarExpr::Const(_) | ScalarExpr::Param(_) => 0,
+        ScalarExpr::Input(_) | ScalarExpr::Const(_) | ScalarExpr::Param(_) | ScalarExpr::Reduced(_) => 0,
         ScalarExpr::Unary(_, x) => 1 + count_flops(x),
         ScalarExpr::Add(a, b)
         | ScalarExpr::Sub(a, b)
@@ -222,7 +222,7 @@ fn count_flops(e: &ScalarExpr) -> u32 {
 /// (the planner won't admit into a too-tight slot); under-stating is not.
 fn ulp_bound(e: &ScalarExpr) -> f64 {
     match e {
-        ScalarExpr::Input(_) | ScalarExpr::Const(_) | ScalarExpr::Param(_) => 0.0,
+        ScalarExpr::Input(_) | ScalarExpr::Const(_) | ScalarExpr::Param(_) | ScalarExpr::Reduced(_) => 0.0,
         ScalarExpr::Unary(op, x) => ulp_bound(x) + unary_ulp(*op),
         ScalarExpr::Binary(op, a, b) => {
             let here = if matches!(op, BinaryOp::Pow) { 4.0 } else { 0.0 };

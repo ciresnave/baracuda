@@ -33,6 +33,9 @@ enum ENode {
     Input(u8),
     Const(u64),
     Param(u8),
+    /// Opaque per-row reduced scalar ([`ScalarExpr::Reduced`]) — a leaf, never
+    /// folded (a row scalar must not be CSE'd/constant-folded across rows).
+    Reduced(u8),
     Add(Id, Id),
     Sub(Id, Id),
     Mul(Id, Id),
@@ -142,6 +145,7 @@ fn add_expr(eg: &mut EGraph, e: &ScalarExpr) -> Id {
         ScalarExpr::Input(i) => eg.add(ENode::Input(*i)),
         ScalarExpr::Const(v) => eg.add(ENode::Const(v.to_bits())),
         ScalarExpr::Param(i) => eg.add(ENode::Param(*i)),
+        ScalarExpr::Reduced(i) => eg.add(ENode::Reduced(*i)),
         ScalarExpr::Add(a, b) => {
             let (a, b) = (add_expr(eg, a), add_expr(eg, b));
             eg.add(ENode::Add(a, b))
@@ -337,7 +341,7 @@ fn saturate(eg: &mut EGraph, max_iters: usize) {
 /// Relative op cost for extraction — division and transcendentals dominate.
 fn weight(n: &ENode) -> u64 {
     match n {
-        ENode::Input(_) | ENode::Param(_) | ENode::Const(_) => 1,
+        ENode::Input(_) | ENode::Param(_) | ENode::Const(_) | ENode::Reduced(_) => 1,
         ENode::Add(..) | ENode::Sub(..) | ENode::Mul(..) => 2,
         ENode::Div(..) => 8,
         ENode::Binary(op, ..) => match op {
@@ -419,6 +423,7 @@ fn build(eg: &EGraph, c: Id, best: &HashMap<Id, (u64, ENode)>) -> ScalarExpr {
         ENode::Input(i) => ScalarExpr::Input(i),
         ENode::Const(bits) => ScalarExpr::Const(f64::from_bits(bits)),
         ENode::Param(i) => ScalarExpr::Param(i),
+        ENode::Reduced(i) => ScalarExpr::Reduced(i),
         ENode::Add(a, b) => ScalarExpr::Add(bx(build(eg, a, best)), bx(build(eg, b, best))),
         ENode::Sub(a, b) => ScalarExpr::Sub(bx(build(eg, a, best)), bx(build(eg, b, best))),
         ENode::Mul(a, b) => ScalarExpr::Mul(bx(build(eg, a, best)), bx(build(eg, b, best))),

@@ -498,7 +498,10 @@ fn dtype_compatible(body: &ScalarExpr, dtype: ElementKind) -> bool {
     let f32_only = matches!(dtype, ElementKind::F32 | ElementKind::F32Strict);
     fn walk(e: &ScalarExpr, is_float: bool, f32_only: bool) -> bool {
         match e {
-            ScalarExpr::Input(_) | ScalarExpr::Const(_) => true,
+            // Reduced only appears in a RowReduce epilogue, which never reaches the
+            // JIT path (region_to_op builds Elementwise only) — treat as a benign
+            // float scalar leaf for exhaustiveness.
+            ScalarExpr::Input(_) | ScalarExpr::Const(_) | ScalarExpr::Reduced(_) => true,
             ScalarExpr::Param(_) => f32_only,
             ScalarExpr::Unary(_, x) => is_float && walk(x, is_float, f32_only),
             ScalarExpr::Binary(_, a, b) => {
@@ -1268,5 +1271,61 @@ mod tests {
         let kf16 = generate(&sum, &red_key(ElementKind::F16), &Cuda);
         let ptx16 = cc.compile(&kf16.source, &kf16.name, 5000).expect("f16 reduction compiles");
         assert!(String::from_utf8(ptx16).unwrap().contains(".entry"));
+    }
+
+    /// The fused RowReduce kernels (RmsNorm / Softmax) compile headerless under
+    /// nvrtc — the warp-shuffle/shared-mem block reduce, `rsqrtf`/`expf`, and (for
+    /// f16) `__half2float` + the fp16 header. Numeric correctness is proven via the
+    /// nvcc host harness; this guards headerless portability. Ignored (needs nvrtc).
+    #[cfg(feature = "nvrtc")]
+    #[test]
+    #[ignore = "requires nvrtc runtime + CUDA install"]
+    fn nvrtc_compiles_rowreduce_kernels() {
+        use crate::ir::{konst, reduced, ReduceOp, ReduceStage, UnaryOp};
+        use crate::{generate, input};
+        let cc = NvrtcCompiler::new(ArchSku::Sm89);
+        let key = |dt: ElementKind, cat: OpCategory| {
+            let a = OperandDesc::new(2, &[256, 128], &[128, 1], dt, 256);
+            structure_key(cat, &[a, a], ArchSku::Sm89)
+        };
+        let rms = |dt: ElementKind| {
+            OpDef::row_reduce(
+                "rmsnorm",
+                1,
+                &[dt],
+                vec![ReduceStage {
+                    pre: input(0).unary(UnaryOp::Sqr).0,
+                    op: ReduceOp::Mean,
+                }],
+                input(0) * (reduced(0) + konst(1e-5)).unary(UnaryOp::Rsqrt),
+            )
+        };
+        let sm = |dt: ElementKind| {
+            OpDef::row_reduce(
+                "softmax",
+                1,
+                &[dt],
+                vec![
+                    ReduceStage { pre: input(0).0, op: ReduceOp::Max },
+                    ReduceStage {
+                        pre: (input(0) - reduced(0)).exp().0,
+                        op: ReduceOp::Sum,
+                    },
+                ],
+                (input(0) - reduced(0)).exp() / reduced(1),
+            )
+        };
+        for (op, dt, cat) in [
+            (rms(ElementKind::F32), ElementKind::F32, OpCategory::Normalization),
+            (sm(ElementKind::F32), ElementKind::F32, OpCategory::Softmax),
+            // f16: exercises __half2float + cuda_fp16.h under headerless nvrtc.
+            (rms(ElementKind::F16), ElementKind::F16, OpCategory::Normalization),
+        ] {
+            let k = generate(&op, &key(dt, cat), &Cuda);
+            let ptx = cc
+                .compile(&k.source, &k.name, 5000)
+                .unwrap_or_else(|e| panic!("{} failed to compile: {e}", k.name));
+            assert!(String::from_utf8(ptx).unwrap().contains(".entry"));
+        }
     }
 }

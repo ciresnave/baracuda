@@ -143,7 +143,9 @@ fn canonicalize(e: &ScalarExpr) -> ScalarExpr {
             }
         }
         ScalarExpr::Unary(op, x) => ScalarExpr::Unary(*op, Box::new(canonicalize(x))),
-        ScalarExpr::Input(_) | ScalarExpr::Const(_) | ScalarExpr::Param(_) => e.clone(),
+        ScalarExpr::Input(_) | ScalarExpr::Const(_) | ScalarExpr::Param(_) | ScalarExpr::Reduced(_) => {
+            e.clone()
+        }
     }
 }
 
@@ -172,6 +174,7 @@ fn sig(e: &ScalarExpr) -> String {
         ScalarExpr::Input(i) => format!("1I{i:03}"),
         ScalarExpr::Param(i) => format!("1P{i:03}"),
         ScalarExpr::Const(v) => format!("1C{v:?}"),
+        ScalarExpr::Reduced(i) => format!("1R{i:03}"),
     }
 }
 
@@ -185,8 +188,12 @@ fn walk(
     match e {
         ScalarExpr::Input(i) => Ok(PatternNode::Bind(*i)),
         // A bare Const or a standalone Param (not the scalar of an Add/Mul) has
-        // no graph-Op form.
-        ScalarExpr::Const(_) | ScalarExpr::Param(_) => Err(PatternError::ScalarParamUnsupported),
+        // no graph-Op form; a Reduced leaf only exists inside a RowReduce op, which
+        // `derive_pattern` rejects (NotElementwise) before reaching `walk` — this
+        // arm is defensive and never fires on the elementwise path.
+        ScalarExpr::Const(_) | ScalarExpr::Param(_) | ScalarExpr::Reduced(_) => {
+            Err(PatternError::ScalarParamUnsupported)
+        }
         ScalarExpr::Add(a, b) => scalar_binop("Add", "AddScalar", a, b, path, consumers, extracts),
         ScalarExpr::Mul(a, b) => scalar_binop("Mul", "MulScalar", a, b, path, consumers, extracts),
         ScalarExpr::Sub(a, b) => plain_binop("Sub", a, b, path, consumers, extracts),

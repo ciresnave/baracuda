@@ -24,6 +24,14 @@ pub enum ScalarExpr {
     /// `Param` is passed at launch (and, in a fused graph, comes from an
     /// `AddScalar`/`MulScalar` attribute via the pattern's `extract:`).
     Param(u8),
+    /// The per-row reduced scalar produced by [`Access::RowReduce`] stage `i`,
+    /// broadcast across every element of the row. A leaf exactly like
+    /// [`ScalarExpr::Input`]/`Param` — to the per-element math a reduction result
+    /// is just another scalar source. Legal **only** inside a `RowReduce`: in a
+    /// stage `pre` referencing an earlier stage (`Reduced(j)`, `j < i`) or in the
+    /// `epilogue` (any `Reduced(0..n_stages)`). Never an `Input` — it carries no
+    /// bind index and must not be folded across rows by the optimizer.
+    Reduced(u8),
     /// Sum of two sub-expressions.
     Add(Box<ScalarExpr>, Box<ScalarExpr>),
     /// Difference of two sub-expressions.
@@ -127,6 +135,14 @@ pub struct Expr(pub ScalarExpr);
 #[must_use]
 pub fn input(i: u8) -> Expr {
     Expr(ScalarExpr::Input(i))
+}
+
+/// The per-row reduced scalar from [`Access::RowReduce`] stage `i` (broadcast
+/// across the row) — a leaf for fused-reduction epilogues (e.g.
+/// `input(0) * (reduced(0) + konst(eps)).unary(UnaryOp::Rsqrt)` for RmsNorm).
+#[must_use]
+pub fn reduced(i: u8) -> Expr {
+    Expr(ScalarExpr::Reduced(i))
 }
 
 /// A compile-time scalar constant leaf (e.g. `input(0) * konst(0.5)`).
@@ -241,13 +257,26 @@ impl Expr {
     }
 }
 
+/// One reduction stage of an [`Access::RowReduce`]: fold `pre` (the per-element
+/// pre-reduction expression) over the last axis with `op`. Stage `i` produces the
+/// scalar [`ScalarExpr::Reduced`]`(i)`; its `pre` may reference `Reduced(j)` for
+/// `j < i` (e.g. Softmax's exp-sum stage reads the row max from stage 0).
+#[derive(Clone, Debug, PartialEq)]
+pub struct ReduceStage {
+    /// Per-element expression reduced along the last axis (`Input`/`Const`/`Param`
+    /// and earlier-stage `Reduced(j)`).
+    pub pre: ScalarExpr,
+    /// The associative combine.
+    pub op: ReduceOp,
+}
+
 /// Iteration / access pattern of an op — tells the emitter the loop-nest shape
 /// and which schedules are legal.
 ///
 /// `#[non_exhaustive]`: windowed/stencil and gather patterns are still the growth
 /// path; arbitrary/multiple reduction axes, strided-input reductions, and keepdim
 /// layout extend [`Access::Reduction`] later.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 #[non_exhaustive]
 pub enum Access {
     /// Output coordinate equals input coordinate (a per-element map).
@@ -260,6 +289,18 @@ pub enum Access {
     Reduction {
         /// The associative combine (+ implied identity).
         op: ReduceOp,
+    },
+    /// Fused **reduce → broadcast → elementwise** over the contiguous last axis:
+    /// the `stages` fold per-row reduced scalars (`Reduced(0..n)`), then `epilogue`
+    /// (which may read those scalars and the `Input`s) is the per-element,
+    /// full-width output. RmsNorm (1 stage) and Softmax (2 stages) are instances —
+    /// one block per row, no hand-written per-op CUDA. v1: single input,
+    /// float-dtype, contiguous; per-column weight/bias (LayerNorm) is a follow-up.
+    RowReduce {
+        /// Ordered reduction stages; stage `i` produces `Reduced(i)`.
+        stages: Vec<ReduceStage>,
+        /// Per-element output expression (references `Input`s + `Reduced(0..n)`).
+        epilogue: ScalarExpr,
     },
 }
 
@@ -314,6 +355,32 @@ impl OpDef {
             body: body.0,
             dtypes: dtypes.to_vec(),
             access: Access::Reduction { op },
+        }
+    }
+
+    /// Build a **fused row-reduction** op (reduce → broadcast → elementwise over
+    /// the last axis). `stages` are the ordered reductions (stage `i` →
+    /// `Reduced(i)`); `epilogue` is the per-element output (references `Input`s and
+    /// `Reduced(0..stages.len())`). `body` is set to the epilogue so the existing
+    /// body-walkers (`params_used`/`count_flops`/dtype plumbing) operate on the
+    /// row-output expression unchanged. See [`Access::RowReduce`] for the v1 scope.
+    #[must_use]
+    pub fn row_reduce(
+        name: &str,
+        n_inputs: u8,
+        dtypes: &[ElementKind],
+        stages: Vec<ReduceStage>,
+        epilogue: Expr,
+    ) -> Self {
+        Self {
+            name: name.to_string(),
+            n_inputs,
+            body: epilogue.0.clone(),
+            dtypes: dtypes.to_vec(),
+            access: Access::RowReduce {
+                stages,
+                epilogue: epilogue.0,
+            },
         }
     }
 }

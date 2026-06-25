@@ -7,7 +7,7 @@
 //! `__half` / `__nv_bfloat16` the same as for `float`.
 
 use crate::backend::{lower_expr, Backend, GeneratedKernel, Lowering};
-use crate::ir::{BinaryOp, ReduceOp, ScalarExpr, UnaryOp};
+use crate::ir::{Access, BinaryOp, ReduceOp, ScalarExpr, UnaryOp};
 use crate::plan::{KernelPlan, Schedule};
 use baracuda_kernels_types::{Contiguity, ElementKind, OperandKey};
 
@@ -45,6 +45,7 @@ impl Backend for Cuda {
             Schedule::Scalar => emit_scalar(plan, ctype),
             Schedule::Strided => emit_strided(plan, ctype),
             Schedule::Reduction { op } => emit_reduction(plan, ctype, op),
+            Schedule::RowReduce { .. } => emit_row_reduce(plan, ctype),
         }
     }
 }
@@ -145,6 +146,7 @@ fn emit_vectorized(plan: &KernelPlan<'_>, vty: &str, lanes: &[&str]) -> Generate
             plan.body,
             &Lowering {
                 leaf: &acc,
+                reduced: &|i| unreachable!("no Reduced leaf outside RowReduce: red{i}"),
                 unary: &|op, x| cuda_unary(op, x, plan.dtype),
                 binary: &|op, a, b| cuda_binary(op, a, b, plan.dtype),
             },
@@ -172,6 +174,7 @@ fn emit_scalar(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
             plan.body,
             &Lowering {
                 leaf: &acc,
+                reduced: &|i| unreachable!("no Reduced leaf outside RowReduce: red{i}"),
                 unary: &|op, x| cuda_unary(op, x, plan.dtype),
                 binary: &|op, a, b| cuda_binary(op, a, b, plan.dtype),
             },
@@ -236,6 +239,7 @@ fn emit_strided(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
             plan.body,
             &Lowering {
                 leaf: &acc,
+                reduced: &|i| unreachable!("no Reduced leaf outside RowReduce: red{i}"),
                 unary: &|op, x| cuda_unary(op, x, plan.dtype),
                 binary: &|op, a, b| cuda_binary(op, a, b, plan.dtype),
             },
@@ -308,6 +312,7 @@ fn emit_reduction(plan: &KernelPlan<'_>, ctype: &str, rop: ReduceOp) -> Generate
         plan.body,
         &Lowering {
             leaf: &load,
+            reduced: &|i| unreachable!("no Reduced leaf outside RowReduce: red{i}"),
             unary: &|op, x| if dbl { unary_f64(op, x) } else { unary_f32(op, x) },
             binary: &|op, a, b| {
                 if dbl {
@@ -369,6 +374,227 @@ fn emit_reduction(plan: &KernelPlan<'_>, ctype: &str, rop: ReduceOp) -> Generate
     s.push_str(&format!("        out[o] = {stored};\n"));
     s.push_str("    }\n}\n");
     GeneratedKernel { name, source: s }
+}
+
+/// Emit a **fused row reduction** ([`Access::RowReduce`]): one block per output
+/// row, a warp-shuffle + shared-memory tree reduce per stage, then a full-width
+/// elementwise epilogue. RmsNorm (1 stage) and Softmax (2 stages) are instances.
+///
+/// Each `block_*` helper broadcasts its result to *every* thread of the block, so a
+/// stage's reduced scalar lives in a uniform per-thread register `r{i}` —
+/// `Reduced(i)` lowers straight to it, with no `__shared__ row_red[]` round-trip
+/// and no extra cross-row barrier (the helpers' internal barriers fully serialize
+/// their shared reuse across stages and grid-stride rows). The accumulator is
+/// `float` (`double` for f64 / f32-strict); f16/bf16 load up-convert and store
+/// down-convert, exactly as [`emit_reduction`].
+///
+/// Correctness invariants (see the design panel): every `__syncthreads` (inside the
+/// helpers) is reached by ALL threads — the row guard is the uniform grid-stride
+/// `for (row = blockIdx.x; row < n_out; ...)`, NEVER a divergent per-thread early
+/// return, so a refactor to per-thread row mapping would deadlock. `__shfl_down_sync`
+/// uses the full `0xffffffff` mask; the launch contract caps `blockDim.x <= 1024`
+/// and (for warp uniformity) a multiple of 32.
+fn emit_row_reduce(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
+    let Access::RowReduce { stages, epilogue } = plan.access else {
+        unreachable!("emit_row_reduce requires Access::RowReduce");
+    };
+    let dbl = matches!(plan.dtype, ElementKind::F64 | ElementKind::F32Strict);
+    let acc = if dbl { "double" } else { "float" };
+    let zero = if dbl { "0.0" } else { "0.0f" };
+    let n = plan.n_inputs;
+    let name = format!("baracuda_gen_{}_{}_rowreduce", plan.op_name, dtype_tag(plan.dtype));
+    // Helpers are named per (op, dtype) so concatenating generated kernels into one
+    // translation unit can never collide on a `__device__` symbol.
+    let stem = format!("{}_{}", plan.op_name, dtype_tag(plan.dtype));
+
+    // load(i) = in_i[idx], up-converting f16/bf16/f32-strict to the accumulate type.
+    let load = |i: u8| match plan.dtype {
+        ElementKind::F16 => format!("__half2float(in{i}[idx])"),
+        ElementKind::Bf16 => format!("__bfloat162float(in{i}[idx])"),
+        ElementKind::F32Strict => format!("(double)in{i}[idx]"),
+        _ => format!("in{i}[idx]"),
+    };
+    // Reduced(s) is the broadcast register from stage s.
+    let red = |s: u8| format!("r{s}");
+    let lower = |e: &ScalarExpr| {
+        lower_expr(
+            e,
+            &Lowering {
+                leaf: &load,
+                reduced: &red,
+                unary: &|op, x| if dbl { unary_f64(op, x) } else { unary_f32(op, x) },
+                binary: &|op, a, b| {
+                    if dbl {
+                        binary_f64(op, a, b)
+                    } else {
+                        binary_f32(op, a, b)
+                    }
+                },
+            },
+        )
+    };
+
+    // Preamble: comment + dtype include + the block-reduce helpers (only the
+    // combines the stages use), then the kernel signature. (We can't reuse
+    // `header` here: the helpers must sit between the includes and `extern "C"`.)
+    let mut s = format!(
+        "// Generated by baracuda-kernelgen — do not edit.\n// op: {} | cell: {}\n",
+        plan.op_name,
+        plan.key.to_token()
+    );
+    if let Some(inc) = extra_include(plan.dtype) {
+        s.push_str(inc);
+    }
+    s.push('\n');
+    let mut ops = std::collections::HashSet::new();
+    for st in stages {
+        ops.insert(st.op);
+    }
+    emit_block_reducers(&mut s, acc, zero, &ops, &stem);
+    s.push_str(&format!("extern \"C\" __global__ void {name}(\n"));
+    for i in 0..n {
+        s.push_str(&format!("    const {ctype}* __restrict__ in{i},\n"));
+    }
+    s.push_str(&format!("    {ctype}* __restrict__ out,\n"));
+    s.push_str(&format!(
+        "    long long n_out,\n    long long k{})\n{{\n",
+        param_args(plan.body)
+    ));
+    // Uniform empty-axis guard (k is a single kernel arg): never skips a barrier
+    // divergently, and defends the Max/Min seed against an OOB load.
+    s.push_str("    if (k == 0) return;\n");
+    s.push_str("    for (long long row = blockIdx.x; row < n_out; row += (long long)gridDim.x) {\n");
+    s.push_str("        long long base = row * k;\n");
+
+    for (i, st) in stages.iter().enumerate() {
+        let pre = lower(&st.pre);
+        s.push_str(&format!("        // stage {i}: {:?}\n", st.op));
+        match st.op {
+            ReduceOp::Sum | ReduceOp::Mean => {
+                s.push_str(&format!("        {acc} acc{i} = {zero};\n"));
+                s.push_str("        for (long long j = threadIdx.x; j < k; j += blockDim.x) {\n");
+                s.push_str("            long long idx = base + j;\n");
+                s.push_str(&format!("            acc{i} += {pre};\n"));
+                s.push_str("        }\n");
+                // block_sum broadcasts the row sum to every thread; Mean divides by
+                // k (k>0 guaranteed by the guard above) — uniform in every thread.
+                let fin = if matches!(st.op, ReduceOp::Mean) {
+                    format!("block_sum_{stem}(acc{i}) / ({acc})k")
+                } else {
+                    format!("block_sum_{stem}(acc{i})")
+                };
+                s.push_str(&format!("        {acc} r{i} = {fin};\n"));
+            }
+            ReduceOp::Max | ReduceOp::Min => {
+                let cmp = if matches!(st.op, ReduceOp::Max) { ">" } else { "<" };
+                let suf = if matches!(st.op, ReduceOp::Max) { "max" } else { "min" };
+                // Carry a `has` flag so idle / short-row lanes inject nothing and no
+                // ±inf seed is needed (headerless); NaN sticks via `e != e`.
+                s.push_str(&format!("        {acc} acc{i} = {zero}; int has{i} = 0;\n"));
+                s.push_str("        for (long long j = threadIdx.x; j < k; j += blockDim.x) {\n");
+                s.push_str("            long long idx = base + j;\n");
+                s.push_str(&format!("            {acc} e = {pre};\n"));
+                s.push_str(&format!(
+                    "            if (!has{i} || e != e || e {cmp} acc{i}) {{ acc{i} = e; has{i} = 1; }}\n"
+                ));
+                s.push_str("        }\n");
+                s.push_str(&format!("        {acc} r{i} = block_{suf}_{stem}(acc{i}, has{i});\n"));
+            }
+        }
+    }
+
+    // Epilogue: full-width output (out[idx], same shape as input), x re-read from
+    // global, Reduced(i) read from the r{i} registers.
+    let epi = lower(epilogue);
+    let stored = match plan.dtype {
+        ElementKind::F16 => format!("__float2half({epi})"),
+        ElementKind::Bf16 => format!("__float2bfloat16({epi})"),
+        _ => epi,
+    };
+    s.push_str("        for (long long j = threadIdx.x; j < k; j += blockDim.x) {\n");
+    s.push_str("            long long idx = base + j;\n");
+    s.push_str(&format!("            out[idx] = {stored};\n"));
+    s.push_str("        }\n");
+    s.push_str("    }\n}\n");
+    GeneratedKernel { name, source: s }
+}
+
+/// Append the warp/block tree-reduce device helpers for the `ops` actually used,
+/// typed by accumulator `acc` (float/double) and uniquely named per `stem`
+/// (op+dtype). Each `block_*` broadcasts its result to all block threads.
+///
+/// Correctness: the full `0xffffffff` shuffle mask (all lanes run the same loop);
+/// the cross-warp fold indexes `smem[threadIdx.x]` (NOT `lane` — a multi-warp
+/// block must read distinct warp partials, not warp 0's duplicated) and reads only
+/// the first `nwarps` slots; Sum pads out-of-range slots with the `0` identity;
+/// Max/Min carry a `(value, has)` flag and peel real partials (no ±inf literal,
+/// NaN-propagating to match `torch.amax`/`amin`).
+fn emit_block_reducers(
+    s: &mut String,
+    acc: &str,
+    zero: &str,
+    ops: &std::collections::HashSet<ReduceOp>,
+    stem: &str,
+) {
+    if ops.iter().any(|o| matches!(o, ReduceOp::Sum | ReduceOp::Mean)) {
+        s.push_str(&format!(
+            "__device__ __forceinline__ {acc} warp_sum_{stem}({acc} v) {{\n\
+             \x20   for (int off = warpSize / 2; off > 0; off >>= 1)\n\
+             \x20       v += __shfl_down_sync(0xffffffffu, v, off);\n\
+             \x20   return v;\n\
+             }}\n\
+             __device__ __forceinline__ {acc} block_sum_{stem}({acc} v) {{\n\
+             \x20   __shared__ {acc} smem[32];\n\
+             \x20   int lane = threadIdx.x & (warpSize - 1);\n\
+             \x20   int wid = threadIdx.x / warpSize;\n\
+             \x20   int nwarps = (blockDim.x + warpSize - 1) / warpSize;\n\
+             \x20   v = warp_sum_{stem}(v);\n\
+             \x20   if (lane == 0) smem[wid] = v;\n\
+             \x20   __syncthreads();\n\
+             \x20   {acc} r = ((int)threadIdx.x < nwarps) ? smem[threadIdx.x] : {zero};\n\
+             \x20   if (wid == 0) r = warp_sum_{stem}(r);\n\
+             \x20   __shared__ {acc} bcast;\n\
+             \x20   if (threadIdx.x == 0) bcast = r;\n\
+             \x20   __syncthreads();\n\
+             \x20   return bcast;\n\
+             }}\n"
+        ));
+    }
+    for (suf, cmp) in [("max", ">"), ("min", "<")] {
+        let want = (suf == "max" && ops.contains(&ReduceOp::Max))
+            || (suf == "min" && ops.contains(&ReduceOp::Min));
+        if !want {
+            continue;
+        }
+        s.push_str(&format!(
+            "__device__ __forceinline__ void warp_{suf}_{stem}({acc}& v, int& has) {{\n\
+             \x20   for (int off = warpSize / 2; off > 0; off >>= 1) {{\n\
+             \x20       {acc} ov = __shfl_down_sync(0xffffffffu, v, off);\n\
+             \x20       int oh = __shfl_down_sync(0xffffffffu, has, off);\n\
+             \x20       if (oh && (!has || ov != ov || ov {cmp} v)) {{ v = ov; has = 1; }}\n\
+             \x20   }}\n\
+             }}\n\
+             __device__ __forceinline__ {acc} block_{suf}_{stem}({acc} v, int has) {{\n\
+             \x20   __shared__ {acc} sv[32]; __shared__ int sh[32];\n\
+             \x20   int lane = threadIdx.x & (warpSize - 1);\n\
+             \x20   int wid = threadIdx.x / warpSize;\n\
+             \x20   int nwarps = (blockDim.x + warpSize - 1) / warpSize;\n\
+             \x20   warp_{suf}_{stem}(v, has);\n\
+             \x20   if (lane == 0) {{ sv[wid] = v; sh[wid] = has; }}\n\
+             \x20   __syncthreads();\n\
+             \x20   __shared__ {acc} bcast;\n\
+             \x20   if (threadIdx.x == 0) {{\n\
+             \x20       {acc} m = sv[0]; int mh = sh[0];\n\
+             \x20       for (int i = 1; i < nwarps; ++i)\n\
+             \x20           if (sh[i] && (!mh || sv[i] != sv[i] || sv[i] {cmp} m)) {{ m = sv[i]; mh = 1; }}\n\
+             \x20       bcast = m;\n\
+             \x20   }}\n\
+             \x20   __syncthreads();\n\
+             \x20   return bcast;\n\
+             }}\n"
+        ));
+    }
+    s.push('\n');
 }
 
 /// `true` if every iteration axis of `o` is a broadcast axis — its offset is
@@ -543,7 +769,7 @@ fn params_used(e: &ScalarExpr) -> Vec<u8> {
                 rec(a, out);
                 rec(b, out);
             }
-            ScalarExpr::Input(_) | ScalarExpr::Const(_) => {}
+            ScalarExpr::Input(_) | ScalarExpr::Const(_) | ScalarExpr::Reduced(_) => {}
         }
     }
     let mut set = std::collections::BTreeSet::new();
@@ -777,5 +1003,135 @@ mod tests {
         assert!(k.source.contains("double acc = 0.0;"));
         assert!(k.source.contains("acc += (double)in0[idx];"));
         assert!(k.source.contains("out[o] = acc;")); // double acc -> single round to float out
+    }
+
+    fn rr_key(dt: ElementKind, cat: OpCategory) -> baracuda_kernels_types::StructureKey {
+        // full-width fused op: input + output share the [256, 128] contiguous shape.
+        let a = OperandDesc::new(2, &[256, 128], &[128, 1], dt, 256);
+        structure_key(cat, &[a, a], ArchSku::Sm89)
+    }
+
+    fn rmsnorm_op(dt: ElementKind) -> OpDef {
+        use crate::ir::{konst, reduced, ReduceOp, ReduceStage, UnaryOp};
+        // x * rsqrt(mean(x^2) + eps), eps baked as a finite Const.
+        OpDef::row_reduce(
+            "rmsnorm",
+            1,
+            &[dt],
+            vec![ReduceStage {
+                pre: input(0).unary(UnaryOp::Sqr).0,
+                op: ReduceOp::Mean,
+            }],
+            input(0) * (reduced(0) + konst(1e-5)).unary(UnaryOp::Rsqrt),
+        )
+    }
+
+    fn softmax_op(dt: ElementKind) -> OpDef {
+        use crate::ir::{reduced, ReduceOp, ReduceStage};
+        // exp(x - rowmax) / sum(exp(x - rowmax)) — numerically stable.
+        OpDef::row_reduce(
+            "softmax",
+            1,
+            &[dt],
+            vec![
+                ReduceStage { pre: input(0).0, op: ReduceOp::Max },
+                ReduceStage {
+                    pre: (input(0) - reduced(0)).exp().0,
+                    op: ReduceOp::Sum,
+                },
+            ],
+            (input(0) - reduced(0)).exp() / reduced(1),
+        )
+    }
+
+    #[test]
+    fn rowreduce_rmsnorm_block_tree_fold() {
+        let k = generate(
+            &rmsnorm_op(ElementKind::F32),
+            &rr_key(ElementKind::F32, OpCategory::Normalization),
+            &Cuda,
+        );
+        assert_eq!(k.name, "baracuda_gen_rmsnorm_f32_rowreduce");
+        // warp-shuffle + shared-mem block reduce, full 0xffffffff mask.
+        assert!(k.source.contains("__shfl_down_sync(0xffffffffu, v, off)"));
+        assert!(k.source.contains("float block_sum_rmsnorm_f32(float v)"));
+        // one block per row, grid-stride over rows; grid-stride fold within the row.
+        assert!(k
+            .source
+            .contains("for (long long row = blockIdx.x; row < n_out; row += (long long)gridDim.x)"));
+        assert!(k
+            .source
+            .contains("for (long long j = threadIdx.x; j < k; j += blockDim.x)"));
+        // mean of squares -> rsqrt; full-width output; uniform empty-axis guard.
+        assert!(k.source.contains("acc0 += (in0[idx]*in0[idx]);"));
+        assert!(k.source.contains("block_sum_rmsnorm_f32(acc0) / (float)k"));
+        assert!(k.source.contains("out[idx] = (in0[idx] * rsqrtf((r0 + 1e-5)));"));
+        assert!(k.source.contains("if (k == 0) return;"));
+    }
+
+    #[test]
+    fn rowreduce_cross_warp_indexes_threadidx_not_lane() {
+        // The must-fix from the design review: the cross-warp fold reads DISTINCT
+        // warp partials at smem[threadIdx.x], NEVER smem[lane] (which would refold
+        // warp 0's partials for every multi-warp block — a silent wrong reduction).
+        let k = generate(
+            &rmsnorm_op(ElementKind::F32),
+            &rr_key(ElementKind::F32, OpCategory::Normalization),
+            &Cuda,
+        );
+        assert!(k.source.contains("smem[threadIdx.x]"));
+        assert!(!k.source.contains("smem[lane]"));
+    }
+
+    #[test]
+    fn rowreduce_softmax_two_stage_nan_max() {
+        let k = generate(
+            &softmax_op(ElementKind::F32),
+            &rr_key(ElementKind::F32, OpCategory::Softmax),
+            &Cuda,
+        );
+        assert_eq!(k.name, "baracuda_gen_softmax_f32_rowreduce");
+        // stage 0: NaN-propagating max via the (value, has) flag, no ±inf literal.
+        assert!(k.source.contains("block_max_softmax_f32"));
+        assert!(!k.source.contains("INFINITY"));
+        assert!(k.source.contains("if (!has0 || e != e || e > acc0)"));
+        // stage 1 reads the rowmax register r0; numerically-stable exp(x - max).
+        assert!(k.source.contains("acc1 += expf((in0[idx] - r0));"));
+        // epilogue divides by the denom register r1.
+        assert!(k.source.contains("out[idx] = (expf((in0[idx] - r0)) / r1);"));
+    }
+
+    #[test]
+    fn rowreduce_f16_accumulates_in_float() {
+        let k = generate(
+            &rmsnorm_op(ElementKind::F16),
+            &rr_key(ElementKind::F16, OpCategory::Normalization),
+            &Cuda,
+        );
+        assert!(k.source.contains("#include <cuda_fp16.h>"));
+        assert!(k.source.contains("const __half* __restrict__ in0"));
+        assert!(k.source.contains("float block_sum_rmsnorm_f16(float v)")); // float acc
+        assert!(k
+            .source
+            .contains("acc0 += (__half2float(in0[idx])*__half2float(in0[idx]));"));
+        assert!(k.source.contains(
+            "out[idx] = __float2half((__half2float(in0[idx]) * rsqrtf((r0 + 1e-5))));"
+        ));
+    }
+
+    #[test]
+    #[should_panic(expected = "references a stage not yet produced")]
+    fn rowreduce_forward_reduced_ref_panics() {
+        use crate::ir::{reduced, ReduceOp, ReduceStage};
+        // A stage 0 `pre` referencing Reduced(0) (its own not-yet-produced result)
+        // is a mis-authored op — validate_row_reduce must reject it at build_plan.
+        let bad = OpDef::row_reduce(
+            "bad",
+            1,
+            &[ElementKind::F32],
+            vec![ReduceStage { pre: reduced(0).0, op: ReduceOp::Sum }],
+            input(0) * reduced(0),
+        );
+        let _ = generate(&bad, &rr_key(ElementKind::F32, OpCategory::Normalization), &Cuda);
     }
 }

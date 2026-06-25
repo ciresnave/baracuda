@@ -46,6 +46,10 @@ pub trait Backend {
 pub struct Lowering<'a> {
     /// Operand-access spelling.
     pub leaf: &'a dyn Fn(u8) -> String,
+    /// Per-row reduced-scalar spelling ([`ScalarExpr::Reduced`]). Only the
+    /// `RowReduce` emitter produces a body containing a `Reduced` leaf; every other
+    /// emitter passes a closure that panics (its bodies never contain one).
+    pub reduced: &'a dyn Fn(u8) -> String,
     /// Unary-op spelling.
     pub unary: &'a dyn Fn(UnaryOp, String) -> String,
     /// Binary-function-op spelling.
@@ -63,6 +67,7 @@ impl std::fmt::Debug for Lowering<'_> {
 pub fn lower_expr(e: &ScalarExpr, lo: &Lowering<'_>) -> String {
     match e {
         ScalarExpr::Input(i) => (lo.leaf)(*i),
+        ScalarExpr::Reduced(i) => (lo.reduced)(*i),
         ScalarExpr::Param(i) => format!("p{i}"),
         // `{v:?}` emits `inf`/`NaN`, which aren't valid C literals; map to the
         // standard macros. (The f32 `f`-suffix vs double-promotion is dtype-
