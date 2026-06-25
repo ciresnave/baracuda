@@ -1331,5 +1331,44 @@ mod tests {
                 .unwrap_or_else(|e| panic!("{} failed to compile: {e}", k.name));
             assert!(String::from_utf8(ptx).unwrap().contains(".entry"));
         }
+
+        // Multi-input: weighted-RmsNorm (x + weight) + LayerNorm (x + weight + bias)
+        // exercise the per-column in_i[j] index headerless.
+        let dt = ElementKind::F32;
+        let x = OperandDesc::new(2, &[256, 128], &[128, 1], dt, 256);
+        let col = OperandDesc::new(2, &[256, 128], &[0, 1], dt, 256);
+        let out = OperandDesc::new(2, &[256, 128], &[128, 1], dt, 256);
+        let wrms = OpDef::row_reduce(
+            "wrmsnorm",
+            2,
+            &[dt],
+            vec![ReduceStage {
+                pre: input(0).unary(UnaryOp::Sqr).0,
+                op: ReduceOp::Mean,
+            }],
+            input(0) * (reduced(0) + konst(1e-5)).unary(UnaryOp::Rsqrt) * input(1),
+        );
+        let ln = OpDef::row_reduce(
+            "layernorm",
+            3,
+            &[dt],
+            vec![
+                ReduceStage { pre: input(0).0, op: ReduceOp::Mean },
+                ReduceStage {
+                    pre: (input(0) - reduced(0)).unary(UnaryOp::Sqr).0,
+                    op: ReduceOp::Mean,
+                },
+            ],
+            (input(0) - reduced(0)) * (reduced(1) + konst(1e-5)).unary(UnaryOp::Rsqrt) * input(1)
+                + input(2),
+        );
+        for (op, ops) in [(wrms, vec![x, col, out]), (ln, vec![x, col, col, out])] {
+            let mk = structure_key(OpCategory::Normalization, &ops, ArchSku::Sm89);
+            let k = generate(&op, &mk, &Cuda);
+            let ptx = cc
+                .compile(&k.source, &k.name, 5000)
+                .unwrap_or_else(|e| panic!("{} failed to compile: {e}", k.name));
+            assert!(String::from_utf8(ptx).unwrap().contains(".entry"));
+        }
     }
 }

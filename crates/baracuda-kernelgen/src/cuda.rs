@@ -8,7 +8,7 @@
 
 use crate::backend::{lower_expr, Backend, GeneratedKernel, Lowering};
 use crate::ir::{Access, BinaryOp, ReduceOp, ScalarExpr, UnaryOp};
-use crate::plan::{KernelPlan, Schedule};
+use crate::plan::{rr_role, KernelPlan, RrRole, Schedule};
 use baracuda_kernels_types::{Contiguity, ElementKind, OperandKey};
 
 /// The CUDA C++ backend. Lowers a [`KernelPlan`] to `.cu` source.
@@ -407,12 +407,23 @@ fn emit_row_reduce(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
     // translation unit can never collide on a `__device__` symbol.
     let stem = format!("{}_{}", plan.op_name, dtype_tag(plan.dtype));
 
-    // load(i) = in_i[idx], up-converting f16/bf16/f32-strict to the accumulate type.
-    let load = |i: u8| match plan.dtype {
-        ElementKind::F16 => format!("__half2float(in{i}[idx])"),
-        ElementKind::Bf16 => format!("__bfloat162float(in{i}[idx])"),
-        ElementKind::F32Strict => format!("(double)in{i}[idx]"),
-        _ => format!("in{i}[idx]"),
+    // load(i), up-converting f16/bf16/f32-strict to the accumulate type. The index
+    // is role-aware (validate guarantees the roles): a row-streamed input (`x`) loads
+    // `in_i[idx]` (idx = base+j); a per-column weight/bias loads `in_i[j]` (the same
+    // value every row). Both `idx` and `j` are in scope in every stage fold + the
+    // epilogue loop. (Validate forbids column inputs inside a stage `pre`, so stage
+    // folds only ever see row-streamed loads — byte-identical to the single-input path.)
+    let load = |i: u8| {
+        let pos = match rr_role(plan.key.operands[i as usize]) {
+            RrRole::RowStreamed => "idx",
+            RrRole::ColBroadcast => "j",
+        };
+        match plan.dtype {
+            ElementKind::F16 => format!("__half2float(in{i}[{pos}])"),
+            ElementKind::Bf16 => format!("__bfloat162float(in{i}[{pos}])"),
+            ElementKind::F32Strict => format!("(double)in{i}[{pos}]"),
+            _ => format!("in{i}[{pos}]"),
+        }
     };
     // Reduced(s) is the broadcast register from stage s.
     let red = |s: u8| format!("r{s}");
@@ -1133,5 +1144,112 @@ mod tests {
             input(0) * reduced(0),
         );
         let _ = generate(&bad, &rr_key(ElementKind::F32, OpCategory::Normalization), &Cuda);
+    }
+
+    // --- multi-input RowReduce: weighted-RmsNorm + LayerNorm ---
+
+    fn mi_key(dt: ElementKind, n_col: usize) -> baracuda_kernels_types::StructureKey {
+        // x [256,128] full + n_col per-column [k] weight/bias (rank-aligned broadcast
+        // view, stride [0,1]) + full-width output.
+        let x = OperandDesc::new(2, &[256, 128], &[128, 1], dt, 256);
+        let col = OperandDesc::new(2, &[256, 128], &[0, 1], dt, 256);
+        let out = OperandDesc::new(2, &[256, 128], &[128, 1], dt, 256);
+        let mut ops = vec![x];
+        ops.extend(std::iter::repeat_n(col, n_col));
+        ops.push(out);
+        structure_key(OpCategory::Normalization, &ops, ArchSku::Sm89)
+    }
+
+    fn wrmsnorm_op(dt: ElementKind) -> OpDef {
+        use crate::ir::{konst, reduced, ReduceOp, ReduceStage, UnaryOp};
+        // x * rsqrt(mean(x^2) + eps) * weight; in0=x (row), in1=weight [k] (column).
+        OpDef::row_reduce(
+            "wrmsnorm",
+            2,
+            &[dt],
+            vec![ReduceStage {
+                pre: input(0).unary(UnaryOp::Sqr).0,
+                op: ReduceOp::Mean,
+            }],
+            input(0) * (reduced(0) + konst(1e-5)).unary(UnaryOp::Rsqrt) * input(1),
+        )
+    }
+
+    fn layernorm_op(dt: ElementKind) -> OpDef {
+        use crate::ir::{konst, reduced, ReduceOp, ReduceStage, UnaryOp};
+        // (x-mean)*rsqrt(var+eps)*weight + bias; in0=x, in1=weight[k], in2=bias[k].
+        OpDef::row_reduce(
+            "layernorm",
+            3,
+            &[dt],
+            vec![
+                ReduceStage { pre: input(0).0, op: ReduceOp::Mean },
+                ReduceStage {
+                    pre: (input(0) - reduced(0)).unary(UnaryOp::Sqr).0,
+                    op: ReduceOp::Mean,
+                },
+            ],
+            (input(0) - reduced(0)) * (reduced(1) + konst(1e-5)).unary(UnaryOp::Rsqrt) * input(1)
+                + input(2),
+        )
+    }
+
+    #[test]
+    fn rowreduce_weighted_rmsnorm_column_index() {
+        let k = generate(&wrmsnorm_op(ElementKind::F32), &mi_key(ElementKind::F32, 1), &Cuda);
+        assert!(k.source.contains("const float* __restrict__ in1,")); // weight operand
+        // stage reduces only the row-streamed x (in0[idx]); column weight only in
+        // the epilogue, indexed in1[j] (per-column) not in1[idx] (per-element).
+        assert!(k.source.contains("acc0 += (in0[idx]*in0[idx]);"));
+        assert!(k.source.contains("out[idx] = ((in0[idx] * rsqrtf((r0 + 1e-5))) * in1[j]);"));
+        assert!(!k.source.contains("in1[idx]"));
+    }
+
+    #[test]
+    fn rowreduce_layernorm_stable_two_pass_with_weight_bias() {
+        let k = generate(&layernorm_op(ElementKind::F32), &mi_key(ElementKind::F32, 2), &Cuda);
+        assert!(k.source.contains("const float* __restrict__ in2,")); // bias operand
+        // stage 0 mean; stage 1 = mean of squared DEVIATIONS (the stable two-pass
+        // var, not the cancellation-prone mean(x^2)-mean(x)^2).
+        assert!(k.source.contains("acc0 += in0[idx];"));
+        assert!(k.source.contains("acc1 += ((in0[idx] - r0)*(in0[idx] - r0));"));
+        // epilogue: (x-mean)*rsqrt(var+eps)*weight[j] + bias[j].
+        assert!(k.source.contains(
+            "out[idx] = ((((in0[idx] - r0) * rsqrtf((r1 + 1e-5))) * in1[j]) + in2[j]);"
+        ));
+        assert!(!k.source.contains("in1[idx]") && !k.source.contains("in2[idx]"));
+    }
+
+    #[test]
+    #[should_panic(expected = "per-column")]
+    fn rowreduce_bare_rank1_weight_rejected() {
+        // The must-fix OOB guard: a weight passed as a BARE rank-1 [k] tensor (not a
+        // rank-aligned [n_out,k] broadcast view) has an empty bcast mask -> would
+        // misclassify as a second row-streamed input and read in1[row*k+j] past its
+        // k elements. validate must reject it loudly.
+        let x = OperandDesc::new(2, &[256, 128], &[128, 1], ElementKind::F32, 256);
+        let bare_w = OperandDesc::new(1, &[128], &[1], ElementKind::F32, 256); // bare [K]
+        let out = OperandDesc::new(2, &[256, 128], &[128, 1], ElementKind::F32, 256);
+        let key = structure_key(OpCategory::Normalization, &[x, bare_w, out], ArchSku::Sm89);
+        let _ = generate(&wrmsnorm_op(ElementKind::F32), &key, &Cuda);
+    }
+
+    #[test]
+    #[should_panic(expected = "epilogue-only")]
+    fn rowreduce_column_input_in_stage_rejected() {
+        use crate::ir::{ReduceOp, ReduceStage};
+        // Reducing a per-column operand is nonsense — a stage.pre referencing the
+        // column weight (Input1) must be rejected.
+        let bad = OpDef::row_reduce(
+            "bad",
+            2,
+            &[ElementKind::F32],
+            vec![ReduceStage {
+                pre: (input(0) * input(1)).0,
+                op: ReduceOp::Mean,
+            }],
+            input(0) * input(1),
+        );
+        let _ = generate(&bad, &mi_key(ElementKind::F32, 1), &Cuda);
     }
 }

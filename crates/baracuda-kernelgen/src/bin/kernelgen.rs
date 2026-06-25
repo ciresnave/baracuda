@@ -5,7 +5,10 @@
 //! matrix (ops × structure cells, eventually fed from Fuel telemetry) and a
 //! `--backend` selector replace the hardcoded pilot next.
 
-use baracuda_kernelgen::{derive_pattern, generate, input, param, to_fkc, Cuda, OpDef};
+use baracuda_kernelgen::{
+    derive_pattern, generate, input, konst, param, reduced, to_fkc, Cuda, OpDef, ReduceOp,
+    ReduceStage, UnaryOp,
+};
 use baracuda_kernels_types::{structure_key, ArchSku, ElementKind, OpCategory, OperandDesc};
 use std::fs;
 
@@ -79,4 +82,87 @@ fn main() {
     let ak = generate(&affine_relu, &akey, &Cuda);
     fs::write(format!("{out_dir}/{}.cu", ak.name), &ak.source).expect("write kernel");
     println!("generated {out_dir}/{}.cu", ak.name);
+
+    // --- Reductions + fused norms (contiguous last-axis float cells, [4096, 1024]) ---
+    // A standalone mean reduction (the RmsNorm building block), f32 + f16.
+    let mean = OpDef::reduction(
+        "mean",
+        1,
+        &[ElementKind::F32, ElementKind::F16],
+        input(0),
+        ReduceOp::Mean,
+    );
+    for dt in [ElementKind::F32, ElementKind::F16] {
+        let a = OperandDesc::new(2, &[4096, 1024], &[1024, 1], dt, 256);
+        let o = OperandDesc::new(1, &[4096], &[1], dt, 256);
+        let key = structure_key(OpCategory::Reduction, &[a, o], ArchSku::Sm89);
+        let k = generate(&mean, &key, &Cuda);
+        fs::write(format!("{out_dir}/{}.cu", k.name), &k.source).expect("write kernel");
+        println!("generated {out_dir}/{}.cu", k.name);
+    }
+
+    // Fused norms: RmsNorm / Softmax (single input), weighted-RmsNorm / LayerNorm
+    // (multi-input: x + per-column [k] weight/bias broadcast over the row axis).
+    let dt = ElementKind::F32;
+    let x = OperandDesc::new(2, &[4096, 1024], &[1024, 1], dt, 256);
+    let col = OperandDesc::new(2, &[4096, 1024], &[0, 1], dt, 256); // weight/bias
+    let full = OperandDesc::new(2, &[4096, 1024], &[1024, 1], dt, 256); // full-width output
+    let rmsnorm = OpDef::row_reduce(
+        "rmsnorm",
+        1,
+        &[dt],
+        vec![ReduceStage {
+            pre: input(0).unary(UnaryOp::Sqr).0,
+            op: ReduceOp::Mean,
+        }],
+        input(0) * (reduced(0) + konst(1e-5)).unary(UnaryOp::Rsqrt),
+    );
+    let softmax = OpDef::row_reduce(
+        "softmax",
+        1,
+        &[dt],
+        vec![
+            ReduceStage { pre: input(0).0, op: ReduceOp::Max },
+            ReduceStage {
+                pre: (input(0) - reduced(0)).exp().0,
+                op: ReduceOp::Sum,
+            },
+        ],
+        (input(0) - reduced(0)).exp() / reduced(1),
+    );
+    let wrmsnorm = OpDef::row_reduce(
+        "wrmsnorm",
+        2,
+        &[dt],
+        vec![ReduceStage {
+            pre: input(0).unary(UnaryOp::Sqr).0,
+            op: ReduceOp::Mean,
+        }],
+        input(0) * (reduced(0) + konst(1e-5)).unary(UnaryOp::Rsqrt) * input(1),
+    );
+    let layernorm = OpDef::row_reduce(
+        "layernorm",
+        3,
+        &[dt],
+        vec![
+            ReduceStage { pre: input(0).0, op: ReduceOp::Mean },
+            ReduceStage {
+                pre: (input(0) - reduced(0)).unary(UnaryOp::Sqr).0,
+                op: ReduceOp::Mean,
+            },
+        ],
+        (input(0) - reduced(0)) * (reduced(1) + konst(1e-5)).unary(UnaryOp::Rsqrt) * input(1)
+            + input(2),
+    );
+    for (op, ops, cat) in [
+        (rmsnorm, vec![x, full], OpCategory::Normalization),
+        (softmax, vec![x, full], OpCategory::Softmax),
+        (wrmsnorm, vec![x, col, full], OpCategory::Normalization),
+        (layernorm, vec![x, col, col, full], OpCategory::Normalization),
+    ] {
+        let key = structure_key(cat, &ops, ArchSku::Sm89);
+        let k = generate(&op, &key, &Cuda);
+        fs::write(format!("{out_dir}/{}.cu", k.name), &k.source).expect("write kernel");
+        println!("generated {out_dir}/{}.cu  (cell {})", k.name, key.to_token());
+    }
 }
