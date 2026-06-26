@@ -162,6 +162,15 @@ pub(crate) fn rr_role(o: OperandKey) -> RrRole {
 /// v1 assumes a **uniform operand dtype** (the structure key carries one dtype) — a
 /// mixed-dtype LayerNorm (fp16 `x` + fp32 weight) is unrepresentable here and must
 /// be refused upstream by the caller.
+///
+/// **Caller pre-condition this cannot check:** a column operand's feature-axis extent
+/// must equal `x`'s `k`. The structure key carries broadcast masks but **no numeric
+/// extents** (specialize on structure, not extents), so a too-short weight has the
+/// same key as a correct one — it's accepted here and the emitter reads `in_i[j]`
+/// past its buffer (a confirmed on-device OOB). This is the same trust level as the
+/// `n_out`/`k` launch args; the layer that still holds the `OperandDesc` extents (an
+/// AOT op author, or the live seam caller once `region_to_op` wires RowReduce) must
+/// assert it — the key has already abstracted the extents away by the time we run.
 fn validate_row_reduce(stages: &[ReduceStage], epilogue: &ScalarExpr, n_inputs: u8, key: &StructureKey) {
     let dtype = key.dtype;
     assert!(

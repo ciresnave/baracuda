@@ -71,6 +71,16 @@ latter, we'll emit `BroadcastTo` in our `pattern:` and consume it in `region_to_
 - Emit the FKC **contract + `pattern:`** for `RowReduce` ops (today they honest-miss),
   so an adopted fused-reduce op re-wires via your declarative `match_region`.
 - Advertise the capability so Fuel may issue fused-reduce JIT requests.
+- **Extent pre-condition the seam caller must enforce:** our `structure_key` carries
+  broadcast masks but **no numeric extents** (specialize on structure, not extents),
+  so the synthesizer cannot verify a per-column weight/bias's feature extent equals
+  `x`'s `k` — a too-short weight keys identically to a correct one and would read out
+  of bounds. Like `n_out`/`k`, this is a caller pre-condition: the boundary that still
+  holds the live `FdxOperandDesc`/`OperandDesc` extents (your `op_to_tag` /
+  region-assembly side) must assert `weight.extent[-1] == x.extent[-1]` before the
+  request crosses. (Adversarially verified on-device: with the extents present we are
+  compute-sanitizer-clean; the mismatch is only reachable if a caller mis-sizes the
+  operand.)
 
 ## 5. Cost-gating
 
