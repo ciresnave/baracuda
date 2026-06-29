@@ -14,6 +14,12 @@ use crate::stream::Stream;
 pub struct DeviceBuffer<T: DeviceRepr> {
     ptr: *mut c_void,
     len: usize,
+    /// Origin stream for buffers allocated via a `*_async` constructor.
+    /// `Some` ⇒ [`Drop`] reclaims via `cudaFreeAsync` on this stream
+    /// (stream-ordered free, safe even while a kernel that used the
+    /// buffer is still pending); `None` ⇒ synchronous `cudaFree`.
+    /// Cloning a `Stream` is just an `Arc` bump, so retaining it is cheap.
+    stream: Option<Stream>,
     _marker: PhantomData<T>,
 }
 
@@ -42,6 +48,7 @@ impl<T: DeviceRepr> DeviceBuffer<T> {
         Ok(Self {
             ptr,
             len,
+            stream: None,
             _marker: PhantomData,
         })
     }
@@ -166,10 +173,20 @@ impl<T: DeviceRepr> Drop for DeviceBuffer<T> {
         if self.ptr.is_null() {
             return;
         }
-        if let Ok(r) = runtime() {
-            if let Ok(cu) = r.cuda_free() {
-                let _ = unsafe { cu(self.ptr) };
+        let Ok(r) = runtime() else { return };
+        // Stream-ordered free for `*_async`-allocated buffers: enqueue
+        // `cudaFreeAsync` on the origin stream so the reclaim is ordered
+        // after any kernel still using the buffer. If that fails to load
+        // (e.g. pre-11.2 runtime) fall through to the synchronous free.
+        if let Some(stream) = &self.stream {
+            if let Ok(cu) = r.cuda_free_async() {
+                if check(unsafe { cu(self.ptr, stream.as_raw()) }).is_ok() {
+                    return;
+                }
             }
+        }
+        if let Ok(cu) = r.cuda_free() {
+            let _ = unsafe { cu(self.ptr) };
         }
     }
 }
@@ -532,6 +549,19 @@ impl<T: DeviceRepr> Drop for PinnedRegistration<'_, T> {
 impl<T: DeviceRepr> DeviceBuffer<T> {
     /// Asynchronously allocate `len` elements on `stream` from the device's
     /// default memory pool (CUDA 11.2+).
+    ///
+    /// The buffer **retains `stream`** (a cheap `Arc` clone), so it also
+    /// *frees* stream-ordered: [`Drop`] enqueues `cudaFreeAsync` on
+    /// `stream`, ordered by the driver *after* every operation already
+    /// submitted to it — including a kernel still reading the buffer. That
+    /// makes "launch on the stream, then let the buffer drop" safe by
+    /// construction, with no host synchronize and no retention pool: the
+    /// per-op `stream.synchronize()` that today keeps scratch / output
+    /// buffers alive can be dropped. Freed blocks return to the device's
+    /// stream-ordered memory pool for reuse across a chain.
+    ///
+    /// [`free_async`](Self::free_async) is still available if you want to
+    /// free at an explicit point rather than at scope exit.
     pub fn new_async(len: usize, stream: &Stream) -> Result<Self> {
         let r = runtime()?;
         let cu = r.cuda_malloc_async()?;
@@ -543,8 +573,27 @@ impl<T: DeviceRepr> DeviceBuffer<T> {
         Ok(Self {
             ptr,
             len,
+            stream: Some(stream.clone()),
             _marker: PhantomData,
         })
+    }
+
+    /// Stream-ordered allocate-and-zero: `cudaMallocAsync` on `stream`
+    /// followed by `cudaMemsetAsync` on the same stream, so the buffer is
+    /// zeroed in stream order before any subsequent op observes it.
+    ///
+    /// This is the async counterpart of [`zeros`](Self::zeros), and the
+    /// constructor to use for **output buffers** that should free
+    /// stream-ordered: like [`new_async`](Self::new_async) the buffer
+    /// retains `stream` and reclaims via `cudaFreeAsync` on [`Drop`], so
+    /// an output written by a pipelined kernel can be evicted without a
+    /// host synchronize or an executor-side lifetime guard.
+    ///
+    /// Requires CUDA 11.2+.
+    pub fn zeros_async(len: usize, stream: &Stream) -> Result<Self> {
+        let buf = Self::new_async(len, stream)?;
+        buf.memset_async(0, stream)?;
+        Ok(buf)
     }
 
     /// Free this buffer asynchronously on `stream`. Consumes `self` so

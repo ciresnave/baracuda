@@ -94,6 +94,78 @@ fn async_alloc_roundtrip() {
     assert_eq!(host, back);
 }
 
+/// The implicit stream-ordered `Drop`: a buffer allocated via `new_async`
+/// retains its stream and frees via `cuMemFreeAsync` when dropped, so we can
+/// drop the inputs *before* synchronizing and the free is ordered after the
+/// kernel that read them — no host sync, no use-after-free. This is the
+/// pattern Fuel's async dispatch relies on (drop the per-op `synchronize`,
+/// let scratch / output buffers free safely on the stream).
+#[test]
+#[ignore = "requires an NVIDIA GPU + CUDA 11.2+"]
+fn async_drop_is_stream_ordered() {
+    let (ctx, stream) = setup().expect("setup");
+    let n: u32 = 1 << 14;
+    let a: Vec<f32> = (0..n).map(|i| i as f32).collect();
+    let b: Vec<f32> = (0..n).map(|i| (n - i) as f32 * 2.0).collect();
+    let expected: Vec<f32> = a.iter().zip(&b).map(|(x, y)| x + y).collect();
+
+    let module = Module::load_ptx(&ctx, VECTOR_ADD_PTX).unwrap();
+    let kernel = module.get_function("vector_add").unwrap();
+    let block: u32 = 256;
+    let grid: u32 = n.div_ceil(block);
+
+    // Output via `zeros_async` (stream-ordered alloc + zero + free) — the
+    // constructor Fuel would use for op outputs. Lives past the inputs.
+    let d_c: DeviceBuffer<f32> = DeviceBuffer::zeros_async(&ctx, n as usize, &stream).unwrap();
+
+    {
+        // Inputs allocated + filled stream-ordered, scoped so they drop
+        // (→ cuMemFreeAsync) while the kernel is still pending on the stream.
+        let d_a = DeviceBuffer::<f32>::new_async(&ctx, n as usize, &stream).unwrap();
+        let d_b = DeviceBuffer::<f32>::new_async(&ctx, n as usize, &stream).unwrap();
+        d_a.copy_from_host_async(&a, &stream).unwrap();
+        d_b.copy_from_host_async(&b, &stream).unwrap();
+
+        // SAFETY: arg types/order match the PTX signature.
+        unsafe {
+            kernel
+                .launch()
+                .grid((grid, 1, 1))
+                .block((block, 1, 1))
+                .stream(&stream)
+                .arg(&d_a)
+                .arg(&d_b)
+                .arg(&d_c)
+                .arg(&n)
+                .launch()
+        }
+        .expect("launch");
+        // d_a / d_b drop HERE — before any synchronize. The async free is
+        // enqueued after the kernel, so this must not corrupt the result.
+    }
+
+    let mut got = vec![0.0f32; n as usize];
+    d_c.copy_to_host_async(&mut got, &stream).unwrap();
+    stream.synchronize().unwrap();
+    assert_eq!(expected, got, "stream-ordered free corrupted a pending read");
+}
+
+/// `zeros_async` returns a stream-ordered, zeroed buffer.
+#[test]
+#[ignore = "requires an NVIDIA GPU + CUDA 11.2+"]
+fn zeros_async_is_zeroed() {
+    let (ctx, stream) = setup().expect("setup");
+    let n = 4096usize;
+    let buf: DeviceBuffer<f32> = DeviceBuffer::zeros_async(&ctx, n, &stream).unwrap();
+
+    let mut back = vec![1.0f32; n];
+    buf.copy_to_host_async(&mut back, &stream).unwrap();
+    stream.synchronize().unwrap();
+
+    assert!(back.iter().all(|&x| x == 0.0), "zeros_async left non-zero bytes");
+    // buf drops here → cuMemFreeAsync on `stream`, no explicit free needed.
+}
+
 #[test]
 #[ignore = "requires an NVIDIA GPU"]
 fn empty_graph_instantiates() {
