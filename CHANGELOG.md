@@ -8,6 +8,28 @@ alpha represents one or more completed phases.
 The phase numbering is Fuel-driven (Fuel is baracuda's primary downstream
 consumer); see `ROADMAP.md` for the active phase board.
 
+## 0.0.1-alpha.70 — 2026-06-28 (Fuel — device-load telemetry aliases)
+
+Convenience aliases for Fuel's `DeviceLoadSelector` (Step E, Phase B2). Both
+underlying reads already shipped in alpha.69 (`Stream::is_complete` /
+`nvml::Device::utilization`); this adds thin, read-only aliases matching the
+shape Fuel's load-balancer wants. No new dependency, no hot-path impact. See
+[`docs/fuel-reply-device-load-telemetry-2026-06-28.md`](docs/fuel-reply-device-load-telemetry-2026-06-28.md).
+
+### Added
+
+- **`Stream::is_idle() -> Result<bool>`** on both `baracuda-driver` and
+  `baracuda-runtime` — a load-probe alias of `is_complete()` (wraps
+  `cuStreamQuery`/`cudaStreamQuery`; `Ok(true)` idle, `Ok(false)` busy).
+  Read-only: never synchronizes the stream or perturbs scheduling. Reflects
+  only this process's submissions to the stream.
+- **`nvml::Device::gpu_utilization_percent() -> Option<u8>`** — GPU core
+  busy-percent in the `Option<u8>` shape a load balancer wants, an honest
+  `None` (never a fabricated value) when the driver can't answer. Convenience
+  wrapper over `utilization()`. Captures *cross-process* device contention
+  (the signal Fuel can't measure itself); pairs with the existing
+  `compute_processes()`/`graphics_processes()` for an SM proxy.
+
 ## 0.0.1-alpha.69 — 2026-06-20 (Fuel — Profile v1 kernel-seam: handshake + structure_key + FKC generator)
 
 Kernel-specialization / Baracuda↔Fuel **Profile v1** release. The cross-project

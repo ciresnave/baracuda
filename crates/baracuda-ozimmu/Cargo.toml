@@ -1,6 +1,6 @@
 [package]
 name = "baracuda-ozimmu"
-version = "0.0.1-alpha.69"
+version = "0.0.1-alpha.70"
 description = "Safe Rust wrapper for baracuda's clean-fork of Hiroyuki Ootomo's ozIMMU — Ozaki-scheme FP64 GEMM that synthesizes a DGEMM from S^2 int8 tensor-core matmuls. Provides an RAII handle + drop-in `dgemm` shim suitable for the `BackendKind::Ozaki` path of `baracuda-kernels`'s `GemmPlan`. Opt-in (NOT bit-equivalent to native DGEMM); the default FP64 path stays on CUTLASS / cuBLAS."
 readme = "README.md"
 edition.workspace = true
