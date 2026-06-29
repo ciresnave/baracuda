@@ -1,0 +1,35 @@
+[package]
+name = "baracuda-kernelgen"
+version = "0.0.1-alpha.72"
+description = "Build-time generator that emits specialized CUDA kernels (and, next, their FKC contracts) from an op's abstract IR fanned out across StructureKey cells. Dev/build tool — not published; its artifacts ship inside baracuda-kernels-sys."
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+publish = false
+
+[features]
+# Pull in the real on-demand nvrtc compiler (NvrtcCompiler). Off by default so the
+# synthesis engine + StubCompiler build and test without a CUDA toolchain; enable
+# with `--features nvrtc` where nvrtc is available.
+nvrtc = ["dep:baracuda-nvrtc"]
+# Wire Fuel's frozen kernel-seam grammar (`fuel_kernel_seam_types::PatternNode`) as
+# the JIT region type AND the live-call envelope (`fuel_kernel_seam::Synthesizer`,
+# `JitRequest`/`JitResponse`) — the direct-Rust §5 endpoint Fuel calls.
+seam = ["dep:fuel-kernel-seam-types", "dep:fuel-kernel-seam"]
+
+[dependencies]
+baracuda-kernels-types = { workspace = true }
+baracuda-nvrtc = { workspace = true, optional = true }
+# Fuel's dependency-free std-POD grammar crate (OpTag / OpAttrs / PatternNode) — the
+# §5 shared wire vocabulary. crates.io version dep so the default build resolves
+# without a Fuel checkout (an unpublished path/git dep breaks workspace resolution).
+fuel-kernel-seam-types = { version = "0.10.2", optional = true }
+# The §5 live-call envelope: JitRequest / JitResponse / the Synthesizer trait Fuel
+# calls. Depends only on fuel-kernel-seam-types + baracuda-kernels-types (no fuel-graph).
+fuel-kernel-seam = { version = "0.10.2", optional = true }
+
+[lints]
+workspace = true

@@ -116,6 +116,42 @@ fn async_alloc_round_trip() {
     assert_eq!(host, back);
 }
 
+/// `zeros_async` returns a stream-ordered, zeroed buffer; dropping it (no
+/// explicit `free_async`) reclaims via `cudaFreeAsync` on the retained
+/// stream — the implicit stream-ordered free Fuel's async dispatch relies on.
+#[test]
+#[ignore = "requires an NVIDIA GPU + CUDA 11.2+"]
+fn zeros_async_and_implicit_stream_drop() {
+    let device = Device::from_ordinal(0);
+    device.set_current().unwrap();
+    let stream = Stream::new().unwrap();
+
+    let n = 4096usize;
+    let host: Vec<f32> = (0..n).map(|i| i as f32 + 1.0).collect();
+
+    {
+        // Stream-ordered zeroed output buffer.
+        let zeroed = DeviceBuffer::<f32>::zeros_async(n, &stream).unwrap();
+        let mut back = vec![1.0f32; n];
+        zeroed.copy_to_host_async(&mut back, &stream).unwrap();
+        stream.synchronize().unwrap();
+        assert!(back.iter().all(|&x| x == 0.0), "zeros_async left non-zero bytes");
+
+        // A second async buffer we DON'T free explicitly: it drops at the end
+        // of this scope and must reclaim via cudaFreeAsync on `stream`.
+        let buf = DeviceBuffer::<f32>::new_async(n, &stream).unwrap();
+        buf.copy_from_host_async(&host, &stream).unwrap();
+        let mut echo = vec![0.0f32; n];
+        buf.copy_to_host_async(&mut echo, &stream).unwrap();
+        stream.synchronize().unwrap();
+        assert_eq!(host, echo);
+        // `buf` and `zeroed` drop here → implicit cudaFreeAsync, no panic.
+    }
+
+    // Stream still valid afterwards: subsequent work succeeds.
+    stream.synchronize().unwrap();
+}
+
 #[test]
 #[ignore = "requires an NVIDIA GPU"]
 fn stream_capture_and_replay_vector_add() {

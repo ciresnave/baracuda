@@ -8,6 +8,151 @@ alpha represents one or more completed phases.
 The phase numbering is Fuel-driven (Fuel is baracuda's primary downstream
 consumer); see `ROADMAP.md` for the active phase board.
 
+## 0.0.1-alpha.72 — 2026-06-29 (harden alpha.71 stream-ordered free)
+
+Post-ship hardening of the alpha.71 stream-ordered free, from an adversarial
+multi-lens review. Two fixes; no API change. Pull alpha.72 rather than alpha.71.
+See [`docs/fuel-reply-stream-ordered-free-2026-06-29.md`](docs/fuel-reply-stream-ordered-free-2026-06-29.md)
+(updated for alpha.72).
+
+### Fixed
+
+- **`DeviceBuffer::drop` no longer falls back to a *synchronous* free when the
+  async free *call* errors** (driver + runtime). alpha.71's `Drop` dropped
+  through to `cuMemFree` / `cudaFree` on any non-success from
+  `cuMemFreeAsync` / `cudaFreeAsync`, not only on a missing symbol — and a
+  synchronous free of a stream-ordered pool allocation that may still be
+  referenced by pending stream work is the exact use-after-free the feature
+  exists to prevent. Now the synchronous fallback fires **only** when the async
+  free *symbol* is unavailable (genuine pre-CUDA-11.2); on an async-free *call*
+  error the block is **leaked** (reclaimed at context/device teardown) rather
+  than synchronously freed. The happy path is unchanged — the async free
+  succeeds and returns — and the error path is unreachable on a healthy stream.
+  This is a defensive-path fix: the common single-stream dispatch path never
+  reached the old fallback.
+
+### Documentation
+
+- **Documented the single-origin-stream precondition** on `new_async` /
+  `zeros_async` (both crates) and in the Fuel reply. The stream-ordered `Drop`
+  free is ordered only against work on the buffer's **origin stream**; a buffer
+  consumed on a *different* stream needs an explicit event/cross-stream
+  dependency (or `free_async` on a suitably-ordered stream) before it drops.
+  Replaces the unqualified "safe by construction" wording. (CUDA's standard
+  stream-ordered-allocator contract — stated so a future multi-stream scheduler
+  doesn't silently reintroduce a UAF.)
+- Corrected the `Drop` rustdoc/comments: the synchronous fallback is the
+  pre-11.2 + sync-allocated-buffer path, not a catch-all for async-free errors.
+
+## 0.0.1-alpha.71 — 2026-06-29 (Fuel — stream-ordered free for async dispatch)
+
+Stream-ordered *free* to match the existing stream-ordered *alloc*, so Fuel's
+Step E A3 async dispatch can drop the per-op `stream.synchronize()` without
+risking use-after-free on scratch / output buffers. A `DeviceBuffer` allocated
+via a `*_async` constructor now **retains its origin stream** and reclaims via
+`cuMemFreeAsync` / `cudaFreeAsync` on [`Drop`] — the free is enqueued *after*
+any kernel still using the buffer, so it's safe by construction with no host
+sync and no executor-side lifetime guard. Synchronous callers are completely
+unchanged. See
+[`docs/fuel-reply-stream-ordered-free-2026-06-29.md`](docs/fuel-reply-stream-ordered-free-2026-06-29.md).
+
+### Added
+
+- **`DeviceBuffer::zeros_async(.., len, stream)`** on both `baracuda-driver`
+  and `baracuda-runtime` — stream-ordered allocate-and-zero (`*MallocAsync` +
+  `*MemsetAsync` on `stream`). The async counterpart of `zeros`, intended for
+  **output buffers** so they free stream-ordered like workspaces do. Retains
+  the stream; reclaims via the async free on `Drop`.
+
+### Changed
+
+- **`DeviceBuffer` allocated via `new_async` / `zeros_async` now frees
+  stream-ordered on `Drop`** (was: synchronous `cuMemFree` / `cudaFree`
+  regardless of how it was allocated). The buffer retains its origin stream
+  (a cheap `Arc` clone — `Stream` is `Arc`-backed) and `Drop` enqueues
+  `cuMemFreeAsync` / `cudaFreeAsync` on it; freed blocks return to the
+  device's stream-ordered memory pool for reuse across a realize chain
+  (peak VRAM ≈ live working set, no repeated real `cuMemAlloc`). If the async
+  free symbol is unavailable (pre-CUDA-11.2), `Drop` falls back to the
+  synchronous free.
+  - **No behavior change for synchronous callers.** Buffers from `new` /
+    `zeros` / `from_slice` retain no stream and free synchronously exactly as
+    before.
+  - The explicit consuming `free_async(self, stream)` still works for callers
+    that want to free at a specific point rather than at scope exit.
+
+### Verified
+
+- New GPU-gated smoke tests on an RTX 4070 (sm_89, driver 610.47, CUDA 11.2+):
+  `async_drop_is_stream_ordered` (driver) launches `vector_add`, then drops the
+  two `new_async` input buffers **before** any synchronize — the async free is
+  ordered after the kernel, so the 16K-element result is bit-exact;
+  `zeros_async_is_zeroed` (driver) and `zeros_async_and_implicit_stream_drop`
+  (runtime) confirm `zeros_async` zeroing and implicit-`Drop` reclaim. Existing
+  `async_alloc_roundtrip` / `async_alloc_round_trip` (explicit `free_async`)
+  still green. (compute-sanitizer not run — unavailable on the local box; the
+  ordered-free correctness is exercised functionally by the pending-read test.)
+
+## 0.0.1-alpha.70 — 2026-06-28 (Fuel — device-load telemetry aliases)
+
+Convenience aliases for Fuel's `DeviceLoadSelector` (Step E, Phase B2). Both
+underlying reads already shipped in alpha.69 (`Stream::is_complete` /
+`nvml::Device::utilization`); this adds thin, read-only aliases matching the
+shape Fuel's load-balancer wants. No new dependency, no hot-path impact. See
+[`docs/fuel-reply-device-load-telemetry-2026-06-28.md`](docs/fuel-reply-device-load-telemetry-2026-06-28.md).
+
+### Added
+
+- **`Stream::is_idle() -> Result<bool>`** on both `baracuda-driver` and
+  `baracuda-runtime` — a load-probe alias of `is_complete()` (wraps
+  `cuStreamQuery`/`cudaStreamQuery`; `Ok(true)` idle, `Ok(false)` busy).
+  Read-only: never synchronizes the stream or perturbs scheduling. Reflects
+  only this process's submissions to the stream.
+- **`nvml::Device::gpu_utilization_percent() -> Option<u8>`** — GPU core
+  busy-percent in the `Option<u8>` shape a load balancer wants, an honest
+  `None` (never a fabricated value) when the driver can't answer. Convenience
+  wrapper over `utilization()`. Captures *cross-process* device contention
+  (the signal Fuel can't measure itself); pairs with the existing
+  `compute_processes()`/`graphics_processes()` for an SM proxy.
+
+## 0.0.1-alpha.69 — 2026-06-20 (Fuel — Profile v1 kernel-seam: handshake + structure_key + FKC generator)
+
+Kernel-specialization / Baracuda↔Fuel **Profile v1** release. The cross-project
+kernel-seam contract (FDX tensor ABI + FKC kernel contracts + telemetry + a
+connect-time version handshake) was ratified by all parties (Fuel, Baracuda,
+Vulkane); this ships Baracuda's conforming surface, reconciled against the FKC
+fusion-patterns spec rev 4.
+
+### Added
+
+- **`baracuda-seam`** (new crate) — the Profile v1 kernel-seam handshake: the
+  frozen 56-byte `#[repr(C)] SeamHello` negotiation envelope plus the out-param
+  C-ABI entry point `baracuda_seam_hello()` that Fuel reads to negotiate a seam
+  profile and capability set (Kernel-Seam Interop §3.1/§3.5). Capability bits
+  reuse the FDX `BackendProbe` tokens.
+- **`structure_key` + `structure_key_token`** (`baracuda-kernels-types`) — the
+  canonical input/output layout-class join token, computed once by Baracuda from
+  a minimal `OperandDesc` projection and called by Fuel for triple duty
+  (telemetry tagging, FKC admissibility predicate, runtime dispatch), with a
+  lossless string codec. `structure_key_token` is the one-call cross-boundary
+  entry point.
+- **`baracuda-kernelgen`** (dev tool, `publish = false`) — the AOT
+  kernel-specialization generator: an abstract op IR lowered to CUDA, three
+  schedules (vectorized `float4`/`double2` / scalar / strided+broadcast),
+  f16/bf16/f32/f64 dtype breadth, and full **FKC contract emission** (provider
+  front-matter + `accept`/`return`/`op_params`/`caps`/`cost`/`precision`/
+  `determinism` + a declarative `pattern:` block with `extract:` for scalar
+  params) plus the `link_registry` roster. Go/no-go validated at **2.03×** on
+  sm_89; emitters audited conformant against FKC fusion-patterns rev 4 (incl. a
+  GELU-flavor fix — exact-erf kernels now emit `GeluErf`, not the tanh-name
+  `Gelu`).
+
+### Fixed
+
+- **`StructureKey.rank`** is the raw iteration rank (the widest operand rank),
+  renamed from `eff_rank` so the field no longer implies the (deferred)
+  contiguous-axis collapse.
+
 ## 0.0.1-alpha.68 — 2026-06-15 (Fuel — CUDA 13.3 / CCCL MSVC build fix)
 
 Build-system release driven by the Fuel team's CUDA 13.3 upgrade. No kernel

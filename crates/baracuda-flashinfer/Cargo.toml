@@ -1,6 +1,6 @@
 [package]
 name = "baracuda-flashinfer"
-version = "0.0.1-alpha.68"
+version = "0.0.1-alpha.72"
 description = "Safe, typed Rust wrappers for NVIDIA FlashInfer's inference-serving kernels: batched paged-KV attention decode, decode-time KV-cache append, cascade / prefix-cache attention-state merge, and sort-free top-K / top-P / min-P sampling. The canonical vLLM-style serving surface for the baracuda CUDA stack. Apache-2.0 (FlashInfer upstream)."
 readme = "README.md"
 edition.workspace = true

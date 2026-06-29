@@ -31,7 +31,7 @@ checksum = "c08606f8c3cbf4ce6ec8e28fb0014a2c086708fe954eaa885384a6165172e7e8"
 
 [[package]]
 name = "baracuda"
-version = "0.0.1-alpha.68"
+version = "0.0.1-alpha.72"
 dependencies = [
  "baracuda-cublas",
  "baracuda-cudf",
@@ -58,14 +58,14 @@ dependencies = [
 
 [[package]]
 name = "baracuda-build"
-version = "0.0.1-alpha.68"
+version = "0.0.1-alpha.72"
 dependencies = [
  "bindgen",
 ]
 
 [[package]]
 name = "baracuda-core"
-version = "0.0.1-alpha.68"
+version = "0.0.1-alpha.72"
 dependencies = [
  "baracuda-types",
  "libloading",
@@ -74,7 +74,7 @@ dependencies = [
 
 [[package]]
 name = "baracuda-cublas"
-version = "0.0.1-alpha.68"
+version = "0.0.1-alpha.72"
 dependencies = [
  "baracuda-core",
  "baracuda-cublas-sys",
@@ -86,7 +86,7 @@ dependencies = [
 
 [[package]]
 name = "baracuda-cublas-sys"
-version = "0.0.1-alpha.68"
+version = "0.0.1-alpha.72"
 dependencies = [
  "baracuda-build",
  "baracuda-core",
@@ -97,7 +97,7 @@ dependencies = [
 
 [[package]]
 name = "baracuda-cuda-sys"
-version = "0.0.1-alpha.68"
+version = "0.0.1-alpha.72"
 dependencies = [
  "baracuda-build",
  "baracuda-core",
@@ -107,7 +107,7 @@ dependencies = [
 
 [[package]]
 name = "baracuda-cudf"
-version = "0.0.1-alpha.68"
+version = "0.0.1-alpha.72"
 dependencies = [
  "baracuda-core",
  "baracuda-cudf-sys",
@@ -117,7 +117,7 @@ dependencies = [
 
 [[package]]
 name = "baracuda-cudf-sys"
-version = "0.0.1-alpha.68"
+version = "0.0.1-alpha.72"
 dependencies = [
  "baracuda-build",
  "baracuda-core",
@@ -128,7 +128,7 @@ dependencies = [
 
 [[package]]
 name = "baracuda-cudnn"
-version = "0.0.1-alpha.68"
+version = "0.0.1-alpha.72"
 dependencies = [
  "baracuda-core",
  "baracuda-cuda-sys",
@@ -141,7 +141,7 @@ dependencies = [
 
 [[package]]
 name = "baracuda-cudnn-sys"
-version = "0.0.1-alpha.68"
+version = "0.0.1-alpha.72"
 dependencies = [
  "baracuda-build",
  "baracuda-core",
@@ -152,7 +152,7 @@ dependencies = [
 
 [[package]]
 name = "baracuda-cufft"
-version = "0.0.1-alpha.68"
+version = "0.0.1-alpha.72"
 dependencies = [
  "baracuda-core",
  "baracuda-cuda-sys",
@@ -164,7 +164,7 @@ dependencies = [
 
 [[package]]
 name = "baracuda-cufft-sys"
-version = "0.0.1-alpha.68"
+version = "0.0.1-alpha.72"
 dependencies = [
  "baracuda-build",
  "baracuda-core",
@@ -175,7 +175,7 @@ dependencies = [
 
 [[package]]
 name = "baracuda-cufile"
-version = "0.0.1-alpha.68"
+version = "0.0.1-alpha.72"
 dependencies = [
  "baracuda-core",
  "baracuda-cufile-sys",
@@ -186,7 +186,7 @@ dependencies = [
 
 [[package]]
 name = "baracuda-cufile-sys"
-version = "0.0.1-alpha.68"
+version = "0.0.1-alpha.72"
 dependencies = [
  "baracuda-core",
  "baracuda-types",
@@ -195,7 +195,7 @@ dependencies = [
 
 [[package]]
 name = "baracuda-cupti"
-version = "0.0.1-alpha.68"
+version = "0.0.1-alpha.72"
 dependencies = [
  "baracuda-core",
  "baracuda-cupti-sys",
@@ -205,7 +205,7 @@ dependencies = [
 
 [[package]]
 name = "baracuda-cupti-sys"
-version = "0.0.1-alpha.68"
+version = "0.0.1-alpha.72"
 dependencies = [
  "baracuda-core",
  "baracuda-types",
@@ -214,7 +214,7 @@ dependencies = [
 
 [[package]]
 name = "baracuda-curand"
-version = "0.0.1-alpha.68"
+version = "0.0.1-alpha.72"
 dependencies = [
  "baracuda-core",
  "baracuda-cuda-sys",
@@ -226,7 +226,7 @@ dependencies = [
 
 [[package]]
 name = "baracuda-curand-sys"
-version = "0.0.1-alpha.68"
+version = "0.0.1-alpha.72"
 dependencies = [
  "baracuda-build",
  "baracuda-core",
@@ -237,7 +237,7 @@ dependencies = [
 
 [[package]]
 name = "baracuda-cusolver"
-version = "0.0.1-alpha.68"
+version = "0.0.1-alpha.72"
 dependencies = [
  "baracuda-core",
  "baracuda-cuda-sys",
@@ -249,7 +249,7 @@ dependencies = [
 
 [[package]]
 name = "baracuda-cusolver-sys"
-version = "0.0.1-alpha.68"
+version = "0.0.1-alpha.72"
 dependencies = [
  "baracuda-build",
  "baracuda-core",
@@ -260,7 +260,7 @@ dependencies = [
 
 [[package]]
 name = "baracuda-cusparse"
-version = "0.0.1-alpha.68"
+version = "0.0.1-alpha.72"
 dependencies = [
  "baracuda-core",
  "baracuda-cuda-sys",
@@ -272,7 +272,7 @@ dependencies = [
 
 [[package]]
 name = "baracuda-cusparse-sys"
-version = "0.0.1-alpha.68"
+version = "0.0.1-alpha.72"
 dependencies = [
  "baracuda-build",
  "baracuda-core",
@@ -283,7 +283,7 @@ dependencies = [
 
 [[package]]
 name = "baracuda-cutensor"
-version = "0.0.1-alpha.68"
+version = "0.0.1-alpha.72"
 dependencies = [
  "baracuda-core",
  "baracuda-cutensor-sys",
@@ -294,7 +294,7 @@ dependencies = [
 
 [[package]]
 name = "baracuda-cutensor-sys"
-version = "0.0.1-alpha.68"
+version = "0.0.1-alpha.72"
 dependencies = [
  "baracuda-core",
  "baracuda-types",
@@ -303,7 +303,7 @@ dependencies = [
 
 [[package]]
 name = "baracuda-cutlass"
-version = "0.0.1-alpha.68"
+version = "0.0.1-alpha.72"
 dependencies = [
  "baracuda-cublas",
  "baracuda-cublas-sys",
@@ -318,7 +318,7 @@ dependencies = [
 
 [[package]]
 name = "baracuda-cutlass-kernels-sys"
-version = "0.0.1-alpha.68"
+version = "0.0.1-alpha.72"
 dependencies = [
  "baracuda-cutlass-sys",
  "baracuda-forge",
@@ -326,14 +326,14 @@ dependencies = [
 
 [[package]]
 name = "baracuda-cutlass-sys"
-version = "0.0.1-alpha.68"
+version = "0.0.1-alpha.72"
 dependencies = [
  "fs2",
 ]
 
 [[package]]
 name = "baracuda-cuvs"
-version = "0.0.1-alpha.68"
+version = "0.0.1-alpha.72"
 dependencies = [
  "baracuda-core",
  "baracuda-cuda-sys",
@@ -346,7 +346,7 @@ dependencies = [
 
 [[package]]
 name = "baracuda-cuvs-sys"
-version = "0.0.1-alpha.68"
+version = "0.0.1-alpha.72"
 dependencies = [
  "baracuda-build",
  "baracuda-core",
@@ -357,7 +357,7 @@ dependencies = [
 
 [[package]]
 name = "baracuda-cvcuda"
-version = "0.0.1-alpha.68"
+version = "0.0.1-alpha.72"
 dependencies = [
  "baracuda-core",
  "baracuda-cvcuda-sys",
@@ -368,7 +368,7 @@ dependencies = [
 
 [[package]]
 name = "baracuda-cvcuda-sys"
-version = "0.0.1-alpha.68"
+version = "0.0.1-alpha.72"
 dependencies = [
  "baracuda-core",
  "baracuda-types",
@@ -377,7 +377,7 @@ dependencies = [
 
 [[package]]
 name = "baracuda-driver"
-version = "0.0.1-alpha.68"
+version = "0.0.1-alpha.72"
 dependencies = [
  "baracuda-core",
  "baracuda-cuda-sys",
@@ -406,7 +406,7 @@ dependencies = [
 
 [[package]]
 name = "baracuda-flashinfer"
-version = "0.0.1-alpha.68"
+version = "0.0.1-alpha.72"
 dependencies = [
  "baracuda-driver",
  "baracuda-flashinfer-sys",
@@ -417,14 +417,14 @@ dependencies = [
 
 [[package]]
 name = "baracuda-flashinfer-sys"
-version = "0.0.1-alpha.68"
+version = "0.0.1-alpha.72"
 dependencies = [
  "baracuda-kernels-sys",
 ]
 
 [[package]]
 name = "baracuda-forge"
-version = "0.0.1-alpha.68"
+version = "0.0.1-alpha.72"
 dependencies = [
  "baracuda-build",
  "fs2",
@@ -439,8 +439,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "baracuda-kernelgen"
+version = "0.0.1-alpha.72"
+dependencies = [
+ "baracuda-kernels-types",
+ "baracuda-nvrtc",
+ "fuel-kernel-seam",
+ "fuel-kernel-seam-types",
+]
+
+[[package]]
 name = "baracuda-kernels"
-version = "0.0.1-alpha.68"
+version = "0.0.1-alpha.72"
 dependencies = [
  "baracuda-cutlass",
  "baracuda-driver",
@@ -462,7 +472,7 @@ dependencies = [
 
 [[package]]
 name = "baracuda-kernels-bench"
-version = "0.0.1-alpha.68"
+version = "0.0.1-alpha.72"
 dependencies = [
  "baracuda-cublas",
  "baracuda-cublas-sys",
@@ -483,7 +493,7 @@ dependencies = [
 
 [[package]]
 name = "baracuda-kernels-sys"
-version = "0.0.1-alpha.68"
+version = "0.0.1-alpha.72"
 dependencies = [
  "baracuda-cutlass-kernels-sys",
  "baracuda-cutlass-sys",
@@ -492,7 +502,7 @@ dependencies = [
 
 [[package]]
 name = "baracuda-kernels-types"
-version = "0.0.1-alpha.68"
+version = "0.0.1-alpha.72"
 dependencies = [
  "baracuda-driver",
  "baracuda-types",
@@ -502,7 +512,7 @@ dependencies = [
 
 [[package]]
 name = "baracuda-megatron"
-version = "0.0.1-alpha.68"
+version = "0.0.1-alpha.72"
 dependencies = [
  "baracuda-cublas",
  "baracuda-driver",
@@ -514,7 +524,7 @@ dependencies = [
 
 [[package]]
 name = "baracuda-nccl"
-version = "0.0.1-alpha.68"
+version = "0.0.1-alpha.72"
 dependencies = [
  "baracuda-core",
  "baracuda-cuda-sys",
@@ -527,7 +537,7 @@ dependencies = [
 
 [[package]]
 name = "baracuda-nccl-sys"
-version = "0.0.1-alpha.68"
+version = "0.0.1-alpha.72"
 dependencies = [
  "baracuda-build",
  "baracuda-core",
@@ -538,7 +548,7 @@ dependencies = [
 
 [[package]]
 name = "baracuda-npp"
-version = "0.0.1-alpha.68"
+version = "0.0.1-alpha.72"
 dependencies = [
  "baracuda-core",
  "baracuda-driver",
@@ -549,7 +559,7 @@ dependencies = [
 
 [[package]]
 name = "baracuda-npp-sys"
-version = "0.0.1-alpha.68"
+version = "0.0.1-alpha.72"
 dependencies = [
  "baracuda-build",
  "baracuda-core",
@@ -560,7 +570,7 @@ dependencies = [
 
 [[package]]
 name = "baracuda-nvcomp"
-version = "0.0.1-alpha.68"
+version = "0.0.1-alpha.72"
 dependencies = [
  "baracuda-core",
  "baracuda-nvcomp-sys",
@@ -571,7 +581,7 @@ dependencies = [
 
 [[package]]
 name = "baracuda-nvcomp-sys"
-version = "0.0.1-alpha.68"
+version = "0.0.1-alpha.72"
 dependencies = [
  "baracuda-core",
  "baracuda-types",
@@ -580,7 +590,7 @@ dependencies = [
 
 [[package]]
 name = "baracuda-nvimagecodec"
-version = "0.0.1-alpha.68"
+version = "0.0.1-alpha.72"
 dependencies = [
  "baracuda-core",
  "baracuda-cuda-sys",
@@ -592,7 +602,7 @@ dependencies = [
 
 [[package]]
 name = "baracuda-nvimagecodec-sys"
-version = "0.0.1-alpha.68"
+version = "0.0.1-alpha.72"
 dependencies = [
  "baracuda-build",
  "baracuda-core",
@@ -603,7 +613,7 @@ dependencies = [
 
 [[package]]
 name = "baracuda-nvjitlink"
-version = "0.0.1-alpha.68"
+version = "0.0.1-alpha.72"
 dependencies = [
  "baracuda-core",
  "baracuda-driver",
@@ -614,7 +624,7 @@ dependencies = [
 
 [[package]]
 name = "baracuda-nvjitlink-sys"
-version = "0.0.1-alpha.68"
+version = "0.0.1-alpha.72"
 dependencies = [
  "baracuda-build",
  "baracuda-core",
@@ -624,7 +634,7 @@ dependencies = [
 
 [[package]]
 name = "baracuda-nvjpeg"
-version = "0.0.1-alpha.68"
+version = "0.0.1-alpha.72"
 dependencies = [
  "baracuda-core",
  "baracuda-cuda-sys",
@@ -636,7 +646,7 @@ dependencies = [
 
 [[package]]
 name = "baracuda-nvjpeg-sys"
-version = "0.0.1-alpha.68"
+version = "0.0.1-alpha.72"
 dependencies = [
  "baracuda-build",
  "baracuda-core",
@@ -647,7 +657,7 @@ dependencies = [
 
 [[package]]
 name = "baracuda-nvml"
-version = "0.0.1-alpha.68"
+version = "0.0.1-alpha.72"
 dependencies = [
  "baracuda-core",
  "baracuda-nvml-sys",
@@ -657,7 +667,7 @@ dependencies = [
 
 [[package]]
 name = "baracuda-nvml-sys"
-version = "0.0.1-alpha.68"
+version = "0.0.1-alpha.72"
 dependencies = [
  "baracuda-build",
  "baracuda-core",
@@ -667,7 +677,7 @@ dependencies = [
 
 [[package]]
 name = "baracuda-nvrtc"
-version = "0.0.1-alpha.68"
+version = "0.0.1-alpha.72"
 dependencies = [
  "baracuda-core",
  "baracuda-driver",
@@ -678,7 +688,7 @@ dependencies = [
 
 [[package]]
 name = "baracuda-nvrtc-sys"
-version = "0.0.1-alpha.68"
+version = "0.0.1-alpha.72"
 dependencies = [
  "baracuda-build",
  "baracuda-core",
@@ -688,7 +698,7 @@ dependencies = [
 
 [[package]]
 name = "baracuda-nvshmem"
-version = "0.0.1-alpha.68"
+version = "0.0.1-alpha.72"
 dependencies = [
  "baracuda-core",
  "baracuda-cuda-sys",
@@ -700,7 +710,7 @@ dependencies = [
 
 [[package]]
 name = "baracuda-nvshmem-sys"
-version = "0.0.1-alpha.68"
+version = "0.0.1-alpha.72"
 dependencies = [
  "baracuda-build",
  "baracuda-core",
@@ -711,7 +721,7 @@ dependencies = [
 
 [[package]]
 name = "baracuda-optim"
-version = "0.0.1-alpha.68"
+version = "0.0.1-alpha.72"
 dependencies = [
  "baracuda-driver",
  "baracuda-forge",
@@ -723,7 +733,7 @@ dependencies = [
 
 [[package]]
 name = "baracuda-ozimmu"
-version = "0.0.1-alpha.68"
+version = "0.0.1-alpha.72"
 dependencies = [
  "baracuda-cublas",
  "baracuda-driver",
@@ -733,7 +743,7 @@ dependencies = [
 
 [[package]]
 name = "baracuda-ozimmu-sys"
-version = "0.0.1-alpha.68"
+version = "0.0.1-alpha.72"
 dependencies = [
  "baracuda-build",
  "baracuda-cublas-sys",
@@ -743,7 +753,7 @@ dependencies = [
 
 [[package]]
 name = "baracuda-runtime"
-version = "0.0.1-alpha.68"
+version = "0.0.1-alpha.72"
 dependencies = [
  "baracuda-core",
  "baracuda-cuda-sys",
@@ -753,8 +763,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "baracuda-seam"
+version = "0.0.1-alpha.72"
+
+[[package]]
 name = "baracuda-tensorrt"
-version = "0.0.1-alpha.68"
+version = "0.0.1-alpha.72"
 dependencies = [
  "baracuda-core",
  "baracuda-cuda-sys",
@@ -766,7 +780,7 @@ dependencies = [
 
 [[package]]
 name = "baracuda-tensorrt-sys"
-version = "0.0.1-alpha.68"
+version = "0.0.1-alpha.72"
 dependencies = [
  "baracuda-build",
  "baracuda-core",
@@ -778,7 +792,7 @@ dependencies = [
 
 [[package]]
 name = "baracuda-transformer-engine"
-version = "0.0.1-alpha.68"
+version = "0.0.1-alpha.72"
 dependencies = [
  "baracuda-driver",
  "baracuda-transformer-engine-sys",
@@ -789,7 +803,7 @@ dependencies = [
 
 [[package]]
 name = "baracuda-transformer-engine-sys"
-version = "0.0.1-alpha.68"
+version = "0.0.1-alpha.72"
 dependencies = [
  "baracuda-build",
  "baracuda-cuda-sys",
@@ -798,7 +812,7 @@ dependencies = [
 
 [[package]]
 name = "baracuda-types"
-version = "0.0.1-alpha.68"
+version = "0.0.1-alpha.72"
 dependencies = [
  "baracuda-types-derive",
  "bytemuck",
@@ -809,7 +823,7 @@ dependencies = [
 
 [[package]]
 name = "baracuda-types-derive"
-version = "0.0.1-alpha.68"
+version = "0.0.1-alpha.72"
 dependencies = [
  "baracuda-types",
  "proc-macro2",
@@ -826,7 +840,7 @@ dependencies = [
  "bitflags",
  "cexpr",
  "clang-sys",
- "itertools 0.12.1",
+ "itertools",
  "lazy_static",
  "lazycell",
  "log",
@@ -976,7 +990,7 @@ dependencies = [
  "clap",
  "criterion-plot",
  "is-terminal",
- "itertools 0.10.5",
+ "itertools",
  "num-traits",
  "once_cell",
  "oorandom",
@@ -995,7 +1009,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6b50826342786a51a89e2da3a28f1c32b06e387201bc2d19791f622c673706b1"
 dependencies = [
  "cast",
- "itertools 0.10.5",
+ "itertools",
 ]
 
 [[package]]
@@ -1091,6 +1105,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "fuel-kernel-seam"
+version = "0.10.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "eb7c5cd680b80f8db17fa815c5a7ab3850c79af5adfd3775146455d919f79ac7"
+dependencies = [
+ "baracuda-kernels-types",
+ "fuel-kernel-seam-types",
+]
+
+[[package]]
+name = "fuel-kernel-seam-types"
+version = "0.10.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "862df2fe673037653822eea1224f1eeaef137648cca6dbb3a655e11061338f39"
+
+[[package]]
 name = "futures-core"
 version = "0.3.32"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1154,15 +1184,6 @@ name = "itertools"
 version = "0.10.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b0fd2260e829bddf4cb6ea802289de2f86d6a7a690192fbe91b3f46e0f2c8473"
-dependencies = [
- "either",
-]
-
-[[package]]
-name = "itertools"
-version = "0.12.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ba291022dbbd398a455acf126c1e341954079855bc60dfdda641363bd6922569"
 dependencies = [
  "either",
 ]
