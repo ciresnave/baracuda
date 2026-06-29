@@ -28,9 +28,10 @@ pub struct DeviceBuffer<T: DeviceRepr> {
     context: Context,
     /// Origin stream for buffers allocated via a `*_async` constructor.
     /// `Some` ⇒ [`Drop`] reclaims via `cuMemFreeAsync` on this stream
-    /// (stream-ordered free, safe even while a kernel that used the
-    /// buffer is still pending); `None` ⇒ synchronous `cuMemFree`.
-    /// Cloning a `Stream` is just an `Arc` bump, so retaining it is cheap.
+    /// (stream-ordered free, safe even while a kernel that used the buffer
+    /// *on this same stream* is still pending); `None` ⇒ synchronous
+    /// `cuMemFree`. Cloning a `Stream` is just an `Arc` bump, so retaining
+    /// it is cheap.
     stream: Option<Stream>,
     _marker: PhantomData<T>,
 }
@@ -102,6 +103,17 @@ impl<T: DeviceRepr> DeviceBuffer<T> {
     /// device's stream-ordered memory pool for reuse across a chain, so a
     /// realize of many ops peaks at roughly the live working set rather
     /// than re-`cuMemAlloc`-ing each step.
+    ///
+    /// **Precondition (single-stream):** this ordering guarantee holds only
+    /// for work submitted to *this same* `stream`. If you use the buffer on
+    /// a *different* stream (e.g. launch a consumer kernel on stream `B`),
+    /// the `Drop` free on the origin stream is **not** automatically ordered
+    /// after that work — you must order the origin stream after it first
+    /// (record an event on `B` and [`Stream::wait_event`] it into the origin
+    /// stream), or free explicitly with [`free_async`](Self::free_async) on a
+    /// suitably-ordered stream. Otherwise the block can be reclaimed (and
+    /// reissued) while the other stream's kernel is still reading it. Using
+    /// the buffer only on its origin stream needs no such care.
     ///
     /// [`free_async`](Self::free_async) is still available if you want to
     /// free at an explicit point rather than at scope exit.
@@ -954,16 +966,27 @@ impl<T: DeviceRepr> Drop for DeviceBuffer<T> {
         }
         let Ok(d) = driver() else { return };
         // Stream-ordered free for `*_async`-allocated buffers: enqueue
-        // `cuMemFreeAsync` on the origin stream so the reclaim is ordered
-        // after any kernel still using the buffer. If that fails to load
-        // (e.g. pre-11.2 driver) fall through to the synchronous free.
+        // `cuMemFreeAsync` on the origin stream so the reclaim is ordered after
+        // work already submitted there. The matching `cuMemAllocAsync` resolved
+        // when this buffer was constructed, so the free symbol is present too.
+        //
+        // If the enqueue itself errors we deliberately do NOT fall back to a
+        // synchronous `cuMemFree`: this is a stream-ordered pool allocation that
+        // may still be referenced by pending work on the stream, and an immediate
+        // free could reclaim it out from under a running kernel — the very
+        // use-after-free this path exists to prevent. Leak instead (the owning
+        // context, still held in `self.context`/the stream, reclaims it at
+        // teardown). The error path is unreachable on a healthy stream.
         if let Some(stream) = &self.stream {
             if let Ok(cu) = d.cu_mem_free_async() {
-                if check(unsafe { cu(self.ptr, stream.as_raw()) }).is_ok() {
-                    return;
-                }
+                let _ = check(unsafe { cu(self.ptr, stream.as_raw()) });
+                return;
             }
+            // `cuMemFreeAsync` unavailable (pre-CUDA-11.2): no async buffer
+            // should exist on such a driver, but fall through defensively.
         }
+        // Synchronous free: the path for sync-allocated buffers (`stream` ==
+        // None), plus the pre-11.2 defensive fallback above.
         if let Ok(cu) = d.cu_mem_free() {
             let _ = unsafe { cu(self.ptr) };
         }
