@@ -1,6 +1,6 @@
 [package]
 name = "baracuda-flashinfer-sys"
-version = "0.0.1-alpha.70"
+version = "0.0.1-alpha.71"
 description = "Raw C-ABI FFI surface for the vendored FlashInfer inference kernels (paged-KV decode, paged-KV append, cascade state merge, sort-free sampling). The launcher shims + vendored FlashInfer sources are compiled by `baracuda-kernels-sys`; this crate is a thin re-export facade so the FlashInfer C-ABI is reachable under its own crate name. Apache-2.0 (FlashInfer upstream) — see `crates/baracuda-kernels-sys/vendor/flashinfer/`."
 readme = "README.md"
 edition.workspace = true

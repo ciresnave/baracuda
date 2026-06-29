@@ -1,6 +1,6 @@
 [package]
 name = "baracuda-cuvs-sys"
-version = "0.0.1-alpha.70"
+version = "0.0.1-alpha.71"
 description = "Raw FFI bindings and dynamic loader for NVIDIA cuVS (GPU vector search / ANN)."
 edition.workspace = true
 rust-version.workspace = true

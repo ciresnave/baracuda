@@ -8,6 +8,55 @@ alpha represents one or more completed phases.
 The phase numbering is Fuel-driven (Fuel is baracuda's primary downstream
 consumer); see `ROADMAP.md` for the active phase board.
 
+## 0.0.1-alpha.71 — 2026-06-29 (Fuel — stream-ordered free for async dispatch)
+
+Stream-ordered *free* to match the existing stream-ordered *alloc*, so Fuel's
+Step E A3 async dispatch can drop the per-op `stream.synchronize()` without
+risking use-after-free on scratch / output buffers. A `DeviceBuffer` allocated
+via a `*_async` constructor now **retains its origin stream** and reclaims via
+`cuMemFreeAsync` / `cudaFreeAsync` on [`Drop`] — the free is enqueued *after*
+any kernel still using the buffer, so it's safe by construction with no host
+sync and no executor-side lifetime guard. Synchronous callers are completely
+unchanged. See
+[`docs/fuel-reply-stream-ordered-free-2026-06-29.md`](docs/fuel-reply-stream-ordered-free-2026-06-29.md).
+
+### Added
+
+- **`DeviceBuffer::zeros_async(.., len, stream)`** on both `baracuda-driver`
+  and `baracuda-runtime` — stream-ordered allocate-and-zero (`*MallocAsync` +
+  `*MemsetAsync` on `stream`). The async counterpart of `zeros`, intended for
+  **output buffers** so they free stream-ordered like workspaces do. Retains
+  the stream; reclaims via the async free on `Drop`.
+
+### Changed
+
+- **`DeviceBuffer` allocated via `new_async` / `zeros_async` now frees
+  stream-ordered on `Drop`** (was: synchronous `cuMemFree` / `cudaFree`
+  regardless of how it was allocated). The buffer retains its origin stream
+  (a cheap `Arc` clone — `Stream` is `Arc`-backed) and `Drop` enqueues
+  `cuMemFreeAsync` / `cudaFreeAsync` on it; freed blocks return to the
+  device's stream-ordered memory pool for reuse across a realize chain
+  (peak VRAM ≈ live working set, no repeated real `cuMemAlloc`). If the async
+  free symbol is unavailable (pre-CUDA-11.2), `Drop` falls back to the
+  synchronous free.
+  - **No behavior change for synchronous callers.** Buffers from `new` /
+    `zeros` / `from_slice` retain no stream and free synchronously exactly as
+    before.
+  - The explicit consuming `free_async(self, stream)` still works for callers
+    that want to free at a specific point rather than at scope exit.
+
+### Verified
+
+- New GPU-gated smoke tests on an RTX 4070 (sm_89, driver 610.47, CUDA 11.2+):
+  `async_drop_is_stream_ordered` (driver) launches `vector_add`, then drops the
+  two `new_async` input buffers **before** any synchronize — the async free is
+  ordered after the kernel, so the 16K-element result is bit-exact;
+  `zeros_async_is_zeroed` (driver) and `zeros_async_and_implicit_stream_drop`
+  (runtime) confirm `zeros_async` zeroing and implicit-`Drop` reclaim. Existing
+  `async_alloc_roundtrip` / `async_alloc_round_trip` (explicit `free_async`)
+  still green. (compute-sanitizer not run — unavailable on the local box; the
+  ordered-free correctness is exercised functionally by the pending-read test.)
+
 ## 0.0.1-alpha.70 — 2026-06-28 (Fuel — device-load telemetry aliases)
 
 Convenience aliases for Fuel's `DeviceLoadSelector` (Step E, Phase B2). Both
