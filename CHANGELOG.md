@@ -8,6 +8,42 @@ alpha represents one or more completed phases.
 The phase numbering is Fuel-driven (Fuel is baracuda's primary downstream
 consumer); see `ROADMAP.md` for the active phase board.
 
+## 0.0.1-alpha.72 — 2026-06-29 (harden alpha.71 stream-ordered free)
+
+Post-ship hardening of the alpha.71 stream-ordered free, from an adversarial
+multi-lens review. Two fixes; no API change. Pull alpha.72 rather than alpha.71.
+See [`docs/fuel-reply-stream-ordered-free-2026-06-29.md`](docs/fuel-reply-stream-ordered-free-2026-06-29.md)
+(updated for alpha.72).
+
+### Fixed
+
+- **`DeviceBuffer::drop` no longer falls back to a *synchronous* free when the
+  async free *call* errors** (driver + runtime). alpha.71's `Drop` dropped
+  through to `cuMemFree` / `cudaFree` on any non-success from
+  `cuMemFreeAsync` / `cudaFreeAsync`, not only on a missing symbol — and a
+  synchronous free of a stream-ordered pool allocation that may still be
+  referenced by pending stream work is the exact use-after-free the feature
+  exists to prevent. Now the synchronous fallback fires **only** when the async
+  free *symbol* is unavailable (genuine pre-CUDA-11.2); on an async-free *call*
+  error the block is **leaked** (reclaimed at context/device teardown) rather
+  than synchronously freed. The happy path is unchanged — the async free
+  succeeds and returns — and the error path is unreachable on a healthy stream.
+  This is a defensive-path fix: the common single-stream dispatch path never
+  reached the old fallback.
+
+### Documentation
+
+- **Documented the single-origin-stream precondition** on `new_async` /
+  `zeros_async` (both crates) and in the Fuel reply. The stream-ordered `Drop`
+  free is ordered only against work on the buffer's **origin stream**; a buffer
+  consumed on a *different* stream needs an explicit event/cross-stream
+  dependency (or `free_async` on a suitably-ordered stream) before it drops.
+  Replaces the unqualified "safe by construction" wording. (CUDA's standard
+  stream-ordered-allocator contract — stated so a future multi-stream scheduler
+  doesn't silently reintroduce a UAF.)
+- Corrected the `Drop` rustdoc/comments: the synchronous fallback is the
+  pre-11.2 + sync-allocated-buffer path, not a catch-all for async-free errors.
+
 ## 0.0.1-alpha.71 — 2026-06-29 (Fuel — stream-ordered free for async dispatch)
 
 Stream-ordered *free* to match the existing stream-ordered *alloc*, so Fuel's
