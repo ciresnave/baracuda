@@ -225,3 +225,15 @@ fn event_record_with_flags() {
     stream.synchronize().unwrap();
     assert!(e.is_complete().unwrap());
 }
+
+#[test]
+#[ignore = "requires an NVIDIA GPU"]
+fn stream_is_idle_after_sync() {
+    // `is_idle()` is the load-probe alias of `is_complete()`: read-only,
+    // never synchronizes. After a synchronize the freshly-drained stream
+    // must report idle, and is_idle must agree with is_complete.
+    let (_dev, _ctx, stream) = setup().expect("setup");
+    stream.synchronize().unwrap();
+    assert!(stream.is_idle().unwrap(), "drained stream should be idle");
+    assert_eq!(stream.is_idle().unwrap(), stream.is_complete().unwrap());
+}

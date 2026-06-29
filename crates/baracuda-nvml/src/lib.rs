@@ -198,6 +198,20 @@ impl Device {
         })
     }
 
+    /// GPU core utilization as a 0–100 percent, or `None` when the driver
+    /// can't answer — an honest "no signal", never a fabricated value.
+    ///
+    /// Convenience wrapper over [`utilization`](Self::utilization) returning
+    /// just the `gpu` field in the `Option<u8>` shape a load balancer wants.
+    /// Unlike a this-process stream query
+    /// (`baracuda_driver::Stream::is_idle`), NVML utilization reflects *every*
+    /// process sharing the GPU — the signal to use when other jobs may be
+    /// contending for the device. Read-only; never panics.
+    #[inline]
+    pub fn gpu_utilization_percent(&self) -> Option<u8> {
+        self.utilization().ok().map(|u| u.gpu.min(100) as u8)
+    }
+
     /// Raw `nvmlDevice_t`. Use with care.
     #[inline]
     pub fn as_raw(&self) -> nvmlDevice_t {

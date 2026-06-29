@@ -97,6 +97,21 @@ impl Stream {
         }
     }
 
+    /// `Ok(true)` if this stream is idle (every piece of work *this process*
+    /// submitted to it has drained), `Ok(false)` while work is still pending.
+    ///
+    /// A read-only alias of [`is_complete`](Self::is_complete) phrased for
+    /// load probes: it wraps `cudaStreamQuery`, so it never synchronizes the
+    /// stream or perturbs scheduling. The signal reflects only the calling
+    /// process's submissions to *this* stream — for cross-process device
+    /// load use NVML utilization (`baracuda_nvml::Device::gpu_utilization_percent`).
+    /// A scheduler that wants a plain `bool` can treat "can't tell" as busy
+    /// with `.unwrap_or(false)`.
+    #[inline]
+    pub fn is_idle(&self) -> Result<bool> {
+        self.is_complete()
+    }
+
     /// The device this stream belongs to.
     #[inline]
     pub fn device(&self) -> Device {
