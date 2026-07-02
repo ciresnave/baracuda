@@ -28,6 +28,34 @@ Expected: `ALL PASSED` (bit-exact, `maxerr 0`; NaN propagated).
 
 **Last run:** RTX 4070 Laptop (sm_89), CUDA 13.3 / nvcc 13.3 — **all 6 cases PASS**.
 
+## Benchmark — `reduce_bench.cu`
+
+Compares the fast-path (last-axis) vs general (outer-axis) reduction on a large
+`[8192,8192]` f32 tensor against a copy-bandwidth reference. Reductions are
+memory-bound, so GB/s vs. the copy peak is the figure of merit.
+
+```
+nvcc -O3 -arch=sm_89 reduce_bench.cu -o reduce_bench && ./reduce_bench
+```
+
+**RTX 4070 Laptop (sm_89):**
+
+| kernel | ms | GB/s |
+| --- | --- | --- |
+| copy (bandwidth ref, read+write) | 2.74 | 195.7 |
+| reduce **last** axis (fast path, 1 thread/row) | 5.15 | 52.2 |
+| reduce **axis 0** (general/outer, 1 thread/col) | 2.68 | 100.2 |
+
+**Finding:** the "fast path" (contiguous last-axis, `base=o*k`) is **1.9× SLOWER**
+than the general outer-axis path — adjacent threads read different rows
+(**uncoalesced**, 32 KB apart) vs. adjacent columns (**coalesced**). Both sit well
+below the ~196 GB/s copy ceiling: the one-thread-per-output sequential fold
+under-utilizes memory. Perf follow-ups: (1) route the last-axis reduction to a
+**warp/block-cooperative** kernel (coalesced reads + shuffle reduce — the
+`Access::RowReduce` emit already does this), and (2) the block-parallel outer-axis
+kernel the design doc §9/§10 reserves. The `ReduceAxisClass` schedule token already
+exists so these land as additive drop-ins, not a re-key.
+
 > This is a manual harness (needs `nvcc` + generated `.cu`), not wired into
 > `cargo test`. The `#include`d kernel names track the catalog cells in
 > `bin/kernelgen.rs`; update both together.
