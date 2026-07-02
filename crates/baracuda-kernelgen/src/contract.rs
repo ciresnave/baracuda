@@ -23,7 +23,7 @@
 //! helpers below so reconciliation is a localized change.
 
 use crate::backend::GeneratedKernel;
-use crate::ir::{BinaryOp, OpDef, ScalarExpr, UnaryOp};
+use crate::ir::{BinaryOp, ExprDag, NodeId, OpDef, ScalarExpr, UnaryOp};
 use crate::pattern::{derive_pattern, to_fkc, PatternNode};
 use baracuda_kernels_types::{Contiguity, ElementKind, StructureKey, VecWidth};
 
@@ -200,17 +200,19 @@ fn scan_params(e: &ScalarExpr, out: &mut Vec<u8>) {
     }
 }
 
-/// Declared flop count per output element: one per arithmetic / unary node.
+/// Declared flop count per output element: **one per distinct arithmetic / unary
+/// node in the value DAG**.
+///
+/// Counting the [`ExprDag`] (not the authored tree) charges a shared interior
+/// *once* — matching the item-02 emitter, which hoists it to a `tmp` computed
+/// once. A body with no sharing counts identically to the old tree walk, so this
+/// is a pure fix: `flops_per_elem` for a body with a duplicated subtree **drops**
+/// (to the honest, actually-computed count) and never rises.
 fn count_flops(e: &ScalarExpr) -> u32 {
-    match e {
-        ScalarExpr::Input(_) | ScalarExpr::Const(_) | ScalarExpr::Param(_) | ScalarExpr::Reduced(_) => 0,
-        ScalarExpr::Unary(_, x) => 1 + count_flops(x),
-        ScalarExpr::Add(a, b)
-        | ScalarExpr::Sub(a, b)
-        | ScalarExpr::Mul(a, b)
-        | ScalarExpr::Div(a, b)
-        | ScalarExpr::Binary(_, a, b) => 1 + count_flops(a) + count_flops(b),
-    }
+    let dag = ExprDag::from_expr(e);
+    (0..dag.len() as NodeId)
+        .filter(|&id| !dag.node(id).is_leaf())
+        .count() as u32
 }
 
 /// Conservative max-ULP bound over the lowered body — a *declared upper bound*,
@@ -428,6 +430,22 @@ mod tests {
         let a = OperandDesc::new(2, &[128, 256], &[256, 1], ElementKind::F32, 256);
         let operands: Vec<_> = std::iter::repeat_n(a, n_operands).collect();
         structure_key(op_cat, &operands, ArchSku::Sm89)
+    }
+
+    #[test]
+    fn flops_count_dedups_shared_subtree() {
+        use crate::ir::konst;
+        // out = g / (g + 1), g = a*b: the product appears on both sides but is
+        // computed once by the emitter, so it is charged once. Distinct DAG
+        // non-leaf nodes: Mul, Add, Div = 3 (a tree walk would count Mul twice → 4).
+        let g = input(0) * input(1);
+        assert_eq!(count_flops(&(g.clone() / (g + konst(1.0))).0), 3);
+        // Structurally-identical products authored separately still hash-cons to one.
+        let (m1, m2) = (input(0) * input(1), input(0) * input(1));
+        assert_eq!(count_flops(&(m1 / (m2 + konst(1.0))).0), 3);
+        // A genuinely different second product does NOT merge → 4 ops.
+        let distinct = (input(0) * input(1)) / ((input(0) * input(2)) + konst(1.0));
+        assert_eq!(count_flops(&distinct.0), 4);
     }
 
     #[test]

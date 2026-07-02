@@ -38,20 +38,25 @@ interiors change the emitted text.
 ## Deferred
 
 1. **Reduction / RowReduce epilogue dedup** (`cuda.rs` `emit_reduction`,
-   `emit_row_reduce`). These still call `lower_expr` on sub-expressions inside
-   fold / stage / epilogue contexts. Route each through `lower_dag` so Softmax's
-   shared `exp(x - max)` (feeding both the sum stage `pre` and the epilogue) is
-   computed once. Care: the `elem` in a `Max`/`Min` fold is used at the seed
-   *and* in the loop — its prelude must sit at the right scope; the RowReduce
-   `lower` closure lowers several exprs (stages + epilogue), each needing its own
-   `tmp` scope. This is where shared interiors first appear in *real* ops, so it
-   is the highest-value follow-up. Add the shared-`Reduced` Softmax case to
-   `dag_validate.cu` + run compute-sanitizer `synccheck`/`racecheck`/`initcheck`
-   on it (the warp-shuffle path must not be perturbed).
-2. **Contract cost DAG-count** (`contract.rs` `count_ops` / `count_flops`). Today
-   they walk the `PatternNode`/`ScalarExpr` tree and **double-count** a duplicated
-   subtree. Count distinct DAG nodes instead so `flops_per_elem` drops (never
-   rises) for a shared body. Golden update called out where sharing exists.
+   `emit_row_reduce`). **Finding (2026-07-02): lower priority than the brief
+   implied.** The headline case — Softmax's shared `exp(x - max)` feeding both the
+   sum stage and the epilogue — is a **cross-pass** share (the reduction fold and
+   the epilogue store loop are separate passes over different elements at different
+   times), so it is *not* a `tmp`-hoist `lower_dag` can express; it is inherent to
+   the two-pass structure. `lower_dag` only dedups *intra-expression* sharing, and
+   **no current fused op** (Softmax / RmsNorm / LayerNorm) has an intra-epilogue
+   shared interior — so routing these paths through `lower_dag` is **byte-identical
+   today** and benefits zero current ops. Deferred until a fused op with a
+   genuinely shared epilogue interior exists (then route the epilogue — a clean
+   single-expr site — through `lower_dag`; the `Max`/`Min` fold `elem`, used at
+   seed *and* loop, needs per-scope preludes and is the trickier site).
+2. **Contract cost DAG-count** (`contract.rs` `count_flops`). **DONE (2026-07-02).**
+   `count_flops` now counts distinct non-leaf `ExprDag` nodes, so a shared subtree
+   is charged once — matching the emitter, which computes it once. `flops_per_elem`
+   for a body with a duplicated subtree **drops** to the honest count, never rises;
+   a body with no sharing is unchanged. Test `flops_count_dedups_shared_subtree`.
+   (`ulp_bound` intentionally stays tree-based — over-stating the error bound is the
+   safe direction; under-stating is not.)
 3. **Seam `region_to_op`** (`jit.rs`). Hash-cons the region Fuel sends (dedup
    duplicated subtrees — pure codegen win, recipe still re-describes the sent
    region) and **rewrite the tree-only soundness docstring** (`jit.rs:401-405`).
