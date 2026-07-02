@@ -33,31 +33,38 @@ schema — the populator only *produces* `DispatchEntry`s to feed it.
 
 ---
 
-## Deferred — the populator (steps 6–8 of the parent brief)
+## Populator seam — LANDED (2026-07-02, `baracuda-kernels-bench/src/lib.rs`)
 
-1. **`HwStamp::current()`** — a bench-side constructor (in `baracuda-kernels-bench`
-   or behind a `baracuda-driver` query) filling `arch` + `device_name` +
-   `cuda_version`. Inject `captured_unix_s` from the caller (keep the types crate
-   wall-clock-free). This is the provenance stamp every `Measured` row carries.
-2. **`gate_cell()`** — in `crates/baracuda-kernels-bench/src/lib.rs`: given a cell
-   `StructureKey` and a set of `(Implementor, entry_point, &mut dyn FnMut())`
-   candidates, time each via the existing `measure_median_ns`, build
-   `Vec<CandidateResult>`, and reduce with `winner_of`. **Correctness gate first**:
-   a candidate is admitted only after its output matches the strided oracle within
-   tolerance (design §10) — a fast-but-wrong candidate is rejected, never ranked.
-   A generated candidate that has not passed nvrtc-headerless + nvcc-numeric +
-   compute-sanitizer must not be rankable (precondition assert).
-3. **CSV extension** — add additive `structure_key: Option<String>`, `arch`,
+1. **`current_hwstamp(device)`** — **DONE.** Bench-side constructor: maps the
+   device's compute capability to `ArchSku` via `arch_sku_of` (sm_89→Sm89,
+   other sm_8x→Sm80, sm_9x→Sm90a), fills `device_name` (`Device::name`) +
+   `cuda_version` (`baracuda_driver::version`) + wall-clock `captured_unix_s`
+   (the bench crate, not the deterministic types crate). Off-device unit test for
+   the mapping; on-device smoke confirms the RTX 4070 stamps as sm89.
+2. **`gate_cell(ctx, stream, key, measured_on, samples, inner, candidates)`** —
+   **DONE.** Times each `(Implementor, entry_point, Box<dyn FnMut() + 'a>)`
+   candidate via `measure_median_ns`, builds `Vec<CandidateResult>`, reduces with
+   `winner_of` → a `Provenance::Measured` `DispatchEntry` ready to `merge`.
+   Correctness stays the caller's precondition (documented on the fn, matching
+   `winner_of`): only pre-validated candidates are timed; a generated candidate
+   must have passed the nvrtc/nvcc/sanitizer gate first. On-device smoke times two
+   candidates → measured entry → `merge` over a seed.
+
+## Deferred — the specific-bench wiring (plumbing over the landed seam)
+
+1. **CSV extension** — add additive `structure_key: Option<String>`, `arch`,
    `implementor` columns to `PhaseTwentyNineRow` (keep existing columns; bump the
    header). Emit one row per candidate.
-4. **Wire `gemm_vs_cublas`** — for each `(M,K=N,dtype)`, build the `StructureKey`,
+2. **Wire `gemm_vs_cublas`** — for each `(M,K=N,dtype)`, build the `StructureKey`,
    run `gate_cell` over `{cuBLAS, CUTLASS-bespoke}` (generated absent — an honest
    empty slot), append gated rows. Then `elementwise.rs` (generated vs bespoke)
-   once kernelgen emits the matching cell.
-5. **CSV → table reducer** — a tool (extend `tools/build_benchmarks_table.py` or a
+   once kernelgen emits the matching cell. This needs a **correctness oracle** per
+   candidate (diff vs the generic strided kernel) before timing — `gate_cell`
+   assumes pre-validated candidates.
+3. **CSV → table reducer** — a tool (extend `tools/build_benchmarks_table.py` or a
    Rust bin) that reads gated CSVs, calls `merge()` over the seed table, and
    regenerates the committed `dispatch_table.rs` via `emit_dispatch_table`.
-6. **Contract provenance** — thread the cell's dispatch decision into
+4. **Contract provenance** — thread the cell's dispatch decision into
    `contract.rs` so `cost.provenance` reads `declared`/`measured`/`vendor`, and
    `contract()` returns `None` for a `vendor` cell (no bindable contract). Preserve
    the `fkc_dtype`-`None` honest-miss path.

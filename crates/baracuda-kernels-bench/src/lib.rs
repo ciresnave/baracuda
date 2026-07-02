@@ -57,7 +57,10 @@
 
 use std::time::Duration;
 
-use baracuda_driver::{init, Context, Device, Event, Stream};
+use baracuda_driver::{init, version, Context, Device, Event, Stream};
+use baracuda_kernels_types::{
+    winner_of, ArchSku, CandidateResult, DispatchEntry, HwStamp, Implementor, StructureKey,
+};
 
 // ---------------------------------------------------------------------
 // Device init
@@ -72,6 +75,88 @@ pub fn setup_device() -> (Context, Stream) {
     let ctx = Context::new(&device).expect("Context::new failed");
     let stream = Stream::new(&ctx).expect("Stream::new failed");
     (ctx, stream)
+}
+
+// ---------------------------------------------------------------------
+// Dispatch bench gate — the item-07 dispatch-table *populator* (v1)
+// ---------------------------------------------------------------------
+//
+// The dispatch-table schema + decision logic (`winner_of`/`seed_winner`/`merge`)
+// live in `baracuda-kernels-types::dispatch`. This is the on-device half: measure
+// each candidate for a cell and reduce to a `DispatchEntry` via `winner_of`, then
+// `merge` those measured rows over the hand-seeded table. It is the v1 populator;
+// Fuel's `dispatch_record` feed is the v2 populator through the same `merge` seam.
+
+/// Map a device's `(major, minor)` compute capability to the specialization
+/// `ArchSku`. Ada (sm_89) is its own SKU; other Ampere (sm_80/86/87) keys to the
+/// `Sm80` cell (an sm_80 kernel is forward-compatible within Ampere); Hopper
+/// (sm_90) to `Sm90a`. `None` for a capability with no built cell.
+#[must_use]
+pub fn arch_sku_of(major: u32, minor: u32) -> Option<ArchSku> {
+    match (major, minor) {
+        (8, 9) => Some(ArchSku::Sm89), // Ada — RTX 4070 / RTX 6000 Ada / L40S
+        (8, _) => Some(ArchSku::Sm80), // Ampere — A100 (sm_80), consumer sm_86/87
+        (9, _) => Some(ArchSku::Sm90a), // Hopper
+        _ => None,
+    }
+}
+
+/// The hardware-provenance stamp for the current device — arch + device name +
+/// CUDA version + capture time. `None` if the device reports a capability with no
+/// built cell (`arch_sku_of` miss). The capture time is read from the wall clock
+/// here (the bench crate, not the deterministic types crate) and is dropped from
+/// the committed routing artifact, so it never churns the diff.
+#[must_use]
+pub fn current_hwstamp(device: &Device) -> Option<HwStamp> {
+    let (major, minor) = device.compute_capability().ok()?;
+    let arch = arch_sku_of(major, minor)?;
+    let device_name = device.name().ok()?;
+    let cuda_version = version().ok().map(|v| v.to_string()).unwrap_or_default();
+    let captured_unix_s = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    Some(HwStamp {
+        arch,
+        device_name,
+        cuda_version,
+        captured_unix_s,
+    })
+}
+
+/// Time every candidate for a cell and reduce to a measured [`DispatchEntry`].
+///
+/// Each candidate is `(implementor, entry_point, launch)`; `launch` enqueues one
+/// invocation (the same contract as [`measure_median_ns`]'s closure).
+/// [`winner_of`] picks the min-median winner and computes the margin; the result
+/// is a `Provenance::Measured` entry ready to [`baracuda_kernels_types::merge`]
+/// over the seeded table. Returns `None` for an empty candidate set.
+///
+/// **Correctness is the caller's precondition** (as for `winner_of`): only pass
+/// candidates whose output already matched the op's numeric oracle — a
+/// fast-but-wrong candidate must be rejected *before* it is timed here, never
+/// ranked. A generated candidate must additionally have passed the standing
+/// nvrtc/nvcc/compute-sanitizer gate.
+#[must_use]
+pub fn gate_cell<'a>(
+    ctx: &Context,
+    stream: &Stream,
+    key: &StructureKey,
+    measured_on: Option<HwStamp>,
+    samples: usize,
+    inner: u64,
+    candidates: Vec<(Implementor, Option<String>, Box<dyn FnMut() + 'a>)>,
+) -> Option<DispatchEntry> {
+    let mut results = Vec::with_capacity(candidates.len());
+    for (implementor, entry_point, mut launch) in candidates {
+        let median_ns = measure_median_ns(ctx, stream, samples, inner, || launch());
+        results.push(CandidateResult {
+            implementor,
+            median_ns,
+            entry_point,
+        });
+    }
+    winner_of(key.to_token(), results, measured_on)
 }
 
 // ---------------------------------------------------------------------
@@ -684,5 +769,56 @@ impl PytorchBaseline {
         self.by_key
             .get(&(op.to_owned(), shape.to_owned(), dtype.to_owned()))
             .copied()
+    }
+}
+
+#[cfg(test)]
+mod gate_tests {
+    use super::*;
+    use baracuda_kernels_types::{
+        merge, structure_key, DispatchEntry, DispatchTable, ElementKind, OpCategory, OperandDesc,
+        Provenance,
+    };
+
+    #[test]
+    fn arch_sku_maps_capabilities() {
+        assert_eq!(arch_sku_of(8, 9), Some(ArchSku::Sm89)); // Ada — RTX 4070
+        assert_eq!(arch_sku_of(8, 0), Some(ArchSku::Sm80)); // A100
+        assert_eq!(arch_sku_of(8, 6), Some(ArchSku::Sm80)); // consumer Ampere
+        assert_eq!(arch_sku_of(9, 0), Some(ArchSku::Sm90a)); // Hopper
+        assert_eq!(arch_sku_of(7, 5), None); // Turing — no built cell
+    }
+
+    /// On-device smoke: the RTX 4070 stamps as sm89, and `gate_cell` times two
+    /// candidates into a measured `DispatchEntry` that `merge` folds over a seed.
+    /// Ignored by default (needs a live GPU); run with `--ignored`.
+    #[test]
+    #[ignore = "requires a CUDA device"]
+    fn hwstamp_and_gate_on_device() {
+        let (ctx, stream) = setup_device();
+        let device = Device::get(0).expect("device");
+        let stamp = current_hwstamp(&device).expect("hwstamp");
+        assert_eq!(stamp.arch, ArchSku::Sm89, "RTX 4070 is Ada/sm89");
+        assert!(!stamp.device_name.is_empty());
+
+        let a = OperandDesc::new(1, &[1 << 16], &[1], ElementKind::F32, 256);
+        let key = structure_key(OpCategory::BinaryElementwise, &[a, a, a], ArchSku::Sm89);
+        // Two trivial (no-op) candidates — enough to exercise the time→reduce loop.
+        let cands: Vec<(Implementor, Option<String>, Box<dyn FnMut()>)> = vec![
+            (Implementor::Generated, Some("gen".into()), Box::new(|| {})),
+            (Implementor::Cublas, None, Box::new(|| {})),
+        ];
+        let entry = gate_cell(&ctx, &stream, &key, Some(stamp), 5, 10, cands).expect("entry");
+        assert_eq!(entry.provenance, Provenance::Measured);
+        assert_eq!(entry.ranked.len(), 2, "both candidates timed");
+        assert!(entry.margin.is_finite() && entry.margin >= 1.0);
+
+        // The measured entry folds into a seeded table via the item-07 merge seam.
+        let mut table = DispatchTable::from_entries(vec![DispatchEntry::seeded(
+            key.to_token(),
+            Implementor::Cublas,
+        )]);
+        merge(&mut table, &[entry]);
+        assert!(table.lookup(&key).is_some(), "cell is routed after merge");
     }
 }
