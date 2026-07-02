@@ -431,6 +431,31 @@ mod tests {
     }
 
     #[test]
+    fn reduction_is_an_honest_miss_no_contract() {
+        use crate::ir::ReduceOp;
+        use crate::pattern::PatternError;
+        use baracuda_kernels_types::AxisMask;
+        // A general-path reduction (explicit axis set) must NEVER leak a bindable
+        // elementwise contract — the honest-miss wall (§5f/§6). Pins that item 03's
+        // axes/keepdim did not open a path around the `NotElementwise` reject.
+        let a = OperandDesc::new(2, &[4096, 1024], &[1024, 1], ElementKind::F32, 256);
+        let o = OperandDesc::new(1, &[1024], &[1], ElementKind::F32, 256);
+        let key = structure_key(OpCategory::Reduction, &[a, o], ArchSku::Sm89);
+        let op = OpDef::reduction_axes(
+            "sum",
+            1,
+            &[ElementKind::F32],
+            input(0),
+            ReduceOp::Sum,
+            AxisMask(0b01),
+            false,
+        );
+        let kernel = generate(&op, &key, &Cuda);
+        assert!(contract(&op, &key, &kernel, "cuda").is_none());
+        assert!(matches!(derive_pattern(&op), Err(PatternError::NotElementwise)));
+    }
+
+    #[test]
     fn front_matter_has_provider_and_seam_profiles() {
         let fm = front_matter("cuda", "abc123");
         assert!(fm.contains("fkc_version: 1"));
