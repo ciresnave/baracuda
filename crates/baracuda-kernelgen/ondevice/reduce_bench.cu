@@ -60,8 +60,8 @@ int main() {
 
     // Copy reference (read + write => 2x traffic) -> peak achievable bandwidth.
     float t_copy = timed([&] { copy_kernel<<<grid_c, block>>>(d_in, d_copy, total); });
-    // Fast path: reduce the LAST axis (one thread per row; warp reads strided).
-    float t_last = timed([&] { baracuda_gen_mean_f32_reduce_mean<<<grid_r, block>>>(d_in, d_out, N, M); });
+    // InnerContig last-axis: now BLOCK-per-row (one block/row, coalesced + block reduce).
+    float t_last = timed([&] { baracuda_gen_mean_f32_reduce_mean<<<(int)N, block>>>(d_in, d_out, N, M); });
     // General path: reduce axis 0 (one thread per column; warp reads coalesced).
     float t_outer = timed([&] { baracuda_gen_sum_f32_reduce_sum_ax1<<<grid_r, block>>>(d_in, d_out, d_shape, d_s0, d_so, N); });
 
@@ -71,7 +71,7 @@ int main() {
     printf("tensor [%lld,%lld] f32 = %.0f MB read per reduction\n\n", N, M, read_gb * 1000);
     printf("%-34s %8s %10s\n", "kernel", "ms", "GB/s");
     printf("%-34s %8.3f %10.1f  (read+write, ~peak)\n", "copy (bandwidth ref)", t_copy, 2 * read_gb / (t_copy / 1000));
-    printf("%-34s %8.3f %10.1f\n", "reduce LAST axis (fast path)", t_last, read_gb / (t_last / 1000));
+    printf("%-34s %8.3f %10.1f\n", "reduce LAST axis (block-per-row)", t_last, read_gb / (t_last / 1000));
     printf("%-34s %8.3f %10.1f\n", "reduce axis 0 (general/outer)", t_outer, read_gb / (t_outer / 1000));
     return 0;
 }

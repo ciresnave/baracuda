@@ -12,6 +12,7 @@
 #include "baracuda_gen_amax_f32_reduce_max_ax1.cu"   // max axis0, rank2 (has-flag/NaN)
 #include "baracuda_gen_sum_f32_reduce_sum_ax2.cu"    // reduce axis1, rank3 (two kept axes)
 #include "baracuda_gen_sum_f32_reduce_sum_ax3.cu"    // reduce {0,1}, rank2 -> scalar
+#include "baracuda_gen_mean_f32_reduce_mean.cu"      // last-axis mean (InnerContig/block-per-row)
 
 static int fails = 0;
 
@@ -138,6 +139,22 @@ int main() {
         std::vector<float> got(1); cudaMemcpy(got.data(), d_out, sizeof(float), cudaMemcpyDeviceToHost);
         check("sum_reduce_all", got, want);
         cudaFree(d_in); cudaFree(d_out); cudaFree(d_sh); cudaFree(d_s0); cudaFree(d_so);
+    }
+    // ---- 7: last-axis Mean via the InnerContig BLOCK-per-row path, [4,8] -> [4] ----
+    {
+        const int R = 4, C = 8;
+        std::vector<float> in(R * C);
+        for (int i = 0; i < R * C; ++i) in[i] = (float)i;
+        std::vector<float> want(R, 0.0f);
+        for (int i = 0; i < R; ++i) { float s = 0; for (int j = 0; j < C; ++j) s += in[i * C + j]; want[i] = s / (float)C; }
+        float *d_in = dev(in), *d_out = nullptr;
+        cudaMalloc((void**)&d_out, R * sizeof(float));
+        baracuda_gen_mean_f32_reduce_mean<<<R, 256>>>(d_in, d_out, R, C); // one block per row
+        cudaDeviceSynchronize();
+        std::vector<float> got(R);
+        cudaMemcpy(got.data(), d_out, R * sizeof(float), cudaMemcpyDeviceToHost);
+        check("mean_lastaxis_block", got, want);
+        cudaFree(d_in); cudaFree(d_out);
     }
 
     cudaError_t e = cudaGetLastError();
