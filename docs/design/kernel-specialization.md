@@ -456,8 +456,11 @@ ordering is emitted one way pending Fuel E1.
   (elementwise emit paths wired). Both on-device validated on sm_89 (RTX 4070).
   `Access::RowReduce` (fused norms/softmax) also shipped. **Still pending**: layout
   nodes (item 01 — now recognition-only after converging with Fuel on convention
-  (c)) and `MatMul` (item 10 spike; the AxisRole superset wires there). After those,
-  the FKC §8 RmsNorm/FusedLinear targets derive.
+  (c)) and `MatMul` (the terminal contraction node — design spike complete in
+  [`matmul-contraction-spike.md`](matmul-contraction-spike.md), grounded in the
+  merged DAG/dispatch/reduction work; implementation gated on one 01 axis-role hook
+  + one 02 producer-leaf hook + the Fuel region grammar). After those, the FKC §8
+  RmsNorm/FusedLinear targets derive.
 
 ### Validation (sm_89, RTX 4070)
 
