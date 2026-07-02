@@ -84,7 +84,9 @@ pub struct KernelPlan<'a> {
 #[must_use]
 pub fn build_plan<'a>(op: &'a OpDef, key: &'a StructureKey) -> KernelPlan<'a> {
     let schedule = match op.access {
-        Access::Reduction { op: rop } => Schedule::Reduction { op: rop },
+        // `axes`/`keepdim` (item 03) are read by the emitter in step 3; the
+        // schedule map is unchanged until then.
+        Access::Reduction { op: rop, .. } => Schedule::Reduction { op: rop },
         // `ref` borrows (the Vec/expr can't move out of the borrowed `op.access`);
         // v1 always routes RowReduce to the block-parallel tree reduce.
         Access::RowReduce {
