@@ -41,7 +41,8 @@ pub use backend::{Backend, GeneratedKernel};
 pub use contract::{contract, front_matter};
 pub use cuda::Cuda;
 pub use ir::{
-    input, konst, param, reduced, Access, Expr, OpDef, ReduceOp, ReduceStage, ScalarExpr, UnaryOp,
+    input, konst, param, reduced, Access, DagNode, Expr, ExprDag, NodeId, OpDef, ReduceOp,
+    ReduceStage, ScalarExpr, UnaryOp,
 };
 pub use jit::{
     synthesize, ArtifactKind, Compiler, JitBudget, JitError, JitRequest, JitResponse, Recipe,

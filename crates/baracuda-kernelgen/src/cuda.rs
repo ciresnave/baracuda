@@ -6,8 +6,8 @@
 //! — and reused verbatim across dtypes, because CUDA overloads `+ - * /` for
 //! `__half` / `__nv_bfloat16` the same as for `float`.
 
-use crate::backend::{lower_expr, Backend, GeneratedKernel, Lowering};
-use crate::ir::{Access, BinaryOp, ReduceOp, ScalarExpr, UnaryOp};
+use crate::backend::{lower_dag, lower_expr, Backend, GeneratedKernel, Lowering};
+use crate::ir::{Access, BinaryOp, ExprDag, ReduceOp, ScalarExpr, UnaryOp};
 use crate::plan::{rr_role, KernelPlan, RrRole, Schedule};
 use baracuda_kernels_types::{Contiguity, ElementKind, OperandKey};
 
@@ -140,17 +140,31 @@ fn emit_vectorized(plan: &KernelPlan<'_>, vty: &str, lanes: &[&str]) -> Generate
         s.push_str(&format!("        {vty} v{i} = in{i}[i];\n"));
     }
     s.push_str(&format!("        {vty} vo;\n"));
+    // A lane value is a scalar of the vector's element type; a hoisted shared
+    // interior lives in that scalar `tmp` type, scoped per lane so names never
+    // collide across lanes.
+    let sctype = scalar_ctype(plan.dtype).expect("vectorized dtype has a scalar ctype");
     for lane in lanes {
         let acc = |idx: u8| format!("v{idx}.{lane}");
-        s.push_str(&format!("        vo.{lane} = {};\n", lower_expr(
-            plan.body,
+        let (prelude, root) = lower_dag(
+            &ExprDag::from_expr(plan.body),
+            sctype,
             &Lowering {
                 leaf: &acc,
                 reduced: &|i| unreachable!("no Reduced leaf outside RowReduce: red{i}"),
                 unary: &|op, x| cuda_unary(op, x, plan.dtype),
                 binary: &|op, a, b| cuda_binary(op, a, b, plan.dtype),
             },
-        )));
+        );
+        if prelude.is_empty() {
+            s.push_str(&format!("        vo.{lane} = {root};\n"));
+        } else {
+            s.push_str("        {\n");
+            for decl in &prelude {
+                s.push_str(&format!("            {decl}\n"));
+            }
+            s.push_str(&format!("            vo.{lane} = {root};\n        }}\n"));
+        }
     }
     s.push_str("        out[i] = vo;\n    }\n}\n");
     GeneratedKernel { name, source: s }
@@ -168,18 +182,27 @@ fn emit_scalar(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
     s.push_str("    long long i = (long long)blockIdx.x * blockDim.x + threadIdx.x;\n");
     s.push_str("    long long step = (long long)gridDim.x * blockDim.x;\n");
     let acc = |idx: u8| format!("in{idx}[i]");
-    s.push_str(&format!(
-        "    for (; i < n; i += step) out[i] = {};\n",
-        lower_expr(
-            plan.body,
-            &Lowering {
-                leaf: &acc,
-                reduced: &|i| unreachable!("no Reduced leaf outside RowReduce: red{i}"),
-                unary: &|op, x| cuda_unary(op, x, plan.dtype),
-                binary: &|op, a, b| cuda_binary(op, a, b, plan.dtype),
-            },
-        )
-    ));
+    let (prelude, root) = lower_dag(
+        &ExprDag::from_expr(plan.body),
+        ctype,
+        &Lowering {
+            leaf: &acc,
+            reduced: &|i| unreachable!("no Reduced leaf outside RowReduce: red{i}"),
+            unary: &|op, x| cuda_unary(op, x, plan.dtype),
+            binary: &|op, a, b| cuda_binary(op, a, b, plan.dtype),
+        },
+    );
+    if prelude.is_empty() {
+        s.push_str(&format!("    for (; i < n; i += step) out[i] = {root};\n"));
+    } else {
+        // Shared interiors: hoist the `tmp` block inside the loop (its RHS reads
+        // the per-`i` inputs), so a shared value is computed once per element.
+        s.push_str("    for (; i < n; i += step) {\n");
+        for decl in &prelude {
+            s.push_str(&format!("        {decl}\n"));
+        }
+        s.push_str(&format!("        out[i] = {root};\n    }}\n"));
+    }
     s.push_str("}\n");
     GeneratedKernel { name, source: s }
 }
@@ -235,15 +258,20 @@ fn emit_strided(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
             format!("in{idx}[o{idx}]")
         }
     };
-    s.push_str(&format!("        out[oo] = {};\n", lower_expr(
-            plan.body,
-            &Lowering {
-                leaf: &acc,
-                reduced: &|i| unreachable!("no Reduced leaf outside RowReduce: red{i}"),
-                unary: &|op, x| cuda_unary(op, x, plan.dtype),
-                binary: &|op, a, b| cuda_binary(op, a, b, plan.dtype),
-            },
-        )));
+    let (prelude, root) = lower_dag(
+        &ExprDag::from_expr(plan.body),
+        ctype,
+        &Lowering {
+            leaf: &acc,
+            reduced: &|i| unreachable!("no Reduced leaf outside RowReduce: red{i}"),
+            unary: &|op, x| cuda_unary(op, x, plan.dtype),
+            binary: &|op, a, b| cuda_binary(op, a, b, plan.dtype),
+        },
+    );
+    for decl in &prelude {
+        s.push_str(&format!("        {decl}\n"));
+    }
+    s.push_str(&format!("        out[oo] = {root};\n"));
     s.push_str("    }\n}\n");
     GeneratedKernel { name, source: s }
 }
@@ -869,6 +897,38 @@ mod tests {
         assert!(k.source.contains("long long c1 = lin % shape[1]; lin /= shape[1];"));
         assert!(k.source.contains("long long o0 = c0*s0[0] + c1*s0[1];"));
         assert!(k.source.contains("out[oo] = (in0[o0] + in1[o1]);"));
+    }
+
+    #[test]
+    fn shared_interior_is_hoisted_to_one_tmp() {
+        use crate::ir::konst;
+        // g = a*b; out = g / (g + 1). The shared product must be emitted ONCE as a
+        // named tmp and referenced twice — not re-rendered (the recompute + source
+        // blow-up the DAG rewrite exists to kill).
+        let g = input(0) * input(1);
+        let op = OpDef::elementwise("diamond", 2, &[ElementKind::F32], g.clone() / (g + konst(1.0)));
+        // A transposed (strided) key routes through emit_strided (plain float infix).
+        let t = OperandDesc::new(2, &[8, 4], &[1, 8], ElementKind::F32, 256);
+        let key = structure_key(OpCategory::BinaryElementwise, &[t, t, t], ArchSku::Sm89);
+        let k = generate(&op, &key, &Cuda);
+        assert_eq!(
+            k.source.matches("in0[o0] * in1[o1]").count(),
+            1,
+            "the shared product is emitted exactly once"
+        );
+        assert!(k.source.contains("float tmp0 = (in0[o0] * in1[o1]);"), "hoisted to a tmp");
+        assert!(
+            k.source.contains("out[oo] = (tmp0 / (tmp0 + 1.0));"),
+            "and referenced twice, not recomputed"
+        );
+    }
+
+    #[test]
+    fn single_use_body_emits_no_tmp() {
+        // Transparency guard: a body with no shared interior must produce zero
+        // `tmp` declarations (byte-identical to the pre-DAG emitter).
+        let k = generate(&add_op(&[ElementKind::F32]), &binary_key(ElementKind::F32), &Cuda);
+        assert!(!k.source.contains("tmp"), "no hoisting for a single-use tree");
     }
 
     #[test]

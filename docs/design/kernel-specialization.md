@@ -387,10 +387,13 @@ holds; generalize with confidence.
 The generator is the `baracuda-kernelgen` crate (`publish = false`, dev/build
 tool). Its shape realizes §10's algorithm/schedule split:
 
-- **`ir`** — the op *algorithm*: `ScalarExpr` (a value DAG of `Input(i)`,
-  `Const(f64)`, `Unary(UnaryOp, _)`, and `Add/Sub/Mul/Div`), an `Expr` eDSL
-  (operator overloads + `.relu()`/`.silu()`/… methods), and `OpDef` (name,
-  `n_inputs`, body, dtypes, `Access`). Backend-neutral.
+- **`ir`** — the op *algorithm*: `ScalarExpr` (the authored *tree* of `Input(i)`,
+  `Const(f64)`, `Unary(UnaryOp, _)`, `Add/Sub/Mul/Div`, …) plus a derived
+  `ExprDag` — the value-numbered DAG that hash-conses the tree so a shared
+  interior is stored, emitted (as a `tmp`), and cost-counted **once** with a
+  per-node consumer count. An `Expr` eDSL (operator overloads +
+  `.relu()`/`.silu()`/… methods) and `OpDef` (name, `n_inputs`, body, dtypes,
+  `Access`). Backend-neutral.
 - **`plan`** — the *schedule* decision: `build_plan(op, key)` maps a
   `StructureKey` cell to a `KernelPlan` whose `Schedule` is `Vectorized{width}`
   (all-contiguous; width = the narrowest operand vector width), `Scalar`
@@ -429,10 +432,12 @@ ordering is emitted one way pending Fuel E1.
 
 - **ORDER 1 — `Const`**: done.
 - **ORDER 2 — `Unary`** (activations): done.
-- **ORDER 3 — reductions / layout / `MatMul`**: pending — the dedicated
-  norm/fused-linear workstream (`Access::Reduction` + reduction nodes carrying
-  `.axis`, a DAG IR with consumer counts, layout nodes with shape facts,
-  `MatMul`). After it, the FKC §8 RmsNorm/FusedLinear targets derive.
+- **ORDER 3 — reductions / layout / `MatMul`**: in progress. Done:
+  `Access::Reduction` (strided / multi-axis / keepdim, block-parallel last-axis,
+  integer accumulation) and the **DAG IR with consumer counts** (`ExprDag` —
+  shared interiors hash-consed, emitted once as a `tmp`; elementwise emit paths
+  wired, on-device bit-exact). Pending: layout nodes with shape facts and
+  `MatMul`. After it, the FKC §8 RmsNorm/FusedLinear targets derive.
 
 ### Validation (sm_89, RTX 4070)
 

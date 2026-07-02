@@ -165,4 +165,19 @@ fn main() {
         fs::write(format!("{out_dir}/{}.cu", k.name), &k.source).expect("write kernel");
         println!("generated {out_dir}/{}.cu  (cell {})", k.name, key.to_token());
     }
+
+    // --- Shared-interior DAG demo (item 02): diamond out = g / (g + 1), g = a*b ---
+    // The product `g` feeds both the numerator and the denominator; the DAG
+    // emitter hoists it to one `tmp` computed once. Two cells exercise both hoist
+    // paths: a scalar cell (align 4 ⇒ no vectorize) and a vectorized cell (align
+    // 256 ⇒ float4, per-lane `tmp` blocks).
+    let g = input(0) * input(1);
+    let diamond = OpDef::elementwise("diamond", 2, &[ElementKind::F32], g.clone() / (g + konst(1.0)));
+    for align in [4u32, 256u32] {
+        let o = OperandDesc::new(1, &[1 << 20], &[1], ElementKind::F32, align);
+        let key = structure_key(OpCategory::BinaryElementwise, &[o, o, o], ArchSku::Sm89);
+        let k = generate(&diamond, &key, &Cuda);
+        fs::write(format!("{out_dir}/{}.cu", k.name), &k.source).expect("write kernel");
+        println!("generated {out_dir}/{}.cu  (cell {})", k.name, key.to_token());
+    }
 }
