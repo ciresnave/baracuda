@@ -420,8 +420,38 @@ pub fn structure_key(op: OpCategory, operands: &[OperandDesc], arch: ArchSku) ->
         rank,
         n_operands: n as u8,
         operands: keys,
-        reduce_axes: AxisMask::EMPTY, // reduction keying: follow-up
+        reduce_axes: derive_reduce_axes(op, operands),
     }
+}
+
+/// [item 03] Derive the reduced-axis set for a reduction cell from **keepdim-form**
+/// operands: bit `d` is set where the input varies (`shape[d] > 1`) but the output
+/// is size-1 (`shape[d] == 1`). This is unambiguous *only* in keepdim form (same
+/// rank, reduced axes present as size-1) — a collapsed (rank-reduced) output is
+/// un-inferable (input `[2,2,4]` reducing axis 0 vs 1 both give `[2,4]`, byte-
+/// identical operands), so it yields `EMPTY` = *undetermined*. Gated on
+/// [`OpCategory::Reduction`]: non-reduction ops (and the fused RowReduce family,
+/// whose output == input shape leaves no size-1 trace) stay `EMPTY`; those carry
+/// the reduced axis explicitly at the seam (item 05). `EMPTY` is thus reserved for
+/// "non-reduction / undetermined", never overloaded as a "last-axis" sentinel.
+/// See `docs/design/axis-role-vocabulary.md` — this is the `{Reduced}` projection.
+fn derive_reduce_axes(op: OpCategory, operands: &[OperandDesc]) -> AxisMask {
+    if op != OpCategory::Reduction || operands.len() < 2 {
+        return AxisMask::EMPTY;
+    }
+    let input = &operands[0];
+    let output = &operands[operands.len() - 1];
+    // Keepdim-form precondition: same rank, reduced axes present as size-1.
+    if input.rank != output.rank {
+        return AxisMask::EMPTY; // collapsed / rank-reduced output ⇒ undetermined
+    }
+    let mut axes = AxisMask::EMPTY;
+    for d in 0..input.rank as usize {
+        if input.shape[d] > 1 && output.shape[d] == 1 {
+            axes.set(d as u8);
+        }
+    }
+    axes
 }
 
 /// Convenience: compute the [`StructureKey`] and return its wire token in one
@@ -999,6 +1029,31 @@ mod tests {
         assert_eq!(k, parsed);
         // Token is human-greppable.
         assert!(token.starts_with("sk1|bin|f32|sm89|"));
+    }
+
+    #[test]
+    fn reduction_reduce_axes_derived_from_keepdim_form() {
+        let x = od(&[4, 8], &[8, 1], ElementKind::F32, 256);
+        // Keepdim reduce of the LAST axis: [4,8] -> [4,1] sets bit 1.
+        let out_last = od(&[4, 1], &[1, 1], ElementKind::F32, 256);
+        let k_last = structure_key(OpCategory::Reduction, &[x, out_last], ArchSku::Sm89);
+        assert_eq!(k_last.reduce_axes, AxisMask(0b10));
+        // Keepdim reduce of AXIS 0: [4,8] -> [1,8] sets bit 0 — a DIFFERENT cell.
+        let out_ax0 = od(&[1, 8], &[8, 1], ElementKind::F32, 256);
+        let k_ax0 = structure_key(OpCategory::Reduction, &[x, out_ax0], ArchSku::Sm89);
+        assert_eq!(k_ax0.reduce_axes, AxisMask(0b01));
+        assert_ne!(k_last.to_token(), k_ax0.to_token()); // honest miss: axis-0 != last
+        // Collapsed (rank-reduced) output is un-inferable ⇒ empty (undetermined).
+        let out_collapse = od(&[4], &[1], ElementKind::F32, 256);
+        let k_col = structure_key(OpCategory::Reduction, &[x, out_collapse], ArchSku::Sm89);
+        assert_eq!(k_col.reduce_axes, AxisMask::EMPTY);
+        // Non-reduction op stays empty even with a size-1 axis present.
+        let k_ew =
+            structure_key(OpCategory::BinaryElementwise, &[out_last, out_last, out_last], ArchSku::Sm89);
+        assert_eq!(k_ew.reduce_axes, AxisMask::EMPTY);
+        // A non-empty reduce_axes round-trips through the token.
+        let parsed = StructureKey::from_token(&k_ax0.to_token()).expect("round-trip");
+        assert_eq!(k_ax0, parsed);
     }
 
     #[test]
