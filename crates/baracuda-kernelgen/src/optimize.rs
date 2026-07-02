@@ -214,6 +214,27 @@ fn eval_unary(op: UnaryOp, v: f64) -> Option<f64> {
     })
 }
 
+/// The exact reciprocal of `c` when `c` is a finite **normal power of two**
+/// whose reciprocal is also finite and normal — the precondition under which
+/// `x / c == x * (1/c)` bit-exactly (the reciprocal is exact, so the true
+/// product equals the true quotient and both round identically). `None`
+/// otherwise (non-pow2, zero, subnormal, or a reciprocal that would leave the
+/// normal range).
+fn exact_pow2_recip(c: f64) -> Option<f64> {
+    const MANTISSA_MASK: u64 = (1u64 << 52) - 1;
+    const EXP_MASK: u64 = 0x7ff;
+    let is_normal_pow2 = |v: f64| {
+        let bits = v.to_bits();
+        let exp = (bits >> 52) & EXP_MASK;
+        bits & MANTISSA_MASK == 0 && exp != 0 && exp != EXP_MASK
+    };
+    if !is_normal_pow2(c) {
+        return None;
+    }
+    let r = 1.0 / c;
+    is_normal_pow2(r).then_some(r)
+}
+
 /// Fold a non-infix binary op on two constants — `Max`/`Min` and integer-clean
 /// `Rem`; `Pow` is skipped (host-f64 vs device-f32), `Rem` by zero is skipped.
 fn eval_binary(op: BinaryOp, x: f64, y: f64) -> Option<f64> {
@@ -265,10 +286,10 @@ fn rules(eg: &mut EGraph) -> bool {
                 if eg.class_const(a) == Some(1.0) {
                     changed |= eg.union(nid, b);
                 }
-                if eg.class_const(a) == Some(0.0) || eg.class_const(b) == Some(0.0) {
-                    let z = eg.add(ENode::Const(0.0_f64.to_bits()));
-                    changed |= eg.union(nid, z);
-                }
+                // NOTE: `x * 0 -> 0` is deliberately ABSENT — it is not
+                // value-preserving (NaN*0 = NaN, Inf*0 = NaN, and -x*0 = -0);
+                // folding it would silently change the bits a kernel computes.
+                // Two-const products fold below (0*0 included, exactly).
                 if let (Some(x), Some(y)) = (eg.class_const(a), eg.class_const(b)) {
                     let c = eg.add(ENode::Const((x * y).to_bits()));
                     changed |= eg.union(nid, c);
@@ -277,6 +298,17 @@ fn rules(eg: &mut EGraph) -> bool {
             ENode::Div(a, b) => {
                 if eg.class_const(b) == Some(1.0) {
                     changed |= eg.union(nid, a);
+                }
+                // x / 2^k  ->  x * 2^-k: bit-exact (an exact power-of-two
+                // reciprocal makes the true product equal the true quotient, so
+                // both round identically — incl. NaN/Inf/±0 propagation), and
+                // device FDIV is ~4x an FMUL (weights 8 vs 2 drive extraction).
+                if let Some(c) = eg.class_const(b) {
+                    if let Some(r) = exact_pow2_recip(c) {
+                        let rc = eg.add(ENode::Const(r.to_bits()));
+                        let m = eg.add(ENode::Mul(a, rc));
+                        changed |= eg.union(nid, m);
+                    }
                 }
                 if let (Some(x), Some(y)) = (eg.class_const(a), eg.class_const(b)) {
                     if y != 0.0 {
@@ -300,6 +332,32 @@ fn rules(eg: &mut EGraph) -> bool {
                 if let Some(v) = eg.class_const(x) {
                     let c = eg.add(ENode::Const((-v).to_bits()));
                     changed |= eg.union(nid, c);
+                }
+            }
+            ENode::Unary(op @ (UnaryOp::Abs | UnaryOp::Relu), x) => {
+                // abs(abs(y)) -> abs(y) ; relu(relu(y)) -> relu(y): idempotent.
+                // abs(neg(y)) -> abs(y): |-y| == |y| bit-exactly (abs clears the
+                // sign bit either way; NaN payload untouched). relu(neg) is NOT
+                // an identity — do not generalize.
+                let xc = eg.find(x);
+                let inner = eg.class_nodes.get(&xc).and_then(|ns| {
+                    ns.iter().find_map(|n| match n {
+                        ENode::Unary(i, y) if *i == op => Some((op, *y)),
+                        ENode::Unary(UnaryOp::Neg, y) if op == UnaryOp::Abs => {
+                            Some((UnaryOp::Abs, *y))
+                        }
+                        _ => None,
+                    })
+                });
+                if let Some((outer, y)) = inner {
+                    let collapsed = eg.add(ENode::Unary(outer, y));
+                    changed |= eg.union(nid, collapsed);
+                }
+                if let Some(v) = eg.class_const(x) {
+                    if let Some(r) = eval_unary(op, v) {
+                        let c = eg.add(ENode::Const(r.to_bits()));
+                        changed |= eg.union(nid, c);
+                    }
                 }
             }
             ENode::Binary(op, a, b) => {
@@ -475,8 +533,58 @@ mod tests {
     }
 
     #[test]
-    fn mul_zero_collapses() {
-        assert_eq!(opt(input(0) * konst(0.0)), ScalarExpr::Const(0.0));
+    fn mul_zero_is_not_folded_for_nonconst_operand() {
+        // x * 0 must NOT collapse to 0: for x = NaN or ±Inf the kernel computes
+        // NaN (and for finite negative x, -0), so the fold would change bits.
+        // The rewrite set is precision-safe by contract.
+        let e = opt(input(0) * konst(0.0));
+        assert!(
+            matches!(e, ScalarExpr::Mul(_, _)),
+            "x*0 stays symbolic, got {e:?}"
+        );
+        // Two-const products still fold exactly (0*0 included).
+        assert_eq!(opt(konst(0.0) * konst(5.0)), ScalarExpr::Const(0.0));
+    }
+
+    #[test]
+    fn div_by_pow2_becomes_mul_by_exact_reciprocal() {
+        // x / 4 -> x * 0.25 (bit-exact; FDIV ~4x an FMUL, so extraction prefers it).
+        assert_eq!(
+            opt(input(0) / konst(4.0)),
+            ScalarExpr::Mul(
+                Box::new(ScalarExpr::Input(0)),
+                Box::new(ScalarExpr::Const(0.25))
+            )
+        );
+        // Negative power of two too: x / -2 -> x * -0.5.
+        assert_eq!(
+            opt(input(0) / konst(-2.0)),
+            ScalarExpr::Mul(
+                Box::new(ScalarExpr::Input(0)),
+                Box::new(ScalarExpr::Const(-0.5))
+            )
+        );
+        // Non-power-of-two divisor stays a division (1/3 is inexact).
+        assert!(matches!(opt(input(0) / konst(3.0)), ScalarExpr::Div(_, _)));
+        // Zero / subnormal-reciprocal divisors stay divisions.
+        assert!(matches!(opt(input(0) / konst(0.0)), ScalarExpr::Div(_, _)));
+    }
+
+    #[test]
+    fn abs_and_relu_idempotents_collapse() {
+        let abs = |e: ScalarExpr| ScalarExpr::Unary(UnaryOp::Abs, Box::new(e));
+        let relu = |e: ScalarExpr| ScalarExpr::Unary(UnaryOp::Relu, Box::new(e));
+        let x = ScalarExpr::Input(0);
+        assert_eq!(optimize(&abs(abs(x.clone()))), abs(x.clone()));
+        assert_eq!(optimize(&relu(relu(x.clone()))), relu(x.clone()));
+        // |-y| == |y| bit-exactly (sign-bit op); relu(neg) is NOT rewritten.
+        assert_eq!(optimize(&abs(neg(x.clone()))), abs(x.clone()));
+        let rn = optimize(&relu(neg(x.clone())));
+        assert!(
+            matches!(&rn, ScalarExpr::Unary(UnaryOp::Relu, inner)
+                if matches!(**inner, ScalarExpr::Unary(UnaryOp::Neg, _))),
+            "relu(neg(x)) must stay, got {rn:?}"
+        );
     }
 
     #[test]
