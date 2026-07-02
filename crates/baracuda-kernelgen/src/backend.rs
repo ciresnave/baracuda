@@ -8,7 +8,7 @@
 //! this generator eventually target backends beyond CUDA (and move out of
 //! Baracuda) without a rewrite.
 
-use crate::ir::{BinaryOp, ScalarExpr, UnaryOp};
+use crate::ir::{BinaryOp, DagNode, ExprDag, NodeId, ScalarExpr, UnaryOp};
 use baracuda_kernels_types::ElementKind;
 
 /// A generated kernel: its exported symbol name and source text.
@@ -62,30 +62,38 @@ impl std::fmt::Debug for Lowering<'_> {
     }
 }
 
-/// Lower a [`ScalarExpr`] DAG to a backend expression string via `lo`'s seams.
+/// Spell an `f64` constant as a valid C literal. `{v:?}` emits `inf`/`NaN`, which
+/// aren't valid C literals; map the non-finite cases to the standard macros.
+/// (The f32 `f`-suffix vs double-promotion is dtype-dependent and tracked as a
+/// follow-up — a perf, not correctness, concern since the result narrows back.)
+#[must_use]
+pub fn const_lit(v: f64) -> String {
+    if v.is_nan() {
+        "NAN".to_string()
+    } else if v.is_infinite() {
+        if v > 0.0 {
+            "INFINITY".to_string()
+        } else {
+            "-INFINITY".to_string()
+        }
+    } else {
+        format!("{v:?}")
+    }
+}
+
+/// Lower a [`ScalarExpr`] tree to a backend expression string via `lo`'s seams.
+///
+/// Structural: a subtree reachable by two paths is re-rendered once per path. For
+/// shared-interior dedup (emit a value once as a `tmp`), lower an [`ExprDag`] via
+/// [`lower_dag`] instead — this remains the inlining primitive both paths share
+/// (single-use nodes lower identically through either).
 #[must_use]
 pub fn lower_expr(e: &ScalarExpr, lo: &Lowering<'_>) -> String {
     match e {
         ScalarExpr::Input(i) => (lo.leaf)(*i),
         ScalarExpr::Reduced(i) => (lo.reduced)(*i),
         ScalarExpr::Param(i) => format!("p{i}"),
-        // `{v:?}` emits `inf`/`NaN`, which aren't valid C literals; map to the
-        // standard macros. (The f32 `f`-suffix vs double-promotion is dtype-
-        // dependent and tracked as a follow-up — it's a perf, not correctness,
-        // concern since the result narrows back.)
-        ScalarExpr::Const(v) => {
-            if v.is_nan() {
-                "NAN".to_string()
-            } else if v.is_infinite() {
-                if *v > 0.0 {
-                    "INFINITY".to_string()
-                } else {
-                    "-INFINITY".to_string()
-                }
-            } else {
-                format!("{v:?}")
-            }
-        }
+        ScalarExpr::Const(v) => const_lit(*v),
         ScalarExpr::Unary(op, x) => (lo.unary)(*op, lower_expr(x, lo)),
         ScalarExpr::Binary(op, a, b) => (lo.binary)(*op, lower_expr(a, lo), lower_expr(b, lo)),
         ScalarExpr::Add(a, b) => format!("({} + {})", lower_expr(a, lo), lower_expr(b, lo)),
@@ -93,4 +101,87 @@ pub fn lower_expr(e: &ScalarExpr, lo: &Lowering<'_>) -> String {
         ScalarExpr::Mul(a, b) => format!("({} * {})", lower_expr(a, lo), lower_expr(b, lo)),
         ScalarExpr::Div(a, b) => format!("({} / {})", lower_expr(a, lo), lower_expr(b, lo)),
     }
+}
+
+/// Lower an [`ExprDag`] to `(prelude, root_ref)`.
+///
+/// `prelude` is the block of `<ctype> tmpN = <expr>;` statements — one per shared
+/// non-leaf node, in topological order (a `tmp`'s RHS references only earlier
+/// `tmp`s / inlined leaves) — that the caller emits before the use site.
+/// `root_ref` names the DAG's output value.
+///
+/// A node with `consumers <= 1`, or any leaf, is **inlined** at its use site;
+/// only a shared *interior* (`consumers > 1`, non-leaf) is hoisted. So for a body
+/// with no shared interior the prelude is empty and `root_ref` is byte-identical
+/// to [`lower_expr`] — the DAG is transparent for every single-use body, which is
+/// the no-regression guarantee for existing goldens.
+#[must_use]
+pub fn lower_dag(dag: &ExprDag, ctype: &str, lo: &Lowering<'_>) -> (Vec<String>, String) {
+    let mut refs: Vec<Option<String>> = vec![None; dag.len()];
+    let mut prelude: Vec<String> = Vec::new();
+    let root_ref = lower_node(dag, dag.root(), ctype, lo, &mut refs, &mut prelude);
+    (prelude, root_ref)
+}
+
+/// Post-order, memoized lowering of one DAG node. Emits a shared interior once
+/// (into `prelude`) and returns the string every use site references (a `tmpN`
+/// name for a hoisted node, the inlined expression otherwise).
+fn lower_node(
+    dag: &ExprDag,
+    id: NodeId,
+    ctype: &str,
+    lo: &Lowering<'_>,
+    refs: &mut Vec<Option<String>>,
+    prelude: &mut Vec<String>,
+) -> String {
+    if let Some(r) = &refs[id as usize] {
+        return r.clone();
+    }
+    // Copy the node out (all fields are `Copy`) so the immutable borrow of `dag`
+    // is released before the `&mut refs`/`&mut prelude` recursion.
+    let node = dag.node(id).clone();
+    let rhs = match node {
+        DagNode::Input(i) => (lo.leaf)(i),
+        DagNode::Reduced(i) => (lo.reduced)(i),
+        DagNode::Param(i) => format!("p{i}"),
+        DagNode::Const(v) => const_lit(v),
+        DagNode::Unary(op, x) => (lo.unary)(op, lower_node(dag, x, ctype, lo, refs, prelude)),
+        DagNode::Binary(op, a, b) => {
+            let a = lower_node(dag, a, ctype, lo, refs, prelude);
+            let b = lower_node(dag, b, ctype, lo, refs, prelude);
+            (lo.binary)(op, a, b)
+        }
+        DagNode::Add(a, b) => {
+            let a = lower_node(dag, a, ctype, lo, refs, prelude);
+            let b = lower_node(dag, b, ctype, lo, refs, prelude);
+            format!("({a} + {b})")
+        }
+        DagNode::Sub(a, b) => {
+            let a = lower_node(dag, a, ctype, lo, refs, prelude);
+            let b = lower_node(dag, b, ctype, lo, refs, prelude);
+            format!("({a} - {b})")
+        }
+        DagNode::Mul(a, b) => {
+            let a = lower_node(dag, a, ctype, lo, refs, prelude);
+            let b = lower_node(dag, b, ctype, lo, refs, prelude);
+            format!("({a} * {b})")
+        }
+        DagNode::Div(a, b) => {
+            let a = lower_node(dag, a, ctype, lo, refs, prelude);
+            let b = lower_node(dag, b, ctype, lo, refs, prelude);
+            format!("({a} / {b})")
+        }
+    };
+    // Hoist a shared interior (edge count > 1, non-leaf) to a named tmp so it is
+    // computed once; inline everything else (byte-identical to `lower_expr`). The
+    // root has consumers == 0 (nothing references it), so it is never hoisted.
+    let r = if !node.is_leaf() && dag.consumers(id) > 1 {
+        let name = format!("tmp{}", prelude.len());
+        prelude.push(format!("{ctype} {name} = {rhs};"));
+        name
+    } else {
+        rhs
+    };
+    refs[id as usize] = Some(r.clone());
+    r
 }

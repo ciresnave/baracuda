@@ -387,10 +387,13 @@ holds; generalize with confidence.
 The generator is the `baracuda-kernelgen` crate (`publish = false`, dev/build
 tool). Its shape realizes §10's algorithm/schedule split:
 
-- **`ir`** — the op *algorithm*: `ScalarExpr` (a value DAG of `Input(i)`,
-  `Const(f64)`, `Unary(UnaryOp, _)`, and `Add/Sub/Mul/Div`), an `Expr` eDSL
-  (operator overloads + `.relu()`/`.silu()`/… methods), and `OpDef` (name,
-  `n_inputs`, body, dtypes, `Access`). Backend-neutral.
+- **`ir`** — the op *algorithm*: `ScalarExpr` (the authored *tree* of `Input(i)`,
+  `Const(f64)`, `Unary(UnaryOp, _)`, `Add/Sub/Mul/Div`, …) plus a derived
+  `ExprDag` — the value-numbered DAG that hash-conses the tree so a shared
+  interior is stored, emitted (as a `tmp`), and cost-counted **once** with a
+  per-node consumer count. An `Expr` eDSL (operator overloads +
+  `.relu()`/`.silu()`/… methods) and `OpDef` (name, `n_inputs`, body, dtypes,
+  `Access`). Backend-neutral.
 - **`plan`** — the *schedule* decision: `build_plan(op, key)` maps a
   `StructureKey` cell to a `KernelPlan` whose `Schedule` is `Vectorized{width}`
   (all-contiguous; width = the narrowest operand vector width), `Scalar`
@@ -429,17 +432,19 @@ ordering is emitted one way pending Fuel E1.
 
 - **ORDER 1 — `Const`**: done.
 - **ORDER 2 — `Unary`** (activations): done.
-- **ORDER 3 — reductions / layout / `MatMul`**: **reductions done** (item 03).
+- **ORDER 3 — reductions / layout / `MatMul`**: **reductions + DAG done**.
   `Access::Reduction` carries `axes: AxisMask` + `keepdim`; the emitter generalizes
   past the contiguous last-axis fast path to outer/middle/multi-axis + keepdim +
-  strided inputs (kept-axis unravel / strided reduced-axis fold), and
-  `structure_key` derives `reduce_axes` from keepdim-form output (the `{Reduced}`
-  projection of the AxisRole vocab — `docs/design/axis-role-vocabulary.md`).
-  On-device validated on sm_89 (RTX 4070). `Access::RowReduce` (fused norms/softmax)
-  also shipped. **Still pending**: layout nodes (item 01 — now recognition-only after
-  converging with Fuel on convention (c)), a DAG IR with consumer counts (item 02),
-  and `MatMul` (item 10 spike; the AxisRole superset wires there). After those, the
-  FKC §8 RmsNorm/FusedLinear targets derive.
+  strided inputs (kept-axis unravel / strided reduced-axis fold, block-parallel
+  last-axis, integer accumulation), and `structure_key` derives `reduce_axes` from
+  keepdim-form output (the `{Reduced}` projection of the AxisRole vocab —
+  `docs/design/axis-role-vocabulary.md`). The **DAG IR with consumer counts**
+  (`ExprDag`) hash-conses shared interiors and emits each once as a `tmp`
+  (elementwise emit paths wired). Both on-device validated on sm_89 (RTX 4070).
+  `Access::RowReduce` (fused norms/softmax) also shipped. **Still pending**: layout
+  nodes (item 01 — now recognition-only after converging with Fuel on convention
+  (c)) and `MatMul` (item 10 spike; the AxisRole superset wires there). After those,
+  the FKC §8 RmsNorm/FusedLinear targets derive.
 
 ### Validation (sm_89, RTX 4070)
 
