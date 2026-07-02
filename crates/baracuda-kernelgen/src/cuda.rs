@@ -44,7 +44,7 @@ impl Backend for Cuda {
             },
             Schedule::Scalar => emit_scalar(plan, ctype),
             Schedule::Strided => emit_strided(plan, ctype),
-            Schedule::Reduction { op } => emit_reduction(plan, ctype, op),
+            Schedule::Reduction { op, .. } => emit_reduction(plan, ctype, op),
             Schedule::RowReduce { .. } => emit_row_reduce(plan, ctype),
         }
     }

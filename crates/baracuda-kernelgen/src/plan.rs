@@ -8,7 +8,7 @@
 
 use crate::ir::{Access, OpDef, ReduceOp, ReduceStage, ScalarExpr};
 use baracuda_kernels_types::{
-    Contiguity, ElementKind, OperandKey, StructureKey, VecWidth, MAX_OPERANDS,
+    AxisMask, Contiguity, ElementKind, OperandKey, StructureKey, VecWidth, MAX_OPERANDS,
 };
 
 /// How the kernel iterates the data — the backend-neutral schedule.
@@ -36,6 +36,13 @@ pub enum Schedule {
     Reduction {
         /// The associative combine to apply along the axis.
         op: ReduceOp,
+        /// Reduce-axis geometry (design-doc predicate #9). All classes lower to
+        /// the sequential fold in v2; the class reserves the dispatch token for a
+        /// future block-parallel outer-axis kernel. The full axis mask rides on
+        /// [`KernelPlan::key`]'s `reduce_axes` (this enum is `Copy`).
+        class: ReduceAxisClass,
+        /// Keep reduced axes as size-1 (broadcast-back) vs. collapse them.
+        keepdim: bool,
     },
     /// Fused reduce → broadcast → elementwise, one block per output row (warp-
     /// shuffle + shared-memory tree reduce): `n_stages` reductions then a full-width
@@ -48,6 +55,23 @@ pub enum Schedule {
         /// Block-parallel tree reduce (`true`, v1) vs the sequential fallback.
         block: bool,
     },
+}
+
+/// Reduce-axis geometry (design-doc predicate #9). All classes lower to the same
+/// sequential fold in v2; the class reserves the dispatch token so a later
+/// block-parallel outer-axis kernel is an additive drop-in, not a re-key.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum ReduceAxisClass {
+    /// Empty mask (legacy last-axis sentinel) or a single contiguous trailing
+    /// axis — today's sequential fast path.
+    InnerContig,
+    /// A single outermost (axis 0) reduced axis.
+    Outer,
+    /// A single interior reduced axis (not axis 0, not a contiguous trailing axis).
+    Middle,
+    /// Two or more reduced axes.
+    Multi,
 }
 
 /// A language-agnostic description of the kernel to emit.
@@ -84,9 +108,22 @@ pub struct KernelPlan<'a> {
 #[must_use]
 pub fn build_plan<'a>(op: &'a OpDef, key: &'a StructureKey) -> KernelPlan<'a> {
     let schedule = match op.access {
-        // `axes`/`keepdim` (item 03) are read by the emitter in step 3; the
-        // schedule map is unchanged until then.
-        Access::Reduction { op: rop, .. } => Schedule::Reduction { op: rop },
+        Access::Reduction {
+            op: rop,
+            axes,
+            keepdim,
+        } => {
+            // `class`/`keepdim` are consumed by the emitter in step 3; today all
+            // classes lower to the same sequential fold, so the legacy last-axis
+            // path (empty mask ⇒ `InnerContig`) stays byte-identical.
+            let input0_contig =
+                key.n_operands > 0 && key.operands[0].contig == Contiguity::Contig;
+            Schedule::Reduction {
+                op: rop,
+                class: classify_reduce_axes(axes, key.rank, input0_contig),
+                keepdim,
+            }
+        }
         // `ref` borrows (the Vec/expr can't move out of the borrowed `op.access`);
         // v1 always routes RowReduce to the block-parallel tree reduce.
         Access::RowReduce {
@@ -125,6 +162,67 @@ pub fn build_plan<'a>(op: &'a OpDef, key: &'a StructureKey) -> KernelPlan<'a> {
         key,
         body: &op.body,
         access: &op.access,
+    }
+}
+
+/// Classify a reduction's axis geometry (design-doc predicate #9) from its
+/// reduced-axis mask + the input's contiguity. An empty mask is the legacy
+/// last-axis sentinel; a single trailing axis over a contiguous input is the
+/// existing fast path. All classes lower to the same sequential fold in v2 — the
+/// class only reserves the dispatch token for a future block-parallel kernel.
+fn classify_reduce_axes(axes: AxisMask, rank: u8, input0_contig: bool) -> ReduceAxisClass {
+    match axes.0.count_ones() {
+        0 => ReduceAxisClass::InnerContig, // empty ⇒ legacy last-axis default
+        1 => {
+            let d = axes.0.trailing_zeros() as u8;
+            if rank > 0 && d == rank - 1 && input0_contig {
+                ReduceAxisClass::InnerContig // contiguous trailing axis = fast path
+            } else if d == 0 {
+                ReduceAxisClass::Outer
+            } else {
+                ReduceAxisClass::Middle
+            }
+        }
+        _ => ReduceAxisClass::Multi,
+    }
+}
+
+#[cfg(test)]
+mod reduce_class_tests {
+    use super::*;
+
+    #[test]
+    fn classify_axis_geometry() {
+        // empty mask ⇒ legacy last-axis fast path
+        assert_eq!(
+            classify_reduce_axes(AxisMask::EMPTY, 3, true),
+            ReduceAxisClass::InnerContig
+        );
+        // trailing axis (rank-1) over a contiguous input ⇒ fast path
+        assert_eq!(
+            classify_reduce_axes(AxisMask(0b100), 3, true),
+            ReduceAxisClass::InnerContig
+        );
+        // outermost axis 0
+        assert_eq!(
+            classify_reduce_axes(AxisMask(0b001), 3, true),
+            ReduceAxisClass::Outer
+        );
+        // interior axis 1
+        assert_eq!(
+            classify_reduce_axes(AxisMask(0b010), 3, true),
+            ReduceAxisClass::Middle
+        );
+        // two reduced axes
+        assert_eq!(
+            classify_reduce_axes(AxisMask(0b011), 3, true),
+            ReduceAxisClass::Multi
+        );
+        // trailing axis but a STRIDED input ⇒ no longer the contiguous fast path
+        assert_eq!(
+            classify_reduce_axes(AxisMask(0b100), 3, false),
+            ReduceAxisClass::Middle
+        );
     }
 }
 
