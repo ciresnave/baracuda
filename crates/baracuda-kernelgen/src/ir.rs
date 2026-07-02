@@ -281,14 +281,23 @@ pub struct ReduceStage {
 pub enum Access {
     /// Output coordinate equals input coordinate (a per-element map).
     Elementwise,
-    /// Reduce the **last (contiguous, trailing) axis** with `op`: each output
-    /// element is `op` folded over that axis's run of `body` values. v1 covers
-    /// the contiguous last-axis float-dtype case — the `MeanDim`/`SumDim` core of
-    /// RmsNorm/Softmax. Strided inputs, arbitrary/multiple axes, keepdim layout,
-    /// and integer accumulation are follow-ups.
+    /// Reduce the axes in `axes` with `op`: each output element is `op` folded
+    /// over the reduced axes' run of `body` values. `axes == AxisMask::EMPTY` is
+    /// the legacy sentinel for the **last (contiguous, trailing) axis** — the
+    /// `MeanDim`/`SumDim` core of RmsNorm/Softmax that `OpDef::reduction` builds.
+    /// A non-empty mask names arbitrary outer/middle/multiple reduced axes, and
+    /// `keepdim` selects whether the reduced axes collapse (rank drops) or stay
+    /// size-1 (broadcast-back). The IR *represents* all of these; the emitter
+    /// generalizes past the contiguous-last-axis fast path in a follow-up (item
+    /// 03 step 3), and integer accumulation is item 04.
     Reduction {
         /// The associative combine (+ implied identity).
         op: ReduceOp,
+        /// Canonical reduced-axis set (bit `i` ⇒ axis `i`). `AxisMask::EMPTY` ⇒
+        /// the legacy last-axis default (`OpDef::reduction` preserves this).
+        axes: AxisMask,
+        /// Keep reduced axes as size-1 (broadcast-back) vs. collapse them.
+        keepdim: bool,
     },
     /// Fused **reduce → broadcast → elementwise** over the contiguous last axis:
     /// the `stages` fold per-row reduced scalars (`Reduced(0..n)`), then `epilogue`
@@ -433,7 +442,8 @@ impl OpDef {
     /// Build a **last-axis reduction** op: `body` is the per-element pre-reduction
     /// expression (e.g. `input(0).unary(Sqr)` for a mean-of-squares), folded over
     /// the contiguous trailing axis by `op`. The output holds one element per
-    /// outer coordinate. See [`Access::Reduction`] for the v1 scope.
+    /// outer coordinate. This is the legacy default — `axes = EMPTY`, no keepdim —
+    /// and is byte-identical to before item 03. See [`Access::Reduction`].
     #[must_use]
     pub fn reduction(
         name: &str,
@@ -442,12 +452,31 @@ impl OpDef {
         body: Expr,
         op: ReduceOp,
     ) -> Self {
+        Self::reduction_axes(name, n_inputs, dtypes, body, op, AxisMask::EMPTY, false)
+    }
+
+    /// Build a reduction over an explicit `axes` set (bit `i` ⇒ axis `i`), with
+    /// `keepdim` selecting broadcast-back (size-1 reduced axes) vs. collapse.
+    /// `axes == AxisMask::EMPTY` is the last-axis legacy default and reproduces
+    /// [`OpDef::reduction`] exactly. The emitter's generalized outer/middle/multi
+    /// axis + keepdim handling lands in item 03 step 3; until then a non-empty
+    /// mask is *representable* here but only lowered by that follow-up.
+    #[must_use]
+    pub fn reduction_axes(
+        name: &str,
+        n_inputs: u8,
+        dtypes: &[ElementKind],
+        body: Expr,
+        op: ReduceOp,
+        axes: AxisMask,
+        keepdim: bool,
+    ) -> Self {
         Self {
             name: name.to_string(),
             n_inputs,
             body: body.0,
             dtypes: dtypes.to_vec(),
-            access: Access::Reduction { op },
+            access: Access::Reduction { op, axes, keepdim },
             views: Vec::new(),
         }
     }
@@ -535,5 +564,48 @@ mod view_tests {
         assert!(View::Identity.is_valid(4));
         assert!(View::Broadcast { bcast: AxisMask::EMPTY }.is_valid(4));
         assert!(View::Reshape { producer_rank: 2 }.is_valid(3));
+    }
+}
+
+#[cfg(test)]
+mod reduction_axes_tests {
+    use super::*;
+
+    #[test]
+    fn reduction_defaults_to_last_axis_empty_mask() {
+        // OpDef::reduction stays the legacy last-axis default: empty mask, no
+        // keepdim — byte-identical to before item 03.
+        match OpDef::reduction("sum", 1, &[ElementKind::F32], input(0), ReduceOp::Sum).access {
+            Access::Reduction { op, axes, keepdim } => {
+                assert_eq!(op, ReduceOp::Sum);
+                assert!(axes.is_empty());
+                assert!(!keepdim);
+            }
+            other => panic!("expected Access::Reduction, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn reduction_axes_carries_axis_set_and_keepdim() {
+        // Reduce axis 0, keepdim on.
+        match OpDef::reduction_axes(
+            "mean0",
+            1,
+            &[ElementKind::F32],
+            input(0),
+            ReduceOp::Mean,
+            AxisMask(0b01),
+            true,
+        )
+        .access
+        {
+            Access::Reduction { op, axes, keepdim } => {
+                assert_eq!(op, ReduceOp::Mean);
+                assert!(axes.is_set(0));
+                assert!(!axes.is_set(1));
+                assert!(keepdim);
+            }
+            other => panic!("expected Access::Reduction, got {other:?}"),
+        }
     }
 }

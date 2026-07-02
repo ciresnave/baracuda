@@ -429,10 +429,17 @@ ordering is emitted one way pending Fuel E1.
 
 - **ORDER 1 — `Const`**: done.
 - **ORDER 2 — `Unary`** (activations): done.
-- **ORDER 3 — reductions / layout / `MatMul`**: pending — the dedicated
-  norm/fused-linear workstream (`Access::Reduction` + reduction nodes carrying
-  `.axis`, a DAG IR with consumer counts, layout nodes with shape facts,
-  `MatMul`). After it, the FKC §8 RmsNorm/FusedLinear targets derive.
+- **ORDER 3 — reductions / layout / `MatMul`**: **reductions done** (item 03).
+  `Access::Reduction` carries `axes: AxisMask` + `keepdim`; the emitter generalizes
+  past the contiguous last-axis fast path to outer/middle/multi-axis + keepdim +
+  strided inputs (kept-axis unravel / strided reduced-axis fold), and
+  `structure_key` derives `reduce_axes` from keepdim-form output (the `{Reduced}`
+  projection of the AxisRole vocab — `docs/design/axis-role-vocabulary.md`).
+  On-device validated on sm_89 (RTX 4070). `Access::RowReduce` (fused norms/softmax)
+  also shipped. **Still pending**: layout nodes (item 01 — now recognition-only after
+  converging with Fuel on convention (c)), a DAG IR with consumer counts (item 02),
+  and `MatMul` (item 10 spike; the AxisRole superset wires there). After those, the
+  FKC §8 RmsNorm/FusedLinear targets derive.
 
 ### Validation (sm_89, RTX 4070)
 
