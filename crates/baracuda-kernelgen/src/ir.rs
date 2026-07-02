@@ -7,7 +7,7 @@
 //! Describing the math here — rather than as opaque CUDA — is what lets the
 //! emitter vectorize, hoist, and fuse, because it can see the dataflow.
 
-use baracuda_kernels_types::ElementKind;
+use baracuda_kernels_types::{AxisMask, ElementKind};
 
 /// A scalar compute expression — the per-output-coordinate math, as a typed DAG.
 ///
@@ -304,6 +304,94 @@ pub enum Access {
     },
 }
 
+/// How input operand `i` is read relative to the op's iteration space — a
+/// structural (compile-time) layout fact the emitter folds into address math.
+/// It is deliberately **not** part of [`ScalarExpr`] (per-coordinate *value*
+/// math) and **not** an [`Access`] variant (a whole-op loop-nest change): a view
+/// is a *per-operand read-through*, so it lives orthogonally on [`OpDef::views`].
+/// That keeps the value-math walkers (optimizer/e-graph, `contract`, `pattern`)
+/// untouched. `Identity` reads at the iteration coordinate (today's behavior);
+/// the other variants let a fused op read an input *through* a layout change in
+/// one pass, skipping a materialized `contiguize`/transpose copy (the §1 win).
+///
+/// v1 emits `Transpose` (= rank-2 `Permute`) / `Permute` / `Broadcast`;
+/// `Reshape` is carried for recognition + keying only (a reshape of a contiguous
+/// producer is the identity linear-index map — genuine rank-change emit belongs
+/// to items 03/10).
+#[derive(Clone, Debug, PartialEq, Default)]
+pub enum View {
+    /// Read operand `i` at the iteration coordinate — no layout change (default).
+    #[default]
+    Identity,
+    /// Read a permutation of the producer: iteration axis `d` indexes producer
+    /// axis `perm[d]`. `perm` is a permutation of `0..rank` (the rank-2 case is a
+    /// transpose); validate with [`View::is_valid`].
+    Permute {
+        /// Permutation of `0..rank`: iteration axis `d` → producer axis `perm[d]`.
+        perm: Vec<u8>,
+    },
+    /// Broadcast a lower-rank / size-1 producer up to the iteration shape: `bcast`
+    /// marks the iteration axes the producer does **not** vary along (stride 0).
+    /// The named IR form of what [`baracuda_kernels_types::OperandKey`]'s
+    /// broadcast mask already encodes on the schedule side.
+    Broadcast {
+        /// Iteration axes along which the producer is broadcast (stride 0).
+        bcast: AxisMask,
+    },
+    /// The producer is contiguous with a different logical rank but the **same**
+    /// linear element order, so reading is a pure linear-index pass-through.
+    /// Carries the producer rank for contract/keying only (no address math).
+    Reshape {
+        /// Logical rank of the pre-reshape producer.
+        producer_rank: u8,
+    },
+}
+
+impl View {
+    /// `true` iff structurally well-formed for an op iterating over `rank` axes: a
+    /// `Permute` must carry a true permutation of `0..rank`; the other variants are
+    /// always well-formed. Extent agreement between the declared view and the
+    /// runtime `shape[]`/stride arrays is a *caller* precondition (the same trust
+    /// level as the RowReduce `n_out`/`k` contract), because
+    /// [`baracuda_kernels_types::StructureKey`] deliberately abstracts numeric
+    /// extents away.
+    #[must_use]
+    pub fn is_valid(&self, rank: u8) -> bool {
+        match self {
+            View::Identity | View::Broadcast { .. } | View::Reshape { .. } => true,
+            View::Permute { perm } => is_permutation(perm, rank),
+        }
+    }
+
+    /// `true` for [`View::Identity`] — the back-compat default that leaves address
+    /// math unchanged.
+    #[must_use]
+    pub fn is_identity(&self) -> bool {
+        matches!(self, View::Identity)
+    }
+}
+
+/// `true` iff `perm` is a permutation of `0..rank` (each axis in range, no dup).
+fn is_permutation(perm: &[u8], rank: u8) -> bool {
+    if perm.len() != rank as usize {
+        return false;
+    }
+    let mut seen = 0u64;
+    for &a in perm {
+        // `a >= 64` guard keeps the shift in range regardless of a bogus `rank`;
+        // any valid axis is `< rank <= MAX_RANK (8)`.
+        if a as usize >= rank as usize || a >= 64 {
+            return false;
+        }
+        let bit = 1u64 << a;
+        if seen & bit != 0 {
+            return false; // duplicate axis
+        }
+        seen |= bit;
+    }
+    true
+}
+
 /// An op definition — the **algorithm** half of the algorithm/schedule split.
 ///
 /// Names the op, its input-operand count, the output expression, the accepted
@@ -321,6 +409,10 @@ pub struct OpDef {
     pub dtypes: Vec<ElementKind>,
     /// Iteration pattern.
     pub access: Access,
+    /// Per-input layout view (index `i` ↔ `Input(i)`). Empty ⇒ every input is
+    /// [`View::Identity`] (back-compat: every existing `OpDef` is view-free). When
+    /// non-empty, length **must** equal `n_inputs`. Set via [`OpDef::with_views`].
+    pub views: Vec<View>,
 }
 
 impl OpDef {
@@ -334,6 +426,7 @@ impl OpDef {
             body: body.0,
             dtypes: dtypes.to_vec(),
             access: Access::Elementwise,
+            views: Vec::new(),
         }
     }
 
@@ -355,6 +448,7 @@ impl OpDef {
             body: body.0,
             dtypes: dtypes.to_vec(),
             access: Access::Reduction { op },
+            views: Vec::new(),
         }
     }
 
@@ -381,6 +475,65 @@ impl OpDef {
                 stages,
                 epilogue: epilogue.0,
             },
+            views: Vec::new(),
         }
+    }
+
+    /// Attach per-input layout [`View`]s (item 01). `views[i]` applies to
+    /// `Input(i)`; `views.len()` must equal `n_inputs`. A view-free op (the common
+    /// case) never calls this and keeps `views` empty. The debug assert catches a
+    /// generator bug at catalog-build time; per-`Permute` validity is checked later
+    /// (in `plan`/`cuda`) once the iteration rank is known.
+    #[must_use]
+    pub fn with_views(mut self, views: Vec<View>) -> Self {
+        debug_assert_eq!(
+            views.len(),
+            self.n_inputs as usize,
+            "OpDef::with_views: views.len() must equal n_inputs"
+        );
+        self.views = views;
+        self
+    }
+}
+
+#[cfg(test)]
+mod view_tests {
+    use super::*;
+
+    #[test]
+    fn view_default_is_identity() {
+        assert_eq!(View::default(), View::Identity);
+        assert!(View::Identity.is_identity());
+        assert!(!View::Permute { perm: vec![1, 0] }.is_identity());
+    }
+
+    #[test]
+    fn existing_constructors_are_view_free() {
+        // Back-compat: every current OpDef builds with empty `views`.
+        let ew = OpDef::elementwise("relu", 1, &[ElementKind::F32], input(0).relu());
+        assert!(ew.views.is_empty());
+        let red = OpDef::reduction("sum", 1, &[ElementKind::F32], input(0), ReduceOp::Sum);
+        assert!(red.views.is_empty());
+    }
+
+    #[test]
+    fn with_views_sets_per_input_views() {
+        let op = OpDef::elementwise("add_t", 2, &[ElementKind::F32], input(0) + input(1))
+            .with_views(vec![View::Permute { perm: vec![1, 0] }, View::Identity]);
+        assert_eq!(op.views.len(), 2);
+        assert_eq!(op.views[0], View::Permute { perm: vec![1, 0] });
+        assert!(op.views[1].is_identity());
+    }
+
+    #[test]
+    fn permute_validity() {
+        assert!(View::Permute { perm: vec![1, 0] }.is_valid(2));
+        assert!(View::Permute { perm: vec![2, 0, 1] }.is_valid(3));
+        assert!(!View::Permute { perm: vec![0, 1] }.is_valid(3)); // wrong length
+        assert!(!View::Permute { perm: vec![0, 0] }.is_valid(2)); // duplicate axis
+        assert!(!View::Permute { perm: vec![0, 5] }.is_valid(2)); // out-of-range axis
+        assert!(View::Identity.is_valid(4));
+        assert!(View::Broadcast { bcast: AxisMask::EMPTY }.is_valid(4));
+        assert!(View::Reshape { producer_rank: 2 }.is_valid(3));
     }
 }
