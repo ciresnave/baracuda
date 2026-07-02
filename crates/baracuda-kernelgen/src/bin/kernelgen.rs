@@ -119,6 +119,15 @@ fn main() {
     // (iii) Reduce axis 0 of [4096,1024] -> [1,1024] (Sum, outer axis, keepdim).
     let sum_ax0_kd =
         OpDef::reduction_axes("sum", 1, &[f32], input(0), ReduceOp::Sum, AxisMask(0b01), true);
+    // (iv) Max over axis 0 (the has-flag / NaN-propagating fold).
+    let max_ax0 =
+        OpDef::reduction_axes("amax", 1, &[f32], input(0), ReduceOp::Max, AxisMask(0b01), false);
+    // (v) Middle axis of a rank-3 tensor -> two kept axes (0 and 2).
+    let sum_mid =
+        OpDef::reduction_axes("sum", 1, &[f32], input(0), ReduceOp::Sum, AxisMask(0b010), false);
+    // (vi) Reduce-all of a rank-2 tensor -> scalar (kept axes empty).
+    let sum_all =
+        OpDef::reduction_axes("sum", 1, &[f32], input(0), ReduceOp::Sum, AxisMask(0b011), false);
     let general_reductions = [
         (
             &sum_ax0,
@@ -134,6 +143,21 @@ fn main() {
             &sum_ax0_kd,
             OperandDesc::new(2, &[4096, 1024], &[1024, 1], f32, 256),
             OperandDesc::new(2, &[1, 1024], &[1024, 1], f32, 256), // keepdim: size-1 axis 0
+        ),
+        (
+            &max_ax0,
+            OperandDesc::new(2, &[4096, 1024], &[1024, 1], f32, 256),
+            OperandDesc::new(1, &[1024], &[1], f32, 256),
+        ),
+        (
+            &sum_mid,
+            OperandDesc::new(3, &[64, 128, 256], &[128 * 256, 256, 1], f32, 256),
+            OperandDesc::new(2, &[64, 256], &[256, 1], f32, 256), // collapse -> [64,256]
+        ),
+        (
+            &sum_all,
+            OperandDesc::new(2, &[4096, 1024], &[1024, 1], f32, 256),
+            OperandDesc::new(1, &[1], &[1], f32, 256), // scalar
         ),
     ];
     for (op, a, o) in general_reductions {
