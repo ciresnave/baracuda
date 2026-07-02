@@ -27,6 +27,20 @@ Dtype shorthand:
 - `s8`/`u8`/`s4`/`u4`/`Bin` — `IntElement` family
 - `Complex32`/`Complex64` — interleaved-real-imag complex floats
 
+## Dispatch / vendor-exclusion
+
+The **per-cell** routing decision (generated vs. cuBLAS/CUTLASS/cuDNN/bespoke) is
+recorded machine-readably in the dispatch table (design
+[§7](docs/design/kernel-specialization.md)), keyed on the `StructureKey` token.
+The schema + decision logic live in `baracuda-kernels-types::dispatch`
+(`DispatchTable`, `winner_of`, `seed_winner`, `merge`); `baracuda-kernelgen`
+emits the committed `@generated` artifact (`emit_dispatch_table`). A cell whose
+winner is a vendor library is a *deliberate* miss — no generated `.cu`, no
+link-registry entry — distinct from a forgotten one. The table is seeded by
+hand-knowledge (large aligned half-GEMM → cuBLAS) and overwritten by
+measurement; the on-device bench gate (v1) and the Fuel `dispatch_record` feed
+(v2, item 08) are the populators.
+
 ---
 
 ## OpCategory: Gemm

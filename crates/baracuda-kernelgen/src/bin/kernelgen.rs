@@ -6,11 +6,12 @@
 //! `--backend` selector replace the hardcoded pilot next.
 
 use baracuda_kernelgen::{
-    derive_pattern, generate, input, konst, param, reduced, to_fkc, Cuda, OpDef, ReduceOp,
-    ReduceStage, UnaryOp,
+    derive_pattern, emit_dispatch_table, generate, input, konst, param, reduced, to_fkc, Cuda,
+    OpDef, ReduceOp, ReduceStage, UnaryOp,
 };
 use baracuda_kernels_types::{
-    structure_key, ArchSku, AxisMask, ElementKind, OpCategory, OperandDesc,
+    seed_winner, structure_key, ArchSku, AxisMask, DispatchEntry, DispatchTable, ElementKind,
+    OpCategory, OperandDesc,
 };
 use std::fs;
 
@@ -29,6 +30,14 @@ fn main() {
             OpCategory::BinaryElementwise,
             &[operand, operand, operand],
             ArchSku::Sm89,
+        );
+        // Honest-miss invariant (§7): a generated cell must not also be a
+        // vendor-routed cell. Elementwise cells never trip a seed, but we consult
+        // the same oracle the GEMM path uses so the rule is enforced, not assumed.
+        debug_assert!(
+            seed_winner(&key).is_none(),
+            "elementwise cell {} unexpectedly vendor-seeded",
+            key.to_token()
         );
         let kernel = generate(&add, &key, &Cuda);
         let path = format!("{out_dir}/{}.cu", kernel.name);
@@ -259,4 +268,39 @@ fn main() {
         fs::write(format!("{out_dir}/{}.cu", k.name), &k.source).expect("write kernel");
         println!("generated {out_dir}/{}.cu  (cell {})", k.name, key.to_token());
     }
+
+    // --- Dispatch table (item 07, §7 vendor-exclusion) --------------------------
+    // Every cell generated above is an elementwise / reduction / norm class, none
+    // of which trips a vendor-exclusion seed. The routing decisions kernelgen
+    // records today are the *seeds*: cells we deliberately route to a vendor
+    // library and therefore do NOT generate — the honest miss made explicit (no
+    // `.cu`, no link-registry entry). The bench gate later merges measured rows
+    // (`Provenance::Measured`) over these via `baracuda_kernels_types::merge`.
+    let mut dispatch: Vec<DispatchEntry> = Vec::new();
+
+    // Large aligned half-precision GEMM → cuBLAS. kernelgen cannot yet emit a
+    // GEMM cell; this is the deliberate vendor route, not a forgotten kernel.
+    for dt in [ElementKind::F16, ElementKind::Bf16] {
+        let ga = OperandDesc::new(2, &[4096, 4096], &[4096, 1], dt, 256);
+        let gb = OperandDesc::new(2, &[4096, 4096], &[4096, 1], dt, 256);
+        let go = OperandDesc::new(2, &[4096, 4096], &[4096, 1], dt, 256);
+        let gkey = structure_key(OpCategory::Gemm, &[ga, gb, go], ArchSku::Sm89);
+        if let Some((winner, why)) = seed_winner(&gkey) {
+            println!(
+                "vendor-exclusion: route {} -> {} ({}); not generating",
+                gkey.to_token(),
+                winner.code(),
+                why
+            );
+            dispatch.push(DispatchEntry::seeded(gkey.to_token(), winner));
+        }
+    }
+
+    let table = DispatchTable::from_entries(dispatch);
+    let dpath = format!("{out_dir}/dispatch_table.rs");
+    fs::write(&dpath, emit_dispatch_table(&table)).expect("write dispatch table");
+    println!(
+        "emitted dispatch table -> {dpath}  ({} vendor-routed cell(s))",
+        table.entries.len()
+    );
 }
