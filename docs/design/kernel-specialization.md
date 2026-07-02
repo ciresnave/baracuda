@@ -240,6 +240,19 @@ the durable mechanism is measurement, because the winner moves with arch and
 dtype. See §8 — Fuel can supply this measurement from real workloads instead of
 us synthesizing it.
 
+**Status (item 07 — mechanism landed):** the schema + decision logic ship in
+`baracuda-kernels-types::dispatch` — `DispatchTable`/`DispatchEntry`/`Implementor`/
+`Provenance`/`HwStamp`, the pure reducers `winner_of`/`seed_winner`/`merge`, and a
+`MIN_FLIP_MARGIN` noise floor so a within-noise "win" can't overturn a seed.
+`baracuda-kernelgen::emit_dispatch_table` writes the committed `@generated`
+routing artifact (sorted, deduped, byte-stable — the `link.rs` discipline), and
+`bin/kernelgen` seeds it with the vendor-exclusion rows (large aligned half-GEMM →
+cuBLAS, *not generated*) while asserting the honest-miss invariant on every
+generated cell. What remains is the **v1 populator** — the on-device bench gate
+that measures each cell's candidates and merges `Provenance::Measured` rows over
+the seeds — and the **v2 populator**, the Fuel `dispatch_record` feed below, which
+lands through the same `merge()` seam (item 08).
+
 ---
 
 ## 8. The Fuel feedback loop

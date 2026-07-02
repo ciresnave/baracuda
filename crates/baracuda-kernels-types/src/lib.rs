@@ -53,6 +53,7 @@
 
 #![deny(missing_docs)]
 
+pub mod dispatch;
 pub mod element;
 pub mod layout;
 pub mod matrix;
@@ -62,6 +63,10 @@ pub mod sku;
 pub mod structure_key;
 pub mod tensor;
 
+pub use dispatch::{
+    merge, seed_winner, winner_of, CandidateResult, DispatchEntry, DispatchTable, HwStamp,
+    Implementor, Provenance, MIN_FLIP_MARGIN,
+};
 pub use element::{
     BiasElement, BiasElementKind, Bin, BinElement, Bool, Complex32, Complex64, Element,
     ElementKind, F32Strict, Fp8E4M3, Fp8E5M2, FpElement, IndexElement, IndexElementKind,

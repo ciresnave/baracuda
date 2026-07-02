@@ -30,6 +30,7 @@
 pub mod backend;
 pub mod contract;
 pub mod cuda;
+pub mod dispatch_artifact;
 pub mod ir;
 pub mod jit;
 pub mod link;
@@ -40,6 +41,7 @@ pub mod plan;
 pub use backend::{Backend, GeneratedKernel};
 pub use contract::{contract, front_matter};
 pub use cuda::Cuda;
+pub use dispatch_artifact::{emit_dispatch_table, parse_dispatch_table};
 pub use ir::{
     input, konst, param, reduced, Access, Expr, OpDef, ReduceOp, ReduceStage, ScalarExpr, UnaryOp,
 };
