@@ -401,6 +401,26 @@ fn emit_reduction(plan: &KernelPlan<'_>, ctype: &str, rop: ReduceOp) -> Generate
     let rank = plan.key.rank as usize;
     let reduced: Vec<usize> = (0..rank).filter(|&d| axes.is_set(d as u8)).collect();
     let kept: Vec<usize> = (0..rank).filter(|&d| !axes.is_set(d as u8)).collect();
+    // Output-store injectivity guard (§5c/§8): the store must not alias. A broadcast
+    // (stride-0) output axis that a *kept* coordinate varies over would collapse
+    // distinct outputs onto one `oo`; a flipped output can write out of bounds. A
+    // stride-0 *reduced* axis is harmless (size-1, coord 0 — the keepdim form). This
+    // is an AOT author-error backstop (reductions never cross the JIT boundary; a
+    // real reduction output is freshly-allocated dense).
+    let out_key = plan.key.operands[(plan.key.n_operands as usize).saturating_sub(1)];
+    let out_aliases = if keepdim {
+        // Output axes align with the input axes.
+        kept.iter().any(|&a| out_key.bcast.is_set(a as u8))
+    } else {
+        // Collapse: output axes are the kept axes in order (0..kept.len()).
+        (0..kept.len()).any(|j| out_key.bcast.is_set(j as u8))
+    };
+    assert!(
+        !out_aliases && !out_key.flipped,
+        "reduction general path: output store must be injective (no broadcast on a kept \
+         axis, no flip) — a non-dense output would alias or write OOB; got {:?}",
+        out_key.contig
+    );
     // The axis set + keepdim disambiguate the symbol so two axis-sets never collide.
     let name = format!(
         "baracuda_gen_{}_{}_reduce_{tag}_ax{:x}{}",
@@ -419,13 +439,16 @@ fn emit_reduction(plan: &KernelPlan<'_>, ctype: &str, rop: ReduceOp) -> Generate
     s.push_str("    long long o = (long long)blockIdx.x * blockDim.x + threadIdx.x;\n");
     s.push_str("    long long gstride = (long long)gridDim.x * blockDim.x;\n");
     s.push_str("    for (; o < n_out; o += gstride) {\n");
-    // Unravel the output linear index over the kept axes (row-major, last kept
-    // axis fastest). Reduced axes never enter the output enumeration.
-    s.push_str("        long long lin = o;\n");
-    for &a in kept.iter().rev() {
-        s.push_str(&format!(
-            "        long long ck{a} = lin % shape[{a}]; lin /= shape[{a}];\n"
-        ));
+    // Unravel the output linear index over the kept axes (row-major, last kept axis
+    // fastest). Reduced axes never enter the output enumeration. (Reduce-all ⇒ no
+    // kept axes ⇒ n_out == 1, so no unravel and no `lin` — avoids an unused var.)
+    if !kept.is_empty() {
+        s.push_str("        long long lin = o;\n");
+        for &a in kept.iter().rev() {
+            s.push_str(&format!(
+                "        long long ck{a} = lin % shape[{a}]; lin /= shape[{a}];\n"
+            ));
+        }
     }
     // Input base offset from the kept coords (a broadcast kept axis has stride 0
     // and drops out naturally).
@@ -1288,6 +1311,28 @@ mod tests {
         assert!(!k.source.contains("long long base = o * k;"));
         assert!(k.source.contains("long long idx = base + cr1*s0[1];")); // strided reduced fold
         assert!(k.source.contains("long long base = ck0*s0[0];"));
+    }
+
+    #[test]
+    #[should_panic(expected = "output store must be injective")]
+    fn reduction_broadcast_output_is_rejected() {
+        use crate::ir::ReduceOp;
+        use baracuda_kernels_types::AxisMask;
+        // A broadcast (stride-0) output would collapse every result onto one slot —
+        // the general path must reject it, not emit an aliasing store.
+        let a = OperandDesc::new(2, &[4, 8], &[8, 1], ElementKind::F32, 256);
+        let out = OperandDesc::new(1, &[8], &[0], ElementKind::F32, 256); // stride-0 = broadcast
+        let key = structure_key(OpCategory::Reduction, &[a, out], ArchSku::Sm89);
+        let op = OpDef::reduction_axes(
+            "s",
+            1,
+            &[ElementKind::F32],
+            input(0),
+            ReduceOp::Sum,
+            AxisMask(0b01),
+            false,
+        );
+        let _ = generate(&op, &key, &Cuda);
     }
 
     fn rr_key(dt: ElementKind, cat: OpCategory) -> baracuda_kernels_types::StructureKey {
