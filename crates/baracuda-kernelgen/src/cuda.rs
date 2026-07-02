@@ -8,7 +8,7 @@
 
 use crate::backend::{lower_expr, Backend, GeneratedKernel, Lowering};
 use crate::ir::{Access, BinaryOp, ReduceOp, ScalarExpr, UnaryOp};
-use crate::plan::{rr_role, KernelPlan, RrRole, Schedule};
+use crate::plan::{rr_role, KernelPlan, ReduceAxisClass, RrRole, Schedule};
 use baracuda_kernels_types::{Contiguity, ElementKind, OperandKey};
 
 /// The CUDA C++ backend. Lowers a [`KernelPlan`] to `.cu` source.
@@ -248,20 +248,27 @@ fn emit_strided(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
     GeneratedKernel { name, source: s }
 }
 
-/// Emit a **last-axis reduction**: one thread per output element, a sequential
-/// fold over the contiguous trailing axis (`k` elements). The accumulator is
-/// `float` — `double` for f64 and f32-strict (the strict mode wants a wide fold)
-/// — so f16/bf16/f32 inputs fold up-converted: more precise than folding in the
-/// narrow type, and it avoids the missing `__half2` reductions. The body computes
-/// the per-element pre-reduction expression; `Sum`/`Mean` fold from a 0 identity,
-/// `Max`/`Min` peel the first element under a `k > 0` guard (NaN-propagating, no
-/// ±∞ literal — header-light, and no out-of-bounds read on an empty axis).
+/// Emit a **reduction** (one thread per output element, sequential fold). Two
+/// paths, chosen by the schedule's [`ReduceAxisClass`] (item 03):
 ///
-/// v1 scope (asserted, AOT build-time — reductions are not in the JIT vocabulary,
+/// - **`InnerContig`** (empty axis mask = legacy last-axis default, or a single
+///   contiguous trailing axis): `base = o*k`, a dense contiguous run — **byte-
+///   identical to before item 03**.
+/// - **outer / middle / multi axis** (`Outer`/`Middle`/`Multi`): a generalized
+///   kept-axis unravel + strided reduced-axis fold, supporting non-last / multiple
+///   reduced axes, a **strided** input, and **keepdim** (size-1 broadcast-back)
+///   vs. collapse output. All classes lower to the same *sequential* fold in v2
+///   (correctness-first; a block-parallel outer-axis kernel is a later drop-in).
+///
+/// The accumulator is `float` — `double` for f64 / f32-strict — so f16/bf16/f32
+/// fold up-converted (more precise, and it avoids the missing `__half2` reduce).
+/// `Sum`/`Mean` fold from a 0 identity; `Max`/`Min` seed the first element
+/// (NaN-propagating, no ±∞ literal, no OOB read on an empty axis).
+///
+/// v1 scope (AOT build-time asserts — reductions are not in the JIT vocabulary,
 /// so these never fire across the `synthesize` trust boundary): a single input,
-/// all-contiguous operands, float dtype. Multi-input (weighted) reductions,
-/// strided/broadcast inputs, arbitrary axes, integer accumulation, and a
-/// block-parallel tree fold (lower error + speed) are follow-ups.
+/// float dtype. Multi-input (weighted) reductions and integer accumulation
+/// (item 04) are follow-ups; the axes/keepdim/strided generalization is this item.
 fn emit_reduction(plan: &KernelPlan<'_>, ctype: &str, rop: ReduceOp) -> GeneratedKernel {
     let tag = match rop {
         ReduceOp::Sum => "sum",
@@ -269,11 +276,6 @@ fn emit_reduction(plan: &KernelPlan<'_>, ctype: &str, rop: ReduceOp) -> Generate
         ReduceOp::Max => "max",
         ReduceOp::Min => "min",
     };
-    let name = format!(
-        "baracuda_gen_{}_{}_reduce_{tag}",
-        plan.op_name,
-        dtype_tag(plan.dtype)
-    );
     assert!(
         matches!(
             plan.dtype,
@@ -283,22 +285,29 @@ fn emit_reduction(plan: &KernelPlan<'_>, ctype: &str, rop: ReduceOp) -> Generate
                 | ElementKind::F32Strict
                 | ElementKind::F64
         ),
-        "reduction v1: float dtypes only (int needs integer-typed accumulation — follow-up); got {:?}",
+        "reduction v1: float dtypes only (int needs integer-typed accumulation — item 04); got {:?}",
         plan.dtype
     );
     assert!(
         plan.n_inputs == 1,
-        "reduction v1: single-input only (multi-input needs per-operand stride/broadcast — follow-up); got {}",
+        "reduction v1: single-input only (multi-input weighted reduction is a follow-up); got {}",
         plan.n_inputs
     );
-    assert!(
-        (0..plan.key.n_operands as usize).all(|i| plan.key.operands[i].contig == Contiguity::Contig),
-        "reduction v1: contiguous operands only (base = o*k assumes a dense last axis); got a strided/broadcast cell"
-    );
-    let n = plan.n_inputs;
-    // Accumulate in double for f64 and f32-strict; float for f32/f16/bf16 (torch
-    // folds f16/bf16 in f32). The leaf load up-converts the input to that width,
-    // and the body is lowered in it (f32 math, or f64 for a double fold).
+
+    // Axis geometry comes from the IR (the source of truth), the fast-path split
+    // from the schedule class — both derived from `Access::Reduction.axes`, so this
+    // does not depend on the (separate) `StructureKey.reduce_axes` keying (step 5).
+    let class = match plan.schedule {
+        Schedule::Reduction { class, .. } => class,
+        _ => unreachable!("emit_reduction on a non-reduction schedule"),
+    };
+    let (axes, keepdim) = match plan.access {
+        Access::Reduction { axes, keepdim, .. } => (*axes, *keepdim),
+        _ => unreachable!("emit_reduction on a non-reduction access"),
+    };
+
+    // Accumulate in double for f64 / f32-strict; float otherwise. Shared by both
+    // paths — the leaf load up-converts, and the body is lowered in the acc width.
     let dbl = matches!(plan.dtype, ElementKind::F64 | ElementKind::F32Strict);
     let acc = if dbl { "double" } else { "float" };
     let zero = if dbl { "0.0" } else { "0.0f" };
@@ -323,55 +332,184 @@ fn emit_reduction(plan: &KernelPlan<'_>, ctype: &str, rop: ReduceOp) -> Generate
             },
         },
     );
+    let store = |finalized: String| -> String {
+        match plan.dtype {
+            ElementKind::F16 => format!("__float2half({finalized})"),
+            ElementKind::Bf16 => format!("__float2bfloat16({finalized})"),
+            _ => finalized,
+        }
+    };
 
-    let mut s = header(plan, &name);
-    for i in 0..n {
-        s.push_str(&format!("    const {ctype}* __restrict__ in{i},\n"));
+    if class == ReduceAxisClass::InnerContig {
+        // ---------- Fast path: contiguous last axis, `base = o*k` (byte-identical). ----------
+        assert!(
+            (0..plan.key.n_operands as usize)
+                .all(|i| plan.key.operands[i].contig == Contiguity::Contig),
+            "reduction fast path: contiguous operands only (base = o*k assumes a dense last axis)"
+        );
+        let name = format!(
+            "baracuda_gen_{}_{}_reduce_{tag}",
+            plan.op_name,
+            dtype_tag(plan.dtype)
+        );
+        let mut s = header(plan, &name);
+        s.push_str(&format!("    const {ctype}* __restrict__ in0,\n"));
+        s.push_str(&format!("    {ctype}* __restrict__ out,\n"));
+        s.push_str(&format!(
+            "    long long n_out,\n    long long k{})\n{{\n",
+            param_args(plan.body)
+        ));
+        s.push_str("    long long o = (long long)blockIdx.x * blockDim.x + threadIdx.x;\n");
+        s.push_str("    long long stride = (long long)gridDim.x * blockDim.x;\n");
+        s.push_str("    for (; o < n_out; o += stride) {\n");
+        s.push_str("        long long base = o * k;\n");
+        match rop {
+            ReduceOp::Sum | ReduceOp::Mean => {
+                s.push_str(&format!("        {acc} acc = {zero};\n"));
+                s.push_str("        for (long long j = 0; j < k; ++j) {\n");
+                s.push_str("            long long idx = base + j;\n");
+                s.push_str(&format!("            acc += {elem};\n"));
+                s.push_str("        }\n");
+            }
+            ReduceOp::Max | ReduceOp::Min => {
+                let cmp = if matches!(rop, ReduceOp::Max) { ">" } else { "<" };
+                s.push_str(&format!("        {acc} acc = {zero};\n"));
+                s.push_str("        if (k > 0) {\n");
+                s.push_str("            long long idx = base;\n");
+                s.push_str(&format!("            acc = {elem};\n"));
+                s.push_str("            for (long long j = 1; j < k; ++j) {\n");
+                s.push_str("                idx = base + j;\n");
+                s.push_str(&format!("                {acc} e = {elem};\n"));
+                s.push_str(&format!("                acc = (e != e || e {cmp} acc) ? e : acc;\n"));
+                s.push_str("            }\n");
+                s.push_str("        }\n");
+            }
+        }
+        let finalized = if matches!(rop, ReduceOp::Mean) {
+            format!("acc / ({acc})k")
+        } else {
+            "acc".to_string()
+        };
+        s.push_str(&format!("        out[o] = {};\n", store(finalized)));
+        s.push_str("    }\n}\n");
+        return GeneratedKernel { name, source: s };
     }
+
+    // ---------- General path: outer / middle / multi axis, strided input, keepdim. ----------
+    // Compile-time axis split (kept vs reduced, ascending). The runtime supplies
+    // per-input-axis extents `shape[]` + input strides `s0[]` + output strides `so[]`.
+    let rank = plan.key.rank as usize;
+    let reduced: Vec<usize> = (0..rank).filter(|&d| axes.is_set(d as u8)).collect();
+    let kept: Vec<usize> = (0..rank).filter(|&d| !axes.is_set(d as u8)).collect();
+    // The axis set + keepdim disambiguate the symbol so two axis-sets never collide.
+    let name = format!(
+        "baracuda_gen_{}_{}_reduce_{tag}_ax{:x}{}",
+        plan.op_name,
+        dtype_tag(plan.dtype),
+        axes.0,
+        if keepdim { "_kd" } else { "" }
+    );
+    let mut s = header(plan, &name);
+    s.push_str(&format!("    const {ctype}* __restrict__ in0,\n"));
     s.push_str(&format!("    {ctype}* __restrict__ out,\n"));
-    s.push_str(&format!(
-        "    long long n_out,\n    long long k{})\n{{\n",
-        param_args(plan.body)
-    ));
+    s.push_str("    const long long* __restrict__ shape,\n"); // per-input-axis extents
+    s.push_str("    const long long* __restrict__ s0,\n"); // input strides
+    s.push_str("    const long long* __restrict__ so,\n"); // output strides
+    s.push_str(&format!("    long long n_out{})\n{{\n", param_args(plan.body)));
     s.push_str("    long long o = (long long)blockIdx.x * blockDim.x + threadIdx.x;\n");
-    s.push_str("    long long stride = (long long)gridDim.x * blockDim.x;\n");
-    s.push_str("    for (; o < n_out; o += stride) {\n");
-    s.push_str("        long long base = o * k;\n");
+    s.push_str("    long long gstride = (long long)gridDim.x * blockDim.x;\n");
+    s.push_str("    for (; o < n_out; o += gstride) {\n");
+    // Unravel the output linear index over the kept axes (row-major, last kept
+    // axis fastest). Reduced axes never enter the output enumeration.
+    s.push_str("        long long lin = o;\n");
+    for &a in kept.iter().rev() {
+        s.push_str(&format!(
+            "        long long ck{a} = lin % shape[{a}]; lin /= shape[{a}];\n"
+        ));
+    }
+    // Input base offset from the kept coords (a broadcast kept axis has stride 0
+    // and drops out naturally).
+    let base_expr = if kept.is_empty() {
+        "0".to_string()
+    } else {
+        kept.iter()
+            .map(|a| format!("ck{a}*s0[{a}]"))
+            .collect::<Vec<_>>()
+            .join(" + ")
+    };
+    s.push_str(&format!("        long long base = {base_expr};\n"));
+    // Output offset: keepdim ⇒ `so` indexed by input axis (reduced axes are
+    // size-1, output coord 0, so only kept terms contribute); collapse ⇒ `so`
+    // indexed by the kept axis's position among the kept axes.
+    let oo_expr = if kept.is_empty() {
+        "0".to_string()
+    } else if keepdim {
+        kept.iter()
+            .map(|a| format!("ck{a}*so[{a}]"))
+            .collect::<Vec<_>>()
+            .join(" + ")
+    } else {
+        kept.iter()
+            .enumerate()
+            .map(|(j, a)| format!("ck{a}*so[{j}]"))
+            .collect::<Vec<_>>()
+            .join(" + ")
+    };
+    s.push_str(&format!("        long long oo = {oo_expr};\n"));
+    // Reduced-axis offset for the fold: Σ cr{r}·s0[r]. A broadcast reduced axis
+    // (stride 0) re-reads the same element `shape[r]` times — correct semantics.
+    let red_off = reduced
+        .iter()
+        .map(|r| format!("cr{r}*s0[{r}]"))
+        .collect::<Vec<_>>()
+        .join(" + ");
     match rop {
         ReduceOp::Sum | ReduceOp::Mean => {
             s.push_str(&format!("        {acc} acc = {zero};\n"));
-            s.push_str("        for (long long j = 0; j < k; ++j) {\n");
-            s.push_str("            long long idx = base + j;\n");
+            for &r in &reduced {
+                s.push_str(&format!(
+                    "        for (long long cr{r} = 0; cr{r} < shape[{r}]; ++cr{r}) {{\n"
+                ));
+            }
+            s.push_str(&format!("            long long idx = base + {red_off};\n"));
             s.push_str(&format!("            acc += {elem};\n"));
-            s.push_str("        }\n");
+            for _ in &reduced {
+                s.push_str("        }\n");
+            }
         }
         ReduceOp::Max | ReduceOp::Min => {
             let cmp = if matches!(rop, ReduceOp::Max) { ">" } else { "<" };
-            // Seed from the first element under a k>0 guard (no ±∞ literal, and no
-            // OOB read on an empty axis); a NaN element sticks (torch.amax/amin).
+            // `has` seeds the first reduced element (all cr=0) without a ±∞ literal;
+            // an empty reduced extent leaves `acc = 0` (matching the fast path).
             s.push_str(&format!("        {acc} acc = {zero};\n"));
-            s.push_str("        if (k > 0) {\n");
-            s.push_str("            long long idx = base;\n");
-            s.push_str(&format!("            acc = {elem};\n"));
-            s.push_str("            for (long long j = 1; j < k; ++j) {\n");
-            s.push_str("                idx = base + j;\n");
-            s.push_str(&format!("                {acc} e = {elem};\n"));
-            s.push_str(&format!("                acc = (e != e || e {cmp} acc) ? e : acc;\n"));
-            s.push_str("            }\n");
-            s.push_str("        }\n");
+            s.push_str("        int has = 0;\n");
+            for &r in &reduced {
+                s.push_str(&format!(
+                    "        for (long long cr{r} = 0; cr{r} < shape[{r}]; ++cr{r}) {{\n"
+                ));
+            }
+            s.push_str(&format!("            long long idx = base + {red_off};\n"));
+            s.push_str(&format!("            {acc} e = {elem};\n"));
+            s.push_str(&format!(
+                "            acc = has ? ((e != e || e {cmp} acc) ? e : acc) : e; has = 1;\n"
+            ));
+            for _ in &reduced {
+                s.push_str("        }\n");
+            }
         }
     }
     let finalized = if matches!(rop, ReduceOp::Mean) {
-        format!("acc / ({acc})k")
+        // Mean divisor = product of the reduced extents (not just the last axis).
+        let divisor = reduced
+            .iter()
+            .map(|r| format!("shape[{r}]"))
+            .collect::<Vec<_>>()
+            .join(" * ");
+        format!("acc / ({acc})({divisor})")
     } else {
         "acc".to_string()
     };
-    let stored = match plan.dtype {
-        ElementKind::F16 => format!("__float2half({finalized})"),
-        ElementKind::Bf16 => format!("__float2bfloat16({finalized})"),
-        _ => finalized,
-    };
-    s.push_str(&format!("        out[o] = {stored};\n"));
+    s.push_str(&format!("        out[oo] = {};\n", store(finalized)));
     s.push_str("    }\n}\n");
     GeneratedKernel { name, source: s }
 }
@@ -1014,6 +1152,142 @@ mod tests {
         assert!(k.source.contains("double acc = 0.0;"));
         assert!(k.source.contains("acc += (double)in0[idx];"));
         assert!(k.source.contains("out[o] = acc;")); // double acc -> single round to float out
+    }
+
+    // ---- item 03: general (outer/middle/multi/keepdim/strided) reduction path ----
+
+    #[test]
+    fn reduction_outer_axis_collapses() {
+        use crate::ir::ReduceOp;
+        use baracuda_kernels_types::AxisMask;
+        // Reduce axis 0 of a contiguous [4,8] input → collapse to [8].
+        let a = OperandDesc::new(2, &[4, 8], &[8, 1], ElementKind::F32, 256);
+        let out = OperandDesc::new(1, &[8], &[1], ElementKind::F32, 256);
+        let key = structure_key(OpCategory::Reduction, &[a, out], ArchSku::Sm89);
+        let op = OpDef::reduction_axes(
+            "s",
+            1,
+            &[ElementKind::F32],
+            input(0),
+            ReduceOp::Sum,
+            AxisMask(0b01),
+            false,
+        );
+        let k = generate(&op, &key, &Cuda);
+        // Distinct symbol carrying the axis set; NOT the fast path.
+        assert_eq!(k.name, "baracuda_gen_s_f32_reduce_sum_ax1");
+        assert!(!k.source.contains("long long base = o * k;"));
+        // Kept-axis unravel, strided base, strided reduced fold, collapse output.
+        assert!(k.source.contains("long long ck1 = lin % shape[1]; lin /= shape[1];"));
+        assert!(k.source.contains("long long base = ck1*s0[1];"));
+        assert!(k.source.contains("for (long long cr0 = 0; cr0 < shape[0]; ++cr0)"));
+        assert!(k.source.contains("long long idx = base + cr0*s0[0];"));
+        assert!(k.source.contains("long long oo = ck1*so[0];"));
+        assert!(k.source.contains("acc += in0[idx];"));
+        assert!(k.source.contains("out[oo] ="));
+    }
+
+    #[test]
+    fn reduction_multi_axis_mean_divisor_is_the_extent_product() {
+        use crate::ir::ReduceOp;
+        use baracuda_kernels_types::AxisMask;
+        // Reduce axes {0,1} of [2,3,4] → [4], Mean: divisor = shape[0] * shape[1].
+        let a = OperandDesc::new(3, &[2, 3, 4], &[12, 4, 1], ElementKind::F32, 256);
+        let out = OperandDesc::new(1, &[4], &[1], ElementKind::F32, 256);
+        let key = structure_key(OpCategory::Reduction, &[a, out], ArchSku::Sm89);
+        let op = OpDef::reduction_axes(
+            "m",
+            1,
+            &[ElementKind::F32],
+            input(0),
+            ReduceOp::Mean,
+            AxisMask(0b011),
+            false,
+        );
+        let k = generate(&op, &key, &Cuda);
+        assert_eq!(k.name, "baracuda_gen_m_f32_reduce_mean_ax3");
+        // Nested reduced loops + the extent-product divisor (not just the last axis).
+        assert!(k.source.contains("for (long long cr0 = 0; cr0 < shape[0]; ++cr0)"));
+        assert!(k.source.contains("for (long long cr1 = 0; cr1 < shape[1]; ++cr1)"));
+        assert!(k.source.contains("long long idx = base + cr0*s0[0] + cr1*s0[1];"));
+        assert!(k.source.contains("acc / (float)(shape[0] * shape[1])"));
+        assert!(k.source.contains("long long base = ck2*s0[2];")); // kept axis 2
+    }
+
+    #[test]
+    fn reduction_keepdim_outer_axis_uses_input_axis_output_stride() {
+        use crate::ir::ReduceOp;
+        use baracuda_kernels_types::AxisMask;
+        // Reduce axis 0 of [4,8] with keepdim → [1,8]: the output stride is indexed
+        // by INPUT axis (kept axis 1), not a collapsed position.
+        let a = OperandDesc::new(2, &[4, 8], &[8, 1], ElementKind::F32, 256);
+        let out = OperandDesc::new(2, &[1, 8], &[8, 1], ElementKind::F32, 256);
+        let key = structure_key(OpCategory::Reduction, &[a, out], ArchSku::Sm89);
+        let op = OpDef::reduction_axes(
+            "s",
+            1,
+            &[ElementKind::F32],
+            input(0),
+            ReduceOp::Sum,
+            AxisMask(0b01),
+            true,
+        );
+        let k = generate(&op, &key, &Cuda);
+        assert_eq!(k.name, "baracuda_gen_s_f32_reduce_sum_ax1_kd");
+        assert!(k.source.contains("long long oo = ck1*so[1];")); // so[input-axis], not so[0]
+    }
+
+    #[test]
+    fn reduction_general_max_seeds_and_propagates_nan() {
+        use crate::ir::ReduceOp;
+        use baracuda_kernels_types::AxisMask;
+        // Max over a non-last axis still uses the NaN-propagating select, seeded via
+        // the `has` flag (no ±∞ literal, empty extent leaves acc = 0).
+        let a = OperandDesc::new(2, &[4, 8], &[8, 1], ElementKind::F32, 256);
+        let out = OperandDesc::new(1, &[8], &[1], ElementKind::F32, 256);
+        let key = structure_key(OpCategory::Reduction, &[a, out], ArchSku::Sm89);
+        let op = OpDef::reduction_axes(
+            "mx",
+            1,
+            &[ElementKind::F32],
+            input(0),
+            ReduceOp::Max,
+            AxisMask(0b01),
+            false,
+        );
+        let k = generate(&op, &key, &Cuda);
+        assert_eq!(k.name, "baracuda_gen_mx_f32_reduce_max_ax1");
+        assert!(!k.source.contains("INFINITY"));
+        assert!(k.source.contains("int has = 0;"));
+        assert!(k
+            .source
+            .contains("acc = has ? ((e != e || e > acc) ? e : acc) : e; has = 1;"));
+    }
+
+    #[test]
+    fn reduction_strided_last_axis_takes_the_general_path() {
+        use crate::ir::ReduceOp;
+        use baracuda_kernels_types::AxisMask;
+        // Reduce the last axis of a column-major (transposed, strided) [8,4] input:
+        // the trailing axis over a non-contiguous input is NOT the contiguous fast
+        // path, so it routes to the strided general fold.
+        let a = OperandDesc::new(2, &[8, 4], &[1, 8], ElementKind::F32, 256);
+        let out = OperandDesc::new(1, &[8], &[1], ElementKind::F32, 256);
+        let key = structure_key(OpCategory::Reduction, &[a, out], ArchSku::Sm89);
+        let op = OpDef::reduction_axes(
+            "s",
+            1,
+            &[ElementKind::F32],
+            input(0),
+            ReduceOp::Sum,
+            AxisMask(0b10),
+            false,
+        );
+        let k = generate(&op, &key, &Cuda);
+        assert_eq!(k.name, "baracuda_gen_s_f32_reduce_sum_ax2");
+        assert!(!k.source.contains("long long base = o * k;"));
+        assert!(k.source.contains("long long idx = base + cr1*s0[1];")); // strided reduced fold
+        assert!(k.source.contains("long long base = ck0*s0[0];"));
     }
 
     fn rr_key(dt: ElementKind, cat: OpCategory) -> baracuda_kernels_types::StructureKey {
