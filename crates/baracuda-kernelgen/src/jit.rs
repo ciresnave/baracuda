@@ -417,6 +417,9 @@ fn region_to_op(
         body,
         dtypes: vec![dtype],
         access: Access::Elementwise,
+        // Seam regions carry no layout facts (Fuel `OpAttrs` lacks perm/shape —
+        // ask F1), so a synthesized op is always view-free until F1 lands.
+        views: Vec::new(),
     };
     // Reuse the AOT bind-set / elementwise validation, and keep the canonical
     // pattern (so synthesize derives it exactly once).
