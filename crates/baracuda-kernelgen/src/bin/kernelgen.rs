@@ -9,7 +9,9 @@ use baracuda_kernelgen::{
     derive_pattern, generate, input, konst, param, reduced, to_fkc, Cuda, OpDef, ReduceOp,
     ReduceStage, UnaryOp,
 };
-use baracuda_kernels_types::{structure_key, ArchSku, ElementKind, OpCategory, OperandDesc};
+use baracuda_kernels_types::{
+    structure_key, ArchSku, AxisMask, ElementKind, OpCategory, OperandDesc,
+};
 use std::fs;
 
 fn main() {
@@ -99,6 +101,46 @@ fn main() {
         let k = generate(&mean, &key, &Cuda);
         fs::write(format!("{out_dir}/{}.cu", k.name), &k.source).expect("write kernel");
         println!("generated {out_dir}/{}.cu", k.name);
+    }
+
+    // --- General-path reductions (item 03): outer-axis, multi-axis, keepdim ---
+    // These exercise the kept-unravel + strided reduced-fold emit (NOT the
+    // contiguous `base=o*k` fast path), so nvcc-compiling + numeric-diffing these
+    // .cu against a torch/strided oracle (brief §7) is what validates the general
+    // path on device. Output operands are dense (collapse) or keepdim (size-1
+    // reduced axis) so the store is injective.
+    let f32 = ElementKind::F32;
+    // (i) Reduce axis 0 of [4096,1024] -> [1024] (Sum, outer axis, collapse).
+    let sum_ax0 =
+        OpDef::reduction_axes("sum", 1, &[f32], input(0), ReduceOp::Sum, AxisMask(0b01), false);
+    // (ii) Reduce axes {0,1} of [64,128,256] -> [256] (Mean, multi-axis, collapse).
+    let mean_ax01 =
+        OpDef::reduction_axes("mean", 1, &[f32], input(0), ReduceOp::Mean, AxisMask(0b011), false);
+    // (iii) Reduce axis 0 of [4096,1024] -> [1,1024] (Sum, outer axis, keepdim).
+    let sum_ax0_kd =
+        OpDef::reduction_axes("sum", 1, &[f32], input(0), ReduceOp::Sum, AxisMask(0b01), true);
+    let general_reductions = [
+        (
+            &sum_ax0,
+            OperandDesc::new(2, &[4096, 1024], &[1024, 1], f32, 256),
+            OperandDesc::new(1, &[1024], &[1], f32, 256),
+        ),
+        (
+            &mean_ax01,
+            OperandDesc::new(3, &[64, 128, 256], &[128 * 256, 256, 1], f32, 256),
+            OperandDesc::new(1, &[256], &[1], f32, 256),
+        ),
+        (
+            &sum_ax0_kd,
+            OperandDesc::new(2, &[4096, 1024], &[1024, 1], f32, 256),
+            OperandDesc::new(2, &[1, 1024], &[1024, 1], f32, 256), // keepdim: size-1 axis 0
+        ),
+    ];
+    for (op, a, o) in general_reductions {
+        let key = structure_key(OpCategory::Reduction, &[a, o], ArchSku::Sm89);
+        let k = generate(op, &key, &Cuda);
+        fs::write(format!("{out_dir}/{}.cu", k.name), &k.source).expect("write kernel");
+        println!("generated {out_dir}/{}.cu  (cell {})", k.name, key.to_token());
     }
 
     // Fused norms: RmsNorm / Softmax (single input), weighted-RmsNorm / LayerNorm
