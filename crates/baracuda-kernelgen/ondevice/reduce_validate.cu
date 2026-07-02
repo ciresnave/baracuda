@@ -13,6 +13,8 @@
 #include "baracuda_gen_sum_f32_reduce_sum_ax2.cu"    // reduce axis1, rank3 (two kept axes)
 #include "baracuda_gen_sum_f32_reduce_sum_ax3.cu"    // reduce {0,1}, rank2 -> scalar
 #include "baracuda_gen_mean_f32_reduce_mean.cu"      // last-axis mean (InnerContig/block-per-row)
+#include "baracuda_gen_sum_i32_reduce_sum.cu"         // i32 last-axis sum (long long accumulator)
+#include "baracuda_gen_amax_i32_reduce_max.cu"        // i32 last-axis max
 
 static int fails = 0;
 
@@ -154,6 +156,48 @@ int main() {
         std::vector<float> got(R);
         cudaMemcpy(got.data(), d_out, R * sizeof(float), cudaMemcpyDeviceToHost);
         check("mean_lastaxis_block", got, want);
+        cudaFree(d_in); cudaFree(d_out);
+    }
+    // ---- 8: i32 last-axis Sum, [4,8] -> [4] (exact long-long accumulator) ----
+    {
+        const int R = 4, C = 8;
+        std::vector<int> in(R * C);
+        for (int i = 0; i < R * C; ++i) in[i] = i - 10; // include negatives
+        std::vector<int> want(R, 0);
+        for (int i = 0; i < R; ++i) for (int j = 0; j < C; ++j) want[i] += in[i * C + j];
+        int *d_in = nullptr, *d_out = nullptr;
+        cudaMalloc((void**)&d_in, R * C * sizeof(int));
+        cudaMemcpy(d_in, in.data(), R * C * sizeof(int), cudaMemcpyHostToDevice);
+        cudaMalloc((void**)&d_out, R * sizeof(int));
+        baracuda_gen_sum_i32_reduce_sum<<<R, 256>>>(d_in, d_out, R, C);
+        cudaDeviceSynchronize();
+        std::vector<int> got(R);
+        cudaMemcpy(got.data(), d_out, R * sizeof(int), cudaMemcpyDeviceToHost);
+        bool ok = true;
+        for (int i = 0; i < R; ++i) if (got[i] != want[i]) ok = false;
+        printf(ok ? "PASS %-22s (exact int)\n" : "FAIL %-22s\n", "sum_i32_lastaxis");
+        if (!ok) fails++;
+        cudaFree(d_in); cudaFree(d_out);
+    }
+    // ---- 9: i32 last-axis Max, [4,8] -> [4] ----
+    {
+        const int R = 4, C = 8;
+        std::vector<int> in(R * C);
+        for (int i = 0; i < R * C; ++i) in[i] = (i * 7) % 13 - 6;
+        std::vector<int> want(R);
+        for (int i = 0; i < R; ++i) { int m = in[i * C]; for (int j = 1; j < C; ++j) if (in[i * C + j] > m) m = in[i * C + j]; want[i] = m; }
+        int *d_in = nullptr, *d_out = nullptr;
+        cudaMalloc((void**)&d_in, R * C * sizeof(int));
+        cudaMemcpy(d_in, in.data(), R * C * sizeof(int), cudaMemcpyHostToDevice);
+        cudaMalloc((void**)&d_out, R * sizeof(int));
+        baracuda_gen_amax_i32_reduce_max<<<R, 256>>>(d_in, d_out, R, C);
+        cudaDeviceSynchronize();
+        std::vector<int> got(R);
+        cudaMemcpy(got.data(), d_out, R * sizeof(int), cudaMemcpyDeviceToHost);
+        bool ok = true;
+        for (int i = 0; i < R; ++i) if (got[i] != want[i]) ok = false;
+        printf(ok ? "PASS %-22s (exact int)\n" : "FAIL %-22s\n", "max_i32_lastaxis");
+        if (!ok) fails++;
         cudaFree(d_in); cudaFree(d_out);
     }
 

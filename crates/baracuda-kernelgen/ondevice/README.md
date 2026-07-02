@@ -8,7 +8,9 @@ catchable **only** on device:
 - the emitter↔host **ABI** — `shape[]` / `s0[]` / `so[]` indexing and `n_out`;
 - the **keepdim ⇒ `so` by input axis** vs **collapse ⇒ `so` by kept position** split;
 - **NaN propagation** in the `Max` `has`-flag fold (torch.amax semantics);
-- multi-axis, middle-axis (two kept axes), and reduce-all (kept empty).
+- multi-axis, middle-axis (two kept axes), and reduce-all (kept empty);
+- **integer accumulation** — i32 last-axis Sum/Max fold in a `long long` accumulator
+  (exact, no float rounding), including negatives.
 
 ## Run
 
@@ -26,7 +28,8 @@ nvcc -arch=sm_89 <outdir>/reduce_validate.cu -o <outdir>/reduce_validate
 
 Expected: `ALL PASSED` (bit-exact, `maxerr 0`; NaN propagated).
 
-**Last run:** RTX 4070 Laptop (sm_89), CUDA 13.3 / nvcc 13.3 — **all 7 cases PASS** (incl. the InnerContig block-per-row last-axis path).
+**Last run:** RTX 4070 Laptop (sm_89), CUDA 13.3 / nvcc 13.3 — **all 9 cases PASS**
+(incl. the InnerContig block-per-row last-axis path and the i32 exact-int Sum/Max cases).
 
 ## Benchmark — `reduce_bench.cu`
 

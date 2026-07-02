@@ -276,6 +276,7 @@ fn emit_reduction(plan: &KernelPlan<'_>, ctype: &str, rop: ReduceOp) -> Generate
         ReduceOp::Max => "max",
         ReduceOp::Min => "min",
     };
+    let int_acc = matches!(plan.dtype, ElementKind::I32 | ElementKind::I64);
     assert!(
         matches!(
             plan.dtype,
@@ -284,9 +285,15 @@ fn emit_reduction(plan: &KernelPlan<'_>, ctype: &str, rop: ReduceOp) -> Generate
                 | ElementKind::F32
                 | ElementKind::F32Strict
                 | ElementKind::F64
-        ),
-        "reduction v1: float dtypes only (int needs integer-typed accumulation — item 04); got {:?}",
+        ) || int_acc,
+        "reduction: float or i32/i64 dtypes only (i8/u8 etc. not yet); got {:?}",
         plan.dtype
+    );
+    // Integer Mean is a float-output (mixed-dtype) op — unrepresentable in a
+    // single-dtype cell; use Sum/Max/Min for int.
+    assert!(
+        !(int_acc && matches!(rop, ReduceOp::Mean)),
+        "reduction: integer Mean is out of scope; use Sum/Max/Min for i32/i64"
     );
     assert!(
         plan.n_inputs == 1,
@@ -308,9 +315,18 @@ fn emit_reduction(plan: &KernelPlan<'_>, ctype: &str, rop: ReduceOp) -> Generate
 
     // Accumulate in double for f64 / f32-strict; float otherwise. Shared by both
     // paths — the leaf load up-converts, and the body is lowered in the acc width.
+    // Integer reductions accumulate in `long long` (exact, overflow-resistant);
+    // f64 / f32-strict in double; everything else in float. The leaf load is native
+    // for int (the `_` arm below) and up-converts only f16/bf16/f32-strict.
     let dbl = matches!(plan.dtype, ElementKind::F64 | ElementKind::F32Strict);
-    let acc = if dbl { "double" } else { "float" };
-    let zero = if dbl { "0.0" } else { "0.0f" };
+    let acc = if int_acc {
+        "long long"
+    } else if dbl {
+        "double"
+    } else {
+        "float"
+    };
+    let zero = if int_acc { "0" } else if dbl { "0.0" } else { "0.0f" };
     let load = |i: u8| match plan.dtype {
         ElementKind::F16 => format!("__half2float(in{i}[idx])"),
         ElementKind::Bf16 => format!("__bfloat162float(in{i}[idx])"),
@@ -1211,6 +1227,29 @@ mod tests {
         assert!(k.source.contains("acc += (double)in0[idx];"));
         assert!(k.source.contains("double r = block_sum_s_")); // block reduce in double
         assert!(k.source.contains("if (threadIdx.x == 0) out[row] = r;")); // single round to f32 out
+    }
+
+    #[test]
+    fn reduction_int_accumulates_in_long_long() {
+        use crate::ir::ReduceOp;
+        // i32 Sum reduces natively into a `long long` accumulator (exact); no float.
+        let op = OpDef::reduction("s", 1, &[ElementKind::I32], input(0), ReduceOp::Sum);
+        let k = generate(&op, &reduce_key(ElementKind::I32), &Cuda);
+        assert!(k.source.contains("const int* __restrict__ in0"));
+        assert!(k.source.contains("long long acc = 0;"));
+        assert!(k.source.contains("acc += in0[idx];")); // native int load, no float convert
+        assert!(k.source.contains("long long r = block_sum_"));
+        assert!(k.source.contains("if (threadIdx.x == 0) out[row] = r;"));
+        assert!(!k.source.contains("float acc"));
+    }
+
+    #[test]
+    #[should_panic(expected = "integer Mean is out of scope")]
+    fn reduction_int_mean_is_rejected() {
+        use crate::ir::ReduceOp;
+        // int Mean is float-output (mixed-dtype) — rejected, not silently mis-typed.
+        let op = OpDef::reduction("m", 1, &[ElementKind::I32], input(0), ReduceOp::Mean);
+        let _ = generate(&op, &reduce_key(ElementKind::I32), &Cuda);
     }
 
     // ---- item 03: general (outer/middle/multi/keepdim/strided) reduction path ----

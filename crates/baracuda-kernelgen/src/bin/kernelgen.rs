@@ -167,6 +167,19 @@ fn main() {
         println!("generated {out_dir}/{}.cu  (cell {})", k.name, key.to_token());
     }
 
+    // --- Integer reductions (item 04): i32 Sum/Max, exact `long long` accumulator ---
+    let i32 = ElementKind::I32;
+    let isum = OpDef::reduction("sum", 1, &[i32], input(0), ReduceOp::Sum);
+    let imax = OpDef::reduction("amax", 1, &[i32], input(0), ReduceOp::Max);
+    for op in [&isum, &imax] {
+        let a = OperandDesc::new(2, &[4096, 1024], &[1024, 1], i32, 256);
+        let o = OperandDesc::new(1, &[4096], &[1], i32, 256);
+        let key = structure_key(OpCategory::Reduction, &[a, o], ArchSku::Sm89);
+        let k = generate(op, &key, &Cuda);
+        fs::write(format!("{out_dir}/{}.cu", k.name), &k.source).expect("write kernel");
+        println!("generated {out_dir}/{}.cu  (cell {})", k.name, key.to_token());
+    }
+
     // Fused norms: RmsNorm / Softmax (single input), weighted-RmsNorm / LayerNorm
     // (multi-input: x + per-column [k] weight/bias broadcast over the row axis).
     let dt = ElementKind::F32;
