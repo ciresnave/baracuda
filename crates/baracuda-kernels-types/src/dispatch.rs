@@ -290,6 +290,81 @@ pub fn winner_of(
     })
 }
 
+/// One candidate from a Fuel `dispatch_record`, in Baracuda vocabulary — the
+/// batch ingest tool resolves Fuel's `ImplId` to `(implementor, entry_point)`
+/// before calling [`reported_entry`].
+#[derive(Clone, Debug, PartialEq)]
+pub struct ReportedCandidate {
+    /// Which implementation class the `ImplId` resolves to.
+    pub implementor: Implementor,
+    /// The kernel entry point, when the implementation has one.
+    pub entry_point: Option<String>,
+    /// Latency in ns — `None` = "considered, unmeasured" (Fuel's Judge ranked
+    /// it by static cost). Per the 2026-07-03 Fuel reply, **sparse lists are
+    /// the norm** until Judge coverage densifies; ingest must not require
+    /// all-measured rows.
+    pub latency_ns: Option<u64>,
+}
+
+/// Convert one aggregated Fuel `dispatch_record` into a
+/// [`Provenance::Reported`] entry for [`merge`].
+///
+/// **Fuel's `chosen` is honored, never re-ranked**: their Judge + runtime route
+/// picker made the live decision (and may weigh more than latency), so the
+/// entry's winner is `chosen` verbatim. `ranked` carries only the *measured*
+/// candidates (ascending by latency) — the evidence, which may or may not put
+/// `chosen` first. `margin` is `best_other_measured / chosen_measured` when
+/// both exist (it can be **< 1** when Fuel chose a slower candidate for
+/// non-latency reasons — such a row refreshes a same-route entry but cannot
+/// flip a different one past [`MIN_FLIP_MARGIN`], which is the intended
+/// conservatism), else `1.0` (no contest evidence).
+///
+/// Returns `None` when the record cannot be trusted as a routing signal: no
+/// structure key (Fuel's field is optional) or no hardware stamp ([`merge`]
+/// arch-gates `Reported` rows, so a stampless record is dropped, not guessed —
+/// composing with Fuel's "`compute_capability` is `None` on non-CUDA backends").
+#[must_use]
+pub fn reported_entry(
+    structure_key: Option<String>,
+    chosen: ReportedCandidate,
+    candidates: Vec<ReportedCandidate>,
+    measured_on: Option<HwStamp>,
+) -> Option<DispatchEntry> {
+    let structure_key = structure_key?;
+    let measured_on = measured_on?;
+    let mut ranked: Vec<CandidateResult> = candidates
+        .into_iter()
+        .filter_map(|c| {
+            let ns = c.latency_ns?;
+            (ns > 0).then(|| CandidateResult {
+                implementor: c.implementor,
+                median_ns: ns as f64,
+                entry_point: c.entry_point,
+            })
+        })
+        .collect();
+    ranked.sort_by(|a, b| a.median_ns.total_cmp(&b.median_ns));
+    let chosen_ns = chosen.latency_ns.filter(|&ns| ns > 0).map(|ns| ns as f64);
+    let margin = match chosen_ns {
+        Some(cns) => ranked
+            .iter()
+            .find(|c| {
+                c.implementor != chosen.implementor || c.entry_point != chosen.entry_point
+            })
+            .map_or(1.0, |other| other.median_ns / cns),
+        None => 1.0,
+    };
+    Some(DispatchEntry {
+        structure_key,
+        winner: chosen.implementor,
+        winner_entry: chosen.entry_point,
+        margin,
+        ranked,
+        provenance: Provenance::Reported,
+        measured_on: Some(measured_on),
+    })
+}
+
 /// Hand-knowledge routing defaults per §7 — cells we route to a vendor library
 /// without benching, keyed by a **predicate over the cell class**, not a literal
 /// token (the seed is "large aligned GEMM", a regime, not one shape).
@@ -802,6 +877,77 @@ mod tests {
             Implementor::Cublas,
             "NaN margin must not clear the noise floor"
         );
+    }
+
+    #[test]
+    fn reported_entry_honors_fuel_chosen_and_sparse_latencies() {
+        let k = ew_key();
+        let rc = |imp: Implementor, entry: Option<&str>, ns: Option<u64>| ReportedCandidate {
+            implementor: imp,
+            entry_point: entry.map(str::to_string),
+            latency_ns: ns,
+        };
+        // Fuel chose a MEASURED candidate that is NOT the fastest (their Judge
+        // weighs more than latency): winner = chosen verbatim, ranked = the
+        // measured evidence (fastest first), margin < 1 recorded honestly.
+        let e = reported_entry(
+            Some(k.to_token()),
+            rc(Implementor::Generated, Some("kern_b"), Some(200)),
+            vec![
+                rc(Implementor::Generated, Some("kern_a"), Some(100)),
+                rc(Implementor::Generated, Some("kern_b"), Some(200)),
+                rc(Implementor::Cublas, None, None), // considered, unmeasured
+            ],
+            Some(stamp(ArchSku::Sm89, 40)),
+        )
+        .expect("entry");
+        assert_eq!(e.provenance, Provenance::Reported);
+        assert_eq!(e.winner_entry.as_deref(), Some("kern_b"), "chosen honored");
+        assert_eq!(e.ranked.len(), 2, "only measured candidates ranked");
+        assert_eq!(e.ranked[0].entry_point.as_deref(), Some("kern_a"));
+        assert!((e.margin - 0.5).abs() < 1e-9, "best-other/chosen = 100/200");
+        // A margin < 1 Reported row cannot FLIP an established different route…
+        let mut t = DispatchTable::from_entries(vec![DispatchEntry {
+            structure_key: k.to_token(),
+            winner: Implementor::Generated,
+            winner_entry: Some("kern_a".to_string()),
+            margin: 2.0,
+            ranked: Vec::new(),
+            provenance: Provenance::Measured,
+            measured_on: Some(stamp(ArchSku::Sm89, 10)),
+        }]);
+        merge(&mut t, &[e]);
+        assert_eq!(
+            t.lookup(&k).unwrap().winner_entry.as_deref(),
+            Some("kern_a"),
+            "sub-1 margin cannot flip a different route"
+        );
+
+        // Unmeasured chosen ⇒ margin 1.0 (no contest evidence).
+        let e2 = reported_entry(
+            Some(k.to_token()),
+            rc(Implementor::Cublas, None, None),
+            vec![rc(Implementor::Generated, Some("kern_a"), Some(100))],
+            Some(stamp(ArchSku::Sm89, 41)),
+        )
+        .unwrap();
+        assert_eq!(e2.margin, 1.0);
+
+        // Untrustworthy records are dropped, not guessed: no token / no stamp.
+        assert!(reported_entry(
+            None,
+            rc(Implementor::Generated, Some("kern_a"), Some(100)),
+            vec![],
+            Some(stamp(ArchSku::Sm89, 42)),
+        )
+        .is_none());
+        assert!(reported_entry(
+            Some(k.to_token()),
+            rc(Implementor::Generated, Some("kern_a"), Some(100)),
+            vec![],
+            None,
+        )
+        .is_none());
     }
 
     #[test]
