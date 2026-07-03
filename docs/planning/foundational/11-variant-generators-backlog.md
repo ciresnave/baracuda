@@ -142,3 +142,14 @@ the true delta before extracting further. The extraction stays (cleaner ABI,
 one fewer device alloc per launch, constant-bank residency — never worse);
 the lesson: diff-reading suggests candidate deltas, only profiling confirms
 which one pays. Seventh measure-don't-assume instance.
+
+**Extraction #2 (2026-07-03): strength-reduced fold offsets — CONFIRMED, 2.05×
+on the general base path (55 → 112.6 GB/s).** Profiling-by-experiment (ncu is
+blocked by ERR_NVGPUCTRPERM — enabling GPU perf counters for non-admin needs
+the NVIDIA driver setting): the reduced-axis fold now walks `roff{i} += s0_{r}`
+per nest level instead of recomputing `base + Σ cr·s0` (an emulated 64-bit
+multiply per iteration, unhidden at starved occupancy). Value-preserving —
+identical addresses; all suites green. Residual: bespoke legacy still leads the
+base 165 vs 113 (~1.5×) — one more technique in there (candidates: 32-bit inner
+counters, deeper unroll) — but the CELL winner remains generated split-K
+(212–242 GB/s), so the residual hunt is about generator learning, not routing.

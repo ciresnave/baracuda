@@ -798,26 +798,40 @@ fn emit_reduction(plan: &KernelPlan<'_>, ctype: &str, rop: ReduceOp) -> Generate
             .join(" + ")
     };
     s.push_str(&format!("        long long oo = {oo_expr};\n"));
-    // Reduced-axis offset for the fold: Σ cr{r}·s0[r]. A broadcast reduced axis
-    // (stride 0) re-reads the same element `shape[r]` times — correct semantics.
-    let red_off = reduced
-        .iter()
-        .map(|r| format!("cr{r}*s0_{r}"))
-        .collect::<Vec<_>>()
-        .join(" + ");
+    // Reduced-axis fold offsets are STRENGTH-REDUCED (extraction #2, from the
+    // bespoke-legacy delta hunt): each nest level walks `roff{i} += s0_{r}`
+    // instead of recomputing `base + Σ cr{r}·s0_{r}` per iteration — the 64-bit
+    // multiply is emulated multi-instruction on consumer SMs, and this serial
+    // fold runs at starved occupancy where nothing hides instruction latency.
+    // Identical addresses (an exact integer identity), so value-preserving. A
+    // broadcast reduced axis (stride 0) still re-reads the same element
+    // `shape{r}` times — correct semantics.
+    let emit_reduced_nest = |s: &mut String, body: &[String]| {
+        s.push_str("        long long roff0 = base;\n");
+        for (i, &r) in reduced.iter().enumerate() {
+            s.push_str(&format!(
+                "        for (long long cr{r} = 0; cr{r} < shape{r}; ++cr{r}) {{\n"
+            ));
+            if i + 1 < reduced.len() {
+                s.push_str(&format!("            long long roff{} = roff{};\n", i + 1, i));
+            }
+        }
+        let inner = reduced.len() - 1;
+        s.push_str(&format!("            long long idx = roff{inner};\n"));
+        for line in body {
+            s.push_str(line);
+        }
+        // Close innermost-first; each level advances its own offset just
+        // before its closing brace.
+        for (i, &r) in reduced.iter().enumerate().rev() {
+            s.push_str(&format!("            roff{i} += s0_{r};\n"));
+            s.push_str("        }\n");
+        }
+    };
     match rop {
         ReduceOp::Sum | ReduceOp::Mean => {
             s.push_str(&format!("        {acc} acc = {zero};\n"));
-            for &r in &reduced {
-                s.push_str(&format!(
-                    "        for (long long cr{r} = 0; cr{r} < shape{r}; ++cr{r}) {{\n"
-                ));
-            }
-            s.push_str(&format!("            long long idx = base + {red_off};\n"));
-            s.push_str(&format!("            acc += {elem};\n"));
-            for _ in &reduced {
-                s.push_str("        }\n");
-            }
+            emit_reduced_nest(&mut s, &[format!("            acc += {elem};\n")]);
         }
         ReduceOp::Max | ReduceOp::Min => {
             let cmp = if matches!(rop, ReduceOp::Max) { ">" } else { "<" };
@@ -825,19 +839,15 @@ fn emit_reduction(plan: &KernelPlan<'_>, ctype: &str, rop: ReduceOp) -> Generate
             // an empty reduced extent leaves `acc = 0` (matching the fast path).
             s.push_str(&format!("        {acc} acc = {zero};\n"));
             s.push_str("        int has = 0;\n");
-            for &r in &reduced {
-                s.push_str(&format!(
-                    "        for (long long cr{r} = 0; cr{r} < shape{r}; ++cr{r}) {{\n"
-                ));
-            }
-            s.push_str(&format!("            long long idx = base + {red_off};\n"));
-            s.push_str(&format!("            {acc} e = {elem};\n"));
-            s.push_str(&format!(
-                "            acc = has ? ((e != e || e {cmp} acc) ? e : acc) : e; has = 1;\n"
-            ));
-            for _ in &reduced {
-                s.push_str("        }\n");
-            }
+            emit_reduced_nest(
+                &mut s,
+                &[
+                    format!("            {acc} e = {elem};\n"),
+                    format!(
+                        "            acc = has ? ((e != e || e {cmp} acc) ? e : acc) : e; has = 1;\n"
+                    ),
+                ],
+            );
         }
     }
     let finalized = if matches!(rop, ReduceOp::Mean) {
@@ -2536,7 +2546,9 @@ mod tests {
         assert!(k.source.contains("long long ck1 = lin % shape1; lin /= shape1;"));
         assert!(k.source.contains("long long base = ck1*s0_1;"));
         assert!(k.source.contains("for (long long cr0 = 0; cr0 < shape0; ++cr0)"));
-        assert!(k.source.contains("long long idx = base + cr0*s0_0;"));
+        assert!(k.source.contains("long long roff0 = base;")
+            && k.source.contains("long long idx = roff0;")
+            && k.source.contains("roff0 += s0_0;"));
         assert!(k.source.contains("long long oo = ck1*so_0;"));
         assert!(k.source.contains("acc += in0[idx];"));
         assert!(k.source.contains("out[oo] ="));
@@ -2564,7 +2576,9 @@ mod tests {
         // Nested reduced loops + the extent-product divisor (not just the last axis).
         assert!(k.source.contains("for (long long cr0 = 0; cr0 < shape0; ++cr0)"));
         assert!(k.source.contains("for (long long cr1 = 0; cr1 < shape1; ++cr1)"));
-        assert!(k.source.contains("long long idx = base + cr0*s0_0 + cr1*s0_1;"));
+        assert!(k.source.contains("long long roff1 = roff0;")
+            && k.source.contains("long long idx = roff1;")
+            && k.source.contains("roff1 += s0_1;"));
         assert!(k.source.contains("acc / (float)(shape0 * shape1)"));
         assert!(k.source.contains("long long base = ck2*s0_2;")); // kept axis 2
     }
@@ -2641,7 +2655,7 @@ mod tests {
         let k = generate(&op, &key, &Cuda);
         assert_eq!(k.name, "baracuda_gen_s_f32_reduce_sum_ax2");
         assert!(!k.source.contains("long long base = o * k;"));
-        assert!(k.source.contains("long long idx = base + cr1*s0_1;")); // strided reduced fold
+        assert!(k.source.contains("long long idx = roff0;") && k.source.contains("roff0 += s0_1;")); // strided reduced fold
         assert!(k.source.contains("long long base = ck0*s0_0;"));
     }
 
