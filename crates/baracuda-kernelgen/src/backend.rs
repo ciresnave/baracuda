@@ -64,8 +64,13 @@ impl std::fmt::Debug for Lowering<'_> {
 
 /// Spell an `f64` constant as a valid C literal. `{v:?}` emits `inf`/`NaN`, which
 /// aren't valid C literals; map the non-finite cases to the standard macros.
-/// (The f32 `f`-suffix vs double-promotion is dtype-dependent and tracked as a
-/// follow-up — a perf, not correctness, concern since the result narrows back.)
+///
+/// The f32 `f`-suffix vs double-promotion question is dtype-dependent and tracked
+/// as a follow-up — but it is **not** purely a perf concern: the optimizer's
+/// bit-preservation contract (e.g. the `x/2^k -> x*2^-k` rule) and the packed
+/// path's const gate are proven against the current double-promoted,
+/// correctly-rounded semantics. Changing the const spelling (or compiling with
+/// `--use_fast_math`) invalidates those proofs; re-verify the rule set first.
 #[must_use]
 pub fn const_lit(v: f64) -> String {
     if v.is_nan() {

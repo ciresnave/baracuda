@@ -20,6 +20,18 @@
 //! Equality-saturation extraction picks the cheapest equivalent. The rewrite set
 //! is the growth surface (factoring, FMA, perspective-diverse identities); the
 //! e-graph machinery underneath does not change as rules are added.
+//!
+//! # Bit-preservation contract
+//!
+//! Every rewrite preserves the device result **bits** for all inputs, with one
+//! documented carve-out: an eliminated arithmetic op no longer *quietens* a
+//! signaling-NaN input, so sNaN payloads are out of contract (the platform
+//! compilers make the same call). Zero **signs** and quiet-NaN payloads are IN
+//! contract — which is why the zero identities are sign-gated by bits
+//! (`x + (-0) -> x` is exact for every `x`, `x + (+0)` is NOT: `(-0)+(+0) = +0`;
+//! dually `x - (+0) -> x` is exact and `x - (-0)` is not) and why const folds
+//! skip NaN operands (a folded host NaN would drop the device's payload
+//! propagation and the authored sign).
 
 use crate::ir::{BinaryOp, ScalarExpr, UnaryOp};
 use std::collections::HashMap;
@@ -176,6 +188,12 @@ fn add_expr(eg: &mut EGraph, e: &ScalarExpr) -> Id {
 /// Fold a unary op on a constant — algebraic ops only; transcendentals return
 /// `None` (host-f64 vs device-f32 would diverge).
 fn eval_unary(op: UnaryOp, v: f64) -> Option<f64> {
+    // Never fold a NaN operand: the emitted `NAN` literal is the positive
+    // canonical quiet NaN, which would drop an authored sign/payload the
+    // runtime op preserves. Left symbolic, the device computes it faithfully.
+    if v.is_nan() {
+        return None;
+    }
     Some(match op {
         UnaryOp::Neg => -v,
         UnaryOp::Abs => v.abs(),
@@ -259,24 +277,36 @@ fn rules(eg: &mut EGraph) -> bool {
         let nid = eg.add(node.clone());
         match node {
             ENode::Add(a, b) => {
-                if eg.class_const(b) == Some(0.0) {
+                // x + (-0) -> x: bit-exact for EVERY x ((+0)+(-0) = +0,
+                // (-0)+(-0) = -0). x + (+0) is NOT an identity: (-0)+(+0) = +0
+                // under round-to-nearest, but the passthrough would keep -0.
+                // Gate by BITS — `== Some(0.0)` would match -0.0 too.
+                let neg_zero = Some((-0.0f64).to_bits());
+                if eg.class_const(b).map(f64::to_bits) == neg_zero {
                     changed |= eg.union(nid, a);
                 }
-                if eg.class_const(a) == Some(0.0) {
+                if eg.class_const(a).map(f64::to_bits) == neg_zero {
                     changed |= eg.union(nid, b);
                 }
                 if let (Some(x), Some(y)) = (eg.class_const(a), eg.class_const(b)) {
-                    let c = eg.add(ENode::Const((x + y).to_bits()));
-                    changed |= eg.union(nid, c);
+                    if !x.is_nan() && !y.is_nan() {
+                        let c = eg.add(ENode::Const((x + y).to_bits()));
+                        changed |= eg.union(nid, c);
+                    }
                 }
             }
             ENode::Sub(a, b) => {
-                if eg.class_const(b) == Some(0.0) {
+                // x - (+0) -> x: bit-exact for EVERY x ((-0)-(+0) = -0,
+                // (+0)-(+0) = +0). x - (-0) is NOT: (-0)-(-0) = +0, but the
+                // passthrough would keep -0. Gate by bits.
+                if eg.class_const(b).map(f64::to_bits) == Some(0.0f64.to_bits()) {
                     changed |= eg.union(nid, a);
                 }
                 if let (Some(x), Some(y)) = (eg.class_const(a), eg.class_const(b)) {
-                    let c = eg.add(ENode::Const((x - y).to_bits()));
-                    changed |= eg.union(nid, c);
+                    if !x.is_nan() && !y.is_nan() {
+                        let c = eg.add(ENode::Const((x - y).to_bits()));
+                        changed |= eg.union(nid, c);
+                    }
                 }
             }
             ENode::Mul(a, b) => {
@@ -291,8 +321,10 @@ fn rules(eg: &mut EGraph) -> bool {
                 // folding it would silently change the bits a kernel computes.
                 // Two-const products fold below (0*0 included, exactly).
                 if let (Some(x), Some(y)) = (eg.class_const(a), eg.class_const(b)) {
-                    let c = eg.add(ENode::Const((x * y).to_bits()));
-                    changed |= eg.union(nid, c);
+                    if !x.is_nan() && !y.is_nan() {
+                        let c = eg.add(ENode::Const((x * y).to_bits()));
+                        changed |= eg.union(nid, c);
+                    }
                 }
             }
             ENode::Div(a, b) => {
@@ -311,7 +343,7 @@ fn rules(eg: &mut EGraph) -> bool {
                     }
                 }
                 if let (Some(x), Some(y)) = (eg.class_const(a), eg.class_const(b)) {
-                    if y != 0.0 {
+                    if y != 0.0 && !x.is_nan() && !y.is_nan() {
                         let c = eg.add(ENode::Const((x / y).to_bits()));
                         changed |= eg.union(nid, c);
                     }
@@ -330,8 +362,10 @@ fn rules(eg: &mut EGraph) -> bool {
                     changed |= eg.union(nid, y);
                 }
                 if let Some(v) = eg.class_const(x) {
-                    let c = eg.add(ENode::Const((-v).to_bits()));
-                    changed |= eg.union(nid, c);
+                    if !v.is_nan() {
+                        let c = eg.add(ENode::Const((-v).to_bits()));
+                        changed |= eg.union(nid, c);
+                    }
                 }
             }
             ENode::Unary(op @ (UnaryOp::Abs | UnaryOp::Relu), x) => {
@@ -527,9 +561,26 @@ mod tests {
     }
 
     #[test]
-    fn add_zero_is_identity() {
-        assert_eq!(opt(input(0) + konst(0.0)), ScalarExpr::Input(0));
+    fn zero_identities_are_sign_gated() {
+        // The bit-exact identities: x + (-0) and x - (+0) pass through…
+        assert_eq!(opt(input(0) + konst(-0.0)), ScalarExpr::Input(0));
         assert_eq!(opt(input(2) - konst(0.0)), ScalarExpr::Input(2));
+        // …but the sign-flipping forms must NOT: (-0)+(+0) = +0 and
+        // (-0)-(-0) = +0, so eliminating the op would leak a -0 through.
+        assert!(matches!(opt(input(0) + konst(0.0)), ScalarExpr::Add(_, _)));
+        assert!(matches!(opt(input(2) - konst(-0.0)), ScalarExpr::Sub(_, _)));
+    }
+
+    #[test]
+    fn nan_constants_are_never_folded() {
+        // Folding a host NaN would emit the positive canonical `NAN` literal,
+        // dropping the sign/payload the runtime device op preserves.
+        let e = optimize(&neg(ScalarExpr::Const(f64::NAN)));
+        assert!(
+            matches!(e, ScalarExpr::Unary(UnaryOp::Neg, ref x) if matches!(**x, ScalarExpr::Const(v) if v.is_nan())),
+            "neg(NaN) stays symbolic, got {e:?}"
+        );
+        assert!(matches!(opt(konst(f64::NAN) + konst(1.0)), ScalarExpr::Add(_, _)));
     }
 
     #[test]
@@ -600,9 +651,10 @@ mod tests {
 
     #[test]
     fn redundant_chain_simplifies_under_an_op() {
-        // relu(x*1 + 0) -> relu(x): the identities propagate under the Relu via
-        // the shared e-class, and extraction picks the cheapest form.
-        let body = (input(0) * konst(1.0) + konst(0.0)).relu();
+        // relu(x*1 + (-0)) -> relu(x): the (sign-correct) identities propagate
+        // under the Relu via the shared e-class, and extraction picks the
+        // cheapest form.
+        let body = (input(0) * konst(1.0) + konst(-0.0)).relu();
         assert_eq!(
             optimize(&body.0),
             ScalarExpr::Unary(UnaryOp::Relu, Box::new(ScalarExpr::Input(0)))

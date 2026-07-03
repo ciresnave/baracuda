@@ -288,6 +288,13 @@ fn awkward_layout(key: &StructureKey) -> &'static str {
 
 /// Required base-pointer alignment (bytes): a vectorized cell needs its vector
 /// width; a scalar cell needs the dtype's natural alignment.
+///
+/// SEAM NOTE (H2, adversarial pass 2026-07-02): the contract does not yet state
+/// the **count unit** of the kernel's `n` argument — a vectorized cell takes a
+/// VECTOR count (`n / width`), a scalar cell an ELEMENT count. A consumer
+/// deriving launch parameters from the contract for a V8 cell without knowing
+/// this would over-launch 8x. Encode the count unit (or the width divisor) in
+/// the contract before Fuel derives launches from it.
 fn required_align(key: &StructureKey) -> u32 {
     let dsz = dtype_size(key.dtype);
     match key.operands[0].vec_width {
