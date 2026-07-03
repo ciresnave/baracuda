@@ -64,7 +64,7 @@ measurement; the on-device bench gate (v1) and the Fuel `dispatch_record` feed
 |----|---------|--------|-----------------|----|----|-------|
 | `UnaryPlan<T, N>` | Bespoke | FP-family | rank N (compile-time) | ✓ | ✓ via `UnaryBackwardPlan` | ~50 kinds: `{Neg, Abs, Sign, Reciprocal, Square, Cube, Sqrt, Rsqrt, Cbrt, Exp, Exp2, Expm1, Log, Log2, Log10, Log1p, Sin, Cos, Tan, Asin, Acos, Atan, Sinh, Cosh, Tanh, Asinh, Acosh, Atanh, Floor, Ceil, Round, Trunc, Frac, Relu, Gelu, GeluTanh, Silu, Mish, Sigmoid, Softplus, Hardswish, Hardsigmoid, Hardtanh, Erf, Erfc, Lgamma, Logit, Softsign, Tanhshrink, Relu6, Selu, LeakyRelu, Elu, Hardshrink, Softshrink}`. Both contig + strided. Activation BWs use weighted tolerance (cancellation-aware). |
 | `UnaryParamPlan<T, N>` | Bespoke | FP-family | rank N | ✓ | ✓ via `UnaryParamBackwardPlan` | Unary with one scalar param: `{Threshold, LeakyReluA, EluA, HardtanhAB, PowI, …}`. PowI added in Phase 12.1 (integer-exponent power-by-squaring; FW + BW; correct on negative bases — no NaN). Phase 14.2 added strided FFI sibling. |
-| `BinaryPlan<T, N>` | Bespoke | FP-family + `{i32, i64}` for bitwise + `Bool` for logical | broadcast-compatible (axis match or `dim==1 && stride==0`) | ✓ | ✓ via `BinaryBackwardPlan` | FP kinds: `{Add, Sub, Mul, Div, Pow, Atan2, Hypot, Copysign, Nextafter, Fmin, Fmax, Maximum, Minimum, FloorDivide, Mod, Remainder}`. Int kinds: `{BitwiseAnd/Or/Xor/LeftShift/RightShift}`. Bool kinds: `{LogicalAnd, LogicalOr, LogicalXor}` (contig only). |
+| `BinaryPlan<T, N>` | Bespoke | FP-family + `{i32, i64}` for bitwise + `Bool` for logical | broadcast-compatible (axis match or `dim==1 && stride==0`) | ✓ | ✓ via `BinaryBackwardPlan` | FP kinds: `{Add, Sub, Mul, Div, Pow, Atan2, Hypot, Copysign, Nextafter, Fmin, Fmax, Maximum, Minimum, FloorDivide, Mod, Remainder}`. Int kinds: `{BitwiseAnd/Or/Xor/LeftShift/RightShift}`. Bool kinds: `{LogicalAnd, LogicalOr, LogicalXor}` (contig only). **Kernelgen audit 2026-07-03 (f16 Add, contig, sm_89): three-way tie at the DRAM ceiling on large n; generated PACKED (4×`__half2`) wins the L2-resident regime (+15% vs bespoke, 793 vs 687 GB/s at 1Mi) — bit-identical outputs. Dispatch-table route for Small/Mid f16 cells: Generated (packed).** |
 | `BinaryParamPlan<T, N>` | Bespoke | FP-family | rank N | ✓ | ✓ via `BinaryParamBackwardPlan` | Binary with one scalar param: `{Lerp(weight), …}`. |
 | `BinaryCmpPlan<T, N>` | Bespoke | FP-family | broadcast-compatible | ✓ | N/A | Comparison ops: `{Eq, Ne, Lt, Le, Gt, Ge}`. Output is `Bool`. |
 | `TernaryPlan<T, N>` | Bespoke | FP-family | rank N | ✓ | ✓ via `TernaryBackwardPlan` | Kinds: `{Clamp, Fma, Addcmul, Addcdiv}`. |
@@ -100,7 +100,7 @@ measurement; the on-device bench gate (v1) and the Fuel `dispatch_record` feed
 
 | Op | Backend | Dtypes | Shapes / Limits | FW | BW | Notes |
 |----|---------|--------|-----------------|----|----|-------|
-| `ReducePlan<T, N>` | Bespoke | FP-family | rank ≤ 8, single axis | ✓ | ✓ via `ReduceBackwardPlan` | Kinds: `{Sum, Mean, Max, Min, Prod, Norm2, LogSumExp, Var, Std}`. BWs cover all 9 kinds (Prod/Norm2/Var/Std added 2026-05-15). |
+| `ReducePlan<T, N>` | Bespoke | FP-family | rank ≤ 8, single axis | ✓ | ✓ via `ReduceBackwardPlan` | Kinds: `{Sum, Mean, Max, Min, Prod, Norm2, LogSumExp, Var, Std}`. BWs cover all 9 kinds (Prod/Norm2/Var/Std added 2026-05-15). **Kernelgen audit rounds 1–2 (2026-07-03, f32 Sum/Mean, sm_89): generated swept 4/4 (last-axis 1.06×; outer-axis 1.41× via split-K variant); after extractions #2–#3 the generated GENERAL path also beats the bespoke legacy reducer head-to-head (169.6 vs 165.2 GB/s). Dispatch-table route: Generated.** |
 | `ArgReducePlan<T, N, I>` | Bespoke | FP-family input → `I ∈ {u32, i32, i64}` output | rank ≤ 8 | ✓ | N/A | Kinds: `{ArgMax, ArgMin}`. Reduce axis must be non-empty. Phase 12.2 added u32/i32 output dtypes via new `IndexOutputElement` sealed trait (default `I = i64` preserves source-compat). |
 | `BoolReducePlan<T, N>` | Bespoke | `{f32, f16, bf16, f64, i32, i64, Bool}` input → `Bool` output | rank ≤ 8 | ✓ | N/A | Kinds: `{Any, All}`. Pure integer AND/OR — bit-stable, deterministic. |
 | `CountReducePlan<T, N>` | Bespoke | `{f32, f16, bf16, f64, i32, i64, Bool}` input → `i64` output | rank ≤ 8 | ✓ | N/A | Kind: `CountNonzero`. i64 accumulator. |
@@ -121,7 +121,7 @@ measurement; the on-device bench gate (v1) and the Fuel `dispatch_record` feed
 
 | Op | Backend | Dtypes | Shapes / Limits | FW | BW | Notes |
 |----|---------|--------|-----------------|----|----|-------|
-| `SoftmaxPlan<T, N>` | Bespoke | FP-family | rank ≤ 8, single axis | ✓ | ✓ via `SoftmaxBackwardPlan` | Kinds: `{Softmax, LogSoftmax}`. Length-preserving, numerically stable (max-shift). |
+| `SoftmaxPlan<T, N>` | Bespoke | FP-family | rank ≤ 8, single axis | ✓ | ✓ via `SoftmaxBackwardPlan` | Kinds: `{Softmax, LogSoftmax}`. Length-preserving, numerically stable (max-shift). **Kernelgen audit round 1 (2026-07-03, f32 last-axis, sm_89): generated rowreduce wins 1.03× on SMEM-eligible rows and 884× on rows >47 KB (bespoke global fallback is O(numel·extent)). Dispatch-table route: Generated.** |
 | `GumbelSoftmaxPlan<T, N>` | Bespoke | FP-family | rank ≤ 8 | ✓ | ✓ via `GumbelSoftmaxBackwardPlan` | Uses cuRAND for Gumbel noise; BW reuses `softmax_backward_*` symbol (shape match). |
 | `SparsemaxPlan<T, N>` | Bespoke | FP-family | rank ≤ 8, extent along softmax axis ≤ `SPARSEMAX_MAX_EXTENT = 1024` | ✓ | ✓ via `SparsemaxBackwardPlan` | Phase 11.6 block-cooperative `cub::BlockRadixSort` + `cub::BlockScan` pipeline (one block per row, 2 compiled tile specs: 256 / 1024). |
 
@@ -131,8 +131,8 @@ measurement; the on-device bench gate (v1) and the Fuel `dispatch_record` feed
 
 | Op | Backend | Dtypes | Shapes / Limits | FW | BW | Notes |
 |----|---------|--------|-----------------|----|----|-------|
-| `RMSNormPlan<T, N>` | Bespoke | FP-family | rank ≤ 8 | ✓ | ✓ via `RMSNormBackwardPlan` | Optional per-feature `γ`. Deterministic affine BW via warp-shuffle (no atomicAdd). Welford for non-f32. |
-| `LayerNormPlan<T, N>` | Bespoke | FP-family | rank ≤ 8 | ✓ | ✓ via `LayerNormBackwardPlan` | Optional per-feature `γ`, `β`. Deterministic affine BW via warp-shuffle. |
+| `RMSNormPlan<T, N>` | Bespoke | FP-family | rank ≤ 8 | ✓ | ✓ via `RMSNormBackwardPlan` | Optional per-feature `γ`. Deterministic affine BW via warp-shuffle (no atomicAdd). Welford for non-f32. **Kernelgen audit 2026-07-03 (f32 FW, last-axis contig, sm_89): generated rowreduce TIES the SMEM fast path at the DRAM ceiling (1.00–1.01×) and wins 3,828–4,339× on rows >47 KB (bespoke legacy fallback is O(k²) per cell), with ~20× tighter numerics there. Dispatch-table route for those cells: Generated.** |
+| `LayerNormPlan<T, N>` | Bespoke | FP-family | rank ≤ 8 | ✓ | ✓ via `LayerNormBackwardPlan` | Optional per-feature `γ`, `β`. Deterministic affine BW via warp-shuffle. **Kernelgen audit 2026-07-03 (f32 FW, last-axis contig, sm_89): generated TIES the SMEM path (1.00–1.02×), wins 8,492× on rows >47 KB. Dispatch-table route for those cells: Generated.** |
 | `BatchNormPlan<T, N>` | Bespoke | FP-family | rank ≤ 8 | ✓ | ✓ via `BatchNormBackwardPlan` | Train + eval mode; tracks running mean / var. |
 | `GroupNormPlan<T, N>` | Bespoke | FP-family | rank ≤ 8 | ✓ | ✓ via `GroupNormBackwardPlan` | Per-group statistics. |
 | `InstanceNormPlan<T, N>` | Bespoke | FP-family | rank ≤ 8 | ✓ | ✓ via `InstanceNormBackwardPlan` | Per-sample, per-channel statistics. |

@@ -174,3 +174,28 @@ general path now wins its cell against the hand-written reducer even before
 split-K (211.8) routes it. Lesson pinned twice over: static reasoning about
 GPU codegen mispredicts even at SASS level — lab-measure candidate loop shapes
 before emitting them.
+
+**Audit round 2 (2026-07-03): norms + elementwise f16 — generated ≥ bespoke
+across the entire tested surface; OP-MATRIX annotated (5 rows).**
+Norms (f32 FW, last-axis contig; rmsnorm/wrmsnorm/layernorm × three shapes,
+CPU-double oracle, all PASS): on bespoke's SMEM-eligible shapes both sides sit
+at the DRAM ceiling (~225 GB/s, ratios 0.99–1.02× = tie; the generated
+2-pass global re-read is absorbed by L2, so bespoke's SMEM row-staging buys
+nothing measurable at these shapes). On rows >47 KB — past the bespoke SMEM
+budget — bespoke falls onto its O(k²)-per-cell legacy fallback and loses
+**3,828× / 4,339× / 8,492×**, with ~20× looser numerics (serial-f32 per-cell
+sums: abs 5e-6–1.3e-5 vs generated 2–6e-7). Elementwise f16 Add (bit-identical
+outputs all three ways): DRAM-bound 64Mi = three-way tie (~237 GB/s, scalar
+f16 already saturates — the item-09 finding again); L2-resident 1Mi = the
+generated PACKED pair (4×__half2) wins +15% over bespoke (793 vs 687 GB/s)
+and +20% over scalar. Verdict pattern across both rounds: bespoke fast paths
+are TIES (everything is at the memory wall), bespoke fallbacks are
+catastrophes the generator never has (rowreduce/general paths have no
+row-size or stride cliffs). Harnesses: `audit_norms.cu`, `audit_ew_f16.cu`
+(scratchpad genout13). Two harness-side lessons recorded: normalized outputs
+need an ABSOLUTE error metric (beta cancellation makes near-zero refs blow up
+relative error), and clock-ramp warmup is mandatory (pre-warmup "wins" of
+±15% inverted on rerun; every ratio quoted above is post-warmup).
+Remaining round-3 candidates: mean f16 (generated reduce_mean vs bespoke f16
+path), fused relu_add (no bespoke sibling — catalog-only), norm BW family
+(generator has no BW story yet — IR roadmap item, not an audit gap).
