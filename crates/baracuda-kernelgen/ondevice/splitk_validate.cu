@@ -76,7 +76,7 @@ int main() {
         cudaMalloc((void**)&d_sh, sizeof(shape)); cudaMemcpy(d_sh, shape, sizeof(shape), cudaMemcpyHostToDevice);
         cudaMalloc((void**)&d_s0, sizeof(s0)); cudaMemcpy(d_s0, s0, sizeof(s0), cudaMemcpyHostToDevice);
         cudaMalloc((void**)&d_so, sizeof(so)); cudaMemcpy(d_so, so, sizeof(so), cudaMemcpyHostToDevice);
-        baracuda_gen_sum_f32_reduce_sum_ax1<<<32, 128>>>(d_in, d_base, d_sh, d_s0, d_so, cols);
+        baracuda_gen_sum_f32_reduce_sum_ax1<<<32, 128>>>(d_in, d_base, rows, cols, cols, 1, 1, cols);
 
         run_splitk(d_in, d_ws, d_out, rows, cols, n_chunks);
         cudaDeviceSynchronize();
@@ -171,7 +171,7 @@ int main() {
 
             int grid_base = (int)col_tiles;
             float t_base = timed([&] {
-                baracuda_gen_sum_f32_reduce_sum_ax1<<<grid_base, block>>>(d_in, d_out, d_sh, d_s0, d_so, cols);
+                baracuda_gen_sum_f32_reduce_sum_ax1<<<grid_base, block>>>(d_in, d_out, rows, cols, cols, 1, 1, cols);
             });
             float t_sk = timed([&] { run_splitk(d_in, d_ws, d_out, rows, cols, n_chunks); });
 

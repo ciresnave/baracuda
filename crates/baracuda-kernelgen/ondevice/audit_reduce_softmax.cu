@@ -113,7 +113,7 @@ int main() {
         const int block = 256;
         int grid = (int)((C + block - 1) / block);
         auto gen_base = [&] {
-            baracuda_gen_sum_f32_reduce_sum_ax1<<<grid, block>>>(d_in, d_g, dsh, ds0, dso, C);
+            baracuda_gen_sum_f32_reduce_sum_ax1<<<grid, block>>>(d_in, d_g, R, C, C, 1, 1, C);
         };
         auto gen_splitk = [&] {
             long long chunk = (R + n_chunks - 1) / n_chunks;

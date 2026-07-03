@@ -98,19 +98,16 @@ fn variant_gate_loop_end_to_end() {
     let d_in = DeviceBuffer::from_slice(&ctx, &host).expect("d_in");
     let d_out = DeviceBuffer::<f32>::new(&ctx, COLS as usize).expect("d_out");
     let d_ws = DeviceBuffer::<f32>::new(&ctx, (N_CHUNKS * COLS) as usize).expect("d_ws");
-    let shape = [ROWS, COLS];
-    let s0 = [COLS, 1i64];
-    let so = [1i64];
-    let d_shape = DeviceBuffer::from_slice(&ctx, &shape).expect("shape");
-    let d_s0 = DeviceBuffer::from_slice(&ctx, &s0).expect("s0");
-    let d_so = DeviceBuffer::from_slice(&ctx, &so).expect("so");
+    // Extraction #1: dims ride by value as flattened scalar params.
+    const ONE: i64 = 1;
 
     let col_tiles = ((COLS as u32) + BLOCK - 1) / BLOCK;
     let chunk_rows: i64 = (ROWS + N_CHUNKS - 1) / N_CHUNKS;
 
     let launch_base = || {
         // SAFETY: argument list matches the generated general-path signature
-        // (in0, out, shape, s0, so, n_out); buffers outlive the launch.
+        // (in0, out, shape0, shape1, s0_0, s0_1, so_0, n_out) — dims by value
+        // per extraction #1; buffers outlive the launch.
         unsafe {
             f_base
                 .launch()
@@ -119,9 +116,11 @@ fn variant_gate_loop_end_to_end() {
                 .stream(&stream)
                 .arg(&d_in)
                 .arg(&d_out)
-                .arg(&d_shape)
-                .arg(&d_s0)
-                .arg(&d_so)
+                .arg(&ROWS)
+                .arg(&COLS)
+                .arg(&COLS)
+                .arg(&ONE)
+                .arg(&ONE)
                 .arg(&COLS)
                 .launch()
                 .expect("base launch");

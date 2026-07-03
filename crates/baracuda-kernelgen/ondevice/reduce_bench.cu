@@ -63,7 +63,7 @@ int main() {
     // InnerContig last-axis: now BLOCK-per-row (one block/row, coalesced + block reduce).
     float t_last = timed([&] { baracuda_gen_mean_f32_reduce_mean<<<(int)N, block>>>(d_in, d_out, N, M); });
     // General path: reduce axis 0 (one thread per column; warp reads coalesced).
-    float t_outer = timed([&] { baracuda_gen_sum_f32_reduce_sum_ax1<<<grid_r, block>>>(d_in, d_out, d_shape, d_s0, d_so, N); });
+    float t_outer = timed([&] { baracuda_gen_sum_f32_reduce_sum_ax1<<<grid_r, block>>>(d_in, d_out, N, M, M, 1, 1, N); });
 
     cudaError_t e = cudaGetLastError();
     if (e != cudaSuccess) { printf("CUDA error: %s\n", cudaGetErrorString(e)); return 2; }

@@ -54,7 +54,7 @@ int main() {
         for (int j = 0; j < C; ++j) for (int i = 0; i < R; ++i) want[j] += in[i * C + j];
         float *d_in = dev(in), *d_out = nullptr; cudaMalloc((void**)&d_out, C * sizeof(float));
         auto *d_sh = dev(shape); auto *d_s0 = dev(s0); auto *d_so = dev(so);
-        baracuda_gen_sum_f32_reduce_sum_ax1<<<32, 128>>>(d_in, d_out, d_sh, d_s0, d_so, C);
+        baracuda_gen_sum_f32_reduce_sum_ax1<<<32, 128>>>(d_in, d_out, R, C, C, 1, 1, C);
         cudaDeviceSynchronize();
         std::vector<float> got(C); cudaMemcpy(got.data(), d_out, C * sizeof(float), cudaMemcpyDeviceToHost);
         check("sum_ax0_collapse", got, want);
@@ -70,7 +70,7 @@ int main() {
         for (int k = 0; k < D; ++k) { float s = 0; for (int i = 0; i < A; ++i) for (int j = 0; j < B; ++j) s += in[i * B * D + j * D + k]; want[k] = s / (float)(A * B); }
         float *d_in = dev(in), *d_out = nullptr; cudaMalloc((void**)&d_out, D * sizeof(float));
         auto *d_sh = dev(shape); auto *d_s0 = dev(s0); auto *d_so = dev(so);
-        baracuda_gen_mean_f32_reduce_mean_ax3<<<32, 128>>>(d_in, d_out, d_sh, d_s0, d_so, D);
+        baracuda_gen_mean_f32_reduce_mean_ax3<<<32, 128>>>(d_in, d_out, A, B, D, (long long)B * D, D, 1, 1, D);
         cudaDeviceSynchronize();
         std::vector<float> got(D); cudaMemcpy(got.data(), d_out, D * sizeof(float), cudaMemcpyDeviceToHost);
         check("mean_ax01_collapse", got, want);
@@ -86,7 +86,7 @@ int main() {
         for (int j = 0; j < C; ++j) for (int i = 0; i < R; ++i) want[j] += in[i * C + j];
         float *d_in = dev(in), *d_out = nullptr; cudaMalloc((void**)&d_out, C * sizeof(float));
         auto *d_sh = dev(shape); auto *d_s0 = dev(s0); auto *d_so = dev(so);
-        baracuda_gen_sum_f32_reduce_sum_ax1_kd<<<32, 128>>>(d_in, d_out, d_sh, d_s0, d_so, C);
+        baracuda_gen_sum_f32_reduce_sum_ax1_kd<<<32, 128>>>(d_in, d_out, R, C, C, 1, C, 1, C);
         cudaDeviceSynchronize();
         std::vector<float> got(C); cudaMemcpy(got.data(), d_out, C * sizeof(float), cudaMemcpyDeviceToHost);
         check("sum_ax0_keepdim", got, want);
@@ -101,7 +101,7 @@ int main() {
         std::vector<long long> shape = {R, C}, s0 = {C, 1}, so = {1};
         float *d_in = dev(in), *d_out = nullptr; cudaMalloc((void**)&d_out, C * sizeof(float));
         auto *d_sh = dev(shape); auto *d_s0 = dev(s0); auto *d_so = dev(so);
-        baracuda_gen_amax_f32_reduce_max_ax1<<<32, 128>>>(d_in, d_out, d_sh, d_s0, d_so, C);
+        baracuda_gen_amax_f32_reduce_max_ax1<<<32, 128>>>(d_in, d_out, R, C, C, 1, 1, C);
         cudaDeviceSynchronize();
         std::vector<float> got(C); cudaMemcpy(got.data(), d_out, C * sizeof(float), cudaMemcpyDeviceToHost);
         bool ok = std::isnan(got[nan_col]); // NaN must propagate (torch.amax)
@@ -120,7 +120,7 @@ int main() {
         for (int i = 0; i < A; ++i) for (int k = 0; k < D; ++k) { float s = 0; for (int j = 0; j < B; ++j) s += in[i * B * D + j * D + k]; want[i * D + k] = s; }
         float *d_in = dev(in), *d_out = nullptr; cudaMalloc((void**)&d_out, A * D * sizeof(float));
         auto *d_sh = dev(shape); auto *d_s0 = dev(s0); auto *d_so = dev(so);
-        baracuda_gen_sum_f32_reduce_sum_ax2<<<32, 128>>>(d_in, d_out, d_sh, d_s0, d_so, A * D);
+        baracuda_gen_sum_f32_reduce_sum_ax2<<<32, 128>>>(d_in, d_out, A, B, D, (long long)B * D, D, 1, D, 1, A * D);
         cudaDeviceSynchronize();
         std::vector<float> got(A * D); cudaMemcpy(got.data(), d_out, A * D * sizeof(float), cudaMemcpyDeviceToHost);
         check("sum_mid_two_kept", got, want);
@@ -136,7 +136,7 @@ int main() {
         for (int i = 0; i < R * C; ++i) want[0] += in[i];
         float *d_in = dev(in), *d_out = nullptr; cudaMalloc((void**)&d_out, sizeof(float));
         auto *d_sh = dev(shape); auto *d_s0 = dev(s0); auto *d_so = dev(so);
-        baracuda_gen_sum_f32_reduce_sum_ax3<<<32, 128>>>(d_in, d_out, d_sh, d_s0, d_so, 1);
+        baracuda_gen_sum_f32_reduce_sum_ax3<<<32, 128>>>(d_in, d_out, R, C, C, 1, 1);
         cudaDeviceSynchronize();
         std::vector<float> got(1); cudaMemcpy(got.data(), d_out, sizeof(float), cudaMemcpyDeviceToHost);
         check("sum_reduce_all", got, want);

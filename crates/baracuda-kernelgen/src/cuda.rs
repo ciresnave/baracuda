@@ -443,11 +443,23 @@ fn emit_strided(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
         s.push_str(&format!("    const {ctype}* __restrict__ in{i},\n"));
     }
     s.push_str(&format!("    {ctype}* __restrict__ out,\n"));
-    s.push_str("    const long long* __restrict__ shape,\n");
-    for i in 0..n {
-        s.push_str(&format!("    const long long* __restrict__ s{i},\n"));
+    // Extraction #1 (generated-vs-bespoke audit round 1): dims ride BY VALUE as
+    // flattened scalar params (the constant bank) instead of global-memory
+    // pointer arrays re-read every iteration — worth ~3x on the general path at
+    // equal parallelism. Legal because every access below is compile-time
+    // indexed (the rank is unrolled), so each `shape[d]` is simply the scalar
+    // `shape{d}`.
+    for d in 0..rank {
+        s.push_str(&format!("    long long shape{d},\n"));
     }
-    s.push_str("    const long long* __restrict__ so,\n");
+    for i in 0..n {
+        for d in 0..rank {
+            s.push_str(&format!("    long long s{i}_{d},\n"));
+        }
+    }
+    for d in 0..rank {
+        s.push_str(&format!("    long long so_{d},\n"));
+    }
     s.push_str(&format!("    long long n{})\n{{\n", param_args(plan.body)));
     // Hoist fully-broadcast inputs: their offset is loop-invariant, load once.
     for k in 0..n {
@@ -462,7 +474,7 @@ fn emit_strided(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
     // Row-major unravel (last axis fastest), unrolled over the iteration rank.
     for d in (0..rank).rev() {
         s.push_str(&format!(
-            "        long long c{d} = lin % shape[{d}]; lin /= shape[{d}];\n"
+            "        long long c{d} = lin % shape{d}; lin /= shape{d};\n"
         ));
     }
     for k in 0..n {
@@ -728,9 +740,20 @@ fn emit_reduction(plan: &KernelPlan<'_>, ctype: &str, rop: ReduceOp) -> Generate
     let mut s = header(plan, &name);
     s.push_str(&format!("    const {ctype}* __restrict__ in0,\n"));
     s.push_str(&format!("    {ctype}* __restrict__ out,\n"));
-    s.push_str("    const long long* __restrict__ shape,\n"); // per-input-axis extents
-    s.push_str("    const long long* __restrict__ s0,\n"); // input strides
-    s.push_str("    const long long* __restrict__ so,\n"); // output strides
+    // Extraction #1 (audit round 1): dims ride BY VALUE as flattened scalar
+    // params (the constant bank) instead of global-pointer arrays re-read every
+    // iteration - every access below is compile-time indexed, so each array
+    // slot is simply a scalar.
+    for d in 0..rank {
+        s.push_str(&format!("    long long shape{d},\n")); // per-input-axis extents
+    }
+    for d in 0..rank {
+        s.push_str(&format!("    long long s0_{d},\n")); // input strides
+    }
+    let n_out_dims = if keepdim { rank } else { kept.len() };
+    for d in 0..n_out_dims {
+        s.push_str(&format!("    long long so_{d},\n")); // output strides
+    }
     s.push_str(&format!("    long long n_out{})\n{{\n", param_args(plan.body)));
     s.push_str("    long long o = (long long)blockIdx.x * blockDim.x + threadIdx.x;\n");
     s.push_str("    long long gstride = (long long)gridDim.x * blockDim.x;\n");
@@ -742,7 +765,7 @@ fn emit_reduction(plan: &KernelPlan<'_>, ctype: &str, rop: ReduceOp) -> Generate
         s.push_str("        long long lin = o;\n");
         for &a in kept.iter().rev() {
             s.push_str(&format!(
-                "        long long ck{a} = lin % shape[{a}]; lin /= shape[{a}];\n"
+                "        long long ck{a} = lin % shape{a}; lin /= shape{a};\n"
             ));
         }
     }
@@ -752,7 +775,7 @@ fn emit_reduction(plan: &KernelPlan<'_>, ctype: &str, rop: ReduceOp) -> Generate
         "0".to_string()
     } else {
         kept.iter()
-            .map(|a| format!("ck{a}*s0[{a}]"))
+            .map(|a| format!("ck{a}*s0_{a}"))
             .collect::<Vec<_>>()
             .join(" + ")
     };
@@ -764,13 +787,13 @@ fn emit_reduction(plan: &KernelPlan<'_>, ctype: &str, rop: ReduceOp) -> Generate
         "0".to_string()
     } else if keepdim {
         kept.iter()
-            .map(|a| format!("ck{a}*so[{a}]"))
+            .map(|a| format!("ck{a}*so_{a}"))
             .collect::<Vec<_>>()
             .join(" + ")
     } else {
         kept.iter()
             .enumerate()
-            .map(|(j, a)| format!("ck{a}*so[{j}]"))
+            .map(|(j, a)| format!("ck{a}*so_{j}"))
             .collect::<Vec<_>>()
             .join(" + ")
     };
@@ -779,7 +802,7 @@ fn emit_reduction(plan: &KernelPlan<'_>, ctype: &str, rop: ReduceOp) -> Generate
     // (stride 0) re-reads the same element `shape[r]` times — correct semantics.
     let red_off = reduced
         .iter()
-        .map(|r| format!("cr{r}*s0[{r}]"))
+        .map(|r| format!("cr{r}*s0_{r}"))
         .collect::<Vec<_>>()
         .join(" + ");
     match rop {
@@ -787,7 +810,7 @@ fn emit_reduction(plan: &KernelPlan<'_>, ctype: &str, rop: ReduceOp) -> Generate
             s.push_str(&format!("        {acc} acc = {zero};\n"));
             for &r in &reduced {
                 s.push_str(&format!(
-                    "        for (long long cr{r} = 0; cr{r} < shape[{r}]; ++cr{r}) {{\n"
+                    "        for (long long cr{r} = 0; cr{r} < shape{r}; ++cr{r}) {{\n"
                 ));
             }
             s.push_str(&format!("            long long idx = base + {red_off};\n"));
@@ -804,7 +827,7 @@ fn emit_reduction(plan: &KernelPlan<'_>, ctype: &str, rop: ReduceOp) -> Generate
             s.push_str("        int has = 0;\n");
             for &r in &reduced {
                 s.push_str(&format!(
-                    "        for (long long cr{r} = 0; cr{r} < shape[{r}]; ++cr{r}) {{\n"
+                    "        for (long long cr{r} = 0; cr{r} < shape{r}; ++cr{r}) {{\n"
                 ));
             }
             s.push_str(&format!("            long long idx = base + {red_off};\n"));
@@ -821,7 +844,7 @@ fn emit_reduction(plan: &KernelPlan<'_>, ctype: &str, rop: ReduceOp) -> Generate
         // Mean divisor = product of the reduced extents (not just the last axis).
         let divisor = reduced
             .iter()
-            .map(|r| format!("shape[{r}]"))
+            .map(|r| format!("shape{r}"))
             .collect::<Vec<_>>()
             .join(" * ");
         format!("acc / ({acc})({divisor})")
@@ -1698,7 +1721,8 @@ fn offset_expr(o: OperandKey, stride_arr: &str, rank: usize) -> String {
         if o.bcast.is_set(d as u8) {
             continue;
         }
-        terms.push(format!("c{d}*{stride_arr}[{d}]"));
+        // By-value scalar param spelling (extraction #1): `s0_1`, `so_0`, …
+        terms.push(format!("c{d}*{stride_arr}_{d}"));
     }
     if terms.is_empty() {
         "0".to_string()
@@ -2267,8 +2291,8 @@ mod tests {
         let key = structure_key(OpCategory::BinaryElementwise, &[t, t, t], ArchSku::Sm89);
         let k = generate(&add_op(&[ElementKind::F32]), &key, &Cuda);
         assert_eq!(k.name, "baracuda_gen_add_f32_strided_r2");
-        assert!(k.source.contains("long long c1 = lin % shape[1]; lin /= shape[1];"));
-        assert!(k.source.contains("long long o0 = c0*s0[0] + c1*s0[1];"));
+        assert!(k.source.contains("long long c1 = lin % shape1; lin /= shape1;"));
+        assert!(k.source.contains("long long o0 = c0*s0_0 + c1*s0_1;"));
         assert!(k.source.contains("out[oo] = (in0[o0] + in1[o1]);"));
     }
 
@@ -2509,11 +2533,11 @@ mod tests {
         assert_eq!(k.name, "baracuda_gen_s_f32_reduce_sum_ax1");
         assert!(!k.source.contains("long long base = o * k;"));
         // Kept-axis unravel, strided base, strided reduced fold, collapse output.
-        assert!(k.source.contains("long long ck1 = lin % shape[1]; lin /= shape[1];"));
-        assert!(k.source.contains("long long base = ck1*s0[1];"));
-        assert!(k.source.contains("for (long long cr0 = 0; cr0 < shape[0]; ++cr0)"));
-        assert!(k.source.contains("long long idx = base + cr0*s0[0];"));
-        assert!(k.source.contains("long long oo = ck1*so[0];"));
+        assert!(k.source.contains("long long ck1 = lin % shape1; lin /= shape1;"));
+        assert!(k.source.contains("long long base = ck1*s0_1;"));
+        assert!(k.source.contains("for (long long cr0 = 0; cr0 < shape0; ++cr0)"));
+        assert!(k.source.contains("long long idx = base + cr0*s0_0;"));
+        assert!(k.source.contains("long long oo = ck1*so_0;"));
         assert!(k.source.contains("acc += in0[idx];"));
         assert!(k.source.contains("out[oo] ="));
     }
@@ -2522,7 +2546,7 @@ mod tests {
     fn reduction_multi_axis_mean_divisor_is_the_extent_product() {
         use crate::ir::ReduceOp;
         use baracuda_kernels_types::AxisMask;
-        // Reduce axes {0,1} of [2,3,4] → [4], Mean: divisor = shape[0] * shape[1].
+        // Reduce axes {0,1} of [2,3,4] → [4], Mean: divisor = shape0 * shape1.
         let a = OperandDesc::new(3, &[2, 3, 4], &[12, 4, 1], ElementKind::F32, 256);
         let out = OperandDesc::new(1, &[4], &[1], ElementKind::F32, 256);
         let key = structure_key(OpCategory::Reduction, &[a, out], ArchSku::Sm89);
@@ -2538,11 +2562,11 @@ mod tests {
         let k = generate(&op, &key, &Cuda);
         assert_eq!(k.name, "baracuda_gen_m_f32_reduce_mean_ax3");
         // Nested reduced loops + the extent-product divisor (not just the last axis).
-        assert!(k.source.contains("for (long long cr0 = 0; cr0 < shape[0]; ++cr0)"));
-        assert!(k.source.contains("for (long long cr1 = 0; cr1 < shape[1]; ++cr1)"));
-        assert!(k.source.contains("long long idx = base + cr0*s0[0] + cr1*s0[1];"));
-        assert!(k.source.contains("acc / (float)(shape[0] * shape[1])"));
-        assert!(k.source.contains("long long base = ck2*s0[2];")); // kept axis 2
+        assert!(k.source.contains("for (long long cr0 = 0; cr0 < shape0; ++cr0)"));
+        assert!(k.source.contains("for (long long cr1 = 0; cr1 < shape1; ++cr1)"));
+        assert!(k.source.contains("long long idx = base + cr0*s0_0 + cr1*s0_1;"));
+        assert!(k.source.contains("acc / (float)(shape0 * shape1)"));
+        assert!(k.source.contains("long long base = ck2*s0_2;")); // kept axis 2
     }
 
     #[test]
@@ -2565,7 +2589,7 @@ mod tests {
         );
         let k = generate(&op, &key, &Cuda);
         assert_eq!(k.name, "baracuda_gen_s_f32_reduce_sum_ax1_kd");
-        assert!(k.source.contains("long long oo = ck1*so[1];")); // so[input-axis], not so[0]
+        assert!(k.source.contains("long long oo = ck1*so_1;")); // so[input-axis], not so[0]
     }
 
     #[test]
@@ -2617,8 +2641,8 @@ mod tests {
         let k = generate(&op, &key, &Cuda);
         assert_eq!(k.name, "baracuda_gen_s_f32_reduce_sum_ax2");
         assert!(!k.source.contains("long long base = o * k;"));
-        assert!(k.source.contains("long long idx = base + cr1*s0[1];")); // strided reduced fold
-        assert!(k.source.contains("long long base = ck0*s0[0];"));
+        assert!(k.source.contains("long long idx = base + cr1*s0_1;")); // strided reduced fold
+        assert!(k.source.contains("long long base = ck0*s0_0;"));
     }
 
     #[test]

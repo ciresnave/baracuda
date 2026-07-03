@@ -129,3 +129,16 @@ generated general path re-reads `shape[]/s0[]/so[]` from global pointers each
 iteration — worth 171 vs 55 GB/s at equal parallelism. EXTRACTION QUEUED:
 by-value dims params for the general strided/reduction emitters (an ABI change
 to those cells; value-preserving → apply broadly, re-golden, re-validate).
+
+**Extraction #1 outcome (2026-07-03): applied, validated, measured NEUTRAL —
+attribution corrected.** By-value flattened dims params landed in the general
+strided/reduction emitters (all goldens + on-device suites green on the new
+ABI), but the base path measured 55.0 vs 55.5 GB/s — the global-pointer dims
+reads were L2-broadcast-cached, not the bottleneck. The bespoke legacy
+reducer's real 171-vs-55 advantage at equal parallelism is still unexplained
+(candidates: inner-loop structure permitting more loads in flight / compiler
+unrolling of their simpler fold). QUEUED: profile both kernels (ncu) to find
+the true delta before extracting further. The extraction stays (cleaner ABI,
+one fewer device alloc per launch, constant-bank residency — never worse);
+the lesson: diff-reading suggests candidate deltas, only profiling confirms
+which one pays. Seventh measure-don't-assume instance.
