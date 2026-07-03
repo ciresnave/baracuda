@@ -222,3 +222,142 @@ fn variant_gate_loop_end_to_end() {
     );
     eprintln!("--- committed artifact ---\n{artifact}");
 }
+
+/// The cross-pass materialization variant (Softmax's shared `exp(x−max)` cached
+/// in a per-row smem tile), through the same automated loop — with the stronger
+/// oracle its `BitIdentical` fidelity earns: the two kernels' outputs must be
+/// **memcmp-identical**, not merely close.
+#[test]
+#[ignore = "requires a CUDA device + nvrtc"]
+fn smemrow_variant_is_bit_identical_and_gated() {
+    use baracuda_kernelgen::{reduced, ReduceStage};
+
+    let (ctx, stream) = setup_device();
+    let device = Device::get(0).expect("device");
+    let stamp = current_hwstamp(&device).expect("hwstamp");
+    if stamp.arch != ArchSku::Sm89 {
+        eprintln!("skipping: cell is keyed sm89, device is {:?}", stamp.arch);
+        return;
+    }
+
+    const RR_ROWS: i64 = 4_096;
+    const K: i64 = 4_096; // 16 KB f32 row cache — inside the default smem window
+    let softmax = OpDef::row_reduce(
+        "softmax",
+        1,
+        &[ElementKind::F32],
+        vec![
+            ReduceStage { pre: input(0).0, op: ReduceOp::Max },
+            ReduceStage { pre: (input(0) - reduced(0)).exp().0, op: ReduceOp::Sum },
+        ],
+        (input(0) - reduced(0)).exp() / reduced(1),
+    );
+    let x = OperandDesc::new(2, &[RR_ROWS, K], &[K, 1], ElementKind::F32, 256);
+    let key = structure_key(OpCategory::Softmax, &[x, x], ArchSku::Sm89);
+    let variants = generate_variants(&softmax, &key, &Cuda);
+    assert_eq!(variants.len(), 2, "base + smemrow");
+    assert_eq!(variants[1].fidelity, VariantFidelity::BitIdentical);
+
+    let compiler = NvrtcCompiler::new(ArchSku::Sm89);
+    let mut modules = Vec::new();
+    for v in &variants {
+        for k in &v.kernels {
+            let ptx = compiler
+                .compile(&k.source, &k.name, 30_000)
+                .unwrap_or_else(|e| panic!("nvrtc({}) failed: {e}", k.name));
+            let ptx = String::from_utf8(ptx).expect("ptx is text");
+            modules.push((k.name.clone(), Module::load_ptx(&ctx, &ptx).expect("load")));
+        }
+    }
+    let func = |name: &str| {
+        let (_, m) = modules.iter().find(|(n, _)| n == name).expect("module");
+        m.get_function(name).expect("get_function")
+    };
+    let base_name = variants[0].kernels[0].name.clone();
+    let smem_name = variants[1].kernels[0].name.clone();
+    let f_base = func(&base_name);
+    let f_smem = func(&smem_name);
+
+    // Inputs spanning negatives, spikes, and a NaN-free varied surface (a NaN
+    // row saturates to NaN identically in both — covered by unit reasoning; the
+    // bit-compare here wants a live numeric surface).
+    let n = (RR_ROWS * K) as usize;
+    let host: Vec<f32> = (0..n).map(|i| ((i % 251) as f32 - 125.0) * 0.05).collect();
+    let d_in = DeviceBuffer::from_slice(&ctx, &host).expect("d_in");
+    let d_base = DeviceBuffer::<f32>::new(&ctx, n).expect("d_base");
+    let d_smem = DeviceBuffer::<f32>::new(&ctx, n).expect("d_smem");
+    let smem_bytes = (K as u32) * 4;
+
+    let launch_base = || {
+        // SAFETY: matches the rowreduce signature (in0, out, n_out, k).
+        unsafe {
+            f_base
+                .launch()
+                .grid(RR_ROWS as u32)
+                .block(256)
+                .stream(&stream)
+                .arg(&d_in)
+                .arg(&d_base)
+                .arg(&RR_ROWS)
+                .arg(&K)
+                .launch()
+                .expect("base launch");
+        }
+    };
+    let launch_smem = || {
+        // SAFETY: same signature + the variant's dynamic smem (k * 4 bytes).
+        unsafe {
+            f_smem
+                .launch()
+                .grid(RR_ROWS as u32)
+                .block(256)
+                .shared_mem_bytes(smem_bytes)
+                .stream(&stream)
+                .arg(&d_in)
+                .arg(&d_smem)
+                .arg(&RR_ROWS)
+                .arg(&K)
+                .launch()
+                .expect("smem launch");
+        }
+    };
+
+    // The BitIdentical oracle: raw u32 output buffers must match exactly.
+    launch_base();
+    launch_smem();
+    stream.synchronize().expect("sync");
+    let mut a = vec![0.0f32; n];
+    let mut b = vec![0.0f32; n];
+    d_base.copy_to_host(&mut a).expect("copy a");
+    d_smem.copy_to_host(&mut b).expect("copy b");
+    for i in 0..n {
+        assert_eq!(
+            a[i].to_bits(),
+            b[i].to_bits(),
+            "bit mismatch at {i}: base {:08x} smemrow {:08x}",
+            a[i].to_bits(),
+            b[i].to_bits()
+        );
+    }
+
+    // Gate the pair; report the measured margin (regime-dependent — occupancy
+    // vs saved traffic — so no winner is asserted; the table records it).
+    let entry = gate_cell(
+        &ctx,
+        &stream,
+        &key,
+        Some(stamp),
+        7,
+        10,
+        vec![
+            (Implementor::Generated, Some(base_name), Box::new(launch_base)),
+            (Implementor::Generated, Some(smem_name), Box::new(launch_smem)),
+        ],
+    )
+    .expect("measured entry");
+    assert_eq!(entry.ranked.len(), 2);
+    eprintln!(
+        "softmax gate: winner {:?} margin {:.3} ({:.0} vs {:.0} ns)",
+        entry.winner_entry, entry.margin, entry.ranked[0].median_ns, entry.ranked[1].median_ns
+    );
+}

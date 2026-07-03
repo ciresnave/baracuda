@@ -273,9 +273,23 @@ fn main() {
         (layernorm, vec![x, col, col, full], OpCategory::Normalization),
     ] {
         let key = structure_key(cat, &ops, ArchSku::Sm89);
-        let k = generate(&op, &key, &Cuda);
-        fs::write(format!("{out_dir}/{}.cu", k.name), &k.source).expect("write kernel");
-        println!("generated {out_dir}/{}.cu  (cell {})", k.name, key.to_token());
+        // Ship-top-K: the base kernel plus every schedule variant (Softmax gets
+        // the bit-identical smemrow materialization; the others have none).
+        for v in generate_variants(&op, &key, &Cuda) {
+            for k in &v.kernels {
+                fs::write(format!("{out_dir}/{}.cu", k.name), &k.source).expect("write kernel");
+                if v.tag == "base" {
+                    println!("generated {out_dir}/{}.cu  (cell {})", k.name, key.to_token());
+                } else {
+                    println!(
+                        "generated {out_dir}/{}.cu  (cell {} | variant {})",
+                        k.name,
+                        key.to_token(),
+                        v.tag
+                    );
+                }
+            }
+        }
     }
 
     // --- Shared-interior DAG demo (item 02): diamond out = g / (g + 1), g = a*b ---

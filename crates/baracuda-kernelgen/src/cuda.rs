@@ -28,10 +28,15 @@ impl Backend for Cuda {
     }
 
     fn lower_variants(&self, plan: &KernelPlan<'_>) -> Vec<Variant> {
-        // First variant: split-K for the outer-axis reduction cell (the
-        // measured 118 GB/s occupancy gap). More join per the variants backlog
-        // (docs/planning/foundational/11-variant-generators-backlog.md).
-        reduction_splitk_variant(plan).into_iter().collect()
+        // Schedule variants per the backlog
+        // (docs/planning/foundational/11-variant-generators-backlog.md):
+        // split-K for the outer-axis reduction cell; the materialized row cache
+        // for RowReduce cells whose epilogue recomputes a stage's per-element
+        // values (cross-pass materialization — Softmax's shared exp).
+        let mut vs = Vec::new();
+        vs.extend(reduction_splitk_variant(plan));
+        vs.extend(row_reduce_materialize_variant(plan));
+        vs
     }
 
     fn lower(&self, plan: &KernelPlan<'_>) -> GeneratedKernel {
@@ -1014,6 +1019,102 @@ fn reduction_splitk_variant(plan: &KernelPlan<'_>) -> Option<Variant> {
 /// uses the full `0xffffffff` mask; the launch contract caps `blockDim.x <= 1024`
 /// and (for warp uniformity) a multiple of 32.
 fn emit_row_reduce(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
+    emit_row_reduce_impl(plan, ctype, false)
+}
+
+/// Cross-pass materialization **variant** for a RowReduce cell whose epilogue
+/// recomputes the LAST stage's per-element expression (the Softmax shape:
+/// stage-2 `pre` = `exp(x − r0)`, epilogue = `exp(x − r0) / r1`).
+///
+/// The base kernel reads the row from global once per stage *plus* once in the
+/// epilogue and recomputes the shared expression there; the variant caches the
+/// last stage's per-element values in **dynamic shared memory** during the fold
+/// and has the epilogue read them back — for Softmax: one fewer full-row global
+/// read and half the `exp`s. The cache slots are written and read by the SAME
+/// thread under the SAME `j` striding, so the cache is thread-private and needs
+/// no extra barrier.
+///
+/// **Bits:** [`VariantFidelity::BitIdentical`] — the epilogue consumes the very
+/// values the fold computed (same expression, same inputs), and an smem
+/// store/load round-trip is exact. The tradeoff is *occupancy* (dynamic smem =
+/// `k · sizeof(acc)` bytes per block), which is the bench gate's to measure —
+/// plus a hard launch cap: `k` must fit the device's per-block smem ceiling,
+/// recorded in the launch note.
+fn row_reduce_materialize_variant(plan: &KernelPlan<'_>) -> Option<Variant> {
+    let Access::RowReduce { stages, epilogue } = plan.access else {
+        return None;
+    };
+    let last = stages.last()?;
+    // A leaf `pre` (bare input) has nothing worth caching — the epilogue's
+    // re-read costs the same as the smem read.
+    if matches!(
+        last.pre,
+        ScalarExpr::Input(_) | ScalarExpr::Const(_) | ScalarExpr::Param(_) | ScalarExpr::Reduced(_)
+    ) {
+        return None;
+    }
+    if !contains_subexpr(epilogue, &last.pre) {
+        return None;
+    }
+    let ctype = scalar_ctype(plan.dtype)?;
+    let dbl = matches!(plan.dtype, ElementKind::F64 | ElementKind::F32Strict);
+    let (acc, asz) = if dbl { ("double", 8) } else { ("float", 4) };
+    let k = emit_row_reduce_impl(plan, ctype, true);
+    let kname = k.name.clone();
+    Some(Variant {
+        tag: "smemrow",
+        kernels: vec![k],
+        fidelity: VariantFidelity::BitIdentical,
+        launch_note: format!(
+            "same launch shape as the base rowreduce ({kname}<<<n_out, B>>> with B a \
+             multiple of 32, <= 1024) PLUS dynamic shared memory = k * {asz} bytes \
+             (`{acc}` per element); requires k within the device per-block shared-memory \
+             ceiling. Bit-identical to the base kernel; the tradeoff is occupancy."
+        ),
+    })
+}
+
+/// `true` if `t` occurs as a subexpression of `e` (structural equality).
+fn contains_subexpr(e: &ScalarExpr, t: &ScalarExpr) -> bool {
+    if e == t {
+        return true;
+    }
+    match e {
+        ScalarExpr::Input(_)
+        | ScalarExpr::Const(_)
+        | ScalarExpr::Param(_)
+        | ScalarExpr::Reduced(_) => false,
+        ScalarExpr::Unary(_, x) => contains_subexpr(x, t),
+        ScalarExpr::Add(a, b)
+        | ScalarExpr::Sub(a, b)
+        | ScalarExpr::Mul(a, b)
+        | ScalarExpr::Div(a, b)
+        | ScalarExpr::Binary(_, a, b) => contains_subexpr(a, t) || contains_subexpr(b, t),
+    }
+}
+
+/// Clone `e`, replacing every subtree structurally equal to `t` with
+/// `Reduced(marker)` — the hook the materialized row-cache read hangs off.
+fn substitute_subexpr(e: &ScalarExpr, t: &ScalarExpr, marker: u8) -> ScalarExpr {
+    if e == t {
+        return ScalarExpr::Reduced(marker);
+    }
+    let bx = |x: &ScalarExpr| Box::new(substitute_subexpr(x, t, marker));
+    match e {
+        ScalarExpr::Input(_)
+        | ScalarExpr::Const(_)
+        | ScalarExpr::Param(_)
+        | ScalarExpr::Reduced(_) => e.clone(),
+        ScalarExpr::Unary(op, x) => ScalarExpr::Unary(*op, bx(x)),
+        ScalarExpr::Add(a, b) => ScalarExpr::Add(bx(a), bx(b)),
+        ScalarExpr::Sub(a, b) => ScalarExpr::Sub(bx(a), bx(b)),
+        ScalarExpr::Mul(a, b) => ScalarExpr::Mul(bx(a), bx(b)),
+        ScalarExpr::Div(a, b) => ScalarExpr::Div(bx(a), bx(b)),
+        ScalarExpr::Binary(op, a, b) => ScalarExpr::Binary(*op, bx(a), bx(b)),
+    }
+}
+
+fn emit_row_reduce_impl(plan: &KernelPlan<'_>, ctype: &str, materialize: bool) -> GeneratedKernel {
     let Access::RowReduce { stages, epilogue } = plan.access else {
         unreachable!("emit_row_reduce requires Access::RowReduce");
     };
@@ -1021,10 +1122,21 @@ fn emit_row_reduce(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
     let acc = if dbl { "double" } else { "float" };
     let zero = if dbl { "0.0" } else { "0.0f" };
     let n = plan.n_inputs;
-    let name = format!("baracuda_gen_{}_{}_rowreduce", plan.op_name, dtype_tag(plan.dtype));
-    // Helpers are named per (op, dtype) so concatenating generated kernels into one
-    // translation unit can never collide on a `__device__` symbol.
-    let stem = format!("{}_{}", plan.op_name, dtype_tag(plan.dtype));
+    let vsuf = if materialize { "_smemrow" } else { "" };
+    let name = format!(
+        "baracuda_gen_{}_{}_rowreduce{vsuf}",
+        plan.op_name,
+        dtype_tag(plan.dtype)
+    );
+    // Helpers are named per (op, dtype[, variant]) so concatenating generated
+    // kernels — including a base/variant PAIR — into one translation unit can
+    // never collide on a `__device__` symbol.
+    let stem = format!(
+        "{}_{}{}",
+        plan.op_name,
+        dtype_tag(plan.dtype),
+        if materialize { "_sm" } else { "" }
+    );
 
     // load(i), up-converting f16/bf16/f32-strict to the accumulate type. The index
     // is role-aware (validate guarantees the roles): a row-streamed input (`x`) loads
@@ -1044,8 +1156,17 @@ fn emit_row_reduce(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
             _ => format!("in{i}[{pos}]"),
         }
     };
-    // Reduced(s) is the broadcast register from stage s.
-    let red = |s: u8| format!("r{s}");
+    // Reduced(s) is the broadcast register from stage s. In the materialized
+    // variant, the one-past-the-end index is the epilogue's hook for the
+    // per-element row cache (see the substitution below).
+    let n_stages = stages.len() as u8;
+    let red = |s: u8| {
+        if materialize && s == n_stages {
+            "baracuda_row_smem[j]".to_string()
+        } else {
+            format!("r{s}")
+        }
+    };
     let lower = |e: &ScalarExpr| {
         lower_expr(
             e,
@@ -1093,10 +1214,22 @@ fn emit_row_reduce(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
     // Uniform empty-axis guard (k is a single kernel arg): never skips a barrier
     // divergently, and defends the Max/Min seed against an OOB load.
     s.push_str("    if (k == 0) return;\n");
+    if materialize {
+        // Per-row element cache: the LAST stage's per-element values, written by
+        // each thread into ITS OWN j-strided slots during the fold and read back
+        // (same slots, same striding) in the epilogue — thread-private by
+        // construction, so no extra barrier is needed. Launch contract: dynamic
+        // shared memory = k * sizeof(acc) bytes.
+        s.push_str(&format!(
+            "    extern __shared__ {acc} baracuda_row_smem[];\n"
+        ));
+    }
     s.push_str("    for (long long row = blockIdx.x; row < n_out; row += (long long)gridDim.x) {\n");
     s.push_str("        long long base = row * k;\n");
 
     for (i, st) in stages.iter().enumerate() {
+        // The materialized variant caches the LAST stage's per-element values.
+        let cache = materialize && i + 1 == stages.len();
         let pre = lower(&st.pre);
         s.push_str(&format!("        // stage {i}: {:?}\n", st.op));
         match st.op {
@@ -1104,7 +1237,13 @@ fn emit_row_reduce(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
                 s.push_str(&format!("        {acc} acc{i} = {zero};\n"));
                 s.push_str("        for (long long j = threadIdx.x; j < k; j += blockDim.x) {\n");
                 s.push_str("            long long idx = base + j;\n");
-                s.push_str(&format!("            acc{i} += {pre};\n"));
+                if cache {
+                    s.push_str(&format!("            {acc} v = {pre};\n"));
+                    s.push_str("            baracuda_row_smem[j] = v;\n");
+                    s.push_str(&format!("            acc{i} += v;\n"));
+                } else {
+                    s.push_str(&format!("            acc{i} += {pre};\n"));
+                }
                 s.push_str("        }\n");
                 // block_sum broadcasts the row sum to every thread; Mean divides by
                 // k (k>0 guaranteed by the guard above) — uniform in every thread.
@@ -1124,6 +1263,9 @@ fn emit_row_reduce(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
                 s.push_str("        for (long long j = threadIdx.x; j < k; j += blockDim.x) {\n");
                 s.push_str("            long long idx = base + j;\n");
                 s.push_str(&format!("            {acc} e = {pre};\n"));
+                if cache {
+                    s.push_str("            baracuda_row_smem[j] = e;\n");
+                }
                 s.push_str(&format!(
                     "            if (!has{i} || e != e || e {cmp} acc{i}) {{ acc{i} = e; has{i} = 1; }}\n"
                 ));
@@ -1133,9 +1275,20 @@ fn emit_row_reduce(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
         }
     }
 
-    // Epilogue: full-width output (out[idx], same shape as input), x re-read from
-    // global, Reduced(i) read from the r{i} registers.
-    let epi = lower(epilogue);
+    // Epilogue: full-width output (out[idx], same shape as input); Reduced(i)
+    // read from the r{i} registers. Base: x re-read from global and the last
+    // stage's per-element expression recomputed. Materialized: every occurrence
+    // of that expression reads the row cache instead — the SAME values the fold
+    // computed (bit-identical by construction), skipping the third global read
+    // of x and the recompute.
+    let epi_sub;
+    let epi_src: &ScalarExpr = if materialize {
+        epi_sub = substitute_subexpr(epilogue, &stages[stages.len() - 1].pre, n_stages);
+        &epi_sub
+    } else {
+        epilogue
+    };
+    let epi = lower(epi_src);
     let stored = match plan.dtype {
         ElementKind::F16 => format!("__float2half({epi})"),
         ElementKind::Bf16 => format!("__float2bfloat16({epi})"),
@@ -1589,6 +1742,64 @@ mod tests {
         let sk = &vs[1];
         assert!(!sk.kernels[0].source.contains("acc /"), "partial never divides");
         assert!(sk.kernels[1].source.contains("out[c] = acc / (float)rows;"));
+    }
+
+    #[test]
+    fn smemrow_variant_materializes_softmax_shared_exp() {
+        use crate::ir::{reduced, ReduceOp, ReduceStage};
+        use crate::{generate_variants, VariantFidelity};
+        // Softmax: stage-2 pre = exp(x - r0) is recomputed verbatim in the
+        // epilogue — the cross-pass shared value the variant caches.
+        let softmax = OpDef::row_reduce(
+            "softmax",
+            1,
+            &[ElementKind::F32],
+            vec![
+                ReduceStage { pre: input(0).0, op: ReduceOp::Max },
+                ReduceStage { pre: (input(0) - reduced(0)).exp().0, op: ReduceOp::Sum },
+            ],
+            (input(0) - reduced(0)).exp() / reduced(1),
+        );
+        let x = OperandDesc::new(2, &[4096, 1024], &[1024, 1], ElementKind::F32, 256);
+        let key = structure_key(OpCategory::Softmax, &[x, x], ArchSku::Sm89);
+        let vs = generate_variants(&softmax, &key, &Cuda);
+        assert_eq!(vs.len(), 2, "base + smemrow");
+        let sm = &vs[1];
+        assert_eq!(sm.tag, "smemrow");
+        assert_eq!(sm.fidelity, VariantFidelity::BitIdentical);
+        let src = &sm.kernels[0].source;
+        assert!(sm.kernels[0].name.ends_with("_rowreduce_smemrow"));
+        assert!(src.contains("extern __shared__ float baracuda_row_smem[];"));
+        // The fold caches the per-element value it accumulates…
+        assert!(src.contains("baracuda_row_smem[j] = v;"));
+        // …and the epilogue reads the cache instead of recomputing: exactly ONE
+        // expf remains (the stage fold's), vs two in the base kernel.
+        assert!(src.contains("out[idx] = (baracuda_row_smem[j] / r1);"));
+        assert_eq!(src.matches("expf").count(), 1, "epilogue exp eliminated");
+        assert_eq!(vs[0].kernels[0].source.matches("expf").count(), 2, "base has both");
+        // Helper symbols must not collide when base + variant share a TU.
+        assert!(src.contains("block_sum_softmax_f32_sm"));
+        assert!(vs[0].kernels[0].source.contains("block_sum_softmax_f32("));
+        // Sanity: the base kernel is untouched by the variant machinery.
+        assert!(!vs[0].kernels[0].source.contains("baracuda_row_smem"));
+    }
+
+    #[test]
+    fn smemrow_not_offered_when_epilogue_does_not_recompute() {
+        use crate::ir::{konst, reduced, ReduceOp, ReduceStage, UnaryOp};
+        use crate::generate_variants;
+        // RmsNorm: stage pre = x², epilogue = x·rsqrt(r0+eps) — the epilogue
+        // never recomputes x², so there is nothing to materialize.
+        let rmsnorm = OpDef::row_reduce(
+            "rmsnorm",
+            1,
+            &[ElementKind::F32],
+            vec![ReduceStage { pre: input(0).unary(UnaryOp::Sqr).0, op: ReduceOp::Mean }],
+            input(0) * (reduced(0) + konst(1e-5)).unary(UnaryOp::Rsqrt),
+        );
+        let x = OperandDesc::new(2, &[4096, 1024], &[1024, 1], ElementKind::F32, 256);
+        let key = structure_key(OpCategory::Normalization, &[x, x], ArchSku::Sm89);
+        assert_eq!(generate_variants(&rmsnorm, &key, &Cuda).len(), 1, "base only");
     }
 
     #[test]
