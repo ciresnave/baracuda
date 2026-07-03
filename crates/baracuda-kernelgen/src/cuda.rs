@@ -68,6 +68,7 @@ impl Backend for Cuda {
             Schedule::Strided => emit_strided(plan, ctype),
             Schedule::Reduction { op, .. } => emit_reduction(plan, ctype, op),
             Schedule::RowReduce { .. } => emit_row_reduce(plan, ctype),
+            Schedule::Contraction => emit_contraction(plan, ctype),
         }
     }
 }
@@ -1021,6 +1022,140 @@ fn reduction_splitk_variant(plan: &KernelPlan<'_>) -> Option<Variant> {
     })
 }
 
+/// Emit a **contraction** ([`Access::Contraction`]) — the terminal ORDER-3
+/// node, v1 = the **skinny SIMT** schedule for the `Tiny`-M long-tail cell
+/// (decode / FlashDecoding++ flat-GEMM): `out[mm,col] = epi(Σ_k lhs[mm,k] ·
+/// rhs[k,col])` with one thread per output **column**, the ≤ 8 M-rows held in
+/// predicated register accumulators, and the rhs streamed **coalesced**
+/// (adjacent threads read adjacent columns of each rhs row) — the rhs, which
+/// dominates traffic at Tiny M, is read exactly once at full bandwidth.
+///
+/// Extents (`m`, `n`, `k`) are launch arguments (the key carries structure
+/// classes, never literals); the launch contract requires `m <= 8` — the
+/// `Tiny` class ceiling the register file is sized for (the same
+/// extent-as-caller-precondition discipline as RowReduce). Accumulation is
+/// `float` (`double` for f64/f32-strict), the [`AccumSpec::WideFloat`] SIMT
+/// policy — deterministic, sequential K order per output. Larger M/tiled/MMA
+/// schedules join as bench-gated variants; all-`Large` cells route to the
+/// vendor via the §7 gate and are never generated.
+fn emit_contraction(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
+    let Access::Contraction { epilogue, .. } = plan.access else {
+        unreachable!("emit_contraction requires Access::Contraction");
+    };
+    let c = plan
+        .key
+        .contraction
+        .expect("build_plan asserted contraction facts");
+    assert_eq!(
+        c.m,
+        baracuda_kernels_types::SizeClass::Tiny,
+        "contraction v1 emits the Tiny-M skinny schedule only; larger M classes \
+         are the tiled variant's territory (and all-Large routes to the vendor)"
+    );
+    let dbl = matches!(plan.dtype, ElementKind::F64 | ElementKind::F32Strict);
+    assert!(
+        matches!(
+            plan.dtype,
+            ElementKind::F16
+                | ElementKind::Bf16
+                | ElementKind::F32
+                | ElementKind::F32Strict
+                | ElementKind::F64
+        ),
+        "contraction v1: float dtypes only; got {:?}",
+        plan.dtype
+    );
+    let acc = if dbl { "double" } else { "float" };
+    let zero = if dbl { "0.0" } else { "0.0f" };
+    // Loads up-convert to the accumulator width, exactly as the reductions do.
+    let load = |expr: String| match plan.dtype {
+        ElementKind::F16 => format!("__half2float({expr})"),
+        ElementKind::Bf16 => format!("__bfloat162float({expr})"),
+        ElementKind::F32Strict => format!("(double){expr}"),
+        _ => expr,
+    };
+    let name = format!(
+        "baracuda_gen_{}_{}_contract_{}{}{}",
+        plan.op_name,
+        dtype_tag(plan.dtype),
+        size_tag(c.m),
+        size_tag(c.n),
+        size_tag(c.k),
+    );
+
+    // Epilogue over the K-sum: Reduced(0) is the per-(row, col) accumulator.
+    let red = |s: u8| {
+        assert_eq!(s, 0, "contraction epilogue reads Reduced(0) only");
+        "r0".to_string()
+    };
+    let epi = lower_expr(
+        epilogue,
+        &Lowering {
+            leaf: &|i| unreachable!("contraction v1 epilogue has no Input leaf: in{i}"),
+            reduced: &red,
+            unary: &|op, x| if dbl { unary_f64(op, x) } else { unary_f32(op, x) },
+            binary: &|op, a, b| {
+                if dbl {
+                    binary_f64(op, a, b)
+                } else {
+                    binary_f32(op, a, b)
+                }
+            },
+        },
+    );
+    let stored = match plan.dtype {
+        ElementKind::F16 => format!("__float2half({epi})"),
+        ElementKind::Bf16 => format!("__float2bfloat16({epi})"),
+        _ => epi,
+    };
+
+    let mut s = header(plan, &name);
+    s.push_str(&format!("    const {ctype}* __restrict__ in0,\n")); // lhs [m,k]
+    s.push_str(&format!("    const {ctype}* __restrict__ in1,\n")); // rhs [k,n]
+    s.push_str(&format!("    {ctype}* __restrict__ out,\n")); // [m,n]
+    s.push_str("    long long m,\n    long long n,\n    long long k)\n{\n");
+    s.push_str("    long long col = (long long)blockIdx.x * blockDim.x + threadIdx.x;\n");
+    s.push_str("    long long step = (long long)gridDim.x * blockDim.x;\n");
+    s.push_str("    for (; col < n; col += step) {\n");
+    // Fixed register file at the Tiny ceiling; the mm loops unroll fully with
+    // constant indices (predicated on the runtime m) so `accs` stays in
+    // registers, never local memory.
+    s.push_str(&format!("        {acc} accs[8];\n"));
+    s.push_str("        #pragma unroll\n");
+    s.push_str(&format!(
+        "        for (int mm = 0; mm < 8; ++mm) accs[mm] = {zero};\n"
+    ));
+    s.push_str("        for (long long kk = 0; kk < k; ++kk) {\n");
+    s.push_str(&format!(
+        "            {acc} w = {};\n",
+        load("in1[kk * n + col]".to_string())
+    ));
+    s.push_str("            #pragma unroll\n");
+    s.push_str("            for (int mm = 0; mm < 8; ++mm) {\n");
+    s.push_str(&format!(
+        "                if (mm < m) accs[mm] += {} * w;\n",
+        load("in0[mm * k + kk]".to_string())
+    ));
+    s.push_str("            }\n        }\n");
+    s.push_str("        #pragma unroll\n");
+    s.push_str("        for (int mm = 0; mm < 8; ++mm) {\n");
+    s.push_str("            if (mm < m) {\n");
+    s.push_str(&format!("                {acc} r0 = accs[mm];\n"));
+    s.push_str(&format!("                out[mm * n + col] = {stored};\n"));
+    s.push_str("            }\n        }\n    }\n}\n");
+    GeneratedKernel { name, source: s }
+}
+
+/// One-letter tag for a [`baracuda_kernels_types::SizeClass`] in symbol names.
+fn size_tag(s: baracuda_kernels_types::SizeClass) -> char {
+    match s {
+        baracuda_kernels_types::SizeClass::Tiny => 't',
+        baracuda_kernels_types::SizeClass::Small => 's',
+        baracuda_kernels_types::SizeClass::Mid => 'm',
+        baracuda_kernels_types::SizeClass::Large => 'l',
+    }
+}
+
 /// Emit a **fused row reduction** ([`Access::RowReduce`]): one block per output
 /// row, a warp-shuffle + shared-memory tree reduce per stage, then a full-width
 /// elementwise epilogue. RmsNorm (1 stage) and Softmax (2 stages) are instances.
@@ -1763,6 +1898,60 @@ mod tests {
         let sk = &vs[1];
         assert!(!sk.kernels[0].source.contains("acc /"), "partial never divides");
         assert!(sk.kernels[1].source.contains("out[c] = acc / (float)rows;"));
+    }
+
+    #[test]
+    fn contraction_emits_skinny_simt_kernel() {
+        use crate::ir::{reduced, ContractionAxes, UnaryOp};
+        // The decode / flat-GEMM cell: [8,4096]·[4096,4096] → [8,4096], f32.
+        let mm = OpDef::contraction(
+            "matmul",
+            &[ElementKind::F32],
+            ContractionAxes::matmul(),
+            reduced(0),
+        );
+        let lhs = OperandDesc::new(2, &[8, 4096], &[4096, 1], ElementKind::F32, 256);
+        let rhs = OperandDesc::new(2, &[4096, 4096], &[4096, 1], ElementKind::F32, 256);
+        let out = OperandDesc::new(2, &[8, 4096], &[4096, 1], ElementKind::F32, 256);
+        let key = structure_key(OpCategory::Gemm, &[lhs, rhs, out], ArchSku::Sm89);
+        let k = generate(&mm, &key, &Cuda);
+        assert_eq!(k.name, "baracuda_gen_matmul_f32_contract_tll");
+        // Coalesced rhs stream (adjacent threads, adjacent columns)…
+        assert!(k.source.contains("float w = in1[kk * n + col];"));
+        // …predicated register accumulators at the Tiny ceiling…
+        assert!(k.source.contains("float accs[8];"));
+        assert!(k.source.contains("if (mm < m) accs[mm] += in0[mm * k + kk] * w;"));
+        // …identity epilogue stores the K-sum.
+        assert!(k.source.contains("out[mm * n + col] = r0;"));
+        assert!(!k.source.contains("atomic"));
+
+        // A relu epilogue lowers over Reduced(0) in the accumulator width.
+        let mr = OpDef::contraction(
+            "matmul_relu",
+            &[ElementKind::F32],
+            ContractionAxes::matmul(),
+            reduced(0).unary(UnaryOp::Relu),
+        );
+        let kr = generate(&mr, &key, &Cuda);
+        assert!(kr.source.contains("< 0.0f ? 0.0f :"));
+
+        // f16 loads up-convert and the store narrows, as the reductions do.
+        let lh = OperandDesc::new(2, &[8, 4096], &[4096, 1], ElementKind::F16, 256);
+        let rh = OperandDesc::new(2, &[4096, 4096], &[4096, 1], ElementKind::F16, 256);
+        let oh = OperandDesc::new(2, &[8, 4096], &[4096, 1], ElementKind::F16, 256);
+        let mh = OpDef::contraction(
+            "matmul",
+            &[ElementKind::F16],
+            ContractionAxes::matmul(),
+            reduced(0),
+        );
+        let kh = generate(
+            &mh,
+            &structure_key(OpCategory::Gemm, &[lh, rh, oh], ArchSku::Sm89),
+            &Cuda,
+        );
+        assert!(kh.source.contains("float w = __half2float(in1[kk * n + col]);"));
+        assert!(kh.source.contains("out[mm * n + col] = __float2half(r0);"));
     }
 
     #[test]

@@ -55,6 +55,12 @@ pub enum Schedule {
         /// Block-parallel tree reduce (`true`, v1) vs the sequential fallback.
         block: bool,
     },
+    /// Batched contraction (`out[m,n] = epi(Σ_k lhs[m,k]·rhs[k,n])`) — the
+    /// terminal ORDER-3 schedule. v1: the skinny SIMT kernel (thread per output
+    /// column, M-row register accumulators, coalesced K-streaming of the rhs) —
+    /// the decode / flat-GEMM long-tail cell; tiled/MMA schedules join as
+    /// bench-gated variants. Axes/accum/epilogue ride on [`KernelPlan::access`].
+    Contraction,
 }
 
 /// Reduce-axis geometry (design-doc predicate #9). All classes lower to the same
@@ -135,6 +141,30 @@ pub fn build_plan<'a>(op: &'a OpDef, key: &'a StructureKey) -> KernelPlan<'a> {
                 n_stages: stages.len() as u8,
                 block: true,
             }
+        }
+        Access::Contraction { ref axes, ref epilogue, .. } => {
+            // v1 admissibility: the canonical rank-2 dense matmul cell, keyed
+            // with contraction facts, and an epilogue over the K-sum only.
+            assert_eq!(
+                (axes.lhs.as_slice(), axes.rhs.as_slice()),
+                (
+                    crate::ir::ContractionAxes::matmul().lhs.as_slice(),
+                    crate::ir::ContractionAxes::matmul().rhs.as_slice()
+                ),
+                "contraction v1: canonical rank-2 matmul axis roles only"
+            );
+            assert!(
+                key.contraction.is_some(),
+                "contraction cell must carry ContractionKey facts (rank-2 dense \
+                 row-major [M,K]x[K,N]->[M,N]); got token {}",
+                key.to_token()
+            );
+            assert!(
+                epilogue_reads_only_reduced0(epilogue),
+                "contraction v1: epilogue over Reduced(0) only (fused bias inputs \
+                 are a follow-up)"
+            );
+            Schedule::Contraction
         }
         Access::Elementwise => {
             let n = key.n_operands as usize;
@@ -223,6 +253,20 @@ mod reduce_class_tests {
             classify_reduce_axes(AxisMask(0b100), 3, false),
             ReduceAxisClass::Middle
         );
+    }
+}
+
+/// `true` if `e` references no leaf other than `Reduced(0)` and constants — the
+/// contraction-v1 epilogue admissibility (no `Input`/`Param`, no other stage).
+fn epilogue_reads_only_reduced0(e: &crate::ir::ScalarExpr) -> bool {
+    use crate::ir::ScalarExpr as E;
+    match e {
+        E::Reduced(0) | E::Const(_) => true,
+        E::Input(_) | E::Param(_) | E::Reduced(_) => false,
+        E::Unary(_, x) => epilogue_reads_only_reduced0(x),
+        E::Add(a, b) | E::Sub(a, b) | E::Mul(a, b) | E::Div(a, b) | E::Binary(_, a, b) => {
+            epilogue_reads_only_reduced0(a) && epilogue_reads_only_reduced0(b)
+        }
     }
 }
 

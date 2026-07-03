@@ -579,6 +579,73 @@ pub enum Access {
         /// Per-element output expression (references `Input`s + `Reduced(0..n)`).
         epilogue: ScalarExpr,
     },
+    /// Batched **contraction** (the terminal ORDER-3 node; item-10 spike):
+    /// `out[m,n] = epilogue( Σ_k lhs[m,k] · rhs[k,n] )`. One contracted axis
+    /// group (K), free axes M (input 0) and N (input 1) — the K-fold is fused
+    /// with TWO free axes, which neither [`Access::Reduction`] (one free axis)
+    /// nor [`Access::RowReduce`] (row-broadcast, no second free axis) can
+    /// express. The K-accumulator reaches the epilogue as the `Reduced(0)` leaf
+    /// (the same bridge `RowReduce` uses — the item-02 "contraction producer"
+    /// hook in its v1 form). v1: rank-2 single-K dense row-major, epilogue over
+    /// `Reduced(0)` only; batch axes, transposes, and fused bias inputs are the
+    /// node's growth axes.
+    Contraction {
+        /// Per-operand axis roles (the AxisRole vocabulary, wired here per the
+        /// item-10 spike / `docs/design/axis-role-vocabulary.md`).
+        axes: ContractionAxes,
+        /// K-accumulation policy.
+        accum: AccumSpec,
+        /// Per-output-element epilogue over the K-sum (`Reduced(0)`).
+        epilogue: ScalarExpr,
+    },
+}
+
+/// Per-axis role in a contraction — the `{Batch, FreeM, FreeN, ContractedK}`
+/// projection of the unified AxisRole vocabulary (`axis-role-vocabulary.md`;
+/// reductions carry the `{Reduced}` projection as `StructureKey::reduce_axes`).
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+pub enum AxisRole {
+    /// Shared, iterated, not summed (lhs & rhs & out). v1: unused (rank-2).
+    Batch,
+    /// Free on the lhs → a row of the output.
+    FreeM,
+    /// Free on the rhs → a column of the output.
+    FreeN,
+    /// Shared and summed; absent from the output.
+    ContractedK,
+}
+
+/// Which axis of each input plays which role. v1 pins the canonical dense
+/// matmul assignment; the constructor exists so the vocabulary (not a bare
+/// convention) is what the emitter and key read — general einsum role vectors
+/// are the growth path without reshaping this type's consumers.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ContractionAxes {
+    /// Roles of input 0's axes, in axis order.
+    pub lhs: Vec<AxisRole>,
+    /// Roles of input 1's axes, in axis order.
+    pub rhs: Vec<AxisRole>,
+}
+
+impl ContractionAxes {
+    /// The canonical rank-2 matmul: `lhs [M,K]`, `rhs [K,N]`.
+    #[must_use]
+    pub fn matmul() -> Self {
+        Self {
+            lhs: vec![AxisRole::FreeM, AxisRole::ContractedK],
+            rhs: vec![AxisRole::ContractedK, AxisRole::FreeN],
+        }
+    }
+}
+
+/// K-accumulation policy for a contraction.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+pub enum AccumSpec {
+    /// Accumulate in `float` (`double` for f64/f32-strict inputs) — the SIMT
+    /// path, deterministic for a fixed schedule; the same widening discipline
+    /// as [`Access::Reduction`]. Tensor-core/TF32 policies join as variants
+    /// with honest contract flips (see the item-10 spike §5.3).
+    WideFloat,
 }
 
 /// How input operand `i` is read relative to the op's iteration space — a
@@ -770,6 +837,32 @@ impl OpDef {
             dtypes: dtypes.to_vec(),
             access: Access::RowReduce {
                 stages,
+                epilogue: epilogue.0,
+            },
+            views: Vec::new(),
+        }
+    }
+
+    /// Build a **contraction** op (`out[m,n] = epilogue(Σ_k lhs[m,k]·rhs[k,n])`).
+    /// `epilogue` references the K-sum as `Reduced(0)` (identity: `reduced(0)`);
+    /// `body == epilogue`, mirroring [`OpDef::row_reduce`], so every body-walker
+    /// (params/flops/ulp/DAG) operates unchanged. v1: exactly 2 inputs, epilogue
+    /// over `Reduced(0)` only (fused bias inputs are a follow-up).
+    #[must_use]
+    pub fn contraction(
+        name: &str,
+        dtypes: &[ElementKind],
+        axes: ContractionAxes,
+        epilogue: Expr,
+    ) -> Self {
+        Self {
+            name: name.to_string(),
+            n_inputs: 2,
+            body: epilogue.0.clone(),
+            dtypes: dtypes.to_vec(),
+            access: Access::Contraction {
+                axes,
+                accum: AccumSpec::WideFloat,
                 epilogue: epilogue.0,
             },
             views: Vec::new(),

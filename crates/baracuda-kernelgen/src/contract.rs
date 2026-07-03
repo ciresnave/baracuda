@@ -453,6 +453,31 @@ mod tests {
     }
 
     #[test]
+    fn contraction_is_an_honest_miss_no_contract() {
+        use crate::ir::{reduced, ContractionAxes};
+        use crate::pattern::PatternError;
+        // The generated contraction node must NEVER leak a bindable elementwise
+        // contract — the honest-miss wall holds until the Fuel region grammar
+        // for contractions lands (item-10 spike §10).
+        let mm = OpDef::contraction(
+            "matmul",
+            &[ElementKind::F32],
+            ContractionAxes::matmul(),
+            reduced(0),
+        );
+        let lhs = OperandDesc::new(2, &[8, 4096], &[4096, 1], ElementKind::F32, 256);
+        let rhs = OperandDesc::new(2, &[4096, 4096], &[4096, 1], ElementKind::F32, 256);
+        let out = OperandDesc::new(2, &[8, 4096], &[4096, 1], ElementKind::F32, 256);
+        let key = structure_key(OpCategory::Gemm, &[lhs, rhs, out], ArchSku::Sm89);
+        let kernel = generate(&mm, &key, &Cuda);
+        assert!(contract(&mm, &key, &kernel, "cuda").is_none());
+        assert!(matches!(
+            crate::derive_pattern(&mm),
+            Err(PatternError::NotElementwise)
+        ));
+    }
+
+    #[test]
     fn count_unit_matches_the_emitted_abi() {
         use crate::{generate, Cuda};
         let c = |op: &OpDef, key: &StructureKey| {
