@@ -143,3 +143,21 @@ the limiter, never a consistent regression, and fewer issue slots burned per
 element (headroom for fused compute-heavy bodies). The deferred packed stages
 (Tier-A transcendentals, packed reductions) should be built as **measured
 variants** gated by the item-07 bench harness, not assumed wins.
+
+---
+
+## `contract_validate.cu` — skinny contraction go/no-go vs cuBLAS (item 10)
+
+The generated `_contract_tll` cell ([M≤8,K]·[K,N], f32) vs a sampled CPU f64
+oracle and `cublasSgemm` (row-major via the C^T = B^T·A^T mapping), then the
+long-tail bench at M ∈ {1, 8}, K = N = 4096. Needs `-lcublas`.
+
+**Last run (RTX 4070/sm_89, CUDA 13.3): correctness EXACT (0.0 rel err vs both
+oracle and cuBLAS) — but the v1 skinny SIMT schedule is a perf NO-GO: ~62 GB/s
+vs cuBLAS ~245 (0.25×).** Diagnosis: one thread per column = 4096 threads in 16
+blocks — the SAME occupancy starvation the outer-axis reduction baseline showed
+(12–53 GB/s starved), with a sequential K load-use chain on top; cuBLAS's M=1
+path split-Ks internally. The proven in-repo fix is the split-K schedule (16×
+on the reduction analogue) as a bench-gated **variant** of this cell — queued
+as the node's first variant. Fourth instance of measure-don't-assume: this time
+the gate protected us from shipping our own thesis kernel as the default.

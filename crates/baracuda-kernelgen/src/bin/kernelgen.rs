@@ -342,6 +342,27 @@ fn main() {
         }
     }
 
+    // --- Contraction (item 10): the Tiny-M skinny long-tail cell ---------------
+    // The generated node targets the decode / flat-GEMM regime (M <= 8); the
+    // all-Large regime stays vendor-routed via the seed below. Extents here pick
+    // the cell CLASS (tll); m/n/k are launch args.
+    {
+        use baracuda_kernelgen::{reduced, ContractionAxes};
+        let mm = OpDef::contraction(
+            "matmul",
+            &[ElementKind::F32],
+            ContractionAxes::matmul(),
+            reduced(0),
+        );
+        let lhs = OperandDesc::new(2, &[8, 4096], &[4096, 1], ElementKind::F32, 256);
+        let rhs = OperandDesc::new(2, &[4096, 4096], &[4096, 1], ElementKind::F32, 256);
+        let o = OperandDesc::new(2, &[8, 4096], &[4096, 1], ElementKind::F32, 256);
+        let key = structure_key(OpCategory::Gemm, &[lhs, rhs, o], ArchSku::Sm89);
+        let k = generate(&mm, &key, &Cuda);
+        fs::write(format!("{out_dir}/{}.cu", k.name), &k.source).expect("write kernel");
+        println!("generated {out_dir}/{}.cu  (cell {})", k.name, key.to_token());
+    }
+
     // --- Dispatch table (item 07, §7 vendor-exclusion) --------------------------
     // Every cell generated above is an elementwise / reduction / norm class, none
     // of which trips a vendor-exclusion seed. The routing decisions kernelgen
