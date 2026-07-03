@@ -449,7 +449,7 @@ impl KernelBuilder {
 
         let target = std::env::var("TARGET").ok();
         let is_msvc = target.as_ref().is_some_and(|t| t.contains("msvc"));
-        let ccbin_env = std::env::var("NVCC_CCBIN").ok();
+        let ccbin = resolve_ccbin(is_msvc);
         let nvcc_threads = self.parallel.nvcc_threads();
 
         let had_error = AtomicBool::new(false);
@@ -486,10 +486,11 @@ impl KernelBuilder {
                     command.arg("-DUSE_CUTLASS");
                 }
 
-                if let Some(ccbin) = &ccbin_env {
-                    command
-                        .arg("-allow-unsupported-compiler")
-                        .args(["-ccbin", ccbin]);
+                if let Some(ccbin) = &ccbin {
+                    if ccbin.allow_unsupported {
+                        command.arg("-allow-unsupported-compiler");
+                    }
+                    command.args(["-ccbin", &ccbin.path]);
                 }
 
                 if !is_msvc {
@@ -508,21 +509,22 @@ impl KernelBuilder {
 
                 command.arg(kernel_file);
 
-                let output = command
-                    .spawn()
-                    .map_err(|e| Error::NvccNotFound(format!("Failed to spawn nvcc: {}", e)))?
-                    .wait_with_output()
-                    .map_err(|e| Error::CompilationFailed {
-                        path: kernel_file.clone(),
-                        message: e.to_string(),
-                    })?;
+                // `Command::output()` pipes stdout/stderr; the previous
+                // `.spawn()` + `wait_with_output()` let the child inherit the
+                // console, so the captured streams were ALWAYS empty and a
+                // failed compile reported a bare "nvcc error:" with no
+                // diagnostics (reported by Fuel, 2026-07-03).
+                let output = command.output().map_err(|e| {
+                    Error::NvccNotFound(format!("Failed to spawn nvcc: {}", e))
+                })?;
 
                 if !output.status.success() {
                     had_error.store(true, Ordering::Relaxed);
                     return Err(Error::CompilationFailed {
                         path: kernel_file.clone(),
                         message: format!(
-                            "nvcc error:\n{}\n{}",
+                            "nvcc exited with {}:\n{}\n{}",
+                            output.status,
                             String::from_utf8_lossy(&output.stdout),
                             String::from_utf8_lossy(&output.stderr)
                         ),
@@ -573,15 +575,16 @@ impl KernelBuilder {
                 .arg(&out_file)
                 .args(&all_obj_files);
 
-            let output = command
-                .spawn()
-                .map_err(|e| Error::NvccNotFound(format!("Failed to spawn nvcc for linking: {}", e)))?
-                .wait_with_output()
-                .map_err(|e| Error::LinkingFailed(e.to_string()))?;
+            // `output()` pipes the streams; spawn+wait_with_output inherited
+            // them, so a failure reported no diagnostics.
+            let output = command.output().map_err(|e| {
+                Error::NvccNotFound(format!("Failed to spawn nvcc for linking: {}", e))
+            })?;
 
             if !output.status.success() {
                 return Err(Error::LinkingFailed(format!(
-                    "nvcc linking error:\n{}\n{}",
+                    "nvcc linking exited with {}:\n{}\n{}",
+                    output.status,
                     String::from_utf8_lossy(&output.stdout),
                     String::from_utf8_lossy(&output.stderr)
                 )));
@@ -633,8 +636,8 @@ impl KernelBuilder {
         println!("cargo:rerun-if-env-changed=NVCC_CCBIN");
 
         let dep_args = self.dependencies.fetch_all(&self.out_dir)?;
-        let ccbin_env = std::env::var("NVCC_CCBIN").ok();
         let is_msvc = std::env::var("TARGET").ok().is_some_and(|t| t.contains("msvc"));
+        let ccbin = resolve_ccbin(is_msvc);
         let nvcc_threads = self.parallel.nvcc_threads();
         let watch_hash = hash_paths(self.sources.watch_paths());
         let mut cache = BuildCache::load(&self.out_dir);
@@ -711,10 +714,11 @@ impl KernelBuilder {
                 for arg in &dep_args {
                     command.arg(arg);
                 }
-                if let Some(ccbin) = &ccbin_env {
-                    command
-                        .arg("-allow-unsupported-compiler")
-                        .args(["-ccbin", ccbin]);
+                if let Some(ccbin) = &ccbin {
+                    if ccbin.allow_unsupported {
+                        command.arg("-allow-unsupported-compiler");
+                    }
+                    command.args(["-ccbin", &ccbin.path]);
                 }
 
                 if is_msvc {
@@ -730,20 +734,19 @@ impl KernelBuilder {
 
                 command.arg(kernel_file);
 
-                let output = command
-                    .spawn()
-                    .map_err(|e| Error::NvccNotFound(format!("Failed to spawn nvcc: {}", e)))?
-                    .wait_with_output()
-                    .map_err(|e| Error::CompilationFailed {
-                        path: kernel_file.to_path_buf(),
-                        message: e.to_string(),
-                    })?;
+                // See the object-compile path above: `output()` pipes the
+                // streams; spawn+wait_with_output inherited them and captured
+                // nothing, swallowing all nvcc diagnostics.
+                let output = command.output().map_err(|e| {
+                    Error::NvccNotFound(format!("Failed to spawn nvcc: {}", e))
+                })?;
 
                 if !output.status.success() {
                     return Err(Error::CompilationFailed {
                         path: kernel_file.to_path_buf(),
                         message: format!(
-                            "nvcc error:\n{}\n{}",
+                            "nvcc exited with {}:\n{}\n{}",
+                            output.status,
                             String::from_utf8_lossy(&output.stdout),
                             String::from_utf8_lossy(&output.stderr)
                         ),
@@ -871,51 +874,8 @@ fn find_msvc_lib_exe() -> Result<PathBuf> {
         )));
     }
 
-    // Probe vswhere at its fixed install location.
-    let vswhere = PathBuf::from(
-        r"C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe",
-    );
-    if vswhere.exists() {
-        let output = Command::new(&vswhere)
-            .args([
-                "-latest",
-                "-products",
-                "*",
-                "-requires",
-                "Microsoft.VisualStudio.Component.VC.Tools.x86.x64",
-                "-property",
-                "installationPath",
-            ])
-            .output()
-            .ok();
-        if let Some(out) = output {
-            if out.status.success() {
-                let install_path = String::from_utf8_lossy(&out.stdout).trim().to_string();
-                if !install_path.is_empty() {
-                    let install = PathBuf::from(&install_path);
-                    let version_file = install.join(
-                        r"VC\Auxiliary\Build\Microsoft.VCToolsVersion.default.txt",
-                    );
-                    if let Ok(ver) = std::fs::read_to_string(&version_file) {
-                        let ver = ver.trim();
-                        // Match host arch — assume x64 (current target arch on
-                        // every CUDA-supported Windows host today).
-                        let lib = install
-                            .join("VC")
-                            .join("Tools")
-                            .join("MSVC")
-                            .join(ver)
-                            .join("bin")
-                            .join("Hostx64")
-                            .join("x64")
-                            .join("lib.exe");
-                        if lib.exists() {
-                            return Ok(lib);
-                        }
-                    }
-                }
-            }
-        }
+    if let Some(lib) = find_msvc_tool("lib.exe") {
+        return Ok(lib);
     }
 
     // Fall back to PATH lookup.
@@ -929,6 +889,101 @@ fn find_msvc_lib_exe() -> Result<PathBuf> {
          `lib.exe` is on PATH."
             .to_string(),
     ))
+}
+
+/// Locate an MSVC host-toolchain binary (`cl.exe`, `lib.exe`, …) via
+/// `vswhere.exe` (the canonical MS-supplied locator, at its fixed install
+/// location). Walks the same layout cc-rs / cargo's MSVC setup uses:
+/// latest VS with the C++ toolset, default toolset version, Hostx64/x64.
+/// Returns `None` on any miss (no vswhere, no VS, tool absent) — callers
+/// have their own fallbacks.
+fn find_msvc_tool(tool: &str) -> Option<PathBuf> {
+    let vswhere = PathBuf::from(
+        r"C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe",
+    );
+    if !vswhere.exists() {
+        return None;
+    }
+    let out = Command::new(&vswhere)
+        .args([
+            "-latest",
+            "-products",
+            "*",
+            "-requires",
+            "Microsoft.VisualStudio.Component.VC.Tools.x86.x64",
+            "-property",
+            "installationPath",
+        ])
+        .output()
+        .ok()?;
+    if !out.status.success() {
+        return None;
+    }
+    let install_path = String::from_utf8_lossy(&out.stdout).trim().to_string();
+    if install_path.is_empty() {
+        return None;
+    }
+    let install = PathBuf::from(&install_path);
+    let ver = std::fs::read_to_string(
+        install.join(r"VC\Auxiliary\Build\Microsoft.VCToolsVersion.default.txt"),
+    )
+    .ok()?;
+    // Match host arch — assume x64 (current target arch on every
+    // CUDA-supported Windows host today).
+    let p = install
+        .join("VC")
+        .join("Tools")
+        .join("MSVC")
+        .join(ver.trim())
+        .join("bin")
+        .join("Hostx64")
+        .join("x64")
+        .join(tool);
+    p.exists().then_some(p)
+}
+
+/// The `-ccbin` argument to pass to nvcc, if any.
+struct CcbinArg {
+    path: String,
+    /// `-allow-unsupported-compiler` accompanies an *explicit* `NVCC_CCBIN`
+    /// (the caller has opted into that compiler); an auto-discovered cl.exe
+    /// keeps nvcc's host-compiler version guard active.
+    allow_unsupported: bool,
+}
+
+/// Resolve nvcc's host compiler.
+///
+/// 1. `NVCC_CCBIN` env var — explicit override, any host OS (existing contract).
+/// 2. MSVC hosts: `cl.exe` already on PATH (VS dev shell) — nvcc finds it by
+///    itself, no argument needed.
+/// 3. MSVC hosts: locate `cl.exe` via `vswhere` and pass it as `-ccbin`.
+///    This makes `cargo build` work from a *plain* shell — without it, nvcc
+///    dies with `Cannot find compiler 'cl.exe' in PATH` on any terminal that
+///    isn't a VS Developer shell (reported by Fuel, 2026-07-03, where the
+///    error was additionally invisible due to the swallowed-stderr bug).
+fn resolve_ccbin(is_msvc: bool) -> Option<CcbinArg> {
+    if let Ok(p) = std::env::var("NVCC_CCBIN") {
+        return Some(CcbinArg {
+            path: p,
+            allow_unsupported: true,
+        });
+    }
+    if !is_msvc {
+        return None;
+    }
+    if Command::new("cl.exe").output().is_ok() {
+        return None;
+    }
+    let cl = find_msvc_tool("cl.exe")?;
+    println!(
+        "cargo:warning=baracuda-forge: cl.exe is not on PATH; using the vswhere-located \
+         MSVC host compiler for nvcc (-ccbin {}).",
+        cl.display()
+    );
+    Some(CcbinArg {
+        path: cl.to_string_lossy().into_owned(),
+        allow_unsupported: false,
+    })
 }
 
 /// Invoke `lib.exe` to assemble a static archive from `obj_files`,
@@ -968,22 +1023,21 @@ fn archive_with_msvc_lib(
         .arg(format!("/OUT:{}", out_file.display()))
         .arg(format!("@{}", response_file.display()));
 
-    let output = command
-        .spawn()
-        .map_err(|e| {
-            Error::NvccNotFound(format!(
-                "Failed to spawn {} for linking: {}",
-                lib_exe.display(),
-                e
-            ))
-        })?
-        .wait_with_output()
-        .map_err(|e| Error::LinkingFailed(e.to_string()))?;
+    // `output()` pipes the streams; spawn+wait_with_output inherited them,
+    // so a failure reported no diagnostics.
+    let output = command.output().map_err(|e| {
+        Error::NvccNotFound(format!(
+            "Failed to spawn {} for linking: {}",
+            lib_exe.display(),
+            e
+        ))
+    })?;
 
     if !output.status.success() {
         return Err(Error::LinkingFailed(format!(
-            "{} archiving error:\n{}\n{}",
+            "{} archiving exited with {}:\n{}\n{}",
             lib_exe.display(),
+            output.status,
             String::from_utf8_lossy(&output.stdout),
             String::from_utf8_lossy(&output.stderr)
         )));
