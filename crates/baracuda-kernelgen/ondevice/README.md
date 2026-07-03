@@ -186,3 +186,32 @@ epilogue's traffic is large relative to the GEMM, which at Tiny-M it never is.
 The contraction long tail lives elsewhere: **dequant-fused matmul** (int4/nf4
 weights dequantized in-kernel — the real quantized-decode traffic),
 irregular-K, and batched-many-tiny. Sixth measure-don't-assume instance.
+
+---
+
+## `audit_reduce_softmax.cu` — generated-vs-bespoke audit, round 1
+
+Generated cells vs the hand-written `baracuda-kernels-sys` kernels, called
+through their own `extern "C" _run` launchers (their path selection — what
+dispatch actually calls). Compile with
+`-std=c++17 -Xcompiler "/Zc:preprocessor /std:c++17" -I <kernels-sys>/kernels/include`.
+
+**Round-1 results (RTX 4070/sm_89, all correctness PASS):**
+
+| matchup | generated | bespoke | verdict |
+| --- | --- | --- | --- |
+| mean last-axis [8192²] | 248 GB/s | 234 GB/s | **GEN 1.06×** |
+| sum axis-0 [65536×1024] | 242 GB/s (splitk) | 171 GB/s (legacy) | **GEN 1.41×** |
+| softmax [4096²] | 235 GB/s (recompute) | 229 GB/s (smem) | **GEN 1.03×** |
+| softmax [2048×16384] | 200 GB/s | **0.2 GB/s** (global fallback) | **GEN 884×** |
+
+Notes: (1) the bespoke softmax fast path IS the smem row-cache — independently
+confirming the earlier gate finding that recompute ≥ smem-cache on this card;
+above 47 KB rows it collapses to an O(numel·extent) fallback the generated
+kernel simply doesn't have. (2) **Extract-the-delta, first application — from a
+LOSING kernel:** the bespoke legacy reducer (171 GB/s) beats our general-path
+BASE (55 GB/s) at identical parallelism because it passes shape/strides **by
+value in kernel params** (`DimsI32/I64` → constant bank) while ours re-reads
+`shape[]/s0[]/so[]` from **global pointers every loop iteration**. Our split-K
+still wins the cell, but by-value dims params are a legitimate technique to
+extract into the general strided/reduction emitters (queued in the backlog).

@@ -119,3 +119,13 @@ generator's IR cannot yet express the algorithm, and each such case is an IR
 roadmap item, not a kernel to maintain. Every extraction gets the standing
 discipline: value-preserving → applied broadly; tradeoff → a gated variant;
 bit-changing → an honest contract flip.
+
+**Audit round 1 (2026-07-03): generated swept all four matchups** (mean
+last-axis 1.06×, outer sum 1.41× via split-K, softmax 1.03×, softmax-wide 884×
+— the bespoke >47KB-row fallback is catastrophic). First extract-the-delta,
+taken from a LOSING kernel per the spirit of the rule: the bespoke reducer
+passes shape/strides **by value in kernel params** (constant bank) where the
+generated general path re-reads `shape[]/s0[]/so[]` from global pointers each
+iteration — worth 171 vs 55 GB/s at equal parallelism. EXTRACTION QUEUED:
+by-value dims params for the general strided/reduction emitters (an ABI change
+to those cells; value-preserving → apply broadly, re-golden, re-validate).
