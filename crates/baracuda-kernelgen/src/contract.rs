@@ -131,6 +131,17 @@ pub fn contract(
     s.push_str("  in_place: allowed\n");
     s.push_str(&format!("  alignment_bytes: {}\n", required_align(key)));
     s.push_str(&format!("  awkward_layout: {}\n", awkward_layout(key)));
+    // The unit of the kernel's `n` launch argument: a vectorized/packed cell
+    // counts w-element VECTORS (n/width), everything else elements. Pinned on
+    // the wire per the 2026-07-03 Fuel exchange (documentation-only for Fuel
+    // today — launches are provider-internal — but load-bearing for their
+    // declared-cost trampoline, and an 8x launch/cost hazard if ever assumed).
+    let cw = crate::cuda::effective_count_width(&crate::plan::build_plan(op, key));
+    if cw > 1 {
+        s.push_str(&format!("  count_unit: vectors_x{cw}\n"));
+    } else {
+        s.push_str("  count_unit: elements\n");
+    }
 
     s.push_str("cost:\n");
     s.push_str("  provenance: declared\n");
@@ -289,12 +300,14 @@ fn awkward_layout(key: &StructureKey) -> &'static str {
 /// Required base-pointer alignment (bytes): a vectorized cell needs its vector
 /// width; a scalar cell needs the dtype's natural alignment.
 ///
-/// SEAM NOTE (H2, adversarial pass 2026-07-02): the contract does not yet state
-/// the **count unit** of the kernel's `n` argument — a vectorized cell takes a
-/// VECTOR count (`n / width`), a scalar cell an ELEMENT count. A consumer
-/// deriving launch parameters from the contract for a V8 cell without knowing
-/// this would over-launch 8x. Encode the count unit (or the width divisor) in
-/// the contract before Fuel derives launches from it.
+/// SEAM NOTE (H2, adversarial pass 2026-07-02 — RESOLVED 2026-07-03): the
+/// kernel's `n` argument is a VECTOR count (`n / width`) on vectorized/packed
+/// cells and an ELEMENT count otherwise — an 8x hazard for any consumer that
+/// assumed elements. The caps block now states it explicitly (`count_unit:`,
+/// via `effective_count_width`, which mirrors the emitter's dispatch including
+/// its scalar fallbacks); Fuel confirmed they never derive launches from
+/// contracts and will consume the field when their declared-cost trampoline
+/// compiles cost expressions over `n`.
 fn required_align(key: &StructureKey) -> u32 {
     let dsz = dtype_size(key.dtype);
     match key.operands[0].vec_width {
@@ -437,6 +450,34 @@ mod tests {
         let a = OperandDesc::new(2, &[128, 256], &[256, 1], ElementKind::F32, 256);
         let operands: Vec<_> = std::iter::repeat_n(a, n_operands).collect();
         structure_key(op_cat, &operands, ArchSku::Sm89)
+    }
+
+    #[test]
+    fn count_unit_matches_the_emitted_abi() {
+        use crate::{generate, Cuda};
+        let c = |op: &OpDef, key: &StructureKey| {
+            let k = generate(op, key, &Cuda);
+            contract(op, key, &k, "cuda").unwrap()
+        };
+        let add = OpDef::elementwise("add", 2, &[ElementKind::F32], input(0) + input(1));
+        // f32 contiguous/aligned → float4 kernel: n counts 4-element vectors.
+        let kf = key_for(3, OpCategory::BinaryElementwise);
+        assert!(c(&add, &kf).contains("count_unit: vectors_x4"));
+        // f16 contiguous/aligned → packed half2 V8 kernel: 8-element vectors.
+        let h = OperandDesc::new(1, &[1 << 20], &[1], ElementKind::F16, 256);
+        let addh = OpDef::elementwise("add", 2, &[ElementKind::F16], input(0) + input(1));
+        let kh = structure_key(OpCategory::BinaryElementwise, &[h, h, h], ArchSku::Sm89);
+        assert!(c(&addh, &kh).contains("count_unit: vectors_x8"));
+        // i32 keys V4 but has no int vector/packed path → the SCALAR fallback:
+        // the contract must say elements, mirroring the emitted ABI, not the key.
+        let gi = OperandDesc::new(1, &[1 << 20], &[1], ElementKind::I32, 256);
+        let addi = OpDef::elementwise("add", 2, &[ElementKind::I32], input(0) + input(1));
+        let ki = structure_key(OpCategory::BinaryElementwise, &[gi, gi, gi], ArchSku::Sm89);
+        assert!(c(&addi, &ki).contains("count_unit: elements"));
+        // Strided cell → elements.
+        let t = OperandDesc::new(2, &[8, 4], &[1, 8], ElementKind::F32, 256);
+        let kt = structure_key(OpCategory::BinaryElementwise, &[t, t, t], ArchSku::Sm89);
+        assert!(c(&add, &kt).contains("count_unit: elements"));
     }
 
     #[test]

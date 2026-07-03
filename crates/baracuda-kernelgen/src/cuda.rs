@@ -106,6 +106,27 @@ fn vector_type(dt: ElementKind, width: u32) -> Option<(&'static str, &'static [&
     }
 }
 
+/// The unit of the emitted elementwise kernel's `n` argument for this plan:
+/// `w > 1` means the kernel counts `w`-element **vectors** (a vectorized or
+/// packed lowering, `n = elements / w`); `1` means elements. Must mirror
+/// [`Cuda::lower`]'s `Schedule::Vectorized` dispatch exactly — the contract's
+/// `count_unit:` documents the ABI the emitter actually built, including the
+/// scalar fallbacks (unpackable dtype, const/param f16 body).
+pub(crate) fn effective_count_width(plan: &KernelPlan<'_>) -> u32 {
+    match plan.schedule {
+        Schedule::Vectorized { width } => {
+            if vector_type(plan.dtype, width).is_some()
+                || (packed_kind(plan.dtype, width).is_some() && body_packs(plan.body))
+            {
+                width
+            } else {
+                1
+            }
+        }
+        _ => 1,
+    }
+}
+
 /// Pair-lane field names for the per-kernel packed vector struct.
 static PACKED_FIELDS: [&str; 4] = ["a", "b", "c", "d"];
 
