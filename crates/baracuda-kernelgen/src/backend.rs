@@ -20,6 +20,40 @@ pub struct GeneratedKernel {
     pub source: String,
 }
 
+/// How a schedule variant's computed bits relate to the cell's default lowering.
+/// Drives the selection policy (variants backlog doc): a [`VariantFidelity::BitIdentical`]
+/// variant may be selected silently; anything else is selectable only through an
+/// honest FKC contract (the caller's precision policy decides), never silently.
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum VariantFidelity {
+    /// Same result bits as the default lowering for every input.
+    BitIdentical,
+    /// Deterministic (fixed order for a fixed launch configuration), but a
+    /// different operation *association* than the default — e.g. a split-K
+    /// partial-sum tree vs the sequential fold.
+    ReassociatedDeterministic,
+}
+
+/// One alternative schedule for a cell: a tagged set of kernels (most variants
+/// are a single kernel; a split-K pair is two, in launch order) plus the launch
+/// protocol the contract must carry. The ship-top-K policy: every validated
+/// variant ships with its own contract under the same `accept.structure_key`;
+/// the dispatch table records Baracuda's measured default, and Fuel remains the
+/// runtime selector.
+#[derive(Clone, Debug)]
+pub struct Variant {
+    /// Short stable tag (`"base"`, `"splitk"`, `"unroll4"`, …). Rides in the
+    /// generated symbol names and, eventually, contract front-matter (opaque on
+    /// the wire — the entry point stays the true identity).
+    pub tag: &'static str,
+    /// The kernels implementing this variant, in launch order.
+    pub kernels: Vec<GeneratedKernel>,
+    /// Bit relationship to the default lowering.
+    pub fidelity: VariantFidelity,
+    /// Launch protocol (grids, workspace sizing, chunking) — contract-facing.
+    pub launch_note: String,
+}
+
 /// Lowers a neutral [`crate::plan::KernelPlan`] to concrete kernel source.
 pub trait Backend {
     /// Short backend identifier (e.g. `"cuda"`).
@@ -31,6 +65,14 @@ pub trait Backend {
     /// dtype is a typed decline, not a lowering panic. (AOT op authoring is
     /// trusted, so `lower` itself may still panic on a dtype it can't spell.)
     fn supports_dtype(&self, dtype: ElementKind) -> bool;
+    /// Alternative schedule variants for this plan's cell, beyond the default
+    /// [`Backend::lower`] kernel. Default: none. Every returned variant must
+    /// pass the same validation gate as the default (nvrtc/nvcc compile +
+    /// numeric oracle + sanitizer where the schedule warrants) before it is
+    /// shipped or ranked by the bench gate.
+    fn lower_variants(&self, _plan: &crate::plan::KernelPlan<'_>) -> Vec<Variant> {
+        Vec::new()
+    }
 }
 
 /// Backend-injected lowering closures for the **non-universal** parts of the

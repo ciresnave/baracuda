@@ -38,7 +38,7 @@ pub mod optimize;
 pub mod pattern;
 pub mod plan;
 
-pub use backend::{Backend, GeneratedKernel};
+pub use backend::{Backend, GeneratedKernel, Variant, VariantFidelity};
 pub use contract::{contract, front_matter};
 pub use cuda::Cuda;
 pub use dispatch_artifact::{emit_dispatch_table, parse_dispatch_table};
@@ -64,4 +64,22 @@ use baracuda_kernels_types::StructureKey;
 #[must_use]
 pub fn generate(op: &OpDef, key: &StructureKey, backend: &dyn Backend) -> GeneratedKernel {
     backend.lower(&build_plan(op, key))
+}
+
+/// Generate the full **variant set** for a cell: the default lowering (tag
+/// `"base"`, bit-identical by definition) plus every backend schedule variant.
+/// Ship-top-K policy (variants backlog doc): all validated variants ship, each
+/// with its own contract; the item-07 bench gate ranks them per arch and the
+/// dispatch table records Baracuda's default — Fuel stays the runtime selector.
+#[must_use]
+pub fn generate_variants(op: &OpDef, key: &StructureKey, backend: &dyn Backend) -> Vec<Variant> {
+    let plan = build_plan(op, key);
+    let mut vs = vec![Variant {
+        tag: "base",
+        kernels: vec![backend.lower(&plan)],
+        fidelity: VariantFidelity::BitIdentical,
+        launch_note: String::new(),
+    }];
+    vs.extend(backend.lower_variants(&plan));
+    vs
 }

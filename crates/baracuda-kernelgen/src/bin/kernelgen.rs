@@ -6,8 +6,8 @@
 //! `--backend` selector replace the hardcoded pilot next.
 
 use baracuda_kernelgen::{
-    derive_pattern, emit_dispatch_table, generate, input, konst, param, reduced, to_fkc, Cuda,
-    OpDef, ReduceOp, ReduceStage, UnaryOp,
+    derive_pattern, emit_dispatch_table, generate, generate_variants, input, konst, param,
+    reduced, to_fkc, Cuda, OpDef, ReduceOp, ReduceStage, UnaryOp,
 };
 use baracuda_kernels_types::{
     seed_winner, structure_key, ArchSku, AxisMask, DispatchEntry, DispatchTable, ElementKind,
@@ -174,6 +174,30 @@ fn main() {
         let k = generate(op, &key, &Cuda);
         fs::write(format!("{out_dir}/{}.cu", k.name), &k.source).expect("write kernel");
         println!("generated {out_dir}/{}.cu  (cell {})", k.name, key.to_token());
+    }
+
+    // --- Schedule variants (phase 2, ship-top-K): split-K for the outer-axis cell ---
+    // The baseline `_reduce_sum_ax1` (one thread per column, 118 GB/s measured) is
+    // emitted above; the split-K pair is the first bench-gated variant. Every
+    // variant ships (Fuel is the runtime selector); the base stays the default.
+    {
+        let a = OperandDesc::new(2, &[8192, 8192], &[8192, 1], f32, 256);
+        let o = OperandDesc::new(1, &[8192], &[1], f32, 256);
+        let key = structure_key(OpCategory::Reduction, &[a, o], ArchSku::Sm89);
+        for v in generate_variants(&sum_ax0, &key, &Cuda) {
+            if v.tag == "base" {
+                continue; // the baseline cell is already written above
+            }
+            for k in &v.kernels {
+                fs::write(format!("{out_dir}/{}.cu", k.name), &k.source).expect("write kernel");
+                println!(
+                    "generated {out_dir}/{}.cu  (cell {} | variant {})",
+                    k.name,
+                    key.to_token(),
+                    v.tag
+                );
+            }
+        }
     }
 
     // --- Integer reductions (item 04): i32 Sum/Max, exact `long long` accumulator ---

@@ -50,6 +50,27 @@ them without data):**
   `Scalar` for `InnerContig` today, so admitting it changes *keying* — a
   `STRUCTURE_KEY_VERSION` bump, Fuel-visible, propose-first.
 
+## Who decides — ship top-K to Fuel (policy, pinned 2026-07-02)
+
+**Default: ship every validated variant, not just the bench winner.** Fuel is
+the runtime decision-maker by design (design §8: it already times and compares
+every implementation available and picks the best), and three mechanisms keep it
+in that seat: `DispatchEntry.ranked` is top-K, `merge()` treats Fuel's
+`Reported` rows as overriding authority, and every shipped variant carries its
+own FKC contract under the same `accept.structure_key` so the planner can pick
+among them. The item-09 mispredict is the standing argument: our synthetic
+bench measures regimes a real workload may never hit — shipping winner-only
+would bake a bench guess in where Fuel could have known better.
+
+- The dispatch table is Baracuda's **own default route and a seed/prior offered
+  to Fuel** — not a gatekeeper on what ships.
+- Winner-only shipping is reserved for cells where a variant is **strictly
+  dominated** (never wins any regime on any measured arch) or where catalog
+  size demands a cap (cap per cell, drop dominated variants first).
+- **Bit-changing variants require Fuel-decides**: only the caller knows its
+  precision requirements, so a reassociated/approximate variant is selectable
+  only through its honest contract, never silently by Baracuda.
+
 ## The connective tissue to build first
 
 1. **Variant-emission loop** (`bin/kernelgen.rs` or a `variants.rs` module): for

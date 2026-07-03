@@ -50,9 +50,44 @@ memory-bound, so GB/s vs. the copy peak is the figure of merit).
 The block-per-row rewrite gave a **4.4× win** on the last axis (was 5.15 ms /
 52.2 GB/s with the old one-thread-per-row *sequential*, uncoalesced fold); it now
 reads at ~227 GB/s — above the copy's read+write ceiling because a reduction is
-read-only, i.e. memory-optimal. **Follow-up:** the outer-axis path (118 GB/s) is
-coalesced but a sequential one-thread-per-column fold; a split-K partial-sum pass
-would push it toward peak (additive via the `ReduceAxisClass` token — no re-key).
+read-only, i.e. memory-optimal. The outer-axis follow-up is now the **split-K
+variant** (see `splitk_validate.cu` below) — regime-dependent, shipped as a
+bench-gated schedule variant beside the baseline.
+
+---
+
+## `splitk_validate.cu` — split-K outer-axis reduction VARIANT (phase 2)
+
+The first bench-gated schedule variant (ship-top-K policy — see
+`docs/planning/foundational/11-variant-generators-backlog.md`): a two-kernel
+split-K (`_splitk_partial` → workspace → `_splitk_combine`) beside the
+single-pass baseline for the outer-axis Sum/Mean cell. Deterministic for a fixed
+`chunk_rows`, no atomics — but a **different association** than the baseline
+(`VariantFidelity::ReassociatedDeterministic`), so it is selectable only through
+its honest contract, never silently.
+
+Checks: baseline + split-K (ragged chunks) vs a CPU f64 oracle; degenerate
+`n_chunks=1` **memcmp-identical** to the baseline (same association); run-to-run
+determinism (memcmp).
+
+**Last run:** RTX 4070 Laptop (sm_89), CUDA 13.3 — **all 3 cases PASS** (oracle
+relerr 0.0), and the sweep (fixed 0.27 GB read, two stable runs):
+
+| cols | baseline (1 thread/col) | split-K | speedup |
+| --- | --- | --- | --- |
+| 256 | 12.4 GB/s (starved) | 229.9 GB/s | **18.5×** |
+| 1024 | 53.0 GB/s | 241.6 GB/s | **4.6×** |
+| 4096 | 204.1 GB/s | 243.8 GB/s | 1.19× |
+| 16384+ | ~248 GB/s | ~244 GB/s | 0.98× |
+
+**Regime-dependent — the variant thesis in one table.** The `StructureKey`
+deliberately carries no literal extents, so all these shapes are ONE cell: the
+within-cell winner depends on a runtime extent (`cols` vs GPU width). That makes
+this a **launch-config-class decision for the runtime selector** (Fuel, per
+call), exactly why the ship-top-K policy ships both kernels: winner-only would
+bake in an 18× loss or a 2% regression depending on the bench shape. (The old
+"118 GB/s" figure from the item-03 session also did not reproduce at cols=8192
+— laptop clock variance; the starved regime is the real, stable gap.)
 
 ---
 

@@ -6,7 +6,10 @@
 //! — and reused verbatim across dtypes, because CUDA overloads `+ - * /` for
 //! `__half` / `__nv_bfloat16` the same as for `float`.
 
-use crate::backend::{lower_dag, lower_dag_all, lower_expr, Backend, GeneratedKernel, Lowering};
+use crate::backend::{
+    lower_dag, lower_dag_all, lower_expr, Backend, GeneratedKernel, Lowering, Variant,
+    VariantFidelity,
+};
 use crate::ir::{Access, BinaryOp, ExprDag, ReduceOp, ScalarExpr, UnaryOp};
 use crate::plan::{rr_role, KernelPlan, ReduceAxisClass, RrRole, Schedule};
 use baracuda_kernels_types::{Contiguity, ElementKind, OperandKey};
@@ -22,6 +25,13 @@ impl Backend for Cuda {
 
     fn supports_dtype(&self, dtype: ElementKind) -> bool {
         scalar_ctype(dtype).is_some()
+    }
+
+    fn lower_variants(&self, plan: &KernelPlan<'_>) -> Vec<Variant> {
+        // First variant: split-K for the outer-axis reduction cell (the
+        // measured 118 GB/s occupancy gap). More join per the variants backlog
+        // (docs/planning/foundational/11-variant-generators-backlog.md).
+        reduction_splitk_variant(plan).into_iter().collect()
     }
 
     fn lower(&self, plan: &KernelPlan<'_>) -> GeneratedKernel {
@@ -795,6 +805,166 @@ fn emit_reduction(plan: &KernelPlan<'_>, ctype: &str, rop: ReduceOp) -> Generate
     GeneratedKernel { name, source: s }
 }
 
+/// Split-K schedule **variant** for the outer-axis reduction cell
+/// (`out[c] = Σ_r in[r,c]`, rank-2 contiguous, reduce axis 0, `Sum`/`Mean`,
+/// float dtypes).
+///
+/// The baseline general path is one thread per column — coalesced, but a single
+/// sequential fold per column, so occupancy collapses when `cols` is small
+/// relative to the GPU (measured 118 GB/s vs a ~230 GB/s ceiling at
+/// `[8192,8192]` f32 on sm_89: 8192 columns = 32 blocks). Split-K parallelizes
+/// over row chunks: `_splitk_partial` gives each `(column-tile, row-chunk)`
+/// block a partial fold into a caller-provided workspace; `_splitk_combine`
+/// folds the `n_chunks` partials per column and applies the Mean divisor + the
+/// store narrowing. Both kernels keep adjacent threads on adjacent columns —
+/// fully coalesced — and there are no atomics.
+///
+/// **Determinism/bits:** deterministic for a fixed `chunk_rows` (a fixed
+/// two-level association), but a *different* association than the baseline's
+/// sequential fold — [`VariantFidelity::ReassociatedDeterministic`]. Selectable
+/// only through an honest contract (the caller's precision policy), never
+/// silently; the baseline stays the default route.
+fn reduction_splitk_variant(plan: &KernelPlan<'_>) -> Option<Variant> {
+    let rop = match plan.schedule {
+        Schedule::Reduction {
+            op,
+            class: ReduceAxisClass::Outer,
+            ..
+        } => op,
+        _ => return None,
+    };
+    // Max/Min split-K (partial maxima are order-free but the has-flag NaN fold
+    // needs care) is a follow-up variant; int needs a long-long workspace.
+    if !matches!(rop, ReduceOp::Sum | ReduceOp::Mean) {
+        return None;
+    }
+    let (axes, keepdim) = match plan.access {
+        Access::Reduction { axes, keepdim, .. } => (*axes, *keepdim),
+        _ => return None,
+    };
+    // Specialized ABI (no stride arrays): the canonical rank-2 axis-0 cell with
+    // dense input and output only.
+    if plan.key.rank != 2 || axes.0 != 0b1 || plan.n_inputs != 1 {
+        return None;
+    }
+    if !matches!(
+        plan.dtype,
+        ElementKind::F16
+            | ElementKind::Bf16
+            | ElementKind::F32
+            | ElementKind::F32Strict
+            | ElementKind::F64
+    ) {
+        return None;
+    }
+    let out_key = plan.key.operands[(plan.key.n_operands as usize).saturating_sub(1)];
+    if plan.key.operands[0].contig != Contiguity::Contig || out_key.contig != Contiguity::Contig {
+        return None;
+    }
+    let ctype = scalar_ctype(plan.dtype)?;
+
+    // Same accumulator / load / store discipline as `emit_reduction`.
+    let dbl = matches!(plan.dtype, ElementKind::F64 | ElementKind::F32Strict);
+    let acc = if dbl { "double" } else { "float" };
+    let zero = if dbl { "0.0" } else { "0.0f" };
+    let load = |i: u8| match plan.dtype {
+        ElementKind::F16 => format!("__half2float(in{i}[idx])"),
+        ElementKind::Bf16 => format!("__bfloat162float(in{i}[idx])"),
+        ElementKind::F32Strict => format!("(double)in{i}[idx]"),
+        _ => format!("in{i}[idx]"),
+    };
+    let elem = lower_expr(
+        plan.body,
+        &Lowering {
+            leaf: &load,
+            reduced: &|i| unreachable!("no Reduced leaf outside RowReduce: red{i}"),
+            unary: &|op, x| if dbl { unary_f64(op, x) } else { unary_f32(op, x) },
+            binary: &|op, a, b| {
+                if dbl {
+                    binary_f64(op, a, b)
+                } else {
+                    binary_f32(op, a, b)
+                }
+            },
+        },
+    );
+    let store = |finalized: String| -> String {
+        match plan.dtype {
+            ElementKind::F16 => format!("__float2half({finalized})"),
+            ElementKind::Bf16 => format!("__float2bfloat16({finalized})"),
+            _ => finalized,
+        }
+    };
+
+    let stem = format!(
+        "baracuda_gen_{}_{}_reduce_{}_ax{:x}{}",
+        plan.op_name,
+        dtype_tag(plan.dtype),
+        if matches!(rop, ReduceOp::Mean) { "mean" } else { "sum" },
+        axes.0,
+        if keepdim { "_kd" } else { "" },
+    );
+
+    // ---- Kernel 1: per-(column-tile, row-chunk) partial folds. ----
+    let pname = format!("{stem}_splitk_partial");
+    let mut p = header(plan, &pname);
+    p.push_str(&format!("    const {ctype}* __restrict__ in0,\n"));
+    p.push_str(&format!("    {acc}* __restrict__ ws,\n"));
+    p.push_str("    long long rows,\n    long long cols,\n    long long chunk_rows)\n{\n");
+    p.push_str("    long long c = (long long)blockIdx.x * blockDim.x + threadIdx.x;\n");
+    p.push_str("    if (c >= cols) return;\n");
+    p.push_str("    long long r0 = (long long)blockIdx.y * chunk_rows;\n");
+    p.push_str("    long long r1 = r0 + chunk_rows; if (r1 > rows) r1 = rows;\n");
+    p.push_str(&format!("    {acc} acc = {zero};\n"));
+    p.push_str("    for (long long r = r0; r < r1; ++r) {\n");
+    p.push_str("        long long idx = r * cols + c;\n");
+    p.push_str(&format!("        acc += {elem};\n"));
+    p.push_str("    }\n");
+    p.push_str("    ws[(long long)blockIdx.y * cols + c] = acc;\n}\n");
+
+    // ---- Kernel 2: fold the n_chunks partials per column; finalize + store. ----
+    let mean = matches!(rop, ReduceOp::Mean);
+    let cname = format!("{stem}_splitk_combine");
+    let mut k = header(plan, &cname);
+    k.push_str(&format!("    const {acc}* __restrict__ ws,\n"));
+    k.push_str(&format!("    {ctype}* __restrict__ out,\n"));
+    k.push_str("    long long cols,\n    long long n_chunks");
+    if mean {
+        k.push_str(",\n    long long rows"); // the Mean divisor
+    }
+    k.push_str(")\n{\n");
+    k.push_str("    long long c = (long long)blockIdx.x * blockDim.x + threadIdx.x;\n");
+    k.push_str("    if (c >= cols) return;\n");
+    // Seed from the first partial (n_chunks >= 1 by the launch contract), not
+    // from 0: `0 + w` flips a -0.0 column total to +0.0, so zero-seeding would
+    // break the degenerate n_chunks=1 bit-identity with the baseline fold.
+    k.push_str(&format!("    {acc} acc = ws[c];\n"));
+    k.push_str("    for (long long k = 1; k < n_chunks; ++k) acc += ws[k * cols + c];\n");
+    let finalized = if mean {
+        format!("acc / ({acc})rows")
+    } else {
+        "acc".to_string()
+    };
+    k.push_str(&format!("    out[c] = {};\n}}\n", store(finalized)));
+
+    Some(Variant {
+        tag: "splitk",
+        kernels: vec![
+            GeneratedKernel { name: pname.clone(), source: p },
+            GeneratedKernel { name: cname.clone(), source: k },
+        ],
+        fidelity: VariantFidelity::ReassociatedDeterministic,
+        launch_note: format!(
+            "two-launch protocol: (1) {pname}<<<dim3(ceil(cols/B), n_chunks), B>>>(in0, ws, \
+             rows, cols, chunk_rows) with chunk_rows = ceil(rows/n_chunks) and workspace ws \
+             of n_chunks*cols `{acc}` elements; (2) {cname}<<<ceil(cols/B), B>>>(ws, out, \
+             cols, n_chunks{}). Deterministic for a fixed chunk_rows; association differs \
+             from the single-pass baseline.",
+            if mean { ", rows" } else { "" }
+        ),
+    })
+}
+
 /// Emit a **fused row reduction** ([`Access::RowReduce`]): one block per output
 /// row, a warp-shuffle + shared-memory tree reduce per stage, then a full-width
 /// elementwise epilogue. RmsNorm (1 stage) and Softmax (2 stages) are instances.
@@ -1321,6 +1491,103 @@ mod tests {
             .source
             .contains("struct __align__(4) baracuda_gen_add_f16_co_v2_vec { __half2 a; };"));
         assert!(!k.source.contains("vo.b"));
+    }
+
+    #[test]
+    fn splitk_variant_offered_for_outer_sum() {
+        use crate::ir::ReduceOp;
+        use crate::{generate_variants, VariantFidelity};
+        use baracuda_kernels_types::AxisMask;
+        let op = OpDef::reduction_axes(
+            "sum",
+            1,
+            &[ElementKind::F32],
+            input(0),
+            ReduceOp::Sum,
+            AxisMask(0b1),
+            false,
+        );
+        let a = OperandDesc::new(2, &[8192, 8192], &[8192, 1], ElementKind::F32, 256);
+        let o = OperandDesc::new(1, &[8192], &[1], ElementKind::F32, 256);
+        let key = structure_key(OpCategory::Reduction, &[a, o], ArchSku::Sm89);
+        let vs = generate_variants(&op, &key, &Cuda);
+        assert_eq!(vs.len(), 2, "base + splitk");
+        assert_eq!(vs[0].tag, "base");
+        assert_eq!(vs[0].fidelity, VariantFidelity::BitIdentical);
+        let sk = &vs[1];
+        assert_eq!(sk.tag, "splitk");
+        assert_eq!(sk.fidelity, VariantFidelity::ReassociatedDeterministic);
+        assert_eq!(sk.kernels.len(), 2, "partial + combine, in launch order");
+        // Partial: coalesced (adjacent threads, adjacent columns), chunked rows,
+        // one workspace row per chunk. No atomics anywhere.
+        let p = &sk.kernels[0];
+        assert!(p.name.ends_with("_splitk_partial"));
+        assert!(p.source.contains("long long idx = r * cols + c;"));
+        assert!(p.source.contains("long long r1 = r0 + chunk_rows; if (r1 > rows) r1 = rows;"));
+        assert!(p.source.contains("ws[(long long)blockIdx.y * cols + c] = acc;"));
+        assert!(!p.source.contains("atomic"));
+        // Combine: fixed chunk-order fold, no Mean divisor for Sum.
+        let c = &sk.kernels[1];
+        assert!(c.name.ends_with("_splitk_combine"));
+        // Seeded from the first partial (not 0): keeps a -0.0 column total's
+        // sign and makes the degenerate n_chunks=1 case bit-identical.
+        assert!(c.source.contains("float acc = ws[c];"));
+        assert!(c.source.contains("for (long long k = 1; k < n_chunks; ++k) acc += ws[k * cols + c];"));
+        assert!(!c.source.contains("/ (float)rows"));
+        assert!(sk.launch_note.contains("chunk_rows = ceil(rows/n_chunks)"));
+    }
+
+    #[test]
+    fn splitk_mean_divides_in_combine_only() {
+        use crate::ir::ReduceOp;
+        use crate::generate_variants;
+        use baracuda_kernels_types::AxisMask;
+        let op = OpDef::reduction_axes(
+            "mean",
+            1,
+            &[ElementKind::F32],
+            input(0),
+            ReduceOp::Mean,
+            AxisMask(0b1),
+            false,
+        );
+        let a = OperandDesc::new(2, &[4096, 1024], &[1024, 1], ElementKind::F32, 256);
+        let o = OperandDesc::new(1, &[1024], &[1], ElementKind::F32, 256);
+        let key = structure_key(OpCategory::Reduction, &[a, o], ArchSku::Sm89);
+        let vs = generate_variants(&op, &key, &Cuda);
+        assert_eq!(vs.len(), 2);
+        let sk = &vs[1];
+        assert!(!sk.kernels[0].source.contains("acc /"), "partial never divides");
+        assert!(sk.kernels[1].source.contains("out[c] = acc / (float)rows;"));
+    }
+
+    #[test]
+    fn splitk_not_offered_for_lastaxis_max_or_int() {
+        use crate::ir::ReduceOp;
+        use crate::generate_variants;
+        use baracuda_kernels_types::AxisMask;
+        // Last-axis (InnerContig): already block-parallel — no split-K.
+        let last = OpDef::reduction("s", 1, &[ElementKind::F32], input(0), ReduceOp::Sum);
+        let a = OperandDesc::new(2, &[4096, 1024], &[1024, 1], ElementKind::F32, 256);
+        let o = OperandDesc::new(1, &[4096], &[1], ElementKind::F32, 256);
+        let k = structure_key(OpCategory::Reduction, &[a, o], ArchSku::Sm89);
+        assert_eq!(generate_variants(&last, &k, &Cuda).len(), 1, "base only");
+        // Outer Max: the has-flag NaN fold needs its own variant treatment.
+        let mx = OpDef::reduction_axes(
+            "amax", 1, &[ElementKind::F32], input(0), ReduceOp::Max, AxisMask(0b1), false,
+        );
+        let ao = OperandDesc::new(2, &[4096, 1024], &[1024, 1], ElementKind::F32, 256);
+        let oo = OperandDesc::new(1, &[1024], &[1], ElementKind::F32, 256);
+        let km = structure_key(OpCategory::Reduction, &[ao, oo], ArchSku::Sm89);
+        assert_eq!(generate_variants(&mx, &km, &Cuda).len(), 1, "base only");
+        // Outer i32 Sum: int workspace is a follow-up.
+        let is = OpDef::reduction_axes(
+            "sum", 1, &[ElementKind::I32], input(0), ReduceOp::Sum, AxisMask(0b1), false,
+        );
+        let ai = OperandDesc::new(2, &[4096, 1024], &[1024, 1], ElementKind::I32, 256);
+        let oi = OperandDesc::new(1, &[1024], &[1], ElementKind::I32, 256);
+        let ki = structure_key(OpCategory::Reduction, &[ai, oi], ArchSku::Sm89);
+        assert_eq!(generate_variants(&is, &ki, &Cuda).len(), 1, "base only");
     }
 
     #[test]
