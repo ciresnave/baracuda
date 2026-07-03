@@ -74,3 +74,37 @@ Expected: `ALL PASSED` (`maxerr 0` — bit-exact; dedup changes text, not values
 headerless `-ptx` compile). The **fused-reduction epilogue** dedup (Softmax's
 shared `exp(x-max)`), the DAG-based contract flops count, and the `region_to_op`
 seam hash-cons are the item-02 follow-up (see `docs/planning/foundational/`).
+
+---
+
+## `packed_validate.cu` — packed f16/bf16 pair path (item 09 Stage 1)
+
+Runs each **packed** kernel (`_co_v8`: half2/bf162 pairs, 128-bit accesses) and
+its **scalar sibling** (the oracle, `_scalar` via a 2-byte-aligned cell) over a
+corpus where input 0 sweeps **every 16-bit pattern** — all NaN payloads, ±Inf,
+±0, every subnormal, max-finite — and requires the raw u16 outputs to be
+memcmp-identical. Cases: `add` (Tier A native pair ops) and `relu_add` (Tier A
+add + Tier B pair-scalarized relu), f16 + bf16.
+
+**Last run:** RTX 4070 Laptop (sm_89), CUDA 13.3 — **all 4 cases bit-identical**
+over the full sweep; compute-sanitizer `initcheck` + `memcheck` **0 errors**.
+
+### Bench — `packed_bench.cu` (honest finding)
+
+f16 `add`, scalar vs packed, per-kernel launcher-realistic grids:
+
+| n (halves) | regime | packed vs scalar |
+| --- | --- | --- |
+| 64k | launch-bound | parity (noise) |
+| 1M–4M | **L2 / instruction-bound** | **+3–8% (consistent)** |
+| 16M+ | DRAM-bound | parity |
+
+**The item-09 brief's premise ("largest unclaimed memory-bound win") is
+empirically wrong on sm_89**: the coalescer merges a warp's adjacent 2-byte lane
+accesses into optimal transactions, so the *scalar* f16 kernel already runs at
+the DRAM ceiling (~203 GB/s) for large coalesced elementwise. The packed path is
+a **modest pure win**: bit-identical always, +3–8% where instruction issue is
+the limiter, never a consistent regression, and fewer issue slots burned per
+element (headroom for fused compute-heavy bodies). The deferred packed stages
+(Tier-A transcendentals, packed reductions) should be built as **measured
+variants** gated by the item-07 bench harness, not assumed wins.

@@ -422,7 +422,7 @@ tool). Its shape realizes §10's algorithm/schedule split:
 
 | schedule | emits | dtypes |
 |---|---|---|
-| Vectorized | linear `float4`(V4) / `double2`(V2) loop | f32 (V4), f64 (V2); f16/bf16 key as V8 but fall back to Scalar — packed `half2` SIMD is a follow-up |
+| Vectorized | linear `float4`(V4) / `double2`(V2) loop; **packed pair loop** for f16/bf16 (`__half2`/`__nv_bfloat162`, V8 = one 128-bit access = 4 pairs, V4/V2 narrower) — Tier A native pair ops where bit-identical (infix `+ - * /` via the pair operator overloads, `Neg`/`Abs`/`Sqr`), Tier B pair-scalarization through the scalar speller otherwise; `Const`/`Param` bodies stay Scalar (double-promote semantics). Bit-identical to Scalar by construction — validated over the full 16-bit input sweep on sm_89. **Measured**: +3–8% in the L2/instruction-bound regime, parity at DRAM-bound sizes (the sm_89 coalescer already drives scalar 2-byte elementwise to the bandwidth ceiling) | f32 (V4), f64 (V2), f16/bf16 (V8/V4/V2 packed) |
 | Scalar | linear one-element loop | f32/f16/bf16/f64/i32/i64 (infix arithmetic via each dtype's operators) |
 | Strided | rank-unrolled coord-unravel; broadcast axes drop their offset terms; a fully-broadcast operand is hoisted to a loop-invariant load | f32/f16/bf16/f64 |
 

@@ -269,6 +269,24 @@ fn main() {
         println!("generated {out_dir}/{}.cu  (cell {})", k.name, key.to_token());
     }
 
+    // --- Packed-vs-scalar differential pairs (item 09) --------------------------
+    // f16/bf16 elementwise at 256-byte alignment key V8 → the packed half2 path;
+    // the SAME ops at 2-byte alignment key Scalar → the bit-exactness oracle the
+    // on-device validator diffs the packed kernels against.
+    for dt in [ElementKind::F16, ElementKind::Bf16] {
+        let addh = OpDef::elementwise("add", 2, &[dt], input(0) + input(1));
+        let reluh = OpDef::elementwise("relu_add", 2, &[dt], (input(0) + input(1)).relu());
+        for op in [&addh, &reluh] {
+            for align in [256u32, 2u32] {
+                let o = OperandDesc::new(1, &[1 << 20], &[1], dt, align);
+                let key = structure_key(OpCategory::BinaryElementwise, &[o, o, o], ArchSku::Sm89);
+                let k = generate(op, &key, &Cuda);
+                fs::write(format!("{out_dir}/{}.cu", k.name), &k.source).expect("write kernel");
+                println!("generated {out_dir}/{}.cu  (cell {})", k.name, key.to_token());
+            }
+        }
+    }
+
     // --- Dispatch table (item 07, §7 vendor-exclusion) --------------------------
     // Every cell generated above is an elementwise / reduction / norm class, none
     // of which trips a vendor-exclusion seed. The routing decisions kernelgen

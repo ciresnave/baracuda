@@ -6,7 +6,7 @@
 //! — and reused verbatim across dtypes, because CUDA overloads `+ - * /` for
 //! `__half` / `__nv_bfloat16` the same as for `float`.
 
-use crate::backend::{lower_dag, lower_expr, Backend, GeneratedKernel, Lowering};
+use crate::backend::{lower_dag, lower_dag_all, lower_expr, Backend, GeneratedKernel, Lowering};
 use crate::ir::{Access, BinaryOp, ExprDag, ReduceOp, ScalarExpr, UnaryOp};
 use crate::plan::{rr_role, KernelPlan, ReduceAxisClass, RrRole, Schedule};
 use baracuda_kernels_types::{Contiguity, ElementKind, OperandKey};
@@ -37,10 +37,17 @@ impl Backend for Cuda {
         match plan.schedule {
             Schedule::Vectorized { width } => match vector_type(plan.dtype, width) {
                 Some((vty, lanes)) => emit_vectorized(plan, vty, lanes),
-                // dtype has no packed vector path yet (e.g. f16 V8): fall back to
-                // scalar — still correct, and still gets the narrower-dtype
-                // bandwidth win.
-                None => emit_scalar(plan, ctype),
+                None => match packed_kind(plan.dtype, width) {
+                    // f16/bf16: packed half2/bf162 pairs — bit-identical to the
+                    // scalar kernel per lane (see the tier notes on the spellers),
+                    // gated to Input-leaf bodies (a Const/Param participates in
+                    // double-promoted math on the scalar path, which a pair splat
+                    // would change).
+                    Some(pk) if body_packs(plan.body) => emit_vectorized_packed(plan, &pk),
+                    // No packed path (or a const/param body): scalar fallback —
+                    // still correct, still the narrower-dtype bandwidth win.
+                    _ => emit_scalar(plan, ctype),
+                },
             },
             Schedule::Scalar => emit_scalar(plan, ctype),
             Schedule::Strided => emit_strided(plan, ctype),
@@ -72,9 +79,9 @@ fn extra_include(dt: ElementKind) -> Option<&'static str> {
     }
 }
 
-/// Vector type + lane names for a `(dtype, width)` the backend can vectorize, or
-/// `None` to fall back to scalar. f16/bf16 packed vectorization (`half2`
-/// intrinsics) is a follow-up.
+/// Vector type + lane names for a `(dtype, width)` with a **native CUDA vector
+/// type** (f32/f64), or `None`. f16/bf16 vectorize through the packed-pair path
+/// ([`packed_kind`] / [`emit_vectorized_packed`]) instead.
 fn vector_type(dt: ElementKind, width: u32) -> Option<(&'static str, &'static [&'static str])> {
     match (dt, width) {
         (ElementKind::F32 | ElementKind::F32Strict, 4) => Some(("float4", &["x", "y", "z", "w"])),
@@ -82,6 +89,102 @@ fn vector_type(dt: ElementKind, width: u32) -> Option<(&'static str, &'static [&
         (ElementKind::F64, 2) => Some(("double2", &["x", "y"])),
         _ => None,
     }
+}
+
+/// Pair-lane field names for the per-kernel packed vector struct.
+static PACKED_FIELDS: [&str; 4] = ["a", "b", "c", "d"];
+
+/// A packed f16/bf16 vector cell: `width` halves per vector access (16 bytes for
+/// V8, 8 for V4, 4 for V2), computed as `width/2` two-lane pairs.
+struct PackedKind {
+    /// The two-lane pair type: `__half2` or `__nv_bfloat162`.
+    pair_ty: &'static str,
+    /// Pair-lane fields in the per-kernel vector struct (`width/2` of them).
+    fields: &'static [&'static str],
+    /// Struct alignment in bytes (= `width * 2`, the full vector access size).
+    align: u32,
+}
+
+/// The packed-pair kind for a `(dtype, width)`, or `None` when the dtype has no
+/// pair type (or the width is not a packed width).
+fn packed_kind(dt: ElementKind, width: u32) -> Option<PackedKind> {
+    let pair_ty = match dt {
+        ElementKind::F16 => "__half2",
+        ElementKind::Bf16 => "__nv_bfloat162",
+        _ => return None,
+    };
+    let lanes = match width {
+        8 => 4,
+        4 => 2,
+        2 => 1,
+        _ => return None,
+    };
+    Some(PackedKind {
+        pair_ty,
+        fields: &PACKED_FIELDS[..lanes],
+        align: width * 2,
+    })
+}
+
+/// Whether the packed pair path can emit `body` **bit-identically** to the
+/// scalar kernel: every leaf must be an `Input`. A `Const`/`Param` on the scalar
+/// f16/bf16 path participates in *double*-promoted math (`__half + 1.5` promotes
+/// through float to double), which a pre-rounded pair splat would change — so
+/// const/param bodies stay on the scalar path.
+fn body_packs(e: &ScalarExpr) -> bool {
+    match e {
+        ScalarExpr::Input(_) => true,
+        ScalarExpr::Const(_) | ScalarExpr::Param(_) | ScalarExpr::Reduced(_) => false,
+        ScalarExpr::Unary(_, x) => body_packs(x),
+        ScalarExpr::Add(a, b)
+        | ScalarExpr::Sub(a, b)
+        | ScalarExpr::Mul(a, b)
+        | ScalarExpr::Div(a, b)
+        | ScalarExpr::Binary(_, a, b) => body_packs(a) && body_packs(b),
+    }
+}
+
+/// Split/join spellings for a pair type: (`low half`, `high half`, `join`).
+fn pair_parts(dt: ElementKind) -> (&'static str, &'static str, &'static str) {
+    match dt {
+        ElementKind::F16 => ("__low2half", "__high2half", "__halves2half2"),
+        ElementKind::Bf16 => ("__low2bfloat16", "__high2bfloat16", "__halves2bfloat162"),
+        _ => unreachable!("pair_parts requires a packed dtype, got {dt:?}"),
+    }
+}
+
+/// Packed unary speller. **Tier A** (native packed intrinsic) only for ops that
+/// are provably bit-identical to the scalar path per lane: `Neg`/`Abs` are
+/// sign-bit ops, and `Sqr`'s product of two halves is exact in f32 (≤ 22
+/// significand bits), so the native packed product rounds identically to the
+/// scalar float-round-trip. Everything else is **Tier B**: split the pair, run
+/// the *existing* scalar speller on each half (identical text ⇒ identical bits),
+/// and re-join. Operand strings are always leaf refs or hoisted `tmp` names
+/// ([`crate::backend::lower_dag_all`]), so the `{x}` duplication below never
+/// duplicates a computation.
+fn packed_unary(op: UnaryOp, x: String, dt: ElementKind) -> String {
+    match op {
+        UnaryOp::Neg => format!("__hneg2({x})"),
+        UnaryOp::Abs => format!("__habs2({x})"),
+        UnaryOp::Sqr => format!("__hmul2({x}, {x})"),
+        _ => {
+            let (lo, hi, join) = pair_parts(dt);
+            let l = cuda_unary(op, format!("{lo}({x})"), dt);
+            let h = cuda_unary(op, format!("{hi}({x})"), dt);
+            format!("{join}({l}, {h})")
+        }
+    }
+}
+
+/// Packed binary speller — all four function ops are **Tier B** (pair-split
+/// through the existing scalar speller): `__hmax2`/`__hmin2` are IEEE maxNum
+/// (NaN-*suppressing*), which would break the house NaN-propagating Max/Min
+/// convention, and `Pow`/`Rem` have no packed intrinsic.
+fn packed_binary(op: BinaryOp, a: String, b: String, dt: ElementKind) -> String {
+    let (lo, hi, join) = pair_parts(dt);
+    let l = cuda_binary(op, format!("{lo}({a})"), format!("{lo}({b})"), dt);
+    let h = cuda_binary(op, format!("{hi}({a})"), format!("{hi}({b})"), dt);
+    format!("{join}({l}, {h})")
 }
 
 /// Short dtype tag for generated symbol names. Only called for dtypes that pass
@@ -164,6 +267,87 @@ fn emit_vectorized(plan: &KernelPlan<'_>, vty: &str, lanes: &[&str]) -> Generate
                 s.push_str(&format!("            {decl}\n"));
             }
             s.push_str(&format!("            vo.{lane} = {root};\n        }}\n"));
+        }
+    }
+    s.push_str("        out[i] = vo;\n    }\n}\n");
+    GeneratedKernel { name, source: s }
+}
+
+/// Emit a **packed** f16/bf16 vectorized elementwise kernel: one `width`-halves
+/// vector access per operand per iteration (128-bit for V8), computed as
+/// `width/2` two-lane pairs. Infix `+ - * /` lower through the CUDA `__half2` /
+/// `__nv_bfloat162` operator overloads — native per-lane packed ops,
+/// bit-identical to the scalar `__half` operators the scalar kernel uses;
+/// function ops go through [`packed_unary`]/[`packed_binary`] (Tier A/B).
+/// Bodies are `Input`-leaf-only ([`body_packs`]), so there are no `p{i}` params.
+///
+/// Lowered with [`lower_dag_all`] (every non-leaf hoisted to a pair-typed `tmp`)
+/// so Tier B's pair-split never duplicates a computation, only a `tmp` name —
+/// deep Tier-B chains stay linear in the source.
+fn emit_vectorized_packed(plan: &KernelPlan<'_>, pk: &PackedKind) -> GeneratedKernel {
+    let width = pk.fields.len() * 2;
+    let name = format!(
+        "baracuda_gen_{}_{}_co_v{}",
+        plan.op_name,
+        dtype_tag(plan.dtype),
+        width
+    );
+    // Per-kernel struct name: generated kernels are concatenated into one
+    // translation unit by the validators, so the type must never collide.
+    let vec_ty = format!("{name}_vec");
+    let n = plan.n_inputs;
+
+    // Custom preamble — the vector struct must sit between the dtype include and
+    // `extern "C"` (the same placement discipline as emit_row_reduce's helpers).
+    let mut s = format!(
+        "// Generated by baracuda-kernelgen — do not edit.\n// op: {} | cell: {}\n",
+        plan.op_name,
+        plan.key.to_token()
+    );
+    if let Some(inc) = extra_include(plan.dtype) {
+        s.push_str(inc);
+    }
+    s.push('\n');
+    s.push_str(&format!(
+        "struct __align__({}) {vec_ty} {{ {} {}; }};\n\n",
+        pk.align,
+        pk.pair_ty,
+        pk.fields.join(", ")
+    ));
+    s.push_str(&format!("extern \"C\" __global__ void {name}(\n"));
+    for i in 0..n {
+        s.push_str(&format!("    const {vec_ty}* __restrict__ in{i},\n"));
+    }
+    s.push_str(&format!("    {vec_ty}* __restrict__ out,\n"));
+    s.push_str("    long long nv)\n{\n");
+    s.push_str("    long long i = (long long)blockIdx.x * blockDim.x + threadIdx.x;\n");
+    s.push_str("    long long step = (long long)gridDim.x * blockDim.x;\n");
+    s.push_str("    for (; i < nv; i += step) {\n");
+    for i in 0..n {
+        s.push_str(&format!("        {vec_ty} v{i} = in{i}[i];\n"));
+    }
+    s.push_str(&format!("        {vec_ty} vo;\n"));
+    for field in pk.fields {
+        let acc = |idx: u8| format!("v{idx}.{field}");
+        let (prelude, root) = lower_dag_all(
+            &ExprDag::from_expr(plan.body),
+            pk.pair_ty,
+            &Lowering {
+                leaf: &acc,
+                reduced: &|i| unreachable!("no Reduced leaf outside RowReduce: red{i}"),
+                unary: &|op, x| packed_unary(op, x, plan.dtype),
+                binary: &|op, a, b| packed_binary(op, a, b, plan.dtype),
+            },
+        );
+        if prelude.is_empty() {
+            // Body is a bare Input leaf (a copy) — no tmp needed.
+            s.push_str(&format!("        vo.{field} = {root};\n"));
+        } else {
+            s.push_str("        {\n");
+            for decl in &prelude {
+                s.push_str(&format!("            {decl}\n"));
+            }
+            s.push_str(&format!("            vo.{field} = {root};\n        }}\n"));
         }
     }
     s.push_str("        out[i] = vo;\n    }\n}\n");
@@ -1084,14 +1268,59 @@ mod tests {
     }
 
     #[test]
-    fn f16_falls_back_to_scalar_with_fp16_header() {
-        // f16 keys as V8 but has no packed path yet → scalar, reusing the same
-        // infix lowering (CUDA overloads + for __half).
+    fn f16_v8_packs_four_half2_pair_lanes() {
+        // f16 keys V8: one 128-bit access = four __half2 pair lanes; infix `+`
+        // lowers through the __half2 operator overload — the native packed op,
+        // bit-identical per lane to the scalar __half operator+ the scalar
+        // kernel uses.
         let k = generate(&add_op(&[ElementKind::F16]), &binary_key(ElementKind::F16), &Cuda);
-        assert_eq!(k.name, "baracuda_gen_add_f16_scalar");
+        assert_eq!(k.name, "baracuda_gen_add_f16_co_v8");
         assert!(k.source.contains("#include <cuda_fp16.h>"));
-        assert!(k.source.contains("const __half* __restrict__ in0"));
-        assert!(k.source.contains("out[i] = (in0[i] + in1[i]);"));
+        assert!(k.source.contains(
+            "struct __align__(16) baracuda_gen_add_f16_co_v8_vec { __half2 a, b, c, d; };"
+        ));
+        assert!(k.source.contains("const baracuda_gen_add_f16_co_v8_vec* __restrict__ in0"));
+        for f in ["a", "b", "c", "d"] {
+            assert!(k.source.contains(&format!("__half2 tmp0 = (v0.{f} + v1.{f});")));
+            assert!(k.source.contains(&format!("vo.{f} = tmp0;")));
+        }
+    }
+
+    #[test]
+    fn bf16_v8_packs_with_bfloat162() {
+        let k = generate(&add_op(&[ElementKind::Bf16]), &binary_key(ElementKind::Bf16), &Cuda);
+        assert_eq!(k.name, "baracuda_gen_add_bf16_co_v8");
+        assert!(k.source.contains("#include <cuda_bf16.h>"));
+        assert!(k.source.contains("__nv_bfloat162 a, b, c, d;"));
+        assert!(k.source.contains("__nv_bfloat162 tmp0 = (v0.a + v1.a);"));
+    }
+
+    #[test]
+    fn f16_const_body_stays_scalar_for_bit_exactness() {
+        use crate::ir::konst;
+        // A Const participates in double-promoted math on the scalar path
+        // (`__half + 1.5` promotes through float to double); a packed pair splat
+        // would pre-round it to f16 and change bits → gated to scalar.
+        let op = OpDef::elementwise("addk", 1, &[ElementKind::F16], input(0) + konst(1.5));
+        let a = OperandDesc::new(1, &[1 << 20], &[1], ElementKind::F16, 256);
+        let key = structure_key(OpCategory::UnaryElementwise, &[a, a], ArchSku::Sm89);
+        let k = generate(&op, &key, &Cuda);
+        assert_eq!(k.name, "baracuda_gen_addk_f16_scalar");
+        assert!(k.source.contains("out[i] = (in0[i] + 1.5);"));
+    }
+
+    #[test]
+    fn f16_align4_packs_single_pair_v2() {
+        // 4-byte alignment fails V8 (16B) and V4 (8B) but admits V2 (4B): one
+        // __half2 pair per access, struct align 4, no second lane.
+        let a = OperandDesc::new(1, &[1 << 20], &[1], ElementKind::F16, 4);
+        let key = structure_key(OpCategory::BinaryElementwise, &[a, a, a], ArchSku::Sm89);
+        let k = generate(&add_op(&[ElementKind::F16]), &key, &Cuda);
+        assert_eq!(k.name, "baracuda_gen_add_f16_co_v2");
+        assert!(k
+            .source
+            .contains("struct __align__(4) baracuda_gen_add_f16_co_v2_vec { __half2 a; };"));
+        assert!(!k.source.contains("vo.b"));
     }
 
     #[test]
@@ -1184,8 +1413,11 @@ mod tests {
     }
 
     #[test]
-    fn f16_unary_computes_in_float() {
-        // f16 has no half2 path yet → scalar emit; unary computes in float.
+    fn f16_packed_tier_b_scalarizes_relu() {
+        // relu has no bit-safe packed intrinsic → Tier B: split the pair, run
+        // the EXISTING float relu spelling per half (identical text ⇒ identical
+        // bits vs the scalar kernel), re-join. The add stays Tier A (native
+        // __half2 operator+). Never the NaN-suppressing __hmax2.
         let op = OpDef::elementwise(
             "relu_add",
             2,
@@ -1195,9 +1427,13 @@ mod tests {
         let a = OperandDesc::new(1, &[1 << 20], &[1], ElementKind::F16, 256);
         let key = structure_key(OpCategory::BinaryElementwise, &[a, a, a], ArchSku::Sm89);
         let k = generate(&op, &key, &Cuda);
-        assert!(k.source.contains("#include <cuda_fp16.h>"));
-        assert!(k.source.contains("__half2float((in0[i] + in1[i]))"));
-        assert!(k.source.contains("< 0.0f ? 0.0f :")); // NaN-propagating relu, in float
+        assert_eq!(k.name, "baracuda_gen_relu_add_f16_co_v8");
+        assert!(k.source.contains("__half2 tmp0 = (v0.a + v1.a);")); // Tier A, hoisted
+        assert!(k.source.contains("__halves2half2(")); // Tier B re-join
+        assert!(k.source.contains("__low2half(tmp0)"));
+        assert!(k.source.contains("__high2half(tmp0)"));
+        assert!(k.source.contains("< 0.0f ? 0.0f :")); // NaN-propagating relu, float, per half
+        assert!(!k.source.contains("__hmax2"));
     }
 
     #[test]

@@ -119,7 +119,22 @@ pub fn lower_expr(e: &ScalarExpr, lo: &Lowering<'_>) -> String {
 pub fn lower_dag(dag: &ExprDag, ctype: &str, lo: &Lowering<'_>) -> (Vec<String>, String) {
     let mut refs: Vec<Option<String>> = vec![None; dag.len()];
     let mut prelude: Vec<String> = Vec::new();
-    let root_ref = lower_node(dag, dag.root(), ctype, lo, &mut refs, &mut prelude);
+    let root_ref = lower_node(dag, dag.root(), ctype, lo, &mut refs, &mut prelude, false);
+    (prelude, root_ref)
+}
+
+/// [`lower_dag`], but hoisting **every** non-leaf node to a named `tmp` (not
+/// just shared ones). For lowerings whose op spellings reference an operand
+/// string more than once (e.g. the packed f16/bf16 pair-scalarization, which
+/// splits one operand into `__low2half(x)` / `__high2half(x)`), inlining would
+/// duplicate whole subexpression *text* per reference — exponential in depth.
+/// Hoist-all makes every operand a `tmp` name, so a duplicate is a name, never
+/// an expression, and the emitted source stays linear. Values are unchanged.
+#[must_use]
+pub fn lower_dag_all(dag: &ExprDag, ctype: &str, lo: &Lowering<'_>) -> (Vec<String>, String) {
+    let mut refs: Vec<Option<String>> = vec![None; dag.len()];
+    let mut prelude: Vec<String> = Vec::new();
+    let root_ref = lower_node(dag, dag.root(), ctype, lo, &mut refs, &mut prelude, true);
     (prelude, root_ref)
 }
 
@@ -133,6 +148,7 @@ fn lower_node(
     lo: &Lowering<'_>,
     refs: &mut Vec<Option<String>>,
     prelude: &mut Vec<String>,
+    hoist_all: bool,
 ) -> String {
     if let Some(r) = &refs[id as usize] {
         return r.clone();
@@ -145,37 +161,40 @@ fn lower_node(
         DagNode::Reduced(i) => (lo.reduced)(i),
         DagNode::Param(i) => format!("p{i}"),
         DagNode::Const(v) => const_lit(v),
-        DagNode::Unary(op, x) => (lo.unary)(op, lower_node(dag, x, ctype, lo, refs, prelude)),
+        DagNode::Unary(op, x) => {
+            (lo.unary)(op, lower_node(dag, x, ctype, lo, refs, prelude, hoist_all))
+        }
         DagNode::Binary(op, a, b) => {
-            let a = lower_node(dag, a, ctype, lo, refs, prelude);
-            let b = lower_node(dag, b, ctype, lo, refs, prelude);
+            let a = lower_node(dag, a, ctype, lo, refs, prelude, hoist_all);
+            let b = lower_node(dag, b, ctype, lo, refs, prelude, hoist_all);
             (lo.binary)(op, a, b)
         }
         DagNode::Add(a, b) => {
-            let a = lower_node(dag, a, ctype, lo, refs, prelude);
-            let b = lower_node(dag, b, ctype, lo, refs, prelude);
+            let a = lower_node(dag, a, ctype, lo, refs, prelude, hoist_all);
+            let b = lower_node(dag, b, ctype, lo, refs, prelude, hoist_all);
             format!("({a} + {b})")
         }
         DagNode::Sub(a, b) => {
-            let a = lower_node(dag, a, ctype, lo, refs, prelude);
-            let b = lower_node(dag, b, ctype, lo, refs, prelude);
+            let a = lower_node(dag, a, ctype, lo, refs, prelude, hoist_all);
+            let b = lower_node(dag, b, ctype, lo, refs, prelude, hoist_all);
             format!("({a} - {b})")
         }
         DagNode::Mul(a, b) => {
-            let a = lower_node(dag, a, ctype, lo, refs, prelude);
-            let b = lower_node(dag, b, ctype, lo, refs, prelude);
+            let a = lower_node(dag, a, ctype, lo, refs, prelude, hoist_all);
+            let b = lower_node(dag, b, ctype, lo, refs, prelude, hoist_all);
             format!("({a} * {b})")
         }
         DagNode::Div(a, b) => {
-            let a = lower_node(dag, a, ctype, lo, refs, prelude);
-            let b = lower_node(dag, b, ctype, lo, refs, prelude);
+            let a = lower_node(dag, a, ctype, lo, refs, prelude, hoist_all);
+            let b = lower_node(dag, b, ctype, lo, refs, prelude, hoist_all);
             format!("({a} / {b})")
         }
     };
     // Hoist a shared interior (edge count > 1, non-leaf) to a named tmp so it is
     // computed once; inline everything else (byte-identical to `lower_expr`). The
-    // root has consumers == 0 (nothing references it), so it is never hoisted.
-    let r = if !node.is_leaf() && dag.consumers(id) > 1 {
+    // root has consumers == 0 (nothing references it), so it is never hoisted —
+    // unless `hoist_all`, which hoists every non-leaf including the root.
+    let r = if !node.is_leaf() && (hoist_all || dag.consumers(id) > 1) {
         let name = format!("tmp{}", prelude.len());
         prelude.push(format!("{ctype} {name} = {rhs};"));
         name
