@@ -285,6 +285,23 @@ fn main() {
                 println!("generated {out_dir}/{}.cu  (cell {})", k.name, key.to_token());
             }
         }
+        // Tier-A unary pairs: the sign-bit / exact-product intrinsics whose
+        // bit-identity to the scalar float-round-trip path must hold for every
+        // NaN payload — the validator sweeps all 16-bit patterns through them.
+        for (nm, uop) in [
+            ("negx", UnaryOp::Neg),
+            ("absx", UnaryOp::Abs),
+            ("sqrx", UnaryOp::Sqr),
+        ] {
+            let op = OpDef::elementwise(nm, 1, &[dt], input(0).unary(uop));
+            for align in [256u32, 2u32] {
+                let o = OperandDesc::new(1, &[1 << 20], &[1], dt, align);
+                let key = structure_key(OpCategory::UnaryElementwise, &[o, o], ArchSku::Sm89);
+                let k = generate(&op, &key, &Cuda);
+                fs::write(format!("{out_dir}/{}.cu", k.name), &k.source).expect("write kernel");
+                println!("generated {out_dir}/{}.cu  (cell {})", k.name, key.to_token());
+            }
+        }
     }
 
     // --- Dispatch table (item 07, §7 vendor-exclusion) --------------------------

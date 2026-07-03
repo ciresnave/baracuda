@@ -86,7 +86,7 @@ corpus where input 0 sweeps **every 16-bit pattern** — all NaN payloads, ±Inf
 memcmp-identical. Cases: `add` (Tier A native pair ops) and `relu_add` (Tier A
 add + Tier B pair-scalarized relu), f16 + bf16.
 
-**Last run:** RTX 4070 Laptop (sm_89), CUDA 13.3 — **all 4 cases bit-identical**
+**Last run:** RTX 4070 Laptop (sm_89), CUDA 13.3 — **all 10 cases bit-identical (add, relu_add, neg, abs, sqr × f16, bf16 — incl. every NaN payload through the Tier-A intrinsics)**
 over the full sweep; compute-sanitizer `initcheck` + `memcheck` **0 errors**.
 
 ### Bench — `packed_bench.cu` (honest finding)

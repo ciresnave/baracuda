@@ -20,6 +20,28 @@
 #include "baracuda_gen_add_bf16_scalar.cu"
 #include "baracuda_gen_relu_add_bf16_co_v8.cu"
 #include "baracuda_gen_relu_add_bf16_scalar.cu"
+#include "baracuda_gen_negx_f16_co_v8.cu"
+#include "baracuda_gen_negx_f16_scalar.cu"
+#include "baracuda_gen_absx_f16_co_v8.cu"
+#include "baracuda_gen_absx_f16_scalar.cu"
+#include "baracuda_gen_sqrx_f16_co_v8.cu"
+#include "baracuda_gen_sqrx_f16_scalar.cu"
+#include "baracuda_gen_negx_bf16_co_v8.cu"
+#include "baracuda_gen_negx_bf16_scalar.cu"
+#include "baracuda_gen_absx_bf16_co_v8.cu"
+#include "baracuda_gen_absx_bf16_scalar.cu"
+#include "baracuda_gen_sqrx_bf16_co_v8.cu"
+#include "baracuda_gen_sqrx_bf16_scalar.cu"
+
+// Run a single-input packed/scalar pair over the sweep and diff (declared below).
+#define UNARY_CASE(NAME, PK, SC, HALF_T)                                            \
+    do {                                                                            \
+        cudaMemset(dp, 0xAA, n * 2); cudaMemset(ds, 0x55, n * 2);                   \
+        PK<<<64, 256>>>((const PK##_vec*)d0, (PK##_vec*)dp, nv);                    \
+        SC<<<64, 256>>>((const HALF_T*)d0, (HALF_T*)ds, n);                         \
+        cudaDeviceSynchronize();                                                    \
+        diff(NAME, dp, ds, n);                                                      \
+    } while (0)
 
 static int fails = 0;
 
@@ -92,6 +114,16 @@ int main() {
         (const __nv_bfloat16*)d0, (const __nv_bfloat16*)d1, (__nv_bfloat16*)ds, n);
     cudaDeviceSynchronize();
     diff("relu_add_bf16", dp, ds, n);
+
+    // ---- Tier-A unary intrinsics vs the scalar float-round-trip path: the NaN
+    // ---- payload question (native __hneg2/__habs2/__hmul2 preserve payloads;
+    // ---- do the convert-path kernels agree on every one of the 2048 payloads?)
+    UNARY_CASE("negx_f16", baracuda_gen_negx_f16_co_v8, baracuda_gen_negx_f16_scalar, __half);
+    UNARY_CASE("absx_f16", baracuda_gen_absx_f16_co_v8, baracuda_gen_absx_f16_scalar, __half);
+    UNARY_CASE("sqrx_f16", baracuda_gen_sqrx_f16_co_v8, baracuda_gen_sqrx_f16_scalar, __half);
+    UNARY_CASE("negx_bf16", baracuda_gen_negx_bf16_co_v8, baracuda_gen_negx_bf16_scalar, __nv_bfloat16);
+    UNARY_CASE("absx_bf16", baracuda_gen_absx_bf16_co_v8, baracuda_gen_absx_bf16_scalar, __nv_bfloat16);
+    UNARY_CASE("sqrx_bf16", baracuda_gen_sqrx_bf16_co_v8, baracuda_gen_sqrx_bf16_scalar, __nv_bfloat16);
 
     cudaError_t e = cudaGetLastError();
     if (e != cudaSuccess) { printf("CUDA error: %s\n", cudaGetErrorString(e)); return 2; }
