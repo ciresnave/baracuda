@@ -36,6 +36,7 @@ impl Backend for Cuda {
         let mut vs = Vec::new();
         vs.extend(reduction_splitk_variant(plan));
         vs.extend(row_reduce_materialize_variant(plan));
+        vs.extend(contraction_splitk_variant(plan));
         vs
     }
 
@@ -1146,6 +1147,153 @@ fn emit_contraction(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
     GeneratedKernel { name, source: s }
 }
 
+/// Split-K schedule **variant** for the contraction cell — the fix for the
+/// measured v1 pathology (one thread per column = starved occupancy + a
+/// sequential K chain: 62 GB/s vs cuBLAS's 245 on the [8,4096]·[4096,4096]
+/// cell; cuBLAS split-Ks its own M=1 path internally). `_splitk_partial` gives
+/// each `(column-tile, K-chunk)` block a partial fold into a caller workspace
+/// (`n_chunks · m · n` acc elements); `_splitk_combine` folds the chunk
+/// partials per `(row, col)` — seeded from chunk 0, not zero, so the
+/// degenerate `n_chunks = 1` launch is **bit-identical** to the base kernel —
+/// and applies the epilogue + store narrowing. Coalesced throughout; no
+/// atomics; deterministic for a fixed `chunk_k` —
+/// [`VariantFidelity::ReassociatedDeterministic`] vs the base's sequential K.
+fn contraction_splitk_variant(plan: &KernelPlan<'_>) -> Option<Variant> {
+    if !matches!(plan.schedule, Schedule::Contraction) {
+        return None;
+    }
+    let Access::Contraction { epilogue, .. } = plan.access else {
+        return None;
+    };
+    // build_plan admissibility already ran; these mirror emit_contraction.
+    let c = plan.key.contraction?;
+    if c.m != baracuda_kernels_types::SizeClass::Tiny {
+        return None;
+    }
+    let dbl = matches!(plan.dtype, ElementKind::F64 | ElementKind::F32Strict);
+    if !matches!(
+        plan.dtype,
+        ElementKind::F16
+            | ElementKind::Bf16
+            | ElementKind::F32
+            | ElementKind::F32Strict
+            | ElementKind::F64
+    ) {
+        return None;
+    }
+    let ctype = scalar_ctype(plan.dtype)?;
+    let acc = if dbl { "double" } else { "float" };
+    let zero = if dbl { "0.0" } else { "0.0f" };
+    let load = |expr: String| match plan.dtype {
+        ElementKind::F16 => format!("__half2float({expr})"),
+        ElementKind::Bf16 => format!("__bfloat162float({expr})"),
+        ElementKind::F32Strict => format!("(double){expr}"),
+        _ => expr,
+    };
+    let stem = format!(
+        "baracuda_gen_{}_{}_contract_{}{}{}",
+        plan.op_name,
+        dtype_tag(plan.dtype),
+        size_tag(c.m),
+        size_tag(c.n),
+        size_tag(c.k),
+    );
+
+    // ---- Kernel 1: per-(column-tile, K-chunk) partial folds → workspace. ----
+    let pname = format!("{stem}_splitk_partial");
+    let mut p = header(plan, &pname);
+    p.push_str(&format!("    const {ctype}* __restrict__ in0,\n"));
+    p.push_str(&format!("    const {ctype}* __restrict__ in1,\n"));
+    p.push_str(&format!("    {acc}* __restrict__ ws,\n"));
+    p.push_str("    long long m,\n    long long n,\n    long long k,\n    long long chunk_k)\n{\n");
+    p.push_str("    long long col = (long long)blockIdx.x * blockDim.x + threadIdx.x;\n");
+    p.push_str("    if (col >= n) return;\n");
+    p.push_str("    long long k0 = (long long)blockIdx.y * chunk_k;\n");
+    p.push_str("    long long k1 = k0 + chunk_k; if (k1 > k) k1 = k;\n");
+    p.push_str(&format!("    {acc} accs[8];\n"));
+    p.push_str("    #pragma unroll\n");
+    p.push_str(&format!("    for (int mm = 0; mm < 8; ++mm) accs[mm] = {zero};\n"));
+    p.push_str("    for (long long kk = k0; kk < k1; ++kk) {\n");
+    p.push_str(&format!(
+        "        {acc} w = {};\n",
+        load("in1[kk * n + col]".to_string())
+    ));
+    p.push_str("        #pragma unroll\n");
+    p.push_str("        for (int mm = 0; mm < 8; ++mm) {\n");
+    p.push_str(&format!(
+        "            if (mm < m) accs[mm] += {} * w;\n",
+        load("in0[mm * k + kk]".to_string())
+    ));
+    p.push_str("        }\n    }\n");
+    p.push_str("    #pragma unroll\n");
+    p.push_str("    for (int mm = 0; mm < 8; ++mm) {\n");
+    p.push_str(
+        "        if (mm < m) ws[((long long)blockIdx.y * m + mm) * n + col] = accs[mm];\n",
+    );
+    p.push_str("    }\n}\n");
+
+    // ---- Kernel 2: fold the chunk partials; epilogue + store narrowing. ----
+    let red = |s: u8| {
+        assert_eq!(s, 0, "contraction epilogue reads Reduced(0) only");
+        "r0".to_string()
+    };
+    let epi = lower_expr(
+        epilogue,
+        &Lowering {
+            leaf: &|i| unreachable!("contraction v1 epilogue has no Input leaf: in{i}"),
+            reduced: &red,
+            unary: &|op, x| if dbl { unary_f64(op, x) } else { unary_f32(op, x) },
+            binary: &|op, a, b| {
+                if dbl {
+                    binary_f64(op, a, b)
+                } else {
+                    binary_f32(op, a, b)
+                }
+            },
+        },
+    );
+    let stored = match plan.dtype {
+        ElementKind::F16 => format!("__float2half({epi})"),
+        ElementKind::Bf16 => format!("__float2bfloat16({epi})"),
+        _ => epi,
+    };
+    let cname = format!("{stem}_splitk_combine");
+    let mut kk = header(plan, &cname);
+    kk.push_str(&format!("    const {acc}* __restrict__ ws,\n"));
+    kk.push_str(&format!("    {ctype}* __restrict__ out,\n"));
+    kk.push_str("    long long m,\n    long long n,\n    long long n_chunks)\n{\n");
+    kk.push_str("    long long col = (long long)blockIdx.x * blockDim.x + threadIdx.x;\n");
+    kk.push_str("    if (col >= n) return;\n");
+    kk.push_str("    #pragma unroll\n");
+    kk.push_str("    for (int mm = 0; mm < 8; ++mm) {\n");
+    kk.push_str("        if (mm < m) {\n");
+    // Seed from chunk 0 (n_chunks >= 1 by the launch contract): keeps the
+    // degenerate single-chunk case bit-identical to the base kernel.
+    kk.push_str(&format!("            {acc} r0 = ws[(long long)mm * n + col];\n"));
+    kk.push_str(
+        "            for (long long ch = 1; ch < n_chunks; ++ch) r0 += ws[(ch * m + mm) * n + col];\n",
+    );
+    kk.push_str(&format!("            out[mm * n + col] = {stored};\n"));
+    kk.push_str("        }\n    }\n}\n");
+
+    Some(Variant {
+        tag: "splitk",
+        kernels: vec![
+            GeneratedKernel { name: pname.clone(), source: p },
+            GeneratedKernel { name: cname.clone(), source: kk },
+        ],
+        fidelity: VariantFidelity::ReassociatedDeterministic,
+        launch_note: format!(
+            "two-launch protocol: (1) {pname}<<<dim3(ceil(n/B), n_chunks), B>>>(in0, in1, ws, \
+             m, n, k, chunk_k) with chunk_k = ceil(k/n_chunks) and workspace ws of \
+             n_chunks*m*n `{acc}` elements; (2) {cname}<<<ceil(n/B), B>>>(ws, out, m, n, \
+             n_chunks). m <= 8 (the Tiny launch contract, as the base kernel). \
+             Deterministic for a fixed chunk_k; association differs from the base's \
+             sequential K fold."
+        ),
+    })
+}
+
 /// One-letter tag for a [`baracuda_kernels_types::SizeClass`] in symbol names.
 fn size_tag(s: baracuda_kernels_types::SizeClass) -> char {
     match s {
@@ -1952,6 +2100,44 @@ mod tests {
         );
         assert!(kh.source.contains("float w = __half2float(in1[kk * n + col]);"));
         assert!(kh.source.contains("out[mm * n + col] = __float2half(r0);"));
+    }
+
+    #[test]
+    fn contraction_splitk_variant_offered_for_tiny_m_cell() {
+        use crate::ir::{reduced, ContractionAxes};
+        use crate::{generate_variants, VariantFidelity};
+        let mm = OpDef::contraction(
+            "matmul",
+            &[ElementKind::F32],
+            ContractionAxes::matmul(),
+            reduced(0),
+        );
+        let lhs = OperandDesc::new(2, &[8, 4096], &[4096, 1], ElementKind::F32, 256);
+        let rhs = OperandDesc::new(2, &[4096, 4096], &[4096, 1], ElementKind::F32, 256);
+        let out = OperandDesc::new(2, &[8, 4096], &[4096, 1], ElementKind::F32, 256);
+        let key = structure_key(OpCategory::Gemm, &[lhs, rhs, out], ArchSku::Sm89);
+        let vs = generate_variants(&mm, &key, &Cuda);
+        assert_eq!(vs.len(), 2, "base + splitk");
+        let sk = &vs[1];
+        assert_eq!(sk.tag, "splitk");
+        assert_eq!(sk.fidelity, VariantFidelity::ReassociatedDeterministic);
+        assert_eq!(sk.kernels.len(), 2);
+        let p = &sk.kernels[0];
+        assert!(p.name.ends_with("_contract_tll_splitk_partial"));
+        assert!(p.source.contains("long long k1 = k0 + chunk_k; if (k1 > k) k1 = k;"));
+        assert!(p
+            .source
+            .contains("if (mm < m) ws[((long long)blockIdx.y * m + mm) * n + col] = accs[mm];"));
+        assert!(!p.source.contains("atomic"));
+        let c = &sk.kernels[1];
+        assert!(c.name.ends_with("_contract_tll_splitk_combine"));
+        // Seeded from chunk 0 → degenerate n_chunks=1 is bit-identical to base.
+        assert!(c.source.contains("float r0 = ws[(long long)mm * n + col];"));
+        assert!(c
+            .source
+            .contains("for (long long ch = 1; ch < n_chunks; ++ch) r0 += ws[(ch * m + mm) * n + col];"));
+        assert!(c.source.contains("out[mm * n + col] = r0;"));
+        assert!(sk.launch_note.contains("chunk_k = ceil(k/n_chunks)"));
     }
 
     #[test]

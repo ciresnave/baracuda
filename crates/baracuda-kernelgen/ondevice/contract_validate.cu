@@ -9,6 +9,8 @@
 #include <cublas_v2.h>
 
 #include "baracuda_gen_matmul_f32_contract_tll.cu"
+#include "baracuda_gen_matmul_f32_contract_tll_splitk_partial.cu"
+#include "baracuda_gen_matmul_f32_contract_tll_splitk_combine.cu"
 
 template <class F>
 static float timed(F launch, int iters = 100) {
@@ -83,14 +85,53 @@ int main() {
                M, maxrel_o, maxrel_b);
         if (!ok) fails++;
 
-        // ---- the long-tail bench ----
+        // ---- the split-K variant: correctness + degenerate bit-identity ----
+        const long long n_chunks = 32;
+        float *dw, *ds;
+        cudaMalloc((void**)&dw, n_chunks * M * N * 4);
+        cudaMalloc((void**)&ds, M * N * 4);
+        auto splitk = [&](long long chunks) {
+            long long chunk_k = (K + chunks - 1) / chunks;
+            dim3 g1((unsigned)grid, (unsigned)chunks);
+            baracuda_gen_matmul_f32_contract_tll_splitk_partial<<<g1, block>>>(
+                dl, dr, dw, M, N, K, chunk_k);
+            baracuda_gen_matmul_f32_contract_tll_splitk_combine<<<grid, block>>>(
+                dw, ds, M, N, chunks);
+        };
+        splitk(n_chunks);
+        cudaDeviceSynchronize();
+        std::vector<float> s(M * N);
+        cudaMemcpy(s.data(), ds, M * N * 4, cudaMemcpyDeviceToHost);
+        double maxrel_s = 0;
+        for (long long i = 0; i < M * N; ++i) {
+            double denom = fabs((double)c[i]) > 1.0 ? fabs((double)c[i]) : 1.0;
+            maxrel_s = fmax(maxrel_s, fabs((double)s[i] - (double)c[i]) / denom);
+        }
+        bool oks = maxrel_s < 1e-4;
+        printf(oks ? "PASS M=%lld  splitk vs cuBLAS %.2e\n" : "FAIL M=%lld  splitk vs cuBLAS %.2e\n",
+               M, maxrel_s);
+        if (!oks) fails++;
+        // Degenerate n_chunks=1: same association as base → memcmp-identical.
+        splitk(1);
+        cudaDeviceSynchronize();
+        std::vector<float> s1(M * N);
+        cudaMemcpy(s1.data(), ds, M * N * 4, cudaMemcpyDeviceToHost);
+        bool bit = memcmp(s1.data(), g.data(), M * N * 4) == 0;
+        printf(bit ? "PASS M=%lld  splitk n_chunks=1 == base (memcmp)\n"
+                   : "FAIL M=%lld  splitk n_chunks=1 != base\n", M);
+        if (!bit) fails++;
+
+        // ---- the long-tail bench: base vs split-K vs cuBLAS ----
         float t_gen = timed(gen);
+        float t_sk = timed([&] { splitk(n_chunks); });
         float t_blas = timed(blas);
         const double gb = (M * K + K * N + M * N) * 4.0 / 1e9; // streamed bytes
-        printf("  M=%lld: generated %8.3f ms (%6.1f GB/s) | cuBLAS %8.3f ms (%6.1f GB/s) | speedup %.2fx\n",
-               M, t_gen, gb / (t_gen / 1000), t_blas, gb / (t_blas / 1000), t_blas / t_gen);
+        printf("  M=%lld: base %8.3f ms (%6.1f GB/s) | splitk %8.3f ms (%6.1f GB/s) | cuBLAS %8.3f ms (%6.1f GB/s) | splitk vs cuBLAS %.2fx\n",
+               M, t_gen, gb / (t_gen / 1000), t_sk, gb / (t_sk / 1000),
+               t_blas, gb / (t_blas / 1000), t_blas / t_sk);
 
         cudaFree(dl); cudaFree(dr); cudaFree(dg); cudaFree(dc);
+        cudaFree(dw); cudaFree(ds);
     }
     cublasDestroy(h);
     cudaError_t e = cudaGetLastError();

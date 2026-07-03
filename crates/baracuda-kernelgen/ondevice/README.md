@@ -161,3 +161,19 @@ path split-Ks internally. The proven in-repo fix is the split-K schedule (16×
 on the reduction analogue) as a bench-gated **variant** of this cell — queued
 as the node's first variant. Fourth instance of measure-don't-assume: this time
 the gate protected us from shipping our own thesis kernel as the default.
+
+**Split-K rematch (same harness, variant pair added):** all 6 correctness cases
+PASS (splitk exact vs cuBLAS; degenerate `n_chunks=1` memcmp-identical to base
+at both shapes), and the bench:
+
+| M | base | split-K | cuBLAS | splitk vs cuBLAS |
+| --- | --- | --- | --- | --- |
+| 1 | 63 GB/s | **233 GB/s** | 245 GB/s | 0.95× |
+| 8 | 74 GB/s | **217 GB/s** | 234 GB/s | 0.93× |
+
+The variant closed the 4× gap to within ~5–7% of cuBLAS on the vendor's own
+plain decode cell — inside/near the `MIN_FLIP_MARGIN` noise floor, so the
+honest per-cell verdict is "vendor keeps the plain cell." The generated node's
+winning ground, per the §1 long-tail thesis, is the **fused-epilogue** cell
+(matmul+bias/act in ONE launch, epilogue folded into `_splitk_combine`) that
+the vendor serves only as a two-kernel round trip — the next rematch.

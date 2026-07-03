@@ -358,9 +358,23 @@ fn main() {
         let rhs = OperandDesc::new(2, &[4096, 4096], &[4096, 1], ElementKind::F32, 256);
         let o = OperandDesc::new(2, &[8, 4096], &[4096, 1], ElementKind::F32, 256);
         let key = structure_key(OpCategory::Gemm, &[lhs, rhs, o], ArchSku::Sm89);
-        let k = generate(&mm, &key, &Cuda);
-        fs::write(format!("{out_dir}/{}.cu", k.name), &k.source).expect("write kernel");
-        println!("generated {out_dir}/{}.cu  (cell {})", k.name, key.to_token());
+        // Ship-top-K: base skinny SIMT + the split-K variant (the measured fix
+        // for the base's occupancy starvation) — the gate + Fuel pick per shape.
+        for v in generate_variants(&mm, &key, &Cuda) {
+            for k in &v.kernels {
+                fs::write(format!("{out_dir}/{}.cu", k.name), &k.source).expect("write kernel");
+                if v.tag == "base" {
+                    println!("generated {out_dir}/{}.cu  (cell {})", k.name, key.to_token());
+                } else {
+                    println!(
+                        "generated {out_dir}/{}.cu  (cell {} | variant {})",
+                        k.name,
+                        key.to_token(),
+                        v.tag
+                    );
+                }
+            }
+        }
     }
 
     // --- Dispatch table (item 07, §7 vendor-exclusion) --------------------------
