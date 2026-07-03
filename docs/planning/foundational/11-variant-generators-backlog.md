@@ -107,3 +107,15 @@ block-per-row + split-K family), **rms_norm/layer_norm/softmax fp** (bespoke
 `norm/` + `softmax/` vs the rowreduce family), **elementwise f16** (bespoke vs
 the packed pair path). Route the verdicts into OP-MATRIX so "backend: Bespoke"
 rows can honestly become "backend: Generated" where measured.
+
+**The extract-the-delta rule (pinned 2026-07-03, user directive):** when a
+bespoke kernel WINS its cell, the audit is not done at "route to bespoke" — the
+two kernels' source is **diffed to identify the winning technique**, and that
+technique is added to the generator as a new schedule/variant (then re-gated).
+A bespoke win is a *missing generator optimization*, not a verdict. The
+convergence target: generated kernels roughly as fast or faster than anything
+we can hand-write — at which point hand-written kernels exist only where the
+generator's IR cannot yet express the algorithm, and each such case is an IR
+roadmap item, not a kernel to maintain. Every extraction gets the standing
+discipline: value-preserving → applied broadly; tradeoff → a gated variant;
+bit-changing → an honest contract flip.
