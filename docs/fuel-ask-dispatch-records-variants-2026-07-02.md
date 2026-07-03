@@ -57,6 +57,14 @@ with its own contract. Two confirmations:
   your records can name which variant won without parsing entry-point suffixes?
   We treat the tag as opaque on both sides; the entry point remains the true
   identity.
+- **Identity caveat our adversarial pass surfaced:** the collapse-form
+  structure token cannot carry the reduced-axis set (provably undetermined for
+  a rank-collapsed output — the item-03 keying finding), so two differently-
+  shaped reduction cells (axis-0 vs axis-1, rank 2) share one token today. A
+  variant's identity on the wire must therefore be `(structure_key,
+  entry_point)`, never the token alone — please confirm your records key on
+  the entry point (or the `ImplId` tuple), and this is a non-issue. The durable
+  fix is the keepdim-form convention already on your queue from item 03.
 
 **C (multi-kernel variants / launch protocol).** The split-K variant is a
 **two-kernel** implementation (partials → combine) with a caller-provided

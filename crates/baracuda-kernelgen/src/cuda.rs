@@ -824,6 +824,15 @@ fn emit_reduction(plan: &KernelPlan<'_>, ctype: &str, rop: ReduceOp) -> Generate
 /// sequential fold — [`VariantFidelity::ReassociatedDeterministic`]. Selectable
 /// only through an honest contract (the caller's precision policy), never
 /// silently; the baseline stays the default route.
+///
+/// **Keying caveat (adversarial pass 2026-07-02, defect 3):** the collapse-form
+/// `StructureKey` token cannot carry the reduced-axis set (`derive_reduce_axes`
+/// is provably undetermined for a rank-collapsed output — the item-03 step-5
+/// finding), so an axis-0 and an axis-1 rank-2 reduction share one token. Any
+/// future consumer that joins *variants* on `accept.structure_key` alone would
+/// conflate this workspace ABI with a last-axis cell. Until the keepdim-form
+/// convention (or an explicit axis field in variant contract front-matter)
+/// lands, the variant's identity is `(token, entry_point)` — never token alone.
 fn reduction_splitk_variant(plan: &KernelPlan<'_>) -> Option<Variant> {
     let rop = match plan.schedule {
         Schedule::Reduction {
@@ -847,6 +856,17 @@ fn reduction_splitk_variant(plan: &KernelPlan<'_>) -> Option<Variant> {
     if plan.key.rank != 2 || axes.0 != 0b1 || plan.n_inputs != 1 {
         return None;
     }
+    // Exactly [input, output] — a malformed key would alias `out_key` below
+    // onto the input and test the wrong operand.
+    if plan.key.n_operands != 2 {
+        return None;
+    }
+    // The fixed signature has no `p{i}` launch slots; a Param body would emit
+    // an undefined identifier. (The baseline appends `param_args`; plumbing
+    // params through the two-launch protocol is a follow-up if ever needed.)
+    if !params_used(plan.body).is_empty() {
+        return None;
+    }
     if !matches!(
         plan.dtype,
         ElementKind::F16
@@ -858,7 +878,17 @@ fn reduction_splitk_variant(plan: &KernelPlan<'_>) -> Option<Variant> {
         return None;
     }
     let out_key = plan.key.operands[(plan.key.n_operands as usize).saturating_sub(1)];
-    if plan.key.operands[0].contig != Contiguity::Contig || out_key.contig != Contiguity::Contig {
+    // `Contig` alone is NOT forward-dense: contiguity classification matches
+    // |stride| against row-major, so a reversed dense view keys Contig +
+    // `flipped` — a cell the baseline serves correctly via its runtime stride
+    // arrays, but this stride-free `idx = r*cols + c` ABI would read out of
+    // bounds. Require forward-dense on both ends.
+    let in_key = plan.key.operands[0];
+    if in_key.contig != Contiguity::Contig
+        || out_key.contig != Contiguity::Contig
+        || in_key.flipped
+        || out_key.flipped
+    {
         return None;
     }
     let ctype = scalar_ctype(plan.dtype)?;
@@ -1559,6 +1589,39 @@ mod tests {
         let sk = &vs[1];
         assert!(!sk.kernels[0].source.contains("acc /"), "partial never divides");
         assert!(sk.kernels[1].source.contains("out[c] = acc / (float)rows;"));
+    }
+
+    #[test]
+    fn splitk_gate_refuses_flipped_param_and_malformed_cells() {
+        use crate::ir::ReduceOp;
+        use crate::{generate_variants, Backend};
+        use baracuda_kernels_types::AxisMask;
+        let op = OpDef::reduction_axes(
+            "sum", 1, &[ElementKind::F32], input(0), ReduceOp::Sum, AxisMask(0b1), false,
+        );
+        let o = OperandDesc::new(1, &[1024], &[1], ElementKind::F32, 256);
+        // Row-reversed dense view: keys Contig + flipped — the baseline serves
+        // it via runtime strides, but the stride-free split-K ABI would read
+        // out of bounds. The gate must refuse.
+        let rev = OperandDesc::new(2, &[4096, 1024], &[-1024, 1], ElementKind::F32, 256);
+        let k_rev = structure_key(OpCategory::Reduction, &[rev, o], ArchSku::Sm89);
+        assert_eq!(generate_variants(&op, &k_rev, &Cuda).len(), 1, "flipped input: base only");
+        // Param body: the fixed splitk signature has no p{i} slot — refused
+        // (the emitted source would reference an undefined identifier).
+        let wsum = OpDef::reduction_axes(
+            "wsum", 1, &[ElementKind::F32],
+            input(0) * crate::ir::param(0),
+            ReduceOp::Sum, AxisMask(0b1), false,
+        );
+        let a = OperandDesc::new(2, &[4096, 1024], &[1024, 1], ElementKind::F32, 256);
+        let k_ok = structure_key(OpCategory::Reduction, &[a, o], ArchSku::Sm89);
+        assert_eq!(generate_variants(&wsum, &k_ok, &Cuda).len(), 1, "param body: base only");
+        // Malformed 1-operand key: out_key would alias the input — refused.
+        // (Exercised via lower_variants directly; generate() itself would also
+        // reject such a key downstream.)
+        let k_one = structure_key(OpCategory::Reduction, &[a], ArchSku::Sm89);
+        let plan = crate::build_plan(&op, &k_one);
+        assert!(Cuda.lower_variants(&plan).is_empty(), "1-operand key: no variant");
     }
 
     #[test]
