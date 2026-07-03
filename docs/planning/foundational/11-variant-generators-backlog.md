@@ -85,3 +85,25 @@ would bake a bench guess in where Fuel could have known better.
 3. **Contract honesty per variant**: a bit-changing variant emits its own
    `determinism`/`precision` block; the table records which variant won so the
    FKC contract served for the cell always describes the kernel actually shipped.
+
+## The generated-vs-bespoke audit (queued 2026-07-03)
+
+The gate has never run its most consequential matchup: `Implementor::Bespoke`
+(the hand-written `baracuda-kernels-sys` kernels) vs `Implementor::Generated`.
+The generated kernels now carry optimizations the bespoke ones predate
+(block-per-row warp-shuffle reductions at 227 GB/s, split-K, packed f16 pairs,
+the smemrow option), so some bespoke kernels may lose their cells — each such
+win also retires hand-written CUDA (a maintenance surface reduction, with the
+dispatch table as the auditable record of why).
+
+Method (the machinery exists end-to-end): per op family, nvrtc-load the
+generated cell (the `variant_gate.rs` pattern) and launch the bespoke sibling
+(Plan API in the bench crate, or `#include` the macro-instantiated `.cu` in an
+nvcc harness), oracle-check BOTH, then `gate_cell` with `Bespoke` + `Generated`
+candidates → `merge` → the committed table records the per-cell winner.
+
+First matchups, by expected signal: **reductions** (bespoke vs the 227 GB/s
+block-per-row + split-K family), **rms_norm/layer_norm/softmax fp** (bespoke
+`norm/` + `softmax/` vs the rowreduce family), **elementwise f16** (bespoke vs
+the packed pair path). Route the verdicts into OP-MATRIX so "backend: Bespoke"
+rows can honestly become "backend: Generated" where measured.

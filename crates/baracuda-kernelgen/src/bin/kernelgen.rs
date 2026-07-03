@@ -347,17 +347,37 @@ fn main() {
     // all-Large regime stays vendor-routed via the seed below. Extents here pick
     // the cell CLASS (tll); m/n/k are launch args.
     {
-        use baracuda_kernelgen::{reduced, ContractionAxes};
+        use baracuda_kernelgen::ContractionAxes;
         let mm = OpDef::contraction(
             "matmul",
             &[ElementKind::F32],
             ContractionAxes::matmul(),
             reduced(0),
         );
+        // The fused long-tail cell: the relu rides the split-K combine for free
+        // (ONE launch), where the vendor path is a GEMM + a separate elementwise
+        // pass over the output.
+        let mmr = OpDef::contraction(
+            "matmul_relu",
+            &[ElementKind::F32],
+            ContractionAxes::matmul(),
+            reduced(0).relu(),
+        );
         let lhs = OperandDesc::new(2, &[8, 4096], &[4096, 1], ElementKind::F32, 256);
         let rhs = OperandDesc::new(2, &[4096, 4096], &[4096, 1], ElementKind::F32, 256);
         let o = OperandDesc::new(2, &[8, 4096], &[4096, 1], ElementKind::F32, 256);
         let key = structure_key(OpCategory::Gemm, &[lhs, rhs, o], ArchSku::Sm89);
+        for v in generate_variants(&mmr, &key, &Cuda) {
+            for k in &v.kernels {
+                fs::write(format!("{out_dir}/{}.cu", k.name), &k.source).expect("write kernel");
+                println!(
+                    "generated {out_dir}/{}.cu  (cell {} | {})",
+                    k.name,
+                    key.to_token(),
+                    v.tag
+                );
+            }
+        }
         // Ship-top-K: base skinny SIMT + the split-K variant (the measured fix
         // for the base's occupancy starvation) — the gate + Fuel pick per shape.
         for v in generate_variants(&mm, &key, &Cuda) {

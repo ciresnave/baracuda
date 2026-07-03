@@ -177,3 +177,12 @@ honest per-cell verdict is "vendor keeps the plain cell." The generated node's
 winning ground, per the §1 long-tail thesis, is the **fused-epilogue** cell
 (matmul+bias/act in ONE launch, epilogue folded into `_splitk_combine`) that
 the vendor serves only as a two-kernel round trip — the next rematch.
+
+**Fused-epilogue rematch (matmul_relu):** correctness exact (0.0 vs the vendor
+round-trip), but **fusion did NOT win — 0.94–0.96×**. Structural finding: at
+Tiny-M the output is tiny (16 KB at M=1), so the vendor's separate relu pass
+costs ~2 µs and our ~5–7% GEMM gap eats it; epilogue fusion pays only when the
+epilogue's traffic is large relative to the GEMM, which at Tiny-M it never is.
+The contraction long tail lives elsewhere: **dequant-fused matmul** (int4/nf4
+weights dequantized in-kernel — the real quantized-decode traffic),
+irregular-K, and batched-many-tiny. Sixth measure-don't-assume instance.

@@ -11,6 +11,18 @@
 #include "baracuda_gen_matmul_f32_contract_tll.cu"
 #include "baracuda_gen_matmul_f32_contract_tll_splitk_partial.cu"
 #include "baracuda_gen_matmul_f32_contract_tll_splitk_combine.cu"
+#include "baracuda_gen_matmul_relu_f32_contract_tll_splitk_partial.cu"
+#include "baracuda_gen_matmul_relu_f32_contract_tll_splitk_combine.cu"
+
+// The vendor path's second launch: a separate relu pass over the GEMM output.
+__global__ void relu_pass(float* __restrict__ x, long long n) {
+    long long i = (long long)blockIdx.x * blockDim.x + threadIdx.x;
+    long long step = (long long)gridDim.x * blockDim.x;
+    for (; i < n; i += step) {
+        float v = x[i];
+        x[i] = v < 0.0f ? 0.0f : v;
+    }
+}
 
 template <class F>
 static float timed(F launch, int iters = 100) {
@@ -120,6 +132,42 @@ int main() {
         printf(bit ? "PASS M=%lld  splitk n_chunks=1 == base (memcmp)\n"
                    : "FAIL M=%lld  splitk n_chunks=1 != base\n", M);
         if (!bit) fails++;
+
+        // ---- the FUSED long-tail rematch: matmul+relu in ONE launch pair vs
+        // ---- the vendor's round trip (cublasSgemm + a separate relu pass). ----
+        {
+            long long chunk_k = (K + n_chunks - 1) / n_chunks;
+            dim3 g1((unsigned)grid, (unsigned)n_chunks);
+            auto fused = [&] {
+                baracuda_gen_matmul_relu_f32_contract_tll_splitk_partial<<<g1, block>>>(
+                    dl, dr, dw, M, N, K, chunk_k);
+                baracuda_gen_matmul_relu_f32_contract_tll_splitk_combine<<<grid, block>>>(
+                    dw, ds, M, N, n_chunks);
+            };
+            auto vendor = [&] {
+                cublasSgemm(h, CUBLAS_OP_N, CUBLAS_OP_N, (int)N, (int)M, (int)K,
+                            &alpha, dr, (int)N, dl, (int)K, &beta, dc, (int)N);
+                relu_pass<<<grid, block>>>(dc, M * N);
+            };
+            fused(); vendor();
+            cudaDeviceSynchronize();
+            std::vector<float> f(M * N), v(M * N);
+            cudaMemcpy(f.data(), ds, M * N * 4, cudaMemcpyDeviceToHost);
+            cudaMemcpy(v.data(), dc, M * N * 4, cudaMemcpyDeviceToHost);
+            double mr = 0;
+            for (long long i = 0; i < M * N; ++i) {
+                double denom = fabs((double)v[i]) > 1.0 ? fabs((double)v[i]) : 1.0;
+                mr = fmax(mr, fabs((double)f[i] - (double)v[i]) / denom);
+            }
+            bool okf = mr < 1e-4;
+            printf(okf ? "PASS M=%lld  fused relu vs vendor round-trip %.2e\n"
+                       : "FAIL M=%lld  fused relu vs vendor round-trip %.2e\n", M, mr);
+            if (!okf) fails++;
+            float t_f = timed(fused);
+            float t_v = timed(vendor);
+            printf("  M=%lld FUSED: matmul+relu one-pair %8.3f ms | cuBLAS+relu pass %8.3f ms | fused speedup %.2fx\n",
+                   M, t_f, t_v, t_v / t_f);
+        }
 
         // ---- the long-tail bench: base vs split-K vs cuBLAS ----
         float t_gen = timed(gen);
