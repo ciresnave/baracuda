@@ -806,26 +806,56 @@ fn emit_reduction(plan: &KernelPlan<'_>, ctype: &str, rop: ReduceOp) -> Generate
     // Identical addresses (an exact integer identity), so value-preserving. A
     // broadcast reduced axis (stride 0) still re-reads the same element
     // `shape{r}` times — correct semantics.
+    // The innermost counter is INT32 when the extent fits (extraction #3,
+    // counter-guided + lab-measured): ptxas unrolls and software-pipelines an
+    // int-counter loop far better than a `long long` one — the 64-bit counter
+    // was the true bespoke-legacy delta (int32 measured 174.5 GB/s vs 94.1
+    // rolled-ll and 130.7 bespoke at equal parallelism; every manual source
+    // unroll REGRESSED to 42–56 GB/s by fighting ptxas's own schedule, and a
+    // pointer-vs-end loop killed unrolling entirely at 14.8). The offset walk
+    // stays 64-bit (extraction #2) so addressing is unchanged; extents above
+    // INT_MAX take the `long long` fallback nest — same body, same element
+    // order, uniform branch, so both nests are bit-identical.
     let emit_reduced_nest = |s: &mut String, body: &[String]| {
         s.push_str("        long long roff0 = base;\n");
         for (i, &r) in reduced.iter().enumerate() {
-            s.push_str(&format!(
-                "        for (long long cr{r} = 0; cr{r} < shape{r}; ++cr{r}) {{\n"
-            ));
             if i + 1 < reduced.len() {
+                s.push_str(&format!(
+                    "        for (long long cr{r} = 0; cr{r} < shape{r}; ++cr{r}) {{\n"
+                ));
                 s.push_str(&format!("            long long roff{} = roff{};\n", i + 1, i));
             }
         }
         let inner = reduced.len() - 1;
-        s.push_str(&format!("            long long idx = roff{inner};\n"));
-        for line in body {
-            s.push_str(line);
-        }
-        // Close innermost-first; each level advances its own offset just
-        // before its closing brace.
+        let r = reduced[inner];
+        let emit_inner = |s: &mut String, header: &str| {
+            s.push_str(header);
+            s.push_str(&format!("            long long idx = roff{inner};\n"));
+            for line in body {
+                s.push_str(line);
+            }
+            s.push_str(&format!("            roff{inner} += s0_{r};\n"));
+            s.push_str("                }\n");
+        };
+        s.push_str(&format!("            if (shape{r} <= 2147483647LL) {{\n"));
+        s.push_str(&format!("                int ext{r} = (int)shape{r};\n"));
+        emit_inner(
+            s,
+            &format!("                for (int cr{r} = 0; cr{r} < ext{r}; ++cr{r}) {{\n"),
+        );
+        s.push_str("            } else {\n");
+        emit_inner(
+            s,
+            &format!("                for (long long cr{r} = 0; cr{r} < shape{r}; ++cr{r}) {{\n"),
+        );
+        s.push_str("            }\n");
+        // Close the outer reduced loops innermost-first; each level advances
+        // its own offset just before its closing brace.
         for (i, &r) in reduced.iter().enumerate().rev() {
-            s.push_str(&format!("            roff{i} += s0_{r};\n"));
-            s.push_str("        }\n");
+            if i + 1 < reduced.len() {
+                s.push_str(&format!("            roff{i} += s0_{r};\n"));
+                s.push_str("        }\n");
+            }
         }
     };
     match rop {
@@ -2545,7 +2575,12 @@ mod tests {
         // Kept-axis unravel, strided base, strided reduced fold, collapse output.
         assert!(k.source.contains("long long ck1 = lin % shape1; lin /= shape1;"));
         assert!(k.source.contains("long long base = ck1*s0_1;"));
-        assert!(k.source.contains("for (long long cr0 = 0; cr0 < shape0; ++cr0)"));
+        // Innermost reduced walk: int32 counter when the extent fits, with a
+        // long long fallback nest; strength-reduced offsets (extraction #2 + #3).
+        assert!(k.source.contains("if (shape0 <= 2147483647LL)"));
+        assert!(k.source.contains("int ext0 = (int)shape0;"));
+        assert!(k.source.contains("for (int cr0 = 0; cr0 < ext0; ++cr0)"));
+        assert!(k.source.contains("for (long long cr0 = 0; cr0 < shape0; ++cr0)")); // fallback
         assert!(k.source.contains("long long roff0 = base;")
             && k.source.contains("long long idx = roff0;")
             && k.source.contains("roff0 += s0_0;"));
@@ -2574,8 +2609,9 @@ mod tests {
         let k = generate(&op, &key, &Cuda);
         assert_eq!(k.name, "baracuda_gen_m_f32_reduce_mean_ax3");
         // Nested reduced loops + the extent-product divisor (not just the last axis).
-        assert!(k.source.contains("for (long long cr0 = 0; cr0 < shape0; ++cr0)"));
-        assert!(k.source.contains("for (long long cr1 = 0; cr1 < shape1; ++cr1)"));
+        assert!(k.source.contains("for (long long cr0 = 0; cr0 < shape0; ++cr0)")); // outer stays ll
+        assert!(k.source.contains("for (int cr1 = 0; cr1 < ext1; ++cr1)")); // innermost int32
+        assert!(k.source.contains("if (shape1 <= 2147483647LL)"));
         assert!(k.source.contains("long long roff1 = roff0;")
             && k.source.contains("long long idx = roff1;")
             && k.source.contains("roff1 += s0_1;"));
@@ -2656,6 +2692,7 @@ mod tests {
         assert_eq!(k.name, "baracuda_gen_s_f32_reduce_sum_ax2");
         assert!(!k.source.contains("long long base = o * k;"));
         assert!(k.source.contains("long long idx = roff0;") && k.source.contains("roff0 += s0_1;")); // strided reduced fold
+        assert!(k.source.contains("for (int cr1 = 0; cr1 < ext1; ++cr1)")); // int32 strided walk
         assert!(k.source.contains("long long base = ck0*s0_0;"));
     }
 

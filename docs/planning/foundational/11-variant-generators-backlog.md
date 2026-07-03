@@ -153,3 +153,24 @@ identical addresses; all suites green. Residual: bespoke legacy still leads the
 base 165 vs 113 (~1.5×) — one more technique in there (candidates: 32-bit inner
 counters, deeper unroll) — but the CELL winner remains generated split-K
 (212–242 GB/s), so the residual hunt is about generator learning, not routing.
+
+**Extraction #3 (2026-07-03): int32 innermost counter — CONFIRMED, closes the
+gap; generated base now BEATS bespoke (169.6 vs 165.2 GB/s).** First
+counter-guided extraction (GPU perf counters unlocked via elevated ncu): ncu
+showed the whole residual was dynamic instruction count (13.5M vs 9.2M at
+identical occupancy/coalescing/stall-mix). The candidate fixes were then
+LAB-MEASURED head-to-head at equal parallelism: int32 counter + 64-bit offset
+walk = 174.5 GB/s; shipped rolled-ll = 94.1; bespoke = 130.7; every manual x4
+source unroll REGRESSED to 42–56 (fighting ptxas's own unroll/schedule — the
+first attempt shipped as x4-interleaved measured 50.4 end-to-end and was
+replaced same-session); pointer-vs-end compare = 14.8 (kills ptxas unrolling).
+Mechanism: ptxas unrolls/pipelines int-counter loops far better than `long
+long` ones. Emission: innermost reduced axis takes an `int` counter under a
+`shape <= INT_MAX` guard with a `long long` fallback nest (same body/order —
+bit-identical, uniform branch). The 64-bit offset walk (ext#2) stays.
+Bespoke-legacy delta hunt CLOSED: 55 → 112.6 (ext#2) → 169.6 (ext#3).
+Scoreboard: #1 neutral, #2 2.05x, #3 1.5x further + parity surpassed. The
+general path now wins its cell against the hand-written reducer even before
+split-K (211.8) routes it. Lesson pinned twice over: static reasoning about
+GPU codegen mispredicts even at SASS level — lab-measure candidate loop shapes
+before emitting them.
