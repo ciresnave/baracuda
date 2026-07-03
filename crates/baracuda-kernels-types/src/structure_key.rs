@@ -157,6 +157,57 @@ impl AxisMask {
     }
 }
 
+/// Structural size class of one contraction dimension — **classes, never
+/// literal extents** (the §1 non-negotiable). Thresholds are v1 and tunable;
+/// they exist to split the vendor-owned regime (all-`Large` → cuBLAS/CUTLASS)
+/// from the generated long tail (`Tiny` M/N = the FlashDecoding++ flat-GEMM /
+/// decode GEMV-adjacent cell).
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
+pub enum SizeClass {
+    /// ≤ 8 — the skinny/decode regime.
+    Tiny,
+    /// 9..=128.
+    Small,
+    /// 129..=2048.
+    Mid,
+    /// > 2048 — the vendor-tuned regime when all three dims are here.
+    Large,
+}
+
+impl SizeClass {
+    /// Classify an extent.
+    #[must_use]
+    pub fn of(extent: i64) -> SizeClass {
+        match extent {
+            i64::MIN..=8 => SizeClass::Tiny,
+            9..=128 => SizeClass::Small,
+            129..=2048 => SizeClass::Mid,
+            _ => SizeClass::Large,
+        }
+    }
+}
+
+/// Contraction-only structure facts (design §5.4 / the item-10 spike), carried
+/// as `StructureKey::contraction` — `None` for every non-contraction cell so
+/// non-GEMM tokens serialize **byte-identically** to the pre-contraction codec
+/// (the token gains an optional trailing field only when these facts exist).
+///
+/// v1 scope = the canonical rank-2 row-major dense cell (`lhs [M,K] · rhs
+/// [K,N] → out [M,N]`): the M/N/K size classes drive the vendor gate, the
+/// K-alignment class the (future) MMA fragment / tail handling. Layout and
+/// batch classes join when the node grows past the pilot.
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
+pub struct ContractionKey {
+    /// Size class of M (lhs rows / out rows).
+    pub m: SizeClass,
+    /// Size class of N (rhs cols / out cols).
+    pub n: SizeClass,
+    /// Size class of K (the contracted dim).
+    pub k: SizeClass,
+    /// Divisibility of K (remainder/tail handling; future MMA-k legality).
+    pub k_div: DivBucket,
+}
+
 // ===========================================================================
 // The key
 // ===========================================================================
@@ -213,6 +264,10 @@ pub struct StructureKey {
     /// Reduced-axis set for reduction-class ops; [`AxisMask::EMPTY`] otherwise
     /// (always empty in v1).
     pub reduce_axes: AxisMask,
+    /// Contraction structure facts ([`ContractionKey`]); `None` for every
+    /// non-contraction cell — in which case the token is byte-identical to the
+    /// pre-contraction codec.
+    pub contraction: Option<ContractionKey>,
 }
 
 // ===========================================================================
@@ -421,7 +476,37 @@ pub fn structure_key(op: OpCategory, operands: &[OperandDesc], arch: ArchSku) ->
         n_operands: n as u8,
         operands: keys,
         reduce_axes: derive_reduce_axes(op, operands),
+        contraction: derive_contraction(op, operands),
     }
+}
+
+/// [item 10] Derive contraction structure facts for the canonical rank-2
+/// row-major dense GEMM cell: `operands = [lhs [M,K], rhs [K,N], out [M,N]]`,
+/// all contiguous. Any other shape/layout/arity yields `None` — an honest
+/// "no contraction facts", never a guess. (Batched / transposed / strided
+/// contraction classes join with the node's growth.)
+fn derive_contraction(op: OpCategory, operands: &[OperandDesc]) -> Option<ContractionKey> {
+    if op != OpCategory::Gemm || operands.len() != 3 {
+        return None;
+    }
+    let (lhs, rhs, out) = (&operands[0], &operands[1], &operands[2]);
+    if lhs.rank != 2 || rhs.rank != 2 || out.rank != 2 {
+        return None;
+    }
+    let (m, k) = (lhs.shape[0], lhs.shape[1]);
+    let (k2, n) = (rhs.shape[0], rhs.shape[1]);
+    // Shapes must agree and every operand must be dense row-major.
+    let dense = |o: &OperandDesc| o.strides[0] == o.shape[1] && o.strides[1] == 1;
+    if k != k2 || out.shape[0] != m || out.shape[1] != n || !dense(lhs) || !dense(rhs) || !dense(out)
+    {
+        return None;
+    }
+    Some(ContractionKey {
+        m: SizeClass::of(m),
+        n: SizeClass::of(n),
+        k: SizeClass::of(k),
+        k_div: div_bucket(k),
+    })
 }
 
 /// [item 03] Derive the reduced-axis set for a reduction cell from **keepdim-form**
@@ -663,7 +748,7 @@ impl StructureKey {
         } else {
             format!("x{:02x}", self.reduce_axes.0)
         };
-        format!(
+        let mut token = format!(
             "sk{}|{}|{}|{}|{}|{}|r{}|{}|{}",
             self.version,
             op_code(self.op),
@@ -674,7 +759,20 @@ impl StructureKey {
             self.rank,
             ops,
             reduce,
-        )
+        );
+        // Contraction facts ride as an OPTIONAL trailing field, emitted only
+        // when present — every non-contraction token stays byte-identical to
+        // the pre-contraction codec (and the wire stays opaque to Fuel).
+        if let Some(c) = self.contraction {
+            token.push_str(&format!(
+                "|c{}{}{}/{}",
+                size_code(c.m),
+                size_code(c.n),
+                size_code(c.k),
+                div_code(c.k_div),
+            ));
+        }
+        token
     }
 
     /// Parse a token produced by [`StructureKey::to_token`]. Returns `None` on
@@ -683,7 +781,8 @@ impl StructureKey {
     #[must_use]
     pub fn from_token(token: &str) -> Option<StructureKey> {
         let parts: Vec<&str> = token.split('|').collect();
-        if parts.len() != 9 {
+        // 9 fields = the base codec; a 10th is the optional contraction field.
+        if parts.len() != 9 && parts.len() != 10 {
             return None;
         }
         let version: u16 = parts[0].strip_prefix("sk")?.parse().ok()?;
@@ -717,6 +816,28 @@ impl StructureKey {
             s => AxisMask(u8::from_str_radix(s.strip_prefix('x')?, 16).ok()?),
         };
 
+        let contraction = match parts.get(9) {
+            None => None,
+            Some(f) => {
+                // `c<m><n><k>/<div>` — e.g. `ctll/d16`.
+                let rest = f.strip_prefix('c')?;
+                let (classes, div) = rest.split_once('/')?;
+                let mut cs = classes.chars();
+                let m = size_from_code(cs.next()?)?;
+                let n = size_from_code(cs.next()?)?;
+                let k = size_from_code(cs.next()?)?;
+                if cs.next().is_some() {
+                    return None;
+                }
+                Some(ContractionKey {
+                    m,
+                    n,
+                    k,
+                    k_div: div_from_code(div)?,
+                })
+            }
+        };
+
         Some(StructureKey {
             version,
             op,
@@ -728,7 +849,81 @@ impl StructureKey {
             n_operands,
             operands,
             reduce_axes,
+            contraction,
         })
+    }
+}
+
+/// One-letter token code for a [`SizeClass`].
+const fn size_code(s: SizeClass) -> char {
+    match s {
+        SizeClass::Tiny => 't',
+        SizeClass::Small => 's',
+        SizeClass::Mid => 'm',
+        SizeClass::Large => 'l',
+    }
+}
+
+fn size_from_code(c: char) -> Option<SizeClass> {
+    Some(match c {
+        't' => SizeClass::Tiny,
+        's' => SizeClass::Small,
+        'm' => SizeClass::Mid,
+        'l' => SizeClass::Large,
+        _ => return None,
+    })
+}
+
+fn div_from_code(s: &str) -> Option<DivBucket> {
+    Some(match s {
+        "d16" => DivBucket::Div16,
+        "d8" => DivBucket::Div8,
+        "d4" => DivBucket::Div4,
+        "d2" => DivBucket::Div2,
+        "da" => DivBucket::Any,
+        _ => return None,
+    })
+}
+
+#[cfg(test)]
+mod contraction_key_tests {
+    use super::*;
+    use crate::{ArchSku, ElementKind, OpCategory};
+
+    #[test]
+    fn gemm_rank2_dense_derives_and_round_trips() {
+        // Skinny decode cell: [8,4096]·[4096,4096] → [8,4096].
+        let lhs = OperandDesc::new(2, &[8, 4096], &[4096, 1], ElementKind::F32, 256);
+        let rhs = OperandDesc::new(2, &[4096, 4096], &[4096, 1], ElementKind::F32, 256);
+        let out = OperandDesc::new(2, &[8, 4096], &[4096, 1], ElementKind::F32, 256);
+        let k = structure_key(OpCategory::Gemm, &[lhs, rhs, out], ArchSku::Sm89);
+        let c = k.contraction.expect("gemm cell derives contraction facts");
+        assert_eq!(c.m, SizeClass::Tiny);
+        assert_eq!(c.n, SizeClass::Large);
+        assert_eq!(c.k, SizeClass::Large);
+        assert_eq!(c.k_div, DivBucket::Div16);
+        let tok = k.to_token();
+        assert!(tok.ends_with("|ctll/d16"), "optional trailing field: {tok}");
+        assert_eq!(StructureKey::from_token(&tok), Some(k), "round-trips");
+    }
+
+    #[test]
+    fn non_gemm_and_malformed_gemm_stay_none_and_byte_identical() {
+        // A non-GEMM cell: no contraction facts, token has exactly 9 fields —
+        // byte-identical to the pre-contraction codec.
+        let a = OperandDesc::new(2, &[128, 256], &[256, 1], ElementKind::F32, 256);
+        let k = structure_key(OpCategory::BinaryElementwise, &[a, a, a], ArchSku::Sm89);
+        assert!(k.contraction.is_none());
+        assert_eq!(k.to_token().split('|').count(), 9);
+        // GEMM with a shape mismatch (K disagreement) → honest None.
+        let bad = OperandDesc::new(2, &[100, 256], &[256, 1], ElementKind::F32, 256);
+        let kb = structure_key(OpCategory::Gemm, &[a, bad, a], ArchSku::Sm89);
+        assert!(kb.contraction.is_none());
+        // GEMM with a transposed (column-major) operand → None (v1 is dense
+        // row-major only).
+        let t = OperandDesc::new(2, &[256, 128], &[1, 256], ElementKind::F32, 256);
+        let kt = structure_key(OpCategory::Gemm, &[a, t, a], ArchSku::Sm89);
+        assert!(kt.contraction.is_none());
     }
 }
 
