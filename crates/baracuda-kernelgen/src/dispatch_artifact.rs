@@ -21,9 +21,12 @@ use baracuda_kernels_types::{DispatchEntry, DispatchTable, Implementor, Provenan
 /// runtime resolves per cell. Rows are sorted by `structure_key` token and
 /// de-duplicated (last-writer-wins) for a stable, diff-friendly artifact.
 ///
-/// Row shape: `(structure_key, winner, margin, provenance)` where `winner` and
-/// `provenance` are the lowercase [`Implementor::code`]/[`Provenance::code`]
-/// tokens and `margin` is `second_best_ns / winner_ns` formatted to fixed
+/// Row shape: `(structure_key, winner, winner_entry, margin, provenance)` where
+/// `winner`/`provenance` are the lowercase [`Implementor::code`]/
+/// [`Provenance::code`] tokens, `winner_entry` is the winning kernel's entry
+/// point (`"-"` when the winner has none, e.g. a vendor library) — load-bearing
+/// for schedule **variants**, where several `Generated` candidates share one
+/// cell token — and `margin` is `second_best_ns / winner_ns` formatted to fixed
 /// precision (byte-stable).
 #[must_use]
 pub fn emit_dispatch_table(table: &DispatchTable) -> String {
@@ -41,8 +44,10 @@ pub fn emit_dispatch_table(table: &DispatchTable) -> String {
     s.push_str("//! StructureKey cell, with the measured margin and its provenance.\n");
     s.push_str("//! The runtime computes a live cell's `StructureKey::to_token()` and\n");
     s.push_str("//! looks it up here to route (design \u{a7}7 vendor-exclusion).\n\n");
-    s.push_str("/// `(structure_key, winner, margin, provenance)` for every routed cell.\n");
-    s.push_str("pub static BARACUDA_DISPATCH_TABLE: &[(&str, &str, f64, &str)] = &[\n");
+    s.push_str(
+        "/// `(structure_key, winner, winner_entry, margin, provenance)` for every routed cell.\n",
+    );
+    s.push_str("pub static BARACUDA_DISPATCH_TABLE: &[(&str, &str, &str, f64, &str)] = &[\n");
     for e in sorted {
         // Defense in depth: `merge` already rejects a non-finite margin, but clamp
         // here too so a hand-built table can never emit a bare `NaN`/`inf` — those
@@ -50,9 +55,10 @@ pub fn emit_dispatch_table(table: &DispatchTable) -> String {
         // to compile. `1.0` = the conservative "no contest / no confidence" value.
         let margin = if e.margin.is_finite() { e.margin } else { 1.0 };
         s.push_str(&format!(
-            "    (\"{}\", \"{}\", {:.6}, \"{}\"),\n",
+            "    (\"{}\", \"{}\", \"{}\", {:.6}, \"{}\"),\n",
             e.structure_key,
             e.winner.code(),
+            e.winner_entry.as_deref().unwrap_or("-"),
             margin,
             e.provenance.code(),
         ));
@@ -86,21 +92,30 @@ pub fn parse_dispatch_table(src: &str) -> Vec<DispatchEntry> {
     out
 }
 
-/// Parse one `("token", "winner", margin, "provenance"),` row. The token may
-/// contain `|`, `/`, `;` but never `"`, so the two string fields bound cleanly.
+/// Parse one `("token", "winner", "entry", margin, "provenance"),` row. The
+/// token/entry may contain `|`, `/`, `;` but never `"`, so the quoted fields
+/// bound cleanly.
 fn parse_row(row: &str) -> Option<DispatchEntry> {
     // token: between the first and second unescaped quote.
     let after_q1 = row.strip_prefix("(\"")?;
     let q2 = after_q1.find('"')?;
     let token = &after_q1[..q2];
-    let rest = &after_q1[q2 + 1..]; // starts at `, "winner", margin, "prov"),`
+    let rest = &after_q1[q2 + 1..]; // `, "winner", "entry", margin, "prov"),`
 
     // winner: the next quoted string.
     let wq1 = rest.find('"')?;
     let after_wq1 = &rest[wq1 + 1..];
     let wq2 = after_wq1.find('"')?;
     let winner = Implementor::from_code(&after_wq1[..wq2])?;
-    let rest = &after_wq1[wq2 + 1..]; // `, margin, "prov"),`
+    let rest = &after_wq1[wq2 + 1..]; // `, "entry", margin, "prov"),`
+
+    // winner_entry: the next quoted string; "-" means none.
+    let eq1 = rest.find('"')?;
+    let after_eq1 = &rest[eq1 + 1..];
+    let eq2 = after_eq1.find('"')?;
+    let entry = &after_eq1[..eq2];
+    let winner_entry = (entry != "-").then(|| entry.to_string());
+    let rest = &after_eq1[eq2 + 1..]; // `, margin, "prov"),`
 
     // provenance: the last quoted string.
     let pq1 = rest.find('"')?;
@@ -108,8 +123,8 @@ fn parse_row(row: &str) -> Option<DispatchEntry> {
     let pq2 = after_pq1.find('"')?;
     let provenance = Provenance::from_code(&after_pq1[..pq2])?;
 
-    // margin: the number between `, ` after winner's close-quote and the comma
-    // before the provenance quote.
+    // margin: the number between the entry's close-quote and the comma before
+    // the provenance quote.
     let margin_str = rest[..pq1].trim().trim_start_matches(',').trim().trim_end_matches(',').trim();
     let margin: f64 = margin_str.parse().ok()?;
     // An `@generated` artifact never holds a non-finite margin (`emit` clamps and
@@ -122,6 +137,7 @@ fn parse_row(row: &str) -> Option<DispatchEntry> {
     Some(DispatchEntry {
         structure_key: token.to_string(),
         winner,
+        winner_entry,
         margin,
         ranked: Vec::new(),
         provenance,
@@ -145,6 +161,7 @@ mod tests {
         DispatchEntry {
             structure_key: token,
             winner,
+            winner_entry: None,
             margin,
             ranked: vec![CandidateResult { implementor: winner, median_ns: 1.0, entry_point: None }],
             provenance: Provenance::Measured,
@@ -158,6 +175,7 @@ mod tests {
         DispatchEntry {
             structure_key: e.structure_key.clone(),
             winner: e.winner,
+            winner_entry: e.winner_entry.clone(),
             margin: e.margin,
             ranked: Vec::new(),
             provenance: e.provenance,
@@ -175,7 +193,8 @@ mod tests {
             measured(at.clone(), Implementor::Bespoke, 3.0), // dup token → collapses
         ]);
         let src = emit_dispatch_table(&table);
-        assert!(src.contains("pub static BARACUDA_DISPATCH_TABLE: &[(&str, &str, f64, &str)] = &["));
+        assert!(src
+            .contains("pub static BARACUDA_DISPATCH_TABLE: &[(&str, &str, &str, f64, &str)] = &["));
         // f16 token sorts before f32 token.
         let a = src.find(&at).unwrap();
         let z = src.find(&zt).unwrap();
@@ -279,6 +298,7 @@ mod tests {
             entries: vec![DispatchEntry {
                 structure_key: tok,
                 winner: Implementor::Cublas,
+                winner_entry: None,
                 margin: f64::INFINITY,
                 ranked: Vec::new(),
                 provenance: Provenance::Seeded,

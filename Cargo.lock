@@ -481,6 +481,7 @@ dependencies = [
  "baracuda-cutlass-sys",
  "baracuda-driver",
  "baracuda-forge",
+ "baracuda-kernelgen",
  "baracuda-kernels",
  "baracuda-kernels-types",
  "baracuda-ozimmu",

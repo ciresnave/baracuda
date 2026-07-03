@@ -189,6 +189,13 @@ pub struct DispatchEntry {
     pub structure_key: String,
     /// The implementation this cell routes to.
     pub winner: Implementor,
+    /// The winner's entry point, when it has one (a `Generated`/`Bespoke`
+    /// kernel symbol; for a multi-kernel schedule variant, the first kernel in
+    /// launch order). Load-bearing for **variants**: one cell can hold several
+    /// `Generated` candidates and the collapse-form token cannot disambiguate
+    /// them, so a routing decision's identity is `(structure_key,
+    /// winner_entry)` — never the token alone.
+    pub winner_entry: Option<String>,
     /// `second_best_ns / winner_ns` (`> 1` ⇒ a real win; `1.0` ⇒ single
     /// candidate, no contest).
     pub margin: f64,
@@ -208,6 +215,7 @@ impl DispatchEntry {
         DispatchEntry {
             structure_key,
             winner,
+            winner_entry: None,
             margin: 1.0,
             ranked: Vec::new(),
             provenance: Provenance::Seeded,
@@ -265,6 +273,7 @@ pub fn winner_of(
     // independent of input order.
     candidates.sort_by(|a, b| a.median_ns.total_cmp(&b.median_ns));
     let winner = candidates[0].implementor;
+    let winner_entry = candidates[0].entry_point.clone();
     let margin = if candidates.len() >= 2 {
         candidates[1].median_ns / candidates[0].median_ns
     } else {
@@ -273,6 +282,7 @@ pub fn winner_of(
     Some(DispatchEntry {
         structure_key,
         winner,
+        winner_entry,
         margin,
         ranked: candidates,
         provenance: Provenance::Measured,
@@ -424,15 +434,23 @@ pub fn merge(table: &mut DispatchTable, incoming: &[DispatchEntry]) {
                 {
                     continue;
                 }
-                // A flip to a *different* winner must clear the noise floor; a
-                // same-winner refresh is always allowed. The guard tests `>=`
-                // (bound to a bool, not `!(margin < …)`, to keep it out of the
-                // partial-ord negation lint) so a non-finite margin — defense in
-                // depth against a poisoned measurement — fails to clear the floor
-                // and blocks the flip, instead of sneaking through the fact that
+                // A flip to a *different route* must clear the noise floor; a
+                // same-route refresh is always allowed. The route identity is
+                // `(winner, winner_entry)`, NOT the implementor alone — two
+                // schedule *variants* are both `Generated`, and a noise-level
+                // variant→variant flip must not bypass the floor. A row whose
+                // `winner_entry` is `None` (a seed, or a pre-variant row) pins
+                // no specific variant, so any same-implementor entry refines it
+                // without the flip threshold. The guard tests `>=` (bound to a
+                // bool, not `!(margin < …)`, to keep it out of the partial-ord
+                // negation lint) so a non-finite margin — defense in depth
+                // against a poisoned measurement — fails to clear the floor and
+                // blocks the flip, instead of sneaking through the fact that
                 // `NaN < MIN_FLIP_MARGIN` is `false`.
+                let same_route = inc.winner == cur.winner
+                    && (cur.winner_entry.is_none() || inc.winner_entry == cur.winner_entry);
                 let clears_noise_floor = inc.margin >= MIN_FLIP_MARGIN;
-                if inc.winner != cur.winner && !clears_noise_floor {
+                if !same_route && !clears_noise_floor {
                     continue;
                 }
                 *cur = inc.clone();
@@ -772,6 +790,7 @@ mod tests {
         let poisoned = DispatchEntry {
             structure_key: k.to_token(),
             winner: Implementor::Generated,
+            winner_entry: None,
             margin: f64::NAN,
             ranked: Vec::new(),
             provenance: Provenance::Measured,
@@ -786,6 +805,67 @@ mod tests {
     }
 
     #[test]
+    fn merge_variant_flip_needs_margin_but_refinement_does_not() {
+        let k = ew_key();
+        let vcand = |entry: &str, ns: f64| CandidateResult {
+            implementor: Implementor::Generated,
+            median_ns: ns,
+            entry_point: Some(entry.to_string()),
+        };
+        // A measured decision for variant A.
+        let a = winner_of(
+            k.to_token(),
+            vec![vcand("kern_a", 100.0), vcand("kern_b", 250.0)],
+            Some(stamp(ArchSku::Sm89, 10)),
+        )
+        .unwrap();
+        let mut t = DispatchTable::from_entries(vec![a]);
+        // A NOISE-level (1.05x) newer win for variant B: both are `Generated`,
+        // but the ROUTE differs (winner_entry) — must NOT flip.
+        let noisy_b = winner_of(
+            k.to_token(),
+            vec![vcand("kern_b", 100.0), vcand("kern_a", 105.0)],
+            Some(stamp(ArchSku::Sm89, 20)),
+        )
+        .unwrap();
+        assert!(noisy_b.margin < MIN_FLIP_MARGIN);
+        merge(&mut t, &[noisy_b]);
+        assert_eq!(
+            t.lookup(&k).unwrap().winner_entry.as_deref(),
+            Some("kern_a"),
+            "a within-noise variant flip must not bypass the floor"
+        );
+        // A REAL (2x) newer win for variant B flips.
+        let real_b = winner_of(
+            k.to_token(),
+            vec![vcand("kern_b", 100.0), vcand("kern_a", 200.0)],
+            Some(stamp(ArchSku::Sm89, 30)),
+        )
+        .unwrap();
+        merge(&mut t, &[real_b]);
+        assert_eq!(t.lookup(&k).unwrap().winner_entry.as_deref(), Some("kern_b"));
+        // A seed pins no entry: a single-candidate (margin 1.0) measurement
+        // REFINES it without needing the flip threshold.
+        let mut t2 = DispatchTable::from_entries(vec![DispatchEntry::seeded(
+            k.to_token(),
+            Implementor::Generated,
+        )]);
+        let refine = winner_of(
+            k.to_token(),
+            vec![vcand("kern_a", 100.0)],
+            Some(stamp(ArchSku::Sm89, 10)),
+        )
+        .unwrap();
+        assert_eq!(refine.margin, 1.0);
+        merge(&mut t2, &[refine]);
+        assert_eq!(
+            t2.lookup(&k).unwrap().winner_entry.as_deref(),
+            Some("kern_a"),
+            "an entry-less seed is refined, not flipped"
+        );
+    }
+
+    #[test]
     fn merge_rejects_non_finite_margin_into_empty_slot() {
         // The empty-slot push path (no existing row, no flip-guard) must also
         // reject a poisoned margin — otherwise a Fuel-reported NaN/inf margin
@@ -796,6 +876,7 @@ mod tests {
             let poisoned = DispatchEntry {
                 structure_key: k.to_token(),
                 winner: Implementor::Generated,
+                winner_entry: None,
                 margin: bad,
                 ranked: Vec::new(),
                 provenance: Provenance::Reported,
