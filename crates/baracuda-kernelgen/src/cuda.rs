@@ -7,8 +7,8 @@
 //! `__half` / `__nv_bfloat16` the same as for `float`.
 
 use crate::backend::{
-    lower_dag, lower_dag_all, lower_expr, Backend, GeneratedKernel, Lowering, Variant,
-    VariantFidelity,
+    lower_dag, lower_dag_all, lower_dag_multi, lower_expr, Backend, GeneratedKernel, Lowering,
+    Variant, VariantFidelity,
 };
 use crate::ir::{Access, BinaryOp, ExprDag, ReduceOp, ScalarExpr, UnaryOp};
 use crate::plan::{rr_role, KernelPlan, ReduceAxisClass, RrRole, Schedule};
@@ -55,7 +55,7 @@ impl Backend for Cuda {
             panic!("cuda backend: unsupported dtype {:?}", plan.dtype);
         };
         assert!(
-            params_used(plan.body).is_empty()
+            plan.output_bodies().iter().all(|b| params_used(b).is_empty())
                 || matches!(plan.dtype, ElementKind::F32 | ElementKind::F32Strict),
             "cuda backend v1: scalar params are f32-only for now (dtype {:?})",
             plan.dtype
@@ -72,7 +72,9 @@ impl Backend for Cuda {
         // backstop holds independently of the plan gate — the 0a lesson: gate
         // every layer.
         if crate::plan::is_int_dtype(plan.dtype) {
-            let mut exprs: Vec<&ScalarExpr> = vec![plan.body];
+            // Every output body (multi-output: body + extra_out_bodies), plus the
+            // reduction-class stages/epilogue — the same coverage as plan.rs.
+            let mut exprs: Vec<&ScalarExpr> = plan.output_bodies();
             match plan.access {
                 Access::RowReduce { stages, epilogue } => {
                     exprs.extend(stages.iter().map(|s| &s.pre));
@@ -97,7 +99,7 @@ impl Backend for Cuda {
         // non-strided emitter's `coord` closure panics if a Coord leaf
         // actually reaches it.
         {
-            let mut exprs: Vec<&ScalarExpr> = vec![plan.body];
+            let mut exprs: Vec<&ScalarExpr> = plan.output_bodies();
             match plan.access {
                 Access::RowReduce { stages, epilogue } => {
                     exprs.extend(stages.iter().map(|s| &s.pre));
@@ -130,6 +132,36 @@ impl Backend for Cuda {
             plan.dtype,
             plan.schedule
         );
+        // Increment 1: a MULTI-OUTPUT plan routes to the dedicated N-store
+        // emitters BEFORE the single-output dispatch below — so the single-output
+        // emitters stay byte-for-byte untouched (extra_out_bodies is empty ⇒
+        // n_outputs == 1 ⇒ this branch is never taken for any pre-increment-1 op).
+        // Independent emitter backstop (the plan gate validates the same rules;
+        // the 0a lesson: gate every layer): Elementwise + uniform dtype + no
+        // Reduced/Coord in any body (the multi lowering has no coord/reduced
+        // closure to reach).
+        if plan.n_outputs > 1 {
+            assert_multi_output_lowerable(plan);
+            return match plan.schedule {
+                Schedule::Vectorized { width } => match vector_type(plan.dtype, width) {
+                    Some((vty, lanes)) => emit_vectorized_multi(plan, vty, lanes),
+                    None => match packed_kind(plan.dtype, width) {
+                        Some(pk) if bodies_pack(plan) => emit_vectorized_packed_multi(plan, &pk),
+                        _ => emit_scalar_multi(plan, ctype),
+                    },
+                },
+                Schedule::Scalar => emit_scalar_multi(plan, ctype),
+                Schedule::Strided => emit_strided_multi(plan, ctype),
+                // Multi-output is Elementwise-only (plan gate + the backstop
+                // above), so only the elementwise schedules can appear.
+                other => panic!(
+                    "cuda backend: multi-output op '{}' reached a non-elementwise \
+                     schedule {other:?} — the plan gate pins multi-output to \
+                     Access::Elementwise (scalar/vectorized/strided)",
+                    plan.op_name
+                ),
+            };
+        }
         match plan.schedule {
             Schedule::Vectorized { width } => match vector_type(plan.dtype, width) {
                 Some((vty, lanes)) => emit_vectorized(plan, vty, lanes),
@@ -205,7 +237,7 @@ pub(crate) fn effective_count_width(plan: &KernelPlan<'_>) -> u32 {
     match plan.schedule {
         Schedule::Vectorized { width } => {
             if vector_type(plan.dtype, width).is_some()
-                || (packed_kind(plan.dtype, width).is_some() && body_packs(plan.body))
+                || (packed_kind(plan.dtype, width).is_some() && bodies_pack(plan))
             {
                 width
             } else {
@@ -214,6 +246,16 @@ pub(crate) fn effective_count_width(plan: &KernelPlan<'_>) -> u32 {
         }
         _ => 1,
     }
+}
+
+/// Whether EVERY output body of the plan is packable (all-`Input`-leaf, per
+/// [`body_packs`]) — the per-DAG f16/bf16 packed-pair gate generalized to
+/// multiple outputs. For a single-output plan this is exactly `body_packs(body)`
+/// (byte-identical decision); a multi-output packed lowering requires all bodies
+/// to pack, else the whole DAG falls back to the scalar path (one body with a
+/// `Const`/`Param` disqualifies the pair splat, same rule as today).
+fn bodies_pack(plan: &KernelPlan<'_>) -> bool {
+    plan.output_bodies().iter().all(|b| body_packs(b))
 }
 
 /// Pair-lane field names for the per-kernel packed vector struct.
@@ -683,6 +725,355 @@ fn emit_strided(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
         s.push_str(&format!("        {decl}\n"));
     }
     s.push_str(&format!("        out[oo] = {};\n", store_expr(plan, root)));
+    s.push_str("    }\n}\n");
+    GeneratedKernel { name, source: s }
+}
+
+/// Independent emitter backstop for a multi-output plan (increment 1), beside
+/// the plan gate `plan::assert_valid_multi_output` (the 0a lesson: gate every
+/// layer). Pins the structural facts the N-store emitters rely on: Elementwise
+/// access, a uniform output dtype, and a key operand count of exactly
+/// `n_inputs + n_outputs`. A `Reduced`/`Coord` leaf in a body is caught by the
+/// panicking `reduced`/`coord` closures the multi emitters pass (and by the
+/// plan gate + `assert_coord_lowerable` run above).
+fn assert_multi_output_lowerable(plan: &KernelPlan<'_>) {
+    assert!(
+        matches!(plan.access, Access::Elementwise),
+        "cuda backend: multi-output op '{}' must be Access::Elementwise",
+        plan.op_name
+    );
+    assert!(
+        plan.out_dtype == plan.dtype,
+        "cuda backend: multi-output op '{}' must have a uniform output dtype (out \
+         {:?}, key {:?}) — hetero multi-output is a follow-up",
+        plan.op_name,
+        plan.out_dtype,
+        plan.dtype
+    );
+    let want = plan.n_inputs as usize + plan.n_outputs as usize;
+    assert!(
+        plan.key.n_operands as usize == want,
+        "cuda backend: multi-output op '{}' key carries {} operands, expected \
+         n_inputs+n_outputs = {want}",
+        plan.op_name,
+        plan.key.n_operands
+    );
+}
+
+/// Panicking `reduced`/`coord` closures for the multi-output elementwise
+/// emitters: v1 multi-output bodies carry neither leaf (rejected at the plan
+/// gate + emitter backstops), so reaching one is a bug, not an honest miss.
+fn multi_reduced_panic(op_name: &str) -> impl Fn(u8) -> String + '_ {
+    move |i| panic!("cuda backend: Reduced({i}) in multi-output op '{op_name}' — multi-output v1 is elementwise-map only (no reduction)")
+}
+fn multi_coord_panic(op_name: &str) -> impl Fn(u8) -> String + '_ {
+    move |d| panic!("cuda backend: Coord({d}) in multi-output op '{op_name}' — multi-output v1 is elementwise-map only (Coord bodies are deferred)")
+}
+
+/// Emit a **multi-output scalar** elementwise kernel (increment 1): one linear
+/// grid-stride kernel that writes `n_outputs` contiguous outputs from a shared
+/// body-DAG. All output bodies are interned into ONE [`ExprDag`]
+/// ([`crate::ir::ExprDag::from_exprs`]) so a value shared between outputs — the
+/// `dy` load, an interior product — is emitted once (hoisted `tmp` / shared load)
+/// and referenced by each store: strictly fewer global loads than N separate
+/// kernels. The store loop grows to N `out{j}[i] = …;`.
+fn emit_scalar_multi(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
+    let n_in = plan.n_inputs as usize;
+    let n_out = plan.n_outputs as usize;
+    let name = format!(
+        "baracuda_gen_{}_{}_mo{}_scalar",
+        plan.op_name,
+        dtype_tag(plan.dtype),
+        n_out
+    );
+    let mut s = header(plan, &name);
+    for i in 0..n_in {
+        s.push_str(&format!("    const {ctype}* __restrict__ in{i},\n"));
+    }
+    for j in 0..n_out {
+        s.push_str(&format!("    {ctype}* __restrict__ out{j},\n"));
+    }
+    s.push_str(&format!(
+        "    long long n{})\n{{\n",
+        param_args_multi(&plan.output_bodies())
+    ));
+    s.push_str("    long long i = (long long)blockIdx.x * blockDim.x + threadIdx.x;\n");
+    s.push_str("    long long step = (long long)gridDim.x * blockDim.x;\n");
+    let acc = |idx: u8| format!("in{idx}[i]");
+    let dag = ExprDag::from_exprs(&plan.output_bodies());
+    let (prelude, roots) = lower_dag_multi(
+        &dag,
+        ctype,
+        &Lowering {
+            leaf: &acc,
+            reduced: &multi_reduced_panic(plan.op_name),
+            coord: &multi_coord_panic(plan.op_name),
+            unary: &|op, x| cuda_unary(op, x, plan.dtype),
+            binary: &|op, a, b| cuda_binary(op, a, b, plan.dtype),
+        },
+        false,
+    );
+    s.push_str("    for (; i < n; i += step) {\n");
+    for decl in &prelude {
+        s.push_str(&format!("        {decl}\n"));
+    }
+    for (j, root) in roots.iter().enumerate() {
+        s.push_str(&format!("        out{j}[i] = {root};\n"));
+    }
+    s.push_str("    }\n}\n");
+    GeneratedKernel { name, source: s }
+}
+
+/// Emit a **multi-output strided** elementwise kernel (increment 1): the
+/// coordinate-unravel emitter generalized to `n_outputs` outputs, each with its
+/// own per-axis stride array `so{j}_{d}` and unraveled offset `oo{j}`. Inputs
+/// keep the single-output address math (per-operand `o{k}`, fully-broadcast
+/// hoist), and the shared body-DAG is lowered once — so a strided multi-output
+/// cell (a shape the contig-only bespoke backward siblings cannot serve without
+/// a materialization pass) still loads each input once.
+fn emit_strided_multi(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
+    let rank = plan.key.rank as usize;
+    let n_in = plan.n_inputs as usize;
+    let n_out = plan.n_outputs as usize;
+    let name = format!(
+        "baracuda_gen_{}_{}_mo{}_strided_r{}",
+        plan.op_name,
+        dtype_tag(plan.dtype),
+        n_out,
+        rank
+    );
+    let mut s = header(plan, &name);
+    for i in 0..n_in {
+        s.push_str(&format!("    const {ctype}* __restrict__ in{i},\n"));
+    }
+    for j in 0..n_out {
+        s.push_str(&format!("    {ctype}* __restrict__ out{j},\n"));
+    }
+    for d in 0..rank {
+        s.push_str(&format!("    long long shape{d},\n"));
+    }
+    for i in 0..n_in {
+        for d in 0..rank {
+            s.push_str(&format!("    long long s{i}_{d},\n"));
+        }
+    }
+    for j in 0..n_out {
+        for d in 0..rank {
+            s.push_str(&format!("    long long so{j}_{d},\n"));
+        }
+    }
+    s.push_str(&format!(
+        "    long long n{})\n{{\n",
+        param_args_multi(&plan.output_bodies())
+    ));
+    for k in 0..n_in {
+        if is_fully_broadcast(plan.key.operands[k], rank) {
+            s.push_str(&format!("    {ctype} h{k} = in{k}[0];\n"));
+        }
+    }
+    s.push_str("    long long i = (long long)blockIdx.x * blockDim.x + threadIdx.x;\n");
+    s.push_str("    long long step = (long long)gridDim.x * blockDim.x;\n");
+    s.push_str("    for (; i < n; i += step) {\n");
+    s.push_str("        long long lin = i;\n");
+    for d in (0..rank).rev() {
+        s.push_str(&format!(
+            "        long long c{d} = lin % shape{d}; lin /= shape{d};\n"
+        ));
+    }
+    for k in 0..n_in {
+        if !is_fully_broadcast(plan.key.operands[k], rank) {
+            let off = offset_expr(plan.key.operands[k], &format!("s{k}"), rank);
+            s.push_str(&format!("        long long o{k} = {off};\n"));
+        }
+    }
+    for j in 0..n_out {
+        let oo = offset_expr(plan.key.operands[n_in + j], &format!("so{j}"), rank);
+        s.push_str(&format!("        long long oo{j} = {oo};\n"));
+    }
+    let acc = |idx: u8| {
+        if is_fully_broadcast(plan.key.operands[idx as usize], rank) {
+            format!("h{idx}")
+        } else {
+            format!("in{idx}[o{idx}]")
+        }
+    };
+    let dag = ExprDag::from_exprs(&plan.output_bodies());
+    let (prelude, roots) = lower_dag_multi(
+        &dag,
+        ctype,
+        &Lowering {
+            leaf: &acc,
+            reduced: &multi_reduced_panic(plan.op_name),
+            coord: &multi_coord_panic(plan.op_name),
+            unary: &|op, x| cuda_unary(op, x, plan.dtype),
+            binary: &|op, a, b| cuda_binary(op, a, b, plan.dtype),
+        },
+        false,
+    );
+    for decl in &prelude {
+        s.push_str(&format!("        {decl}\n"));
+    }
+    for (j, root) in roots.iter().enumerate() {
+        s.push_str(&format!("        out{j}[oo{j}] = {root};\n"));
+    }
+    s.push_str("    }\n}\n");
+    GeneratedKernel { name, source: s }
+}
+
+/// Emit a **multi-output vectorized** elementwise kernel (increment 1): the
+/// native `float4`/`float2`/`double2` path with `n_outputs` output vectors. Each
+/// input vector is loaded once (`v{i} = in{i}[i]`); each lane lowers ALL output
+/// bodies through the shared DAG, assigning `vo{j}.{lane}`; then N vector stores.
+fn emit_vectorized_multi(plan: &KernelPlan<'_>, vty: &str, lanes: &[&str]) -> GeneratedKernel {
+    let n_in = plan.n_inputs as usize;
+    let n_out = plan.n_outputs as usize;
+    let name = format!(
+        "baracuda_gen_{}_{}_mo{}_co_v{}",
+        plan.op_name,
+        dtype_tag(plan.dtype),
+        n_out,
+        lanes.len()
+    );
+    let mut s = header(plan, &name);
+    for i in 0..n_in {
+        s.push_str(&format!("    const {vty}* __restrict__ in{i},\n"));
+    }
+    for j in 0..n_out {
+        s.push_str(&format!("    {vty}* __restrict__ out{j},\n"));
+    }
+    s.push_str(&format!(
+        "    long long nv{})\n{{\n",
+        param_args_multi(&plan.output_bodies())
+    ));
+    s.push_str("    long long i = (long long)blockIdx.x * blockDim.x + threadIdx.x;\n");
+    s.push_str("    long long step = (long long)gridDim.x * blockDim.x;\n");
+    s.push_str("    for (; i < nv; i += step) {\n");
+    for i in 0..n_in {
+        s.push_str(&format!("        {vty} v{i} = in{i}[i];\n"));
+    }
+    for j in 0..n_out {
+        s.push_str(&format!("        {vty} vo{j};\n"));
+    }
+    let sctype = scalar_ctype(plan.dtype).expect("vectorized dtype has a scalar ctype");
+    let dag = ExprDag::from_exprs(&plan.output_bodies());
+    for lane in lanes {
+        let acc = |idx: u8| format!("v{idx}.{lane}");
+        let (prelude, roots) = lower_dag_multi(
+            &dag,
+            sctype,
+            &Lowering {
+                leaf: &acc,
+                reduced: &multi_reduced_panic(plan.op_name),
+                coord: &multi_coord_panic(plan.op_name),
+                unary: &|op, x| cuda_unary(op, x, plan.dtype),
+                binary: &|op, a, b| cuda_binary(op, a, b, plan.dtype),
+            },
+            false,
+        );
+        if prelude.is_empty() {
+            for (j, root) in roots.iter().enumerate() {
+                s.push_str(&format!("        vo{j}.{lane} = {root};\n"));
+            }
+        } else {
+            s.push_str("        {\n");
+            for decl in &prelude {
+                s.push_str(&format!("            {decl}\n"));
+            }
+            for (j, root) in roots.iter().enumerate() {
+                s.push_str(&format!("            vo{j}.{lane} = {root};\n"));
+            }
+            s.push_str("        }\n");
+        }
+    }
+    for j in 0..n_out {
+        s.push_str(&format!("        out{j}[i] = vo{j};\n"));
+    }
+    s.push_str("    }\n}\n");
+    GeneratedKernel { name, source: s }
+}
+
+/// Emit a **multi-output packed** f16/bf16 vectorized kernel (increment 1): the
+/// packed-pair path with `n_outputs` output vectors. Every output body must pack
+/// ([`bodies_pack`]) — all leaves `Input`, no params — so the pair spellers apply
+/// per lane; hoisting-all (via [`lower_dag_multi`]'s `hoist_all`) keeps Tier-B
+/// pair-splits from duplicating text across the shared DAG.
+fn emit_vectorized_packed_multi(plan: &KernelPlan<'_>, pk: &PackedKind) -> GeneratedKernel {
+    let width = pk.fields.len() * 2;
+    let n_in = plan.n_inputs as usize;
+    let n_out = plan.n_outputs as usize;
+    let name = format!(
+        "baracuda_gen_{}_{}_mo{}_co_v{}",
+        plan.op_name,
+        dtype_tag(plan.dtype),
+        n_out,
+        width
+    );
+    let vec_ty = format!("{name}_vec");
+    let mut s = format!(
+        "// Generated by baracuda-kernelgen — do not edit.\n// op: {} | cell: {}\n",
+        plan.op_name,
+        plan.key.to_token()
+    );
+    if let Some(inc) = extra_include(plan.dtype) {
+        s.push_str(inc);
+    }
+    s.push('\n');
+    s.push_str(&format!(
+        "struct __align__({}) {vec_ty} {{ {} {}; }};\n\n",
+        pk.align,
+        pk.pair_ty,
+        pk.fields.join(", ")
+    ));
+    s.push_str(&format!("extern \"C\" __global__ void {name}(\n"));
+    for i in 0..n_in {
+        s.push_str(&format!("    const {vec_ty}* __restrict__ in{i},\n"));
+    }
+    for j in 0..n_out {
+        s.push_str(&format!("    {vec_ty}* __restrict__ out{j},\n"));
+    }
+    s.push_str("    long long nv)\n{\n");
+    s.push_str("    long long i = (long long)blockIdx.x * blockDim.x + threadIdx.x;\n");
+    s.push_str("    long long step = (long long)gridDim.x * blockDim.x;\n");
+    s.push_str("    for (; i < nv; i += step) {\n");
+    for i in 0..n_in {
+        s.push_str(&format!("        {vec_ty} v{i} = in{i}[i];\n"));
+    }
+    for j in 0..n_out {
+        s.push_str(&format!("        {vec_ty} vo{j};\n"));
+    }
+    let dag = ExprDag::from_exprs(&plan.output_bodies());
+    for field in pk.fields {
+        let acc = |idx: u8| format!("v{idx}.{field}");
+        let (prelude, roots) = lower_dag_multi(
+            &dag,
+            pk.pair_ty,
+            &Lowering {
+                leaf: &acc,
+                reduced: &multi_reduced_panic(plan.op_name),
+                coord: &multi_coord_panic(plan.op_name),
+                unary: &|op, x| packed_unary(op, x, plan.dtype),
+                binary: &|op, a, b| packed_binary(op, a, b, plan.dtype),
+            },
+            true,
+        );
+        if prelude.is_empty() {
+            for (j, root) in roots.iter().enumerate() {
+                s.push_str(&format!("        vo{j}.{field} = {root};\n"));
+            }
+        } else {
+            s.push_str("        {\n");
+            for decl in &prelude {
+                s.push_str(&format!("            {decl}\n"));
+            }
+            for (j, root) in roots.iter().enumerate() {
+                s.push_str(&format!("            vo{j}.{field} = {root};\n"));
+            }
+            s.push_str("        }\n");
+        }
+    }
+    for j in 0..n_out {
+        s.push_str(&format!("        out{j}[i] = vo{j};\n"));
+    }
     s.push_str("    }\n}\n");
     GeneratedKernel { name, source: s }
 }
@@ -4287,6 +4678,8 @@ mod tests {
             schedule: Schedule::Vectorized { width: 4 },
             key: &key,
             body: &body,
+            n_outputs: 1,
+            extra_out_bodies: &[],
             access: &crate::ir::Access::Elementwise,
         };
         let _ = Cuda.lower(&plan);
@@ -4853,6 +5246,8 @@ mod tests {
             schedule: Schedule::Scalar,
             key: &key,
             body: &body,
+            n_outputs: 1,
+            extra_out_bodies: &[],
             access: &crate::ir::Access::Elementwise,
         };
         let _ = Cuda.lower(&plan);
@@ -4873,6 +5268,8 @@ mod tests {
             schedule: Schedule::Scalar,
             key: &key,
             body: &body,
+            n_outputs: 1,
+            extra_out_bodies: &[],
             access: &crate::ir::Access::Elementwise,
         };
         let _ = Cuda.lower(&plan);
@@ -4893,6 +5290,8 @@ mod tests {
             schedule: Schedule::Scalar,
             key: &key,
             body: &body,
+            n_outputs: 1,
+            extra_out_bodies: &[],
             access: &crate::ir::Access::Elementwise,
         };
         let _ = Cuda.lower(&plan);
@@ -4917,6 +5316,8 @@ mod tests {
             schedule: Schedule::Scalar,
             key: &key,
             body: &body,
+            n_outputs: 1,
+            extra_out_bodies: &[],
             access: &crate::ir::Access::Elementwise,
         };
         let _ = Cuda.lower(&plan);
@@ -4940,6 +5341,8 @@ mod tests {
             schedule: Schedule::Scalar,
             key: &key,
             body: &body,
+            n_outputs: 1,
+            extra_out_bodies: &[],
             access: &crate::ir::Access::Elementwise,
         };
         let _ = Cuda.lower(&plan);
@@ -5172,6 +5575,8 @@ mod tests {
             schedule: Schedule::Strided,
             key: &key,
             body: &body,
+            n_outputs: 1,
+            extra_out_bodies: &[],
             access: &crate::ir::Access::Elementwise,
         };
         let _ = Cuda.lower(&plan);
@@ -5204,6 +5609,8 @@ mod tests {
             },
             key: &key,
             body: &body,
+            n_outputs: 1,
+            extra_out_bodies: &[],
             access: &access,
         };
         let _ = Cuda.lower(&plan);
@@ -5224,6 +5631,8 @@ mod tests {
             schedule: Schedule::Strided,
             key: &key,
             body: &body,
+            n_outputs: 1,
+            extra_out_bodies: &[],
             access: &crate::ir::Access::Elementwise,
         };
         let _ = Cuda.lower(&plan);
@@ -5248,6 +5657,8 @@ mod tests {
             schedule: Schedule::Scalar,
             key: &key,
             body: &body,
+            n_outputs: 1,
+            extra_out_bodies: &[],
             access: &crate::ir::Access::Elementwise,
         };
         let _ = Cuda.lower(&plan);
@@ -5274,5 +5685,233 @@ mod tests {
         );
         assert!(k.source.contains("float tmp0 = ((float)c1 - (float)c0);"));
         assert!(k.source.contains("out[oo] = (in0[o0] * (tmp0 * tmp0));"));
+    }
+}
+
+#[cfg(test)]
+mod multi_output_tests {
+    //! Increment 1 (MULTI_OUTPUT elementwise) goldens: one kernel writing N
+    //! outputs from a shared body-DAG, with cross-body CSE (the shared `dy` load
+    //! / an interior product emitted ONCE). Single-output emission stays
+    //! byte-identical (extra_out_bodies empty) — pinned by
+    //! `single_body_multi_matches_elementwise`.
+    use crate::ir::{input, konst, BinaryOp, OpDef, UnaryOp};
+    use crate::{generate, Cuda};
+    use baracuda_kernels_types::{
+        structure_key, ArchSku, ElementKind, OpCategory, OperandDesc, StructureKey,
+    };
+
+    /// N contiguous 1D operands. `even` picks the vectorizable extent (V4 f32 /
+    /// V8 f16) vs an odd extent that forces the Scalar schedule.
+    fn contig_key(dt: ElementKind, n_operands: usize, even: bool) -> StructureKey {
+        let ext: i64 = if even { 1 << 20 } else { 1_000_003 };
+        let a = OperandDesc::new(1, &[ext], &[1], dt, 256);
+        let ops: Vec<_> = std::iter::repeat_n(a, n_operands).collect();
+        structure_key(OpCategory::BinaryElementwise, &ops, ArchSku::Sm89)
+    }
+
+    /// N transposed (column-major) rank-2 operands: all strided, none broadcast.
+    fn strided_key(dt: ElementKind, n_operands: usize) -> StructureKey {
+        let t = OperandDesc::new(2, &[8, 4], &[1, 8], dt, 256);
+        let ops: Vec<_> = std::iter::repeat_n(t, n_operands).collect();
+        structure_key(OpCategory::BinaryElementwise, &ops, ArchSku::Sm89)
+    }
+
+    // dy=in0, a=in1, b=in2. mul backward: da=dy*b, db=dy*a.
+    fn mul_backward(dt: ElementKind) -> OpDef {
+        OpDef::elementwise_multi(
+            "mul_backward",
+            3,
+            &[dt],
+            vec![input(0) * input(2), input(0) * input(1)],
+        )
+    }
+
+    #[test]
+    fn mul_backward_scalar_shares_the_dy_load_once() {
+        // da = dy*b, db = dy*a. dy = in0 is loaded by both outputs; the shared
+        // load hoists to ONE `tmp0 = in0[i]` referenced by both stores.
+        let k = generate(&mul_backward(ElementKind::F32), &contig_key(ElementKind::F32, 5, false), &Cuda);
+        assert_eq!(k.name, "baracuda_gen_mul_backward_f32_mo2_scalar", "{}", k.source);
+        assert_eq!(
+            k.source.matches("in0[i]").count(),
+            1,
+            "the shared dy load appears exactly once:\n{}",
+            k.source
+        );
+        assert!(k.source.contains("float tmp0 = in0[i];"), "{}", k.source);
+        assert!(k.source.contains("out0[i] = (tmp0 * in2[i]);"), "{}", k.source);
+        assert!(k.source.contains("out1[i] = (tmp0 * in1[i]);"), "{}", k.source);
+        assert!(k.source.contains("float* __restrict__ out0,"));
+        assert!(k.source.contains("float* __restrict__ out1,"));
+    }
+
+    #[test]
+    fn div_backward_shares_the_interior_dy_over_b() {
+        // da = dy/b; db = -((dy/b)*a/b). The dy/b interior is body 0's ROOT AND
+        // body 1's interior, hoisted ONCE (tmp1); `b` (in2) is a shared leaf,
+        // hoisted once (tmp0).
+        let dyb = input(0) / input(2);
+        let db = (dyb.clone() * input(1) / input(2)).unary(UnaryOp::Neg);
+        let op = OpDef::elementwise_multi("div_backward", 3, &[ElementKind::F32], vec![dyb, db]);
+        let k = generate(&op, &contig_key(ElementKind::F32, 5, false), &Cuda);
+        assert_eq!(k.name, "baracuda_gen_div_backward_f32_mo2_scalar", "{}", k.source);
+        assert_eq!(k.source.matches("in0[i]").count(), 1, "dy loaded once:\n{}", k.source);
+        assert_eq!(k.source.matches("in2[i]").count(), 1, "b loaded once:\n{}", k.source);
+        assert!(k.source.contains("float tmp0 = in2[i];"), "{}", k.source);
+        assert!(k.source.contains("float tmp1 = (in0[i] / tmp0);"), "the dy/b interior:\n{}", k.source);
+        assert!(k.source.contains("out0[i] = tmp1;"), "da IS the shared interior:\n{}", k.source);
+        assert!(k.source.contains("out1[i] = (-((tmp1 * in1[i]) / tmp0));"), "{}", k.source);
+        assert_eq!(k.source.matches("tmp1").count(), 3, "interior reused by both stores:\n{}", k.source);
+    }
+
+    #[test]
+    fn fma_backward_three_outputs_with_a_plain_copy() {
+        // Forward y = a*b + c. Backward: da = dy*b, db = dy*a, dc = dy (a plain
+        // COPY reusing the hoisted shared load — dc = tmp0).
+        let op = OpDef::elementwise_multi(
+            "fma_backward",
+            3,
+            &[ElementKind::F32],
+            vec![input(0) * input(2), input(0) * input(1), input(0)],
+        );
+        let k = generate(&op, &contig_key(ElementKind::F32, 6, false), &Cuda);
+        assert_eq!(k.name, "baracuda_gen_fma_backward_f32_mo3_scalar", "{}", k.source);
+        assert_eq!(k.source.matches("in0[i]").count(), 1, "dy loaded once:\n{}", k.source);
+        assert!(k.source.contains("float tmp0 = in0[i];"), "{}", k.source);
+        assert!(k.source.contains("out0[i] = (tmp0 * in2[i]);"), "{}", k.source);
+        assert!(k.source.contains("out1[i] = (tmp0 * in1[i]);"), "{}", k.source);
+        assert!(k.source.contains("out2[i] = tmp0;"), "dc is the shared dy copy:\n{}", k.source);
+    }
+
+    #[test]
+    fn mul_backward_strided_both_stores_at_unraveled_offsets() {
+        // Transposed operands → the strided emitter: each output has its own
+        // per-axis stride array (so0_*, so1_*) and unraveled offset (oo0, oo1);
+        // dy still loaded once.
+        let k = generate(&mul_backward(ElementKind::F32), &strided_key(ElementKind::F32, 5), &Cuda);
+        assert_eq!(k.name, "baracuda_gen_mul_backward_f32_mo2_strided_r2", "{}", k.source);
+        assert!(k.source.contains("long long oo0 = c0*so0_0 + c1*so0_1;"), "{}", k.source);
+        assert!(k.source.contains("long long oo1 = c0*so1_0 + c1*so1_1;"), "{}", k.source);
+        assert!(k.source.contains("float tmp0 = in0[o0];"), "{}", k.source);
+        assert!(k.source.contains("out0[oo0] = (tmp0 * in2[o2]);"), "{}", k.source);
+        assert!(k.source.contains("out1[oo1] = (tmp0 * in1[o1]);"), "{}", k.source);
+        assert_eq!(k.source.matches("in0[o0]").count(), 1, "{}", k.source);
+    }
+
+    #[test]
+    fn mul_backward_vectorized_float4_multi_store() {
+        // Contiguous V4 f32 → the native float4 path with two output vectors;
+        // each input vector loaded once, both output vectors stored.
+        let k = generate(&mul_backward(ElementKind::F32), &contig_key(ElementKind::F32, 5, true), &Cuda);
+        assert_eq!(k.name, "baracuda_gen_mul_backward_f32_mo2_co_v4", "{}", k.source);
+        assert!(k.source.contains("float4 v0 = in0[i];"), "{}", k.source);
+        assert!(k.source.contains("vo0.x = (tmp0 * v2.x);"), "{}", k.source);
+        assert!(k.source.contains("vo1.x = (tmp0 * v1.x);"), "{}", k.source);
+        assert!(k.source.contains("out0[i] = vo0;"), "{}", k.source);
+        assert!(k.source.contains("out1[i] = vo1;"), "{}", k.source);
+    }
+
+    #[test]
+    fn mul_backward_packed_f16_both_bodies_pack() {
+        // f16 V8 contiguous, all-Input-leaf bodies → the packed __half2 path with
+        // two output vectors (4 pairs each).
+        let k = generate(&mul_backward(ElementKind::F16), &contig_key(ElementKind::F16, 5, true), &Cuda);
+        assert_eq!(k.name, "baracuda_gen_mul_backward_f16_mo2_co_v8", "{}", k.source);
+        assert!(
+            k.source.contains(
+                "struct __align__(16) baracuda_gen_mul_backward_f16_mo2_co_v8_vec { __half2 a, b, c, d; };"
+            ),
+            "{}",
+            k.source
+        );
+        assert!(k.source.contains("baracuda_gen_mul_backward_f16_mo2_co_v8_vec v0 = in0[i];"), "{}", k.source);
+        assert!(k.source.contains("vo0.a = "), "{}", k.source);
+        assert!(k.source.contains("vo1.a = "), "{}", k.source);
+        assert!(k.source.contains("out0[i] = vo0;"), "{}", k.source);
+        assert!(k.source.contains("out1[i] = vo1;"), "{}", k.source);
+    }
+
+    #[test]
+    fn multi_output_const_body_forces_scalar_fallback() {
+        // A Const in one body disqualifies the packed pair splat → the WHOLE
+        // multi-output DAG falls back to the scalar emitter even on a V8 f16 cell.
+        let op = OpDef::elementwise_multi(
+            "scaled_bw",
+            2,
+            &[ElementKind::F16],
+            vec![input(0) * input(1), input(0) * konst(0.5)],
+        );
+        let k = generate(&op, &contig_key(ElementKind::F16, 4, true), &Cuda);
+        assert_eq!(k.name, "baracuda_gen_scaled_bw_f16_mo2_scalar", "{}", k.source);
+        assert!(!k.source.contains("__half2"), "no packed pairs on the fallback:\n{}", k.source);
+        assert!(k.source.contains("__half tmp0 = in0[i];"), "{}", k.source);
+        assert!(k.source.contains("out0[i] = (tmp0 * in1[i]);"), "{}", k.source);
+        assert!(k.source.contains("out1[i] = (tmp0 * 0.5);"), "{}", k.source);
+    }
+
+    #[test]
+    fn single_body_multi_matches_elementwise() {
+        // BYTE-IDENTITY: a one-body elementwise_multi is n_outputs==1 →
+        // extra_out_bodies empty → the established single-output path, byte-for-
+        // byte identical to OpDef::elementwise (the additive guarantee).
+        let key = contig_key(ElementKind::F32, 2, true);
+        let single = generate(
+            &OpDef::elementwise("relu", 1, &[ElementKind::F32], input(0).relu()),
+            &key,
+            &Cuda,
+        );
+        let via_multi = generate(
+            &OpDef::elementwise_multi("relu", 1, &[ElementKind::F32], vec![input(0).relu()]),
+            &key,
+            &Cuda,
+        );
+        assert_eq!(single.name, via_multi.name);
+        assert_eq!(single.source, via_multi.source, "single-output byte-identical");
+    }
+
+    #[test]
+    fn nested_cmp_mask_multiply_composes_in_a_multi_output_body() {
+        // A nested Cmp mask-multiply (relu-backward `dy*(x>0)`) composes in one
+        // multi-output body and lowers per body — an inline 0/1 float, no
+        // special-casing; the second output is the plain dy copy.
+        let op = OpDef::elementwise_multi(
+            "relu_like_bw",
+            2,
+            &[ElementKind::F32],
+            vec![
+                input(0) * input(1).binary(BinaryOp::CmpGt, konst(0.0)),
+                input(0),
+            ],
+        );
+        let k = generate(&op, &contig_key(ElementKind::F32, 4, false), &Cuda);
+        assert_eq!(k.name, "baracuda_gen_relu_like_bw_f32_mo2_scalar", "{}", k.source);
+        assert!(k.source.contains("out1[i] = tmp0;"), "the dy copy:\n{}", k.source);
+        assert!(
+            k.source.contains("out0[i] = (tmp0 * ((float)in1[i] > (float)0.0 ? 1.0f : 0.0f));"),
+            "{}",
+            k.source
+        );
+    }
+
+    #[test]
+    fn optimize_each_body_then_intern_preserves_cross_body_cse() {
+        // E-graph order (pinned): the optimizer simplifies ONE ScalarExpr, so a
+        // multi-output op is optimized per body FIRST, then interned together —
+        // and the interning still collapses a subexpression shared between the
+        // (independently-optimized) bodies. b0 = dy*b; b1 = (dy*b)*a share dy*b;
+        // after optimize (a no-op here) from_exprs keeps them sharing one node.
+        use crate::ir::ExprDag;
+        use crate::optimize::optimize;
+        let b0 = (input(0) * input(2)).0;
+        let b1 = ((input(0) * input(2)) * input(1)).0;
+        let o0 = optimize(&b0);
+        let o1 = optimize(&b1);
+        let dag = ExprDag::from_exprs(&[&o0, &o1]);
+        // Body 0's optimized root is the shared dy*b node, referenced by body 1.
+        assert!(
+            dag.consumers(dag.roots()[0]) >= 1,
+            "the shared subexpr survives optimize-then-intern"
+        );
     }
 }

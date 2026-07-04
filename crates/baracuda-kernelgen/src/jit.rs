@@ -454,6 +454,11 @@ fn region_to_op(
         // Uniform-dtype (increment 1): a JIT'd op never stores hetero output —
         // the root-cmp gate above is what keeps this unconditional.
         out_dtype: None,
+        // Single-output: a seam region is a single-rooted PatternNode
+        // (fuel-kernel-seam-types), so `region_to_op` builds exactly one output
+        // body. Multi-output (increment 1) is AOT-only until Fuel's seam grows a
+        // multi-output region envelope — see the module notes / synthesize.
+        extra_out_bodies: Vec::new(),
     };
     // Reuse the AOT bind-set / elementwise validation, and keep the canonical
     // pattern (so synthesize derives it exactly once).
@@ -1789,6 +1794,50 @@ mod tests {
                 assert!(String::from_utf8(ptx).unwrap().contains(".entry"));
             }
         }
+    }
+
+    /// A MULTI-OUTPUT (increment 1) kernel compiles headerless under nvrtc: N
+    /// output pointers + N stores from a shared body-DAG are plain C (no
+    /// includes on the f32 path). mul_backward (2 outputs, scalar) and
+    /// fma_backward (3 outputs) are the representative cells; numeric
+    /// correctness is the nvcc host harness (`multi_output_validate.cu`), this
+    /// guards headerless portability. Ignored (needs nvrtc + CUDA).
+    #[cfg(feature = "nvrtc")]
+    #[test]
+    #[ignore = "requires nvrtc runtime + CUDA install"]
+    fn nvrtc_compiles_multi_output_kernel() {
+        use crate::generate;
+        use crate::ir::input;
+        let cc = NvrtcCompiler::new(ArchSku::Sm89);
+        let key = |n: usize| {
+            let a = OperandDesc::new(1, &[1 << 20], &[1], ElementKind::F32, 256);
+            let ops: Vec<_> = std::iter::repeat_n(a, n).collect();
+            structure_key(OpCategory::BinaryElementwise, &ops, ArchSku::Sm89)
+        };
+        // mul_backward: 3 inputs, 2 outputs (da=dy*b, db=dy*a).
+        let mul = OpDef::elementwise_multi(
+            "mul_backward",
+            3,
+            &[ElementKind::F32],
+            vec![input(0) * input(2), input(0) * input(1)],
+        );
+        let k = generate(&mul, &key(5), &Cuda);
+        let ptx = cc
+            .compile(&k.source, &k.name, 5000)
+            .unwrap_or_else(|e| panic!("mul_backward failed headerless nvrtc: {e}"));
+        assert!(String::from_utf8(ptx).unwrap().contains(".entry"));
+        // fma_backward: 3 inputs, 3 outputs (one a plain copy).
+        let fma = OpDef::elementwise_multi(
+            "fma_backward",
+            3,
+            &[ElementKind::F32],
+            vec![input(0) * input(2), input(0) * input(1), input(0)],
+        );
+        let k = generate(&fma, &key(6), &Cuda);
+        let ptx = cc
+            .compile(&k.source, &k.name, 5000)
+            .unwrap_or_else(|e| panic!("fma_backward failed headerless nvrtc: {e}"));
+        assert!(String::from_utf8(ptx).unwrap().contains(".entry"));
     }
 
     /// The increment-0b comparison kernels compile headerless under nvrtc: the

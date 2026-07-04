@@ -427,3 +427,59 @@ bespoke sibling on this corpus (relerr 0.0), and both are correctly-rounded-clos
 `OpKind` (see `fuel-cuda-backend/src/baracuda/reduce.rs`), so CPU is the oracle;
 both bit-exact — `any` via the Cmp* post's exact 0/1 → u8, `count` via the float
 accumulator → i64 store (exact while count ≤ 2²⁴).
+
+## `multi_output_validate.cu` — multi-output elementwise (increment 1)
+
+Launches the **generated** MULTI_OUTPUT kernels — one kernel writing N outputs
+from a shared body-DAG, with cross-body CSE (the shared `dy` load / an interior
+product emitted once, then N stores) — vs an f64 CPU oracle **per output**, on a
+contiguous and a strided cell, plus a generated-vs-bespoke audit (the sibling
+`binary_mul_backward_fp.cu` / `binary_div_backward_fp.cu` functor math, inlined).
+
+Validates:
+
+- **`mul_backward`** (3 in → 2 out: `da=dy·b`, `db=dy·a`) — the shared `dy` load
+  hoists to one `tmp0` referenced by both stores; both outputs oracle-exact.
+- **`div_backward`** (`da=dy/b`, `db=−dy·a/b²`) — the `dy/b` interior is shared
+  (body 0's root AND body 1's interior), computed once; both outputs within a few
+  f32 ULP of the oracle.
+- **`fma_backward`** (3 outputs, one a plain **copy** of `dy` reusing the hoisted
+  load) — all three exact.
+- **strided cell** — col-major inputs, row-major outputs: both stores land at
+  their own unraveled offsets (`oo0`/`oo1`).
+- **determinism** — two runs of the multi-store are bit-identical.
+
+**Run (from a VS dev shell):**
+
+```sh
+nvcc -O3 -arch=sm_89 multi_output_validate.cu -o multi_output_validate && ./multi_output_validate
+compute-sanitizer --tool memcheck  ./multi_output_validate
+compute-sanitizer --tool racecheck ./multi_output_validate
+```
+
+**Last run:** RTX 4070 Laptop (sm_89), CUDA 13.3 / nvcc 13.3 — **ALL 15 checks PASS**;
+`compute-sanitizer memcheck` = **0 errors**, `racecheck` = **0 hazards** (the
+multi-store to distinct buffers is race-free and in-bounds).
+
+| case | vs f64 oracle | vs bespoke |
+| --- | --- | --- |
+| `mul_bw` da / db (contig) | **maxrel 0.0** (exact) | **bit-identical** (single multiply) |
+| `mul_bw` da / db (strided) | **maxrel 0.0** | — |
+| `mul_bw` determinism (2 runs) | — | **bit-identical** |
+| `div_bw` da (contig) | maxrel 4.5e-08 | **bit-identical** (`dy/b` same formula) |
+| `div_bw` db (contig) | maxrel 1.1e-07 | oracle-close, **not** bit-equal (see note) |
+| `div_bw` da / db (bespoke) | maxrel ≤ 4.8e-08 | — |
+| `fma_bw` da / db / dc-copy | **maxrel 0.0** (exact) | — (no 3-out sibling) |
+
+Notes: (1) `mul_backward` is a single multiply per output, so the generated dual
+store is **bit-identical** to the bespoke `MulBackwardFunctor` — a tie at the
+memory wall on the contig fast path, exactly the audit prediction; the generator
+additionally serves the **strided** cell (bespoke is contig-only). (2) `div_backward`
+`db` differs by rounding: the generator shares the `dy/b` interior (`db =
+−((dy/b)·a/b)`), the bespoke recomputes (`db = −(dy·a)/(b·b)`) — the interior-share
+is the whole point (fewer ops/loads), and both land within ~1e-7 of the f64 oracle.
+(3) no elementwise multi-output backward has a Fuel `OpKind` (Fuel splits
+multi-output backward into per-output kinds, e.g. `FlashAttnBackwardQ/K/V`), so
+these ship as generated AOT kernels with **no FKC contract** (honest miss — the
+`return.outputs`/§5.5-bundle envelope needs a forest-pattern identity Baracuda
+cannot yet advertise); the kernels generate and run correctly, proven here.

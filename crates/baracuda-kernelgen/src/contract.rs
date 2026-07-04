@@ -65,6 +65,32 @@ pub fn contract(
     // contract would corrupt the planner's honest miss signal (§4.3).
     let dtype = fkc_dtype(key.dtype)?;
 
+    // Increment-1 MULTI-OUTPUT honest miss (typed, no contract; the kernel still
+    // generates + works AOT — the cmp/bitwise/Coord precedent). Read against
+    // Fuel's actual sources, a multi-output elementwise op has no advertisable
+    // identity in the current seam envelope:
+    //   1. `op_kind`: no Fuel `OpKind` names an elementwise multi-output dual
+    //      (fuel-dispatch fkc/lower.rs `lower_op_kind` has no MulElementwiseBackward
+    //      etc.; Fuel splits multi-output backward into per-output OpKinds — e.g.
+    //      FlashAttnBackwardQ/K/V — one single-output kernel each).
+    //   2. `fused_op`: needs a `pattern:` block, but a `PatternNode`
+    //      (fuel-kernel-seam-types) is single-ROOTED — a single-output subgraph;
+    //      a forest of N distinct output roots is not expressible, and
+    //      `derive_pattern` reads only `op.body` (output 0), so emitting a
+    //      contract here would advertise a WRONG single-output pattern that
+    //      ignores the other outputs and mis-describes the N-operand key.
+    //   3. Fuel's ONLY multi-output ABI (kernel-contract-format.md §5.5, "Option
+    //      C") is a `return.bundle` — ONE packed output buffer mapped to a
+    //      `FusedOp.output_views` — semantically different from our N DISTINCT
+    //      output buffers, and it still needs the fused-op pattern identity (2)
+    //      that we cannot provide.
+    // So: no contract, until Fuel's seam grows a multi-output region envelope
+    // (a forest pattern, or a per-output split). Guarded up front so the wrong
+    // single-output pattern is never emitted.
+    if op.n_outputs() > 1 {
+        return None;
+    }
+
     // Increment 0b honesty gate (tightened by the adversarial review): a body
     // containing a Cmp* ANYWHERE emits a contract only as the u8-out
     // single-op primitive.

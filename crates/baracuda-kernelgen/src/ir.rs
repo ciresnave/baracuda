@@ -492,6 +492,12 @@ pub struct ExprDag {
     nodes: Vec<DagNode>,
     consumers: Vec<u32>,
     root: NodeId,
+    /// One output root per body — `[root]` for the single-body [`Self::from_expr`],
+    /// one entry per output body for the multi-output [`Self::from_exprs`]. Because
+    /// every body is interned into this SAME arena, a subexpression shared across
+    /// bodies collapses to one node (its `consumers` count reflects the cross-body
+    /// edges) — the cross-body CSE the multi-output emitter lowers once.
+    roots: Vec<NodeId>,
 }
 
 impl ExprDag {
@@ -508,13 +514,56 @@ impl ExprDag {
             nodes: b.nodes,
             consumers: b.consumers,
             root,
+            roots: vec![root],
         }
     }
 
-    /// The output node (the value the op computes).
+    /// Hash-cons **several** [`ScalarExpr`] bodies into ONE value-numbered DAG,
+    /// interning across bodies so a subexpression shared between outputs collapses
+    /// to a single node — the cross-body CSE that makes a multi-output kernel load
+    /// `dy` once and compute a shared interior once, then store to N outputs
+    /// ([`OpDef::elementwise_multi`]). Returns the roots in body order via
+    /// [`Self::roots`]; `root()` is `roots[0]` (output 0) for API compatibility.
+    ///
+    /// Order-of-composition note (pinned): the optimizer ([`crate::optimize`])
+    /// simplifies a single `ScalarExpr`, so a multi-output op is optimized
+    /// **per body first, THEN interned here** — the interning is what preserves the
+    /// cross-body sharing, and running it after per-body optimization keeps both
+    /// the correctness (each body simplified independently) and the sharing
+    /// (structurally-equal simplified subtrees still hash-cons to one node).
+    ///
+    /// # Panics
+    /// If `exprs` is empty (a DAG needs at least one root).
+    #[must_use]
+    pub fn from_exprs(exprs: &[&ScalarExpr]) -> ExprDag {
+        assert!(!exprs.is_empty(), "ExprDag::from_exprs: needs at least one body");
+        let mut b = DagBuilder {
+            nodes: Vec::new(),
+            consumers: Vec::new(),
+            memo: HashMap::new(),
+        };
+        let roots: Vec<NodeId> = exprs.iter().map(|e| b.intern(e)).collect();
+        ExprDag {
+            nodes: b.nodes,
+            consumers: b.consumers,
+            root: roots[0],
+            roots,
+        }
+    }
+
+    /// The output node of body 0 (the value output 0 computes). For a
+    /// single-body DAG this is *the* output; for a multi-output DAG see
+    /// [`Self::roots`].
     #[must_use]
     pub fn root(&self) -> NodeId {
         self.root
+    }
+
+    /// The output root of every body, in body order (`[root()]` for a single-body
+    /// DAG). The multi-output emitter lowers each, sharing one hoisted prelude.
+    #[must_use]
+    pub fn roots(&self) -> &[NodeId] {
+        &self.roots
     }
 
     /// The node at `id`.
@@ -1132,6 +1181,22 @@ pub struct OpDef {
     /// in a follow-up"); the caller's output `OperandDesc` carries the hetero
     /// dtype, which only shapes that operand's own layout facts.
     pub out_dtype: Option<ElementKind>,
+    /// Additional output bodies for a **multi-output** elementwise op (increment
+    /// 1). Output 0 is [`OpDef::body`]; each entry here is one further output,
+    /// evaluated at the same coordinate over the same inputs. **Empty for every
+    /// single-output op** (`n_outputs() == 1`), which is every op built by every
+    /// pre-increment-1 constructor — so `body` stays output 0 and every existing
+    /// body-walker (`params_used`/`count_flops`/dtype plumbing/`derive_pattern`)
+    /// operates on it unchanged, and emission is **byte-identical**. Non-empty
+    /// only via [`OpDef::elementwise_multi`]; `Access::Elementwise` only in v1
+    /// (validated at `plan::build_plan`, with an emitter backstop in `cuda`).
+    ///
+    /// The value proposition is **cross-body CSE**: all output bodies are
+    /// interned into ONE [`ExprDag`] ([`ExprDag::from_exprs`]) so a subexpression
+    /// shared between outputs (the `dy` load, an interior product) becomes one
+    /// hoisted `tmp` referenced by multiple stores — strictly fewer global loads
+    /// than decomposing into N single-output kernels.
+    pub extra_out_bodies: Vec<ScalarExpr>,
 }
 
 impl OpDef {
@@ -1147,6 +1212,7 @@ impl OpDef {
             access: Access::Elementwise,
             views: Vec::new(),
             out_dtype: None,
+            extra_out_bodies: Vec::new(),
         }
     }
 
@@ -1168,7 +1234,75 @@ impl OpDef {
             access: Access::Elementwise,
             views: Vec::new(),
             out_dtype: Some(ElementKind::U8),
+            extra_out_bodies: Vec::new(),
         }
+    }
+
+    /// Build a **multi-output** elementwise op (increment 1): one kernel that
+    /// writes `bodies.len()` outputs from a shared body-DAG. `bodies[0]` is
+    /// output 0 ([`OpDef::body`]); `bodies[1..]` become [`OpDef::extra_out_bodies`].
+    /// Every body is evaluated at the same coordinate over the same `n_inputs`
+    /// inputs, and all outputs share the iteration shape (elementwise-map).
+    ///
+    /// This clears the elementwise BACKWARD surface: `mul_backward` computes
+    /// `da = dy·b` AND `db = dy·a` in one pass, and the shared subexpressions (the
+    /// `dy` load, an interior product) CSE into one hoisted `tmp` referenced by
+    /// both stores (via [`ExprDag::from_exprs`]) — the whole value proposition
+    /// over decomposing into N single-output kernels.
+    ///
+    /// v1 scope (validated at `plan::build_plan`, emitter-backstopped in `cuda`):
+    /// `Access::Elementwise` only; uniform dtype across all outputs (`out_dtype`
+    /// stays `None` — hetero multi-out is the follow-up); each body may read
+    /// `Input`/`Const`/`Param` but NOT `Reduced`/`Coord` (those are other access
+    /// spaces); outputs must not be broadcast/flipped and must not alias inputs
+    /// (in-place is deferred). `1 ≤ n_outputs` and `n_inputs + n_outputs ≤
+    /// MAX_OPERANDS`.
+    ///
+    /// # Panics
+    /// If `bodies` is empty (a multi-output op needs at least one output).
+    #[must_use]
+    pub fn elementwise_multi(
+        name: &str,
+        n_inputs: u8,
+        dtypes: &[ElementKind],
+        bodies: Vec<Expr>,
+    ) -> Self {
+        assert!(
+            !bodies.is_empty(),
+            "OpDef::elementwise_multi: needs at least one output body"
+        );
+        let mut it = bodies.into_iter();
+        let body = it.next().expect("non-empty checked above").0;
+        let extra_out_bodies: Vec<ScalarExpr> = it.map(|e| e.0).collect();
+        Self {
+            name: name.to_string(),
+            n_inputs,
+            body,
+            dtypes: dtypes.to_vec(),
+            access: Access::Elementwise,
+            views: Vec::new(),
+            out_dtype: None,
+            extra_out_bodies,
+        }
+    }
+
+    /// Number of outputs this op writes: `1 + extra_out_bodies.len()`. `1` for
+    /// every single-output op (every pre-increment-1 constructor).
+    #[must_use]
+    pub fn n_outputs(&self) -> u8 {
+        // `+ 1` for `body` (output 0). A catalog author who overflows `u8` with
+        // output bodies has bigger problems; `MAX_OPERANDS` (8) gates it long first.
+        1 + u8::try_from(self.extra_out_bodies.len()).expect("extra_out_bodies exceeds u8")
+    }
+
+    /// All output bodies in order: `body` (output 0) then `extra_out_bodies`. The
+    /// canonical iterator for the multi-output emitters (interned together into
+    /// one [`ExprDag`]) and the plan/backstop walks (gate every output body).
+    #[must_use]
+    pub fn output_bodies(&self) -> Vec<&ScalarExpr> {
+        std::iter::once(&self.body)
+            .chain(self.extra_out_bodies.iter())
+            .collect()
     }
 
     /// Build a **last-axis reduction** op: `body` is the per-element pre-reduction
@@ -1218,6 +1352,7 @@ impl OpDef {
             },
             views: Vec::new(),
             out_dtype: None,
+            extra_out_bodies: Vec::new(),
         }
     }
 
@@ -1253,6 +1388,7 @@ impl OpDef {
             },
             views: Vec::new(),
             out_dtype: None,
+            extra_out_bodies: Vec::new(),
         }
     }
 
@@ -1281,6 +1417,7 @@ impl OpDef {
             },
             views: Vec::new(),
             out_dtype: None,
+            extra_out_bodies: Vec::new(),
         }
     }
 
@@ -1308,6 +1445,7 @@ impl OpDef {
             },
             views: Vec::new(),
             out_dtype: None,
+            extra_out_bodies: Vec::new(),
         }
     }
 
@@ -1694,5 +1832,70 @@ mod dag_tests {
         let dag = ExprDag::from_expr(&e);
         // 2 inputs + 9 distinct Mul levels = 11 nodes (not 2^8-scale).
         assert_eq!(dag.len(), 11, "one node per level, shared — linear in depth");
+    }
+
+    #[test]
+    fn from_expr_has_one_root_equal_to_root() {
+        // Back-compat: the single-body constructor exposes exactly one root, and
+        // it equals `root()`.
+        let dag = ExprDag::from_expr(&mul(ipt(0), ipt(1)));
+        assert_eq!(dag.roots(), &[dag.root()]);
+        assert_eq!(dag.roots().len(), 1);
+    }
+
+    #[test]
+    fn from_exprs_shares_the_dy_load_across_bodies() {
+        // mul_backward: da = dy*b, db = dy*a. dy = Input(0) is loaded by BOTH
+        // bodies; interned across bodies it is ONE node with consumers == 2 (the
+        // cross-body CSE the emitter hoists to a single `tmp`). The two roots are
+        // DISTINCT Mul nodes (dy*b != dy*a).
+        let da = mul(ipt(0), ipt(2)); // dy*b
+        let db = mul(ipt(0), ipt(1)); // dy*a
+        let dag = ExprDag::from_exprs(&[&da, &db]);
+        // Input0(dy), Input1(a), Input2(b), Mul(dy,b), Mul(dy,a) = 5 nodes.
+        assert_eq!(dag.len(), 5, "dy interned once across both bodies");
+        let dy = only(&dag, |n| matches!(n, DagNode::Input(0)));
+        assert_eq!(dag.consumers(dy), 2, "dy feeds both output bodies");
+        assert_eq!(dag.roots().len(), 2, "two output roots");
+        assert_ne!(dag.roots()[0], dag.roots()[1], "da and db are distinct nodes");
+    }
+
+    #[test]
+    fn from_exprs_shares_an_interior_across_bodies() {
+        // div_backward shape: da = dy/b; db = -((dy/b)*a/b). The dy/b interior is
+        // the ROOT of body 0 AND an interior of body 1 — interned once. Its
+        // consumer count reflects the interior reference (from body 1's Mul); the
+        // emitter additionally treats a shared root as a use, so it hoists once.
+        let dyb = ScalarExpr::Div(Box::new(ipt(0)), Box::new(ipt(2))); // dy/b
+        let da = dyb.clone();
+        let db = ScalarExpr::Unary(
+            UnaryOp::Neg,
+            Box::new(ScalarExpr::Div(
+                Box::new(mul(dyb.clone(), ipt(1))),
+                Box::new(ipt(2)),
+            )),
+        );
+        let dag = ExprDag::from_exprs(&[&da, &db]);
+        // Body 0's root is the dy/b Div; it is referenced by body 1's interior
+        // (there are two Div nodes total — dy/b and the outer .../b — so we key
+        // off root[0] directly rather than the ambiguous "the Div node").
+        let dyb_node = dag.roots()[0];
+        assert!(matches!(dag.node(dyb_node), DagNode::Div(..)), "body 0 root is dy/b");
+        assert!(
+            dag.consumers(dyb_node) >= 1,
+            "the shared dy/b interior is referenced by body 1"
+        );
+    }
+
+    #[test]
+    fn from_exprs_single_body_matches_from_expr() {
+        // A one-element slice is identical to `from_expr` (single-output stays
+        // byte-identical — the emitter's no-regression guarantee).
+        let e = mul(ipt(0), ipt(1));
+        let a = ExprDag::from_expr(&e);
+        let b = ExprDag::from_exprs(&[&e]);
+        assert_eq!(a.len(), b.len());
+        assert_eq!(a.roots(), b.roots());
+        assert_eq!(a.to_expr(), b.to_expr());
     }
 }

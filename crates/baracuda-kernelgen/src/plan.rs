@@ -101,12 +101,36 @@ pub struct KernelPlan<'a> {
     /// and its token for traceability.
     pub key: &'a StructureKey,
     /// Output `= body`, evaluated per coordinate. For [`Schedule::RowReduce`] this
-    /// is the epilogue (`OpDef::row_reduce` sets `body = epilogue`).
+    /// is the epilogue (`OpDef::row_reduce` sets `body = epilogue`). For a
+    /// multi-output op this is output 0; the further outputs are in
+    /// [`Self::extra_out_bodies`].
     pub body: &'a ScalarExpr,
+    /// Number of outputs the kernel writes (`1` for every single-output op —
+    /// `OpDef::n_outputs`). `> 1` only for a validated multi-output
+    /// `Access::Elementwise` op (increment 1); the emitter then writes the last
+    /// `n_outputs` operands of the key from one shared body-DAG.
+    pub n_outputs: u8,
+    /// Additional output bodies (`OpDef::extra_out_bodies`) — **empty for every
+    /// single-output op**, so the single-output emitters are byte-identical. The
+    /// multi-output emitter interns `[body] ++ extra_out_bodies` into one
+    /// [`crate::ir::ExprDag`] for cross-body CSE.
+    pub extra_out_bodies: &'a [ScalarExpr],
     /// The op's access pattern — the [`Schedule::RowReduce`] emitter reads its
     /// `stages` (and epilogue) off here, since `Schedule` is `Copy` and can't carry
     /// the stage `Vec`.
     pub access: &'a Access,
+}
+
+impl KernelPlan<'_> {
+    /// All output bodies in order — `body` (output 0) then `extra_out_bodies`.
+    /// One element for a single-output plan; the multi-output emitter interns
+    /// these together for cross-body CSE, and the backstop walks gate every one.
+    #[must_use]
+    pub fn output_bodies(&self) -> Vec<&ScalarExpr> {
+        std::iter::once(self.body)
+            .chain(self.extra_out_bodies.iter())
+            .collect()
+    }
 }
 
 /// Choose the schedule for `op` at structure cell `key` and return a neutral
@@ -119,6 +143,7 @@ pub struct KernelPlan<'a> {
 #[must_use]
 pub fn build_plan<'a>(op: &'a OpDef, key: &'a StructureKey) -> KernelPlan<'a> {
     assert_valid_out_dtype(op);
+    assert_valid_multi_output(op, key);
     assert_no_half_nextafter(op, key.dtype);
     assert_int_op_admissibility(op, key.dtype);
     assert_coord_admissibility(op, key);
@@ -220,6 +245,8 @@ pub fn build_plan<'a>(op: &'a OpDef, key: &'a StructureKey) -> KernelPlan<'a> {
         schedule,
         key,
         body: &op.body,
+        n_outputs: op.n_outputs(),
+        extra_out_bodies: &op.extra_out_bodies,
         access: &op.access,
     }
 }
@@ -356,6 +383,142 @@ pub(crate) fn rr_role(o: OperandKey) -> RrRole {
 /// lower through accumulator-width helpers that never pass through it. This
 /// plan-level walk covers EVERY Access arm, so no lowering path — present or
 /// future backend — can bypass the honest miss.
+/// Increment-1 **multi-output** admissibility gate — runs at the top of
+/// [`build_plan`] (the house pattern), with an independent emitter backstop in
+/// [`crate::cuda::Cuda::lower`]. A single-output op (`extra_out_bodies` empty,
+/// every pre-increment-1 op) returns immediately, so nothing about the
+/// established path changes and emission stays byte-identical. For a multi-output
+/// op (built only by [`OpDef::elementwise_multi`]) the v1 rules, all honest
+/// AOT panics:
+///
+/// 1. **Access**: `Access::Elementwise` only. Multi-output is meaningful only for
+///    an elementwise map; the reduction-class arms reject `extra_out_bodies`
+///    (a fused reduction/contraction stores one accumulator, not N bodies).
+/// 2. **Uniform dtype**: `out_dtype == None`. All outputs share the key dtype;
+///    hetero multi-output (a u8 mask beside a float grad — dropout fw) is the
+///    follow-up.
+/// 3. **Operand budget**: `1 ≤ n_outputs` and `n_inputs + n_outputs ≤
+///    MAX_OPERANDS`, and the key must carry exactly `n_inputs + n_outputs`
+///    operands (inputs then outputs) — the caller's `OperandDesc` list.
+/// 4. **Body legality** (every output body): `Input(i) < n_inputs`; NO `Reduced`
+///    (there is no reduction here); NO `Coord` (Elementwise-map only in v1 — a
+///    multi-output coordinate kernel is deferred, same rejection the Coord gate
+///    would give); `Const` finite. `Param` f32-only is enforced by the emitter's
+///    param assert over all output bodies (same rule as the single-output path).
+///    (This gate rejecting `Coord` here is also what lets the downstream
+///    `assert_coord_admissibility` keep its `Access::Elementwise => {}` arm — a
+///    multi-output `Coord` never reaches it.)
+/// 5. **Output operands**: each of the last `n_outputs` operands must be
+///    **non-broadcast** (a stride-0 output would alias its own writes across
+///    iteration coordinates — a write race, and not the full output shape) and
+///    **not flipped**. This is the key-visible slice of "outputs must not alias
+///    and must match the output shape".
+///
+/// **Caller preconditions the key cannot see** (documented honestly, the same
+/// trust level as the RowReduce `n_out`/`k` and `Coord` extent preconditions):
+/// true buffer aliasing — an output buffer pointer equal to an input's (in-place)
+/// — and exact per-output extent agreement are abstracted away by the structure
+/// key (buffer identity and numeric extents are not keyed). The AOT op author (or
+/// a future seam caller, once a multi-output region envelope exists) must ensure
+/// distinct, correctly-shaped output buffers; v1 defers in-place entirely.
+fn assert_valid_multi_output(op: &OpDef, key: &StructureKey) {
+    if op.extra_out_bodies.is_empty() {
+        return; // single-output — the established path, unchanged.
+    }
+    let name = &op.name;
+    assert!(
+        matches!(op.access, Access::Elementwise),
+        "OpDef '{name}': multi-output is Access::Elementwise-only in v1 — a fused \
+         reduction/contraction stores a single accumulator, not N bodies; \
+         extra_out_bodies is rejected on a {}-class op",
+        access_tag(&op.access)
+    );
+    assert!(
+        op.out_dtype.is_none(),
+        "OpDef '{name}': multi-output requires a uniform output dtype (out_dtype \
+         None) in v1 — a hetero multi-output (u8 mask beside a float grad) is the \
+         follow-up"
+    );
+    let n_inputs = op.n_inputs as usize;
+    let n_outputs = op.n_outputs() as usize;
+    assert!(
+        n_inputs + n_outputs <= MAX_OPERANDS,
+        "OpDef '{name}': n_inputs ({n_inputs}) + n_outputs ({n_outputs}) exceeds \
+         MAX_OPERANDS ({MAX_OPERANDS})"
+    );
+    assert!(
+        key.n_operands as usize == n_inputs + n_outputs,
+        "OpDef '{name}': multi-output key must carry n_inputs+n_outputs operands \
+         (inputs then outputs) = {}, got {} — the caller's OperandDesc list is a \
+         shape mismatch",
+        n_inputs + n_outputs,
+        key.n_operands
+    );
+
+    // Body legality — walk every output body.
+    fn check_body(e: &ScalarExpr, n_inputs: u8, name: &str) {
+        match e {
+            ScalarExpr::Input(i) => assert!(
+                *i < n_inputs,
+                "OpDef '{name}': multi-output body Input({i}) >= n_inputs {n_inputs}"
+            ),
+            ScalarExpr::Const(v) => assert!(
+                v.is_finite(),
+                "OpDef '{name}': multi-output body Const must be finite, got {v}"
+            ),
+            ScalarExpr::Param(_) => {}
+            ScalarExpr::Reduced(s) => panic!(
+                "OpDef '{name}': multi-output body must not read Reduced({s}) — there \
+                 is no reduction in an Elementwise multi-output op"
+            ),
+            ScalarExpr::Coord(d) => panic!(
+                "OpDef '{name}': multi-output body must not read Coord({d}) — v1 is \
+                 elementwise-map only (a multi-output coordinate kernel is deferred)"
+            ),
+            ScalarExpr::Unary(_, x) => check_body(x, n_inputs, name),
+            ScalarExpr::Add(a, b)
+            | ScalarExpr::Sub(a, b)
+            | ScalarExpr::Mul(a, b)
+            | ScalarExpr::Div(a, b)
+            | ScalarExpr::Binary(_, a, b) => {
+                check_body(a, n_inputs, name);
+                check_body(b, n_inputs, name);
+            }
+        }
+    }
+    for e in op.output_bodies() {
+        check_body(e, op.n_inputs, name);
+    }
+
+    // Output operands: the last n_outputs entries. A writable output must not be
+    // broadcast (stride-0 → aliased writes) or flipped.
+    for j in 0..n_outputs {
+        let o = key.operands[n_inputs + j];
+        assert!(
+            o.bcast.is_empty(),
+            "OpDef '{name}': multi-output output {j} is broadcast (mask {:#04x}) — a \
+             stride-0 output aliases its own writes across iteration coordinates \
+             (a write race) and is not the full output shape",
+            o.bcast.0
+        );
+        assert!(
+            !o.flipped,
+            "OpDef '{name}': multi-output output {j} is flipped (negative stride) — \
+             a reversed output view is deferred"
+        );
+    }
+}
+
+/// Short tag for an [`Access`] variant, for the multi-output rejection message.
+fn access_tag(a: &Access) -> &'static str {
+    match a {
+        Access::Elementwise => "Elementwise",
+        Access::Reduction { .. } => "Reduction",
+        Access::RowReduce { .. } => "RowReduce",
+        Access::Contraction { .. } => "Contraction",
+    }
+}
+
 fn assert_no_half_nextafter(op: &OpDef, dtype: ElementKind) {
     use crate::ir::BinaryOp;
     if !matches!(dtype, ElementKind::F16 | ElementKind::Bf16) {
@@ -388,7 +551,13 @@ fn assert_no_half_nextafter(op: &OpDef, dtype: ElementKind) {
         // The reduction post-expr (0e) lowers through the accumulator-width
         // spellers too, so the honest-miss walk must cover it (body is already in).
         Access::Reduction { post, .. } => exprs.push(post),
-        Access::Elementwise => {}
+        // Review-caught gate asymmetry (increment 1): a multi-output op's EXTRA
+        // output bodies must be walked too — else a half `Nextafter` hidden in an
+        // extra body bypasses this honest-miss gate. Non-elementwise multi-output
+        // is already rejected by `assert_valid_multi_output` (runs first), so this
+        // arm is the ONLY place `extra_out_bodies` is legal; empty for every
+        // single-output op (byte-identical).
+        Access::Elementwise => exprs.extend(op.extra_out_bodies.iter()),
     }
     for e in exprs {
         assert!(
@@ -567,7 +736,15 @@ fn assert_int_op_admissibility(op: &OpDef, dtype: ElementKind) {
         // The reduction post-expr (0e) lowers at the accumulator dtype — a
         // Const/Param/Div/unary there hits the same int-dtype hazards, so gate it.
         Access::Reduction { post, .. } => exprs.push(post),
-        Access::Elementwise => {}
+        // Review-caught gate asymmetry (increment 1): walk the EXTRA output bodies
+        // too. Without this, an int-only op with a COMPOSED operand hides in a
+        // multi-output extra body at U8/S8 and bypasses the 8-bit leaf-operand pin
+        // (rule 3) — cross-body CSE then hoists it into a truncated 8-bit tmp, the
+        // exact 0c value-divergence ((200+100)>>1 = 22 hoisted vs 150 inlined).
+        // Non-elementwise multi-output is already rejected by
+        // `assert_valid_multi_output` (runs first), so this is the only place
+        // `extra_out_bodies` is legal; empty for every single-output op.
+        Access::Elementwise => exprs.extend(op.extra_out_bodies.iter()),
     }
     for e in exprs {
         walk(e, &op.name, dtype, int_dt, elementwise);
@@ -956,5 +1133,182 @@ fn vec_width_elems(v: VecWidth) -> u32 {
         VecWidth::V4 => 4,
         VecWidth::V2 => 2,
         VecWidth::Scalar => 1,
+    }
+}
+
+#[cfg(test)]
+mod multi_output_validate {
+    //! Increment-1 multi-output gate-rejection tests. Per the house rule these
+    //! call `build_plan` DIRECTLY (an emitter panic would mask a gate mutation).
+    use super::build_plan;
+    use crate::ir::{input, konst, Access, OpDef, ReduceOp, ScalarExpr};
+    use baracuda_kernels_types::{
+        structure_key, ArchSku, ElementKind, OpCategory, OperandDesc, StructureKey,
+    };
+
+    // n_operands contiguous 1D operands of `dtype`.
+    fn key_dt(dtype: ElementKind, n_operands: usize) -> StructureKey {
+        let a = OperandDesc::new(1, &[1024], &[1], dtype, 256);
+        let ops: Vec<_> = std::iter::repeat_n(a, n_operands).collect();
+        structure_key(OpCategory::BinaryElementwise, &ops, ArchSku::Sm89)
+    }
+    // F32 shorthand for the layout-shape rejection tests.
+    fn key(n_operands: usize) -> StructureKey {
+        key_dt(ElementKind::F32, n_operands)
+    }
+
+    fn mul_backward() -> OpDef {
+        OpDef::elementwise_multi(
+            "mul_backward",
+            3,
+            &[ElementKind::F32],
+            vec![input(0) * input(2), input(0) * input(1)],
+        )
+    }
+
+    #[test]
+    fn valid_multi_output_builds() {
+        // The happy path: 3 inputs + 2 outputs = 5 operands.
+        let _ = build_plan(&mul_backward(), &key(5));
+    }
+
+    #[test]
+    #[should_panic(expected = "broadcast")]
+    fn output_broadcast_aliases_its_writes_rejected() {
+        // A broadcast (stride-0) OUTPUT aliases its own writes across iteration
+        // coordinates (a write race) and is not the full output shape.
+        let a = OperandDesc::new(2, &[8, 4], &[4, 1], ElementKind::F32, 256);
+        // Output operand 4 (the last): broadcast inner axis (stride 0 → bcast).
+        let bcast_out = OperandDesc::new(2, &[8, 4], &[1, 0], ElementKind::F32, 256);
+        let ops = vec![a, a, a, a, bcast_out];
+        let k = structure_key(OpCategory::BinaryElementwise, &ops, ArchSku::Sm89);
+        let _ = build_plan(&mul_backward(), &k);
+    }
+
+    #[test]
+    #[should_panic(expected = "shape mismatch")]
+    fn operand_count_mismatch_rejected() {
+        // The key must carry exactly n_inputs+n_outputs = 5 operands; a 4-operand
+        // key is a declared shape/operand mismatch.
+        let _ = build_plan(&mul_backward(), &key(4));
+    }
+
+    #[test]
+    #[should_panic(expected = "exceeds MAX_OPERANDS")]
+    fn n_outputs_overflow_max_operands_rejected() {
+        // 6 inputs + 3 outputs = 9 > MAX_OPERANDS(8).
+        let op = OpDef::elementwise_multi(
+            "over",
+            6,
+            &[ElementKind::F32],
+            vec![input(0), input(1), input(2)],
+        );
+        let _ = build_plan(&op, &key(8));
+    }
+
+    #[test]
+    #[should_panic(expected = "Reduced")]
+    fn reduced_in_a_body_rejected() {
+        // A multi-output body must not read Reduced (no reduction in an
+        // elementwise map). Built directly (no constructor produces this).
+        let mut op = OpDef::elementwise_multi(
+            "bad",
+            2,
+            &[ElementKind::F32],
+            vec![input(0) * input(1), input(0)],
+        );
+        op.extra_out_bodies[0] = ScalarExpr::Reduced(0);
+        let _ = build_plan(&op, &key(4));
+    }
+
+    #[test]
+    #[should_panic(expected = "Coord")]
+    fn coord_in_a_body_rejected() {
+        // A multi-output body must not read Coord (elementwise-map only in v1).
+        let mut op = OpDef::elementwise_multi(
+            "bad",
+            2,
+            &[ElementKind::F32],
+            vec![input(0) * input(1), input(0)],
+        );
+        op.extra_out_bodies[0] = ScalarExpr::Coord(0);
+        let _ = build_plan(&op, &key(4));
+    }
+
+    #[test]
+    #[should_panic(expected = "Elementwise-only")]
+    fn multi_output_on_a_reduction_rejected() {
+        // extra_out_bodies on a non-Elementwise op — a fused reduction stores one
+        // accumulator, not N bodies. Built directly by pushing onto the field.
+        let mut op = OpDef::reduction("s", 1, &[ElementKind::F32], input(0), ReduceOp::Sum);
+        op.extra_out_bodies.push(ScalarExpr::Input(0));
+        assert!(matches!(op.access, Access::Reduction { .. }));
+        // A reduction key = [input, output]; the Elementwise check fires first.
+        let _ = build_plan(&op, &key(2));
+    }
+
+    #[test]
+    #[should_panic(expected = "uniform output dtype")]
+    fn hetero_multi_output_rejected() {
+        // out_dtype = Some on a multi-output op — hetero multi-out is deferred.
+        // Body 0's root is a valid Cmp so the pre-existing assert_valid_out_dtype
+        // predicate gate PASSES; the rejection is the multi-output uniform-dtype
+        // rule specifically.
+        use crate::ir::BinaryOp;
+        let mut op = OpDef::elementwise_multi(
+            "bad",
+            2,
+            &[ElementKind::F32],
+            vec![input(0).binary(BinaryOp::CmpLt, input(1)), input(0)],
+        );
+        op.out_dtype = Some(ElementKind::U8);
+        let _ = build_plan(&op, &key(4));
+    }
+
+    #[test]
+    #[should_panic(expected = "finite")]
+    fn non_finite_const_in_a_body_rejected() {
+        let op = OpDef::elementwise_multi(
+            "bad",
+            2,
+            &[ElementKind::F32],
+            vec![input(0) * input(1), input(0) + konst(f64::INFINITY)],
+        );
+        let _ = build_plan(&op, &key(4));
+    }
+
+    // ---- Review-caught gate asymmetry: EXTRA output bodies must be walked by the
+    // half-Nextafter and int-op-admissibility gates too (they seeded only op.body).
+
+    #[test]
+    #[should_panic(expected = "requires LEAF")]
+    fn composed_int_op_operand_in_an_extra_body_rejected_at_the_plan_gate() {
+        use crate::ir::BinaryOp;
+        let op = OpDef::elementwise_multi(
+            "bad",
+            3,
+            &[ElementKind::U8],
+            vec![
+                input(0) + input(1),
+                (input(0) + input(1)).binary(BinaryOp::Shr, input(2)),
+            ],
+        );
+        let _ = build_plan(&op, &key_dt(ElementKind::U8, 5));
+    }
+
+    #[test]
+    #[should_panic(expected = "must miss honestly")]
+    fn half_nextafter_in_an_extra_body_rejected_at_the_plan_gate() {
+        use crate::ir::BinaryOp;
+        let op = OpDef::elementwise_multi(
+            "bad",
+            1,
+            &[ElementKind::F16],
+            vec![
+                input(0) * input(0),
+                input(0).binary(BinaryOp::Nextafter, input(0)),
+            ],
+        );
+        let _ = build_plan(&op, &key_dt(ElementKind::F16, 3));
     }
 }

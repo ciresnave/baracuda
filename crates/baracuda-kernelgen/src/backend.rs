@@ -174,8 +174,82 @@ pub fn lower_expr(e: &ScalarExpr, lo: &Lowering<'_>) -> String {
 pub fn lower_dag(dag: &ExprDag, ctype: &str, lo: &Lowering<'_>) -> (Vec<String>, String) {
     let mut refs: Vec<Option<String>> = vec![None; dag.len()];
     let mut prelude: Vec<String> = Vec::new();
-    let root_ref = lower_node(dag, dag.root(), ctype, lo, &mut refs, &mut prelude, false);
+    let policy = HoistPolicy {
+        hoist_all: false,
+        hoist_shared_leaves: false,
+        extra_uses: &[],
+    };
+    let root_ref = lower_node(dag, dag.root(), ctype, lo, &mut refs, &mut prelude, &policy);
     (prelude, root_ref)
+}
+
+/// Hoisting policy for [`lower_node`] — how aggressively a value is bound to a
+/// named `tmp` vs inlined at its use site.
+struct HoistPolicy<'u> {
+    /// Hoist EVERY non-leaf (the packed pair-split path — see [`lower_dag_all`]).
+    hoist_all: bool,
+    /// Also hoist a **shared `Input` leaf** (a memory load referenced by more
+    /// than one use) — the multi-output path, so the shared `dy` load appears
+    /// once. Single-output paths keep leaves inlined (a leaf ref is free).
+    hoist_shared_leaves: bool,
+    /// Per-node "extra use" count beyond the intra-DAG `consumers` edges — the
+    /// multi-output root multiplicity (a node that is the output root of `k`
+    /// bodies has `k` extra uses). Empty ⇒ all zero (single-output). Combined
+    /// with `consumers` this is the node's total use count, which decides
+    /// sharing.
+    extra_uses: &'u [u32],
+}
+
+impl HoistPolicy<'_> {
+    /// Total uses of `id` = intra-DAG consumer edges + multi-output root uses.
+    fn total_uses(&self, dag: &ExprDag, id: NodeId) -> u32 {
+        dag.consumers(id) + self.extra_uses.get(id as usize).copied().unwrap_or(0)
+    }
+}
+
+/// Lower a **multi-root** DAG (one root per output body, from
+/// [`ExprDag::from_exprs`]) to `(prelude, root_refs)` — the cross-body-CSE core
+/// of the multi-output emitter. All roots are lowered against ONE shared `refs`
+/// memo and ONE shared `prelude`, so a subexpression shared between outputs is
+/// emitted once and referenced by each store. Beyond the intra-body sharing
+/// [`lower_dag`] already hoists, this additionally hoists:
+///
+/// - a value used by more than one output body (a shared interior, or a node
+///   that is one body's root and another body's interior), via the
+///   root-multiplicity `extra_uses`;
+/// - a **shared `Input` leaf** — the shared `dy` load — so it appears in the
+///   source exactly once (the "strictly fewer global loads" win).
+///
+/// `hoist_all` mirrors [`lower_dag_all`] for the packed pair-split path (every
+/// non-leaf a `tmp`). `root_refs[j]` names output body `j`'s value; a node that
+/// is the sole use of its value inlines exactly as the single-output path does.
+#[must_use]
+pub fn lower_dag_multi(
+    dag: &ExprDag,
+    ctype: &str,
+    lo: &Lowering<'_>,
+    hoist_all: bool,
+) -> (Vec<String>, Vec<String>) {
+    // Root multiplicity: how many output bodies name each node as their root.
+    // A node that is a body root AND referenced by another node (or the root of
+    // two bodies) has total_uses > 1, so it hoists once rather than re-emitting.
+    let mut extra_uses = vec![0u32; dag.len()];
+    for &r in dag.roots() {
+        extra_uses[r as usize] += 1;
+    }
+    let policy = HoistPolicy {
+        hoist_all,
+        hoist_shared_leaves: true,
+        extra_uses: &extra_uses,
+    };
+    let mut refs: Vec<Option<String>> = vec![None; dag.len()];
+    let mut prelude: Vec<String> = Vec::new();
+    let root_refs = dag
+        .roots()
+        .iter()
+        .map(|&r| lower_node(dag, r, ctype, lo, &mut refs, &mut prelude, &policy))
+        .collect();
+    (prelude, root_refs)
 }
 
 /// [`lower_dag`], but hoisting **every** non-leaf node to a named `tmp` (not
@@ -189,7 +263,12 @@ pub fn lower_dag(dag: &ExprDag, ctype: &str, lo: &Lowering<'_>) -> (Vec<String>,
 pub fn lower_dag_all(dag: &ExprDag, ctype: &str, lo: &Lowering<'_>) -> (Vec<String>, String) {
     let mut refs: Vec<Option<String>> = vec![None; dag.len()];
     let mut prelude: Vec<String> = Vec::new();
-    let root_ref = lower_node(dag, dag.root(), ctype, lo, &mut refs, &mut prelude, true);
+    let policy = HoistPolicy {
+        hoist_all: true,
+        hoist_shared_leaves: false,
+        extra_uses: &[],
+    };
+    let root_ref = lower_node(dag, dag.root(), ctype, lo, &mut refs, &mut prelude, &policy);
     (prelude, root_ref)
 }
 
@@ -203,7 +282,7 @@ fn lower_node(
     lo: &Lowering<'_>,
     refs: &mut Vec<Option<String>>,
     prelude: &mut Vec<String>,
-    hoist_all: bool,
+    policy: &HoistPolicy<'_>,
 ) -> String {
     if let Some(r) = &refs[id as usize] {
         return r.clone();
@@ -218,39 +297,51 @@ fn lower_node(
         DagNode::Param(i) => format!("p{i}"),
         DagNode::Const(v) => const_lit(v),
         DagNode::Unary(op, x) => {
-            (lo.unary)(op, lower_node(dag, x, ctype, lo, refs, prelude, hoist_all))
+            (lo.unary)(op, lower_node(dag, x, ctype, lo, refs, prelude, policy))
         }
         DagNode::Binary(op, a, b) => {
-            let a = lower_node(dag, a, ctype, lo, refs, prelude, hoist_all);
-            let b = lower_node(dag, b, ctype, lo, refs, prelude, hoist_all);
+            let a = lower_node(dag, a, ctype, lo, refs, prelude, policy);
+            let b = lower_node(dag, b, ctype, lo, refs, prelude, policy);
             (lo.binary)(op, a, b)
         }
         DagNode::Add(a, b) => {
-            let a = lower_node(dag, a, ctype, lo, refs, prelude, hoist_all);
-            let b = lower_node(dag, b, ctype, lo, refs, prelude, hoist_all);
+            let a = lower_node(dag, a, ctype, lo, refs, prelude, policy);
+            let b = lower_node(dag, b, ctype, lo, refs, prelude, policy);
             format!("({a} + {b})")
         }
         DagNode::Sub(a, b) => {
-            let a = lower_node(dag, a, ctype, lo, refs, prelude, hoist_all);
-            let b = lower_node(dag, b, ctype, lo, refs, prelude, hoist_all);
+            let a = lower_node(dag, a, ctype, lo, refs, prelude, policy);
+            let b = lower_node(dag, b, ctype, lo, refs, prelude, policy);
             format!("({a} - {b})")
         }
         DagNode::Mul(a, b) => {
-            let a = lower_node(dag, a, ctype, lo, refs, prelude, hoist_all);
-            let b = lower_node(dag, b, ctype, lo, refs, prelude, hoist_all);
+            let a = lower_node(dag, a, ctype, lo, refs, prelude, policy);
+            let b = lower_node(dag, b, ctype, lo, refs, prelude, policy);
             format!("({a} * {b})")
         }
         DagNode::Div(a, b) => {
-            let a = lower_node(dag, a, ctype, lo, refs, prelude, hoist_all);
-            let b = lower_node(dag, b, ctype, lo, refs, prelude, hoist_all);
+            let a = lower_node(dag, a, ctype, lo, refs, prelude, policy);
+            let b = lower_node(dag, b, ctype, lo, refs, prelude, policy);
             format!("({a} / {b})")
         }
     };
-    // Hoist a shared interior (edge count > 1, non-leaf) to a named tmp so it is
-    // computed once; inline everything else (byte-identical to `lower_expr`). The
-    // root has consumers == 0 (nothing references it), so it is never hoisted —
-    // unless `hoist_all`, which hoists every non-leaf including the root.
-    let r = if !node.is_leaf() && (hoist_all || dag.consumers(id) > 1) {
+    // Hoisting decision:
+    // - a non-leaf hoists when `hoist_all` (packed pair-split), or when it is
+    //   shared — total uses > 1 (intra-body consumer edges + multi-output root
+    //   multiplicity). A single-use root has total_uses <= 1, so it inlines
+    //   into its store, byte-identical to `lower_expr`.
+    // - a leaf normally inlines (a leaf ref is free); under `hoist_shared_leaves`
+    //   (multi-output) a shared `Input` LEAF — a memory load referenced by more
+    //   than one output — hoists so the load appears once. Const/Param/Coord/
+    //   Reduced leaves stay inlined (no load to dedup; multi-output bodies carry
+    //   no Coord/Reduced anyway).
+    let shared = policy.total_uses(dag, id) > 1;
+    let hoist = if node.is_leaf() {
+        policy.hoist_shared_leaves && matches!(node, DagNode::Input(_)) && shared
+    } else {
+        policy.hoist_all || shared
+    };
+    let r = if hoist {
         let name = format!("tmp{}", prelude.len());
         prelude.push(format!("{ctype} {name} = {rhs};"));
         name

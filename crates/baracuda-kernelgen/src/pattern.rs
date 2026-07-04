@@ -59,6 +59,17 @@ pub enum PatternNode {
 pub enum PatternError {
     /// The op's access pattern isn't elementwise.
     NotElementwise,
+    /// The op writes multiple outputs (increment 1). A [`PatternNode`] is
+    /// single-ROOTED (a single-output subgraph, per fuel-kernel-seam-types), so a
+    /// forest of N distinct output roots is not an expressible v1 pattern —
+    /// deriving one from `op.body` (output 0) alone would silently ignore the
+    /// other outputs. No pattern, and therefore no contract (the honest miss);
+    /// the kernel still generates and lowers normally. See `contract()`'s
+    /// multi-output note for the full Fuel-source rationale.
+    MultiOutput {
+        /// The op's output count (`> 1`).
+        n_outputs: u8,
+    },
     /// The body contains a scalar constant; scalar-param pattern emission
     /// (`AddScalar`/`MulScalar`/…) is a follow-up (needs the op-attribute bridge).
     ScalarParamUnsupported,
@@ -105,6 +116,14 @@ pub enum PatternError {
 pub fn derive_pattern(op: &OpDef) -> Result<PatternNode, PatternError> {
     if !matches!(op.access, Access::Elementwise) {
         return Err(PatternError::NotElementwise);
+    }
+    // A multi-output op is a forest of N output roots; a single-rooted
+    // PatternNode cannot express it, and walking only `op.body` would derive a
+    // pattern that silently drops the other outputs. Miss honestly.
+    if op.n_outputs() > 1 {
+        return Err(PatternError::MultiOutput {
+            n_outputs: op.n_outputs(),
+        });
     }
     // Canonicalize commutative operands first so two authorings of one body
     // produce byte-identical paths/extracts/YAML (internal determinism); per
