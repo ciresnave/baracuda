@@ -693,8 +693,8 @@ fn node_children(n: &DagNode) -> Vec<NodeId> {
 }
 
 /// The associative combine of an [`Access::Reduction`]. The identity is implied
-/// (`Sum`/`Mean` → 0; `Max`/`Min` peel the first element, so no ±∞ literal — that
-/// keeps the emitted source header-light under nvrtc).
+/// (`Sum`/`Mean` → 0; `Prod` → 1; `Max`/`Min` peel the first element, so no ±∞
+/// literal — that keeps the emitted source header-light under nvrtc).
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub enum ReduceOp {
     /// Sum over the reduced axis (`SumDim`).
@@ -705,6 +705,18 @@ pub enum ReduceOp {
     Max,
     /// Minimum — NaN-propagating (`torch.amin`).
     Min,
+    /// Product over the reduced axis (increment 0e — `torch.prod`). Identity 1
+    /// (`acc = 1; acc *= elem`), pass-through finalize (no Mean-style divisor).
+    /// Semantics match the bespoke `reduce_prod_fp.cu` / `reduce_prod_int.cu`:
+    /// f16/bf16 multiply through an f32 accumulator; f32/f16/bf16 fold in
+    /// `float`, f64/f32-strict in `double`; `I32`/`I64` accumulate in the
+    /// widened `long long` (the bespoke i64/u64 accumulator) and the store
+    /// truncates back to the input width with wrap-on-overflow. Fuel has no
+    /// `ProdReduce` `OpKind` yet (`fuel-cuda-backend/src/baracuda/reduce.rs`:
+    /// "Prod … ship in baracuda but don't have matching Fuel `OpKind`s yet"),
+    /// so a Prod reduction — like every reduction — emits no contract (honest
+    /// miss, and reductions are not in the elementwise pattern vocabulary).
+    Prod,
 }
 
 /// Ergonomic builder handle wrapping a [`ScalarExpr`]. Overloads arithmetic so
@@ -889,6 +901,24 @@ pub enum Access {
         axes: AxisMask,
         /// Keep reduced axes as size-1 (broadcast-back) vs. collapse them.
         keepdim: bool,
+        /// **Fused post-expression / epilogue** (increment 0e), applied to the
+        /// finalized fold result before the store. Mirrors the `Contraction`
+        /// epilogue convention: it references the reduced result as
+        /// [`ScalarExpr::Reduced`]`(0)` and MAY reference `Const`/`Param`, but
+        /// NOT `Input` (the reduced axis is gone — an `Input` at the output
+        /// coordinate is a different, ambiguous thing; rejected at
+        /// `plan::assert_valid_reduction_post`) nor `Coord` (reduction-class,
+        /// Elementwise-only). The default is the identity `Reduced(0)`
+        /// (`OpDef::reduction`/`reduction_axes` set this), so every existing
+        /// reduction emits byte-identically. **Ordering vs. Mean (pinned):** the
+        /// post sees the POST-Mean value — `Mean` divides first, then the post
+        /// applies to the mean (the natural "finalize" semantics). Unlocks
+        /// `norm2 = Sqrt(Sum(Sqr(x)))`, logsumexp-finalize, dot-with-scale, and
+        /// the boolean/count hetero-out reductions (via a `Cmp*` post + a `U8`
+        /// `out_dtype`). The post lowers through the SAME accumulator-width
+        /// scalar-expr emitter as the fold body, so all 0a–0d vocabulary
+        /// composes in it.
+        post: ScalarExpr,
     },
     /// Fused **reduce → broadcast → elementwise** over the contiguous last axis:
     /// the `stages` fold per-row reduced scalars (`Reduced(0..n)`), then `epilogue`
@@ -1081,16 +1111,26 @@ pub struct OpDef {
     /// non-empty, length **must** equal `n_inputs`. Set via [`OpDef::with_views`].
     pub views: Vec<View>,
     /// Output element dtype when it differs from the key (input) dtype. `None`
-    /// (every constructor except [`OpDef::elementwise_pred`]) ⇒ output dtype ==
-    /// key dtype — the uniform-dtype behavior every pre-0b op has, unchanged.
-    /// v1 admits exactly `Some(ElementKind::U8)` and only for an
-    /// [`Access::Elementwise`] body whose ROOT is a `Cmp*` predicate (validated
-    /// AOT by `plan::assert_valid_out_dtype`): the store converts the exact
-    /// 0.0/1.0 predicate to a `u8` 1/0 mask — the FKC "comparison → U8 mask"
-    /// convention. Keying is untouched: `StructureKey.dtype` stays operand-0
-    /// (input) dtype per the schema ("v1 assumes a uniform operand dtype;
-    /// mixed-dtype folds in a follow-up"); the caller's output `OperandDesc`
-    /// carries U8, which only shapes that operand's own layout facts.
+    /// (every uniform-dtype constructor) ⇒ output dtype == key dtype — the
+    /// behavior every pre-0b op has, unchanged. The legal `Some(_)` set is
+    /// validated AOT by `plan::assert_valid_out_dtype`:
+    ///
+    /// - **`Some(U8)`** — a `u8` 0/1 mask. On an [`Access::Elementwise`] body
+    ///   whose ROOT is a `Cmp*` predicate (the `elementwise_pred` case, the FKC
+    ///   "comparison → U8 mask" convention), or on an [`Access::Reduction`]
+    ///   whose `post` root is a `Cmp*` (a boolean `any`/`all` reduce). The
+    ///   store converts the exact 0.0/1.0 to `u8`.
+    /// - **`Some(I64)`** — a widened integer output (increment 0e), only on an
+    ///   [`Access::Reduction`] with `Sum` + an identity `Reduced(0)` post
+    ///   (a `count`/sum-widening reduce). Exact for an integer accumulator;
+    ///   exact for a float accumulator only while the count ≤ 2²⁴ — a caller
+    ///   precondition (the key abstracts extents away), at the `Coord` trust
+    ///   level.
+    ///
+    /// Keying is untouched: `StructureKey.dtype` stays operand-0 (input) dtype
+    /// per the schema ("v1 assumes a uniform operand dtype; mixed-dtype folds
+    /// in a follow-up"); the caller's output `OperandDesc` carries the hetero
+    /// dtype, which only shapes that operand's own layout facts.
     pub out_dtype: Option<ElementKind>,
 }
 
@@ -1152,7 +1192,9 @@ impl OpDef {
     /// `axes == AxisMask::EMPTY` is the last-axis legacy default and reproduces
     /// [`OpDef::reduction`] exactly. The emitter's generalized outer/middle/multi
     /// axis + keepdim handling lands in item 03 step 3; until then a non-empty
-    /// mask is *representable* here but only lowered by that follow-up.
+    /// mask is *representable* here but only lowered by that follow-up. The
+    /// post-expression is the identity `Reduced(0)` (see [`OpDef::reduction_post`]
+    /// for the fused-epilogue form), so emission is byte-identical to pre-0e.
     #[must_use]
     pub fn reduction_axes(
         name: &str,
@@ -1168,7 +1210,47 @@ impl OpDef {
             n_inputs,
             body: body.0,
             dtypes: dtypes.to_vec(),
-            access: Access::Reduction { op, axes, keepdim },
+            access: Access::Reduction {
+                op,
+                axes,
+                keepdim,
+                post: ScalarExpr::Reduced(0),
+            },
+            views: Vec::new(),
+            out_dtype: None,
+        }
+    }
+
+    /// Build a **last-axis reduction with a fused post-expression** (increment
+    /// 0e). `body` is the per-element pre-reduction expression (as
+    /// [`OpDef::reduction`]); `op` is the combine; `post` is the epilogue applied
+    /// to the finalized fold result, which it references as
+    /// [`reduced`]`(0)` — e.g. `norm2 = Sqrt(Sum(Sqr(x)))` is
+    /// `reduction_post("norm2", 1, dt, input(0).unary(Sqr), Sum, reduced(0).sqrt())`.
+    /// `post` MAY read `Const`/`Param` but NOT `Input` (validated at
+    /// `plan::assert_valid_reduction_post`). The post sees the POST-Mean value.
+    /// This is the last-axis (`AxisMask::EMPTY`, no keepdim) form; a fused post
+    /// over an explicit axis set is a follow-up (construct the `Access` directly).
+    #[must_use]
+    pub fn reduction_post(
+        name: &str,
+        n_inputs: u8,
+        dtypes: &[ElementKind],
+        body: Expr,
+        op: ReduceOp,
+        post: Expr,
+    ) -> Self {
+        Self {
+            name: name.to_string(),
+            n_inputs,
+            body: body.0,
+            dtypes: dtypes.to_vec(),
+            access: Access::Reduction {
+                op,
+                axes: AxisMask::EMPTY,
+                keepdim: false,
+                post: post.0,
+            },
             views: Vec::new(),
             out_dtype: None,
         }
@@ -1416,10 +1498,12 @@ mod reduction_axes_tests {
         // OpDef::reduction stays the legacy last-axis default: empty mask, no
         // keepdim — byte-identical to before item 03.
         match OpDef::reduction("sum", 1, &[ElementKind::F32], input(0), ReduceOp::Sum).access {
-            Access::Reduction { op, axes, keepdim } => {
+            Access::Reduction { op, axes, keepdim, post } => {
                 assert_eq!(op, ReduceOp::Sum);
                 assert!(axes.is_empty());
                 assert!(!keepdim);
+                // Default post is the identity Reduced(0) — byte-identical emission.
+                assert_eq!(post, ScalarExpr::Reduced(0));
             }
             other => panic!("expected Access::Reduction, got {other:?}"),
         }
@@ -1439,12 +1523,48 @@ mod reduction_axes_tests {
         )
         .access
         {
-            Access::Reduction { op, axes, keepdim } => {
+            Access::Reduction { op, axes, keepdim, post } => {
                 assert_eq!(op, ReduceOp::Mean);
                 assert!(axes.is_set(0));
                 assert!(!axes.is_set(1));
                 assert!(keepdim);
+                assert_eq!(post, ScalarExpr::Reduced(0));
             }
+            other => panic!("expected Access::Reduction, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn reduction_post_carries_the_epilogue_and_defaults_last_axis() {
+        // reduction_post: last-axis (empty mask, no keepdim), Prod combiner, and a
+        // real Sqrt post over Reduced(0) — the norm2 shape.
+        match OpDef::reduction_post(
+            "norm2",
+            1,
+            &[ElementKind::F32],
+            input(0).unary(UnaryOp::Sqr),
+            ReduceOp::Sum,
+            reduced(0).sqrt(),
+        )
+        .access
+        {
+            Access::Reduction { op, axes, keepdim, post } => {
+                assert_eq!(op, ReduceOp::Sum);
+                assert!(axes.is_empty());
+                assert!(!keepdim);
+                assert_eq!(
+                    post,
+                    ScalarExpr::Unary(UnaryOp::Sqrt, Box::new(ScalarExpr::Reduced(0)))
+                );
+            }
+            other => panic!("expected Access::Reduction, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn prod_is_a_distinct_combiner() {
+        match OpDef::reduction("p", 1, &[ElementKind::F32], input(0), ReduceOp::Prod).access {
+            Access::Reduction { op, .. } => assert_eq!(op, ReduceOp::Prod),
             other => panic!("expected Access::Reduction, got {other:?}"),
         }
     }

@@ -122,11 +122,13 @@ pub fn build_plan<'a>(op: &'a OpDef, key: &'a StructureKey) -> KernelPlan<'a> {
     assert_no_half_nextafter(op, key.dtype);
     assert_int_op_admissibility(op, key.dtype);
     assert_coord_admissibility(op, key);
+    assert_valid_reduction_post(op);
     let schedule = match op.access {
         Access::Reduction {
             op: rop,
             axes,
             keepdim,
+            post: _,
         } => {
             // `class`/`keepdim` are consumed by the emitter in step 3; today all
             // classes lower to the same sequential fold, so the legacy last-axis
@@ -383,7 +385,10 @@ fn assert_no_half_nextafter(op: &OpDef, dtype: ElementKind) {
             exprs.push(epilogue);
         }
         Access::Contraction { epilogue, .. } => exprs.push(epilogue),
-        Access::Elementwise | Access::Reduction { .. } => {}
+        // The reduction post-expr (0e) lowers through the accumulator-width
+        // spellers too, so the honest-miss walk must cover it (body is already in).
+        Access::Reduction { post, .. } => exprs.push(post),
+        Access::Elementwise => {}
     }
     for e in exprs {
         assert!(
@@ -559,7 +564,10 @@ fn assert_int_op_admissibility(op: &OpDef, dtype: ElementKind) {
             exprs.push(epilogue);
         }
         Access::Contraction { epilogue, .. } => exprs.push(epilogue),
-        Access::Elementwise | Access::Reduction { .. } => {}
+        // The reduction post-expr (0e) lowers at the accumulator dtype — a
+        // Const/Param/Div/unary there hits the same int-dtype hazards, so gate it.
+        Access::Reduction { post, .. } => exprs.push(post),
+        Access::Elementwise => {}
     }
     for e in exprs {
         walk(e, &op.name, dtype, int_dt, elementwise);
@@ -659,7 +667,10 @@ fn assert_coord_admissibility(op: &OpDef, key: &StructureKey) {
             exprs.push(epilogue);
         }
         Access::Contraction { epilogue, .. } => exprs.push(epilogue),
-        Access::Elementwise | Access::Reduction { .. } => {}
+        // A Coord in a reduction post-expr is doubly rejected (here, non-
+        // elementwise → the Coord arm fires; and by assert_valid_reduction_post).
+        Access::Reduction { post, .. } => exprs.push(post),
+        Access::Elementwise => {}
     }
     for e in exprs {
         walk(e, &op.name, key.dtype, key.rank, elementwise);
@@ -671,45 +682,135 @@ fn assert_coord_admissibility(op: &OpDef, key: &StructureKey) {
 /// Access arm and every lowering path is covered; a panic here is an
 /// author-error backstop, and the JIT never constructs a `Some` out_dtype).
 ///
-/// The v1 rule: `Some(U8)` is legal **only** for an [`Access::Elementwise`] op
-/// whose body ROOT is a `Cmp*` predicate — the one shape whose store conversion
-/// is exact (the predicate is exactly 0.0/1.0, and `(unsigned char)` of that is
-/// exactly 1/0). Everything else panics with an honest-miss message:
-/// - a non-cmp body with a u8 output would truncate real float values silently;
-/// - a cmp under `Reduction`/`RowReduce`/`Contraction` stores the *accumulator*,
-///   not a predicate (a predicate-reduce — any/all/count — is the roadmap's
-///   "hetero output dtype" reduction follow-up, not this increment);
-/// - `Some(non-U8)` is unimplemented (no store conversion exists for it).
+/// Two admitted hetero-output shapes, both with an EXACT store conversion:
+///
+/// 1. **[`Access::Elementwise`] predicate → `Some(U8)`** (increment 0b): the
+///    body ROOT must be a `Cmp*` — the value is exactly 0.0/1.0 and
+///    `(unsigned char)` of that is exactly 1/0 (`OpDef::elementwise_pred`).
+///
+/// 2. **[`Access::Reduction`] hetero-out** (increment 0e — the roadmap "any/all
+///    → U8, count → I64" reduction):
+///    - `Some(U8)`: the POST-expr ROOT must be a `Cmp*`, so the stored value is
+///      exactly 0.0/1.0 regardless of the fold magnitude — the honest
+///      boolean-reduce (`any` = `Sum(x≠0)` with post `Reduced(0) > 0`; `all` =
+///      `Sum(x=0)` with post `Reduced(0) = 0`; or `Max`/`Min` of a predicate
+///      wrapped in a redundant cmp post). A non-cmp post would truncate the raw
+///      accumulator silently (a count of 300 → `44` at u8), so it rejects.
+///    - `Some(I64)`: the combine must be `Sum` and the post the identity
+///      `Reduced(0)` — a **count** (`Sum(x≠0)`) or a sum-widening. The store is
+///      `(long long)` of the accumulator: exact for an int input (i32→i64
+///      widening) and exact for a float accumulator while the count ≤ 2²⁴ (a
+///      documented CALLER precondition, the same trust level as `Coord`'s
+///      exact-integer bound — the key abstracts extents away). `Mean`/`Max`/
+///      `Min` → I64 reject (fractional / not the count shape).
+///
+/// Everything else panics honestly: `Some(non-U8/I64)` has no store conversion;
+/// a `RowReduce`/`Contraction` stores its accumulator, not a predicate, so a
+/// hetero store there would truncate silently.
 ///
 /// A `Cmp*` NESTED inside a float body (mask-multiply `dy * (x > 0)`) is legal
 /// with `out_dtype = None` — it is an inline 0.0/1.0 float, no u8 store — and a
 /// top-level cmp with `out_dtype = None` (a float mask) is likewise legal.
 fn assert_valid_out_dtype(op: &OpDef) {
     let Some(od) = op.out_dtype else { return };
-    assert!(
-        od == ElementKind::U8,
-        "OpDef '{}': out_dtype Some({od:?}) is unsupported — the only hetero \
-         output dtype in v1 is U8 (the comparison-predicate mask; use \
-         OpDef::elementwise_pred)",
-        op.name
-    );
-    assert!(
-        matches!(op.access, Access::Elementwise),
-        "OpDef '{}': out_dtype = Some(U8) is legal only for Access::Elementwise \
-         — a Reduction/RowReduce/Contraction stores its accumulator, not a \
-         0/1 predicate, so a u8 store there would truncate silently; \
-         predicate-reductions (any/all/count) are a separate follow-up",
-        op.name
-    );
-    assert!(
-        matches!(&op.body, ScalarExpr::Binary(bop, _, _) if bop.is_cmp()),
-        "OpDef '{}': out_dtype = Some(U8) requires the body ROOT to be a \
-         comparison (ScalarExpr::Binary with a Cmp* op) — only a predicate \
-         yields exactly 0.0/1.0, so any other body would truncate silently \
-         under the u8 store; nested comparisons in a float body take \
-         out_dtype = None instead",
-        op.name
-    );
+    match &op.access {
+        Access::Elementwise => {
+            assert!(
+                od == ElementKind::U8,
+                "OpDef '{}': out_dtype Some({od:?}) is unsupported for an \
+                 Elementwise op — the only hetero output dtype there is U8 (the \
+                 comparison-predicate mask; use OpDef::elementwise_pred)",
+                op.name
+            );
+            assert!(
+                matches!(&op.body, ScalarExpr::Binary(bop, _, _) if bop.is_cmp()),
+                "OpDef '{}': out_dtype = Some(U8) requires the body ROOT to be a \
+                 comparison (ScalarExpr::Binary with a Cmp* op) — only a predicate \
+                 yields exactly 0.0/1.0, so any other body would truncate silently \
+                 under the u8 store; nested comparisons in a float body take \
+                 out_dtype = None instead",
+                op.name
+            );
+        }
+        Access::Reduction { op: rop, post, .. } => match od {
+            ElementKind::U8 => assert!(
+                matches!(post, ScalarExpr::Binary(bop, _, _) if bop.is_cmp()),
+                "OpDef '{}': a U8-output reduction requires the POST-expr ROOT to \
+                 be a comparison (Cmp*) — only then is the stored value exactly \
+                 0.0/1.0 (the honest any/all boolean-reduce); a non-cmp post would \
+                 truncate the raw accumulator silently under the u8 store",
+                op.name
+            ),
+            ElementKind::I64 => assert!(
+                matches!(rop, ReduceOp::Sum) && matches!(post, ScalarExpr::Reduced(0)),
+                "OpDef '{}': an I64-output reduction is the count/sum-widening shape \
+                 — it requires op = Sum and the identity post (Reduced(0)); \
+                 Mean/Max/Min → I64 or a non-identity post is out of scope (would \
+                 not be an exact integer store)",
+                op.name
+            ),
+            other => panic!(
+                "OpDef '{}': out_dtype Some({other:?}) is unsupported for a \
+                 reduction — v1 admits U8 (boolean any/all, via a Cmp* post) and \
+                 I64 (count, via Sum + identity post)",
+                op.name
+            ),
+        },
+        Access::RowReduce { .. } | Access::Contraction { .. } => panic!(
+            "OpDef '{}': out_dtype = Some({od:?}) is rejected under \
+             RowReduce/Contraction — a fused reduction/contraction stores its \
+             accumulator, not a 0/1 predicate, so a hetero store would truncate \
+             silently; only Access::Elementwise (predicate → U8) and \
+             Access::Reduction (any/all → U8, count → I64) carry a hetero output",
+            op.name
+        ),
+    }
+}
+
+/// Validate the increment-0e reduction **post-expression** at plan time (AOT).
+/// Runs at the top of [`build_plan`] (like the other honest-miss gates), with an
+/// independent emitter backstop in `cuda::emit_reduction` (the post's `leaf`
+/// closure panics if an `Input` ever reaches it). The post references the fold
+/// result as `Reduced(0)` and MAY read `Const`/`Param`; it must NOT read:
+///
+/// - `Input(_)` — the reduced axis is gone, so an input at the output coordinate
+///   is a different, ambiguous tensor (this mirrors the contraction epilogue's
+///   `epilogue_reads_only_reduced0`, generalized to also admit `Param`);
+/// - `Coord(_)` — reduction-class, Elementwise-only (also caught upstream);
+/// - `Reduced(s)` for `s ≥ 1` — a single-fold reduction produces only
+///   `Reduced(0)`.
+fn assert_valid_reduction_post(op: &OpDef) {
+    let Access::Reduction { post, .. } = &op.access else {
+        return;
+    };
+    fn walk(e: &ScalarExpr, name: &str) {
+        match e {
+            ScalarExpr::Reduced(0) | ScalarExpr::Const(_) | ScalarExpr::Param(_) => {}
+            ScalarExpr::Reduced(s) => panic!(
+                "OpDef '{name}': reduction post-expr Reduced({s}) — a single-fold \
+                 reduction produces only Reduced(0)"
+            ),
+            ScalarExpr::Input(i) => panic!(
+                "OpDef '{name}': reduction post-expr must not read Input({i}) — the \
+                 reduced axis is gone, so an input at the output coordinate is a \
+                 different, ambiguous tensor; the post reads Reduced(0)/Const/Param"
+            ),
+            ScalarExpr::Coord(d) => panic!(
+                "OpDef '{name}': reduction post-expr must not read Coord({d}) — Coord \
+                 is Elementwise-only (a coordinate along a folded axis is ambiguous)"
+            ),
+            ScalarExpr::Unary(_, x) => walk(x, name),
+            ScalarExpr::Add(a, b)
+            | ScalarExpr::Sub(a, b)
+            | ScalarExpr::Mul(a, b)
+            | ScalarExpr::Div(a, b)
+            | ScalarExpr::Binary(_, a, b) => {
+                walk(a, name);
+                walk(b, name);
+            }
+        }
+    }
+    walk(post, &op.name);
 }
 
 fn validate_row_reduce(stages: &[ReduceStage], epilogue: &ScalarExpr, n_inputs: u8, key: &StructureKey) {
@@ -835,6 +936,14 @@ fn validate_row_reduce(stages: &[ReduceStage], epilogue: &ScalarExpr, n_inputs: 
         }
     }
     for (i, st) in stages.iter().enumerate() {
+        // Prod stages (0e added the combiner to Access::Reduction, not to the
+        // fused RowReduce cooperative reducer) are an honest miss here — the
+        // emitter has no block_prod in the row path. Gate + emitter backstop.
+        assert!(
+            !matches!(st.op, ReduceOp::Prod),
+            "RowReduce stage {i}: the Prod combiner is not supported in the fused \
+             row-reduce path (0e adds Prod to Access::Reduction only); miss honestly"
+        );
         check(&st.pre, n_inputs, i as u8, true, &is_col);
     }
     check(epilogue, n_inputs, stages.len() as u8, false, &is_col);

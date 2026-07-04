@@ -79,7 +79,9 @@ impl Backend for Cuda {
                     exprs.push(epilogue);
                 }
                 Access::Contraction { epilogue, .. } => exprs.push(epilogue),
-                Access::Elementwise | Access::Reduction { .. } => {}
+                // The 0e reduction post-expr lowers at the accumulator dtype too.
+                Access::Reduction { post, .. } => exprs.push(post),
+                Access::Elementwise => {}
             }
             for e in exprs {
                 assert_no_int_div_or_const(e, plan.dtype);
@@ -102,22 +104,28 @@ impl Backend for Cuda {
                     exprs.push(epilogue);
                 }
                 Access::Contraction { epilogue, .. } => exprs.push(epilogue),
-                Access::Elementwise | Access::Reduction { .. } => {}
+                Access::Reduction { post, .. } => exprs.push(post),
+                Access::Elementwise => {}
             }
             for e in exprs {
                 assert_coord_lowerable(e, plan);
             }
         }
-        // Increment 0b: a hetero-output (u8-predicate) plan reaches only the
-        // scalar/strided emitters — `build_plan` forces the schedule (no packed
-        // u8 store exists) and `assert_valid_out_dtype` pinned the Access to
-        // Elementwise. This emitter-level backstop keeps a future schedule
-        // change from silently routing a u8-mask output through a vector-typed
-        // store (the 0a lesson: gate every layer, not just the first).
+        // Increment 0b/0e: a hetero-output plan reaches only emitters with an
+        // out_dtype-aware store: the scalar/strided elementwise emitters (0b
+        // u8-predicate — no packed u8 store exists, so `build_plan` forces the
+        // schedule) and the reduction emitter (0e any/all → U8, count → I64 —
+        // `emit_reduction` threads `out_ctype`/`store` through the fold). This
+        // emitter-level backstop keeps a future schedule change from silently
+        // routing a hetero output through a vector-typed store (the 0a lesson:
+        // gate every layer, not just the first).
         assert!(
             plan.out_dtype == plan.dtype
-                || matches!(plan.schedule, Schedule::Scalar | Schedule::Strided),
-            "cuda backend: hetero output (out {:?}, key {:?}) lowers scalar/strided only; got {:?}",
+                || matches!(
+                    plan.schedule,
+                    Schedule::Scalar | Schedule::Strided | Schedule::Reduction { .. }
+                ),
+            "cuda backend: hetero output (out {:?}, key {:?}) lowers scalar/strided/reduction only; got {:?}",
             plan.out_dtype,
             plan.dtype,
             plan.schedule
@@ -706,6 +714,7 @@ fn emit_reduction(plan: &KernelPlan<'_>, ctype: &str, rop: ReduceOp) -> Generate
         ReduceOp::Mean => "mean",
         ReduceOp::Max => "max",
         ReduceOp::Min => "min",
+        ReduceOp::Prod => "prod",
     };
     let int_acc = matches!(plan.dtype, ElementKind::I32 | ElementKind::I64);
     assert!(
@@ -739,10 +748,19 @@ fn emit_reduction(plan: &KernelPlan<'_>, ctype: &str, rop: ReduceOp) -> Generate
         Schedule::Reduction { class, .. } => class,
         _ => unreachable!("emit_reduction on a non-reduction schedule"),
     };
-    let (axes, keepdim) = match plan.access {
-        Access::Reduction { axes, keepdim, .. } => (*axes, *keepdim),
+    let (axes, keepdim, post) = match plan.access {
+        Access::Reduction {
+            axes,
+            keepdim,
+            post,
+            ..
+        } => (*axes, *keepdim, post),
         _ => unreachable!("emit_reduction on a non-reduction access"),
     };
+    // The output pointer's scalar C type — the input `ctype` for a uniform-dtype
+    // reduction, `unsigned char`/`long long` for a 0e hetero-out (any/all/count),
+    // exactly the 0b pattern (`assert_valid_out_dtype` pinned the legal set).
+    let octype = out_ctype(plan, ctype);
 
     // Accumulate in double for f64 / f32-strict; float otherwise. Shared by both
     // paths — the leaf load up-converts, and the body is lowered in the acc width.
@@ -758,6 +776,9 @@ fn emit_reduction(plan: &KernelPlan<'_>, ctype: &str, rop: ReduceOp) -> Generate
         "float"
     };
     let zero = if int_acc { "0" } else if dbl { "0.0" } else { "0.0f" };
+    // Prod identity (increment 0e): `acc = 1; acc *= elem` (matches the bespoke
+    // `ProdReduce::init() = T(1)`). Additive combines keep the `0` identity.
+    let one = if int_acc { "1" } else if dbl { "1.0" } else { "1.0f" };
     let load = |i: u8| match plan.dtype {
         ElementKind::F16 => format!("__half2float(in{i}[idx])"),
         ElementKind::Bf16 => format!("__bfloat162float(in{i}[idx])"),
@@ -785,12 +806,59 @@ fn emit_reduction(plan: &KernelPlan<'_>, ctype: &str, rop: ReduceOp) -> Generate
             },
         },
     );
-    let store = |finalized: String| -> String {
-        match plan.dtype {
-            ElementKind::F16 => format!("__float2half({finalized})"),
-            ElementKind::Bf16 => format!("__float2bfloat16({finalized})"),
-            _ => finalized,
+    // Convert an accumulator-width value to the output store. Uniform-dtype is
+    // byte-identical to pre-0e (f16/bf16 demote, else native). A 0e hetero-out
+    // converts the accumulator to the output dtype: U8 for a boolean any/all
+    // (the value is exactly 0.0/1.0 by the Cmp* post, so the cast is exact) and
+    // I64 for a count/sum-widening (exact for an int accumulator; exact for a
+    // float accumulator while count ≤ 2²⁴ — the documented caller precondition).
+    let store = |v: String| -> String {
+        if plan.out_dtype != plan.dtype {
+            return match plan.out_dtype {
+                ElementKind::U8 => format!("(unsigned char)({v})"),
+                ElementKind::I64 => format!("(long long)({v})"),
+                other => unreachable!("validated hetero out dtype {other:?}"),
+            };
         }
+        match plan.dtype {
+            ElementKind::F16 => format!("__float2half({v})"),
+            ElementKind::Bf16 => format!("__float2bfloat16({v})"),
+            _ => v,
+        }
+    };
+    // Apply the 0e fused post-expression (default = identity `Reduced(0)`) to the
+    // finalized fold result, then convert for the store. The post lowers through
+    // the SAME accumulator-width spellers as the fold body, with `Reduced(0)`
+    // bound to a hoisted `red0` register (so a post referencing it more than once
+    // — or the Mean quotient — is computed once). Returns `(optional red0 decl,
+    // store rhs)`: the identity post yields `(None, store(finalized))`, so the
+    // call site emits a single `<lvalue> = <rhs>;` byte-identical to pre-0e; a
+    // real post yields the `{acc} red0 = <finalized>;` decl plus the posted rhs.
+    let post_is_identity = matches!(post, ScalarExpr::Reduced(0));
+    let post_apply = |finalized: String| -> (Option<String>, String) {
+        if post_is_identity {
+            return (None, store(finalized));
+        }
+        let posted = lower_expr(
+            post,
+            &Lowering {
+                leaf: &|i| {
+                    panic!(
+                        "cuda backend: reduction post-expr Input({i}) reached the emitter \
+                         — the post reads Reduced(0)/Const/Param only (validated by \
+                         plan::assert_valid_reduction_post)"
+                    )
+                },
+                reduced: &|s| {
+                    assert_eq!(s, 0, "reduction post references Reduced({s}); only 0 exists");
+                    "red0".to_string()
+                },
+                coord: &|d| panic!("cuda backend: reduction post-expr Coord({d}) is Elementwise-only"),
+                unary: &|op, x| if dbl { unary_f64(op, x) } else { unary_f32(op, x) },
+                binary: &|op, a, b| if dbl { binary_f64(op, a, b) } else { binary_f32(op, a, b) },
+            },
+        );
+        (Some(format!("{acc} red0 = {finalized};")), store(posted))
     };
 
     if class == ReduceAxisClass::InnerContig {
@@ -825,13 +893,13 @@ fn emit_reduction(plan: &KernelPlan<'_>, ctype: &str, rop: ReduceOp) -> Generate
         }
         s.push('\n');
         let ops = std::collections::HashSet::from([rop]);
-        emit_block_reducers(&mut s, acc, zero, &ops, &stem);
+        emit_block_reducers(&mut s, acc, zero, one, &ops, &stem);
         s.push_str(&format!("extern \"C\" __global__ void {name}(\n"));
         s.push_str(&format!("    const {ctype}* __restrict__ in0,\n"));
-        s.push_str(&format!("    {ctype}* __restrict__ out,\n"));
+        s.push_str(&format!("    {octype}* __restrict__ out,\n"));
         s.push_str(&format!(
             "    long long n_out,\n    long long k{})\n{{\n",
-            param_args(plan.body)
+            param_args_multi(&[plan.body, post])
         ));
         s.push_str(
             "    for (long long row = blockIdx.x; row < n_out; row += (long long)gridDim.x) {\n",
@@ -853,6 +921,16 @@ fn emit_reduction(plan: &KernelPlan<'_>, ctype: &str, rop: ReduceOp) -> Generate
                 };
                 s.push_str(&format!("        {acc} r = {fin};\n"));
             }
+            ReduceOp::Prod => {
+                // Prod (0e): identity 1, `acc *= elem`, pass-through finalize. The
+                // block_prod tree matches the Sum/Max/Min cooperative pattern.
+                s.push_str(&format!("        {acc} acc = {one};\n"));
+                s.push_str("        for (long long j = threadIdx.x; j < k; j += blockDim.x) {\n");
+                s.push_str("            long long idx = base + j;\n");
+                s.push_str(&format!("            acc *= {elem};\n"));
+                s.push_str("        }\n");
+                s.push_str(&format!("        {acc} r = block_prod_{stem}(acc);\n"));
+            }
             ReduceOp::Max | ReduceOp::Min => {
                 let cmp = if matches!(rop, ReduceOp::Max) { ">" } else { "<" };
                 let suf = if matches!(rop, ReduceOp::Max) { "max" } else { "min" };
@@ -869,11 +947,18 @@ fn emit_reduction(plan: &KernelPlan<'_>, ctype: &str, rop: ReduceOp) -> Generate
                 s.push_str(&format!("        {acc} r = block_{suf}_{stem}(acc, has);\n"));
             }
         }
-        // The block_* helpers broadcast the result to all threads; one writes it.
-        s.push_str(&format!(
-            "        if (threadIdx.x == 0) out[row] = {};\n",
-            store("r".to_string())
-        ));
+        // The block_* helpers broadcast the result to all threads; thread 0 applies
+        // the 0e post-expr (identity ⇒ byte-identical) and writes.
+        let (decl, rhs) = post_apply("r".to_string());
+        match decl {
+            None => s.push_str(&format!("        if (threadIdx.x == 0) out[row] = {rhs};\n")),
+            Some(d) => {
+                s.push_str("        if (threadIdx.x == 0) {\n");
+                s.push_str(&format!("            {d}\n"));
+                s.push_str(&format!("            out[row] = {rhs};\n"));
+                s.push_str("        }\n");
+            }
+        }
         s.push_str("    }\n}\n");
         return GeneratedKernel { name, source: s };
     }
@@ -914,7 +999,7 @@ fn emit_reduction(plan: &KernelPlan<'_>, ctype: &str, rop: ReduceOp) -> Generate
     );
     let mut s = header(plan, &name);
     s.push_str(&format!("    const {ctype}* __restrict__ in0,\n"));
-    s.push_str(&format!("    {ctype}* __restrict__ out,\n"));
+    s.push_str(&format!("    {octype}* __restrict__ out,\n"));
     // Extraction #1 (audit round 1): dims ride BY VALUE as flattened scalar
     // params (the constant bank) instead of global-pointer arrays re-read every
     // iteration - every access below is compile-time indexed, so each array
@@ -929,7 +1014,10 @@ fn emit_reduction(plan: &KernelPlan<'_>, ctype: &str, rop: ReduceOp) -> Generate
     for d in 0..n_out_dims {
         s.push_str(&format!("    long long so_{d},\n")); // output strides
     }
-    s.push_str(&format!("    long long n_out{})\n{{\n", param_args(plan.body)));
+    s.push_str(&format!(
+        "    long long n_out{})\n{{\n",
+        param_args_multi(&[plan.body, post])
+    ));
     s.push_str("    long long o = (long long)blockIdx.x * blockDim.x + threadIdx.x;\n");
     s.push_str("    long long gstride = (long long)gridDim.x * blockDim.x;\n");
     s.push_str("    for (; o < n_out; o += gstride) {\n");
@@ -1038,6 +1126,11 @@ fn emit_reduction(plan: &KernelPlan<'_>, ctype: &str, rop: ReduceOp) -> Generate
             s.push_str(&format!("        {acc} acc = {zero};\n"));
             emit_reduced_nest(&mut s, &[format!("            acc += {elem};\n")]);
         }
+        ReduceOp::Prod => {
+            // Prod (0e): identity 1, `acc *= elem` in the reduced nest.
+            s.push_str(&format!("        {acc} acc = {one};\n"));
+            emit_reduced_nest(&mut s, &[format!("            acc *= {elem};\n")]);
+        }
         ReduceOp::Max | ReduceOp::Min => {
             let cmp = if matches!(rop, ReduceOp::Max) { ">" } else { "<" };
             // `has` seeds the first reduced element (all cr=0) without a ±∞ literal;
@@ -1064,9 +1157,16 @@ fn emit_reduction(plan: &KernelPlan<'_>, ctype: &str, rop: ReduceOp) -> Generate
             .join(" * ");
         format!("acc / ({acc})({divisor})")
     } else {
+        // Sum/Prod/Max/Min: pass-through finalize (Prod matches the bespoke
+        // `ProdReduce::finalize` no-op).
         "acc".to_string()
     };
-    s.push_str(&format!("        out[oo] = {};\n", store(finalized)));
+    // 0e post-expr (identity ⇒ byte-identical single store line).
+    let (decl, rhs) = post_apply(finalized);
+    if let Some(d) = decl {
+        s.push_str(&format!("        {d}\n"));
+    }
+    s.push_str(&format!("        out[oo] = {rhs};\n"));
     s.push_str("    }\n}\n");
     GeneratedKernel { name, source: s }
 }
@@ -1113,10 +1213,22 @@ fn reduction_splitk_variant(plan: &KernelPlan<'_>) -> Option<Variant> {
     if !matches!(rop, ReduceOp::Sum | ReduceOp::Mean) {
         return None;
     }
-    let (axes, keepdim) = match plan.access {
-        Access::Reduction { axes, keepdim, .. } => (*axes, *keepdim),
+    let (axes, keepdim, post) = match plan.access {
+        Access::Reduction {
+            axes,
+            keepdim,
+            post,
+            ..
+        } => (*axes, *keepdim, post),
         _ => return None,
     };
+    // The split-K combine store applies neither the 0e post-expr nor a hetero-out
+    // conversion (its ABI predates both), so decline those cells — the baseline
+    // general path serves them correctly. (A post-aware / hetero split-K combine
+    // is a follow-up; declining is never-worse, only leaves the perf variant off.)
+    if !matches!(post, ScalarExpr::Reduced(0)) || plan.out_dtype != plan.dtype {
+        return None;
+    }
     // Specialized ABI (no stride arrays): the canonical rank-2 axis-0 cell with
     // dense input and output only.
     if plan.key.rank != 2 || axes.0 != 0b1 || plan.n_inputs != 1 {
@@ -1688,6 +1800,10 @@ fn emit_row_reduce_impl(plan: &KernelPlan<'_>, ctype: &str, materialize: bool) -
     let dbl = matches!(plan.dtype, ElementKind::F64 | ElementKind::F32Strict);
     let acc = if dbl { "double" } else { "float" };
     let zero = if dbl { "0.0" } else { "0.0f" };
+    // Prod's multiplicative identity — passed through to `emit_block_reducers`
+    // for its signature; a RowReduce Prod stage is rejected at the plan gate, so
+    // `ops` never contains Prod here and no block_prod is emitted.
+    let one = if dbl { "1.0" } else { "1.0f" };
     let n = plan.n_inputs;
     let vsuf = if materialize { "_smemrow" } else { "" };
     let name = format!(
@@ -1775,7 +1891,7 @@ fn emit_row_reduce_impl(plan: &KernelPlan<'_>, ctype: &str, materialize: bool) -
     for st in stages {
         ops.insert(st.op);
     }
-    emit_block_reducers(&mut s, acc, zero, &ops, &stem);
+    emit_block_reducers(&mut s, acc, zero, one, &ops, &stem);
     s.push_str(&format!("extern \"C\" __global__ void {name}(\n"));
     for i in 0..n {
         s.push_str(&format!("    const {ctype}* __restrict__ in{i},\n"));
@@ -1807,6 +1923,13 @@ fn emit_row_reduce_impl(plan: &KernelPlan<'_>, ctype: &str, materialize: bool) -
         let pre = lower(&st.pre);
         s.push_str(&format!("        // stage {i}: {:?}\n", st.op));
         match st.op {
+            // Prod stages are rejected at the plan gate (`validate_row_reduce`);
+            // this is the independent emitter backstop (the 0a lesson: gate every
+            // layer). The fused row path has no block_prod cooperative reducer.
+            ReduceOp::Prod => panic!(
+                "cuda backend: RowReduce Prod stage is unsupported (0e adds Prod to \
+                 Access::Reduction only) — the plan gate should have refused this op"
+            ),
             ReduceOp::Sum | ReduceOp::Mean => {
                 s.push_str(&format!("        {acc} acc{i} = {zero};\n"));
                 s.push_str("        for (long long j = threadIdx.x; j < k; j += blockDim.x) {\n");
@@ -1890,9 +2013,37 @@ fn emit_block_reducers(
     s: &mut String,
     acc: &str,
     zero: &str,
+    one: &str,
     ops: &std::collections::HashSet<ReduceOp>,
     stem: &str,
 ) {
+    // Prod (increment 0e): the same cooperative warp-shuffle + shared-mem tree as
+    // block_sum, but with `*` and the multiplicative identity `one` for idle
+    // lanes. Associative/commutative, so the block-tree order is deterministic.
+    if ops.contains(&ReduceOp::Prod) {
+        s.push_str(&format!(
+            "__device__ __forceinline__ {acc} warp_prod_{stem}({acc} v) {{\n\
+             \x20   for (int off = warpSize / 2; off > 0; off >>= 1)\n\
+             \x20       v *= __shfl_down_sync(0xffffffffu, v, off);\n\
+             \x20   return v;\n\
+             }}\n\
+             __device__ __forceinline__ {acc} block_prod_{stem}({acc} v) {{\n\
+             \x20   __shared__ {acc} smem[32];\n\
+             \x20   int lane = threadIdx.x & (warpSize - 1);\n\
+             \x20   int wid = threadIdx.x / warpSize;\n\
+             \x20   int nwarps = (blockDim.x + warpSize - 1) / warpSize;\n\
+             \x20   v = warp_prod_{stem}(v);\n\
+             \x20   if (lane == 0) smem[wid] = v;\n\
+             \x20   __syncthreads();\n\
+             \x20   {acc} r = ((int)threadIdx.x < nwarps) ? smem[threadIdx.x] : {one};\n\
+             \x20   if (wid == 0) r = warp_prod_{stem}(r);\n\
+             \x20   __shared__ {acc} bcast;\n\
+             \x20   if (threadIdx.x == 0) bcast = r;\n\
+             \x20   __syncthreads();\n\
+             \x20   return bcast;\n\
+             }}\n"
+        ));
+    }
     if ops.iter().any(|o| matches!(o, ReduceOp::Sum | ReduceOp::Mean)) {
         s.push_str(&format!(
             "__device__ __forceinline__ {acc} warp_sum_{stem}({acc} v) {{\n\
@@ -2452,6 +2603,19 @@ fn param_args(e: &ScalarExpr) -> String {
         .iter()
         .map(|i| format!(", float p{i}"))
         .collect()
+}
+
+/// Like [`param_args`], but over the UNION of params used across several
+/// expressions (increment 0e: a reduction's launch signature must declare params
+/// referenced by the fold body OR the post-expr). Deduped + ascending via the
+/// `BTreeSet` in [`params_used`]. For a body-only op (identity post) this is
+/// byte-identical to `param_args(body)`.
+fn param_args_multi(exprs: &[&ScalarExpr]) -> String {
+    let mut set = std::collections::BTreeSet::new();
+    for e in exprs {
+        set.extend(params_used(e));
+    }
+    set.iter().map(|i| format!(", float p{i}")).collect()
 }
 
 #[cfg(test)]
@@ -3235,6 +3399,251 @@ mod tests {
         let _ = generate(&op, &key, &Cuda);
     }
 
+    // ============================ increment 0e ============================
+    // (1) ReduceOp::Prod, (2) fused reduction post-expr, (3) hetero-out reduction.
+
+    #[test]
+    fn reduction_prod_fp_folds_from_one() {
+        use crate::ir::ReduceOp;
+        // Prod over the last axis: identity 1, `acc *= elem`, block_prod tree,
+        // pass-through finalize (no divisor). Matches bespoke reduce_prod_fp.cu.
+        let op = OpDef::reduction("p", 1, &[ElementKind::F32], input(0), ReduceOp::Prod);
+        let k = generate(&op, &reduce_key(ElementKind::F32), &Cuda);
+        assert_eq!(k.name, "baracuda_gen_p_f32_reduce_prod");
+        // block_prod cooperative reducer, NOT block_sum.
+        assert!(k.source.contains("float warp_prod_p_f32(float v)"));
+        assert!(k.source.contains("v *= __shfl_down_sync(0xffffffffu, v, off);"));
+        assert!(k.source.contains("float block_prod_p_f32(float v)"));
+        assert!(!k.source.contains("block_sum"));
+        // identity 1, multiplicative fold, thread-0 store, no Mean divisor.
+        assert!(k.source.contains("float acc = 1.0f;"));
+        assert!(k.source.contains("acc *= in0[idx];"));
+        assert!(k.source.contains("float r = block_prod_p_f32(acc);"));
+        assert!(k.source.contains("if (threadIdx.x == 0) out[row] = r;"));
+        assert!(!k.source.contains("/ (float)k"));
+    }
+
+    #[test]
+    fn reduction_prod_int_accumulates_in_long_long() {
+        use crate::ir::ReduceOp;
+        // i32 Prod: widened `long long` accumulator (the bespoke i64 reduce_prod_int
+        // accumulator), native int multiply, store truncates back to i32 (wrap).
+        let op = OpDef::reduction("p", 1, &[ElementKind::I32], input(0), ReduceOp::Prod);
+        let k = generate(&op, &reduce_key(ElementKind::I32), &Cuda);
+        assert!(k.source.contains("const int* __restrict__ in0"));
+        assert!(k.source.contains("int* __restrict__ out")); // out == in dtype
+        assert!(k.source.contains("long long acc = 1;"));
+        assert!(k.source.contains("acc *= in0[idx];")); // native int, no float convert
+        assert!(k.source.contains("long long r = block_prod_p_i32(acc);"));
+        assert!(!k.source.contains("float acc"));
+    }
+
+    #[test]
+    fn reduction_prod_general_axis_folds_from_one() {
+        use crate::ir::ReduceOp;
+        use baracuda_kernels_types::AxisMask;
+        // Prod over the outer axis (general path): identity 1, `acc *= elem`,
+        // no Mean divisor.
+        let a = OperandDesc::new(2, &[4, 8], &[8, 1], ElementKind::F32, 256);
+        let out = OperandDesc::new(1, &[8], &[1], ElementKind::F32, 256);
+        let key = structure_key(OpCategory::Reduction, &[a, out], ArchSku::Sm89);
+        let op = OpDef::reduction_axes(
+            "p",
+            1,
+            &[ElementKind::F32],
+            input(0),
+            ReduceOp::Prod,
+            AxisMask(0b01),
+            false,
+        );
+        let k = generate(&op, &key, &Cuda);
+        assert_eq!(k.name, "baracuda_gen_p_f32_reduce_prod_ax1");
+        assert!(k.source.contains("float acc = 1.0f;"));
+        assert!(k.source.contains("acc *= in0[idx];"));
+        assert!(k.source.contains("out[oo] = acc;")); // pass-through finalize
+        assert!(!k.source.contains("/ (float)"));
+    }
+
+    #[test]
+    fn reduction_post_norm2_applies_sqrt_after_the_sum() {
+        use crate::ir::{reduced, ReduceOp, UnaryOp};
+        // norm2 = Sqrt(Sum(Sqr(x))): the pre-body squares (already worked), the
+        // 0e post applies Sqrt to the fold result via a hoisted `red0` register.
+        let op = OpDef::reduction_post(
+            "norm2",
+            1,
+            &[ElementKind::F32],
+            input(0).unary(UnaryOp::Sqr),
+            ReduceOp::Sum,
+            reduced(0).sqrt(),
+        );
+        let k = generate(&op, &reduce_key(ElementKind::F32), &Cuda);
+        assert_eq!(k.name, "baracuda_gen_norm2_f32_reduce_sum");
+        assert!(k.source.contains("acc += (in0[idx]*in0[idx]);"));
+        assert!(k.source.contains("float r = block_sum_norm2_f32(acc);"));
+        // Post: red0 = r (the fold result), then Sqrt, then store — thread-0 only.
+        assert!(k.source.contains("if (threadIdx.x == 0) {"));
+        assert!(k.source.contains("float red0 = r;"));
+        assert!(k.source.contains("out[row] = sqrtf(red0);"));
+    }
+
+    #[test]
+    fn reduction_post_sees_the_post_mean_value() {
+        use crate::ir::{reduced, ReduceOp, UnaryOp};
+        // Ordering pin (documented): Mean divides FIRST, then the post applies to
+        // the mean. So `red0` binds the ALREADY-divided block_sum/k, and Sqrt sees
+        // sqrt(mean), not mean(sqrt).
+        let op = OpDef::reduction_post(
+            "rms",
+            1,
+            &[ElementKind::F32],
+            input(0).unary(UnaryOp::Sqr),
+            ReduceOp::Mean,
+            reduced(0).sqrt(),
+        );
+        let k = generate(&op, &reduce_key(ElementKind::F32), &Cuda);
+        assert!(k.source.contains("float r = block_sum_rms_f32(acc) / (float)k;"));
+        assert!(k.source.contains("float red0 = r;")); // post sees the mean
+        assert!(k.source.contains("out[row] = sqrtf(red0);"));
+    }
+
+    #[test]
+    fn reduction_post_identity_is_byte_identical_to_plain() {
+        use crate::ir::{reduced, ReduceOp};
+        // The default post (`Reduced(0)`) must emit exactly like OpDef::reduction —
+        // no red0 binding, no extra braces — the 0e no-regression guarantee.
+        let plain = OpDef::reduction("s", 1, &[ElementKind::F32], input(0), ReduceOp::Sum);
+        let posted = OpDef::reduction_post(
+            "s",
+            1,
+            &[ElementKind::F32],
+            input(0),
+            ReduceOp::Sum,
+            reduced(0),
+        );
+        let kp = generate(&plain, &reduce_key(ElementKind::F32), &Cuda);
+        let kd = generate(&posted, &reduce_key(ElementKind::F32), &Cuda);
+        assert_eq!(kp.source, kd.source, "identity post must be byte-identical");
+        assert!(!kd.source.contains("red0"));
+    }
+
+    // Reduce-key with a hetero output dtype: [256,128] float input, [256] `out_dt`.
+    fn reduce_key_hetero(out_dt: ElementKind) -> baracuda_kernels_types::StructureKey {
+        let a = OperandDesc::new(2, &[256, 128], &[128, 1], ElementKind::F32, 256);
+        let out = OperandDesc::new(1, &[256], &[1], out_dt, 256);
+        structure_key(OpCategory::Reduction, &[a, out], ArchSku::Sm89)
+    }
+
+    #[test]
+    fn reduction_hetero_out_u8_any() {
+        use crate::ir::{konst, reduced, BinaryOp, ReduceOp};
+        // any = Sum(x != 0) with a Cmp* post `Reduced(0) > 0` → exactly 0/1,
+        // stored to a u8 mask. Input dtype stays f32 (the key dtype); the output
+        // pointer + store convert to u8 (the 0b hetero pattern, on a reduction).
+        let mut op = OpDef::reduction_post(
+            "any",
+            1,
+            &[ElementKind::F32],
+            input(0).binary(BinaryOp::CmpNe, konst(0.0)),
+            ReduceOp::Sum,
+            reduced(0).binary(BinaryOp::CmpGt, konst(0.0)),
+        );
+        op.out_dtype = Some(ElementKind::U8);
+        let k = generate(&op, &reduce_key_hetero(ElementKind::U8), &Cuda);
+        assert!(k.source.contains("unsigned char* __restrict__ out")); // hetero out ptr
+        assert!(k.source.contains("float acc = 0.0f;")); // fold still in float
+        assert!(k.source.contains("float red0 = r;"));
+        // Post is a Cmp (0/1); the store casts the exact predicate to u8.
+        assert!(k.source.contains("out[row] = (unsigned char)(((float)red0 > (float)0.0 ? 1.0f : 0.0f));"));
+    }
+
+    #[test]
+    fn reduction_hetero_out_i64_count() {
+        use crate::ir::{konst, BinaryOp, ReduceOp};
+        // count = Sum(x != 0) with the identity post, stored to i64. The float
+        // accumulator converts to a long long store (exact while count ≤ 2^24).
+        let mut op = OpDef::reduction(
+            "count",
+            1,
+            &[ElementKind::F32],
+            input(0).binary(BinaryOp::CmpNe, konst(0.0)),
+            ReduceOp::Sum,
+        );
+        op.out_dtype = Some(ElementKind::I64);
+        let k = generate(&op, &reduce_key_hetero(ElementKind::I64), &Cuda);
+        assert!(k.source.contains("long long* __restrict__ out")); // i64 out ptr
+        assert!(k.source.contains("float acc = 0.0f;"));
+        // Identity post ⇒ no red0 binding; the store casts float acc → i64.
+        assert!(!k.source.contains("red0"));
+        assert!(k.source.contains("if (threadIdx.x == 0) out[row] = (long long)(r);"));
+    }
+
+    // ---- 0e gate-rejection tests (call build_plan DIRECTLY: the emitter would
+    // silently truncate a bad hetero store rather than panic, so the plan gate is
+    // the load-bearing wall — exercise it without the emitter in the way). ----
+
+    #[test]
+    #[should_panic(expected = "must not read Input")]
+    fn reduction_post_reading_input_is_rejected_at_the_plan_gate() {
+        use crate::ir::{reduced, ReduceOp};
+        // The reduced axis is gone; an Input at the output coordinate is a
+        // different, ambiguous tensor — rejected (mirrors the contraction epilogue).
+        let op = OpDef::reduction_post(
+            "bad",
+            1,
+            &[ElementKind::F32],
+            input(0),
+            ReduceOp::Sum,
+            reduced(0) + input(0),
+        );
+        let _ = crate::build_plan(&op, &reduce_key(ElementKind::F32));
+    }
+
+    #[test]
+    #[should_panic(expected = "requires the POST-expr ROOT to be a comparison")]
+    fn reduction_u8_out_non_cmp_post_is_rejected_at_the_plan_gate() {
+        use crate::ir::{reduced, ReduceOp};
+        // U8 out with a non-cmp (identity) post stores the raw accumulator — a
+        // silent truncation. The gate demands a Cmp* post (exact 0/1).
+        let mut op = OpDef::reduction_post(
+            "bad_any",
+            1,
+            &[ElementKind::F32],
+            input(0),
+            ReduceOp::Sum,
+            reduced(0),
+        );
+        op.out_dtype = Some(ElementKind::U8);
+        let _ = crate::build_plan(&op, &reduce_key_hetero(ElementKind::U8));
+    }
+
+    #[test]
+    #[should_panic(expected = "requires op = Sum")]
+    fn reduction_i64_out_non_sum_is_rejected_at_the_plan_gate() {
+        use crate::ir::ReduceOp;
+        // I64 out is the count/sum-widening shape — Max → i64 is not an exact
+        // integer store shape, so it rejects.
+        let mut op = OpDef::reduction("m", 1, &[ElementKind::F32], input(0), ReduceOp::Max);
+        op.out_dtype = Some(ElementKind::I64);
+        let _ = crate::build_plan(&op, &reduce_key_hetero(ElementKind::I64));
+    }
+
+    #[test]
+    #[should_panic(expected = "Prod combiner is not supported in the fused")]
+    fn rowreduce_prod_stage_is_rejected_at_the_plan_gate() {
+        use crate::ir::{reduced, ReduceOp, ReduceStage};
+        // Prod is a 0e Access::Reduction combiner only; the fused row path has no
+        // block_prod, so a Prod stage misses honestly at the gate.
+        let op = OpDef::row_reduce(
+            "gp",
+            1,
+            &[ElementKind::F32],
+            vec![ReduceStage { pre: input(0).0, op: ReduceOp::Prod }],
+            reduced(0),
+        );
+        let _ = crate::build_plan(&op, &rr_key(ElementKind::F32, OpCategory::Softmax));
+    }
+
     fn rr_key(dt: ElementKind, cat: OpCategory) -> baracuda_kernels_types::StructureKey {
         // full-width fused op: input + output share the [256, 128] contiguous shape.
         let a = OperandDesc::new(2, &[256, 128], &[128, 1], dt, 256);
@@ -3993,12 +4402,13 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "legal only for Access::Elementwise")]
-    fn u8_out_under_reduction_is_rejected() {
+    #[should_panic(expected = "requires the POST-expr ROOT to be a comparison")]
+    fn u8_out_reduction_with_non_cmp_post_is_rejected() {
         use crate::ir::ReduceOp;
-        // count(x > 0) as a u8-output reduction: the store is the ACCUMULATOR,
-        // not a predicate — predicate-reductions (any/all/count) are a separate
-        // follow-up, so this must panic, not truncate.
+        // count(x > 0) stored as u8 with the IDENTITY post: the store is the raw
+        // ACCUMULATOR (a count up to 1024), not a 0/1 predicate — u8 would
+        // truncate silently. 0e admits a U8-out reduction ONLY when the POST-expr
+        // root is a Cmp* (the honest any/all boolean-reduce); this must panic.
         let mut op = OpDef::reduction(
             "count_pos",
             1,
@@ -4014,7 +4424,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "legal only for Access::Elementwise")]
+    #[should_panic(expected = "stores its accumulator")]
     fn u8_out_under_row_reduce_is_rejected() {
         let mut op = softmax_op(ElementKind::F32);
         op.out_dtype = Some(ElementKind::U8);
@@ -4022,7 +4432,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "legal only for Access::Elementwise")]
+    #[should_panic(expected = "stores its accumulator")]
     fn u8_out_under_contraction_is_rejected() {
         use crate::ir::{reduced, ContractionAxes};
         let mut op = OpDef::contraction(
@@ -4040,7 +4450,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "the only hetero output dtype in v1 is U8")]
+    #[should_panic(expected = "the only hetero output dtype there is U8")]
     fn non_u8_out_dtype_is_rejected() {
         let mut op = OpDef::elementwise(
             "bad_f16_out",
@@ -4780,6 +5190,7 @@ mod tests {
             op: ReduceOp::Sum,
             axes: AxisMask::EMPTY,
             keepdim: false,
+            post: crate::ir::ScalarExpr::Reduced(0),
         };
         let plan = KernelPlan {
             op_name: "backstop",

@@ -1944,6 +1944,24 @@ mod tests {
         let kf16 = generate(&sum, &red_key(ElementKind::F16), &Cuda);
         let ptx16 = cc.compile(&kf16.source, &kf16.name, 5000).expect("f16 reduction compiles");
         assert!(String::from_utf8(ptx16).unwrap().contains(".entry"));
+        // 0e: Prod (block_prod cooperative reducer) compiles headerless.
+        let prod = OpDef::reduction("p", 1, &[ElementKind::F32], input(0), ReduceOp::Prod);
+        let kp = generate(&prod, &red_key(ElementKind::F32), &Cuda);
+        let ptxp = cc.compile(&kp.source, &kp.name, 5000).expect("f32 prod reduction compiles");
+        assert!(String::from_utf8(ptxp).unwrap().contains(".entry"));
+        // 0e: norm2 = Sqrt(Sum(Sqr(x))) — the fused post-expr (sqrtf on red0)
+        // compiles headerless too.
+        let norm2 = OpDef::reduction_post(
+            "norm2",
+            1,
+            &[ElementKind::F32],
+            input(0).unary(UnaryOp::Sqr),
+            ReduceOp::Sum,
+            crate::ir::reduced(0).sqrt(),
+        );
+        let kn = generate(&norm2, &red_key(ElementKind::F32), &Cuda);
+        let ptxn = cc.compile(&kn.source, &kn.name, 5000).expect("f32 norm2-post compiles");
+        assert!(String::from_utf8(ptxn).unwrap().contains(".entry"));
     }
 
     /// The fused RowReduce kernels (RmsNorm / Softmax) compile headerless under

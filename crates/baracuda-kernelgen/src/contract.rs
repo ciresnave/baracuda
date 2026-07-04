@@ -742,6 +742,40 @@ mod tests {
     }
 
     #[test]
+    fn prod_and_hetero_out_reductions_are_honest_misses_no_contract() {
+        use crate::ir::{konst, reduced, BinaryOp, ReduceOp};
+        use crate::pattern::PatternError;
+        // The 0e reductions (Prod combiner; boolean/count hetero-out via a Cmp*
+        // post) emit NO contract — reductions are not in the elementwise pattern
+        // vocabulary, AND Fuel has no ProdReduce/Any/All/CountNonzero OpKind yet
+        // (fuel-cuda-backend/src/baracuda/reduce.rs), so a contract would be
+        // un-importable. Honest miss, typed (NotElementwise), same wall as Sum.
+        let a = OperandDesc::new(2, &[256, 128], &[128, 1], ElementKind::F32, 256);
+
+        // (a) Prod.
+        let prod_out = OperandDesc::new(1, &[256], &[1], ElementKind::F32, 256);
+        let pk = structure_key(OpCategory::Reduction, &[a, prod_out], ArchSku::Sm89);
+        let prod = OpDef::reduction("p", 1, &[ElementKind::F32], input(0), ReduceOp::Prod);
+        assert!(contract(&prod, &pk, &generate(&prod, &pk, &Cuda), "cuda").is_none());
+        assert!(matches!(derive_pattern(&prod), Err(PatternError::NotElementwise)));
+
+        // (b) hetero-out any (Sum(x!=0) → u8 via a Cmp* post).
+        let any_out = OperandDesc::new(1, &[256], &[1], ElementKind::U8, 256);
+        let ak = structure_key(OpCategory::Reduction, &[a, any_out], ArchSku::Sm89);
+        let mut any = OpDef::reduction_post(
+            "any",
+            1,
+            &[ElementKind::F32],
+            input(0).binary(BinaryOp::CmpNe, konst(0.0)),
+            ReduceOp::Sum,
+            reduced(0).binary(BinaryOp::CmpGt, konst(0.0)),
+        );
+        any.out_dtype = Some(ElementKind::U8);
+        assert!(contract(&any, &ak, &generate(&any, &ak, &Cuda), "cuda").is_none());
+        assert!(matches!(derive_pattern(&any), Err(PatternError::NotElementwise)));
+    }
+
+    #[test]
     fn front_matter_has_provider_and_seam_profiles() {
         let fm = front_matter("cuda", "abc123");
         assert!(fm.contains("fkc_version: 1"));

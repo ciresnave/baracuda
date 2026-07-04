@@ -351,3 +351,79 @@ preprocessor flags): `nvcc -O3 -arch=sm_89 -std=c++17 -Xcompiler
   increment); the mask-multiply idiom is value-correct modulo signed zero.
   **Route implication for the eventual triu audit:** value-equal with `-0` on
   masked negatives — a consumer needing exact `+0` requires the select op.
+
+## `reduction_upgrades_validate.cu` — reduction upgrades (increment 0e)
+
+Validates the three 0e reduction additions against a CPU reference and, where a
+bespoke sibling exists, against the hand-written `baracuda-kernels-sys` reduce
+kernels (called through their `extern "C" _run` launchers, keepdim ABI):
+
+1. **`ReduceOp::Prod`** — f32 (`reduce_prod_fp.cu`) and i32 (`reduce_prod_int.cu`,
+   the widened `long long` accumulator + wrap-on-store). Bespoke siblings.
+2. **Fused post-expression** — `norm2 = Sqrt(Sum(Sqr(x)))` (the `Sqr` pre-body
+   folds, `Sqrt` post applies to the fold result via `red0`). Bespoke sibling
+   `reduce_norm2_fp.cu`.
+3. **Hetero output dtype** — `any` (`Sum(x≠0)` with a `Cmp*` post → `u8`) and
+   `count` (`Sum(x≠0)` with the identity post → `i64`). No bespoke `OpKind`
+   (Fuel has no Prod/Any/All/CountNonzero reduce dispatch — CPU is the oracle).
+
+**Regeneration:** these cells are **not** in the `bin/kernelgen.rs` catalog.
+Generate them into `<outdir>`, then copy the harness beside them:
+
+```rust
+use baracuda_kernelgen::ir::BinaryOp;
+use baracuda_kernelgen::{generate, input, konst, reduced, Cuda, OpDef, ReduceOp, UnaryOp};
+use baracuda_kernels_types::{structure_key, ArchSku, ElementKind, OpCategory, OperandDesc};
+
+let out = std::env::args().nth(1).expect("outdir");
+let write = |k: baracuda_kernelgen::GeneratedKernel| {
+    std::fs::write(format!("{out}/{}.cu", k.name), &k.source).unwrap();
+};
+// last-axis reduce cell: [256,128] f32 input, [256] output of `out_dt`.
+let key = |out_dt: ElementKind| {
+    let a = OperandDesc::new(2, &[256, 128], &[128, 1], ElementKind::F32, 256);
+    let o = OperandDesc::new(1, &[256], &[1], out_dt, 256);
+    structure_key(OpCategory::Reduction, &[a, o], ArchSku::Sm89)
+};
+let key_uniform = |dt: ElementKind| {
+    let a = OperandDesc::new(2, &[256, 128], &[128, 1], dt, 256);
+    let o = OperandDesc::new(1, &[256], &[1], dt, 256);
+    structure_key(OpCategory::Reduction, &[a, o], ArchSku::Sm89)
+};
+// (1) Prod fp + int.
+write(generate(&OpDef::reduction("prod", 1, &[ElementKind::F32], input(0), ReduceOp::Prod), &key_uniform(ElementKind::F32), &Cuda));
+write(generate(&OpDef::reduction("prod", 1, &[ElementKind::I32], input(0), ReduceOp::Prod), &key_uniform(ElementKind::I32), &Cuda));
+// (2) norm2 = Sqrt(Sum(Sqr(x))).
+write(generate(&OpDef::reduction_post("norm2", 1, &[ElementKind::F32], input(0).unary(UnaryOp::Sqr), ReduceOp::Sum, reduced(0).sqrt()), &key_uniform(ElementKind::F32), &Cuda));
+// (3) hetero-out: any -> u8 (Cmp* post), count -> i64 (identity post).
+let mut anyv = OpDef::reduction_post("anyv", 1, &[ElementKind::F32], input(0).binary(BinaryOp::CmpNe, konst(0.0)), ReduceOp::Sum, reduced(0).binary(BinaryOp::CmpGt, konst(0.0)));
+anyv.out_dtype = Some(ElementKind::U8);
+write(generate(&anyv, &key(ElementKind::U8), &Cuda));
+let mut countv = OpDef::reduction("countv", 1, &[ElementKind::F32], input(0).binary(BinaryOp::CmpNe, konst(0.0)), ReduceOp::Sum);
+countv.out_dtype = Some(ElementKind::I64);
+write(generate(&countv, &key(ElementKind::I64), &Cuda));
+```
+
+Compile like `audit_reduce_softmax.cu` (the bespoke reduce headers want c++17):
+`nvcc -O3 -arch=sm_89 -std=c++17 -Xcompiler "/Zc:preprocessor /std:c++17" -I <kernels/include> reduction_upgrades_validate.cu`.
+
+**Last run:** RTX 4070 Laptop (sm_89), CUDA 13.3 / nvcc 13.3 — **ALL 11 cases PASS**:
+
+| case | vs CPU | vs bespoke |
+| --- | --- | --- |
+| `prod_f32` | relerr 4.3e-07 | relerr **0.0** (bit-exact) |
+| `prod_i32` (wrap) | **bit-exact** (i64→i32) | **bit-exact** |
+| `norm2_f32` | relerr 3.9e-08 | relerr **0.0** (bit-exact) |
+| `any_u8` | **bit-exact** | — (no sibling) |
+| `count_i64` | **bit-exact** | — (no sibling) |
+
+Notes: (1) `prod_i32` exercises the i32 wrap-on-store from the widened `long long`
+accumulator (3²⁰ ≈ 3.5e9 fits i64, wraps i32) — bit-exact to both the CPU
+`(i32)(i64 product)` model and the bespoke i64-accumulator kernel (integer product
+is exactly associative mod 2⁶⁴, so the block-tree and the bespoke sequential fold
+agree bit-for-bit). (2) `prod_f32` / `norm2_f32` came out **bit-identical** to the
+bespoke sibling on this corpus (relerr 0.0), and both are correctly-rounded-close
+(< 1e-6) to the f64 oracle. (3) the hetero-out `any`/`count` have no bespoke
+`OpKind` (see `fuel-cuda-backend/src/baracuda/reduce.rs`), so CPU is the oracle;
+both bit-exact — `any` via the Cmp* post's exact 0/1 → u8, `count` via the float
+accumulator → i64 store (exact while count ≤ 2²⁴).
