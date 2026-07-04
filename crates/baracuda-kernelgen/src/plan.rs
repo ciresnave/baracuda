@@ -331,22 +331,55 @@ fn epilogue_reads_only_reduced0(e: &crate::ir::ScalarExpr) -> bool {
 }
 
 /// The access role of a [`Access::RowReduce`] input operand, from its layout.
+///
+/// The three roles are the three broadcast geometries a row-reduce operand can
+/// take, and they map one-to-one onto the emitter's load index (`last` = the
+/// feature/reduced axis, `rank-1`):
+///
+/// | role | broadcast mask | varies along | index |
+/// |---|---|---|---|
+/// | [`RowStreamed`](RrRole::RowStreamed) | empty | row **and** feature | `in_i[base+j]` |
+/// | [`ColBroadcast`](RrRole::ColBroadcast) | every outer axis, **not** `last` | feature only | `in_i[j]` |
+/// | [`RowScalar`](RrRole::RowScalar) | `last` set, **no** outer axis | row only | `in_i[row]` (hoisted) |
+///
+/// `RowScalar` is the exact inverse of `ColBroadcast`: a `ColBroadcast` weight is
+/// constant *across rows* and varies *along the feature axis*; a `RowScalar`
+/// (a saved per-row statistic — μ, rstd, lse) is constant *along the feature
+/// axis* and varies *across rows*.
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub(crate) enum RrRole {
-    /// The reduced tensor `x` ([n_out, k], full / empty bcast) — `in_i[base+j]`.
+    /// A reduced/streamed tensor ([n_out, k], full / empty bcast) — `in_i[base+j]`.
+    /// Input 0 (`x`) is always this; a second streamed input (softmax-bw's `dy`
+    /// beside `y`) is now also legal (the increment-2 lift).
     RowStreamed,
     /// A per-column `[k]` weight/bias, broadcast over the row axis — `in_i[j]`.
     ColBroadcast,
+    /// A per-row scalar (saved stat), broadcast over the feature axis —
+    /// `in_i[row]`, loaded **once** per row (hoisted outside the feature loop).
+    RowScalar,
 }
 
-/// Classify a RowReduce input by its broadcast mask. **Total / non-panicking** —
-/// the emitter calls this for the load index and must never crash; all *rejection*
-/// of malformed shapes lives in [`validate_row_reduce`] (one source of truth, no
-/// drift). An empty bcast is the row-streamed `x`; any broadcast is a column
-/// operand (the legality of *which* broadcast is validate's job).
-pub(crate) fn rr_role(o: OperandKey) -> RrRole {
+/// Classify a RowReduce input by its broadcast mask, given the feature axis
+/// `last` (`rank-1`). **Total / non-panicking** — the emitter calls this for the
+/// load index and must never crash; all *rejection* of malformed shapes lives in
+/// [`validate_row_reduce`] (one source of truth, no drift). The three-way split:
+///
+/// - empty bcast ⇒ [`RrRole::RowStreamed`] (the reduced/streamed tensor);
+/// - `last` axis broadcast ⇒ [`RrRole::RowScalar`] (constant along the feature
+///   axis ⇒ one value per row). An all-broadcast operand also lands here (last is
+///   set) and is then *rejected* by validate's outer-axis-clear check — a true
+///   scalar is a `Const`, not an operand;
+/// - otherwise (some axis broadcast, but not `last`) ⇒ [`RrRole::ColBroadcast`]
+///   (varies along the feature axis ⇒ a per-column weight/bias).
+///
+/// Which *specific* broadcast masks are legal for each role (every outer axis for
+/// a column, no outer axis for a row-scalar, contiguity for a streamed input) is
+/// validate's job, so the classification here is deliberately coarse and total.
+pub(crate) fn rr_role(o: OperandKey, last: u8) -> RrRole {
     if o.bcast.is_empty() {
         RrRole::RowStreamed
+    } else if o.bcast.is_set(last) {
+        RrRole::RowScalar
     } else {
         RrRole::ColBroadcast
     }
@@ -357,24 +390,38 @@ pub(crate) fn rr_role(o: OperandKey) -> RrRole {
 /// `emit_reduction`'s asserts). Catches expression errors (a `Reduced(s)` not yet
 /// produced, out-of-range `Input`, a `Param`, a non-finite `Const`, a column input
 /// inside a reduction stage) **and** operand-layout errors that would mis-index or
-/// read out of bounds: `x` (input 0) must be row-streamed + contiguous; every other
-/// input must be a per-column `[k]` weight/bias broadcast over **all** outer axes
-/// (rank ≥ 2), not reversed, and never a bare rank-1 `[k]` tensor (whose empty bcast
-/// would misclassify as row-streamed and read `in_i[row*k+j]` past the buffer); the
-/// output is full-width contiguous.
+/// read out of bounds. Input 0 (`x`) must be row-streamed + contiguous. Each other
+/// input takes one of three [`RrRole`]s, classified by broadcast mask ([`rr_role`])
+/// and validated for the load index the emitter uses:
+///
+/// - **`RowStreamed`** (empty bcast, `in_i[base+j]`) — a second reduced/streamed
+///   tensor (softmax-bw's `dy` beside `y`); must be contiguous. This is the
+///   increment-2 lift of the former "inputs>0 must be column-broadcast" guard.
+/// - **`ColBroadcast`** (every outer axis bcast, `last` not, `in_i[j]`) — a
+///   per-column `[k]` weight/bias; not reversed; rank ≥ 2.
+/// - **`RowScalar`** (`last` bcast, no outer axis, `in_i[row]`) — a saved per-row
+///   scalar (μ, rstd, lse), the inverse of `ColBroadcast`; not reversed; rank ≥ 2.
+///   An all-broadcast operand (a true scalar → `Const`) is rejected here.
+///
+/// The output is full-width contiguous.
 ///
 /// v1 assumes a **uniform operand dtype** (the structure key carries one dtype) — a
 /// mixed-dtype LayerNorm (fp16 `x` + fp32 weight) is unrepresentable here and must
 /// be refused upstream by the caller.
 ///
-/// **Caller pre-condition this cannot check:** a column operand's feature-axis extent
-/// must equal `x`'s `k`. The structure key carries broadcast masks but **no numeric
-/// extents** (specialize on structure, not extents), so a too-short weight has the
-/// same key as a correct one — it's accepted here and the emitter reads `in_i[j]`
-/// past its buffer (a confirmed on-device OOB). This is the same trust level as the
-/// `n_out`/`k` launch args; the layer that still holds the `OperandDesc` extents (an
-/// AOT op author, or the live seam caller once `region_to_op` wires RowReduce) must
-/// assert it — the key has already abstracted the extents away by the time we run.
+/// **Caller pre-conditions this cannot check** (the structure key carries broadcast
+/// masks but **no numeric extents** — specialize on structure, not extents), each at
+/// the same trust level as the `n_out`/`k` launch args, asserted by the layer still
+/// holding the `OperandDesc` extents (an AOT op author, or the live seam caller once
+/// `region_to_op` wires RowReduce):
+/// - a `ColBroadcast` weight's feature-axis extent must equal `x`'s `k` (else the
+///   emitter reads `in_i[j]` past its buffer — a confirmed on-device OOB);
+/// - a second `RowStreamed` input must be full `[n_out,k]` dense (else `in_i[base+j]`
+///   over-reads — the identical trust as input 0; a bare rank-1 `[k]` has the same
+///   key as a full `[n_out,k]`, so this can no longer be a key-visible rejection);
+/// - a `RowScalar` must be `[n_out]`-shaped with a dense outer layout so its linear
+///   offset equals `row` (else `in_i[row]` mis-indexes).
+///
 /// Nextafter is declared f32/f64-only at the IR level (its half lowering via
 /// promote-to-f32 would step the f32 lattice — ~2^13 steps inside one half
 /// step, so the demote rounds straight back: a silently wrong no-op). The
@@ -1018,16 +1065,37 @@ fn validate_row_reduce(stages: &[ReduceStage], epilogue: &ScalarExpr, n_inputs: 
     let last = (rank - 1) as u8;
 
     // Operand roles + layout legality (the OOB / mis-index guards). Parallel index
-    // over key.operands + is_col, so a range loop is the natural form.
+    // over key.operands, so a range loop is the natural form. `is_col` feeds the
+    // epilogue-only check below (reducing a per-column weight is rejected); a
+    // RowScalar is legal in BOTH a stage `pre` and the epilogue (it is constant
+    // along the reduced axis — layer-norm-bw's x_hat reads μ/rstd inside a fold),
+    // so it is deliberately NOT tracked as a column.
     let mut is_col = [false; MAX_OPERANDS];
+    let mut input0_streamed = false;
     #[allow(clippy::needless_range_loop)]
     for i in 0..n {
         let o = key.operands[i];
-        match rr_role(o) {
-            RrRole::RowStreamed => assert!(
-                o.contig == Contiguity::Contig,
-                "RowReduce row-streamed input {i} must be contiguous (base = row*k assumes a dense last axis)"
-            ),
+        match rr_role(o, last) {
+            RrRole::RowStreamed => {
+                assert!(
+                    o.contig == Contiguity::Contig,
+                    "RowReduce row-streamed input {i} must be contiguous (base = row*k assumes a dense last axis)"
+                );
+                // `Contiguity::Contig` is |stride|-based (classify_contiguity uses
+                // strides[d].abs()), so a dense-but-REVERSED view passes the contig
+                // check while carrying flipped=true — and the emitter walks memory
+                // FORWARD (idx = row*k + j), reading the tensor mirrored / off the
+                // end. `flipped` is a key-visible axis (the 'r'/'f' token field), so
+                // reject it here as the ColBroadcast/RowScalar branches do. (Review
+                // #2: the pre-lift inputs>0-must-be-column guard flip-checked every
+                // extra input; lifting it to allow a 2nd row-streamed input newly
+                // exposed this path.)
+                assert!(
+                    !o.flipped,
+                    "RowReduce row-streamed input {i} must not be reversed along an axis (base = row*k reads forward-dense; a flipped view would read mirrored/OOB)"
+                );
+                input0_streamed |= i == 0;
+            }
             RrRole::ColBroadcast => {
                 assert!(
                     !o.bcast.is_set(last),
@@ -1046,25 +1114,43 @@ fn validate_row_reduce(stages: &[ReduceStage], epilogue: &ScalarExpr, n_inputs: 
                 );
                 is_col[i] = true;
             }
+            RrRole::RowScalar => {
+                // Per-row scalar (a saved stat: μ, rstd, lse). The feature (last)
+                // axis is broadcast (guaranteed by rr_role); NO outer (row) axis may
+                // be — else it is either all-broadcast (a true scalar → bake as
+                // Const) or drops a row dependence. Indexed `in_i[row]`, so it needs
+                // an outer axis (rank >= 2) laid out dense (offset == row), the
+                // latter a caller precondition at the same trust level as `x`'s
+                // base = row*k (see the module note).
+                assert!(
+                    (0..last).all(|d| !o.bcast.is_set(d)),
+                    "RowReduce row-scalar input {i}: an outer (row) axis is broadcast (mask {:#04x}) — a per-row scalar varies across rows and is constant only along the feature axis; an all-broadcast operand is a true scalar (bake as Const)",
+                    o.bcast.0
+                );
+                assert!(
+                    !o.flipped,
+                    "RowReduce row-scalar input {i} must not be reversed"
+                );
+                assert!(
+                    rank >= 2,
+                    "RowReduce row-scalar input {i} needs rank >= 2 (an outer row axis to index by `row`)"
+                );
+            }
         }
     }
     assert!(
-        !is_col[0],
-        "RowReduce Input0 (x) must be the row-streamed reduced tensor, not column-broadcast"
+        input0_streamed,
+        "RowReduce Input0 (x) must be the row-streamed reduced tensor, not a column-broadcast weight or a per-row scalar"
     );
-    // Inputs 1.. must be column-broadcast — closes the silent OOB where a bare
-    // rank-1 [k] weight (empty bcast) misclassifies as a second row-streamed input
-    // and reads in_i[row*k+j] past its k elements. (A second row-streamed input —
-    // residual fusion — is a deliberate follow-up.)
-    #[allow(clippy::needless_range_loop)]
-    for i in 1..n {
-        assert!(
-            is_col[i],
-            "RowReduce input {i} must be a per-column [k] weight/bias (rank-aligned [n_out,k] with outer stride 0), not a bare row-streamed tensor"
-        );
-    }
+    // Inputs 1.. may now be a second **row-streamed** tensor (softmax-bw's `dy`
+    // beside `y`), a per-column weight/bias, OR a per-row scalar (layer-norm-bw's
+    // μ/rstd). The former "inputs>0 must be column-broadcast" guard is LIFTED
+    // (increment 2): a second row-streamed input full [n_out,k] is the point. A
+    // bare rank-1 [k] passed as input>0 has an empty bcast and so is now accepted
+    // as row-streamed — its full extent [n_out,k] is a caller precondition (the key
+    // cannot see n_out/k), the identical trust level as input 0. See the module note.
     if n > 1 {
-        assert!(rank >= 2, "RowReduce with weight/bias needs rank >= 2");
+        assert!(rank >= 2, "RowReduce with a multi-operand epilogue needs rank >= 2");
     }
     let out = key.operands[n];
     assert!(
@@ -1310,5 +1396,168 @@ mod multi_output_validate {
             ],
         );
         let _ = build_plan(&op, &key_dt(ElementKind::F16, 3));
+    }
+}
+
+#[cfg(test)]
+mod rowreduce_role_validate {
+    //! Increment-2 RowReduce role tests: `rr_role` classification units + gate
+    //! tests that call `build_plan` DIRECTLY (the house rule — an emitter panic
+    //! would mask a gate mutation). Covers the new `RowScalar` role, the lifted
+    //! "inputs>0 must be column-broadcast" restriction, and the rejected-ambiguous
+    //! cases.
+    use super::{build_plan, rr_role, RrRole};
+    use crate::ir::{input, reduced, OpDef, ReduceOp, ReduceStage};
+    use baracuda_kernels_types::{
+        structure_key, ArchSku, AxisMask, Contiguity, DivBucket, ElementKind, OpCategory,
+        OperandDesc, OperandKey, VecWidth,
+    };
+
+    // A minimal OperandKey carrying only the broadcast mask + flip (all rr_role /
+    // validate read for classification); contig is irrelevant to the role.
+    fn opkey(bcast: u8, flipped: bool) -> OperandKey {
+        OperandKey {
+            contig: Contiguity::Broadcast,
+            bcast: AxisMask(bcast),
+            vec_width: VecWidth::Scalar,
+            inner_div: DivBucket::Any,
+            flipped,
+        }
+    }
+
+    #[test]
+    fn rr_role_classifies_the_three_geometries_and_the_ambiguous_case() {
+        // rank 2 ⇒ feature (last) axis = 1.
+        assert_eq!(rr_role(opkey(0b00, false), 1), RrRole::RowStreamed); // nothing bcast
+        assert_eq!(rr_role(opkey(0b10, false), 1), RrRole::RowScalar); // feature bcast ⇒ per-row
+        assert_eq!(rr_role(opkey(0b01, false), 1), RrRole::ColBroadcast); // outer bcast ⇒ per-col
+        // A varying feature axis is NEVER a RowScalar (that is exactly ColBroadcast).
+        assert_ne!(rr_role(opkey(0b01, false), 1), RrRole::RowScalar);
+        // All-broadcast is ambiguous: classified RowScalar (last is set), then REJECTED
+        // by validate's outer-axis-clear check (a true scalar is a Const, not an operand).
+        assert_eq!(rr_role(opkey(0b11, false), 1), RrRole::RowScalar);
+    }
+
+    // A full-width row-streamed operand [256,128].
+    fn stream() -> OperandDesc {
+        OperandDesc::new(2, &[256, 128], &[128, 1], ElementKind::F32, 256)
+    }
+    // A per-row scalar: [n_out,k]-presented, strides [1,0] (feature-axis broadcast,
+    // outer varies dense).
+    fn rowscalar() -> OperandDesc {
+        OperandDesc::new(2, &[256, 128], &[1, 0], ElementKind::F32, 256)
+    }
+
+    #[test]
+    fn second_row_streamed_input_builds() {
+        // softmax bw: y, dy both row-streamed [n,k] + dx. The former guard rejected
+        // input>0 unless column-broadcast; the lift makes this the point — it PASSES.
+        let op = OpDef::row_reduce(
+            "softmax_bw",
+            2,
+            &[ElementKind::F32],
+            vec![ReduceStage { pre: (input(0) * input(1)).0, op: ReduceOp::Sum }],
+            input(0) * (input(1) - reduced(0)),
+        );
+        let s = stream();
+        let key = structure_key(OpCategory::Softmax, &[s, s, s], ArchSku::Sm89);
+        let _ = build_plan(&op, &key);
+    }
+
+    #[test]
+    fn row_scalar_inputs_build() {
+        // layer_norm bw: x, dy row-streamed; mean, rstd per-row scalars (used INSIDE a
+        // stage pre — x_hat — and the epilogue).
+        let x_hat = (input(0) - input(2)) * input(3);
+        let op = OpDef::row_reduce(
+            "layer_norm_bw",
+            4,
+            &[ElementKind::F32],
+            vec![
+                ReduceStage { pre: input(1).0, op: ReduceOp::Mean },
+                ReduceStage { pre: (input(1) * x_hat.clone()).0, op: ReduceOp::Mean },
+            ],
+            input(3) * (input(1) - reduced(0) - x_hat * reduced(1)),
+        );
+        let s = stream();
+        let rs = rowscalar();
+        let key = structure_key(OpCategory::Normalization, &[s, s, rs, rs, s], ArchSku::Sm89);
+        let _ = build_plan(&op, &key);
+    }
+
+    // A 2-input op whose input 1 is the offending operand under test.
+    fn probe_op() -> OpDef {
+        OpDef::row_reduce(
+            "probe",
+            2,
+            &[ElementKind::F32],
+            vec![ReduceStage { pre: input(0).0, op: ReduceOp::Sum }],
+            input(0) + input(1),
+        )
+    }
+
+    #[test]
+    #[should_panic(expected = "true scalar")]
+    fn all_broadcast_input_rejected_as_a_true_scalar() {
+        // strides [0,0] ⇒ both axes broadcast ⇒ classified RowScalar (last set) then
+        // rejected by the outer-axis-clear check — a genuinely ambiguous mask.
+        let s = stream();
+        let allb = OperandDesc::new(2, &[256, 128], &[0, 0], ElementKind::F32, 256);
+        let key = structure_key(OpCategory::Softmax, &[s, allb, s], ArchSku::Sm89);
+        let _ = build_plan(&probe_op(), &key);
+    }
+
+    #[test]
+    #[should_panic(expected = "reversed")]
+    fn row_scalar_flipped_rejected() {
+        // feature-axis broadcast (RowScalar) but a NEGATIVE outer stride ⇒ flipped.
+        let s = stream();
+        let flipped_rs = OperandDesc::new(2, &[256, 128], &[-1, 0], ElementKind::F32, 256);
+        let key = structure_key(OpCategory::Softmax, &[s, flipped_rs, s], ArchSku::Sm89);
+        let _ = build_plan(&probe_op(), &key);
+    }
+
+    #[test]
+    #[should_panic(expected = "reversed")]
+    fn flipped_row_streamed_input_rejected() {
+        // Review #2 CRITICAL: a dense-but-REVERSED second row-streamed input
+        // (empty bcast ⇒ RowStreamed; strides [128,-1] ⇒ |stride|-contig=Contig
+        // but flipped=true). Pre-fix the RowStreamed branch checked only Contig
+        // and accepted it, then the emitter read it forward (mirrored/OOB). Now
+        // rejected, matching the ColBroadcast/RowScalar branches. Via build_plan
+        // DIRECTLY so only the plan gate can fire.
+        let s = stream();
+        let flipped = OperandDesc::new(2, &[256, 128], &[128, -1], ElementKind::F32, 256);
+        let key = structure_key(OpCategory::Softmax, &[s, flipped, s], ArchSku::Sm89);
+        let _ = build_plan(&probe_op(), &key);
+    }
+
+    #[test]
+    #[should_panic(expected = "every outer")]
+    fn rank3_partial_middle_broadcast_rejected() {
+        // rank 3, only the MIDDLE axis broadcast: feature (last) varies ⇒ ColBroadcast,
+        // but it fails "must broadcast every outer axis" (axis 0 is not broadcast) — an
+        // ambiguous partial broadcast, neither a clean column nor a row-scalar.
+        let x = OperandDesc::new(3, &[4, 8, 16], &[128, 16, 1], ElementKind::F32, 256);
+        let mid = OperandDesc::new(3, &[4, 8, 16], &[16, 0, 1], ElementKind::F32, 256);
+        let out = OperandDesc::new(3, &[4, 8, 16], &[128, 16, 1], ElementKind::F32, 256);
+        let key = structure_key(OpCategory::Softmax, &[x, mid, out], ArchSku::Sm89);
+        let _ = build_plan(&probe_op(), &key);
+    }
+
+    #[test]
+    #[should_panic(expected = "Input0")]
+    fn input0_as_row_scalar_rejected() {
+        // Input 0 (the reduced tensor) presented feature-broadcast (a row-scalar) is
+        // illegal — it must be the row-streamed x.
+        let op = OpDef::row_reduce(
+            "t",
+            1,
+            &[ElementKind::F32],
+            vec![ReduceStage { pre: input(0).0, op: ReduceOp::Sum }],
+            reduced(0),
+        );
+        let key = structure_key(OpCategory::Softmax, &[rowscalar(), stream()], ArchSku::Sm89);
+        let _ = build_plan(&op, &key);
     }
 }

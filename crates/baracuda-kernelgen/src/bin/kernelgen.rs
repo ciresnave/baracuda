@@ -217,8 +217,9 @@ fn main() {
     // (multi-input: x + per-column [k] weight/bias broadcast over the row axis).
     let dt = ElementKind::F32;
     let x = OperandDesc::new(2, &[4096, 1024], &[1024, 1], dt, 256);
-    let col = OperandDesc::new(2, &[4096, 1024], &[0, 1], dt, 256); // weight/bias
-    let full = OperandDesc::new(2, &[4096, 1024], &[1024, 1], dt, 256); // full-width output
+    let col = OperandDesc::new(2, &[4096, 1024], &[0, 1], dt, 256); // weight/bias (per-column)
+    let rowscalar = OperandDesc::new(2, &[4096, 1024], &[1, 0], dt, 256); // saved per-row stat
+    let full = OperandDesc::new(2, &[4096, 1024], &[1024, 1], dt, 256); // full-width row-streamed
     let rmsnorm = OpDef::row_reduce(
         "rmsnorm",
         1,
@@ -266,11 +267,35 @@ fn main() {
         (input(0) - reduced(0)) * (reduced(1) + konst(1e-5)).unary(UnaryOp::Rsqrt) * input(1)
             + input(2),
     );
+    // Compound backward (increment 2). softmax bw: in0=y, in1=dy (both row-streamed);
+    // dx = y·(dy - Σ_j y[j]·dy[j]). layer_norm bw dx: in0=x, in1=dy (row-streamed),
+    // in2=mean, in3=rstd (per-row saved scalars); x_hat=(x-mean)·rstd,
+    // dx = rstd·(dy - mean(dy) - x_hat·mean(dy·x_hat)).
+    let softmax_bw = OpDef::row_reduce(
+        "softmax_bw",
+        2,
+        &[dt],
+        vec![ReduceStage { pre: (input(0) * input(1)).0, op: ReduceOp::Sum }],
+        input(0) * (input(1) - reduced(0)),
+    );
+    let ln_x_hat = (input(0) - input(2)) * input(3);
+    let layer_norm_bw = OpDef::row_reduce(
+        "layer_norm_bw",
+        4,
+        &[dt],
+        vec![
+            ReduceStage { pre: input(1).0, op: ReduceOp::Mean },
+            ReduceStage { pre: (input(1) * ln_x_hat.clone()).0, op: ReduceOp::Mean },
+        ],
+        input(3) * (input(1) - reduced(0) - ln_x_hat * reduced(1)),
+    );
     for (op, ops, cat) in [
         (rmsnorm, vec![x, full], OpCategory::Normalization),
         (softmax, vec![x, full], OpCategory::Softmax),
         (wrmsnorm, vec![x, col, full], OpCategory::Normalization),
         (layernorm, vec![x, col, col, full], OpCategory::Normalization),
+        (softmax_bw, vec![x, x, full], OpCategory::Softmax),
+        (layer_norm_bw, vec![x, x, rowscalar, rowscalar, full], OpCategory::Normalization),
     ] {
         let key = structure_key(cat, &ops, ArchSku::Sm89);
         // Ship-top-K: the base kernel plus every schedule variant (Softmax gets

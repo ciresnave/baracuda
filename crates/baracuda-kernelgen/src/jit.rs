@@ -2110,5 +2110,44 @@ mod tests {
                 .unwrap_or_else(|e| panic!("{} failed to compile: {e}", k.name));
             assert!(String::from_utf8(ptx).unwrap().contains(".entry"));
         }
+
+        // Increment 2: compound backward — softmax bw (two row-streamed inputs) and
+        // layer_norm bw dx (two row-streamed + two per-row saved-stat scalars — the
+        // hoisted `in_i[row]` load compiles headerless).
+        let stream = OperandDesc::new(2, &[256, 128], &[128, 1], dt, 256);
+        let rowscalar = OperandDesc::new(2, &[256, 128], &[1, 0], dt, 256);
+        let softmax_bw = OpDef::row_reduce(
+            "softmax_bw",
+            2,
+            &[dt],
+            vec![ReduceStage { pre: (input(0) * input(1)).0, op: ReduceOp::Sum }],
+            input(0) * (input(1) - reduced(0)),
+        );
+        let ln_x_hat = (input(0) - input(2)) * input(3);
+        let layer_norm_bw = OpDef::row_reduce(
+            "layer_norm_bw",
+            4,
+            &[dt],
+            vec![
+                ReduceStage { pre: input(1).0, op: ReduceOp::Mean },
+                ReduceStage { pre: (input(1) * ln_x_hat.clone()).0, op: ReduceOp::Mean },
+            ],
+            input(3) * (input(1) - reduced(0) - ln_x_hat * reduced(1)),
+        );
+        for (op, ops, cat) in [
+            (softmax_bw, vec![stream, stream, stream], OpCategory::Softmax),
+            (
+                layer_norm_bw,
+                vec![stream, stream, rowscalar, rowscalar, stream],
+                OpCategory::Normalization,
+            ),
+        ] {
+            let mk = structure_key(cat, &ops, ArchSku::Sm89);
+            let k = generate(&op, &mk, &Cuda);
+            let ptx = cc
+                .compile(&k.source, &k.name, 5000)
+                .unwrap_or_else(|e| panic!("{} failed to compile: {e}", k.name));
+            assert!(String::from_utf8(ptx).unwrap().contains(".entry"));
+        }
     }
 }

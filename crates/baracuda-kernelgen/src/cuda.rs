@@ -2188,6 +2188,41 @@ fn emit_row_reduce_impl(plan: &KernelPlan<'_>, ctype: &str, materialize: bool) -
     let Access::RowReduce { stages, epilogue } = plan.access else {
         unreachable!("emit_row_reduce requires Access::RowReduce");
     };
+    // Independent emitter backstop (belt-and-suspenders; the plan gate
+    // `validate_row_reduce` validates the same, the 0a lesson: gate every layer).
+    // Re-derive each operand's role from the key and assert the OOB-relevant
+    // invariants the role-aware `load`/hoist below depend on, with cuda-prefixed
+    // messages distinct from the plan gate's — so no future path can route a
+    // malformed RowReduce operand into an out-of-bounds index. Reached by BOTH the
+    // base kernel (`emit_row_reduce` → here) and the smemrow variant.
+    {
+        let last = plan.key.rank.saturating_sub(1);
+        for i in 0..plan.n_inputs {
+            let o = plan.key.operands[i as usize];
+            match rr_role(o, last) {
+                RrRole::RowStreamed => assert!(
+                    o.contig == Contiguity::Contig && !o.flipped,
+                    "cuda backend: RowReduce row-streamed input {i} must be contiguous \
+                     and not flipped (in{i}[base+j] reads forward-dense; a reversed \
+                     view is |stride|-contig but reads mirrored/OOB)"
+                ),
+                RrRole::ColBroadcast => assert!(
+                    !o.flipped && !o.bcast.is_set(last) && (0..last).all(|d| o.bcast.is_set(d)),
+                    "cuda backend: RowReduce column input {i} must broadcast every outer axis, \
+                     vary along the feature axis, and not flip (in{i}[j])"
+                ),
+                RrRole::RowScalar => assert!(
+                    plan.key.rank >= 2 && !o.flipped && (0..last).all(|d| !o.bcast.is_set(d)),
+                    "cuda backend: RowReduce row-scalar input {i} needs rank>=2, no outer-axis \
+                     broadcast, and no flip (in{i}[row])"
+                ),
+            }
+        }
+        assert!(
+            plan.n_inputs == 0 || rr_role(plan.key.operands[0], last) == RrRole::RowStreamed,
+            "cuda backend: RowReduce input 0 must be the row-streamed reduced tensor"
+        );
+    }
     let dbl = matches!(plan.dtype, ElementKind::F64 | ElementKind::F32Strict);
     let acc = if dbl { "double" } else { "float" };
     let zero = if dbl { "0.0" } else { "0.0f" };
@@ -2212,16 +2247,27 @@ fn emit_row_reduce_impl(plan: &KernelPlan<'_>, ctype: &str, materialize: bool) -
         if materialize { "_sm" } else { "" }
     );
 
+    // The feature (reduced/last) axis index, for the role classifier. `saturating_sub`
+    // keeps `load` total even at rank 0 (validate guarantees rank >= 1 before we run).
+    let last = plan.key.rank.saturating_sub(1);
     // load(i), up-converting f16/bf16/f32-strict to the accumulate type. The index
-    // is role-aware (validate guarantees the roles): a row-streamed input (`x`) loads
-    // `in_i[idx]` (idx = base+j); a per-column weight/bias loads `in_i[j]` (the same
-    // value every row). Both `idx` and `j` are in scope in every stage fold + the
-    // epilogue loop. (Validate forbids column inputs inside a stage `pre`, so stage
-    // folds only ever see row-streamed loads — byte-identical to the single-input path.)
+    // is role-aware (validate guarantees the roles): a row-streamed input (`x`, or a
+    // second streamed operand like softmax-bw's `dy`) loads `in_i[idx]` (idx = base+j);
+    // a per-column weight/bias loads `in_i[j]` (same value every row); a per-row scalar
+    // (a saved stat) reads the value hoisted ONCE per row into `rs{i}` (already the
+    // accumulate type). `idx`/`j` are in scope in every stage fold + the epilogue loop;
+    // `rs{i}` is hoisted at the row-loop top, so it too is in scope everywhere.
+    // (Validate forbids only column inputs inside a stage `pre`; a row-scalar is
+    // constant along the reduced axis and is legal there — layer-norm-bw's x_hat.)
     let load = |i: u8| {
-        let pos = match rr_role(plan.key.operands[i as usize]) {
+        let role = rr_role(plan.key.operands[i as usize], last);
+        if role == RrRole::RowScalar {
+            return format!("rs{i}");
+        }
+        let pos = match role {
             RrRole::RowStreamed => "idx",
             RrRole::ColBroadcast => "j",
+            RrRole::RowScalar => unreachable!("row-scalar handled above"),
         };
         match plan.dtype {
             ElementKind::F16 => format!("__half2float(in{i}[{pos}])"),
@@ -2307,6 +2353,23 @@ fn emit_row_reduce_impl(plan: &KernelPlan<'_>, ctype: &str, materialize: bool) -
     }
     s.push_str("    for (long long row = blockIdx.x; row < n_out; row += (long long)gridDim.x) {\n");
     s.push_str("        long long base = row * k;\n");
+    // Hoist per-row scalar operands (saved stats: μ, rstd, lse) once per row: they
+    // are constant along the feature axis, so `in{i}[row]` is loaded here (outside
+    // the feature loop), up-converted to the accumulate type, and referenced as
+    // `rs{i}` in every stage fold + the epilogue. Emits NOTHING when there is no
+    // row-scalar operand (every pre-increment-2 op), so existing emission is
+    // byte-identical.
+    for i in 0..n {
+        if rr_role(plan.key.operands[i as usize], last) == RrRole::RowScalar {
+            let conv = match plan.dtype {
+                ElementKind::F16 => format!("__half2float(in{i}[row])"),
+                ElementKind::Bf16 => format!("__bfloat162float(in{i}[row])"),
+                ElementKind::F32Strict => format!("(double)in{i}[row]"),
+                _ => format!("in{i}[row]"),
+            };
+            s.push_str(&format!("        {acc} rs{i} = {conv};\n"));
+        }
+    }
 
     for (i, st) in stages.iter().enumerate() {
         // The materialized variant caches the LAST stage's per-element values.
@@ -4240,17 +4303,23 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "per-column")]
-    fn rowreduce_bare_rank1_weight_rejected() {
-        // The must-fix OOB guard: a weight passed as a BARE rank-1 [k] tensor (not a
-        // rank-aligned [n_out,k] broadcast view) has an empty bcast mask -> would
-        // misclassify as a second row-streamed input and read in1[row*k+j] past its
-        // k elements. validate must reject it loudly.
+    fn rowreduce_second_empty_bcast_input_is_row_streamed_not_rejected() {
+        // Increment 2 LIFTED the former "inputs>0 must be column-broadcast" guard.
+        // A second input with an EMPTY bcast mask is now classified RowStreamed (a
+        // second reduced/streamed tensor — softmax-bw's `dy` beside `y`) and ACCEPTED;
+        // the key genuinely cannot distinguish a bare rank-1 [k] from a full [n_out,k]
+        // (both have the identical {Contig, empty-bcast} operand key), so the full
+        // extent is a caller precondition at the same trust level as input 0 (see the
+        // validate_row_reduce module note). Fed wrmsnorm_op's epilogue, input 1 now
+        // indexes in1[idx] (row-streamed), NOT in1[j] (column) — proving the
+        // reclassification the lift produces.
         let x = OperandDesc::new(2, &[256, 128], &[128, 1], ElementKind::F32, 256);
         let bare_w = OperandDesc::new(1, &[128], &[1], ElementKind::F32, 256); // bare [K]
         let out = OperandDesc::new(2, &[256, 128], &[128, 1], ElementKind::F32, 256);
         let key = structure_key(OpCategory::Normalization, &[x, bare_w, out], ArchSku::Sm89);
-        let _ = generate(&wrmsnorm_op(ElementKind::F32), &key, &Cuda);
+        let k = generate(&wrmsnorm_op(ElementKind::F32), &key, &Cuda);
+        assert!(k.source.contains("in1[idx]"), "second empty-bcast input is row-streamed");
+        assert!(!k.source.contains("in1[j]"), "not classified as a column weight");
     }
 
     #[test]
@@ -4270,6 +4339,116 @@ mod tests {
             input(0) * input(1),
         );
         let _ = generate(&bad, &mi_key(ElementKind::F32, 1), &Cuda);
+    }
+
+    // --- increment 2: compound-backward RowReduce (2nd row-streamed input +
+    //     per-row saved-stat scalars). softmax bw + layer_norm bw dx. ---
+
+    // Two full-width row-streamed inputs [256,128] + full output — softmax bw's
+    // (y, dy, dx). No column/row-scalar operand.
+    fn softmax_bw_key(dt: ElementKind) -> baracuda_kernels_types::StructureKey {
+        let full = OperandDesc::new(2, &[256, 128], &[128, 1], dt, 256);
+        structure_key(OpCategory::Softmax, &[full, full, full], ArchSku::Sm89)
+    }
+
+    fn softmax_bw_op(dt: ElementKind) -> OpDef {
+        use crate::ir::{reduced, ReduceOp, ReduceStage};
+        // in0=y, in1=dy (both row-streamed). dx = y*(dy - Σ_j y[j]·dy[j]).
+        OpDef::row_reduce(
+            "softmax_bw",
+            2,
+            &[dt],
+            vec![ReduceStage { pre: (input(0) * input(1)).0, op: ReduceOp::Sum }],
+            input(0) * (input(1) - reduced(0)),
+        )
+    }
+
+    // x, dy row-streamed [256,128]; mean, rstd per-row scalars ([n_out,k]-presented,
+    // strides [1,0]: feature-axis broadcast, outer varies) + full output.
+    fn layer_norm_bw_key(dt: ElementKind) -> baracuda_kernels_types::StructureKey {
+        let stream = OperandDesc::new(2, &[256, 128], &[128, 1], dt, 256);
+        let rowscalar = OperandDesc::new(2, &[256, 128], &[1, 0], dt, 256);
+        structure_key(
+            OpCategory::Normalization,
+            &[stream, stream, rowscalar, rowscalar, stream],
+            ArchSku::Sm89,
+        )
+    }
+
+    fn layer_norm_bw_op(dt: ElementKind) -> OpDef {
+        use crate::ir::{reduced, ReduceOp, ReduceStage};
+        // in0=x, in1=dy (row-streamed); in2=mean, in3=rstd (per-row scalars).
+        // x_hat=(x-mean)*rstd; dx = rstd*(dy - mean(dy) - x_hat*mean(dy*x_hat)).
+        let x_hat = (input(0) - input(2)) * input(3);
+        OpDef::row_reduce(
+            "layer_norm_bw",
+            4,
+            &[dt],
+            vec![
+                ReduceStage { pre: input(1).0, op: ReduceOp::Mean },
+                ReduceStage { pre: (input(1) * x_hat.clone()).0, op: ReduceOp::Mean },
+            ],
+            input(3) * (input(1) - reduced(0) - x_hat * reduced(1)),
+        )
+    }
+
+    #[test]
+    fn rowreduce_softmax_bw_two_row_streamed_inputs() {
+        let k = generate(&softmax_bw_op(ElementKind::F32), &softmax_bw_key(ElementKind::F32), &Cuda);
+        assert_eq!(k.name, "baracuda_gen_softmax_bw_f32_rowreduce");
+        // signature carries the SECOND row-streamed input in1.
+        assert!(k.source.contains("const float* __restrict__ in1,"));
+        // the Sum stage folds y·dy — BOTH inputs indexed row-streamed (in_i[idx]).
+        assert!(k.source.contains("acc0 += (in0[idx] * in1[idx]);"));
+        assert!(k.source.contains("float r0 = block_sum_softmax_bw_f32(acc0);"));
+        // epilogue: dx = y·(dy - rowdot), full-width, both inputs row-streamed.
+        assert!(k.source.contains("out[idx] = (in0[idx] * (in1[idx] - r0));"));
+        // no per-column (j) or per-row-scalar (row/rs) index appears — pure streamed.
+        assert!(!k.source.contains("in1[j]") && !k.source.contains("rs0") && !k.source.contains("rs1"));
+    }
+
+    #[test]
+    fn rowreduce_layer_norm_bw_rowscalar_hoist_two_stage() {
+        let k = generate(
+            &layer_norm_bw_op(ElementKind::F32),
+            &layer_norm_bw_key(ElementKind::F32),
+            &Cuda,
+        );
+        assert_eq!(k.name, "baracuda_gen_layer_norm_bw_f32_rowreduce");
+        // four inputs: x, dy row-streamed; mean, rstd per-row scalars.
+        assert!(k.source.contains("const float* __restrict__ in3,"));
+        // saved stats hoisted ONCE per row (in{i}[row]), outside the feature loop.
+        assert!(k.source.contains("float rs2 = in2[row];"));
+        assert!(k.source.contains("float rs3 = in3[row];"));
+        // stage 0: mean(dy) — the streamed dy folded, Mean divides by k.
+        assert!(k.source.contains("acc0 += in1[idx];"));
+        assert!(k.source.contains("float r0 = block_sum_layer_norm_bw_f32(acc0) / (float)k;"));
+        // stage 1: mean(dy·x_hat), x_hat=(x-mean)*rstd reads the hoisted rs2/rs3.
+        assert!(k.source.contains("acc1 += (in1[idx] * ((in0[idx] - rs2) * rs3));"));
+        assert!(k.source.contains("float r1 = block_sum_layer_norm_bw_f32(acc1) / (float)k;"));
+        // epilogue: dx = rstd·(dy - r0 - x_hat·r1) — rstd/mean via rs3/rs2, NOT per-elem.
+        assert!(k.source.contains(
+            "out[idx] = (rs3 * ((in1[idx] - r0) - (((in0[idx] - rs2) * rs3) * r1)));"
+        ));
+        // the per-row scalars are NEVER read per-element (in2[idx]/in3[idx]).
+        assert!(!k.source.contains("in2[idx]") && !k.source.contains("in3[idx]"));
+        // ...nor per-column (in2[j]/in3[j]).
+        assert!(!k.source.contains("in2[j]") && !k.source.contains("in3[j]"));
+    }
+
+    #[test]
+    fn rowreduce_layer_norm_bw_f16_hoists_upconverted_stat() {
+        // f16: the hoisted per-row scalar is up-converted to the f32 accumulate type
+        // ONCE (__half2float(in{i}[row])), not per feature element.
+        let k = generate(
+            &layer_norm_bw_op(ElementKind::F16),
+            &layer_norm_bw_key(ElementKind::F16),
+            &Cuda,
+        );
+        assert!(k.source.contains("float rs2 = __half2float(in2[row]);"));
+        assert!(k.source.contains("float rs3 = __half2float(in3[row]);"));
+        // block reducer accumulates in float even for f16.
+        assert!(k.source.contains("float block_sum_layer_norm_bw_f16(float v)"));
     }
 
     // =======================================================================

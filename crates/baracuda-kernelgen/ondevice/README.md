@@ -483,3 +483,85 @@ multi-output backward into per-output kinds, e.g. `FlashAttnBackwardQ/K/V`), so
 these ship as generated AOT kernels with **no FKC contract** (honest miss — the
 `return.outputs`/§5.5-bundle envelope needs a forest-pattern identity Baracuda
 cannot yet advertise); the kernels generate and run correctly, proven here.
+
+## `rowreduce_bw_validate.cu` — compound-backward RowReduce (increment 2)
+
+The increment-2 proof vehicles: a fused RowReduce with a **second row-streamed
+input** (softmax bw reads `y` AND `dy`) and **per-row saved-stat scalars** hoisted
+once per row (layer_norm bw dx reads `mean`/`rstd` as `in_i[row]`). One block per
+row, block-parallel tree reduce; the generated kernels are diffed against an f64
+CPU oracle and the **bespoke** `softmax_backward_fp` / `layer_norm_backward_fp`
+launchers (`baracuda-kernels-sys`, the path dispatch calls).
+
+- **softmax bw**: `dx[j] = y[j]·(dy[j] - Σ_l y[l]·dy[l])` — `y`, `dy` both
+  RowStreamed (`in_i[base+j]`); the row-dot is one block reduce (bespoke recomputes
+  it per thread). Bespoke launcher `launch_softmax_backward_fp(dy, y, dx, …)` takes
+  the **saved forward output `y`** (not recomputed).
+- **layer_norm bw dx**: `x_hat=(x-mean)·rstd; dx = rstd·(dy - mean(dy) -
+  x_hat·mean(dy·x_hat))` — `x`, `dy` RowStreamed; `mean`, `rstd` per-row scalars
+  (stride `[1,0]`, hoisted). Bespoke `launch_layer_norm_backward_fp(dy, x, gamma=null,
+  mean, inv_std, dx, …)` takes **mean + `inv_std` (= rstd)** indexed `[row]` with
+  `stride_save=[1,0]` — the identical saved-stats convention (gamma=null ⇒ the
+  dx-only path matching the generated epilogue).
+
+**Run (from a VS dev shell):**
+
+```sh
+nvcc -O3 -arch=sm_89 -std=c++17 -Xcompiler "/Zc:preprocessor /std:c++17" \
+     -I <kernels/include> rowreduce_bw_validate.cu -o rowreduce_bw_validate
+./rowreduce_bw_validate                                  # correctness (5 shapes) + bench
+compute-sanitizer --tool memcheck  ./rowreduce_bw_validate san   # generated kernels, small shapes
+compute-sanitizer --tool racecheck ./rowreduce_bw_validate san
+```
+
+**Last run:** RTX 4070 Laptop (sm_89), CUDA 13.3 / nvcc 13.3 — **all 10 correctness
+cases PASS**; `compute-sanitizer memcheck` = **0 errors**, `racecheck` = **0
+hazards** (the block-reduce smem, the per-row-scalar hoist, and the dual
+row-streamed loads are race-free and in-bounds).
+
+Correctness (scale-relative L-inf vs f64 oracle; abs-diff vs the bespoke sibling —
+per-element relative error is meaningless for backward grads that cancel to ≈0):
+
+| shape | softmax_bw oracle / vs bespoke | layer_norm_bw oracle / vs bespoke |
+| --- | --- | --- |
+| 256×128 | 7.8e-08 / 7.5e-09 | 8.8e-08 / 3.6e-07 |
+| 1000×777 (non-square) | 8.6e-08 / 1.9e-09 | 1.0e-07 / 3.6e-07 |
+| 64×16384 (64 KB row, smemrow regime) | 9.0e-08 / 5.8e-11 | 1.1e-07 / 3.6e-07 |
+| 4096×1024 (catalog cell) | 1.0e-07 / 1.9e-09 | 1.0e-07 / 4.8e-07 |
+| 131072×32 (many rows, tiny k) | 1.1e-07 / 6.0e-08 | 1.0e-07 / 6.0e-07 |
+
+The generated kernels match the shipped bespoke to **f32 precision** (abs-diff
+≤ 6e-7 across every shape) and the f64 oracle to the same (worst-element error
+≤ 1.1e-7 of the tensor's peak magnitude — clean f32-accumulation level even at
+k = 16384, thanks to the block tree reduce).
+
+**Extract-the-delta — the generator WINS decisively (not a tie).** The bespoke
+backwards are one-thread-per-cell with an inner O(extent) recompute of the row
+statistic (`Σ y·dy` / `sum_dxh`+`sum_dxhxh`) — O(numel·extent) total, and there is
+**no smem/block-cooperative BW fast path** (only the *forward* softmax/layernorm
+have one). The generated fused RowReduce does one block-parallel tree reduce per
+row, so it is memory-bound where the bespoke is compute-bound:
+
+| bench cell | gen GB/s | bespoke ms | gen speedup |
+| --- | --- | --- | --- |
+| softmax_bw 8192×2048 | 240 | 79.7 | **95×** |
+| layer_norm_bw 8192×2048 | 170 | 1061 | **893×** |
+| softmax_bw 2048×16384 | 140 | 1210 | **421×** |
+| layer_norm_bw 2048×16384 (64 KB row) | 141 | 17 018 | **5976×** |
+
+The gap widens with `k` (the recompute is quadratic in the reduced extent), so the
+wide-row cell — exactly the smemrow-variant regime — is the generator's largest
+win. The technique to extract for a bespoke follow-up is the one this generator
+already embodies: **replace the per-thread row-statistic recompute with a
+block-cooperative tree reduce** (the same lesson as the reduction/softmax-fwd
+rewrites). No cliff, no loss to record.
+
+**Fuel contract (honest miss, confirmed):** Fuel's JIT/FKC vocabulary (`OpTag`,
+`fuel-kernel-seam-types`) is forward/functional only — it has **no `*Backward`
+tag**. Autograd emits softmax/layernorm backward as atomic `Op::Fused(…_BACKWARD)`
+nodes and `op_to_tag(Op::Fused) → None`, so they never enter a JIT region; the
+registry backward matchers are stubbed (`canonical_pattern → None`). On the
+Baracuda side `derive_pattern` rejects the RowReduce region (`NotElementwise`). So
+these fused backwards emit **no contract** and stay AOT-only — the same honest miss
+as the reduction family and the multi-output elementwise increment, no new panic
+path.
