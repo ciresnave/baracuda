@@ -69,6 +69,15 @@ pub enum PatternError {
         /// The indices actually bound by the body, ascending.
         got: Vec<u8>,
     },
+    /// The body contains a scalar fn with no FKC §4.1 graph-`Op` name yet (the
+    /// increment-0a vocabulary: `Erfc`…`Lgamma`, `Atan2`…`RemTrunc`). Fuel's
+    /// `OpTag` set doesn't name these, so no pattern — and therefore no contract
+    /// — is emitted (the honest miss); we never invent vocabulary. The kernels
+    /// themselves still generate and lower normally.
+    NoFkcName {
+        /// The IR op's `Debug` rendering (e.g. `"Erfc"`, `"Atan2"`).
+        op: String,
+    },
 }
 
 /// Derive the FKC pattern tree for `op`, or a [`PatternError`] if the body isn't
@@ -201,32 +210,50 @@ fn walk(
         // The non-infix binary fns have no scalar-param form in §4.1 (no
         // MaxScalar/etc.), so a `Param` operand is rejected (plain_binop).
         ScalarExpr::Binary(op, a, b) => {
-            plain_binop(binary_name(*op), a, b, path, consumers, extracts)
+            let Some(name) = binary_name(*op) else {
+                return Err(PatternError::NoFkcName { op: format!("{op:?}") });
+            };
+            plain_binop(name, a, b, path, consumers, extracts)
         }
-        ScalarExpr::Unary(op, x) => Ok(op_node(
-            unary_name(*op),
-            vec![walk(x, false, &child(path, 0), extracts)?],
-            consumers,
-        )),
+        ScalarExpr::Unary(op, x) => {
+            let Some(name) = unary_name(*op) else {
+                return Err(PatternError::NoFkcName { op: format!("{op:?}") });
+            };
+            Ok(op_node(
+                name,
+                vec![walk(x, false, &child(path, 0), extracts)?],
+                consumers,
+            ))
+        }
     }
 }
 
-/// FKC §4.1 graph-`Op` name for a [`BinaryOp`].
-fn binary_name(op: BinaryOp) -> &'static str {
-    match op {
+/// FKC §4.1 graph-`Op` name for a [`BinaryOp`], or `None` for the increment-0a
+/// fns §4.1 doesn't name yet (Fuel's `OpTag` is `#[non_exhaustive]`; we do NOT
+/// invent tags — the body is rejected as [`PatternError::NoFkcName`] instead).
+fn binary_name(op: BinaryOp) -> Option<&'static str> {
+    Some(match op {
         BinaryOp::Max => "Maximum",
         BinaryOp::Min => "Minimum",
         BinaryOp::Pow => "Pow",
         BinaryOp::Rem => "Rem",
-    }
+        BinaryOp::Atan2
+        | BinaryOp::Copysign
+        | BinaryOp::Nextafter
+        | BinaryOp::FmaxIeee
+        | BinaryOp::FminIeee
+        | BinaryOp::RemTrunc => return None,
+    })
 }
 
-/// FKC §4.1 graph-`Op` name for a [`UnaryOp`]. Per §4.1 (B6/E2 resolution) bare
-/// `Gelu` is the **tanh** approximation and `GeluErf` is the **exact erf** form;
-/// our [`UnaryOp::Gelu`] lowers to exact erf (see `cuda.rs`), so it emits
-/// `GeluErf` — emitting bare `Gelu` would misroute it to tanh-GELU subgraphs.
-fn unary_name(op: UnaryOp) -> &'static str {
-    match op {
+/// FKC §4.1 graph-`Op` name for a [`UnaryOp`], or `None` for the increment-0a
+/// fns §4.1 doesn't name yet (same rule as [`binary_name`]). Per §4.1 (B6/E2
+/// resolution) bare `Gelu` is the **tanh** approximation and `GeluErf` is the
+/// **exact erf** form; our [`UnaryOp::Gelu`] lowers to exact erf (see
+/// `cuda.rs`), so it emits `GeluErf` — emitting bare `Gelu` would misroute it
+/// to tanh-GELU subgraphs.
+fn unary_name(op: UnaryOp) -> Option<&'static str> {
+    Some(match op {
         UnaryOp::Neg => "Neg",
         UnaryOp::Abs => "Abs",
         UnaryOp::Sqr => "Sqr",
@@ -248,7 +275,25 @@ fn unary_name(op: UnaryOp) -> &'static str {
         UnaryOp::Round => "Round",
         UnaryOp::Sign => "Sign",
         UnaryOp::Step => "Step",
-    }
+        UnaryOp::Erfc
+        | UnaryOp::Trunc
+        | UnaryOp::Exp2
+        | UnaryOp::Expm1
+        | UnaryOp::Log2
+        | UnaryOp::Log10
+        | UnaryOp::Log1p
+        | UnaryOp::Sinh
+        | UnaryOp::Cosh
+        | UnaryOp::Tan
+        | UnaryOp::Asin
+        | UnaryOp::Acos
+        | UnaryOp::Atan
+        | UnaryOp::Asinh
+        | UnaryOp::Acosh
+        | UnaryOp::Atanh
+        | UnaryOp::Cbrt
+        | UnaryOp::Lgamma => return None,
+    })
 }
 
 /// `Add`/`Mul` with exactly one runtime `Param` operand is the FKC §4.1
@@ -568,6 +613,43 @@ pattern:
         assert!(fkc.contains("op: AddScalar"));
         assert!(fkc.contains("extract: { param0: \"self.value\" }"));
         assert!(fkc.contains("- bind: 0"));
+    }
+
+    #[test]
+    fn increment_0a_vocab_is_rejected_not_invented() {
+        use crate::ir::{BinaryOp, UnaryOp};
+        // Fuel's OpTag/§4.1 vocabulary is #[non_exhaustive] and does NOT name the
+        // increment-0a fns: pattern derivation must reject them (honest miss),
+        // never invent a graph-Op name.
+        let erfc = OpDef::elementwise("e", 1, &[ElementKind::F32], input(0).unary(UnaryOp::Erfc));
+        assert_eq!(
+            derive_pattern(&erfc),
+            Err(PatternError::NoFkcName { op: "Erfc".to_string() })
+        );
+        let fmax = OpDef::elementwise(
+            "f",
+            2,
+            &[ElementKind::F32],
+            input(0).binary(BinaryOp::FmaxIeee, input(1)),
+        );
+        assert_eq!(
+            derive_pattern(&fmax),
+            Err(PatternError::NoFkcName { op: "FmaxIeee".to_string() })
+        );
+        // …even buried under ops that DO have names.
+        let nested = OpDef::elementwise(
+            "n",
+            1,
+            &[ElementKind::F32],
+            input(0).unary(UnaryOp::Lgamma).relu(),
+        );
+        assert_eq!(
+            derive_pattern(&nested),
+            Err(PatternError::NoFkcName { op: "Lgamma".to_string() })
+        );
+        // The pre-existing vocabulary is untouched: Erf still emits `op: Erf`.
+        let erf = OpDef::elementwise("g", 1, &[ElementKind::F32], input(0).unary(UnaryOp::Erf));
+        assert!(to_fkc(&derive_pattern(&erf).unwrap()).contains("op: Erf"));
     }
 
     #[test]

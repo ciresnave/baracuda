@@ -43,12 +43,17 @@ pub enum ScalarExpr {
     Div(Box<ScalarExpr>, Box<ScalarExpr>),
     /// A unary math / activation op applied to a sub-expression.
     Unary(UnaryOp, Box<ScalarExpr>),
-    /// A non-infix binary op (`max`/`min`/`pow`/`rem`) — a backend function call.
+    /// A non-infix binary op (`max`/`min`/`pow`/`rem`/`atan2`/…) — a backend
+    /// function call.
     Binary(BinaryOp, Box<ScalarExpr>, Box<ScalarExpr>),
 }
 
 /// A unary math / activation op. Variant names line up with the FKC §4.1
-/// graph-`Op` vocabulary, so [`crate::derive_pattern`] maps them by name.
+/// graph-`Op` vocabulary, so [`crate::derive_pattern`] maps them by name —
+/// **except** the increment-0a scalar-fn extension (`Erfc` through `Lgamma`),
+/// which Fuel's `OpTag`/§4.1 vocabulary does not name yet: those lower and
+/// validate like any other op but are rejected by pattern derivation (an
+/// honest miss — no invented tags) until Fuel adds the vocabulary.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub enum UnaryOp {
     /// Negation `-x`.
@@ -94,22 +99,87 @@ pub enum UnaryOp {
     Sign,
     /// Heaviside step `x > 0 ? 1 : 0` (`heaviside(x, values=0)`; `step(0) = 0`).
     Step,
+    // --- increment-0a scalar-fn extension (no FKC §4.1 name yet; see enum docs) ---
+    /// Complementary error function `erfc x = 1 − erf x`.
+    Erfc,
+    /// Truncate — round toward zero (exact on finite values).
+    Trunc,
+    /// Base-2 exponential `2ˣ`.
+    Exp2,
+    /// `eˣ − 1`, accurate near 0.
+    Expm1,
+    /// Base-2 logarithm.
+    Log2,
+    /// Base-10 logarithm.
+    Log10,
+    /// `ln(1 + x)`, accurate near 0.
+    Log1p,
+    /// Hyperbolic sine.
+    Sinh,
+    /// Hyperbolic cosine.
+    Cosh,
+    /// Tangent.
+    Tan,
+    /// Arcsine (domain `[-1, 1]`).
+    Asin,
+    /// Arccosine (domain `[-1, 1]`).
+    Acos,
+    /// Arctangent.
+    Atan,
+    /// Inverse hyperbolic sine.
+    Asinh,
+    /// Inverse hyperbolic cosine (domain `[1, ∞)`).
+    Acosh,
+    /// Inverse hyperbolic tangent (domain `(-1, 1)`).
+    Atanh,
+    /// Cube root (defined for negative inputs, unlike `pow(x, 1/3)`).
+    Cbrt,
+    /// Log-gamma `ln|Γ(x)|`.
+    Lgamma,
 }
 
 /// A non-infix binary op — lowered as a backend **function call** (`fmaxf`,
 /// `powf`), unlike the infix arithmetic [`ScalarExpr::Add`]/`Sub`/`Mul`/`Div`.
-/// Variant names line up with the FKC §4.1 graph-`Op` vocabulary.
+/// Variant names line up with the FKC §4.1 graph-`Op` vocabulary — except the
+/// increment-0a extension (`Atan2` through `RemTrunc`), which §4.1 does not
+/// name yet (see the [`UnaryOp`] docs; same honest-miss rule).
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub enum BinaryOp {
-    /// Elementwise maximum (commutative).
+    /// Elementwise maximum — **NaN-propagating** (`torch.maximum`; commutative).
+    /// Deliberately distinct from [`BinaryOp::FmaxIeee`] (NaN-suppressing).
     Max,
-    /// Elementwise minimum (commutative).
+    /// Elementwise minimum — **NaN-propagating** (`torch.minimum`; commutative).
+    /// Deliberately distinct from [`BinaryOp::FminIeee`] (NaN-suppressing).
     Min,
     /// Power `aᵇ` (not commutative).
     Pow,
     /// Floored remainder — `a - floor(a/b)·b`, sign-of-divisor (`torch.remainder`,
-    /// Fuel's `Op::Rem`; not commutative). Distinct from C `fmod` (sign-of-dividend).
+    /// Fuel's `Op::Rem`; not commutative). Distinct from C `fmod` (sign-of-dividend
+    /// — that is [`BinaryOp::RemTrunc`]); never merge the two.
     Rem,
+    // --- increment-0a scalar-fn extension (no FKC §4.1 name yet; see UnaryOp docs) ---
+    /// Four-quadrant arctangent `atan2(a, b)` — `a` is `y`, `b` is `x` (not
+    /// commutative; the ±0 quadrant conventions are IEEE's).
+    Atan2,
+    /// `copysign(a, b)` — bit-level sign transfer: magnitude of `a`, sign bit of
+    /// `b`, including signed zero and the sign of a NaN payload (not commutative).
+    Copysign,
+    /// `nextafter(a, b)` — the next representable value after `a` toward `b`, in
+    /// the **kernel dtype's own lattice** (bit-level). f16/bf16 are rejected as an
+    /// honest miss: the half path computes promoted-to-f32, which would step the
+    /// f32 lattice and round back to `a` — the wrong neighbor, silently.
+    Nextafter,
+    /// IEEE-754 `maxNum` (CUDA `fmaxf`) — **NaN-suppressing**: if exactly one
+    /// operand is NaN, returns the other. DISTINCT from the house NaN-propagating
+    /// [`BinaryOp::Max`]; never alias or merge them (the reference kernel
+    /// `binary_maximum_fp.cu` reserves `fmaxf` for exactly this separate op).
+    FmaxIeee,
+    /// IEEE-754 `minNum` (CUDA `fminf`) — NaN-suppressing dual of
+    /// [`BinaryOp::FmaxIeee`]; distinct from the NaN-propagating [`BinaryOp::Min`].
+    FminIeee,
+    /// Truncated remainder — C `fmod`, sign-of-**dividend** (`torch.fmod`; not
+    /// commutative). Distinct from the floored [`BinaryOp::Rem`] (sign-of-divisor).
+    RemTrunc,
 }
 
 // ===========================================================================

@@ -237,10 +237,7 @@ fn ulp_bound(e: &ScalarExpr) -> f64 {
     match e {
         ScalarExpr::Input(_) | ScalarExpr::Const(_) | ScalarExpr::Param(_) | ScalarExpr::Reduced(_) => 0.0,
         ScalarExpr::Unary(op, x) => ulp_bound(x) + unary_ulp(*op),
-        ScalarExpr::Binary(op, a, b) => {
-            let here = if matches!(op, BinaryOp::Pow) { 4.0 } else { 0.0 };
-            ulp_bound(a) + ulp_bound(b) + here
-        }
+        ScalarExpr::Binary(op, a, b) => ulp_bound(a) + ulp_bound(b) + binary_ulp(*op),
         ScalarExpr::Add(a, b)
         | ScalarExpr::Sub(a, b)
         | ScalarExpr::Mul(a, b)
@@ -249,16 +246,79 @@ fn ulp_bound(e: &ScalarExpr) -> f64 {
 }
 
 /// Per-op CUDA f32 ULP error. Correctly-rounded / exact ops (`Neg`/`Abs`/`Sqr`/
-/// `Sqrt`/`Recip`/`Relu`/`Floor`/`Ceil`/`Round`/`Sign`/`Step`) are 0.
+/// `Sqrt`/`Recip`/`Relu`/`Floor`/`Ceil`/`Round`/`Sign`/`Step`/`Trunc`) are 0.
+/// Deliberately **exhaustive** (no wildcard): a future op must be rated here on
+/// purpose, or the compiler objects — a silent 0.0 default would under-state,
+/// and under-stating is the one unsafe direction.
 fn unary_ulp(op: UnaryOp) -> f64 {
     match op {
-        UnaryOp::Log => 1.0,
-        UnaryOp::Exp | UnaryOp::Tanh | UnaryOp::Erf | UnaryOp::Sin | UnaryOp::Cos | UnaryOp::Rsqrt => {
-            2.0
-        }
-        // composites of expf/erff + rounding — conservatively a bit higher
-        UnaryOp::Sigmoid | UnaryOp::Silu | UnaryOp::Gelu => 3.0,
-        _ => 0.0,
+        // exact / correctly rounded
+        UnaryOp::Neg
+        | UnaryOp::Abs
+        | UnaryOp::Sqr
+        | UnaryOp::Sqrt
+        | UnaryOp::Recip
+        | UnaryOp::Relu
+        | UnaryOp::Floor
+        | UnaryOp::Ceil
+        | UnaryOp::Round
+        | UnaryOp::Sign
+        | UnaryOp::Step
+        | UnaryOp::Trunc => 0.0,
+        UnaryOp::Log | UnaryOp::Expm1 | UnaryOp::Log1p | UnaryOp::Cbrt | UnaryOp::Log2 => 1.0,
+        UnaryOp::Exp
+        | UnaryOp::Tanh
+        | UnaryOp::Erf
+        | UnaryOp::Sin
+        | UnaryOp::Cos
+        | UnaryOp::Rsqrt
+        | UnaryOp::Exp2
+        | UnaryOp::Log10
+        | UnaryOp::Cosh
+        | UnaryOp::Atan => 2.0,
+        // composites of expf/erff + rounding — conservatively a bit higher —
+        // and the vendor-3-ulp inverse/hyperbolic tier.
+        UnaryOp::Sigmoid
+        | UnaryOp::Silu
+        | UnaryOp::Gelu
+        | UnaryOp::Sinh
+        | UnaryOp::Acos
+        | UnaryOp::Asinh
+        | UnaryOp::Atanh => 3.0,
+        // domain-edge-sensitive fns at the loosest shared tier (vendor: tanf 4,
+        // asinf 4, acoshf 4, erfcf 4).
+        UnaryOp::Tan | UnaryOp::Asin | UnaryOp::Acosh | UnaryOp::Erfc => 4.0,
+        // lgammaf: vendor declares 6 ulp OUTSIDE the interval (-10.001, -2.264)
+        // and larger inside it (near the negative-real poles). 6 is the honest
+        // vendor headline bound — rating it 4 (the previous loosest tier) would
+        // under-state, so this op introduces the 6 tier; the near-pole caveat is
+        // inherent to lgamma at any finite rating.
+        UnaryOp::Lgamma => 6.0,
+    }
+}
+
+/// Per-op CUDA f32 ULP error for the binary fns, mirroring [`unary_ulp`]
+/// (exhaustive, no wildcard). `Max`/`Min` (compare-selects) and the bit-level
+/// increment-0a ops (`copysignf`/`nextafterf`/`fmaxf`/`fminf`/`fmodf` — all
+/// vendor 0-ulp) contribute 0. Floored `Rem` is rated UNBOUNDED (infinity ⇒
+/// the contract emits `approximate` with no `max_ulp` claim): it lowers as
+/// the composite `a - floor(a/b)*b`, and a 0.5-ulp quotient perturbation that
+/// crosses an integer boundary flips the floor — the result is then off by
+/// |b|, which no finite result-ULP number bounds. (Inherent to the floored-mod
+/// formula; torch.remainder behaves identically. `RemTrunc` = `fmodf` is a
+/// genuinely exact vendor primitive and keeps 0.)
+fn binary_ulp(op: BinaryOp) -> f64 {
+    match op {
+        BinaryOp::Max
+        | BinaryOp::Min
+        | BinaryOp::Copysign
+        | BinaryOp::Nextafter
+        | BinaryOp::FmaxIeee
+        | BinaryOp::FminIeee
+        | BinaryOp::RemTrunc => 0.0,
+        BinaryOp::Rem => f64::INFINITY,
+        BinaryOp::Atan2 => 3.0, // vendor atan2f: 3 ulp
+        BinaryOp::Pow => 4.0,
     }
 }
 
@@ -270,6 +330,11 @@ fn precision_of(body: &ScalarExpr) -> (&'static str, Option<u32>) {
     let u = ulp_bound(body);
     if u <= 0.0 {
         ("correctly_rounded", Some(0))
+    } else if u.is_infinite() {
+        // A body containing an op with no finite result-ULP bound (floored
+        // Rem's quotient-boundary flip): honest contract = approximate with
+        // NO max_ulp claim, never an under-stated finite number.
+        ("approximate", None)
     } else {
         ("approximate", Some(u.ceil() as u32))
     }
@@ -657,5 +722,66 @@ mod tests {
         let op = OpDef::elementwise("add", 2, &[ElementKind::Complex64], input(0) + input(1));
         let key = key_dtype(ElementKind::Complex64, 3);
         assert!(contract(&op, &key, &stub_kernel(), "cuda").is_none());
+    }
+
+    #[test]
+    fn vocab_ulp_tiers_rate_the_new_fns() {
+        use crate::ir::{BinaryOp, UnaryOp};
+        // Op-sensitive precision for the increment-0a vocabulary: the declared
+        // max_ulp is the fn's vendor tier, and the exact/bit-level ops stay
+        // correctly_rounded. (Under-stating is the unsafe direction — these pins
+        // hold the table honest.)
+        let u = |op: UnaryOp| precision_of(&input(0).unary(op).0);
+        assert_eq!(u(UnaryOp::Trunc), ("correctly_rounded", Some(0)));
+        assert_eq!(u(UnaryOp::Log1p), ("approximate", Some(1)));
+        assert_eq!(u(UnaryOp::Expm1), ("approximate", Some(1)));
+        assert_eq!(u(UnaryOp::Cbrt), ("approximate", Some(1)));
+        assert_eq!(u(UnaryOp::Exp2), ("approximate", Some(2)));
+        assert_eq!(u(UnaryOp::Sinh), ("approximate", Some(3)));
+        // the domain-edge-sensitive fns carry the loose tiers.
+        assert_eq!(u(UnaryOp::Tan), ("approximate", Some(4)));
+        assert_eq!(u(UnaryOp::Asin), ("approximate", Some(4)));
+        assert_eq!(u(UnaryOp::Acosh), ("approximate", Some(4)));
+        assert_eq!(u(UnaryOp::Erfc), ("approximate", Some(4)));
+        assert_eq!(u(UnaryOp::Lgamma), ("approximate", Some(6)));
+        let b = |op: BinaryOp| precision_of(&input(0).binary(op, input(1)).0);
+        assert_eq!(b(BinaryOp::Atan2), ("approximate", Some(3)));
+        // bit-level / exact binaries are correctly rounded.
+        assert_eq!(b(BinaryOp::Copysign), ("correctly_rounded", Some(0)));
+        assert_eq!(b(BinaryOp::Nextafter), ("correctly_rounded", Some(0)));
+        assert_eq!(b(BinaryOp::FmaxIeee), ("correctly_rounded", Some(0)));
+        assert_eq!(b(BinaryOp::FminIeee), ("correctly_rounded", Some(0)));
+        assert_eq!(b(BinaryOp::RemTrunc), ("correctly_rounded", Some(0)));
+    }
+
+    #[test]
+    fn vocab_ops_have_no_contract_until_fuel_names_them() {
+        use crate::ir::{BinaryOp, UnaryOp};
+        use crate::pattern::PatternError;
+        // Fuel's §4.1/OpTag vocabulary doesn't name the increment-0a fns: no
+        // pattern derives (NoFkcName), so no contract is emitted — the honest
+        // miss. The kernel itself still generates (lowering is unaffected).
+        let erfc = OpDef::elementwise("erfc", 1, &[ElementKind::F32], input(0).unary(UnaryOp::Erfc));
+        let ukey = key_for(2, OpCategory::UnaryElementwise);
+        let uk = generate(&erfc, &ukey, &Cuda);
+        assert!(uk.source.contains("erfcf("), "the kernel still lowers");
+        assert!(contract(&erfc, &ukey, &uk, "cuda").is_none(), "but no contract");
+        assert!(matches!(
+            crate::derive_pattern(&erfc),
+            Err(PatternError::NoFkcName { ref op }) if op == "Erfc"
+        ));
+        let at2 = OpDef::elementwise(
+            "atan2",
+            2,
+            &[ElementKind::F32],
+            input(0).binary(BinaryOp::Atan2, input(1)),
+        );
+        let bkey = key_for(3, OpCategory::BinaryElementwise);
+        let bk = generate(&at2, &bkey, &Cuda);
+        assert!(contract(&at2, &bkey, &bk, "cuda").is_none());
+        assert!(matches!(
+            crate::derive_pattern(&at2),
+            Err(PatternError::NoFkcName { ref op }) if op == "Atan2"
+        ));
     }
 }

@@ -214,10 +214,13 @@ fn packed_unary(op: UnaryOp, x: String, dt: ElementKind) -> String {
     }
 }
 
-/// Packed binary speller — all four function ops are **Tier B** (pair-split
+/// Packed binary speller — every binary function op is **Tier B** (pair-split
 /// through the existing scalar speller): `__hmax2`/`__hmin2` are IEEE maxNum
 /// (NaN-*suppressing*), which would break the house NaN-propagating Max/Min
-/// convention, and `Pow`/`Rem` have no packed intrinsic.
+/// convention, and the rest (`Pow`/`Rem`, the increment-0a fns) have no packed
+/// intrinsic. `FmaxIeee`/`FminIeee` *could* one day take `__hmax2`/`__hmin2` as
+/// Tier A, but only behind the item-09 bit-identity sweep — not assumed here.
+/// `Nextafter` never reaches this speller ([`cuda_binary`] refuses halves).
 fn packed_binary(op: BinaryOp, a: String, b: String, dt: ElementKind) -> String {
     let (lo, hi, join) = pair_parts(dt);
     let l = cuda_binary(op, format!("{lo}({a})"), format!("{lo}({b})"), dt);
@@ -1802,6 +1805,26 @@ fn unary_f32(op: UnaryOp, x: String) -> String {
         UnaryOp::Round => format!("rintf({x})"), // ties to even
         UnaryOp::Sign => format!("({x} > 0.0f ? 1.0f : ({x} < 0.0f ? -1.0f : 0.0f))"),
         UnaryOp::Step => format!("({x} > 0.0f ? 1.0f : 0.0f)"), // heaviside(x, 0): step(0)=0
+        // increment-0a scalar fns — all implicit CUDA device math (headerless
+        // under nvrtc, same class as expf; no includes).
+        UnaryOp::Erfc => format!("erfcf({x})"),
+        UnaryOp::Trunc => format!("truncf({x})"),
+        UnaryOp::Exp2 => format!("exp2f({x})"),
+        UnaryOp::Expm1 => format!("expm1f({x})"),
+        UnaryOp::Log2 => format!("log2f({x})"),
+        UnaryOp::Log10 => format!("log10f({x})"),
+        UnaryOp::Log1p => format!("log1pf({x})"),
+        UnaryOp::Sinh => format!("sinhf({x})"),
+        UnaryOp::Cosh => format!("coshf({x})"),
+        UnaryOp::Tan => format!("tanf({x})"),
+        UnaryOp::Asin => format!("asinf({x})"),
+        UnaryOp::Acos => format!("acosf({x})"),
+        UnaryOp::Atan => format!("atanf({x})"),
+        UnaryOp::Asinh => format!("asinhf({x})"),
+        UnaryOp::Acosh => format!("acoshf({x})"),
+        UnaryOp::Atanh => format!("atanhf({x})"),
+        UnaryOp::Cbrt => format!("cbrtf({x})"),
+        UnaryOp::Lgamma => format!("lgammaf({x})"),
     }
 }
 
@@ -1829,6 +1852,25 @@ fn unary_f64(op: UnaryOp, x: String) -> String {
         UnaryOp::Round => format!("rint({x})"), // ties to even
         UnaryOp::Sign => format!("({x} > 0.0 ? 1.0 : ({x} < 0.0 ? -1.0 : 0.0))"),
         UnaryOp::Step => format!("({x} > 0.0 ? 1.0 : 0.0)"), // heaviside(x, 0): step(0)=0
+        // increment-0a scalar fns — the double variants of the f32 spellings.
+        UnaryOp::Erfc => format!("erfc({x})"),
+        UnaryOp::Trunc => format!("trunc({x})"),
+        UnaryOp::Exp2 => format!("exp2({x})"),
+        UnaryOp::Expm1 => format!("expm1({x})"),
+        UnaryOp::Log2 => format!("log2({x})"),
+        UnaryOp::Log10 => format!("log10({x})"),
+        UnaryOp::Log1p => format!("log1p({x})"),
+        UnaryOp::Sinh => format!("sinh({x})"),
+        UnaryOp::Cosh => format!("cosh({x})"),
+        UnaryOp::Tan => format!("tan({x})"),
+        UnaryOp::Asin => format!("asin({x})"),
+        UnaryOp::Acos => format!("acos({x})"),
+        UnaryOp::Atan => format!("atan({x})"),
+        UnaryOp::Asinh => format!("asinh({x})"),
+        UnaryOp::Acosh => format!("acosh({x})"),
+        UnaryOp::Atanh => format!("atanh({x})"),
+        UnaryOp::Cbrt => format!("cbrt({x})"),
+        UnaryOp::Lgamma => format!("lgamma({x})"),
     }
 }
 
@@ -1858,9 +1900,10 @@ fn cuda_unary(op: UnaryOp, x: String, dtype: ElementKind) -> String {
 /// `Maximum`/`Minimum` are **NaN-propagating** (a NaN operand ⇒ NaN out) —
 /// matching `torch.maximum`/`minimum` and the house reference kernel
 /// `binary_maximum_fp.cu`, which deliberately reserves `fmaxf`/`fminf` (IEEE
-/// `maxNum`, NaN-*suppressing*) for a *separate* `Fmax`/`Fmin` op. So we emit the
-/// compare-select, not `fmaxf`. (Operands appear 3× — the deferred temp-binding
-/// pass, cf. relu/sigmoid, removes the recompute on compound inners.)
+/// `maxNum`, NaN-*suppressing*) for a *separate* op. That separate op now exists
+/// as [`BinaryOp::FmaxIeee`]/[`BinaryOp::FminIeee`] below — so `Max`/`Min` emit
+/// the compare-select, never `fmaxf`. (Operands appear 3× — the deferred
+/// temp-binding pass, cf. relu/sigmoid, removes the recompute on compound inners.)
 fn binary_f32(op: BinaryOp, a: String, b: String) -> String {
     match op {
         BinaryOp::Max => format!("({a} != {a} ? {a} : ({b} != {b} ? {b} : ({a} > {b} ? {a} : {b})))"),
@@ -1869,6 +1912,16 @@ fn binary_f32(op: BinaryOp, a: String, b: String) -> String {
         // Floored remainder (torch.remainder, sign-of-divisor — Fuel's Op::Rem),
         // not C fmodf (sign-of-dividend). Operands appear twice (temp-binding TODO).
         BinaryOp::Rem => format!("({a} - floorf({a} / {b}) * {b})"),
+        // increment-0a scalar fns. FmaxIeee/FminIeee are the deliberate
+        // NaN-SUPPRESSING fmaxf/fminf — the separate op the house reserves them
+        // for; Max/Min above stay the NaN-propagating compare-selects. RemTrunc
+        // is C fmodf (sign-of-dividend) — the truncated sibling of Rem above.
+        BinaryOp::Atan2 => format!("atan2f({a}, {b})"),
+        BinaryOp::Copysign => format!("copysignf({a}, {b})"),
+        BinaryOp::Nextafter => format!("nextafterf({a}, {b})"),
+        BinaryOp::FmaxIeee => format!("fmaxf({a}, {b})"),
+        BinaryOp::FminIeee => format!("fminf({a}, {b})"),
+        BinaryOp::RemTrunc => format!("fmodf({a}, {b})"),
     }
 }
 
@@ -1879,12 +1932,40 @@ fn binary_f64(op: BinaryOp, a: String, b: String) -> String {
         BinaryOp::Min => format!("({a} != {a} ? {a} : ({b} != {b} ? {b} : ({a} < {b} ? {a} : {b})))"),
         BinaryOp::Pow => format!("pow({a}, {b})"),
         BinaryOp::Rem => format!("({a} - floor({a} / {b}) * {b})"),
+        BinaryOp::Atan2 => format!("atan2({a}, {b})"),
+        BinaryOp::Copysign => format!("copysign({a}, {b})"),
+        BinaryOp::Nextafter => format!("nextafter({a}, {b})"),
+        BinaryOp::FmaxIeee => format!("fmax({a}, {b})"),
+        BinaryOp::FminIeee => format!("fmin({a}, {b})"),
+        BinaryOp::RemTrunc => format!("fmod({a}, {b})"),
     }
 }
 
 /// Lower a non-infix binary op for `dtype` (f32/f64 native; f16/bf16 compute in
 /// float). Mirrors [`cuda_unary`]; integer binary-function math is a follow-up.
+///
+/// The f16/bf16 promote→f32-fn→demote round trip is value-correct for every op
+/// here **except `Nextafter`**, which is therefore refused (the JIT gates it in
+/// `dtype_compatible`; reaching this panic means an AOT author declared f16/bf16
+/// on a Nextafter body). Why the others are safe: half→f32 is exact, and
+/// demoting rounds a correctly-computed f32 value once — for `Copysign`
+/// specifically the result's magnitude is the *input's own* (exactly
+/// representable) magnitude with the sign bit swapped, and a half NaN payload
+/// round-trips half→f32→half bit-exactly (the same guarantee the whole scalar
+/// half path leans on, swept by `packed_validate.cu`), so bit-level sign
+/// transfer survives the promotion. `Nextafter` does not: the f32 neighbor of a
+/// promoted half is ~2¹³ f32 steps closer than the next *half*, so the demote
+/// rounds straight back to `a` — a silently wrong no-op, hence the honest miss.
 fn cuda_binary(op: BinaryOp, a: String, b: String, dtype: ElementKind) -> String {
+    if matches!(dtype, ElementKind::F16 | ElementKind::Bf16)
+        && matches!(op, BinaryOp::Nextafter)
+    {
+        panic!(
+            "cuda backend: Nextafter has no half-precision lowering — the \
+             promote-to-f32 path would step the f32 lattice, not the {dtype:?} \
+             one (declare f32/f64 only, or miss honestly)"
+        );
+    }
     match dtype {
         ElementKind::F32 | ElementKind::F32Strict => binary_f32(op, a, b),
         ElementKind::F64 => binary_f64(op, a, b),
@@ -2953,5 +3034,304 @@ mod tests {
             input(0) * input(1),
         );
         let _ = generate(&bad, &mi_key(ElementKind::F32, 1), &Cuda);
+    }
+
+    // =======================================================================
+    // Increment-0a scalar-fn vocabulary — emission goldens + dtype gates
+    // =======================================================================
+
+    /// Scalar (unvectorized) unary cell: align defeats vectorization so the
+    /// emitted body is the bare `out[i] = <fn>(in0[i]);` golden.
+    fn unary_scalar_key(dt: ElementKind, align: u32) -> baracuda_kernels_types::StructureKey {
+        let a = OperandDesc::new(1, &[1 << 20], &[1], dt, align);
+        structure_key(OpCategory::UnaryElementwise, &[a, a], ArchSku::Sm89)
+    }
+
+    fn binary_scalar_key(dt: ElementKind, align: u32) -> baracuda_kernels_types::StructureKey {
+        let a = OperandDesc::new(1, &[1 << 20], &[1], dt, align);
+        structure_key(OpCategory::BinaryElementwise, &[a, a, a], ArchSku::Sm89)
+    }
+
+    #[test]
+    fn vocab_unary_emission_goldens_f32_f64_f16() {
+        use crate::ir::UnaryOp;
+        // One golden per new unary fn (Erf pre-existed; pinned here so the whole
+        // sweep is asserted in one place): exact C call per dtype — f32 device
+        // math, f64 device math, f16 promote→f32-fn→demote.
+        let cases: &[(UnaryOp, &str, &str)] = &[
+            (UnaryOp::Erf, "erff", "erf"),
+            (UnaryOp::Erfc, "erfcf", "erfc"),
+            (UnaryOp::Trunc, "truncf", "trunc"),
+            (UnaryOp::Exp2, "exp2f", "exp2"),
+            (UnaryOp::Expm1, "expm1f", "expm1"),
+            (UnaryOp::Log2, "log2f", "log2"),
+            (UnaryOp::Log10, "log10f", "log10"),
+            (UnaryOp::Log1p, "log1pf", "log1p"),
+            (UnaryOp::Sinh, "sinhf", "sinh"),
+            (UnaryOp::Cosh, "coshf", "cosh"),
+            (UnaryOp::Tan, "tanf", "tan"),
+            (UnaryOp::Asin, "asinf", "asin"),
+            (UnaryOp::Acos, "acosf", "acos"),
+            (UnaryOp::Atan, "atanf", "atan"),
+            (UnaryOp::Asinh, "asinhf", "asinh"),
+            (UnaryOp::Acosh, "acoshf", "acosh"),
+            (UnaryOp::Atanh, "atanhf", "atanh"),
+            (UnaryOp::Cbrt, "cbrtf", "cbrt"),
+            (UnaryOp::Lgamma, "lgammaf", "lgamma"),
+        ];
+        for &(uop, f32_fn, f64_fn) in cases {
+            let op = |dt: ElementKind| {
+                OpDef::elementwise("v", 1, &[dt], input(0).unary(uop))
+            };
+            let kf = generate(&op(ElementKind::F32), &unary_scalar_key(ElementKind::F32, 4), &Cuda);
+            assert!(
+                kf.source.contains(&format!("out[i] = {f32_fn}(in0[i]);")),
+                "{uop:?} f32 golden missing in:\n{}",
+                kf.source
+            );
+            let kd = generate(&op(ElementKind::F64), &unary_scalar_key(ElementKind::F64, 8), &Cuda);
+            assert!(
+                kd.source.contains(&format!("out[i] = {f64_fn}(in0[i]);")),
+                "{uop:?} f64 golden missing in:\n{}",
+                kd.source
+            );
+            // f16 scalar: the existing promote-to-f32 transcendental path.
+            let kh = generate(&op(ElementKind::F16), &unary_scalar_key(ElementKind::F16, 2), &Cuda);
+            assert!(
+                kh.source
+                    .contains(&format!("out[i] = __float2half({f32_fn}(__half2float(in0[i])));")),
+                "{uop:?} f16 promote golden missing in:\n{}",
+                kh.source
+            );
+        }
+    }
+
+    #[test]
+    fn vocab_binary_emission_goldens_f32_f64_f16() {
+        use crate::ir::BinaryOp;
+        // (op, f32 fn, f64 fn, f16 promote path expected?) — Nextafter has NO
+        // half lowering (gated; separate test).
+        let cases: &[(BinaryOp, &str, &str, bool)] = &[
+            (BinaryOp::Atan2, "atan2f", "atan2", true),
+            (BinaryOp::Copysign, "copysignf", "copysign", true),
+            (BinaryOp::Nextafter, "nextafterf", "nextafter", false),
+            (BinaryOp::FmaxIeee, "fmaxf", "fmax", true),
+            (BinaryOp::FminIeee, "fminf", "fmin", true),
+            (BinaryOp::RemTrunc, "fmodf", "fmod", true),
+        ];
+        for &(bop, f32_fn, f64_fn, half_ok) in cases {
+            let op = |dt: ElementKind| {
+                OpDef::elementwise("v", 2, &[dt], input(0).binary(bop, input(1)))
+            };
+            let kf = generate(&op(ElementKind::F32), &binary_scalar_key(ElementKind::F32, 4), &Cuda);
+            assert!(
+                kf.source.contains(&format!("out[i] = {f32_fn}(in0[i], in1[i]);")),
+                "{bop:?} f32 golden missing in:\n{}",
+                kf.source
+            );
+            let kd = generate(&op(ElementKind::F64), &binary_scalar_key(ElementKind::F64, 8), &Cuda);
+            assert!(
+                kd.source.contains(&format!("out[i] = {f64_fn}(in0[i], in1[i]);")),
+                "{bop:?} f64 golden missing in:\n{}",
+                kd.source
+            );
+            if half_ok {
+                let kh =
+                    generate(&op(ElementKind::F16), &binary_scalar_key(ElementKind::F16, 2), &Cuda);
+                assert!(
+                    kh.source.contains(&format!(
+                        "out[i] = __float2half({f32_fn}(__half2float(in0[i]), __half2float(in1[i])));"
+                    )),
+                    "{bop:?} f16 promote golden missing in:\n{}",
+                    kh.source
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn fmax_ieee_is_fmaxf_and_distinct_from_nan_propagating_maximum() {
+        use crate::ir::BinaryOp;
+        // The two ops must never alias: FmaxIeee/FminIeee are the NaN-SUPPRESSING
+        // fmaxf/fminf; Max/Min stay the NaN-propagating compare-selects.
+        let key = binary_scalar_key(ElementKind::F32, 4);
+        let ieee = OpDef::elementwise(
+            "fmaxi",
+            2,
+            &[ElementKind::F32],
+            input(0).binary(BinaryOp::FmaxIeee, input(1)),
+        );
+        let ki = generate(&ieee, &key, &Cuda);
+        assert!(ki.source.contains("fmaxf(in0[i], in1[i])"));
+        assert!(!ki.source.contains("!="), "no NaN-select in the IEEE op");
+        let max = OpDef::elementwise("m", 2, &[ElementKind::F32], input(0).max(input(1)));
+        let km = generate(&max, &key, &Cuda);
+        assert!(!km.source.contains("fmaxf"), "Maximum must NOT become fmaxf");
+        assert!(km.source.contains("!="), "Maximum keeps the NaN-propagating select");
+        // Min side — BOTH directions (mutation-caught gap: Min silently
+        // becoming fminf passed the suite when only FminIeee was pinned).
+        let ieee_min = OpDef::elementwise(
+            "fmini",
+            2,
+            &[ElementKind::F32],
+            input(0).binary(BinaryOp::FminIeee, input(1)),
+        );
+        assert!(generate(&ieee_min, &key, &Cuda).source.contains("fminf(in0[i], in1[i])"));
+        let min = OpDef::elementwise("mn", 2, &[ElementKind::F32], input(0).min(input(1)));
+        let kn = generate(&min, &key, &Cuda);
+        assert!(!kn.source.contains("fminf"), "Minimum must NOT become fminf");
+        assert!(kn.source.contains("!="), "Minimum keeps the NaN-propagating select");
+    }
+
+    #[test]
+    fn remtrunc_is_fmodf_and_rem_stays_floored() {
+        use crate::ir::BinaryOp;
+        // RemTrunc = C fmodf (sign-of-dividend); Rem stays the floored form
+        // (sign-of-divisor). Distinct spellings, never merged.
+        let key = binary_scalar_key(ElementKind::F32, 4);
+        let rt = OpDef::elementwise(
+            "fmod",
+            2,
+            &[ElementKind::F32],
+            input(0).binary(BinaryOp::RemTrunc, input(1)),
+        );
+        let kt = generate(&rt, &key, &Cuda);
+        assert!(kt.source.contains("fmodf(in0[i], in1[i])"));
+        assert!(!kt.source.contains("floorf"), "RemTrunc must not take the floored form");
+        let rem = OpDef::elementwise(
+            "rem",
+            2,
+            &[ElementKind::F32],
+            input(0).binary(BinaryOp::Rem, input(1)),
+        );
+        let kr = generate(&rem, &key, &Cuda);
+        assert!(kr.source.contains("(in0[i] - floorf(in0[i] / in1[i]) * in1[i])"));
+        assert!(!kr.source.contains("fmodf"), "Rem must not become fmodf");
+        // f64 spellings pinned too — in binary_f64 the fmod/floor and
+        // fmax/fmin arms sit one edit apart, an easy silent swap.
+        let key64 = binary_scalar_key(ElementKind::F64, 4);
+        let rt64 = OpDef::elementwise(
+            "fmod64",
+            2,
+            &[ElementKind::F64],
+            input(0).binary(BinaryOp::RemTrunc, input(1)),
+        );
+        let kt64 = generate(&rt64, &key64, &Cuda);
+        assert!(kt64.source.contains("fmod(in0[i], in1[i])"));
+        assert!(!kt64.source.contains("floor("), "f64 RemTrunc must not take the floored form");
+        let rem64 = OpDef::elementwise(
+            "rem64",
+            2,
+            &[ElementKind::F64],
+            input(0).binary(BinaryOp::Rem, input(1)),
+        );
+        let kr64 = generate(&rem64, &key64, &Cuda);
+        assert!(kr64.source.contains("(in0[i] - floor(in0[i] / in1[i]) * in1[i])"));
+        assert!(!kr64.source.contains("fmod("), "f64 Rem must not become fmod");
+        let max64 = OpDef::elementwise("mx64", 2, &[ElementKind::F64], input(0).max(input(1)));
+        let km64 = generate(&max64, &key64, &Cuda);
+        assert!(!km64.source.contains("fmax("), "f64 Maximum must NOT become fmax");
+        assert!(km64.source.contains("!="), "f64 Maximum keeps the NaN-propagating select");
+        let min64 = OpDef::elementwise("mn64", 2, &[ElementKind::F64], input(0).min(input(1)));
+        let kn64 = generate(&min64, &key64, &Cuda);
+        assert!(!kn64.source.contains("fmin("), "f64 Minimum must NOT become fmin");
+    }
+
+    #[test]
+    #[should_panic(expected = "no half-precision lowering")]
+    fn nextafter_f16_is_refused_at_the_emitter() {
+        use crate::ir::BinaryOp;
+        // The promote-to-f32 half path would compute the f32-lattice neighbor
+        // (which demotes right back to `a`) — silently wrong, so the emitter
+        // refuses rather than lowers. (The JIT gates this in dtype_compatible.)
+        let op = OpDef::elementwise(
+            "nextafter",
+            2,
+            &[ElementKind::F16],
+            input(0).binary(BinaryOp::Nextafter, input(1)),
+        );
+        let _ = generate(&op, &binary_scalar_key(ElementKind::F16, 2), &Cuda);
+    }
+
+    #[test]
+    #[should_panic(expected = "no half-precision lowering")]
+    fn nextafter_bf16_is_refused_at_the_emitter() {
+        use crate::ir::BinaryOp;
+        let op = OpDef::elementwise(
+            "nextafter",
+            2,
+            &[ElementKind::Bf16],
+            input(0).binary(BinaryOp::Nextafter, input(1)),
+        );
+        let _ = generate(&op, &binary_scalar_key(ElementKind::Bf16, 2), &Cuda);
+    }
+
+    // The adversarial review of increment 0a proved the cuda_binary refusal
+    // alone was bypassable: the reduction pre-body, RowReduce stages/epilogue,
+    // and contraction epilogues lower through accumulator-width helpers that
+    // never reach it. The plan-level walk (assert_no_half_nextafter) now
+    // guards EVERY Access arm — these three pin the previously-open paths.
+
+    #[test]
+    #[should_panic(expected = "must miss honestly")]
+    fn nextafter_f16_is_refused_in_a_reduction_body() {
+        use crate::ir::{konst, BinaryOp, ReduceOp};
+        let op = OpDef::reduction(
+            "na_sum",
+            1,
+            &[ElementKind::F16],
+            input(0).binary(BinaryOp::Nextafter, konst(1.0)),
+            ReduceOp::Sum,
+        );
+        let _ = generate(&op, &reduce_key(ElementKind::F16), &Cuda);
+    }
+
+    #[test]
+    #[should_panic(expected = "must miss honestly")]
+    fn nextafter_f16_is_refused_in_a_row_reduce_epilogue() {
+        use crate::ir::{reduced, BinaryOp, ReduceOp, ReduceStage};
+        let op = OpDef::row_reduce(
+            "na_rr",
+            1,
+            &[ElementKind::F16],
+            vec![ReduceStage { pre: input(0).0, op: ReduceOp::Max }],
+            input(0).binary(BinaryOp::Nextafter, reduced(0)),
+        );
+        let x = OperandDesc::new(2, &[4096, 1024], &[1024, 1], ElementKind::F16, 256);
+        let key = structure_key(OpCategory::Softmax, &[x, x], ArchSku::Sm89);
+        let _ = generate(&op, &key, &Cuda);
+    }
+
+    #[test]
+    #[should_panic(expected = "must miss honestly")]
+    fn nextafter_f16_is_refused_in_a_contraction_epilogue() {
+        use crate::ir::{konst, reduced, BinaryOp, ContractionAxes};
+        let op = OpDef::contraction(
+            "na_mm",
+            &[ElementKind::F16],
+            ContractionAxes::matmul(),
+            reduced(0).binary(BinaryOp::Nextafter, konst(1.0)),
+        );
+        let lhs = OperandDesc::new(2, &[8, 4096], &[4096, 1], ElementKind::F16, 256);
+        let rhs = OperandDesc::new(2, &[4096, 4096], &[4096, 1], ElementKind::F16, 256);
+        let out = OperandDesc::new(2, &[8, 4096], &[4096, 1], ElementKind::F16, 256);
+        let key = structure_key(OpCategory::Gemm, &[lhs, rhs, out], ArchSku::Sm89);
+        let _ = generate(&op, &key, &Cuda);
+    }
+
+    #[test]
+    fn vocab_f16_packed_falls_back_to_tier_b_pair_scalarization() {
+        use crate::ir::UnaryOp;
+        // A new transcendental at an aligned f16 cell takes the PACKED schedule
+        // but the fn itself is Tier B: pair-split through the same scalar f32
+        // spelling (bit-identical to the scalar sibling), never a fake packed
+        // intrinsic.
+        let op = OpDef::elementwise("erfx", 1, &[ElementKind::F16], input(0).unary(UnaryOp::Erfc));
+        let k = generate(&op, &unary_scalar_key(ElementKind::F16, 256), &Cuda);
+        assert_eq!(k.name, "baracuda_gen_erfx_f16_co_v8");
+        assert!(k.source.contains("__halves2half2("));
+        assert!(k.source.contains("erfcf(__half2float(__low2half("));
+        assert!(k.source.contains("erfcf(__half2float(__high2half("));
+        assert!(!k.source.contains("h2erfc"), "no invented packed intrinsic");
     }
 }

@@ -487,8 +487,13 @@ fn binary_operands(
 }
 
 /// Whether the CUDA backend can lower `body` at `dtype`: unary / binary-fn nodes
-/// require a float dtype (`cuda_unary`/`cuda_binary` have no integer math), and a
-/// runtime scalar `Param` is f32-only. Pure infix arithmetic works at any dtype.
+/// require a float dtype (`cuda_unary`/`cuda_binary` have no integer math), a
+/// runtime scalar `Param` is f32-only, and `Nextafter` additionally excludes
+/// f16/bf16 (the half path computes promoted-to-f32, which would step the f32
+/// lattice — the wrong neighbor; see `cuda_binary`). Pure infix arithmetic works
+/// at any dtype. The Nextafter arm is defensive today — no region name maps to
+/// it until Fuel adds §4.1 vocabulary — but it keeps the honest-miss gate in
+/// place ahead of the emitter's panic.
 fn dtype_compatible(body: &ScalarExpr, dtype: ElementKind) -> bool {
     let is_float = matches!(
         dtype,
@@ -499,27 +504,36 @@ fn dtype_compatible(body: &ScalarExpr, dtype: ElementKind) -> bool {
             | ElementKind::F64
     );
     let f32_only = matches!(dtype, ElementKind::F32 | ElementKind::F32Strict);
-    fn walk(e: &ScalarExpr, is_float: bool, f32_only: bool) -> bool {
+    let is_half = matches!(dtype, ElementKind::F16 | ElementKind::Bf16);
+    fn walk(e: &ScalarExpr, is_float: bool, f32_only: bool, is_half: bool) -> bool {
         match e {
             // Reduced only appears in a RowReduce epilogue, which never reaches the
             // JIT path (region_to_op builds Elementwise only) — treat as a benign
             // float scalar leaf for exhaustiveness.
             ScalarExpr::Input(_) | ScalarExpr::Const(_) | ScalarExpr::Reduced(_) => true,
             ScalarExpr::Param(_) => f32_only,
-            ScalarExpr::Unary(_, x) => is_float && walk(x, is_float, f32_only),
-            ScalarExpr::Binary(_, a, b) => {
-                is_float && walk(a, is_float, f32_only) && walk(b, is_float, f32_only)
+            ScalarExpr::Unary(_, x) => is_float && walk(x, is_float, f32_only, is_half),
+            ScalarExpr::Binary(op, a, b) => {
+                is_float
+                    && !(is_half && matches!(op, BinaryOp::Nextafter))
+                    && walk(a, is_float, f32_only, is_half)
+                    && walk(b, is_float, f32_only, is_half)
             }
             ScalarExpr::Add(a, b)
             | ScalarExpr::Sub(a, b)
             | ScalarExpr::Mul(a, b)
-            | ScalarExpr::Div(a, b) => walk(a, is_float, f32_only) && walk(b, is_float, f32_only),
+            | ScalarExpr::Div(a, b) => {
+                walk(a, is_float, f32_only, is_half) && walk(b, is_float, f32_only, is_half)
+            }
         }
     }
-    walk(body, is_float, f32_only)
+    walk(body, is_float, f32_only, is_half)
 }
 
-/// Inverse of [`crate::pattern`]'s `binary_name`.
+/// Inverse of [`crate::pattern`]'s `binary_name`. The increment-0a binaries
+/// (`Atan2`/`Copysign`/`Nextafter`/`FmaxIeee`/`FminIeee`/`RemTrunc`) have NO
+/// name here on purpose — §4.1/`OpTag` doesn't name them yet, so no region can
+/// request them (an honest `UnsupportedOp`, never invented vocabulary).
 fn region_binary(op: &str) -> Option<BinaryOp> {
     Some(match op {
         "Maximum" => BinaryOp::Max,
@@ -542,8 +556,9 @@ fn unary_operand(op: &str, operands: &[PatternNode], np: &mut u8) -> Result<Scal
 }
 
 /// Inverse of [`crate::pattern`]'s `unary_name`. `GeluErf` → [`UnaryOp::Gelu`]
-/// (our exact-erf flavor); bare `Gelu` (tanh approx) and ops with no IR form
-/// (`Sin`/`Cos`/`Step`/…) are unsupported in increment 1.
+/// (our exact-erf flavor); bare `Gelu` (tanh approx) is unsupported. The
+/// increment-0a unaries (`Erfc`…`Lgamma`) have NO name here on purpose —
+/// §4.1/`OpTag` doesn't name them yet (see [`region_binary`]).
 fn region_unary(op: &str) -> Option<UnaryOp> {
     Some(match op {
         "Neg" => UnaryOp::Neg,
@@ -1157,6 +1172,50 @@ mod tests {
     }
 
     #[test]
+    fn increment_0a_names_are_not_region_reachable() {
+        // The new scalar fns have no §4.1/OpTag vocabulary, so no region can name
+        // them: honest UnsupportedOp, never a panic, and the mapping tables were
+        // NOT extended speculatively.
+        for (name, n) in [("Erfc", 1u8), ("Lgamma", 1), ("Atan2", 2), ("Nextafter", 2),
+                          ("FmaxIeee", 2), ("RemTrunc", 2)] {
+            let operands = (0..n).map(PatternNode::Bind).collect();
+            let region = op_node(name, operands);
+            assert_eq!(
+                synthesize(&req(region, n, ElementKind::F32, "x"), &Cuda, &StubCompiler)
+                    .unwrap_err(),
+                JitError::UnsupportedOp(name.to_string()),
+                "{name} must be an honest region miss"
+            );
+        }
+        assert!(region_unary("Erfc").is_none());
+        assert!(region_binary("Atan2").is_none());
+    }
+
+    #[test]
+    fn nextafter_half_dtypes_are_gated_as_honest_misses() {
+        use crate::ir::input;
+        // Nextafter's half path would step the f32 lattice (wrong neighbor) —
+        // dtype_compatible must refuse f16/bf16 while keeping f32/f64 lowerable.
+        let body = input(0).binary(BinaryOp::Nextafter, input(1)).0;
+        assert!(dtype_compatible(&body, ElementKind::F32));
+        assert!(dtype_compatible(&body, ElementKind::F32Strict));
+        assert!(dtype_compatible(&body, ElementKind::F64));
+        assert!(!dtype_compatible(&body, ElementKind::F16));
+        assert!(!dtype_compatible(&body, ElementKind::Bf16));
+        // …and buried under other ops it still gates.
+        let nested = input(0).binary(BinaryOp::Nextafter, input(1)).relu().0;
+        assert!(!dtype_compatible(&nested, ElementKind::F16));
+        // The other new binaries keep the normal float rule (halves promote
+        // value-correctly — see cuda_binary's Copysign note) and ints still miss.
+        let cs = input(0).binary(BinaryOp::Copysign, input(1)).0;
+        assert!(dtype_compatible(&cs, ElementKind::F16));
+        assert!(!dtype_compatible(&cs, ElementKind::I32));
+        let erfc = input(0).unary(crate::ir::UnaryOp::Erfc).0;
+        assert!(!dtype_compatible(&erfc, ElementKind::I64));
+        assert!(dtype_compatible(&erfc, ElementKind::Bf16));
+    }
+
+    #[test]
     fn bare_gelu_tanh_flavor_is_rejected() {
         let region = op_node("Gelu", vec![PatternNode::Bind(0)]);
         let err = synthesize(&req(region, 1, ElementKind::F32, "x"), &Cuda, &StubCompiler)
@@ -1239,6 +1298,45 @@ mod tests {
         let resp = synthesize(&r, &Cuda, &NvrtcCompiler::new(ArchSku::Sm89)).unwrap();
         assert_eq!(resp.kernel.kind, ArtifactKind::Ptx);
         assert!(String::from_utf8(resp.kernel.artifact).unwrap().contains(".entry"));
+    }
+
+    /// The increment-0a scalar-fn vocabulary compiles headerless under nvrtc —
+    /// the same implicit-device-math property the Exp/Tanh emission proves —
+    /// across f32, f16 (promote path + fp16 header), and f64. Erf/Log1p unary +
+    /// Atan2/RemTrunc binary are the representative sweep. Ignored (needs nvrtc).
+    #[cfg(feature = "nvrtc")]
+    #[test]
+    #[ignore = "requires nvrtc runtime + CUDA install"]
+    fn nvrtc_compiles_increment_0a_vocab() {
+        use crate::generate;
+        use crate::ir::{input, BinaryOp, UnaryOp};
+        let cc = NvrtcCompiler::new(ArchSku::Sm89);
+        let ukey = |dt: ElementKind| {
+            let a = OperandDesc::new(1, &[1 << 20], &[1], dt, 256);
+            structure_key(OpCategory::UnaryElementwise, &[a, a], ArchSku::Sm89)
+        };
+        let bkey = |dt: ElementKind| {
+            let a = OperandDesc::new(1, &[1 << 20], &[1], dt, 256);
+            structure_key(OpCategory::BinaryElementwise, &[a, a, a], ArchSku::Sm89)
+        };
+        for dt in [ElementKind::F32, ElementKind::F16, ElementKind::F64] {
+            for uop in [UnaryOp::Erf, UnaryOp::Log1p] {
+                let op = OpDef::elementwise("vu", 1, &[dt], input(0).unary(uop));
+                let k = generate(&op, &ukey(dt), &Cuda);
+                let ptx = cc.compile(&k.source, &k.name, 5000).unwrap_or_else(|e| {
+                    panic!("{uop:?} {dt:?} failed headerless nvrtc: {e}")
+                });
+                assert!(String::from_utf8(ptx).unwrap().contains(".entry"));
+            }
+            for bop in [BinaryOp::Atan2, BinaryOp::RemTrunc] {
+                let op = OpDef::elementwise("vb", 2, &[dt], input(0).binary(bop, input(1)));
+                let k = generate(&op, &bkey(dt), &Cuda);
+                let ptx = cc.compile(&k.source, &k.name, 5000).unwrap_or_else(|e| {
+                    panic!("{bop:?} {dt:?} failed headerless nvrtc: {e}")
+                });
+                assert!(String::from_utf8(ptx).unwrap().contains(".entry"));
+            }
+        }
     }
 
     /// The reduction schedule compiles headerless under nvrtc too: f32 mean-of-

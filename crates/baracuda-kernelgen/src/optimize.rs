@@ -212,6 +212,12 @@ fn eval_unary(op: UnaryOp, v: f64) -> Option<f64> {
         UnaryOp::Floor => v.floor(),
         UnaryOp::Ceil => v.ceil(),
         UnaryOp::Round => v.round_ties_even(),
+        // Trunc is exact on FINITE values only by policy: NaN is already guarded
+        // above, and ±Inf stays symbolic too (house lesson: fold nothing
+        // non-finite — the emitted INFINITY literal round-trip is not worth the
+        // risk surface). Every other increment-0a fn is a device approximation
+        // and is deliberately NOT folded (the Rsqrt-fold lesson).
+        UnaryOp::Trunc if v.is_finite() => v.trunc(),
         UnaryOp::Sign => {
             if v > 0.0 {
                 1.0
@@ -228,7 +234,9 @@ fn eval_unary(op: UnaryOp, v: f64) -> Option<f64> {
                 0.0
             }
         }
-        _ => return None, // Sin/Cos/Rsqrt + the activations: transcendental, skip
+        // Sin/Cos/Rsqrt, the activations, and the whole increment-0a fn set
+        // (Erfc…Lgamma): device-approximate — never folded.
+        _ => return None,
     })
 }
 
@@ -255,6 +263,10 @@ fn exact_pow2_recip(c: f64) -> Option<f64> {
 
 /// Fold a non-infix binary op on two constants — `Max`/`Min` and integer-clean
 /// `Rem`; `Pow` is skipped (host-f64 vs device-f32), `Rem` by zero is skipped.
+/// The increment-0a binaries are ALL skipped: `Atan2` is approximate, and the
+/// exact bit-level ops (`Copysign`/`Nextafter`/`FmaxIeee`/`FminIeee`/`RemTrunc`)
+/// stay unfolded under the when-in-doubt-add-no-rule policy (`Nextafter` in
+/// particular is dtype-lattice-dependent, so a host-f64 fold would be wrong).
 fn eval_binary(op: BinaryOp, x: f64, y: f64) -> Option<f64> {
     // Max/Min only fold when neither operand is NaN — the kernel propagates NaN
     // (NaN-select), so folding a NaN operand away (host f64::max suppresses it)
@@ -262,8 +274,18 @@ fn eval_binary(op: BinaryOp, x: f64, y: f64) -> Option<f64> {
     Some(match op {
         BinaryOp::Max if !x.is_nan() && !y.is_nan() => x.max(y),
         BinaryOp::Min if !x.is_nan() && !y.is_nan() => x.min(y),
-        // floored remainder (torch.remainder), matching the kernel — not `x % y`
-        BinaryOp::Rem if y != 0.0 => x - (x / y).floor() * y,
+        // floored remainder (torch.remainder), matching the kernel — not `x % y`.
+        // Gated finite-in AND finite-out: NaN operands must stay symbolic (the
+        // fold would canonicalize the payload/sign the device would propagate),
+        // and an overflowing (x/y).floor()*y can produce ±inf, whose `-INFINITY`
+        // literal the headerless-nvrtc discipline forbids (see `ScalarExpr` docs).
+        BinaryOp::Rem if x.is_finite() && y.is_finite() && y != 0.0 => {
+            let r = x - (x / y).floor() * y;
+            if !r.is_finite() {
+                return None;
+            }
+            r
+        }
         _ => return None,
     })
 }
@@ -437,9 +459,16 @@ fn weight(n: &ENode) -> u64 {
         ENode::Add(..) | ENode::Sub(..) | ENode::Mul(..) => 2,
         ENode::Div(..) => 8,
         ENode::Binary(op, ..) => match op {
-            BinaryOp::Max | BinaryOp::Min => 2,
-            BinaryOp::Rem => 8,
-            BinaryOp::Pow => 16,
+            // Copysign/Nextafter are bit-manipulation ops; FmaxIeee/FminIeee are
+            // hardware min/max — all cheap, same tier as the Max/Min selects.
+            BinaryOp::Max
+            | BinaryOp::Min
+            | BinaryOp::Copysign
+            | BinaryOp::Nextafter
+            | BinaryOp::FmaxIeee
+            | BinaryOp::FminIeee => 2,
+            BinaryOp::Rem | BinaryOp::RemTrunc => 8, // division-class
+            BinaryOp::Pow | BinaryOp::Atan2 => 16,   // transcendental
         },
         ENode::Unary(op, _) => match op {
             UnaryOp::Neg | UnaryOp::Abs | UnaryOp::Relu => 1,
@@ -448,7 +477,8 @@ fn weight(n: &ENode) -> u64 {
             | UnaryOp::Ceil
             | UnaryOp::Round
             | UnaryOp::Sign
-            | UnaryOp::Step => 2,
+            | UnaryOp::Step
+            | UnaryOp::Trunc => 2,
             UnaryOp::Sqrt | UnaryOp::Rsqrt | UnaryOp::Recip => 8,
             UnaryOp::Exp
             | UnaryOp::Log
@@ -458,7 +488,24 @@ fn weight(n: &ENode) -> u64 {
             | UnaryOp::Gelu
             | UnaryOp::Silu
             | UnaryOp::Sin
-            | UnaryOp::Cos => 16,
+            | UnaryOp::Cos
+            | UnaryOp::Erfc
+            | UnaryOp::Exp2
+            | UnaryOp::Expm1
+            | UnaryOp::Log2
+            | UnaryOp::Log10
+            | UnaryOp::Log1p
+            | UnaryOp::Sinh
+            | UnaryOp::Cosh
+            | UnaryOp::Tan
+            | UnaryOp::Asin
+            | UnaryOp::Acos
+            | UnaryOp::Atan
+            | UnaryOp::Asinh
+            | UnaryOp::Acosh
+            | UnaryOp::Atanh
+            | UnaryOp::Cbrt
+            | UnaryOp::Lgamma => 16,
         },
     }
 }
@@ -702,5 +749,115 @@ mod tests {
         let body = (input(0) * konst(1.0) + konst(0.0)).relu().0;
         let once = optimize(&body);
         assert_eq!(optimize(&once), once);
+    }
+
+    #[test]
+    fn trunc_const_fold_is_finite_gated() {
+        use crate::ir::UnaryOp;
+        let trunc = |v: f64| ScalarExpr::Unary(UnaryOp::Trunc, Box::new(ScalarExpr::Const(v)));
+        // Exact on finite values: fold (round toward zero, both signs).
+        assert_eq!(optimize(&trunc(-3.7)), ScalarExpr::Const(-3.0));
+        assert_eq!(optimize(&trunc(2.9)), ScalarExpr::Const(2.0));
+        // Non-finite stays symbolic (house lesson: no non-finite const folds).
+        assert!(matches!(optimize(&trunc(f64::INFINITY)), ScalarExpr::Unary(UnaryOp::Trunc, _)));
+        assert!(matches!(optimize(&trunc(f64::NEG_INFINITY)), ScalarExpr::Unary(UnaryOp::Trunc, _)));
+        assert!(matches!(optimize(&trunc(f64::NAN)), ScalarExpr::Unary(UnaryOp::Trunc, _)));
+    }
+
+    #[test]
+    fn increment_0a_fns_are_never_const_folded() {
+        use crate::ir::{BinaryOp, UnaryOp};
+        // Device-approximate fns stay symbolic (the Rsqrt-fold lesson) — ALL
+        // 17 approximate increment-0a unaries, so a host-fold added for any
+        // one of them fails here (mutation-caught gap: sampling 5 let an
+        // Exp2 host-fold pass the suite).
+        for op in [
+            UnaryOp::Erfc,
+            UnaryOp::Exp2,
+            UnaryOp::Expm1,
+            UnaryOp::Log2,
+            UnaryOp::Log10,
+            UnaryOp::Log1p,
+            UnaryOp::Sinh,
+            UnaryOp::Cosh,
+            UnaryOp::Tan,
+            UnaryOp::Asin,
+            UnaryOp::Acos,
+            UnaryOp::Atan,
+            UnaryOp::Asinh,
+            UnaryOp::Acosh,
+            UnaryOp::Atanh,
+            UnaryOp::Cbrt,
+            UnaryOp::Lgamma,
+        ] {
+            let e = optimize(&ScalarExpr::Unary(op, Box::new(ScalarExpr::Const(1.5))));
+            assert!(
+                matches!(e, ScalarExpr::Unary(o, _) if o == op),
+                "{op:?}(const) must stay symbolic, got {e:?}"
+            );
+        }
+        // …and so do ALL the new binaries — including the exact bit-level ones
+        // (when-in-doubt-add-no-rule; Nextafter is dtype-lattice-dependent).
+        for op in [
+            BinaryOp::Atan2,
+            BinaryOp::Copysign,
+            BinaryOp::Nextafter,
+            BinaryOp::FmaxIeee,
+            BinaryOp::FminIeee,
+            BinaryOp::RemTrunc,
+        ] {
+            let e = optimize(&ScalarExpr::Binary(
+                op,
+                Box::new(ScalarExpr::Const(-3.0)),
+                Box::new(ScalarExpr::Const(2.0)),
+            ));
+            assert!(
+                matches!(e, ScalarExpr::Binary(o, _, _) if o == op),
+                "{op:?}(const, const) must stay symbolic, got {e:?}"
+            );
+        }
+        // No new identity rewrites either: the x,x forms of every new binary
+        // stay as authored (unlike the pinned max(x,x)/min(x,x) -> x for the
+        // NaN-propagating Max/Min). Pinning all three closes the mutation
+        // where extending the Max|Min rule arm to FminIeee passed the suite.
+        for op in [BinaryOp::FmaxIeee, BinaryOp::FminIeee, BinaryOp::RemTrunc] {
+            let same = ScalarExpr::Binary(
+                op,
+                Box::new(ScalarExpr::Input(0)),
+                Box::new(ScalarExpr::Input(0)),
+            );
+            assert_eq!(optimize(&same), same, "{op:?}(x, x) must stay as authored");
+        }
+    }
+
+    #[test]
+    fn rem_const_fold_is_finite_gated() {
+        use crate::ir::BinaryOp;
+        let rem = |a: f64, b: f64| {
+            ScalarExpr::Binary(
+                BinaryOp::Rem,
+                Box::new(ScalarExpr::Const(a)),
+                Box::new(ScalarExpr::Const(b)),
+            )
+        };
+        // The legitimate fold still fires…
+        assert_eq!(optimize(&rem(7.0, 2.0)), ScalarExpr::Const(1.0));
+        // …but NaN operands stay symbolic (a fold would canonicalize the
+        // payload/sign the device op propagates)…
+        for e in [rem(f64::NAN, 2.0), rem(5.0, f64::NAN)] {
+            assert!(
+                matches!(optimize(&e), ScalarExpr::Binary(BinaryOp::Rem, _, _)),
+                "NaN-operand Rem must stay symbolic"
+            );
+        }
+        // …as do infinite operands and finite operands whose floored-mod
+        // composite overflows to ±inf (a -INFINITY literal is forbidden under
+        // the headerless-nvrtc discipline).
+        for e in [rem(f64::INFINITY, 2.0), rem(5.0, f64::NEG_INFINITY), rem(1e308, 1e-308)] {
+            assert!(
+                matches!(optimize(&e), ScalarExpr::Binary(BinaryOp::Rem, _, _)),
+                "non-finite-in or non-finite-out Rem must stay symbolic"
+            );
+        }
     }
 }

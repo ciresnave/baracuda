@@ -113,6 +113,7 @@ pub struct KernelPlan<'a> {
 /// call, not this function's.)
 #[must_use]
 pub fn build_plan<'a>(op: &'a OpDef, key: &'a StructureKey) -> KernelPlan<'a> {
+    assert_no_half_nextafter(op, key.dtype);
     let schedule = match op.access {
         Access::Reduction {
             op: rop,
@@ -315,6 +316,55 @@ pub(crate) fn rr_role(o: OperandKey) -> RrRole {
 /// `n_out`/`k` launch args; the layer that still holds the `OperandDesc` extents (an
 /// AOT op author, or the live seam caller once `region_to_op` wires RowReduce) must
 /// assert it — the key has already abstracted the extents away by the time we run.
+/// Nextafter is declared f32/f64-only at the IR level (its half lowering via
+/// promote-to-f32 would step the f32 lattice — ~2^13 steps inside one half
+/// step, so the demote rounds straight back: a silently wrong no-op). The
+/// CUDA emitter's `cuda_binary` panic only guards the elementwise path; the
+/// reduction pre-body, RowReduce stages/epilogue, and contraction epilogues
+/// lower through accumulator-width helpers that never pass through it. This
+/// plan-level walk covers EVERY Access arm, so no lowering path — present or
+/// future backend — can bypass the honest miss.
+fn assert_no_half_nextafter(op: &OpDef, dtype: ElementKind) {
+    use crate::ir::BinaryOp;
+    if !matches!(dtype, ElementKind::F16 | ElementKind::Bf16) {
+        return;
+    }
+    fn walk(e: &ScalarExpr) -> bool {
+        match e {
+            ScalarExpr::Input(_)
+            | ScalarExpr::Const(_)
+            | ScalarExpr::Param(_)
+            | ScalarExpr::Reduced(_) => false,
+            ScalarExpr::Add(a, b)
+            | ScalarExpr::Sub(a, b)
+            | ScalarExpr::Mul(a, b)
+            | ScalarExpr::Div(a, b) => walk(a) || walk(b),
+            ScalarExpr::Unary(_, a) => walk(a),
+            ScalarExpr::Binary(bop, a, b) => {
+                matches!(bop, BinaryOp::Nextafter) || walk(a) || walk(b)
+            }
+        }
+    }
+    let mut exprs: Vec<&ScalarExpr> = vec![&op.body];
+    match &op.access {
+        Access::RowReduce { stages, epilogue } => {
+            exprs.extend(stages.iter().map(|s| &s.pre));
+            exprs.push(epilogue);
+        }
+        Access::Contraction { epilogue, .. } => exprs.push(epilogue),
+        Access::Elementwise | Access::Reduction { .. } => {}
+    }
+    for e in exprs {
+        assert!(
+            !walk(e),
+            "Nextafter has no half-precision lowering (IR contract: f32/f64 only; \
+             the promote-to-f32 path silently no-ops after the demote) — op '{}' \
+             at {dtype:?} must miss honestly",
+            op.name
+        );
+    }
+}
+
 fn validate_row_reduce(stages: &[ReduceStage], epilogue: &ScalarExpr, n_inputs: u8, key: &StructureKey) {
     let dtype = key.dtype;
     assert!(
