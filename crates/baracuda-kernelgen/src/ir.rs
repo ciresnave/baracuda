@@ -33,6 +33,42 @@ pub enum ScalarExpr {
     /// `epilogue` (any `Reduced(0..n_stages)`). Never an `Input` — it carries no
     /// bind index and must not be folded across rows by the optimizer.
     Reduced(u8),
+    /// The **output element's coordinate** along axis `axis` (increment 0d) —
+    /// the row-major unravel of the output index over the cell's iteration
+    /// shape, converted to the compute dtype. `Coord(1)` at output element
+    /// `[i, j]` of a rank-2 op is the value `j` as a `float`/`double`.
+    ///
+    /// A leaf exactly like [`ScalarExpr::Reduced`]: opaque to the optimizer
+    /// (hash/intern by `axis`, never an `Input`, never const-folded — its
+    /// value varies per coordinate), lowered by the backend's coordinate
+    /// accessor. Legality (enforced at the top of `plan::build_plan`, every
+    /// `Access` arm, with independent emitter backstops in `cuda`):
+    ///
+    /// - **dtype**: `F32`/`F32Strict`/`F64` ONLY. f16/bf16 reject — their max
+    ///   exactly-representable integer is 2048 (bf16: 256), which real axis
+    ///   extents exceed, so a half coordinate would silently round. Int
+    ///   dtypes reject — the coordinate is spelled as a float cast
+    ///   (`(float)c{d}`), the same double-math hazard as `Const`/`Param` at
+    ///   int dtypes; an int-literal coordinate spelling is the queued
+    ///   follow-up.
+    /// - **exactness bound (documented honestly)**: an f32 coordinate is
+    ///   exact only while the axis extent ≤ 2²⁴ (f64: 2⁵³). The per-axis
+    ///   "extent fits the compute dtype's exact-integer range" check is a
+    ///   **caller precondition**: the structure key deliberately abstracts
+    ///   numeric extents away — the same trust level as the established
+    ///   RowReduce column-weight extent precondition (see
+    ///   `plan::validate_row_reduce`'s caller-pre-condition note).
+    /// - **access**: [`Access::Elementwise`] bodies ONLY (v1). Reduction-class
+    ///   bodies reject: a coordinate along a reduced/folded axis is ambiguous
+    ///   (which fold iteration?), and RowReduce/Contraction epilogues iterate
+    ///   their own coordinate spaces (row/column, m/n) — lifting Coord into
+    ///   them needs explicit per-arm semantics, deferred.
+    /// - **axis**: must be `< key.rank` (validated at plan time).
+    /// - **schedule**: a Coord body always lowers via `Schedule::Strided` —
+    ///   the one emitter that materializes the per-axis coordinates `c{d}`;
+    ///   never `Vectorized`/`Scalar` (a linear-index kernel has no per-axis
+    ///   coordinates to read).
+    Coord(u8),
     /// Sum of two sub-expressions.
     Add(Box<ScalarExpr>, Box<ScalarExpr>),
     /// Difference of two sub-expressions.
@@ -397,6 +433,8 @@ pub enum DagNode {
     Param(u8),
     /// Per-row reduced scalar from [`Access::RowReduce`] stage `i`. (Leaf.)
     Reduced(u8),
+    /// Output coordinate along axis `axis` ([`ScalarExpr::Coord`]). (Leaf.)
+    Coord(u8),
     /// Sum of two nodes.
     Add(NodeId, NodeId),
     /// Difference of two nodes.
@@ -412,14 +450,18 @@ pub enum DagNode {
 }
 
 impl DagNode {
-    /// `true` for a source leaf (`Input`/`Const`/`Param`/`Reduced`) — a value with
-    /// no children. Leaves are never hoisted to a `tmp` (a leaf reference is free);
-    /// only shared *interior* nodes are.
+    /// `true` for a source leaf (`Input`/`Const`/`Param`/`Reduced`/`Coord`) — a
+    /// value with no children. Leaves are never hoisted to a `tmp` (a leaf
+    /// reference is free); only shared *interior* nodes are.
     #[must_use]
     pub fn is_leaf(&self) -> bool {
         matches!(
             self,
-            DagNode::Input(_) | DagNode::Const(_) | DagNode::Param(_) | DagNode::Reduced(_)
+            DagNode::Input(_)
+                | DagNode::Const(_)
+                | DagNode::Param(_)
+                | DagNode::Reduced(_)
+                | DagNode::Coord(_)
         )
     }
 }
@@ -514,6 +556,7 @@ impl ExprDag {
             DagNode::Const(v) => ScalarExpr::Const(v),
             DagNode::Param(i) => ScalarExpr::Param(i),
             DagNode::Reduced(i) => ScalarExpr::Reduced(i),
+            DagNode::Coord(d) => ScalarExpr::Coord(d),
             DagNode::Add(a, b) => {
                 ScalarExpr::Add(Box::new(self.rebuild(a)), Box::new(self.rebuild(b)))
             }
@@ -542,6 +585,7 @@ enum DagKey {
     ConstBits(u64),
     Param(u8),
     Reduced(u8),
+    Coord(u8),
     Add(NodeId, NodeId),
     Sub(NodeId, NodeId),
     Mul(NodeId, NodeId),
@@ -557,6 +601,7 @@ impl DagKey {
             DagNode::Const(v) => DagKey::ConstBits(v.to_bits()),
             DagNode::Param(i) => DagKey::Param(i),
             DagNode::Reduced(i) => DagKey::Reduced(i),
+            DagNode::Coord(d) => DagKey::Coord(d),
             DagNode::Add(a, b) => DagKey::Add(a, b),
             DagNode::Sub(a, b) => DagKey::Sub(a, b),
             DagNode::Mul(a, b) => DagKey::Mul(a, b),
@@ -580,6 +625,7 @@ impl DagBuilder {
             ScalarExpr::Const(v) => DagNode::Const(*v),
             ScalarExpr::Param(i) => DagNode::Param(*i),
             ScalarExpr::Reduced(i) => DagNode::Reduced(*i),
+            ScalarExpr::Coord(d) => DagNode::Coord(*d),
             ScalarExpr::Add(a, b) => {
                 let (a, b) = (self.intern(a), self.intern(b));
                 DagNode::Add(a, b)
@@ -632,9 +678,11 @@ impl DagBuilder {
 /// The child ids a node references, with multiplicity (`Mul(a, a)` → `[a, a]`).
 fn node_children(n: &DagNode) -> Vec<NodeId> {
     match *n {
-        DagNode::Input(_) | DagNode::Const(_) | DagNode::Param(_) | DagNode::Reduced(_) => {
-            Vec::new()
-        }
+        DagNode::Input(_)
+        | DagNode::Const(_)
+        | DagNode::Param(_)
+        | DagNode::Reduced(_)
+        | DagNode::Coord(_) => Vec::new(),
         DagNode::Unary(_, x) => vec![x],
         DagNode::Add(a, b)
         | DagNode::Sub(a, b)
@@ -676,6 +724,16 @@ pub fn input(i: u8) -> Expr {
 #[must_use]
 pub fn reduced(i: u8) -> Expr {
     Expr(ScalarExpr::Reduced(i))
+}
+
+/// The output element's coordinate along `axis` ([`ScalarExpr::Coord`]) as a
+/// value in the compute dtype — the iota/coordinate leaf (increment 0d). E.g.
+/// the main-diagonal triu mask is
+/// `input(0) * coord(1).binary(BinaryOp::CmpGe, coord(0))`. f32/f64
+/// Elementwise bodies only; see the [`ScalarExpr::Coord`] legality table.
+#[must_use]
+pub fn coord(axis: u8) -> Expr {
+    Expr(ScalarExpr::Coord(axis))
 }
 
 /// A compile-time scalar constant leaf (e.g. `input(0) * konst(0.5)`).
@@ -1479,6 +1537,30 @@ mod dag_tests {
         assert!(dag.node(r).is_leaf());
         let mixed = ExprDag::from_expr(&add(ScalarExpr::Reduced(0), ScalarExpr::Reduced(1)));
         assert_eq!(mixed.len(), 3, "Reduced(0) and Reduced(1) are distinct leaves");
+    }
+
+    #[test]
+    fn coord_leaf_shared_but_never_merged_across_axes_or_kinds() {
+        // A shared Coord(1) (the triu-mask shape: c1 compared and reused)
+        // interns once and is a LEAF (never hoisted); Coord(0) and Coord(1)
+        // never merge; Coord(i) never merges with Input(i)/Reduced(i)/Param(i)
+        // (distinct DagKey kinds).
+        let c1 = ScalarExpr::Coord(1);
+        let dag = ExprDag::from_expr(&add(c1.clone(), c1));
+        assert_eq!(dag.len(), 2, "one Coord(1) + the Add");
+        let c = only(&dag, |n| matches!(n, DagNode::Coord(1)));
+        assert_eq!(dag.consumers(c), 2);
+        assert!(dag.node(c).is_leaf());
+        let mixed = ExprDag::from_expr(&add(ScalarExpr::Coord(0), ScalarExpr::Coord(1)));
+        assert_eq!(mixed.len(), 3, "Coord(0) and Coord(1) are distinct leaves");
+        let kinds = ExprDag::from_expr(&add(
+            add(ScalarExpr::Coord(0), ScalarExpr::Input(0)),
+            add(ScalarExpr::Reduced(0), ScalarExpr::Param(0)),
+        ));
+        assert_eq!(kinds.len(), 7, "same-index leaves of different kinds never merge");
+        // Round-trip: interning is a value identity for Coord bodies too.
+        let body = mul(ScalarExpr::Coord(1), ipt(0));
+        assert_eq!(ExprDag::from_expr(&body).to_expr(), body);
     }
 
     #[test]

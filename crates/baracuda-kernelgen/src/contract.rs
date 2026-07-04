@@ -246,7 +246,10 @@ fn params_used(body: &ScalarExpr) -> Vec<u8> {
 fn scan_params(e: &ScalarExpr, out: &mut Vec<u8>) {
     match e {
         ScalarExpr::Param(i) => out.push(*i),
-        ScalarExpr::Input(_) | ScalarExpr::Const(_) | ScalarExpr::Reduced(_) => {}
+        ScalarExpr::Input(_)
+        | ScalarExpr::Const(_)
+        | ScalarExpr::Reduced(_)
+        | ScalarExpr::Coord(_) => {}
         ScalarExpr::Unary(_, x) => scan_params(x, out),
         ScalarExpr::Add(a, b)
         | ScalarExpr::Sub(a, b)
@@ -283,7 +286,18 @@ fn count_flops(e: &ScalarExpr) -> u32 {
 /// (the planner won't admit into a too-tight slot); under-stating is not.
 fn ulp_bound(e: &ScalarExpr) -> f64 {
     match e {
-        ScalarExpr::Input(_) | ScalarExpr::Const(_) | ScalarExpr::Param(_) | ScalarExpr::Reduced(_) => 0.0,
+        // Coord rates 0 like the other leaves: the long-long → float/double
+        // cast is exact under the documented caller precondition (axis extent
+        // within the dtype's exact-integer range — see `ScalarExpr::Coord`).
+        // Defensive today: no contract is ever emitted for a Coord body
+        // (derive_pattern rejects CoordUnsupported first), but the table
+        // stays exhaustive on purpose so the rating is decided here, not
+        // silently defaulted, when the Iota bridge lands.
+        ScalarExpr::Input(_)
+        | ScalarExpr::Const(_)
+        | ScalarExpr::Param(_)
+        | ScalarExpr::Reduced(_)
+        | ScalarExpr::Coord(_) => 0.0,
         ScalarExpr::Unary(op, x) => ulp_bound(x) + unary_ulp(*op),
         ScalarExpr::Binary(op, a, b) => ulp_bound(a) + ulp_bound(b) + binary_ulp(*op),
         ScalarExpr::Add(a, b)
@@ -410,7 +424,8 @@ pub(crate) fn expr_contains_cmp(e: &ScalarExpr) -> bool {
         ScalarExpr::Input(_)
         | ScalarExpr::Const(_)
         | ScalarExpr::Param(_)
-        | ScalarExpr::Reduced(_) => false,
+        | ScalarExpr::Reduced(_)
+        | ScalarExpr::Coord(_) => false,
         ScalarExpr::Add(a, b)
         | ScalarExpr::Sub(a, b)
         | ScalarExpr::Mul(a, b)
@@ -1061,6 +1076,33 @@ mod tests {
             "nested-cmp fused contract is withheld (missing-Cast pattern gap)"
         );
         assert!(derive_pattern(&op).is_ok(), "vocabulary exists; the gate is honesty");
+    }
+
+    #[test]
+    fn coord_bodies_have_no_contract_until_the_iota_bridge_lands() {
+        use crate::ir::{coord, BinaryOp};
+        use crate::pattern::PatternError;
+        // OpTag::Iota exists (0.10.2), but the emitted pattern grammar cannot
+        // carry its axis attribute and the Iota↔Coord correspondence is
+        // unreconciled — so a Coord body derives NO pattern
+        // (CoordUnsupported) and therefore NO contract (importable-honest:
+        // an axis-less `op: Iota` would advertise a wrong-bind matcher). The
+        // kernel itself still generates via the strided schedule.
+        let triu = OpDef::elementwise(
+            "triu_mask",
+            1,
+            &[ElementKind::F32],
+            input(0) * coord(1).binary(BinaryOp::CmpGe, coord(0) + crate::ir::konst(0.0)),
+        );
+        let a = OperandDesc::new(2, &[128, 256], &[256, 1], ElementKind::F32, 256);
+        let key = structure_key(OpCategory::BinaryElementwise, &[a, a], ArchSku::Sm89);
+        let k = generate(&triu, &key, &Cuda);
+        assert!(k.source.contains("(float)c1"), "the kernel still lowers");
+        assert!(contract(&triu, &key, &k, "cuda").is_none(), "but no contract");
+        assert!(matches!(
+            derive_pattern(&triu),
+            Err(PatternError::CoordUnsupported { .. })
+        ));
     }
 
     #[test]

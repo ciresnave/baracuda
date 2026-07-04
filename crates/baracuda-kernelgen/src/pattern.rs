@@ -78,6 +78,23 @@ pub enum PatternError {
         /// The IR op's `Debug` rendering (e.g. `"Erfc"`, `"Atan2"`).
         op: String,
     },
+    /// The body contains a [`ScalarExpr::Coord`] leaf (increment 0d). This is
+    /// NOT a `NoFkcName` miss: fuel-kernel-seam-types 0.10.2 DOES name a
+    /// coordinate-like op — `OpTag::Iota`, listed under "value source" — but
+    /// the bridge is unbuilt in both directions, so the miss is typed on its
+    /// own. Outward: a Fuel `Iota` is a graph NODE whose axis rides
+    /// `OpAttrs.axis`, while Baracuda's emitted pattern grammar
+    /// ([`PatternNode`]) carries no attrs channel — an emitted `op: Iota`
+    /// with no axis would match ANY iota regardless of axis (a wrong bind),
+    /// and the Iota-tensor-vs-output-coordinate correspondence (Fuel's Iota
+    /// materializes a tensor a region binds; `Coord` reads THIS op's output
+    /// coordinate with zero operands) is unreconciled. So: no pattern, no
+    /// contract (importable-honest rule), until the Iota attrs bridge is
+    /// designed. The kernels themselves still generate and lower normally.
+    CoordUnsupported {
+        /// The axis of (one of) the body's `Coord` leaves.
+        axis: u8,
+    },
 }
 
 /// Derive the FKC pattern tree for `op`, or a [`PatternError`] if the body isn't
@@ -158,9 +175,11 @@ fn canonicalize(e: &ScalarExpr) -> ScalarExpr {
             }
         }
         ScalarExpr::Unary(op, x) => ScalarExpr::Unary(*op, Box::new(canonicalize(x))),
-        ScalarExpr::Input(_) | ScalarExpr::Const(_) | ScalarExpr::Param(_) | ScalarExpr::Reduced(_) => {
-            e.clone()
-        }
+        ScalarExpr::Input(_)
+        | ScalarExpr::Const(_)
+        | ScalarExpr::Param(_)
+        | ScalarExpr::Reduced(_)
+        | ScalarExpr::Coord(_) => e.clone(),
     }
 }
 
@@ -190,6 +209,7 @@ fn sig(e: &ScalarExpr) -> String {
         ScalarExpr::Param(i) => format!("1P{i:03}"),
         ScalarExpr::Const(v) => format!("1C{v:?}"),
         ScalarExpr::Reduced(i) => format!("1R{i:03}"),
+        ScalarExpr::Coord(d) => format!("1D{d:03}"),
     }
 }
 
@@ -209,6 +229,12 @@ fn walk(
         ScalarExpr::Const(_) | ScalarExpr::Param(_) | ScalarExpr::Reduced(_) => {
             Err(PatternError::ScalarParamUnsupported)
         }
+        // Coord is a typed miss of its own kind — see the variant docs:
+        // OpTag::Iota EXISTS (0.10.2 "value source") but the emitted pattern
+        // grammar cannot carry the axis attribute and the Iota↔Coord
+        // correspondence is unreconciled, so emitting `op: Iota` would
+        // advertise a wrong-bind matcher. No pattern, no contract.
+        ScalarExpr::Coord(d) => Err(PatternError::CoordUnsupported { axis: *d }),
         ScalarExpr::Add(a, b) => scalar_binop("Add", "AddScalar", a, b, path, consumers, extracts),
         ScalarExpr::Mul(a, b) => scalar_binop("Mul", "MulScalar", a, b, path, consumers, extracts),
         ScalarExpr::Sub(a, b) => plain_binop("Sub", a, b, path, consumers, extracts),
@@ -740,6 +766,44 @@ pattern:
         let lt = OpDef::elementwise("l", 2, &[ElementKind::F32], input(0).binary(BinaryOp::CmpLt, input(1)));
         let fkc = to_fkc(&derive_pattern(&lt).unwrap());
         assert!(fkc.find("bind: 0").unwrap() < fkc.find("bind: 1").unwrap());
+    }
+
+    #[test]
+    fn coord_bodies_are_rejected_typed_not_bridged_to_iota() {
+        use crate::ir::{coord, BinaryOp};
+        // OpTag::Iota EXISTS in fuel-kernel-seam-types 0.10.2 ("value source")
+        // — but Baracuda's pattern grammar has no attrs channel for the axis
+        // and the Iota↔Coord correspondence is unreconciled, so a Coord body
+        // must miss TYPED (CoordUnsupported, never an invented `op: Iota`
+        // emission and never a panic). The kernels still generate (pinned in
+        // cuda's goldens).
+        let iota = OpDef::elementwise("iota1", 0, &[ElementKind::F32], coord(1));
+        assert_eq!(
+            derive_pattern(&iota),
+            Err(PatternError::CoordUnsupported { axis: 1 })
+        );
+        // …even buried under ops that DO have names (the triu-mask body).
+        let triu = OpDef::elementwise(
+            "triu_mask",
+            1,
+            &[ElementKind::F32],
+            input(0) * coord(1).binary(BinaryOp::CmpGe, coord(0) + konst(0.0)),
+        );
+        assert!(matches!(
+            derive_pattern(&triu),
+            Err(PatternError::CoordUnsupported { .. })
+        ));
+        // …and in the alibi relative-position shape.
+        let alibi = OpDef::elementwise(
+            "alibi",
+            0,
+            &[ElementKind::F32],
+            (coord(1) - coord(0)) * param(0),
+        );
+        assert!(matches!(
+            derive_pattern(&alibi),
+            Err(PatternError::CoordUnsupported { .. })
+        ));
     }
 
     #[test]

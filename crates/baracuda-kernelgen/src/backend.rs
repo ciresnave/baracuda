@@ -92,6 +92,13 @@ pub struct Lowering<'a> {
     /// `RowReduce` emitter produces a body containing a `Reduced` leaf; every other
     /// emitter passes a closure that panics (its bodies never contain one).
     pub reduced: &'a dyn Fn(u8) -> String,
+    /// Output-coordinate spelling ([`ScalarExpr::Coord`], increment 0d): the
+    /// per-axis coordinate of the output element, cast to the compute dtype
+    /// (`(float)c{d}` in the CUDA strided emitter). Only the strided
+    /// elementwise emitter materializes coordinates; every other emitter
+    /// passes a panicking closure — the plan gate routes Coord bodies to
+    /// `Schedule::Strided`, and those closures are the per-emitter backstop.
+    pub coord: &'a dyn Fn(u8) -> String,
     /// Unary-op spelling.
     pub unary: &'a dyn Fn(UnaryOp, String) -> String,
     /// Binary-function-op spelling.
@@ -139,6 +146,7 @@ pub fn lower_expr(e: &ScalarExpr, lo: &Lowering<'_>) -> String {
     match e {
         ScalarExpr::Input(i) => (lo.leaf)(*i),
         ScalarExpr::Reduced(i) => (lo.reduced)(*i),
+        ScalarExpr::Coord(d) => (lo.coord)(*d),
         ScalarExpr::Param(i) => format!("p{i}"),
         ScalarExpr::Const(v) => const_lit(*v),
         ScalarExpr::Unary(op, x) => (lo.unary)(*op, lower_expr(x, lo)),
@@ -206,6 +214,7 @@ fn lower_node(
     let rhs = match node {
         DagNode::Input(i) => (lo.leaf)(i),
         DagNode::Reduced(i) => (lo.reduced)(i),
+        DagNode::Coord(d) => (lo.coord)(d),
         DagNode::Param(i) => format!("p{i}"),
         DagNode::Const(v) => const_lit(v),
         DagNode::Unary(op, x) => {

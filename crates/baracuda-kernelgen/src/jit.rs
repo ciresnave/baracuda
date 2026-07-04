@@ -569,6 +569,17 @@ fn dtype_compatible(body: &ScalarExpr, dtype: ElementKind) -> bool {
             // JIT path (region_to_op builds Elementwise only) — treat as a benign
             // float scalar leaf for exhaustiveness.
             ScalarExpr::Input(_) | ScalarExpr::Reduced(_) => true,
+            // Coord (increment 0d) mirrors the AOT plan gate: f32/f64 only
+            // (halves round past 2048; ints would take the float-cast
+            // coordinate). Defensive today — `region_to_op` never constructs
+            // a Coord (OpTag::Iota is declined typed at `optag_name`, see the
+            // seam module) — but the gate stands ahead of the vocabulary like
+            // the Nextafter arm does, so a future Iota bridge cannot panic
+            // `build_plan` across the trust boundary.
+            ScalarExpr::Coord(_) => matches!(
+                c.dtype,
+                ElementKind::F32 | ElementKind::F32Strict | ElementKind::F64
+            ),
             ScalarExpr::Const(_) => !c.is_int,
             ScalarExpr::Param(_) => c.f32_only,
             ScalarExpr::Unary(_, x) => c.is_float && walk(x, c),
@@ -798,7 +809,15 @@ pub mod seam {
             OpTag::Gt => "Gt",
             OpTag::Ge => "Ge",
             // Op::Gelu (tanh), PowI/Clamp, Where/MaskedFill, reductions,
-            // MatMul, shape/layout, indexing, LogSoftmaxLastDim, Iota — not synthesized.
+            // MatMul, shape/layout, indexing, LogSoftmaxLastDim — not
+            // synthesized. OpTag::Iota (0.10.2 "value source") is ALSO
+            // declined here even though the IR now has `ScalarExpr::Coord`
+            // (increment 0d): a Fuel Iota is a graph node whose axis rides
+            // `OpAttrs.axis`, and this converter drops attrs — mapping it
+            // axis-less would synthesize the wrong coordinate. Typed decline
+            // (UnsupportedOp("Iota")), never a panic — pinned by
+            // `iota_region_declines_typed`; the attrs-aware Coord bridge is
+            // the follow-up.
             _ => return None,
         })
     }
@@ -993,6 +1012,69 @@ pub mod seam {
             assert!(resp.contract.contains("fused_op: jit_relu_add"));
             assert!(resp.recipe.pattern.contains("op: Relu"));
             assert!(resp.kernel.source.contains("__global__"));
+        }
+
+        #[test]
+        fn iota_region_declines_typed() {
+            // OpTag::Iota EXISTS in fuel-kernel-seam-types 0.10.2 (a "value
+            // source"), so a Fuel region CAN name it — but the seam converter
+            // drops OpAttrs (where Iota's axis lives), and an axis-less
+            // coordinate is the wrong kernel. The region must decline TYPED
+            // (UnsupportedOp("Iota")), never panic and never synthesize an
+            // axis-guessed `ScalarExpr::Coord` — both bare and nested under
+            // supported ops.
+            let bare = op(OpTag::Iota, vec![]);
+            let err = synthesize(
+                &bare,
+                &operands(ElementKind::F32, 1),
+                OpCategory::UnaryElementwise,
+                ArchSku::Sm89,
+                "jit_iota",
+                1000,
+                &Cuda,
+                &StubCompiler,
+            )
+            .unwrap_err();
+            assert!(
+                matches!(err, JitError::UnsupportedOp(ref o) if o == "Iota"),
+                "got {err:?}"
+            );
+            // Nested: mul(x, iota) — the triu-mask-ish shape a matcher could
+            // plausibly hand us once Iota appears in user graphs.
+            let nested = op(
+                OpTag::Mul,
+                vec![SeamNode::Bind { index: 0 }, op(OpTag::Iota, vec![])],
+            );
+            let err = synthesize(
+                &nested,
+                &operands(ElementKind::F32, 2),
+                OpCategory::BinaryElementwise,
+                ArchSku::Sm89,
+                "jit_mul_iota",
+                1000,
+                &Cuda,
+                &StubCompiler,
+            )
+            .unwrap_err();
+            assert!(
+                matches!(err, JitError::UnsupportedOp(ref o) if o == "Iota"),
+                "got {err:?}"
+            );
+            // And through the live Synthesizer envelope: a typed Declined,
+            // never a panic across the §5 boundary.
+            let synth = BaracudaSynthesizer::new(1000);
+            let req = SeamRequest {
+                region: op(
+                    OpTag::Mul,
+                    vec![SeamNode::Bind { index: 0 }, op(OpTag::Iota, vec![])],
+                ),
+                operands: operands(ElementKind::F32, 2),
+                arch: ArchSku::Sm89,
+            };
+            let SeamResponse::Declined { reason } = synth.synthesize(&req) else {
+                panic!("expected Declined");
+            };
+            assert!(reason.contains("Iota"), "reason should name the tag: {reason}");
         }
 
         #[test]
@@ -1794,6 +1876,39 @@ mod tests {
         let ku = generate(&addu, &bkey(ElementKind::U8), &Cuda);
         let ptxu = cc.compile(&ku.source, &ku.name, 5000).expect("u8 add compiles headerless");
         assert!(String::from_utf8(ptxu).unwrap().contains(".entry"));
+    }
+
+    /// The increment-0d Coord kernels compile headerless under nvrtc: the
+    /// triu-mask strided kernel (the `(float)c1` coordinate cast + compute-
+    /// dtype compare — plain C, zero includes) and the zero-input f64 iota
+    /// (`(double)c1`, no input pointers). Numeric correctness is proven by the
+    /// nvcc host harness (`ondevice/coord_validate.cu` — see the ondevice
+    /// README's "coord ops (increment 0d)" section); this guards headerless
+    /// portability. Ignored (needs nvrtc + CUDA).
+    #[cfg(feature = "nvrtc")]
+    #[test]
+    #[ignore = "requires nvrtc runtime + CUDA install"]
+    fn nvrtc_compiles_coord_kernels() {
+        use crate::generate;
+        use crate::ir::{coord, input, konst};
+        let cc = NvrtcCompiler::new(ArchSku::Sm89);
+        let a32 = OperandDesc::new(2, &[128, 256], &[256, 1], ElementKind::F32, 256);
+        let tkey = structure_key(OpCategory::BinaryElementwise, &[a32, a32], ArchSku::Sm89);
+        let triu = OpDef::elementwise(
+            "triu_mask",
+            1,
+            &[ElementKind::F32],
+            input(0) * coord(1).binary(BinaryOp::CmpGe, coord(0) + konst(0.0)),
+        );
+        let k = generate(&triu, &tkey, &Cuda);
+        let ptx = cc.compile(&k.source, &k.name, 5000).expect("triu-mask compiles headerless");
+        assert!(String::from_utf8(ptx).unwrap().contains(".entry"));
+        let a64 = OperandDesc::new(2, &[128, 256], &[256, 1], ElementKind::F64, 256);
+        let ikey = structure_key(OpCategory::UnaryElementwise, &[a64], ArchSku::Sm89);
+        let iota = OpDef::elementwise("iota1", 0, &[ElementKind::F64], coord(1));
+        let ki = generate(&iota, &ikey, &Cuda);
+        let ptxi = cc.compile(&ki.source, &ki.name, 5000).expect("f64 iota compiles headerless");
+        assert!(String::from_utf8(ptxi).unwrap().contains(".entry"));
     }
 
     /// The reduction schedule compiles headerless under nvrtc too: f32 mean-of-

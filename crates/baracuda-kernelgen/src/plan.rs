@@ -121,6 +121,7 @@ pub fn build_plan<'a>(op: &'a OpDef, key: &'a StructureKey) -> KernelPlan<'a> {
     assert_valid_out_dtype(op);
     assert_no_half_nextafter(op, key.dtype);
     assert_int_op_admissibility(op, key.dtype);
+    assert_coord_admissibility(op, key);
     let schedule = match op.access {
         Access::Reduction {
             op: rop,
@@ -183,7 +184,18 @@ pub fn build_plan<'a>(op: &'a OpDef, key: &'a StructureKey) -> KernelPlan<'a> {
                 .map(|k| vec_width_elems(key.operands[k].vec_width))
                 .min()
                 .unwrap_or(1);
-            if !all_contig {
+            if expr_contains_coord(&op.body) {
+                // A Coord body always takes the STRIDED schedule (increment
+                // 0d): the strided emitter is the only one that materializes
+                // the per-axis output coordinates `c{d}` a Coord leaf reads —
+                // the Vectorized/Scalar emitters iterate a bare linear index.
+                // Contiguous cells are still CORRECT under strided emission
+                // (the unravel + stride dot-product reproduces the linear
+                // offset exactly), just unoptimized — a coordinate-aware
+                // vectorized variant is a follow-up. Pinned by the
+                // vectorize-never test in `cuda`.
+                Schedule::Strided
+            } else if !all_contig {
                 Schedule::Strided
             } else if min_width >= 2 && op.out_dtype.is_none() {
                 // A hetero-output (u8 predicate) kernel takes the SCALAR path
@@ -277,7 +289,11 @@ fn epilogue_reads_only_reduced0(e: &crate::ir::ScalarExpr) -> bool {
     use crate::ir::ScalarExpr as E;
     match e {
         E::Reduced(0) | E::Const(_) => true,
-        E::Input(_) | E::Param(_) | E::Reduced(_) => false,
+        // Coord rejects here too: a contraction epilogue iterates the (m, n)
+        // output space, not an elementwise cell's — Coord's v1 semantics are
+        // Elementwise-only (`assert_coord_admissibility` fires first with the
+        // targeted message; this arm keeps the predicate honest regardless).
+        E::Input(_) | E::Param(_) | E::Reduced(_) | E::Coord(_) => false,
         E::Unary(_, x) => epilogue_reads_only_reduced0(x),
         E::Add(a, b) | E::Sub(a, b) | E::Mul(a, b) | E::Div(a, b) | E::Binary(_, a, b) => {
             epilogue_reads_only_reduced0(a) && epilogue_reads_only_reduced0(b)
@@ -348,7 +364,8 @@ fn assert_no_half_nextafter(op: &OpDef, dtype: ElementKind) {
             ScalarExpr::Input(_)
             | ScalarExpr::Const(_)
             | ScalarExpr::Param(_)
-            | ScalarExpr::Reduced(_) => false,
+            | ScalarExpr::Reduced(_)
+            | ScalarExpr::Coord(_) => false,
             ScalarExpr::Add(a, b)
             | ScalarExpr::Sub(a, b)
             | ScalarExpr::Mul(a, b)
@@ -437,6 +454,14 @@ fn assert_int_op_admissibility(op: &OpDef, dtype: ElementKind) {
     ) {
         match e {
             ScalarExpr::Input(_) | ScalarExpr::Reduced(_) => {}
+            // Coord's own gate (`assert_coord_admissibility`, which also runs
+            // at the top of build_plan) rejects EVERY int dtype — a Coord is
+            // spelled as a float cast, the same double-math hazard this walk
+            // polices for Const/Param — so this arm carries no second assert
+            // (one source of truth for the message). It is also structurally
+            // moot for rule 3: an int-only op's operands are pinned to leaf
+            // Inputs at 8-bit before Coord could ever appear there.
+            ScalarExpr::Coord(_) => {}
             ScalarExpr::Const(_) => assert!(
                 !int_dt,
                 "op '{op_name}': Const at int dtype {dtype:?} is rejected — a Const \
@@ -538,6 +563,106 @@ fn assert_int_op_admissibility(op: &OpDef, dtype: ElementKind) {
     }
     for e in exprs {
         walk(e, &op.name, dtype, int_dt, elementwise);
+    }
+}
+
+/// Whether `e` contains a [`ScalarExpr::Coord`] leaf anywhere — drives the
+/// increment-0d Strided schedule routing in [`build_plan`] (a Coord body must
+/// reach the one emitter that materializes per-axis coordinates) and mirrors
+/// `contract::expr_contains_cmp` in shape.
+pub(crate) fn expr_contains_coord(e: &ScalarExpr) -> bool {
+    match e {
+        ScalarExpr::Coord(_) => true,
+        ScalarExpr::Input(_)
+        | ScalarExpr::Const(_)
+        | ScalarExpr::Param(_)
+        | ScalarExpr::Reduced(_) => false,
+        ScalarExpr::Unary(_, x) => expr_contains_coord(x),
+        ScalarExpr::Add(a, b)
+        | ScalarExpr::Sub(a, b)
+        | ScalarExpr::Mul(a, b)
+        | ScalarExpr::Div(a, b)
+        | ScalarExpr::Binary(_, a, b) => expr_contains_coord(a) || expr_contains_coord(b),
+    }
+}
+
+/// Increment-0d [`ScalarExpr::Coord`] admissibility gate — runs at the TOP of
+/// [`build_plan`] and walks the expressions of EVERY Access arm (the 0a
+/// lesson: emitter backstops alone are bypassed by the reduction-class
+/// lowering paths), with independent emitter backstops in `cuda`. Three
+/// validate-reject rules, all honest misses:
+///
+/// 1. **Access**: Coord is legal ONLY in an [`Access::Elementwise`] body (v1).
+///    A coordinate along a reduced/folded axis is ambiguous (which fold
+///    iteration produced the output element?), and the RowReduce/Contraction
+///    epilogues iterate their own coordinate spaces ((row, j) and (m, n)) —
+///    lifting Coord into them needs explicit per-arm semantics, deferred.
+/// 2. **Dtype**: `F32`/`F32Strict`/`F64` ONLY. f16/bf16 reject — the max
+///    exactly-representable integer is 2048 (bf16: 256), which real axis
+///    extents exceed, so a half coordinate would silently round. Int dtypes
+///    reject — the coordinate lowers as a float cast (`(float)c{d}`), the
+///    same double-math hazard as `Const`/`Param` at int dtypes; the
+///    int-literal coordinate spelling is the queued follow-up.
+/// 3. **Axis**: `axis < key.rank` — an out-of-range axis has no `c{d}` to
+///    read (the emitter would spell an undefined identifier).
+///
+/// The exactness bound (f32 coordinates exact to 2²⁴, f64 to 2⁵³) is a CALLER
+/// precondition — the key abstracts extents away, the same trust level as the
+/// RowReduce column-weight extent precondition (see [`ScalarExpr::Coord`]).
+fn assert_coord_admissibility(op: &OpDef, key: &StructureKey) {
+    let elementwise = matches!(op.access, Access::Elementwise);
+    fn walk(e: &ScalarExpr, op_name: &str, dtype: ElementKind, rank: u8, elementwise: bool) {
+        match e {
+            ScalarExpr::Input(_)
+            | ScalarExpr::Const(_)
+            | ScalarExpr::Param(_)
+            | ScalarExpr::Reduced(_) => {}
+            ScalarExpr::Coord(d) => {
+                assert!(
+                    elementwise,
+                    "op '{op_name}': Coord({d}) is Elementwise-only in 0d — a coordinate \
+                     along a reduced/folded axis is ambiguous (which fold iteration?), and \
+                     the RowReduce/Contraction stages/epilogues iterate their own \
+                     coordinate spaces; miss honestly"
+                );
+                assert!(
+                    matches!(
+                        dtype,
+                        ElementKind::F32 | ElementKind::F32Strict | ElementKind::F64
+                    ),
+                    "op '{op_name}': Coord({d}) requires an f32/f64 compute dtype, got \
+                     {dtype:?} — f16/bf16 coordinates round past extent 2048 (bf16: 256) \
+                     and int dtypes would inject the float-cast coordinate into integer \
+                     math (int-literal coordinate spelling is a follow-up); miss honestly"
+                );
+                assert!(
+                    *d < rank,
+                    "op '{op_name}': Coord({d}) axis out of range for rank {rank} — the \
+                     iteration space has no such coordinate"
+                );
+            }
+            ScalarExpr::Unary(_, x) => walk(x, op_name, dtype, rank, elementwise),
+            ScalarExpr::Add(a, b)
+            | ScalarExpr::Sub(a, b)
+            | ScalarExpr::Mul(a, b)
+            | ScalarExpr::Div(a, b)
+            | ScalarExpr::Binary(_, a, b) => {
+                walk(a, op_name, dtype, rank, elementwise);
+                walk(b, op_name, dtype, rank, elementwise);
+            }
+        }
+    }
+    let mut exprs: Vec<&ScalarExpr> = vec![&op.body];
+    match &op.access {
+        Access::RowReduce { stages, epilogue } => {
+            exprs.extend(stages.iter().map(|s| &s.pre));
+            exprs.push(epilogue);
+        }
+        Access::Contraction { epilogue, .. } => exprs.push(epilogue),
+        Access::Elementwise | Access::Reduction { .. } => {}
+    }
+    for e in exprs {
+        walk(e, &op.name, key.dtype, key.rank, elementwise);
     }
 }
 
@@ -689,6 +814,13 @@ fn validate_row_reduce(stages: &[ReduceStage], epilogue: &ScalarExpr, n_inputs: 
             ),
             ScalarExpr::Param(i) => {
                 panic!("RowReduce v1 forbids Param({i}) — bake scalars (eps) as Const")
+            }
+            ScalarExpr::Coord(d) => {
+                panic!(
+                    "RowReduce forbids Coord({d}) — the RowReduce stages/epilogue iterate \
+                     the (row, j) space, not an elementwise output coordinate space; \
+                     Coord is Elementwise-only in 0d"
+                )
             }
             ScalarExpr::Const(v) => assert!(v.is_finite(), "RowReduce Const must be finite, got {v}"),
             ScalarExpr::Unary(_, x) => check(x, n_inputs, max_reduced, in_stage, is_col),

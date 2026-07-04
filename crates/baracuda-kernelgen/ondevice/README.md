@@ -284,3 +284,70 @@ emit("shr", S8, input(0).binary(BinaryOp::Shr, input(1)));
 - **8-bit shifts** (`shl`/`shr` u8, `shr` i8): match the documented promotion
   model (promote to int, C shift, store-truncate mod 2⁸) for b ∈ [0,31];
   i8 `shr` is ARITHMETIC (sign-replicating) — `-128 >> 7 == -1`.
+
+## `coord_validate.cu` — `Coord` leaf (increment 0d)
+
+Validates `ScalarExpr::Coord(axis)` (the output coordinate along `axis`, as a
+float). Three bodies: a triu **mask-multiply** `x * (coord(1) >= coord(0) + k)`
+(k = 0/-1/2, f32 + f64) diffed against the **bespoke** `triu` kernel
+(`baracuda_triu_tril.cuh`, included by absolute path); a pure `iota` `coord(1)`;
+and an alibi-slope `(coord(1) - coord(0)) * p0` (launch param) — the last two vs
+a CPU reference. The generated kernels route to the STRIDED schedule (the Coord
+body forces it) even on contiguous cells.
+
+**Regeneration:** these cells are **not** in the `bin/kernelgen.rs` catalog.
+Generate them with the library into `<outdir>`, then copy this harness beside
+them:
+
+```rust
+use baracuda_kernelgen::ir::BinaryOp;
+use baracuda_kernelgen::{coord, generate, input, konst, param, Cuda, OpDef};
+use baracuda_kernels_types::{structure_key, ArchSku, ElementKind, OpCategory, OperandDesc};
+
+let out = std::env::args().nth(1).expect("outdir");
+let write = |k: baracuda_kernelgen::GeneratedKernel| {
+    std::fs::write(format!("{out}/{}.cu", k.name), &k.source).unwrap();
+};
+let key_1in = |dt: ElementKind| {  // one input + output
+    let a = OperandDesc::new(2, &[128, 256], &[256, 1], dt, 256);
+    structure_key(OpCategory::BinaryElementwise, &[a, a], ArchSku::Sm89)
+};
+let key_0in = |dt: ElementKind| {  // zero inputs (pure coord) + output
+    let a = OperandDesc::new(2, &[128, 256], &[256, 1], dt, 256);
+    structure_key(OpCategory::UnaryElementwise, &[a], ArchSku::Sm89)
+};
+let triu = |name: &str, dt: ElementKind, k: f64| OpDef::elementwise(
+    name, 1, &[dt],
+    input(0) * coord(1).binary(BinaryOp::CmpGe, coord(0) + konst(k)));
+write(generate(&triu("triu_mask", ElementKind::F32, 0.0), &key_1in(ElementKind::F32), &Cuda));
+write(generate(&triu("triu_mask_km1", ElementKind::F32, -1.0), &key_1in(ElementKind::F32), &Cuda));
+write(generate(&triu("triu_mask_k2", ElementKind::F32, 2.0), &key_1in(ElementKind::F32), &Cuda));
+write(generate(&triu("triu_mask", ElementKind::F64, 0.0), &key_1in(ElementKind::F64), &Cuda));
+write(generate(&OpDef::elementwise("iota1", 0, &[ElementKind::F32], coord(1)),
+               &key_0in(ElementKind::F32), &Cuda));
+write(generate(&OpDef::elementwise("alibi", 0, &[ElementKind::F32], (coord(1) - coord(0)) * param(0)),
+               &key_0in(ElementKind::F32), &Cuda));
+```
+
+Compile like `audit_reduce_softmax.cu` (the bespoke header needs the
+preprocessor flags): `nvcc -O3 -arch=sm_89 -std=c++17 -Xcompiler
+"/Zc:preprocessor /std:c++17" -I <kernels/include> coord_validate.cu`.
+
+**Last run:** RTX 4070 Laptop (sm_89), 2026-07-04 — **ALL PASSED**:
+
+- **`Coord` is bit-exact.** `iota` (`out = coord(1)`, column index to 4095, a
+  coordinate axis > 2¹¹) and `alibi` (`(coord(1)-coord(0))*slope`) match the
+  CPU definition **bit-for-bit** across every shape.
+- **triu mask-multiply is VALUE-exact to bespoke, not bit-exact — and the gap
+  is *precisely* the sign of zero.** The generated body is a mask-MULTIPLY
+  (`in * (cond ? 1 : 0)`); bespoke `triu` is a SELECT (`cond ? in : 0`). On a
+  masked-out **negative** entry the multiply yields `negative * 0.0f = -0.0`
+  while the select stores `+0.0`. Across all f32/f64 shapes (incl. non-square
+  37×53, degenerate 1×1, and coordinate axes > 2¹¹: 5000×33 / 33×5000) the
+  generated output is `==`-equal to both bespoke and the mathematical
+  definition, and **every** bit-difference was verified to be exactly that
+  `-0.0`-on-masked-negative case (e.g. 84,489 of them at 5000×33, all
+  accounted). A bit-identical `triu` needs a `Where`/select op (a future
+  increment); the mask-multiply idiom is value-correct modulo signed zero.
+  **Route implication for the eventual triu audit:** value-equal with `-0` on
+  masked negatives — a consumer needing exact `+0` requires the select op.

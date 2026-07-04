@@ -85,6 +85,29 @@ impl Backend for Cuda {
                 assert_no_int_div_or_const(e, plan.dtype);
             }
         }
+        // Increment 0d: independent Coord emitter backstop, beside the int
+        // Div/Const walk above and with the SAME expression coverage (body +
+        // RowReduce stages/epilogue + Contraction epilogue). The plan gate
+        // (`plan::assert_coord_admissibility`) validate-rejects the same
+        // three rows; this backstop holds independently of it (the 0a
+        // lesson: gate every layer), with cuda-prefixed messages distinct
+        // from the plan gate's. The fourth layer is per-emitter: every
+        // non-strided emitter's `coord` closure panics if a Coord leaf
+        // actually reaches it.
+        {
+            let mut exprs: Vec<&ScalarExpr> = vec![plan.body];
+            match plan.access {
+                Access::RowReduce { stages, epilogue } => {
+                    exprs.extend(stages.iter().map(|s| &s.pre));
+                    exprs.push(epilogue);
+                }
+                Access::Contraction { epilogue, .. } => exprs.push(epilogue),
+                Access::Elementwise | Access::Reduction { .. } => {}
+            }
+            for e in exprs {
+                assert_coord_lowerable(e, plan);
+            }
+        }
         // Increment 0b: a hetero-output (u8-predicate) plan reaches only the
         // scalar/strided emitters — `build_plan` forces the schedule (no packed
         // u8 store exists) and `assert_valid_out_dtype` pinned the Access to
@@ -228,7 +251,10 @@ fn packed_kind(dt: ElementKind, width: u32) -> Option<PackedKind> {
 fn body_packs(e: &ScalarExpr) -> bool {
     match e {
         ScalarExpr::Input(_) => true,
-        ScalarExpr::Const(_) | ScalarExpr::Param(_) | ScalarExpr::Reduced(_) => false,
+        // Coord never packs: the packed dtypes (f16/bf16) are outside its
+        // dtype gate anyway, and a Coord body never reaches Vectorized.
+        ScalarExpr::Const(_) | ScalarExpr::Param(_) | ScalarExpr::Reduced(_)
+        | ScalarExpr::Coord(_) => false,
         ScalarExpr::Unary(_, x) => body_packs(x),
         ScalarExpr::Add(a, b)
         | ScalarExpr::Sub(a, b)
@@ -354,6 +380,13 @@ fn emit_vectorized(plan: &KernelPlan<'_>, vty: &str, lanes: &[&str]) -> Generate
             &Lowering {
                 leaf: &acc,
                 reduced: &|i| unreachable!("no Reduced leaf outside RowReduce: red{i}"),
+                coord: &|d| {
+                    panic!(
+                        "cuda backend: Coord({d}) reached the vectorized emitter — Coord \
+                         bodies lower via Strided only (the linear-index kernels have no \
+                         per-axis coordinates)"
+                    )
+                },
                 unary: &|op, x| cuda_unary(op, x, plan.dtype),
                 binary: &|op, a, b| cuda_binary(op, a, b, plan.dtype),
             },
@@ -434,6 +467,15 @@ fn emit_vectorized_packed(plan: &KernelPlan<'_>, pk: &PackedKind) -> GeneratedKe
             &Lowering {
                 leaf: &acc,
                 reduced: &|i| unreachable!("no Reduced leaf outside RowReduce: red{i}"),
+                // Doubly unreachable: `body_packs` is Input-leaf-only AND the
+                // packed dtypes are outside Coord's f32/f64 gate.
+                coord: &|d| {
+                    panic!(
+                        "cuda backend: Coord({d}) reached the packed emitter — Coord \
+                         bodies lower via Strided only (and halves are outside the \
+                         Coord dtype gate)"
+                    )
+                },
                 unary: &|op, x| packed_unary(op, x, plan.dtype),
                 binary: &|op, a, b| packed_binary(op, a, b, plan.dtype),
             },
@@ -504,6 +546,13 @@ fn emit_scalar(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
         &Lowering {
             leaf: &acc,
             reduced: &|i| unreachable!("no Reduced leaf outside RowReduce: red{i}"),
+            coord: &|d| {
+                panic!(
+                    "cuda backend: Coord({d}) reached the scalar emitter — Coord bodies \
+                     lower via Strided only (the linear-index kernels have no per-axis \
+                     coordinates)"
+                )
+            },
             unary: &|op, x| cuda_unary(op, x, plan.dtype),
             binary: &|op, a, b| cuda_binary(op, a, b, plan.dtype),
         },
@@ -588,12 +637,36 @@ fn emit_strided(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
             format!("in{idx}[o{idx}]")
         }
     };
+    // Coord(d) reads the unraveled per-axis coordinate `c{d}` — emitted
+    // UNCONDITIONALLY above for every axis (the output-offset unravel), so the
+    // coordinate exists even in the all-contiguous-input case where no operand
+    // needs a per-axis offset — cast to the compute ctype. Exact while the
+    // axis extent fits the dtype's exact-integer range (f32: 2^24, f64: 2^53
+    // — the documented caller precondition); the plan gate + the
+    // `assert_coord_lowerable` backstop pin the dtype to f32/f32s/f64 and the
+    // axis to `< rank` before this closure can run.
+    let coord = |d: u8| {
+        assert!(
+            (d as usize) < rank,
+            "cuda backend: Coord({d}) axis out of range for the rank-{rank} strided \
+             unravel (the backstop should have refused this plan)"
+        );
+        match plan.dtype {
+            ElementKind::F32 | ElementKind::F32Strict => format!("(float)c{d}"),
+            ElementKind::F64 => format!("(double)c{d}"),
+            other => panic!(
+                "cuda backend: Coord({d}) has no {other:?} coordinate spelling — \
+                 f32/f64 only (the backstop should have refused this plan)"
+            ),
+        }
+    };
     let (prelude, root) = lower_dag(
         &ExprDag::from_expr(plan.body),
         ctype,
         &Lowering {
             leaf: &acc,
             reduced: &|i| unreachable!("no Reduced leaf outside RowReduce: red{i}"),
+            coord: &coord,
             unary: &|op, x| cuda_unary(op, x, plan.dtype),
             binary: &|op, a, b| cuda_binary(op, a, b, plan.dtype),
         },
@@ -696,6 +769,12 @@ fn emit_reduction(plan: &KernelPlan<'_>, ctype: &str, rop: ReduceOp) -> Generate
         &Lowering {
             leaf: &load,
             reduced: &|i| unreachable!("no Reduced leaf outside RowReduce: red{i}"),
+            coord: &|d| {
+                panic!(
+                    "cuda backend: Coord({d}) reached the reduction emitter — Coord is \
+                     Elementwise-only (a coordinate along a folded axis is ambiguous)"
+                )
+            },
             unary: &|op, x| if dbl { unary_f64(op, x) } else { unary_f32(op, x) },
             binary: &|op, a, b| {
                 if dbl {
@@ -1095,6 +1174,12 @@ fn reduction_splitk_variant(plan: &KernelPlan<'_>) -> Option<Variant> {
         &Lowering {
             leaf: &load,
             reduced: &|i| unreachable!("no Reduced leaf outside RowReduce: red{i}"),
+            coord: &|d| {
+                panic!(
+                    "cuda backend: Coord({d}) reached the split-K reduction variant — \
+                     Coord is Elementwise-only"
+                )
+            },
             unary: &|op, x| if dbl { unary_f64(op, x) } else { unary_f32(op, x) },
             binary: &|op, a, b| {
                 if dbl {
@@ -1253,6 +1338,13 @@ fn emit_contraction(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
         &Lowering {
             leaf: &|i| unreachable!("contraction v1 epilogue has no Input leaf: in{i}"),
             reduced: &red,
+            coord: &|d| {
+                panic!(
+                    "cuda backend: Coord({d}) reached the contraction emitter — the \
+                     (m, n) epilogue space is not the elementwise coordinate space; \
+                     Coord is Elementwise-only"
+                )
+            },
             unary: &|op, x| if dbl { unary_f64(op, x) } else { unary_f32(op, x) },
             binary: &|op, a, b| {
                 if dbl {
@@ -1401,6 +1493,12 @@ fn contraction_splitk_variant(plan: &KernelPlan<'_>) -> Option<Variant> {
         &Lowering {
             leaf: &|i| unreachable!("contraction v1 epilogue has no Input leaf: in{i}"),
             reduced: &red,
+            coord: &|d| {
+                panic!(
+                    "cuda backend: Coord({d}) reached the split-K contraction variant — \
+                     Coord is Elementwise-only"
+                )
+            },
             unary: &|op, x| if dbl { unary_f64(op, x) } else { unary_f32(op, x) },
             binary: &|op, a, b| {
                 if dbl {
@@ -1512,7 +1610,11 @@ fn row_reduce_materialize_variant(plan: &KernelPlan<'_>) -> Option<Variant> {
     // re-read costs the same as the smem read.
     if matches!(
         last.pre,
-        ScalarExpr::Input(_) | ScalarExpr::Const(_) | ScalarExpr::Param(_) | ScalarExpr::Reduced(_)
+        ScalarExpr::Input(_)
+            | ScalarExpr::Const(_)
+            | ScalarExpr::Param(_)
+            | ScalarExpr::Reduced(_)
+            | ScalarExpr::Coord(_)
     ) {
         return None;
     }
@@ -1546,7 +1648,8 @@ fn contains_subexpr(e: &ScalarExpr, t: &ScalarExpr) -> bool {
         ScalarExpr::Input(_)
         | ScalarExpr::Const(_)
         | ScalarExpr::Param(_)
-        | ScalarExpr::Reduced(_) => false,
+        | ScalarExpr::Reduced(_)
+        | ScalarExpr::Coord(_) => false,
         ScalarExpr::Unary(_, x) => contains_subexpr(x, t),
         ScalarExpr::Add(a, b)
         | ScalarExpr::Sub(a, b)
@@ -1567,7 +1670,8 @@ fn substitute_subexpr(e: &ScalarExpr, t: &ScalarExpr, marker: u8) -> ScalarExpr 
         ScalarExpr::Input(_)
         | ScalarExpr::Const(_)
         | ScalarExpr::Param(_)
-        | ScalarExpr::Reduced(_) => e.clone(),
+        | ScalarExpr::Reduced(_)
+        | ScalarExpr::Coord(_) => e.clone(),
         ScalarExpr::Unary(op, x) => ScalarExpr::Unary(*op, bx(x)),
         ScalarExpr::Add(a, b) => ScalarExpr::Add(bx(a), bx(b)),
         ScalarExpr::Sub(a, b) => ScalarExpr::Sub(bx(a), bx(b)),
@@ -1636,6 +1740,13 @@ fn emit_row_reduce_impl(plan: &KernelPlan<'_>, ctype: &str, materialize: bool) -
             &Lowering {
                 leaf: &load,
                 reduced: &red,
+                coord: &|d| {
+                    panic!(
+                        "cuda backend: Coord({d}) reached the RowReduce emitter — the \
+                         (row, j) space is not the elementwise coordinate space; Coord \
+                         is Elementwise-only"
+                    )
+                },
                 unary: &|op, x| if dbl { unary_f64(op, x) } else { unary_f32(op, x) },
                 binary: &|op, a, b| {
                     if dbl {
@@ -2229,7 +2340,10 @@ fn params_used(e: &ScalarExpr) -> Vec<u8> {
                 rec(a, out);
                 rec(b, out);
             }
-            ScalarExpr::Input(_) | ScalarExpr::Const(_) | ScalarExpr::Reduced(_) => {}
+            ScalarExpr::Input(_)
+            | ScalarExpr::Const(_)
+            | ScalarExpr::Reduced(_)
+            | ScalarExpr::Coord(_) => {}
         }
     }
     let mut set = std::collections::BTreeSet::new();
@@ -2250,6 +2364,12 @@ fn params_used(e: &ScalarExpr) -> Vec<u8> {
 fn assert_no_int_div_or_const(e: &ScalarExpr, dtype: ElementKind) {
     match e {
         ScalarExpr::Input(_) | ScalarExpr::Param(_) | ScalarExpr::Reduced(_) => {}
+        // A Coord at an int dtype is the SAME hazard class as Const (its
+        // spelling is a float cast) — but it has its own dedicated backstop,
+        // `assert_coord_lowerable`, which runs beside this walk in
+        // `Cuda::lower` for every dtype (not just int) and carries the
+        // targeted message; no second assert here (one message per layer).
+        ScalarExpr::Coord(_) => {}
         ScalarExpr::Const(_) => panic!(
             "cuda backend: Const at an integer dtype ({dtype:?}) — a Const is \
              spelled as an f64 C literal, which would silently run double math \
@@ -2268,6 +2388,59 @@ fn assert_no_int_div_or_const(e: &ScalarExpr, dtype: ElementKind) {
         | ScalarExpr::Binary(_, a, b) => {
             assert_no_int_div_or_const(a, dtype);
             assert_no_int_div_or_const(b, dtype);
+        }
+    }
+}
+
+/// Emitter backstop for [`ScalarExpr::Coord`] (increment 0d): panic if the
+/// expression contains a Coord leaf at a non-float compute dtype, under a
+/// non-Elementwise access, or with an out-of-range axis — the three rows the
+/// plan gate (`plan::assert_coord_admissibility`) validate-rejects, enforced
+/// here INDEPENDENTLY so a gate mutation cannot silently emit a rounding half
+/// coordinate, an int-kernel float cast, an ambiguous folded-axis coordinate,
+/// or an undefined `c{d}` identifier. Called from [`Cuda::lower`] over the
+/// body and every reduction-class stage/epilogue (the same coverage as
+/// [`assert_no_int_div_or_const`]); messages are cuda-prefixed, distinct from
+/// the plan gate's.
+fn assert_coord_lowerable(e: &ScalarExpr, plan: &KernelPlan<'_>) {
+    match e {
+        ScalarExpr::Input(_)
+        | ScalarExpr::Const(_)
+        | ScalarExpr::Param(_)
+        | ScalarExpr::Reduced(_) => {}
+        ScalarExpr::Coord(d) => {
+            assert!(
+                matches!(plan.access, Access::Elementwise),
+                "cuda backend: Coord({d}) under a non-Elementwise access — the \
+                 reduction-class emitters iterate fold/row/contraction coordinate \
+                 spaces, not the elementwise output space; the plan gate rejects this"
+            );
+            assert!(
+                matches!(
+                    plan.dtype,
+                    ElementKind::F32 | ElementKind::F32Strict | ElementKind::F64
+                ),
+                "cuda backend: Coord({d}) at non-float dtype {:?} — the coordinate is \
+                 spelled as a float/double cast, which rounds past 2048 at half \
+                 precision and injects float math into an integer kernel; the plan \
+                 gate rejects this",
+                plan.dtype
+            );
+            assert!(
+                *d < plan.key.rank,
+                "cuda backend: Coord({d}) axis out of range for rank {} — no c{d} \
+                 coordinate exists to read; the plan gate rejects this",
+                plan.key.rank
+            );
+        }
+        ScalarExpr::Unary(_, x) => assert_coord_lowerable(x, plan),
+        ScalarExpr::Add(a, b)
+        | ScalarExpr::Sub(a, b)
+        | ScalarExpr::Mul(a, b)
+        | ScalarExpr::Div(a, b)
+        | ScalarExpr::Binary(_, a, b) => {
+            assert_coord_lowerable(a, plan);
+            assert_coord_lowerable(b, plan);
         }
     }
 }
@@ -4360,5 +4533,335 @@ mod tests {
             access: &crate::ir::Access::Elementwise,
         };
         let _ = Cuda.lower(&plan);
+    }
+
+    // ===== increment 0d: Coord(axis) — the iota/coordinate leaf =============
+
+    use crate::ir::coord;
+
+    /// Rank-2 contiguous, fully aligned cell — the shape whose ALIGNED inputs
+    /// would normally vectorize (V4 at f32): exactly the cell the Coord
+    /// routing must force onto Strided.
+    fn coord_key_2d(dt: ElementKind, n_operands: usize) -> baracuda_kernels_types::StructureKey {
+        let a = OperandDesc::new(2, &[128, 256], &[256, 1], dt, 256);
+        let operands: Vec<_> = std::iter::repeat_n(a, n_operands).collect();
+        structure_key(OpCategory::BinaryElementwise, &operands, ArchSku::Sm89)
+    }
+
+    /// The increment-0d proof-vehicle body: `out[i,j] = x[i,j] * (j >= i + k)`
+    /// — the triu mask as a mask-multiply (`k` baked as a Const; `k = 0.0` is
+    /// the main diagonal).
+    fn triu_mask_op(name: &str, dt: ElementKind, k: f64) -> OpDef {
+        OpDef::elementwise(
+            name,
+            1,
+            &[dt],
+            input(0) * coord(1).binary(BinaryOp::CmpGe, coord(0) + konst(k)),
+        )
+    }
+
+    #[test]
+    fn coord_triu_mask_f32_golden_strided_unravel_and_float_cast() {
+        // The headline golden: a CONTIGUOUS (aligned, would-be-V4) cell still
+        // takes the strided emitter, the row-major unravel is emitted even
+        // though the single input is contiguous (the output offset needs the
+        // same c{d}s), and Coord spells the exact `(float)c{d}` cast into the
+        // compute-dtype compare.
+        let k = generate(&triu_mask_op("triu_mask", ElementKind::F32, 0.0), &coord_key_2d(ElementKind::F32, 2), &Cuda);
+        assert_eq!(k.name, "baracuda_gen_triu_mask_f32_strided_r2");
+        // Unravel present despite all-contiguous operands (last axis fastest).
+        assert!(k.source.contains("long long c1 = lin % shape1; lin /= shape1;"));
+        assert!(k.source.contains("long long c0 = lin % shape0; lin /= shape0;"));
+        // The compare is decided in the compute dtype: both Coord casts and
+        // the 0b compute-dtype cmp casts compose.
+        assert!(
+            k.source.contains(
+                "out[oo] = (in0[o0] * ((float)(float)c1 >= (float)((float)c0 + 0.0) ? 1.0f : 0.0f));"
+            ),
+            "triu-mask store golden missing in:\n{}",
+            k.source
+        );
+        // No vector machinery leaked in.
+        assert!(!k.source.contains("float4"));
+    }
+
+    #[test]
+    fn coord_pure_iota_all_contiguous_zero_inputs_golden() {
+        // out = coord(1) with ZERO inputs: nothing but the output needs the
+        // unravel — the emitter must still emit it (the output-offset unravel
+        // produces the c{d}s a Coord reads).
+        let op = OpDef::elementwise("iota1", 0, &[ElementKind::F32], coord(1));
+        let a = OperandDesc::new(2, &[128, 256], &[256, 1], ElementKind::F32, 256);
+        let key = structure_key(OpCategory::UnaryElementwise, &[a], ArchSku::Sm89);
+        let k = generate(&op, &key, &Cuda);
+        assert_eq!(k.name, "baracuda_gen_iota1_f32_strided_r2");
+        assert!(k.source.contains("long long c1 = lin % shape1; lin /= shape1;"));
+        assert!(k.source.contains("long long oo = c0*so_0 + c1*so_1;"));
+        assert!(k.source.contains("out[oo] = (float)c1;"), "{}", k.source);
+        assert!(!k.source.contains("in0"), "a 0-input op has no input pointers");
+    }
+
+    #[test]
+    fn coord_f64_golden_uses_double_cast_and_literals() {
+        let k = generate(&triu_mask_op("triu_mask", ElementKind::F64, 0.0), &coord_key_2d(ElementKind::F64, 2), &Cuda);
+        assert_eq!(k.name, "baracuda_gen_triu_mask_f64_strided_r2");
+        assert!(
+            k.source.contains(
+                "out[oo] = (in0[o0] * ((double)c1 >= ((double)c0 + 0.0) ? 1.0 : 0.0));"
+            ),
+            "f64 triu-mask store golden missing in:\n{}",
+            k.source
+        );
+        assert!(!k.source.contains("(float)"), "no float casts in the f64 kernel");
+    }
+
+    #[test]
+    fn coord_alibi_body_with_launch_param_golden() {
+        // (coord(1) - coord(0)) * param(0) — the alibi relative-position shape
+        // with a runtime slope: zero tensor inputs, one f32 launch param.
+        let op = OpDef::elementwise("alibi", 0, &[ElementKind::F32], (coord(1) - coord(0)) * param(0));
+        let a = OperandDesc::new(2, &[128, 256], &[256, 1], ElementKind::F32, 256);
+        let key = structure_key(OpCategory::UnaryElementwise, &[a], ArchSku::Sm89);
+        let k = generate(&op, &key, &Cuda);
+        assert_eq!(k.name, "baracuda_gen_alibi_f32_strided_r2");
+        assert!(k.source.contains("long long n, float p0)"), "p0 rides the launch signature");
+        assert!(
+            k.source.contains("out[oo] = (((float)c1 - (float)c0) * p0);"),
+            "alibi store golden missing in:\n{}",
+            k.source
+        );
+    }
+
+    #[test]
+    fn coord_body_never_vectorizes_aligned_v4_cell_takes_strided() {
+        use crate::plan::Schedule;
+        // The routing pin, via build_plan DIRECTLY: a fully-aligned contiguous
+        // f32 cell (which vectorizes to float4 for a coord-free body — see
+        // f32_contiguous_vectorizes_to_float4) must take Strided when the body
+        // contains a Coord; Scalar is equally illegal (no c{d}s there).
+        let op = triu_mask_op("triu_mask", ElementKind::F32, 0.0);
+        let key = coord_key_2d(ElementKind::F32, 2);
+        let plan = crate::build_plan(&op, &key);
+        assert!(
+            matches!(plan.schedule, Schedule::Strided),
+            "Coord body must route Strided, got {:?}",
+            plan.schedule
+        );
+        // Sibling sanity: the SAME cell without the Coord still vectorizes —
+        // the routing is keyed on the body, not the cell.
+        let plain = OpDef::elementwise("scale", 1, &[ElementKind::F32], input(0) * konst(2.0));
+        assert!(matches!(
+            crate::build_plan(&plain, &key).schedule,
+            Schedule::Vectorized { width: 4 }
+        ));
+    }
+
+    // ---- plan-gate rejections, via build_plan DIRECTLY (a gate mutation must
+    // turn into a should_panic failure; the emitter backstops have their own
+    // hand-built-plan tests below).
+
+    #[test]
+    #[should_panic(expected = "requires an f32/f64 compute dtype")]
+    fn coord_at_f16_is_rejected_at_the_plan_gate() {
+        // f16's max exactly-representable integer is 2048 — real axis extents
+        // exceed it, so a half coordinate would silently round.
+        let op = triu_mask_op("triu_mask", ElementKind::F16, 0.0);
+        let key = coord_key_2d(ElementKind::F16, 2);
+        let _ = crate::build_plan(&op, &key);
+    }
+
+    #[test]
+    #[should_panic(expected = "requires an f32/f64 compute dtype")]
+    fn coord_at_i32_is_rejected_at_the_plan_gate() {
+        // The coordinate is spelled as a float cast — the same double-math
+        // hazard as Const/Param at int dtypes (int-literal spelling queued).
+        let op = OpDef::elementwise("shift_by_col", 1, &[ElementKind::I32], input(0) + coord(1));
+        let key = coord_key_2d(ElementKind::I32, 2);
+        let _ = crate::build_plan(&op, &key);
+    }
+
+    #[test]
+    #[should_panic(expected = "Elementwise-only in 0d")]
+    fn coord_in_a_reduction_body_is_rejected_at_the_plan_gate() {
+        use crate::ir::ReduceOp;
+        // A coordinate along a folded axis is ambiguous — which fold
+        // iteration produced the output element?
+        let op = OpDef::reduction(
+            "wsum",
+            1,
+            &[ElementKind::F32],
+            input(0) * coord(0),
+            ReduceOp::Sum,
+        );
+        let key = reduce_key(ElementKind::F32);
+        let _ = crate::build_plan(&op, &key);
+    }
+
+    #[test]
+    #[should_panic(expected = "Elementwise-only in 0d")]
+    fn coord_in_a_row_reduce_epilogue_is_rejected_at_the_plan_gate() {
+        use crate::ir::{reduced, ReduceOp, ReduceStage};
+        // The RowReduce epilogue iterates the (row, j) space, not the
+        // elementwise output coordinate space.
+        let op = OpDef::row_reduce(
+            "rr_coord",
+            1,
+            &[ElementKind::F32],
+            vec![ReduceStage { pre: input(0).0, op: ReduceOp::Sum }],
+            reduced(0) + coord(0),
+        );
+        let key = rr_key(ElementKind::F32, OpCategory::Normalization);
+        let _ = crate::build_plan(&op, &key);
+    }
+
+    #[test]
+    #[should_panic(expected = "Elementwise-only in 0d")]
+    fn coord_in_a_contraction_epilogue_is_rejected_at_the_plan_gate() {
+        use crate::ir::{reduced, ContractionAxes};
+        // The contraction epilogue iterates (m, n), not an elementwise cell.
+        let op = OpDef::contraction(
+            "mm_coord",
+            &[ElementKind::F32],
+            ContractionAxes::matmul(),
+            reduced(0) * coord(0),
+        );
+        let lhs = OperandDesc::new(2, &[8, 4096], &[4096, 1], ElementKind::F32, 256);
+        let rhs = OperandDesc::new(2, &[4096, 4096], &[4096, 1], ElementKind::F32, 256);
+        let out = OperandDesc::new(2, &[8, 4096], &[4096, 1], ElementKind::F32, 256);
+        let key = structure_key(OpCategory::Gemm, &[lhs, rhs, out], ArchSku::Sm89);
+        let _ = crate::build_plan(&op, &key);
+    }
+
+    #[test]
+    #[should_panic(expected = "iteration space has no such coordinate")]
+    fn coord_axis_out_of_range_is_rejected_at_the_plan_gate() {
+        // coord(2) on a rank-2 cell — no such axis exists.
+        let op = OpDef::elementwise("iota2", 0, &[ElementKind::F32], coord(2));
+        let a = OperandDesc::new(2, &[128, 256], &[256, 1], ElementKind::F32, 256);
+        let key = structure_key(OpCategory::UnaryElementwise, &[a], ArchSku::Sm89);
+        let _ = crate::build_plan(&op, &key);
+    }
+
+    // ---- emitter backstops, independent of the plan gate (hand-built plans:
+    // a future gate mutation or schedule-selection change must trip HERE, not
+    // silently emit a rounding half coordinate / an int-kernel float cast /
+    // an undefined c{d} identifier).
+
+    #[test]
+    #[should_panic(expected = "at non-float dtype")]
+    fn coord_at_int_dtype_is_refused_by_the_emitter_backstop() {
+        use crate::backend::Backend;
+        use crate::plan::{KernelPlan, Schedule};
+        let key = coord_key_2d(ElementKind::I32, 2);
+        let body = (input(0) + coord(1)).0;
+        let plan = KernelPlan {
+            op_name: "backstop",
+            n_inputs: 1,
+            dtype: ElementKind::I32,
+            out_dtype: ElementKind::I32,
+            schedule: Schedule::Strided,
+            key: &key,
+            body: &body,
+            access: &crate::ir::Access::Elementwise,
+        };
+        let _ = Cuda.lower(&plan);
+    }
+
+    #[test]
+    #[should_panic(expected = "under a non-Elementwise access")]
+    fn coord_under_reduction_access_is_refused_by_the_emitter_backstop() {
+        use crate::backend::Backend;
+        use crate::ir::ReduceOp;
+        use crate::plan::{KernelPlan, ReduceAxisClass, Schedule};
+        use baracuda_kernels_types::AxisMask;
+        let key = reduce_key(ElementKind::F32);
+        let body = (input(0) * coord(0)).0;
+        let access = crate::ir::Access::Reduction {
+            op: ReduceOp::Sum,
+            axes: AxisMask::EMPTY,
+            keepdim: false,
+        };
+        let plan = KernelPlan {
+            op_name: "backstop",
+            n_inputs: 1,
+            dtype: ElementKind::F32,
+            out_dtype: ElementKind::F32,
+            schedule: Schedule::Reduction {
+                op: ReduceOp::Sum,
+                class: ReduceAxisClass::InnerContig,
+                keepdim: false,
+            },
+            key: &key,
+            body: &body,
+            access: &access,
+        };
+        let _ = Cuda.lower(&plan);
+    }
+
+    #[test]
+    #[should_panic(expected = "coordinate exists to read")]
+    fn coord_axis_out_of_range_is_refused_by_the_emitter_backstop() {
+        use crate::backend::Backend;
+        use crate::plan::{KernelPlan, Schedule};
+        let key = coord_key_2d(ElementKind::F32, 2);
+        let body = coord(5).0; // rank is 2 — no c5 exists
+        let plan = KernelPlan {
+            op_name: "backstop",
+            n_inputs: 1,
+            dtype: ElementKind::F32,
+            out_dtype: ElementKind::F32,
+            schedule: Schedule::Strided,
+            key: &key,
+            body: &body,
+            access: &crate::ir::Access::Elementwise,
+        };
+        let _ = Cuda.lower(&plan);
+    }
+
+    #[test]
+    #[should_panic(expected = "reached the scalar emitter")]
+    fn coord_misrouted_to_scalar_is_refused_by_the_per_emitter_backstop() {
+        use crate::backend::Backend;
+        use crate::plan::{KernelPlan, Schedule};
+        // A plan that passes the dtype/access/axis backstop but carries the
+        // WRONG schedule (a future schedule-selection change): the scalar
+        // emitter's coord closure is the layer that refuses — a linear-index
+        // kernel has no c{d} to read.
+        let key = coord_key_2d(ElementKind::F32, 2);
+        let body = (input(0) + coord(1)).0;
+        let plan = KernelPlan {
+            op_name: "backstop",
+            n_inputs: 1,
+            dtype: ElementKind::F32,
+            out_dtype: ElementKind::F32,
+            schedule: Schedule::Scalar,
+            key: &key,
+            body: &body,
+            access: &crate::ir::Access::Elementwise,
+        };
+        let _ = Cuda.lower(&plan);
+    }
+
+    #[test]
+    fn coord_shared_leaf_is_free_and_shared_interiors_still_hoist() {
+        // Coord is a LEAF: reusing coord(0) twice must NOT hoist a tmp for the
+        // leaf itself, while a shared INTERIOR over Coords still hoists once —
+        // the DAG discipline carries over to the new leaf.
+        let g = coord(1) - coord(0); // shared interior
+        let op = OpDef::elementwise(
+            "reldist",
+            1,
+            &[ElementKind::F32],
+            input(0) * (g.clone() * g),
+        );
+        let k = generate(&op, &coord_key_2d(ElementKind::F32, 2), &Cuda);
+        assert_eq!(
+            k.source.matches("((float)c1 - (float)c0)").count(),
+            1,
+            "the shared difference is emitted exactly once:\n{}",
+            k.source
+        );
+        assert!(k.source.contains("float tmp0 = ((float)c1 - (float)c0);"));
+        assert!(k.source.contains("out[oo] = (in0[o0] * (tmp0 * tmp0));"));
     }
 }

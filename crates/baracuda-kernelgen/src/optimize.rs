@@ -48,6 +48,13 @@ enum ENode {
     /// Opaque per-row reduced scalar ([`ScalarExpr::Reduced`]) — a leaf, never
     /// folded (a row scalar must not be CSE'd/constant-folded across rows).
     Reduced(u8),
+    /// Opaque output-coordinate leaf ([`ScalarExpr::Coord`], increment 0d) —
+    /// hash/eq by axis, ZERO rewrite/fold rules (its value varies per output
+    /// coordinate, so no host fold is even well-typed). `Coord(d) == Coord(d)`
+    /// hash-consing into one e-class is fine (same value at every coordinate);
+    /// no rule may equate `Coord(i)` with anything else. Pinned by
+    /// `coord_is_an_opaque_leaf_with_no_rules`.
+    Coord(u8),
     Add(Id, Id),
     Sub(Id, Id),
     Mul(Id, Id),
@@ -158,6 +165,7 @@ fn add_expr(eg: &mut EGraph, e: &ScalarExpr) -> Id {
         ScalarExpr::Const(v) => eg.add(ENode::Const(v.to_bits())),
         ScalarExpr::Param(i) => eg.add(ENode::Param(*i)),
         ScalarExpr::Reduced(i) => eg.add(ENode::Reduced(*i)),
+        ScalarExpr::Coord(d) => eg.add(ENode::Coord(*d)),
         ScalarExpr::Add(a, b) => {
             let (a, b) = (add_expr(eg, a), add_expr(eg, b));
             eg.add(ENode::Add(a, b))
@@ -467,7 +475,10 @@ fn saturate(eg: &mut EGraph, max_iters: usize) {
 /// Relative op cost for extraction — division and transcendentals dominate.
 fn weight(n: &ENode) -> u64 {
     match n {
-        ENode::Input(_) | ENode::Param(_) | ENode::Const(_) | ENode::Reduced(_) => 1,
+        // Coord sits in the leaf tier: on the strided schedule the unraveled
+        // c{d} already exists for the offset math, so reading it costs a cast.
+        ENode::Input(_) | ENode::Param(_) | ENode::Const(_) | ENode::Reduced(_)
+        | ENode::Coord(_) => 1,
         ENode::Add(..) | ENode::Sub(..) | ENode::Mul(..) => 2,
         ENode::Div(..) => 8,
         ENode::Binary(op, ..) => match op {
@@ -593,6 +604,7 @@ fn build(eg: &EGraph, c: Id, best: &HashMap<Id, (u64, ENode)>) -> ScalarExpr {
         ENode::Const(bits) => ScalarExpr::Const(f64::from_bits(bits)),
         ENode::Param(i) => ScalarExpr::Param(i),
         ENode::Reduced(i) => ScalarExpr::Reduced(i),
+        ENode::Coord(d) => ScalarExpr::Coord(d),
         ENode::Add(a, b) => ScalarExpr::Add(bx(build(eg, a, best)), bx(build(eg, b, best))),
         ENode::Sub(a, b) => ScalarExpr::Sub(bx(build(eg, a, best)), bx(build(eg, b, best))),
         ENode::Mul(a, b) => ScalarExpr::Mul(bx(build(eg, a, best)), bx(build(eg, b, best))),
@@ -958,6 +970,51 @@ mod tests {
             let n = ENode::Binary(op, 0, 1);
             assert_eq!(weight(&n), 2, "{op:?} must sit in the compare-select tier");
         }
+    }
+
+    #[test]
+    fn coord_is_an_opaque_leaf_with_no_rules() {
+        use crate::ir::{coord, BinaryOp};
+        // Representative Coord bodies round-trip optimize() UNCHANGED — the
+        // triu-mask predicate multiply and the alibi relative-position body.
+        let triu = (input(0)
+            * coord(1).binary(BinaryOp::CmpGe, coord(0) + konst(0.0)))
+        .0;
+        assert_eq!(optimize(&triu), triu, "triu-mask body must round-trip");
+        let alibi = ((coord(1) - coord(0)) * crate::ir::param(0)).0;
+        assert_eq!(optimize(&alibi), alibi, "alibi body must round-trip");
+        // A bare Coord leaf is already minimal.
+        assert_eq!(optimize(&coord(1).0), ScalarExpr::Coord(1));
+        // No rule equates Coord(i) with anything else: Coord(0) - Coord(0)
+        // stays symbolic (no x-x rule exists, and none may be added for
+        // Coord), and the reflexive compare stays as authored (the same
+        // NaN-honesty pin the Cmp* set carries — a widened rule arm matching
+        // Coord must fail here).
+        let sub_same = ScalarExpr::Sub(
+            Box::new(ScalarExpr::Coord(0)),
+            Box::new(ScalarExpr::Coord(0)),
+        );
+        assert_eq!(optimize(&sub_same), sub_same);
+        for op in [BinaryOp::CmpEq, BinaryOp::CmpGe, BinaryOp::Max, BinaryOp::Min] {
+            let e = ScalarExpr::Binary(
+                op,
+                Box::new(ScalarExpr::Coord(0)),
+                Box::new(ScalarExpr::Coord(1)),
+            );
+            assert_eq!(optimize(&e), e, "{op:?}(c0, c1) must stay as authored");
+        }
+        // Coord(0) and Coord(1) never merge (distinct axes = distinct values):
+        // c0 + c1 keeps two distinct leaves.
+        let e = optimize(&(coord(0) + coord(1)).0);
+        assert!(
+            matches!(&e, ScalarExpr::Add(a, b)
+                if matches!(**a, ScalarExpr::Coord(0)) && matches!(**b, ScalarExpr::Coord(1))),
+            "Coord(0)/Coord(1) must stay distinct, got {e:?}"
+        );
+        // The VALUE-GENERIC bit-exact identities still apply to a Coord
+        // operand (they are proofs about every value, not about Coord):
+        // c1 * 1.0 -> c1. This is hash-cons/extraction, not a Coord rule.
+        assert_eq!(optimize(&(coord(1) * konst(1.0)).0), ScalarExpr::Coord(1));
     }
 
     #[test]
