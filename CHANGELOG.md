@@ -8,6 +8,90 @@ alpha represents one or more completed phases.
 The phase numbering is Fuel-driven (Fuel is baracuda's primary downstream
 consumer); see `ROADMAP.md` for the active phase board.
 
+## 0.0.1-alpha.73 — 2026-07-04 (kernel specialization — generated kernels replace the bespoke surface)
+
+The kernel-specialization release. `baracuda-kernelgen` grows from an
+elementwise emitter into a value-numbered-DAG IR + backend that generates
+device kernels across the bespoke surface — reductions, contractions, layout
+views, gather/scatter — each generated form measured against its bespoke
+counterpart before it ships. The IR was then expanded increment-by-increment
+(each one adversarially reviewed) until it can express the functionality in the
+bespoke kernels, and the mixed-dtype dispatch key was wired to Fuel's Model-A
+per-operand dtype tuple. No public API removals; the `seam`/`nvrtc` surfaces
+are additive. See the `docs/fuel-*` channel for the Fuel-side agreements.
+
+### Added — the specialization engine (items 01–10)
+
+- **Value-numbered DAG IR** (`ScalarExpr` graph with consumer counts) — a shared
+  subtree is emitted once, so multi-use bodies dedup instead of recomputing.
+- **Layout `View` IR** as a recognition carrier — the generator recognizes a
+  transposed/strided read and fuses `body(transpose(input))` into one pass
+  (fused transposed reads beat the bespoke transpose+op by 3.6×–27× on-device).
+- **Strided / multi-axis / keepdim reductions** — outer/middle/multi-axis
+  geometry classified on the schedule; block-per-row cooperative last-axis
+  reduction (4.4× on-device over the naive strided path); exact integer
+  (`long long`) accumulation for integer reductions.
+- **`Access::Contraction` (ORDER-3 / MatMul)** with a `ContractionKey` on the
+  `StructureKey` and a split-K outer-axis reduction variant (go/no-go rematch vs
+  cuBLAS: correctness exact, schedule 0.25× → 0.95× of cuBLAS after split-K).
+- **Per-arch dispatch-table routing oracle** — the §7 vendor-exclusion mechanism
+  (route a structure key to generated vs vendor per arch) with an automated
+  variant-gate loop closed end-to-end.
+- **Packed `half2`/`bf162` vectorization** for f16/bf16 elementwise, and a
+  cross-pass materialization variant (Softmax's shared `exp` cached per row).
+
+### Added — the IR-expansion ramp (increments 0a–#5, each adversarially reviewed)
+
+- **0a** scalar-fn vocabulary broadening (18 unary + 6 binary intrinsics).
+- **0b** comparison predicates + u8 mask output.
+- **0c** integer compute dtypes + bitwise/logical ops.
+- **0d** `Coord(axis)` leaf (the output coordinate as a computable value).
+- **0e** reduction `Prod` + fused post-expr + heterogeneous output dtype.
+- **#1 MULTI_OUTPUT** — N outputs from one shared body-DAG.
+- **#2 RowReduce role generalization** — fused compound backwards (beats the
+  bespoke backward by 95×–5976× where the reduction fuses the epilogue).
+- **#3 layout/shape node wiring** — fused transposed reads (see View, above).
+- **#4 GATHER** — data-dependent index-tensor reads (`ReadIndex::Indexed`).
+- **#5 SCATTER + ATOMIC_HISTOGRAM** — data-dependent writes
+  (`WriteIndex::ScatterIndexed`), with a `Nondeterministic` variant fidelity for
+  atomic-accumulate scatter.
+
+### Added — Model-A mixed-dtype dispatch key
+
+- **`ElementKind::U32`** (additive, end of the enum — no discriminant shift; the
+  `structure_key` token stays version 1 and pre-existing tokens are byte-identical).
+  U32 is the Fuel-required index dtype (Fuel is U32-index at graph-build).
+- **Per-operand dtype in the FKC `accept` block** — the dispatch key is the
+  per-operand dtype tuple assembled from `accept.inputs[i].dtype`, emitted as
+  Fuel's plural `dtypes: [..]` TensorDesc field (singular `dtype:` is silently
+  dropped by Fuel's importer). Gather / index_select / embedding advertise a
+  keyed contract with the verified Fuel `op_kind` spelling and an `oob_policy`
+  field; scatter stays an honest miss pending operand-arity negotiation.
+- U32 is an **index/address dtype only** — the CUDA backend rejects a U32 value
+  plan for a non-indexed op (no u32 arithmetic path opens); on-device gather is
+  bit-exact vs the i32 kernel with a clean memcheck.
+
+### Fixed
+
+- **`baracuda-forge`**: nvcc / `lib.exe` output is now piped into build errors
+  (previously swallowed), and `cl.exe` is auto-discovered via `vswhere` — a
+  silent-toolchain-failure fix for the MSVC build path.
+- **e-graph soundness**: removed the unsound `x*0` fold and sign-gated the zero
+  identities so NaN constants are never folded away; added exact div-by-pow2 and
+  abs/relu rewrite rules; NaN-payload sweep over the Tier-A unary intrinsics.
+- **Contract flops** are DAG-counted (a shared subtree charged once, not per use).
+- **Split-K variant gate** hardened against flipped views, param bodies, and key
+  shape; output-store injectivity guard restored on the general reduction path.
+
+### Performance
+
+- Block-per-row cooperative reduction: **4.4×** on-device over the naive
+  last-axis path. Split-K contraction: **0.25× → 0.95×** of cuBLAS. Generated
+  elementwise/norm/reduction paths sweep the bespoke audit (generated ≥ bespoke
+  everywhere measured); three extract-the-delta perf extractions folded back into
+  the generator (strength-reduced fold offsets **2.05×** on the general path; an
+  int32 innermost counter puts the generated base at 169.6 vs 165.2 GB/s bespoke).
+
 ## 0.0.1-alpha.72 — 2026-06-29 (harden alpha.71 stream-ordered free)
 
 Post-ship hardening of the alpha.71 stream-ordered free, from an adversarial
