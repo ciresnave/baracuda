@@ -26,10 +26,13 @@ baracuda-nvrtc = { workspace = true, optional = true }
 # Fuel's dependency-free std-POD grammar crate (OpTag / OpAttrs / PatternNode) — the
 # §5 shared wire vocabulary. crates.io version dep so the default build resolves
 # without a Fuel checkout (an unpublished path/git dep breaks workspace resolution).
-fuel-kernel-seam-types = { version = "0.10.2", optional = true }
+fuel-kernel-seam-types = { version = "0.10.3", optional = true }
 # The §5 live-call envelope: JitRequest / JitResponse / the Synthesizer trait Fuel
 # calls. Depends only on fuel-kernel-seam-types + baracuda-kernels-types (no fuel-graph).
-fuel-kernel-seam = { version = "0.10.2", optional = true }
+# 0.10.3 = the frozen two-step handover: take_kernel ON the trait; JitResponse light
+# handle (Synthesized{entry_point}); envelope SynthArtifact{artifact,kind(Ptx|Cubin),
+# link,contract}; JitRequest.budget.
+fuel-kernel-seam = { version = "0.10.3", optional = true }
 
 [lints]
 workspace = true
