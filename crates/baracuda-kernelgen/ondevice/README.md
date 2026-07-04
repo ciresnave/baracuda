@@ -933,3 +933,128 @@ BOTH lanes of its pair, i.e. the "odd" stream is the "even" stream at a **+1
 increment provides yet (it is a runtime launch-arg slice, not a stride view or an
 index gather). So rope is now 2/3 closed; the last third is a small base-offset/slice
 operand (NOT another access-pattern increment). Not forced.
+
+## `scan_validate.cu` — prefix scan (increment 6)
+
+Validates `Access::Scan` — a cumsum/cumprod/cummax/cummin along the innermost
+(contiguous) axis. Two forms ship:
+
+- **serial-fold BASE** (`_scan_{sum,prod,max,min}[_rev][_excl]`) —
+  `VariantFidelity::BitIdentical`, thread 0 walks the axis in order (the honest
+  deterministic bit-reference). Diffed **bit-exact** (memcmp / NaN-aware) vs a CPU
+  **float-serial** oracle scanned in the MATCHING direction.
+- **block-scan VARIANT** (`..._blockscan`) — a Kogge-Stone warp scan
+  (`__shfl_up_sync`) + cross-warp exclusive-offset carry, re-emitted **inline**
+  (`smem_scan` does not exist in kernelgen; the source is headerless), chunked so a
+  `k > blockDim` row threads its running carry across tiles. **FP `Sum`/`Prod` only**
+  (Max/Min + integer ride the base). `ReassociatedDeterministic` — the warp tree
+  reassociates, so it is selectable only through an honest contract, never silently,
+  and there is **no bit-identical degenerate config** (unlike split-K, even a single
+  blockDim-wide chunk reassociates — the degenerate config is within-ULP of the base).
+
+**Regeneration:** these cells are **not** in the `bin/kernelgen.rs` catalog.
+Regenerate the `.cu` sources with the library dump tool, then copy the harness
+beside them:
+
+```sh
+SCAN_OUT=<outdir> cargo test -p baracuda-kernelgen dump_scan_sources -- --ignored --nocapture
+cp crates/baracuda-kernelgen/ondevice/scan_validate.cu <outdir>/
+nvcc -O3 -arch=sm_89 <outdir>/scan_validate.cu -o <outdir>/scan_validate && <outdir>/scan_validate
+```
+
+The dump tool (`cuda::scan_tests::dump_scan_sources`) writes the 16 f32 base cells
+(4 combines × incl/excl × fwd/rev), the f64 base, and the 4 block-scan variants
+(Sum/Prod × incl/excl) — the exact `#include` set the harness names.
+
+**Sanitizers** (small shapes via the `san` argv — the block-scan smem carry +
+`__syncthreads` make racecheck/synccheck/initcheck load-bearing, not just memcheck):
+
+```sh
+compute-sanitizer --tool memcheck  ./scan_validate san
+compute-sanitizer --tool racecheck ./scan_validate san
+compute-sanitizer --tool synccheck ./scan_validate san
+compute-sanitizer --tool initcheck ./scan_validate san
+```
+
+**Extract-the-delta audit vs the bespoke naive scan** (`scan_cumsum_fp.cu`, called
+through its `baracuda_kernels_scan_cumsum_f32_run` launcher) — the header form:
+
+```sh
+nvcc -O3 -arch=sm_89 -std=c++17 -Xcompiler "/Zc:preprocessor /std:c++17" \
+     -DWITH_BESPOKE -I <kernels-sys>/kernels/elementwise -I <kernels-sys>/kernels/include \
+     scan_validate.cu -o scan_validate_bespoke && ./scan_validate_bespoke
+```
+
+**Last run:** RTX 4070 Laptop (sm_89), CUDA 13.3 / nvcc 13.3 — **RESULT: ALL PASSED**
+(52 checks pure; +2 the bespoke audit); `compute-sanitizer` **memcheck / racecheck /
+synccheck / initcheck all 0 errors / 0 hazards** on the `san` shapes (the block-scan
+smem carry + the two `__syncthreads` per chunk are race/sync/init-clean).
+
+- **serial BASE bit-exact** — all 4 combines × incl/excl × fwd/rev, memcmp-exact vs
+  the float oracle on both `8×13` and `64×200`; f64 base memcmp-exact vs a double
+  oracle.
+- **FP boundary semantics** — signed-zero (an all-`−0.0` row sums to `+0`, bits
+  `0x00000000` — the `0.0f`-seeded fold); NaN propagation (Max/Min NaN-propagating
+  via `v != v`; Sum/Prod poison downstream, upstream unaffected — all 4 combines);
+  empty row (`k=0` leaves the output untouched); single-element (incl=in,
+  excl=identity).
+- **block-scan VARIANT** — run-to-run **memcmp-identical** (deterministic) on every
+  **device-launched** cell (the four **forward** f32 Sum/Prod × incl/excl blockscans);
+  **within-ULP** of an f64 oracle to a depth-aware `max(1e-5, 5e-7·√k)` bound
+  (a 16384-deep f32 sum legitimately carries ~1.4e-5 — the reassociated tree, being
+  deterministic, only sizes the *value* tolerance for deep rows); degenerate
+  single-chunk within-ULP of the serial base (relerr ≤ 3.9e-6). Multi-warp `64×16384`
+  (64 KB row — crosses warps AND chunks) is the device-only carry-propagation check.
+  The f16/bf16/f64 **forward** blockscans share this exact warp/carry algorithm (the
+  acc-width + `__half2float`/`__float2half` convert is the same primitive the
+  device-validated f64 base and the packed-f16 elementwise path already exercise), so
+  they are covered by equivalence, not a separate launch.
+
+> **Post-review (2026-07-04) — value-preserving emitter fixes, prior run still holds.**
+> Three adversarial-review fixes landed after this run; none change any output, so the
+> ALL-PASSED result above stands: (1) the Max/Min identity is now emitted header-light
+> via `__int_as_float(0xff800000u)` / `__longlong_as_double(...)` instead of the
+> `<cmath>` `INFINITY` macro (same ±inf bit pattern; **nvcc-verified to compile clean to
+> an sm_89 cubin headerless** — matches the reduce path's no-`INFINITY` discipline); (2)
+> the warp-exclusive `wexc` shuffle is now emitted only on the exclusive path (dead in
+> inclusive kernels — no output change); (3) the **reverse** block-scan variant is
+> **declined to the serial base in v1** (`scan_blockscan_variant` returns `None` for
+> `reverse`): it is traced-correct but was never device-launched, and an AOT scan is an
+> honest miss (no Fuel contract), so the validator is the ONLY gate — a reassociated
+> path ships only once device-validated. Reverse scans run the BitIdentical base (17×
+> bespoke). **Follow-up:** device-validate + re-enable reverse block-scan; add explicit
+> f16/bf16 block launches.
+
+**Extract-the-delta — the generator WINS decisively (and ties on correctness).** The
+bespoke scan family (`scan_axis_kernel`) is **one-thread-per-cell**, each thread
+re-scanning its own O(extent) prefix → **O(numel·extent)** total. The generated
+serial base is memcmp-**exact** to it (same naive math order — forward and reverse
+inclusive) but one-thread-**per-row** (O(numel)); the block-scan variant is
+cooperative. On `4096×4096` f32 cumsum (0.13 GB read+write):
+
+| kernel | technique | ms | GB/s (read+write) | vs bespoke |
+| --- | --- | --- | --- | --- |
+| gen block-scan variant | Kogge-Stone warp + carry | **0.590** | **227.4** | **43×** |
+| gen serial base | one thread per row | 1.461 | 91.9 | **17×** |
+| bespoke (naive) | one thread per cell | 25.325 | 5.3 | 1× |
+
+The block-scan variant reads at **227 GB/s — the copy-bandwidth ceiling** (memory
+optimal, same ~227 the reduce/rowreduce rewrites hit), 43× the bespoke; even the
+deliberately-unparallelized base is 17× the bespoke because it drops the quadratic
+per-cell rescan. No losing cell to record; the winning technique the generator
+already embodies is the cooperative scan (the same lesson as the reduction/softmax
+rewrites). **De-scoped from v1** (queued as follow-ups): the block-scan `Max`/`Min`
+variant (a `(value, has)`-flag warp scan — exactly associative, would be
+`BitIdentical`), integer block-scan, the **reverse** block-scan (traced-correct but
+declined pending device validation — reverse rides the base), and the non-inner scan
+axis.
+
+**Fuel contract (honest miss, AOT-only):** a scan emits **no contract** — neither
+`contract.rs` nor `pattern.rs` has any Scan/Cumsum/Prefix vocabulary and Fuel
+exposes no Scan/Cumsum `OpTag`, so `derive_pattern` rejects it as `NotElementwise`
+before any body walk and `contract()` returns `None` (the Reduction/RowReduce/
+Contraction precedent — pinned by `contract::tests::scan_is_an_honest_miss_no_contract`).
+Scan is a **stronger miss** than those: before this increment it could not even be
+represented; after it, the AOT kernel generates and runs (proven here) but still
+crosses no Fuel wire. Keying stays **additive** (`baracuda-kernels-types` UNTOUCHED —
+the `_blockscan` entry_point disambiguates the variant on the wire, never the token).

@@ -943,6 +943,31 @@ mod tests {
     }
 
     #[test]
+    fn scan_is_an_honest_miss_no_contract() {
+        use crate::ir::ReduceOp;
+        use crate::pattern::PatternError;
+        // Increment 6 SCAN is an AOT-only honest miss: neither contract.rs nor
+        // pattern.rs has any Scan/Cumsum vocabulary, and Fuel exposes no Scan OpTag,
+        // so a scan emits NO FKC contract (the kernel still generates + runs AOT) —
+        // the Reduction/RowReduce/Contraction precedent. `derive_pattern` rejects it
+        // as NotElementwise BEFORE any body walk; `contract()` then returns None.
+        let sc =
+            OpDef::scan_simple("cumsum", &[ElementKind::F32], ReduceOp::Sum, 1, false, false);
+        let a = OperandDesc::new(2, &[256, 128], &[128, 1], ElementKind::F32, 256);
+        let o = OperandDesc::new(2, &[256, 128], &[128, 1], ElementKind::F32, 256);
+        let key = structure_key(OpCategory::UnaryElementwise, &[a, o], ArchSku::Sm89);
+        let kernel = generate(&sc, &key, &Cuda);
+        assert!(
+            contract(&sc, &key, &kernel, "cuda").is_none(),
+            "a scan must emit NO contract (no Fuel Scan OpTag; AOT-only honest miss)"
+        );
+        assert!(matches!(
+            crate::derive_pattern(&sc),
+            Err(PatternError::NotElementwise)
+        ));
+    }
+
+    #[test]
     fn viewed_op_is_an_honest_miss_no_contract() {
         use crate::ir::View;
         use crate::pattern::PatternError;

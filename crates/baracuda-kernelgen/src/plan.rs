@@ -63,6 +63,26 @@ pub enum Schedule {
     /// the decode / flat-GEMM long-tail cell; tiled/MMA schedules join as
     /// bench-gated variants. Axes/accum/epilogue ride on [`KernelPlan::access`].
     Contraction,
+    /// **Prefix scan** along a single axis (increment 6) — a full-width cumulative
+    /// output, one row per output slot. `block = false` is the serial-fold BASE
+    /// (thread 0 walks the axis sequentially — the deterministic bit-reference,
+    /// [`crate::backend::VariantFidelity::BitIdentical`]); `block = true` is the
+    /// cooperative block-scan VARIANT (Kogge-Stone warp scan + cross-warp carry,
+    /// produced by `cuda::scan_blockscan_variant`, never by `build_plan`). The
+    /// monoid/axis/flags ride here (this enum is `Copy`); `pre`/`post` ride on
+    /// [`KernelPlan::access`].
+    Scan {
+        /// The associative monoid combine along the axis.
+        op: ReduceOp,
+        /// The scanned axis (v1: `rank - 1`, innermost/contiguous).
+        axis: u8,
+        /// Walk the axis descending.
+        reverse: bool,
+        /// Exclusive (shift-by-one, identity at the first visited position) scan.
+        exclusive: bool,
+        /// `false` = serial-fold base; `true` = cooperative block-scan variant.
+        block: bool,
+    },
 }
 
 /// Reduce-axis geometry (design-doc predicate #9). All classes lower to the same
@@ -235,6 +255,26 @@ pub fn build_plan<'a>(op: &'a OpDef, key: &'a StructureKey) -> KernelPlan<'a> {
                  are a follow-up)"
             );
             Schedule::Contraction
+        }
+        // Increment 6 SCAN: validate admissibility (mirrors the RowReduce arm's
+        // `validate_row_reduce` call), then derive the serial-fold BASE schedule
+        // (`block: false`). The cooperative block-scan is produced separately by
+        // `cuda::scan_blockscan_variant` (a `lower_variants` filter), never here.
+        Access::Scan {
+            op: sop,
+            axis,
+            reverse,
+            exclusive,
+            ..
+        } => {
+            validate_scan(op, key, axis, reverse, exclusive);
+            Schedule::Scan {
+                op: sop,
+                axis,
+                reverse,
+                exclusive,
+                block: false,
+            }
         }
         Access::Elementwise => {
             let n = key.n_operands as usize;
@@ -627,6 +667,7 @@ fn access_tag(a: &Access) -> &'static str {
         Access::Reduction { .. } => "Reduction",
         Access::RowReduce { .. } => "RowReduce",
         Access::Contraction { .. } => "Contraction",
+        Access::Scan { .. } => "Scan",
     }
 }
 
@@ -1104,6 +1145,13 @@ fn assert_no_half_nextafter(op: &OpDef, dtype: ElementKind) {
         // The reduction post-expr (0e) lowers through the accumulator-width
         // spellers too, so the honest-miss walk must cover it (body is already in).
         Access::Reduction { post, .. } => exprs.push(post),
+        // Increment 6 SCAN: the `pre` (per-element pre-map) and `post` (per-element
+        // epilogue) both lower through the accumulator-width spellers (body == post
+        // is already in), so a half `Nextafter` hidden in `pre` must miss honestly.
+        Access::Scan { pre, post, .. } => {
+            exprs.push(pre);
+            exprs.push(post);
+        }
         // Review-caught gate asymmetry (increment 1): a multi-output op's EXTRA
         // output bodies must be walked too — else a half `Nextafter` hidden in an
         // extra body bypasses this honest-miss gate. Non-elementwise multi-output
@@ -1299,6 +1347,13 @@ fn assert_int_op_admissibility(op: &OpDef, dtype: ElementKind) {
         // The reduction post-expr (0e) lowers at the accumulator dtype — a
         // Const/Param/Div/unary there hits the same int-dtype hazards, so gate it.
         Access::Reduction { post, .. } => exprs.push(post),
+        // Increment 6 SCAN: `pre`/`post` lower at the accumulator dtype (an int
+        // cumsum/cummax rides the serial base), so a Const/Param/Div/unary/int-only
+        // op there hits the same int hazards — gate both.
+        Access::Scan { pre, post, .. } => {
+            exprs.push(pre);
+            exprs.push(post);
+        }
         // Review-caught gate asymmetry (increment 1): walk the EXTRA output bodies
         // too. Without this, an int-only op with a COMPOSED operand hides in a
         // multi-output extra body at U8/S8 and bypasses the 8-bit leaf-operand pin
@@ -1410,6 +1465,14 @@ fn assert_coord_admissibility(op: &OpDef, key: &StructureKey) {
         // A Coord in a reduction post-expr is doubly rejected (here, non-
         // elementwise → the Coord arm fires; and by assert_valid_reduction_post).
         Access::Reduction { post, .. } => exprs.push(post),
+        // Increment 6 SCAN: a Coord in `pre`/`post` is doubly rejected (here, the
+        // scan is non-elementwise → the Coord arm fires; and the emitter's
+        // panicking `coord` closure). The scan iterates the (row, j) space, not an
+        // elementwise output coordinate space.
+        Access::Scan { pre, post, .. } => {
+            exprs.push(pre);
+            exprs.push(post);
+        }
         Access::Elementwise => {}
     }
     for e in exprs {
@@ -1515,6 +1578,15 @@ fn assert_valid_out_dtype(op: &OpDef) {
              accumulator, not a 0/1 predicate, so a hetero store would truncate \
              silently; only Access::Elementwise (predicate → U8) and \
              Access::Reduction (any/all → U8, count → I64) carry a hetero output",
+            op.name
+        ),
+        // Increment 6 SCAN: a cumulative op does not change dtype (the output is
+        // same-shape, same-dtype as Input(0)), so a hetero out_dtype has no exact
+        // store — reject it, exactly like RowReduce/Contraction.
+        Access::Scan { .. } => panic!(
+            "OpDef '{}': out_dtype = Some({od:?}) is rejected under Scan — a prefix \
+             scan is same-dtype as its input (a cumulative op does not change \
+             dtype), so there is no hetero store; use out_dtype = None",
             op.name
         ),
     }
@@ -1739,6 +1811,162 @@ fn validate_row_reduce(stages: &[ReduceStage], epilogue: &ScalarExpr, n_inputs: 
         check(&st.pre, n_inputs, i as u8, true, &is_col);
     }
     check(epilogue, n_inputs, stages.len() as u8, false, &is_col);
+}
+
+/// Validate an [`Access::Scan`] op at build time (AOT — a scan never crosses the
+/// JIT trust boundary, so a panic here is an author-error backstop). Mirrors
+/// [`validate_row_reduce`]'s operand-role + layout checks, with three DELIBERATE
+/// differences:
+///
+/// - **ADMITS `Prod`** — unlike RowReduce (which forbids `Prod` because the fused
+///   row path has no `block_prod`), a scan explicitly wants cumprod, and the
+///   serial base folds it directly. Only the block-scan VARIANT emitter (§4)
+///   declines integer Sum/Prod; the serial base is `BitIdentical` for every
+///   admitted dtype (integer Sum/Prod wraps exactly; Max/Min is exactly associative).
+/// - **NO float-only gate** — integer `Sum`/`Prod`/`Max`/`Min` on the serial base
+///   are legal and bit-exact, so (unlike RowReduce) no `float dtype` assert.
+/// - **`axis == rank - 1`** — v1 scans the innermost (contiguous) axis only; a
+///   non-inner axis needs a strided scan skeleton (deferred), rejected here so the
+///   miss is honest, not silently wrong.
+///
+/// Rejects `Mean` (not a monoid). `exclusive` and `reverse` are independently legal
+/// and composable — there is no illegal combination, so nothing extra is asserted
+/// for them (the on-device validator covers all four cells).
+fn validate_scan(op: &OpDef, key: &StructureKey, axis: u8, reverse: bool, exclusive: bool) {
+    let Access::Scan {
+        op: scan_op,
+        pre,
+        post,
+        ..
+    } = &op.access
+    else {
+        unreachable!("validate_scan on a non-Scan op");
+    };
+    let name = &op.name;
+    // Both flags are independently legal and composable — asserted-consumed so a
+    // future reader sees they were considered (no illegal (exclusive, reverse) cell).
+    let _ = (reverse, exclusive);
+
+    // Mean is not a monoid (no identity a running prefix can carry) — reject before
+    // anything else so the message is unambiguous. Prod is DELIBERATELY admitted
+    // (the row-reduce Prod ban does NOT carry over — a scan folds cumprod serially).
+    assert!(
+        !matches!(scan_op, ReduceOp::Mean),
+        "OpDef '{name}': Scan combine Mean is not a monoid (no identity/associative \
+         running prefix) — v1 scans Sum/Prod/Max/Min only"
+    );
+
+    let n = op.n_inputs as usize;
+    assert!(
+        (1..MAX_OPERANDS).contains(&n),
+        "Scan n_inputs {} out of [1, MAX_OPERANDS)",
+        op.n_inputs
+    );
+    assert!(
+        key.n_operands as usize == n + 1,
+        "Scan expects n_inputs+1 operands (inputs then output); got {}",
+        key.n_operands
+    );
+    let rank = key.rank as usize;
+    assert!(rank >= 1, "Scan needs a scanned axis (rank >= 1)");
+    let last = (rank - 1) as u8;
+
+    // v1: the innermost (contiguous, trailing) axis only. The row-iteration
+    // skeleton scans the dense inner dimension; a non-inner axis needs a strided
+    // scan skeleton (deferred). `axis < rank` is subsumed (axis == rank-1 implies it).
+    assert!(
+        axis == last,
+        "Scan v1 scans the innermost (contiguous) axis only: axis {axis} != rank-1 \
+         ({last}) — a non-inner scan axis is a deferred follow-up (reject so the \
+         miss is honest, not silently wrong)"
+    );
+
+    // Operand roles + layout legality (mirrors validate_row_reduce). Input 0 is the
+    // row-streamed scanned tensor: `base = row*k` + the forward `idx = base+j` walk
+    // assume a dense, forward last axis, so it must be Contig and NOT flipped (a
+    // reversed operand keys |stride|-Contig + flipped and would read mirrored/OOB —
+    // the reverse SCAN is the `reverse` flag, never a flipped operand).
+    let mut input0_streamed = false;
+    #[allow(clippy::needless_range_loop)]
+    for i in 0..n {
+        let o = key.operands[i];
+        match rr_role(o, last) {
+            RrRole::RowStreamed => {
+                assert!(
+                    o.contig == Contiguity::Contig,
+                    "Scan streamed input {i} must be contiguous (base = row*k assumes a dense scanned axis)"
+                );
+                assert!(
+                    !o.flipped,
+                    "Scan streamed input {i} must not be reversed along an axis (idx = base+j reads forward-dense; a flipped view reads mirrored/OOB — use the `reverse` scan flag, not a flipped operand)"
+                );
+                input0_streamed |= i == 0;
+            }
+            RrRole::ColBroadcast => {
+                assert!(
+                    !o.bcast.is_set(last) && (0..last).all(|d| o.bcast.is_set(d)),
+                    "Scan column input {i} must broadcast every outer axis and vary along the scanned axis (in_i[j])"
+                );
+                assert!(!o.flipped, "Scan column input {i} must not be reversed");
+            }
+            RrRole::RowScalar => {
+                assert!(
+                    rank >= 2 && (0..last).all(|d| !o.bcast.is_set(d)),
+                    "Scan row-scalar input {i} needs rank >= 2 and no outer-axis broadcast (in_i[row]); an all-broadcast operand is a true scalar (bake as Const)"
+                );
+                assert!(!o.flipped, "Scan row-scalar input {i} must not be reversed");
+            }
+        }
+    }
+    assert!(
+        input0_streamed,
+        "Scan Input0 must be the row-streamed scanned tensor, not a column-broadcast weight or a per-row scalar"
+    );
+    let out = key.operands[n];
+    assert!(
+        out.bcast.is_empty() && out.contig == Contiguity::Contig && !out.flipped,
+        "Scan output must be full-width forward-dense contiguous (empty bcast, not flipped)"
+    );
+
+    // Expression legality. `pre` (the per-element pre-map) runs BEFORE the fold, so
+    // it must NOT read the running prefix (`Reduced` is rejected in `pre`); `post`
+    // (the per-element epilogue) reads the running prefix as the single `Reduced(0)`
+    // leaf. Coord is rejected upstream by `assert_coord_admissibility` (non-
+    // elementwise); Param is f32-only (emitter). Input indices must be in range.
+    fn check(e: &ScalarExpr, n_inputs: u8, allow_reduced: bool, ctx: &str, name: &str) {
+        match e {
+            ScalarExpr::Input(i) => assert!(
+                *i < n_inputs,
+                "Scan '{name}' {ctx} Input({i}) >= n_inputs {n_inputs}"
+            ),
+            ScalarExpr::Reduced(s) => {
+                assert!(
+                    allow_reduced,
+                    "Scan '{name}' {ctx} must not read Reduced({s}) — the running prefix does not exist in the pre-map (it reads inputs only)"
+                );
+                assert!(
+                    *s == 0,
+                    "Scan '{name}' {ctx} Reduced({s}) — the running prefix is the single Reduced(0) leaf"
+                );
+            }
+            ScalarExpr::Const(v) => assert!(
+                v.is_finite(),
+                "Scan '{name}' {ctx} Const must be finite, got {v}"
+            ),
+            ScalarExpr::Param(_) | ScalarExpr::Coord(_) => {}
+            ScalarExpr::Unary(_, x) => check(x, n_inputs, allow_reduced, ctx, name),
+            ScalarExpr::Add(a, b)
+            | ScalarExpr::Sub(a, b)
+            | ScalarExpr::Mul(a, b)
+            | ScalarExpr::Div(a, b)
+            | ScalarExpr::Binary(_, a, b) => {
+                check(a, n_inputs, allow_reduced, ctx, name);
+                check(b, n_inputs, allow_reduced, ctx, name);
+            }
+        }
+    }
+    check(pre, op.n_inputs, false, "pre-map", name);
+    check(post, op.n_inputs, true, "post-epilogue", name);
 }
 
 /// Vector width in elements for a [`VecWidth`] bucket.
@@ -2503,5 +2731,200 @@ mod scatter_gate_validate {
         let dst = OperandDesc::new(2, &[4, 3], &[3, 1], ElementKind::I32, 256);
         let key = structure_key(OpCategory::BinaryElementwise, &[iupd, idx, dst], ArchSku::Sm89);
         assert_eq!(build_plan(&op, &key).schedule, Schedule::Strided);
+    }
+}
+
+#[cfg(test)]
+mod scan_gate_validate {
+    //! Increment-6 SCAN gate-rejection tests. Per the house rule these call
+    //! `build_plan` DIRECTLY — an emitter panic would mask a gate mutation (the 0c
+    //! lesson). Every `validate_scan` (and `assert_valid_out_dtype`) rejection has a
+    //! test here; each is mutation-checked both directions by a targeted reverse-edit.
+    use super::{build_plan, Schedule};
+    use crate::ir::{input, konst, reduced, OpDef, ReduceOp};
+    use baracuda_kernels_types::{
+        structure_key, ArchSku, ElementKind, OpCategory, OperandDesc, StructureKey,
+    };
+
+    // A rank-2 [256,128] scan cell: contiguous input + full-width contiguous output.
+    fn scan_key(dt: ElementKind) -> StructureKey {
+        let a = OperandDesc::new(2, &[256, 128], &[128, 1], dt, 256);
+        let o = OperandDesc::new(2, &[256, 128], &[128, 1], dt, 256);
+        structure_key(OpCategory::UnaryElementwise, &[a, o], ArchSku::Sm89)
+    }
+
+    #[test]
+    fn valid_scan_builds_all_monoids_and_flags() {
+        // Every v1 monoid × inclusive/exclusive × forward/reverse builds; the
+        // schedule is the serial base (block=false), innermost axis (rank-1 = 1).
+        for op in [ReduceOp::Sum, ReduceOp::Prod, ReduceOp::Max, ReduceOp::Min] {
+            for reverse in [false, true] {
+                for exclusive in [false, true] {
+                    let sc =
+                        OpDef::scan_simple("cum", &[ElementKind::F32], op, 1, reverse, exclusive);
+                    let key = scan_key(ElementKind::F32);
+                    let plan = build_plan(&sc, &key);
+                    assert_eq!(
+                        plan.schedule,
+                        Schedule::Scan { op, axis: 1, reverse, exclusive, block: false }
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn integer_scan_builds_sum_max_min() {
+        // Integer Sum/Max/Min ride the serial base BitIdentical — validate_scan
+        // does NOT copy validate_row_reduce's float-only gate.
+        for op in [ReduceOp::Sum, ReduceOp::Max, ReduceOp::Min] {
+            let sc = OpDef::scan_simple("cumi", &[ElementKind::I32], op, 1, false, false);
+            let _ = build_plan(&sc, &scan_key(ElementKind::I32));
+        }
+    }
+
+    #[test]
+    fn prod_is_admitted_unlike_rowreduce() {
+        // DELIBERATE difference from validate_row_reduce: Prod IS admitted (cumprod).
+        let sc = OpDef::scan_simple("cumprod", &[ElementKind::F32], ReduceOp::Prod, 1, false, false);
+        let key = scan_key(ElementKind::F32);
+        let plan = build_plan(&sc, &key);
+        assert!(matches!(
+            plan.schedule,
+            Schedule::Scan { op: ReduceOp::Prod, .. }
+        ));
+    }
+
+    #[test]
+    #[should_panic(expected = "not a monoid")]
+    fn mean_combine_rejected() {
+        // Mean is not a monoid — rejected (unlike Sum/Prod/Max/Min).
+        let sc = OpDef::scan_simple("cummean", &[ElementKind::F32], ReduceOp::Mean, 1, false, false);
+        let _ = build_plan(&sc, &scan_key(ElementKind::F32));
+    }
+
+    #[test]
+    #[should_panic(expected = "innermost")]
+    fn non_inner_axis_rejected() {
+        // v1 scans axis == rank-1 only; axis 0 on a rank-2 cell is a deferred
+        // follow-up, rejected so the miss is honest.
+        let sc = OpDef::scan_simple("cum0", &[ElementKind::F32], ReduceOp::Sum, 0, false, false);
+        let _ = build_plan(&sc, &scan_key(ElementKind::F32));
+    }
+
+    #[test]
+    #[should_panic(expected = "must be contiguous")]
+    fn non_contig_scanned_input_rejected() {
+        // A transposed (column-major) input keys non-Contig on the scanned axis —
+        // base = row*k assumes a dense scanned axis, so reject.
+        let a = OperandDesc::new(2, &[256, 128], &[1, 256], ElementKind::F32, 256);
+        let o = OperandDesc::new(2, &[256, 128], &[128, 1], ElementKind::F32, 256);
+        let key = structure_key(OpCategory::UnaryElementwise, &[a, o], ArchSku::Sm89);
+        let sc = OpDef::scan_simple("cum", &[ElementKind::F32], ReduceOp::Sum, 1, false, false);
+        let _ = build_plan(&sc, &key);
+    }
+
+    #[test]
+    #[should_panic(expected = "must not be reversed")]
+    fn flipped_operand_rejected() {
+        // A dense-but-REVERSED input keys |stride|-Contig + flipped; idx = base+j
+        // reads forward, so a flipped operand reads mirrored/OOB — reject (the
+        // reverse SCAN is the `reverse` flag, never a flipped operand).
+        let a = OperandDesc::new(2, &[256, 128], &[128, -1], ElementKind::F32, 256);
+        let o = OperandDesc::new(2, &[256, 128], &[128, 1], ElementKind::F32, 256);
+        let key = structure_key(OpCategory::UnaryElementwise, &[a, o], ArchSku::Sm89);
+        let sc = OpDef::scan_simple("cum", &[ElementKind::F32], ReduceOp::Sum, 1, false, false);
+        let _ = build_plan(&sc, &key);
+    }
+
+    #[test]
+    #[should_panic(expected = "rejected under Scan")]
+    fn hetero_out_dtype_rejected() {
+        // A cumulative op is same-dtype as its input — a hetero out_dtype has no
+        // exact store (assert_valid_out_dtype, runs before validate_scan).
+        let mut sc = OpDef::scan_simple("cum", &[ElementKind::F32], ReduceOp::Sum, 1, false, false);
+        sc.out_dtype = Some(ElementKind::U8);
+        let _ = build_plan(&sc, &scan_key(ElementKind::F32));
+    }
+
+    // ---- pre/post expression-legality gate (the `check` closure). Reachable only
+    // via the public OpDef::scan (arbitrary pre/post); scan_simple can't exercise
+    // it. Review-caught: a mutation neutralizing BOTH `check` call sites passed the
+    // whole suite — these four tests now kill that mutant. ----
+
+    #[test]
+    #[should_panic(expected = "must not read Reduced")]
+    fn pre_map_reading_reduced_rejected() {
+        // The pre-map runs BEFORE the fold — the running prefix does not exist yet,
+        // so a `Reduced` read in `pre` would lower to an undefined register.
+        let sc = OpDef::scan(
+            "cum", 1, &[ElementKind::F32], ReduceOp::Sum, 1, false, false,
+            reduced(0), reduced(0),
+        );
+        let _ = build_plan(&sc, &scan_key(ElementKind::F32));
+    }
+
+    #[test]
+    #[should_panic(expected = "single Reduced(0) leaf")]
+    fn post_reading_reduced_nonzero_rejected() {
+        // The running prefix is the single Reduced(0) leaf; Reduced(1) has no source.
+        let sc = OpDef::scan(
+            "cum", 1, &[ElementKind::F32], ReduceOp::Sum, 1, false, false,
+            input(0), reduced(1),
+        );
+        let _ = build_plan(&sc, &scan_key(ElementKind::F32));
+    }
+
+    #[test]
+    #[should_panic(expected = ">= n_inputs")]
+    fn pre_input_out_of_range_rejected() {
+        // Input(5) with n_inputs = 1 — the kernel signature has no in5.
+        let sc = OpDef::scan(
+            "cum", 1, &[ElementKind::F32], ReduceOp::Sum, 1, false, false,
+            input(5), reduced(0),
+        );
+        let _ = build_plan(&sc, &scan_key(ElementKind::F32));
+    }
+
+    #[test]
+    #[should_panic(expected = "Const must be finite")]
+    fn nonfinite_const_in_post_rejected() {
+        // A non-finite Const in the epilogue (here NaN) has no valid emission.
+        let sc = OpDef::scan(
+            "cum", 1, &[ElementKind::F32], ReduceOp::Sum, 1, false, false,
+            input(0),
+            crate::ir::Expr(crate::ir::ScalarExpr::Add(
+                Box::new(reduced(0).0),
+                Box::new(konst(f64::NAN).0),
+            )),
+        );
+        let _ = build_plan(&sc, &scan_key(ElementKind::F32));
+    }
+
+    // ---- operand-role / output-layout gates (review-caught: only the RowStreamed
+    // contig + flip guards were tested). ----
+
+    #[test]
+    #[should_panic(expected = "full-width forward-dense")]
+    fn flipped_output_rejected() {
+        // A reversed OUTPUT keys |stride|-Contig + flipped; the scan store is
+        // forward-dense (out[base+j]) — a flipped output would write mirrored.
+        let a = OperandDesc::new(2, &[256, 128], &[128, 1], ElementKind::F32, 256);
+        let o = OperandDesc::new(2, &[256, 128], &[128, -1], ElementKind::F32, 256);
+        let key = structure_key(OpCategory::UnaryElementwise, &[a, o], ArchSku::Sm89);
+        let sc = OpDef::scan_simple("cum", &[ElementKind::F32], ReduceOp::Sum, 1, false, false);
+        let _ = build_plan(&sc, &key);
+    }
+
+    #[test]
+    #[should_panic(expected = "Input0 must be the row-streamed")]
+    fn input0_not_streamed_rejected() {
+        // Input0 broadcast along the scanned (last) axis keys as a per-row scalar,
+        // not the row-streamed scanned tensor — there is nothing to scan.
+        let a = OperandDesc::new(2, &[256, 128], &[1, 0], ElementKind::F32, 256);
+        let o = OperandDesc::new(2, &[256, 128], &[128, 1], ElementKind::F32, 256);
+        let key = structure_key(OpCategory::UnaryElementwise, &[a, o], ArchSku::Sm89);
+        let sc = OpDef::scan_simple("cum", &[ElementKind::F32], ReduceOp::Sum, 1, false, false);
+        let _ = build_plan(&sc, &key);
     }
 }

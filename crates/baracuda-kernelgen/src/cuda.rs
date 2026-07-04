@@ -57,6 +57,11 @@ impl Backend for Cuda {
         vs.extend(row_reduce_materialize_variant(plan));
         vs.extend(contraction_splitk_variant(plan));
         vs.extend(scatter_atomic_variant(plan));
+        // Increment 6 SCAN: the cooperative block-scan (Kogge-Stone warp scan +
+        // cross-warp carry) for the FP Sum/Prod scan cell — reassociated-
+        // deterministic, so selectable only through an honest contract. Declines
+        // Max/Min and integer to the serial base (which serves them bit-exact).
+        vs.extend(scan_blockscan_variant(plan));
         vs
     }
 
@@ -120,6 +125,12 @@ impl Backend for Cuda {
                 Access::Contraction { epilogue, .. } => exprs.push(epilogue),
                 // The 0e reduction post-expr lowers at the accumulator dtype too.
                 Access::Reduction { post, .. } => exprs.push(post),
+                // Increment 6 SCAN: `pre`/`post` lower at the accumulator dtype (an
+                // int cumsum rides the serial base), so gate both for int Div/Const.
+                Access::Scan { pre, post, .. } => {
+                    exprs.push(pre);
+                    exprs.push(post);
+                }
                 Access::Elementwise => {}
             }
             for e in exprs {
@@ -144,6 +155,12 @@ impl Backend for Cuda {
                 }
                 Access::Contraction { epilogue, .. } => exprs.push(epilogue),
                 Access::Reduction { post, .. } => exprs.push(post),
+                // Increment 6 SCAN: a Coord in `pre`/`post` is rejected here (the
+                // scan iterates the (row, j) space, not the elementwise output space).
+                Access::Scan { pre, post, .. } => {
+                    exprs.push(pre);
+                    exprs.push(post);
+                }
                 Access::Elementwise => {}
             }
             for e in exprs {
@@ -261,6 +278,10 @@ impl Backend for Cuda {
             Schedule::Reduction { op, .. } => emit_reduction(plan, ctype, op),
             Schedule::RowReduce { .. } => emit_row_reduce(plan, ctype),
             Schedule::Contraction => emit_contraction(plan, ctype),
+            // Increment 6 SCAN: `build_plan` always derives `block: false` (the
+            // serial-fold base); the cooperative block-scan is produced separately
+            // by `scan_blockscan_variant`, never routed through `lower()`.
+            Schedule::Scan { .. } => emit_scan(plan, ctype),
         }
     }
 }
@@ -3250,6 +3271,530 @@ fn emit_block_reducers(
         ));
     }
     s.push('\n');
+}
+
+// ============================================================================
+// Increment 6 SCAN — prefix scan (cumsum/cumprod/cummax/cummin), inner axis.
+// ============================================================================
+
+/// The monoid identity literal for a scan combine at `dt`, header-light (the
+/// `INFINITY` FP extremes are already emitted by [`crate::backend::const_lit`], so
+/// they compile under nvrtc/nvcc without a `<math.h>` include; the integer extremes
+/// are plain C literals). `Sum → 0`, `Prod → 1`, `Max → the type MINIMUM` (an
+/// empty-set max), `Min → the type MAXIMUM`. Used for the exclusive scan's first
+/// position (the identity probe) and the block-scan's out-of-range lane padding.
+fn scan_identity(sop: ReduceOp, dt: ElementKind) -> String {
+    let int_acc = crate::plan::is_int_dtype(dt);
+    let dbl = matches!(dt, ElementKind::F64 | ElementKind::F32Strict);
+    match sop {
+        ReduceOp::Sum => if int_acc { "0" } else if dbl { "0.0" } else { "0.0f" }.to_string(),
+        ReduceOp::Prod => if int_acc { "1" } else if dbl { "1.0" } else { "1.0f" }.to_string(),
+        // Max's identity is the type minimum; Min's is the type maximum.
+        ReduceOp::Max => type_extreme_lit(dt, true),
+        ReduceOp::Min => type_extreme_lit(dt, false),
+        ReduceOp::Mean => unreachable!("Scan rejects Mean at validate_scan"),
+    }
+}
+
+/// The type's extreme literal: `most_negative=true` → the minimum, else the
+/// maximum. FP extremes are `∓INFINITY` (header-light per `const_lit`); integer
+/// extremes are exact C literals.
+fn type_extreme_lit(dt: ElementKind, most_negative: bool) -> String {
+    match dt {
+        // Header-light ±inf via the always-available bit-cast intrinsics — the
+        // headerless-nvrtc discipline forbids the <cmath> `INFINITY` macro (the
+        // reduce/row-reduce Max/Min path follows the same rule). This is NOT dead:
+        // an EXCLUSIVE Max/Min emits the monoid identity (±inf) as the position-0
+        // OUTPUT. Double accumulator for F64/F32Strict, float otherwise.
+        ElementKind::F64 | ElementKind::F32Strict => if most_negative {
+            "__longlong_as_double(0xfff0000000000000ULL)"
+        } else {
+            "__longlong_as_double(0x7ff0000000000000ULL)"
+        }
+        .to_string(),
+        ElementKind::F16 | ElementKind::Bf16 | ElementKind::F32 => if most_negative {
+            "__int_as_float(0xff800000u)"
+        } else {
+            "__int_as_float(0x7f800000u)"
+        }
+        .to_string(),
+        ElementKind::I32 => if most_negative { "(-2147483647 - 1)" } else { "2147483647" }.to_string(),
+        ElementKind::I64 => {
+            if most_negative { "(-9223372036854775807LL - 1)" } else { "9223372036854775807LL" }
+                .to_string()
+        }
+        ElementKind::S8 => if most_negative { "((signed char)-128)" } else { "((signed char)127)" }
+            .to_string(),
+        ElementKind::U8 => if most_negative { "((unsigned char)0)" } else { "((unsigned char)255)" }
+            .to_string(),
+        other => unreachable!("scan type_extreme_lit on unsupported dtype {other:?}"),
+    }
+}
+
+/// The serial-fold scan BASE (`block = false`) — [`crate::backend::VariantFidelity::BitIdentical`].
+fn emit_scan(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
+    emit_scan_impl(plan, ctype, false)
+}
+
+/// Append the inline warp-scan device helper for the block-scan variant (analog of
+/// [`emit_block_reducers`]): a Kogge-Stone warp-inclusive scan via `__shfl_up_sync`
+/// (`log2(warpSize)` rounds, full `0xffffffff` mask — every lane runs the same
+/// loop). FP `Sum`/`Prod` only (the block-scan variant is FP-only; Max/Min ride the
+/// serial base). Named per `stem` so a base+variant pair in one translation unit
+/// never collides on the `__device__` symbol.
+fn emit_block_scanners(s: &mut String, acc: &str, sop: ReduceOp, stem: &str) {
+    let (assign, tag) = match sop {
+        ReduceOp::Sum => ("+=", "sum"),
+        ReduceOp::Prod => ("*=", "prod"),
+        _ => unreachable!("emit_block_scanners: block-scan is FP Sum/Prod only"),
+    };
+    s.push_str(&format!(
+        "__device__ __forceinline__ {acc} warpscan_{tag}_{stem}({acc} v) {{\n\
+         \x20   int lane = threadIdx.x & (warpSize - 1);\n\
+         \x20   for (int off = 1; off < warpSize; off <<= 1) {{\n\
+         \x20       {acc} t = __shfl_up_sync(0xffffffffu, v, off);\n\
+         \x20       if (lane >= off) v {assign} t;\n\
+         \x20   }}\n\
+         \x20   return v;\n\
+         }}\n\n"
+    ));
+}
+
+/// Emit a scan kernel — the serial-fold BASE (`block = false`) or the cooperative
+/// block-scan VARIANT (`block = true`). See [`crate::ir::Access::Scan`] and §3/§4
+/// of the increment-6 brief.
+///
+/// The BASE is a plain per-row serial fold (thread 0 walks the axis in order — the
+/// honest deterministic bit-reference). The VARIANT re-emits a Kogge-Stone warp
+/// scan + cross-warp exclusive-offset carry INLINE (headerless — `smem_scan` does
+/// not exist in this crate), chunking the row so a `k > blockDim` row threads its
+/// running carry across tiles; it is FP `Sum`/`Prod` only.
+fn emit_scan_impl(plan: &KernelPlan<'_>, ctype: &str, block: bool) -> GeneratedKernel {
+    let (pre, post) = match plan.access {
+        Access::Scan { pre, post, .. } => (pre, post),
+        _ => unreachable!("emit_scan requires Access::Scan"),
+    };
+    let (sop, axis, reverse, exclusive) = match plan.schedule {
+        Schedule::Scan {
+            op,
+            axis,
+            reverse,
+            exclusive,
+            ..
+        } => (op, axis, reverse, exclusive),
+        _ => unreachable!("emit_scan on a non-Scan schedule"),
+    };
+
+    // ---- Independent emitter backstops (belt-and-suspenders; validate_scan
+    // validates the same, the 0a lesson: gate every layer). cuda-prefixed messages
+    // distinct from the plan gate's. ----
+    let rank = plan.key.rank;
+    assert!(rank >= 1, "cuda backend: Scan needs a scanned axis (rank >= 1)");
+    let last = rank - 1;
+    assert!(
+        axis == last,
+        "cuda backend: Scan v1 emits the innermost (contiguous) axis only (axis {axis} != rank-1 {last})"
+    );
+    {
+        let o0 = plan.key.operands[0];
+        assert!(
+            rr_role(o0, last) == RrRole::RowStreamed
+                && o0.contig == Contiguity::Contig
+                && !o0.flipped,
+            "cuda backend: Scan input 0 must be the forward-dense contiguous scanned tensor (idx = base+j)"
+        );
+    }
+    if block {
+        // The cooperative kernel re-emits the warp scan + cross-warp carry inline;
+        // it serves FP Sum/Prod only (Max/Min + integer ride the serial base). The
+        // warp_buf[32] cross-warp buffer sizes for blockDim <= 1024, a multiple of
+        // 32 — a LAUNCH contract (no generation-time blockDim to assert), carried in
+        // the launch note and pinned by the on-device sanitizer runs.
+        assert!(
+            matches!(sop, ReduceOp::Sum | ReduceOp::Prod),
+            "cuda backend: the scan block-scan variant serves FP Sum/Prod only"
+        );
+        assert!(
+            matches!(
+                plan.dtype,
+                ElementKind::F16
+                    | ElementKind::Bf16
+                    | ElementKind::F32
+                    | ElementKind::F32Strict
+                    | ElementKind::F64
+            ),
+            "cuda backend: the scan block-scan variant is FP-only (reassociated Sum/Prod); got {:?}",
+            plan.dtype
+        );
+    }
+
+    let dbl = matches!(plan.dtype, ElementKind::F64 | ElementKind::F32Strict);
+    let int_acc = crate::plan::is_int_dtype(plan.dtype);
+    // Base: float/double for FP, the native ctype (wrapping) for integers. Variant:
+    // FP-only (asserted), so float/double.
+    let acc = if dbl {
+        "double"
+    } else if int_acc {
+        ctype
+    } else {
+        "float"
+    };
+    let ident = scan_identity(sop, plan.dtype);
+
+    let combine_tag = match sop {
+        ReduceOp::Sum => "sum",
+        ReduceOp::Prod => "prod",
+        ReduceOp::Max => "max",
+        ReduceOp::Min => "min",
+        ReduceOp::Mean => unreachable!("Scan rejects Mean at validate_scan"),
+    };
+    let dtag = dtype_tag(plan.dtype);
+    let rev_suf = if reverse { "_rev" } else { "" };
+    let exc_suf = if exclusive { "_excl" } else { "" };
+    let blk_suf = if block { "_blockscan" } else { "" };
+    let name = format!(
+        "baracuda_gen_{}_{dtag}_scan_{combine_tag}{rev_suf}{exc_suf}{blk_suf}",
+        plan.op_name
+    );
+    // The device-helper stem carries the flag suffixes too, so several block-scan
+    // variants of ONE op (e.g. inclusive + exclusive cumsum) concatenated into one
+    // translation unit (the on-device validator) never collide on the `__device__`
+    // `warpscan_*` symbol.
+    let stem = format!("{}_{dtag}{rev_suf}{exc_suf}", plan.op_name);
+
+    // Role-aware load (mirrors emit_row_reduce_impl): the scanned input reads
+    // `in_i[idx]` (idx = base+j); a per-column operand `in_i[j]`; a per-row scalar
+    // the hoisted `rs{i}`. f16/bf16/f32-strict up-convert to the acc width.
+    let load = |i: u8| {
+        let role = rr_role(plan.key.operands[i as usize], last);
+        if role == RrRole::RowScalar {
+            return format!("rs{i}");
+        }
+        let pos = match role {
+            RrRole::RowStreamed => "idx",
+            RrRole::ColBroadcast => "j",
+            RrRole::RowScalar => unreachable!("row-scalar handled above"),
+        };
+        match plan.dtype {
+            ElementKind::F16 => format!("__half2float(in{i}[{pos}])"),
+            ElementKind::Bf16 => format!("__bfloat162float(in{i}[{pos}])"),
+            ElementKind::F32Strict => format!("(double)in{i}[{pos}]"),
+            _ => format!("in{i}[{pos}]"),
+        }
+    };
+    // `pre` (the per-element pre-map) lowers over the loaded input; it has NO
+    // running prefix, so a Reduced leaf panics (validate_scan rejects it).
+    let pre_str = lower_expr(
+        pre,
+        &Lowering {
+            leaf: &load,
+            reduced: &|s| panic!("cuda backend: Scan pre-map read Reduced({s}) — no running prefix in the pre-map"),
+            coord: &|d| panic!("cuda backend: Scan Coord({d}) is Elementwise-only"),
+            unary: &|op, x| if dbl { unary_f64(op, x) } else { unary_f32(op, x) },
+            binary: &|op, a, b| if dbl { binary_f64(op, a, b) } else { binary_f32(op, a, b) },
+        },
+    );
+    // `post` (the per-element epilogue) lowers over the running-prefix register,
+    // bound to the `prefix` variable (Reduced(0)); the identity post yields
+    // `"prefix"`, so the store is byte-simple.
+    let post_str = lower_expr(
+        post,
+        &Lowering {
+            leaf: &load,
+            reduced: &|s| {
+                assert_eq!(s, 0, "Scan post references Reduced({s}); only 0 (the running prefix) exists");
+                "prefix".to_string()
+            },
+            coord: &|d| panic!("cuda backend: Scan Coord({d}) is Elementwise-only"),
+            unary: &|op, x| if dbl { unary_f64(op, x) } else { unary_f32(op, x) },
+            binary: &|op, a, b| if dbl { binary_f64(op, a, b) } else { binary_f32(op, a, b) },
+        },
+    );
+    let store = |v: &str| -> String {
+        match plan.dtype {
+            ElementKind::F16 => format!("__float2half({v})"),
+            ElementKind::Bf16 => format!("__float2bfloat16({v})"),
+            _ => v.to_string(),
+        }
+    };
+    let stored = store(&post_str);
+
+    // ---- Preamble + signature. ----
+    let mut s = format!(
+        "// Generated by baracuda-kernelgen — do not edit.\n// op: {} | cell: {}\n",
+        plan.op_name,
+        plan.key.to_token()
+    );
+    if let Some(inc) = extra_include(plan.dtype) {
+        s.push_str(inc);
+    }
+    s.push('\n');
+    if block {
+        emit_block_scanners(&mut s, acc, sop, &stem);
+    }
+    s.push_str(&format!("extern \"C\" __global__ void {name}(\n"));
+    for i in 0..plan.n_inputs {
+        s.push_str(&format!("    const {ctype}* __restrict__ in{i},\n"));
+    }
+    s.push_str(&format!("    {ctype}* __restrict__ out,\n"));
+    s.push_str(&format!(
+        "    long long n_out,\n    long long k{})\n{{\n",
+        param_args_multi(&[pre, post])
+    ));
+    s.push_str("    if (k == 0) return;\n");
+
+    // Per-row grid-stride loop (uniform — never a divergent early return).
+    s.push_str("    for (long long row = blockIdx.x; row < n_out; row += (long long)gridDim.x) {\n");
+    s.push_str("        long long base = row * k;\n");
+    // Hoist per-row scalar operands once per row (emits nothing for single-input).
+    for i in 0..plan.n_inputs {
+        if rr_role(plan.key.operands[i as usize], last) == RrRole::RowScalar {
+            let conv = match plan.dtype {
+                ElementKind::F16 => format!("__half2float(in{i}[row])"),
+                ElementKind::Bf16 => format!("__bfloat162float(in{i}[row])"),
+                ElementKind::F32Strict => format!("(double)in{i}[row]"),
+                _ => format!("in{i}[row]"),
+            };
+            s.push_str(&format!("        {acc} rs{i} = {conv};\n"));
+        }
+    }
+
+    if !block {
+        // -------------------- SERIAL FOLD BASE (thread 0 owns the row) --------------------
+        s.push_str("        if (threadIdx.x == 0) {\n");
+        // Forward: j = 0..k-1 ascending; reverse: j = k-1..0 descending.
+        let for_hdr = if reverse {
+            "            for (long long j = k - 1; j >= 0; --j) {\n"
+        } else {
+            "            for (long long j = 0; j < k; ++j) {\n"
+        };
+        match sop {
+            ReduceOp::Sum | ReduceOp::Prod => {
+                let opc = if matches!(sop, ReduceOp::Sum) { "+" } else { "*" };
+                s.push_str(&format!("            {acc} acc = {ident};\n"));
+                s.push_str(for_hdr);
+                s.push_str("                long long idx = base + j;\n");
+                s.push_str(&format!("                {acc} v = {pre_str};\n"));
+                if exclusive {
+                    // exclusive: write the PRE-combine acc (identity at first pos).
+                    s.push_str(&format!("                {acc} prefix = acc;\n"));
+                    s.push_str(&format!("                out[idx] = {stored};\n"));
+                    s.push_str(&format!("                acc = acc {opc} v;\n"));
+                } else {
+                    s.push_str(&format!("                acc = acc {opc} v;\n"));
+                    s.push_str(&format!("                {acc} prefix = acc;\n"));
+                    s.push_str(&format!("                out[idx] = {stored};\n"));
+                }
+                s.push_str("            }\n");
+            }
+            ReduceOp::Max | ReduceOp::Min => {
+                let cmp = if matches!(sop, ReduceOp::Max) { ">" } else { "<" };
+                // Seed acc with a dummy (guarded by `have`); the exclusive first
+                // position emits the monoid identity. NaN propagates via `v != v`.
+                s.push_str(&format!("            {acc} acc = {ident}; int have = 0;\n"));
+                s.push_str(for_hdr);
+                s.push_str("                long long idx = base + j;\n");
+                s.push_str(&format!("                {acc} v = {pre_str};\n"));
+                if exclusive {
+                    s.push_str(&format!("                {acc} prefix = have ? acc : ({ident});\n"));
+                    s.push_str(&format!("                out[idx] = {stored};\n"));
+                    s.push_str(&format!(
+                        "                if (!have || v != v || v {cmp} acc) {{ acc = v; have = 1; }}\n"
+                    ));
+                } else {
+                    s.push_str(&format!(
+                        "                if (!have || v != v || v {cmp} acc) {{ acc = v; have = 1; }}\n"
+                    ));
+                    s.push_str(&format!("                {acc} prefix = acc;\n"));
+                    s.push_str(&format!("                out[idx] = {stored};\n"));
+                }
+                s.push_str("            }\n");
+            }
+            ReduceOp::Mean => unreachable!("Scan rejects Mean"),
+        }
+        s.push_str("        }\n"); // if threadIdx.x == 0
+    } else {
+        // -------------------- BLOCK-SCAN VARIANT (chunked, cross-warp carry) --------------------
+        // FP Sum/Prod only. Kogge-Stone warp scan + cross-warp exclusive offset,
+        // chunked so a k > blockDim row threads its running carry across tiles.
+        let comb = |a: &str, b: &str| -> String {
+            match sop {
+                ReduceOp::Sum => format!("({a} + {b})"),
+                ReduceOp::Prod => format!("({a} * {b})"),
+                _ => unreachable!(),
+            }
+        };
+        let tag = if matches!(sop, ReduceOp::Sum) { "sum" } else { "prod" };
+        s.push_str(&format!("        __shared__ {acc} warp_buf[32];\n"));
+        s.push_str(&format!("        __shared__ {acc} warp_off[32];\n"));
+        s.push_str(&format!("        __shared__ {acc} chunk_tot;\n"));
+        s.push_str(&format!("        {acc} carry = {ident};\n"));
+        s.push_str("        int lane = threadIdx.x & (warpSize - 1);\n");
+        s.push_str("        int wid = threadIdx.x / warpSize;\n");
+        s.push_str("        int nwarps = (blockDim.x + warpSize - 1) / warpSize;\n");
+        s.push_str("        for (long long c0 = 0; c0 < k; c0 += (long long)blockDim.x) {\n");
+        s.push_str("            long long p = c0 + threadIdx.x;\n");
+        // Reverse remaps the axis position; the p-space scan is always ascending.
+        if reverse {
+            s.push_str("            long long j = k - 1 - p;\n");
+        } else {
+            s.push_str("            long long j = p;\n");
+        }
+        s.push_str("            long long idx = base + j;\n");
+        // Out-of-range lanes contribute the identity (the ternary does NOT read
+        // in_i[idx] when p >= k — no OOB load).
+        s.push_str(&format!(
+            "            {acc} v = (p < k) ? ({pre_str}) : ({ident});\n"
+        ));
+        s.push_str(&format!("            {acc} winc = warpscan_{tag}_{stem}(v);\n"));
+        // `wexc` (the warp-exclusive value) is only consumed on the exclusive path
+        // (`chunk_excl`); emitting it for an inclusive scan is a dead warp shuffle.
+        if exclusive {
+            s.push_str(&format!(
+                "            {acc} wexc = __shfl_up_sync(0xffffffffu, winc, 1);\n"
+            ));
+            s.push_str(&format!("            if (lane == 0) wexc = {ident};\n"));
+        }
+        s.push_str(&format!(
+            "            {acc} wtot = __shfl_sync(0xffffffffu, winc, warpSize - 1);\n"
+        ));
+        s.push_str("            if (lane == 0) warp_buf[wid] = wtot;\n");
+        s.push_str("            __syncthreads();\n");
+        s.push_str("            if (threadIdx.x == 0) {\n");
+        s.push_str(&format!("                {acc} run = {ident};\n"));
+        s.push_str("                for (int w = 0; w < nwarps; ++w) {\n");
+        s.push_str("                    warp_off[w] = run;\n");
+        s.push_str(&format!("                    run = {};\n", comb("run", "warp_buf[w]")));
+        s.push_str("                }\n");
+        s.push_str("                chunk_tot = run;\n");
+        s.push_str("            }\n");
+        s.push_str("            __syncthreads();\n");
+        let chunk_incl = comb("warp_off[wid]", "winc");
+        let chunk_excl = comb("warp_off[wid]", "wexc");
+        if exclusive {
+            s.push_str(&format!(
+                "            {acc} prefix = {};\n",
+                comb("carry", &chunk_excl)
+            ));
+        } else {
+            s.push_str(&format!(
+                "            {acc} prefix = {};\n",
+                comb("carry", &chunk_incl)
+            ));
+        }
+        s.push_str(&format!("            if (p < k) out[idx] = {stored};\n"));
+        s.push_str(&format!("            carry = {};\n", comb("carry", "chunk_tot")));
+        s.push_str("            __syncthreads();\n");
+        s.push_str("        }\n");
+    }
+
+    s.push_str("    }\n}\n");
+    GeneratedKernel { name, source: s }
+}
+
+/// Block-scan schedule VARIANT for the FP `Sum`/`Prod` scan cell — a Kogge-Stone
+/// warp scan + cross-warp exclusive-offset carry (re-emitted inline, headerless),
+/// one block per row, chunked so a `k > blockDim` row threads its running carry
+/// across tiles. A [`Variant`] filter (model: [`reduction_splitk_variant`]) —
+/// `return None` for every cell it cannot serve honestly.
+///
+/// **Scope (v1, stated explicitly):** FP `Sum`/`Prod` only. `Max`/`Min` and integer
+/// scans decline to the serial base (which serves them bit-exact) — a `Max`/`Min`
+/// block scan needs a `(value, has)`-flag warp scan (the exactly-associative,
+/// BitIdentical follow-up).
+///
+/// **Bits:** FP `Sum`/`Prod` reassociate (a two-level warp/cross-warp tree vs the
+/// base's sequential fold), so [`VariantFidelity::ReassociatedDeterministic`]
+/// (`determinism_str() => "same_hardware_bitwise"`) — deterministic for a fixed
+/// launch, selectable only through an honest contract, never silently. Unlike
+/// split-K there is NO bit-identical degenerate config (even a single blockDim-wide
+/// chunk reassociates); the degenerate config is within-ULP of the base.
+///
+/// **Keying:** identity on the wire is `(structure_key token, entry_point)` — the
+/// `_blockscan` entry_point disambiguates it from the base (never token alone).
+fn scan_blockscan_variant(plan: &KernelPlan<'_>) -> Option<Variant> {
+    let (sop, _axis, reverse, _exclusive) = match plan.schedule {
+        Schedule::Scan {
+            op,
+            axis,
+            reverse,
+            exclusive,
+            ..
+        } => (op, axis, reverse, exclusive),
+        _ => return None,
+    };
+    // FORWARD only in v1. `emit_scan_impl` DOES emit a correct reverse block-scan
+    // (j = k-1-p turns the reverse j-scan into a forward p-space scan — traced
+    // correct), but the on-device validator only exercises forward block cells, and
+    // the scan is an AOT honest miss (no Fuel contract), so the validator is the ONLY
+    // correctness gate — a reassociated path must be device-validated before it
+    // ships. Reverse scans use the BitIdentical serial base (correct, 17x bespoke);
+    // re-enable + validate reverse block-scan as the follow-up. (Review-caught: the
+    // reverse block-scan was emitted but unvalidated.)
+    if reverse {
+        return None;
+    }
+    // FP Sum/Prod only — Max/Min + integer ride the serial base.
+    if !matches!(sop, ReduceOp::Sum | ReduceOp::Prod) {
+        return None;
+    }
+    if !matches!(
+        plan.dtype,
+        ElementKind::F16
+            | ElementKind::Bf16
+            | ElementKind::F32
+            | ElementKind::F32Strict
+            | ElementKind::F64
+    ) {
+        return None;
+    }
+    // The fixed signature has no `p{i}` slots — a Param pre/post would emit an
+    // undefined identifier (mirror the split-K param decline). The base serves
+    // param'd scans.
+    let param_bodies: Vec<&ScalarExpr> = match plan.access {
+        Access::Scan { pre, post, .. } => vec![pre, post],
+        _ => return None,
+    };
+    if param_bodies.iter().any(|e| !params_used(e).is_empty()) {
+        return None;
+    }
+    // Decline a hetero-out / non-dense / flipped cell (the base serves them). The
+    // scanned input + output must be forward-dense contiguous (idx = base+j / the
+    // out[idx] store), and single-streamed-input (the cooperative kernel v1 shape).
+    if plan.out_dtype != plan.dtype || plan.n_inputs != 1 {
+        return None;
+    }
+    let last = plan.key.rank.saturating_sub(1);
+    let in0 = plan.key.operands[0];
+    let out = plan.key.operands[plan.key.n_operands.saturating_sub(1) as usize];
+    if rr_role(in0, last) != RrRole::RowStreamed
+        || in0.contig != Contiguity::Contig
+        || in0.flipped
+        || !out.bcast.is_empty()
+        || out.contig != Contiguity::Contig
+        || out.flipped
+    {
+        return None;
+    }
+    let ctype = scalar_ctype(plan.dtype)?;
+    let k = emit_scan_impl(plan, ctype, true);
+    let fidelity = VariantFidelity::ReassociatedDeterministic; // FP Sum/Prod reassociated
+    Some(Variant {
+        tag: "blockscan",
+        kernels: vec![k],
+        fidelity,
+        launch_note: format!(
+            "block-scan (Kogge-Stone warp scan via __shfl_up_sync + cross-warp \
+             exclusive-offset carry, re-emitted inline): one block per row, \
+             <<<min(n_out, maxblocks), B>>> with B a multiple of 32 and <= 1024 \
+             (static __shared__ warp_buf/warp_off[32]); a k > B row threads its \
+             running carry across ceil(k/B) chunks. FP Sum/Prod only; Max/Min + \
+             integer ride the serial base. Determinism: {}. No bit-identical \
+             degenerate config (the warp tree reassociates even a single chunk); \
+             within-ULP of the serial base.",
+            fidelity.determinism_str()
+        ),
+    })
 }
 
 /// `true` if every iteration axis of `o` is a broadcast axis — its offset is
@@ -7428,5 +7973,189 @@ mod multi_output_tests {
             dag.consumers(dag.roots()[0]) >= 1,
             "the shared subexpr survives optimize-then-intern"
         );
+    }
+}
+
+#[cfg(test)]
+mod scan_tests {
+    //! Increment-6 SCAN emitter tests: the serial-fold BASE + the block-scan
+    //! VARIANT generate valid, structurally-correct CUDA. On-device numeric proof
+    //! is `ondevice/scan_validate.cu`; these are source-shape + variant-wiring pins.
+    use crate::ir::{Access, OpDef, ReduceOp};
+    use crate::plan::Schedule;
+    use crate::{build_plan, generate, generate_variants, Cuda};
+    use baracuda_kernels_types::{
+        structure_key, ArchSku, ElementKind, OpCategory, OperandDesc, StructureKey,
+    };
+
+    fn scan_key(dt: ElementKind) -> StructureKey {
+        let a = OperandDesc::new(2, &[256, 128], &[128, 1], dt, 256);
+        let o = OperandDesc::new(2, &[256, 128], &[128, 1], dt, 256);
+        structure_key(OpCategory::UnaryElementwise, &[a, o], ArchSku::Sm89)
+    }
+
+    #[test]
+    fn base_emits_full_width_serial_fold() {
+        // Inclusive forward cumsum: thread 0 walks the axis, writes out[idx] every j.
+        let sc = OpDef::scan_simple("cumsum", &[ElementKind::F32], ReduceOp::Sum, 1, false, false);
+        let k = generate(&sc, &scan_key(ElementKind::F32), &Cuda);
+        assert_eq!(k.name, "baracuda_gen_cumsum_f32_scan_sum");
+        assert!(k.source.contains("if (threadIdx.x == 0)"));
+        assert!(k.source.contains("for (long long j = 0; j < k; ++j)"));
+        assert!(k.source.contains("acc = acc + v;"));
+        assert!(k.source.contains("out[idx] ="));
+        // full-width: writes every position, NOT a single reduced scalar.
+        assert!(!k.source.contains("__shfl")); // base has no cooperative primitive
+    }
+
+    #[test]
+    fn reverse_iterates_descending_exclusive_writes_before_combine() {
+        let sc = OpDef::scan_simple("cs", &[ElementKind::F32], ReduceOp::Sum, 1, true, true);
+        let k = generate(&sc, &scan_key(ElementKind::F32), &Cuda);
+        assert_eq!(k.name, "baracuda_gen_cs_f32_scan_sum_rev_excl");
+        assert!(k.source.contains("for (long long j = k - 1; j >= 0; --j)"));
+        // exclusive: prefix (the pre-combine acc) is stored BEFORE the combine.
+        let pre = k.source.find("float prefix = acc;").unwrap();
+        let comb = k.source.find("acc = acc + v;").unwrap();
+        assert!(pre < comb, "exclusive writes before the combine");
+    }
+
+    #[test]
+    fn maxmin_carry_have_flag_and_exclusive_identity() {
+        let sc = OpDef::scan_simple("cmax", &[ElementKind::F32], ReduceOp::Max, 1, false, true);
+        let k = generate(&sc, &scan_key(ElementKind::F32), &Cuda);
+        assert!(k.source.contains("int have = 0;"));
+        assert!(k.source.contains("v != v")); // NaN-propagating
+        // exclusive[0] = the Max monoid identity (-inf), emitted HEADER-LIGHT via the
+        // bit-cast intrinsic (NOT the <cmath> INFINITY macro the headerless-nvrtc
+        // discipline forbids — the reduce/row-reduce Max/Min path follows the same).
+        assert!(k.source.contains("have ? acc : (__int_as_float(0xff800000u))"));
+        assert!(
+            !k.source.contains("INFINITY"),
+            "scan Max/Min must not emit the headerless-forbidden INFINITY macro:\n{}",
+            k.source
+        );
+    }
+
+    #[test]
+    fn base_is_bit_identical_variant_index_0() {
+        // generate_variants seeds base at index 0, BitIdentical.
+        let sc = OpDef::scan_simple("cumsum", &[ElementKind::F32], ReduceOp::Sum, 1, false, false);
+        let vs = generate_variants(&sc, &scan_key(ElementKind::F32), &Cuda);
+        assert_eq!(vs[0].tag, "base");
+        assert_eq!(vs[0].fidelity, crate::VariantFidelity::BitIdentical);
+    }
+
+    #[test]
+    fn blockscan_variant_present_for_fp_sum_prod_reassociated() {
+        for op in [ReduceOp::Sum, ReduceOp::Prod] {
+            let sc = OpDef::scan_simple("cum", &[ElementKind::F32], op, 1, false, false);
+            let vs = generate_variants(&sc, &scan_key(ElementKind::F32), &Cuda);
+            let bs = vs.iter().find(|v| v.tag == "blockscan").expect("blockscan variant");
+            assert_eq!(
+                bs.fidelity,
+                crate::VariantFidelity::ReassociatedDeterministic,
+                "FP Sum/Prod block-scan reassociates -> same_hardware_bitwise"
+            );
+            let src = &bs.kernels[0].source;
+            assert!(src.contains("__shfl_up_sync")); // Kogge-Stone warp scan
+            assert!(src.contains("warp_buf[32]")); // cross-warp carry
+            assert!(src.contains("__syncthreads()"));
+            assert!(bs.kernels[0].name.ends_with("_blockscan"));
+        }
+    }
+
+    #[test]
+    fn reverse_scan_declines_the_blockscan_variant_to_base() {
+        // v1: the reverse block-scan is correct but not yet device-validated, so the
+        // variant filter declines reverse; a reverse scan ships the BitIdentical base
+        // ONLY (no reassociated blockscan). (Review-caught coverage gap.)
+        for op in [ReduceOp::Sum, ReduceOp::Prod] {
+            let sc = OpDef::scan_simple("cumr", &[ElementKind::F32], op, 1, true, false);
+            let vs = generate_variants(&sc, &scan_key(ElementKind::F32), &Cuda);
+            assert!(
+                vs.iter().all(|v| v.tag != "blockscan"),
+                "reverse scan must not offer the unvalidated block-scan variant"
+            );
+            assert_eq!(vs[0].tag, "base");
+        }
+    }
+
+    #[test]
+    fn blockscan_variant_declines_maxmin_and_integer() {
+        // Max/Min (any dtype) and integer Sum/Prod ride the serial base only.
+        for (op, dt) in [
+            (ReduceOp::Max, ElementKind::F32),
+            (ReduceOp::Min, ElementKind::F32),
+            (ReduceOp::Sum, ElementKind::I32),
+            (ReduceOp::Prod, ElementKind::I32),
+        ] {
+            let sc = OpDef::scan_simple("cum", &[dt], op, 1, false, false);
+            let vs = generate_variants(&sc, &scan_key(dt), &Cuda);
+            assert!(
+                vs.iter().all(|v| v.tag != "blockscan"),
+                "block-scan must decline {op:?}/{dt:?} to the base"
+            );
+        }
+    }
+
+    #[test]
+    fn integer_scan_uses_native_accumulator() {
+        // I32 cumsum accumulates in the native ctype (wrapping), not a float acc.
+        let sc = OpDef::scan_simple("cumi", &[ElementKind::I32], ReduceOp::Sum, 1, false, false);
+        let k = generate(&sc, &scan_key(ElementKind::I32), &Cuda);
+        assert!(k.source.contains("int acc = 0;"));
+        assert!(!k.source.contains("float acc"));
+    }
+
+    #[test]
+    fn base_schedule_is_block_false() {
+        let sc = OpDef::scan_simple("cum", &[ElementKind::F32], ReduceOp::Sum, 1, false, false);
+        let key = scan_key(ElementKind::F32);
+        let plan = build_plan(&sc, &key);
+        assert!(matches!(plan.schedule, Schedule::Scan { block: false, .. }));
+        assert!(matches!(plan.access, Access::Scan { .. }));
+    }
+
+    /// Manual dump tool (not a wired assertion): regenerate the scan `.cu` sources
+    /// the on-device validator `#include`s. Run with:
+    ///   `cargo test -p baracuda-kernelgen dump_scan_sources -- --ignored --nocapture`
+    /// then copy `ondevice/scan_validate.cu` beside the emitted files and `nvcc` it.
+    #[test]
+    #[ignore = "manual regeneration tool for ondevice/scan_validate.cu"]
+    fn dump_scan_sources() {
+        let out = std::env::var("SCAN_OUT").unwrap_or_else(|_| ".".to_string());
+        let write = |k: crate::GeneratedKernel| {
+            std::fs::write(format!("{out}/{}.cu", k.name), &k.source).unwrap();
+            println!("wrote {out}/{}.cu", k.name);
+        };
+        // Every base cell the validator exercises: 4 combines × incl/excl × fwd/rev.
+        for (op, tag) in [
+            (ReduceOp::Sum, "cumsum"),
+            (ReduceOp::Prod, "cumprod"),
+            (ReduceOp::Max, "cummax"),
+            (ReduceOp::Min, "cummin"),
+        ] {
+            for reverse in [false, true] {
+                for exclusive in [false, true] {
+                    let sc = OpDef::scan_simple(tag, &[ElementKind::F32], op, 1, reverse, exclusive);
+                    write(generate(&sc, &scan_key(ElementKind::F32), &Cuda));
+                }
+            }
+        }
+        // f64 base (oracle-exact) + the block-scan variants (Sum/Prod, incl/excl).
+        for (op, tag) in [(ReduceOp::Sum, "cumsum"), (ReduceOp::Prod, "cumprod")] {
+            for exclusive in [false, true] {
+                let sc = OpDef::scan_simple(tag, &[ElementKind::F32], op, 1, false, exclusive);
+                for v in generate_variants(&sc, &scan_key(ElementKind::F32), &Cuda) {
+                    for kern in v.kernels {
+                        write(kern);
+                    }
+                }
+            }
+        }
+        // f64 serial base (Sum) for the double-precision bit-exact case.
+        let scd = OpDef::scan_simple("cumsum", &[ElementKind::F64], ReduceOp::Sum, 1, false, false);
+        write(generate(&scd, &scan_key(ElementKind::F64), &Cuda));
     }
 }

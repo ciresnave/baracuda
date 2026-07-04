@@ -1000,6 +1000,34 @@ pub enum Access {
         /// Per-output-element epilogue over the K-sum (`Reduced(0)`).
         epilogue: ScalarExpr,
     },
+    /// **Prefix scan** along a single axis with a monoid combine (increment 6):
+    /// `out[.., j] = op_folded( pre(in[.., 0..=j]) )` (inclusive) — a
+    /// cumsum/cumprod/cummax/cummin. Unlike [`Access::Reduction`] (one output per
+    /// row) the scan produces a **full-width** output: a running prefix that varies
+    /// with `j`. v1 monoids are `Sum | Prod | Max | Min` on the innermost
+    /// (contiguous) axis; the index-carrying cummax/cummin backward pair and
+    /// `LogCumsumExp` (non-monoid) are DEFERRED.
+    Scan {
+        /// The associative monoid combine (reuses [`ReduceOp`]; `Mean` is rejected
+        /// at `plan::validate_scan` — it is not a monoid).
+        op: ReduceOp,
+        /// The scanned axis. v1 asserts `axis == rank - 1` (innermost, contiguous).
+        axis: u8,
+        /// Walk the axis descending (`reverse` scan) instead of ascending.
+        reverse: bool,
+        /// **Exclusive** scan: output position `j` holds the fold of the elements
+        /// STRICTLY before `j` (the first visited position holds the monoid
+        /// identity). The default (`false`) is the inclusive scan.
+        exclusive: bool,
+        /// Per-element **pre-map** applied to each input element before it enters
+        /// the fold (identity default = `ScalarExpr::Input(0)`).
+        pre: ScalarExpr,
+        /// Per-element **epilogue** applied to the running prefix after the combine
+        /// (identity default = `ScalarExpr::Reduced(0)`, carrying the scan result
+        /// unchanged — the running prefix reaches it as the `Reduced(0)` leaf, the
+        /// same bridge `RowReduce`/`Contraction` epilogues use).
+        post: ScalarExpr,
+    },
 }
 
 /// Per-axis role in a contraction — the `{Batch, FreeM, FreeN, ContractedK}`
@@ -1714,6 +1742,72 @@ impl OpDef {
             out_dtype: None,
             extra_out_bodies: Vec::new(),
         }
+    }
+
+    /// Build a **prefix scan** op (increment 6): a cumsum/cumprod/cummax/cummin
+    /// along `axis` with monoid `op`. `pre` is the per-element pre-map applied
+    /// before the fold (identity: `input(0)`); `post` is the per-element epilogue
+    /// over the running prefix, which it references as `reduced(0)` (identity:
+    /// `reduced(0)`). `body == post`, mirroring [`OpDef::row_reduce`]/
+    /// [`OpDef::contraction`], so every body-walker (params/flops/ulp/DAG/
+    /// `derive_pattern`) operates on the primary output expr unchanged. v1 rejects
+    /// `Mean` (not a monoid) and asserts `axis == rank - 1` at `plan::validate_scan`.
+    #[must_use]
+    #[allow(clippy::too_many_arguments)]
+    pub fn scan(
+        name: &str,
+        n_inputs: u8,
+        dtypes: &[ElementKind],
+        op: ReduceOp,
+        axis: u8,
+        reverse: bool,
+        exclusive: bool,
+        pre: Expr,
+        post: Expr,
+    ) -> Self {
+        Self {
+            name: name.to_string(),
+            n_inputs,
+            body: post.0.clone(),
+            dtypes: dtypes.to_vec(),
+            access: Access::Scan {
+                op,
+                axis,
+                reverse,
+                exclusive,
+                pre: pre.0,
+                post: post.0,
+            },
+            views: Vec::new(),
+            read_index: Vec::new(),
+            write_index: WriteIndex::Direct,
+            out_dtype: None,
+            extra_out_bodies: Vec::new(),
+        }
+    }
+
+    /// The common no-pre/no-post [`OpDef::scan`]: `pre = input(0)`, `post =
+    /// reduced(0)` (both identities — the plain cumulative op).
+    #[must_use]
+    pub fn scan_simple(
+        name: &str,
+        dtypes: &[ElementKind],
+        op: ReduceOp,
+        axis: u8,
+        reverse: bool,
+        exclusive: bool,
+    ) -> Self {
+        Self::scan(
+            name,
+            1,
+            dtypes,
+            op,
+            axis,
+            reverse,
+            exclusive,
+            Expr(ScalarExpr::Input(0)),
+            Expr(ScalarExpr::Reduced(0)),
+        )
     }
 
     /// Attach per-input layout [`View`]s (item 01). `views[i]` applies to
