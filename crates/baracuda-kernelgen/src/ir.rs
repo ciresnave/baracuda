@@ -139,14 +139,53 @@ pub enum UnaryOp {
 }
 
 /// A non-infix binary op — lowered as a backend **function call** (`fmaxf`,
-/// `powf`) or C operator (the `Cmp*` predicates), unlike the infix arithmetic
-/// [`ScalarExpr::Add`]/`Sub`/`Mul`/`Div`.
+/// `powf`) or C operator (the `Cmp*` predicates and the increment-0c integer
+/// ops), unlike the infix arithmetic [`ScalarExpr::Add`]/`Sub`/`Mul`/`Div`.
 /// Variant names line up with the FKC §4.1 graph-`Op` vocabulary — except the
 /// increment-0a extension (`Atan2` through `RemTrunc`), which §4.1 does not
-/// name yet (see the [`UnaryOp`] docs; same honest-miss rule), and the
+/// name yet (see the [`UnaryOp`] docs; same honest-miss rule), the
 /// increment-0b comparisons, whose §4.1 names drop the `Cmp` prefix
 /// (`CmpEq` → `Equal`, `CmpNe` → `Ne`, `CmpLt` → `Lt`, `CmpLe` → `Le`,
-/// `CmpGt` → `Gt`, `CmpGe` → `Ge` — the mapping lives in `pattern::binary_name`).
+/// `CmpGt` → `Gt`, `CmpGe` → `Ge` — the mapping lives in `pattern::binary_name`),
+/// and the increment-0c bitwise/shift/logical ops, which neither `OpTag`
+/// (fuel-kernel-seam-types 0.10.2) nor Fuel's `lower_op_kind` dispatch table
+/// names — those ops lower and validate but emit NO contract (honest miss).
+///
+/// # Op × dtype admissibility (increment 0c — audited against the bespoke surface)
+///
+/// The compute-dtype legality table, enforced at the TOP of `plan::build_plan`
+/// (`assert_int_op_admissibility`, every `Access` arm) with independent
+/// emitter backstops in `cuda::binary_int` / `cuda::binary_f32` / `binary_f64`
+/// and the JIT's `dtype_compatible`. "int" = `I32`/`I64`/`S8`(FKC `I8`)/`U8`.
+///
+/// | op set                                          | f16/bf16/f32/f32s/f64 | I32/I64 | S8/U8 | evidence / semantics |
+/// |-------------------------------------------------|-----------------------|---------|-------|----------------------|
+/// | infix `Add`/`Sub`/`Mul`                         | legal                 | legal   | legal | wrapping two's-complement (see below); bespoke `reduce_sum_int`/`reduce_prod_int` carry int +/× |
+/// | infix `Div`                                     | legal                 | REJECT  | REJECT| bespoke elementwise div is `_fp`-only (`binary_div_fp.cu`); C `/` div-by-zero is device-UB |
+/// | every [`UnaryOp`]                               | legal (0a/0b gates)   | REJECT  | REJECT| bespoke unary elementwise surface is `_fp`-only |
+/// | `Max`/`Min`/`Pow`/`Rem` + 0a fns                | legal (Nextafter f32/f64) | REJECT | REJECT | float device fns only; no bespoke int instantiation |
+/// | `CmpEq`…`CmpGe`                                 | legal                 | REJECT  | REJECT| bespoke cmp is `_fp`-only (`binary_cmp_*_fp.cu`) |
+/// | `BitAnd`/`BitOr`/`BitXor`/`Shl`/`Shr`           | REJECT                | legal   | legal, LEAF operands only | bespoke `binary_bitwise_*_int.cu` instantiates i32/i64; 8-bit legal per the 0c charter with the promote-then-truncate semantics documented per variant — and at `S8`/`U8` every operand must be a leaf `Input` (a composed operand observes the un-truncated promoted value when inlined but the truncated 8-bit tmp when hoisted, so its result would depend on DAG sharing; see `plan::assert_int_op_admissibility` rule 3) |
+/// | `LogicalAnd`/`LogicalOr`/`LogicalXor`           | REJECT                | REJECT  | U8 only, LEAF operands only | bespoke `binary_logical_*_bool.cu` instantiates ONLY `uint8_t` (Bool); the `!= 0` tests observe un-truncated composed values, so the same 8-bit leaf-operand pin applies |
+/// | `Const`/`Param` leaves in the body              | legal (Param f32-only)| REJECT  | REJECT| a `Const` is spelled as an f64 C literal — at an int dtype it would silently run double math (and f64 cannot represent all i64); an int-literal speller is a follow-up |
+///
+/// **Integer wrapping semantics.** For `I32`/`I64`, infix `+ - *` lower to the
+/// native C operators. Signed arithmetic overflow remains formally UB in ALL
+/// current ISO C++ standards — C++20 (P0907) standardized the two's-complement
+/// REPRESENTATION, shifts, and narrowing conversions, NOT arithmetic overflow,
+/// which stays UB in C++20 and C++23. The wrapping contract therefore rests on
+/// the NVCC/PTX lowering: every CUDA target compiles `+ - *` to the wrapping
+/// two's-complement PTX forms (`add.s32`/`mul.lo.s64`) — observed-defined,
+/// matched by the bespoke `reduce_sum_int.cu`/`reduce_prod_int.cu` kernels'
+/// native-operator int accumulation, and the same architecture-inherited
+/// reliance the bespoke right-shift kernel documents for arithmetic `>>`.
+/// For `S8`/`U8`, C integer promotion widens both operands to
+/// `int`, the arithmetic is exact in `int` (no 8-bit pair can overflow it),
+/// and the store truncates back to 8 bits — mod-2⁸ wrapping by construction
+/// (well-defined for `unsigned char`; implementation-defined-but-two's-
+/// complement for `signed char` on every CUDA compiler, standardized by
+/// C++20). "Exact"/`correctly_rounded` for these ops means exact WRAPPING
+/// semantics, not infinite-precision arithmetic.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub enum BinaryOp {
     /// Elementwise maximum — **NaN-propagating** (`torch.maximum`; commutative).
@@ -213,6 +252,80 @@ pub enum BinaryOp {
     CmpGt,
     /// Greater-or-equal `a >= b ? 1 : 0` (false on any NaN operand).
     CmpGe,
+    // --- increment-0c integer bitwise / shift / logical ops (INT-ONLY — see the
+    // admissibility table in the enum docs; no FKC §4.1/OpTag name, no
+    // lower_op_kind dispatch spelling ⇒ no contract, honest miss) ---
+    /// Bitwise AND `a & b` — int-only (`I32`/`I64`/`S8`/`U8`). Matches
+    /// `binary_bitwise_and_int.cu`'s `BitwiseAndFunctor` (`return a & b;`)
+    /// exactly: no rounding, no overflow. On `S8`/`U8` the C integer promotion
+    /// (sign-/zero-extend to `int`) followed by the 8-bit store truncation is
+    /// bit-identical to a native 8-bit AND.
+    BitAnd,
+    /// Bitwise OR `a | b` — int-only; `binary_bitwise_or_int.cu` semantics.
+    /// Same promotion/truncation reasoning as [`BinaryOp::BitAnd`].
+    BitOr,
+    /// Bitwise XOR `a ^ b` — int-only; `binary_bitwise_xor_int.cu` semantics.
+    /// Same promotion/truncation reasoning as [`BinaryOp::BitAnd`].
+    BitXor,
+    /// Bitwise left shift `a << b` — int-only. Matches
+    /// `binary_bitwise_left_shift_int.cu` exactly: the RAW C `<<`, no masking
+    /// or clamping. Caveat carried verbatim from the bespoke kernel:
+    /// out-of-range shift amounts (`b < 0` or `b >= 8 * sizeof(promoted T)`)
+    /// are undefined behavior in C/C++ on signed types — PyTorch documents the
+    /// result as undefined/hardware-dependent there too, so we inherit the
+    /// architecture's behavior rather than masking; callers who need defined
+    /// behavior clamp `b` before launch. Left-shifting a negative value is
+    /// likewise formally UB pre-C++20 (wrapping two's-complement in practice
+    /// on every CUDA target; C++20 standardizes it). **8-bit note:** `S8`/`U8`
+    /// operands promote to `int` BEFORE the shift, so the effective shift
+    /// width is 32 (amounts 8..31 are in-promoted-range, where a native 8-bit
+    /// shift would have no defined range at all) and the store truncates the
+    /// 32-bit result mod 2⁸ — for in-range amounts this equals the native
+    /// 8-bit wrapping shift. Formal-UB caveat, carried honestly: a promoted
+    /// result that overflows `int` (e.g. `200 << 24`) is still formally UB
+    /// pre-C++20 (C++20 defines it as mod-2³²), and while nvcc via forge
+    /// compiles C++20, the headerless nvrtc path passes no `-std` flag — on
+    /// NVCC/PTX both observably wrap, the same architecture-inherited
+    /// contract as the bespoke shift kernels. Bespoke has no 8-bit
+    /// instantiation to defer to; these promotion-composition semantics are
+    /// the documented 0c contract. At `S8`/`U8` both operands must be leaf
+    /// `Input`s (the plan gate's 8-bit composition pin — the shift AMOUNT and,
+    /// for `Shr`, the shifted value observe the un-truncated promoted value,
+    /// so a composed operand's result would depend on DAG sharing).
+    Shl,
+    /// Bitwise right shift `a >> b` — int-only. Matches
+    /// `binary_bitwise_right_shift_int.cu` exactly: **arithmetic** shift on
+    /// signed types (`I32`/`I64`/`S8` — the sign bit replicates; formally
+    /// implementation-defined pre-C++20, but NVCC/MSVC/GCC/Clang all lower
+    /// signed `>>` to the arithmetic PTX `shr.s32`/`shr.s64`, the reliance the
+    /// bespoke kernel pins) and **logical** shift on `U8` (zero-extension —
+    /// the natural unsigned semantics). Out-of-range amounts (`b < 0` or
+    /// `b >= 8 * sizeof(promoted T)`) inherit the architecture's behavior,
+    /// same caller contract as [`BinaryOp::Shl`]. `S8`/`U8` promote to `int`
+    /// first (sign-/zero-extended), so the 8-bit result always fits and the
+    /// store truncation is exact. Same 8-bit leaf-operand pin as
+    /// [`BinaryOp::Shl`]: `Shr` observes the un-truncated promoted value of a
+    /// composed operand in BOTH positions (the shifted value's high bits and
+    /// the amount), so at `S8`/`U8` both operands must be leaf `Input`s.
+    Shr,
+    /// Logical AND — **U8 (Bool) only**. Matches `binary_logical_and_bool.cu`'s
+    /// `LogicalAndFunctor` exactly: `(a != 0 && b != 0) ? 1 : 0` — each input
+    /// is NORMALIZED to 0/1 before the op, so the output is strictly 0 or 1
+    /// even for unnormalized byte inputs (e.g. `2 && 4 == 1`, never `2 & 4 == 0`).
+    /// Operands must be leaf `Input`s (the plan gate's 8-bit composition pin:
+    /// the `!= 0` test observes the un-truncated promoted value of a composed
+    /// operand — `255+1` is 0 truncated but 256 promoted — so its result would
+    /// depend on DAG sharing); U8 is this op's only dtype, so the pin always
+    /// applies. Same contract for [`BinaryOp::LogicalOr`]/[`BinaryOp::LogicalXor`].
+    LogicalAnd,
+    /// Logical OR — U8 only; `binary_logical_or_bool.cu`:
+    /// `(a != 0 || b != 0) ? 1 : 0`, same normalization contract as
+    /// [`BinaryOp::LogicalAnd`].
+    LogicalOr,
+    /// Logical XOR (boolean inequality) — U8 only; `binary_logical_xor_bool.cu`:
+    /// `((a != 0) != (b != 0)) ? 1 : 0`, same normalization contract as
+    /// [`BinaryOp::LogicalAnd`].
+    LogicalXor,
 }
 
 impl BinaryOp {
@@ -229,6 +342,37 @@ impl BinaryOp {
                 | BinaryOp::CmpLe
                 | BinaryOp::CmpGt
                 | BinaryOp::CmpGe
+        )
+    }
+
+    /// `true` for the increment-0c INT-ONLY ops (bitwise/shift/logical) — the
+    /// ops that lower via `cuda::binary_int` and are legal ONLY at the integer
+    /// compute dtypes (`I32`/`I64`/`S8`/`U8`; logical narrows further to `U8`
+    /// — see [`BinaryOp::is_logical`]). Float dtypes validate-reject at the
+    /// plan gate; the float spellers carry an independent panic backstop.
+    #[must_use]
+    pub fn is_int_only(self) -> bool {
+        matches!(
+            self,
+            BinaryOp::BitAnd
+                | BinaryOp::BitOr
+                | BinaryOp::BitXor
+                | BinaryOp::Shl
+                | BinaryOp::Shr
+                | BinaryOp::LogicalAnd
+                | BinaryOp::LogicalOr
+                | BinaryOp::LogicalXor
+        )
+    }
+
+    /// `true` for the logical (0/1-normalizing) ops — legal at `U8` (the FKC
+    /// Bool spelling) ONLY, per the bespoke surface: `binary_logical_*_bool.cu`
+    /// instantiates exactly `uint8_t`, no wider int.
+    #[must_use]
+    pub fn is_logical(self) -> bool {
+        matches!(
+            self,
+            BinaryOp::LogicalAnd | BinaryOp::LogicalOr | BinaryOp::LogicalXor
         )
     }
 }
@@ -1122,8 +1266,64 @@ mod view_tests {
             BinaryOp::FmaxIeee,
             BinaryOp::FminIeee,
             BinaryOp::RemTrunc,
+            BinaryOp::BitAnd,
+            BinaryOp::BitOr,
+            BinaryOp::BitXor,
+            BinaryOp::Shl,
+            BinaryOp::Shr,
+            BinaryOp::LogicalAnd,
+            BinaryOp::LogicalOr,
+            BinaryOp::LogicalXor,
         ] {
             assert!(!op.is_cmp());
+        }
+    }
+
+    #[test]
+    fn is_int_only_and_is_logical_cover_exactly_the_0c_sets() {
+        // is_int_only: exactly the 8 increment-0c ops — no float op may drift
+        // into the int lowering path, and no int op may reach a float speller.
+        let int_only = [
+            BinaryOp::BitAnd,
+            BinaryOp::BitOr,
+            BinaryOp::BitXor,
+            BinaryOp::Shl,
+            BinaryOp::Shr,
+            BinaryOp::LogicalAnd,
+            BinaryOp::LogicalOr,
+            BinaryOp::LogicalXor,
+        ];
+        for op in int_only {
+            assert!(op.is_int_only(), "{op:?}");
+        }
+        for op in [
+            BinaryOp::Max,
+            BinaryOp::Min,
+            BinaryOp::Pow,
+            BinaryOp::Rem,
+            BinaryOp::Atan2,
+            BinaryOp::Copysign,
+            BinaryOp::Nextafter,
+            BinaryOp::FmaxIeee,
+            BinaryOp::FminIeee,
+            BinaryOp::RemTrunc,
+            BinaryOp::CmpEq,
+            BinaryOp::CmpNe,
+            BinaryOp::CmpLt,
+            BinaryOp::CmpLe,
+            BinaryOp::CmpGt,
+            BinaryOp::CmpGe,
+        ] {
+            assert!(!op.is_int_only(), "{op:?}");
+        }
+        // is_logical: exactly the three 0/1-normalizing ops (U8-only set) —
+        // the bitwise ops must NOT gain the U8-only restriction, and the
+        // logical ops must NOT silently widen to I32/I64.
+        for op in [BinaryOp::LogicalAnd, BinaryOp::LogicalOr, BinaryOp::LogicalXor] {
+            assert!(op.is_logical(), "{op:?}");
+        }
+        for op in [BinaryOp::BitAnd, BinaryOp::BitOr, BinaryOp::BitXor, BinaryOp::Shl, BinaryOp::Shr] {
+            assert!(!op.is_logical(), "{op:?}");
         }
     }
 

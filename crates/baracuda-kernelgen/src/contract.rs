@@ -379,6 +379,22 @@ fn binary_ulp(op: BinaryOp) -> f64 {
         BinaryOp::Rem => f64::INFINITY,
         BinaryOp::Atan2 => 3.0, // vendor atan2f: 3 ulp
         BinaryOp::Pow => 4.0,
+        // The increment-0c integer ops are BIT-EXACT: "exact" here means exact
+        // WRAPPING two's-complement semantics (and, for the logical ops, the
+        // exact 0/1 normalization) — there is no rounding step at all, so 0 is
+        // the honest rating, not an under-statement. (Today these ops emit NO
+        // contract — no OpTag/lower_op_kind name exists, so derive_pattern
+        // rejects first — but this table stays exhaustive on purpose: when
+        // Fuel names them, the rating is already decided here, not silently
+        // defaulted.)
+        BinaryOp::BitAnd
+        | BinaryOp::BitOr
+        | BinaryOp::BitXor
+        | BinaryOp::Shl
+        | BinaryOp::Shr
+        | BinaryOp::LogicalAnd
+        | BinaryOp::LogicalOr
+        | BinaryOp::LogicalXor => 0.0,
     }
 }
 
@@ -851,6 +867,85 @@ mod tests {
         assert_eq!(b(BinaryOp::FmaxIeee), ("correctly_rounded", Some(0)));
         assert_eq!(b(BinaryOp::FminIeee), ("correctly_rounded", Some(0)));
         assert_eq!(b(BinaryOp::RemTrunc), ("correctly_rounded", Some(0)));
+    }
+
+    #[test]
+    fn int_ops_rate_zero_ulp_and_emit_no_contract() {
+        use crate::ir::BinaryOp;
+        const INT_OPS: [BinaryOp; 8] = [
+            BinaryOp::BitAnd,
+            BinaryOp::BitOr,
+            BinaryOp::BitXor,
+            BinaryOp::Shl,
+            BinaryOp::Shr,
+            BinaryOp::LogicalAnd,
+            BinaryOp::LogicalOr,
+            BinaryOp::LogicalXor,
+        ];
+        // Precision table: all eight rated 0 EXHAUSTIVELY (bit-exact wrapping
+        // int semantics — no rounding step exists), pinned per op so a future
+        // arm shuffle can't silently re-rate one.
+        for op in INT_OPS {
+            assert_eq!(
+                precision_of(&input(0).binary(op, input(1)).0),
+                ("correctly_rounded", Some(0)),
+                "{op:?}"
+            );
+        }
+        // Contract: HONEST MISS — neither OpTag 0.10.2 nor lower_op_kind names
+        // the bitwise/logical ops, so no pattern derives and no contract is
+        // emitted; the kernel itself still generates (bitwise at i32, logical
+        // at u8 — the audited-legal cells).
+        use crate::pattern::PatternError;
+        let band = OpDef::elementwise(
+            "band",
+            2,
+            &[ElementKind::I32],
+            input(0).binary(BinaryOp::BitAnd, input(1)),
+        );
+        let ki = key_dtype(ElementKind::I32, 3);
+        let k = generate(&band, &ki, &Cuda);
+        assert!(k.source.contains("(in0[i] & in1[i])"), "the kernel still lowers");
+        assert!(contract(&band, &ki, &k, "cuda").is_none(), "but no contract");
+        assert!(matches!(
+            derive_pattern(&band),
+            Err(PatternError::NoFkcName { ref op }) if op == "BitAnd"
+        ));
+        let land = OpDef::elementwise(
+            "land",
+            2,
+            &[ElementKind::U8],
+            input(0).binary(BinaryOp::LogicalAnd, input(1)),
+        );
+        let ku = key_dtype(ElementKind::U8, 3);
+        let kl = generate(&land, &ku, &Cuda);
+        assert!(kl.source.contains("!= 0 &&"), "the kernel still lowers");
+        assert!(contract(&land, &ku, &kl, "cuda").is_none(), "but no contract");
+    }
+
+    #[test]
+    fn uniform_int_add_contracts_carry_the_audited_dtype() {
+        // Increment 0c: uniform-U8/S8 COMPUTE is audited, so an infix Add at
+        // U8/S8 emits a real contract — dtypes carry the FKC §5 spellings
+        // (U8; S8 spells I8), correctly_rounded means exact WRAPPING
+        // semantics, and count_unit stays elements (int cells never
+        // vectorize — no int vector/packed path exists).
+        let addu = OpDef::elementwise("add", 2, &[ElementKind::U8], input(0) + input(1));
+        let ku = key_dtype(ElementKind::U8, 3);
+        let k = generate(&addu, &ku, &Cuda);
+        let c = contract(&addu, &ku, &k, "cuda").unwrap();
+        assert!(c.contains("op_kind: Add"));
+        assert!(c.contains("dtypes: [U8]"));
+        assert!(c.contains("mode: correctly_rounded"));
+        assert!(c.contains("count_unit: elements"));
+        // 2 u8 reads + 1 u8 write.
+        assert!(c.contains("bytes_per_elem: 3"));
+        let adds = OpDef::elementwise("add", 2, &[ElementKind::S8], input(0) + input(1));
+        let ks = key_dtype(ElementKind::S8, 3);
+        let k8 = generate(&adds, &ks, &Cuda);
+        let c8 = contract(&adds, &ks, &k8, "cuda").unwrap();
+        assert!(c8.contains("dtypes: [I8]"), "S8 spells I8 on the FKC wire");
+        assert!(c8.contains("count_unit: elements"));
     }
 
     #[test]

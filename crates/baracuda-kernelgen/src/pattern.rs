@@ -239,7 +239,11 @@ fn walk(
 /// invent tags — the body is rejected as [`PatternError::NoFkcName`] instead).
 /// The comparison predicates ARE named — §4.1 "Comparison (→ U8 mask)":
 /// `Equal`/`Ne`/`Lt`/`Le`/`Gt`/`Ge`, matching `fuel_kernel_seam_types::OpTag`
-/// verbatim.
+/// verbatim. The increment-0c bitwise/shift/logical ops are NOT named:
+/// audited against fuel-kernel-seam-types 0.10.2 (`OpTag` has no bitwise/
+/// logical/shift tags) and fuel-dispatch's `lower_op_kind` string table (no
+/// `Bitwise*`/`Logical*` dispatch spellings) — so no pattern, and therefore no
+/// contract, is emitted for them (honest miss; the kernels still lower).
 fn binary_name(op: BinaryOp) -> Option<&'static str> {
     Some(match op {
         BinaryOp::Max => "Maximum",
@@ -257,7 +261,15 @@ fn binary_name(op: BinaryOp) -> Option<&'static str> {
         | BinaryOp::Nextafter
         | BinaryOp::FmaxIeee
         | BinaryOp::FminIeee
-        | BinaryOp::RemTrunc => return None,
+        | BinaryOp::RemTrunc
+        | BinaryOp::BitAnd
+        | BinaryOp::BitOr
+        | BinaryOp::BitXor
+        | BinaryOp::Shl
+        | BinaryOp::Shr
+        | BinaryOp::LogicalAnd
+        | BinaryOp::LogicalOr
+        | BinaryOp::LogicalXor => return None,
     })
 }
 
@@ -665,6 +677,37 @@ pattern:
         // The pre-existing vocabulary is untouched: Erf still emits `op: Erf`.
         let erf = OpDef::elementwise("g", 1, &[ElementKind::F32], input(0).unary(UnaryOp::Erf));
         assert!(to_fkc(&derive_pattern(&erf).unwrap()).contains("op: Erf"));
+    }
+
+    #[test]
+    fn increment_0c_int_ops_are_rejected_not_invented() {
+        use crate::ir::BinaryOp;
+        // fuel-kernel-seam-types 0.10.2 OpTag has no bitwise/logical/shift
+        // tags and fuel-dispatch lower_op_kind has no Bitwise*/Logical*
+        // spellings: ALL EIGHT 0c ops must reject as NoFkcName (honest miss;
+        // never invented vocabulary) — pinned exhaustively, per op.
+        for op in [
+            BinaryOp::BitAnd,
+            BinaryOp::BitOr,
+            BinaryOp::BitXor,
+            BinaryOp::Shl,
+            BinaryOp::Shr,
+            BinaryOp::LogicalAnd,
+            BinaryOp::LogicalOr,
+            BinaryOp::LogicalXor,
+        ] {
+            let o = OpDef::elementwise(
+                "b",
+                2,
+                &[ElementKind::I32],
+                input(0).binary(op, input(1)),
+            );
+            assert_eq!(
+                derive_pattern(&o),
+                Err(PatternError::NoFkcName { op: format!("{op:?}") }),
+                "{op:?} must be an honest pattern miss"
+            );
+        }
     }
 
     #[test]

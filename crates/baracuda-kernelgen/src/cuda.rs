@@ -24,15 +24,17 @@ impl Backend for Cuda {
     }
 
     fn supports_dtype(&self, dtype: ElementKind) -> bool {
-        // U8 entered `scalar_ctype` for the increment-0b predicate STORES
-        // (which never consult this gate — the plan's out_dtype path carries
-        // them), but uniform-u8 COMPUTE regions must keep declining here:
-        // C integer promotion, wrapping/truncation, and device-undefined
-        // division by zero are unaudited semantics, and the float-derived
-        // precision block would mislabel them. Deferred to increment 0c
-        // (int/bitwise dtype completion), where int semantics get their own
-        // validation + contract story.
-        !matches!(dtype, ElementKind::U8) && scalar_ctype(dtype).is_some()
+        // Increment 0c replaced the 0b uniform-u8 hold with the audited int
+        // story: U8 and S8 are now COMPUTE dtypes (wrapping add/sub/mul via
+        // integer promotion + store truncation; the bitwise/shift/logical
+        // vocabulary), so this gate is exactly "does the backend have a
+        // scalar C type". This is deliberately dtype-only: per-OP legality
+        // (Div-for-int rejected, unary/float-fn/cmp rejected at int, logical
+        // U8-only — the ir.rs admissibility table) is gate 2, the JIT's
+        // `dtype_compatible`, and the AOT plan gate
+        // `assert_int_op_admissibility` — so a uniform-U8 Div region still
+        // declines even though U8 itself is supported here.
+        scalar_ctype(dtype).is_some()
     }
 
     fn lower_variants(&self, plan: &KernelPlan<'_>) -> Vec<Variant> {
@@ -58,6 +60,31 @@ impl Backend for Cuda {
             "cuda backend v1: scalar params are f32-only for now (dtype {:?})",
             plan.dtype
         );
+        // Increment 0c: infix `Div` and `Const` are spelled by shared,
+        // dtype-blind backend code (`lower_expr` emits C `/` and an f64
+        // literal with no dtype context) — the only two REJECT rows of the
+        // ir.rs admissibility table with no op-level emitter backstop, and
+        // exactly the device-dangerous ones (int `/0` is device-UB; an
+        // f64-spelled Const silently runs double math in an integer kernel).
+        // Mirror of the Param assert above, walking every expression the plan
+        // can lower (body + RowReduce stages/epilogue + Contraction epilogue,
+        // the same coverage as plan.rs's assert_no_half_nextafter walk) so the
+        // backstop holds independently of the plan gate — the 0a lesson: gate
+        // every layer.
+        if crate::plan::is_int_dtype(plan.dtype) {
+            let mut exprs: Vec<&ScalarExpr> = vec![plan.body];
+            match plan.access {
+                Access::RowReduce { stages, epilogue } => {
+                    exprs.extend(stages.iter().map(|s| &s.pre));
+                    exprs.push(epilogue);
+                }
+                Access::Contraction { epilogue, .. } => exprs.push(epilogue),
+                Access::Elementwise | Access::Reduction { .. } => {}
+            }
+            for e in exprs {
+                assert_no_int_div_or_const(e, plan.dtype);
+            }
+        }
         // Increment 0b: a hetero-output (u8-predicate) plan reaches only the
         // scalar/strided emitters — `build_plan` forces the schedule (no packed
         // u8 store exists) and `assert_valid_out_dtype` pinned the Access to
@@ -98,8 +125,10 @@ impl Backend for Cuda {
 
 /// CUDA scalar type for a dtype, or `None` if the backend can't lower it yet.
 /// `U8` (increment 0b) is the comparison-predicate mask dtype — `unsigned char`
-/// per the FKC §5 Bool→U8 pinning; it also makes uniform-u8 *infix* bodies
-/// lowerable (wrapping mod-256 C semantics), same class as the i32/i64 arms.
+/// per the FKC §5 Bool→U8 pinning — and, since increment 0c, an audited
+/// COMPUTE dtype (wrapping mod-256 C semantics), same class as the i32/i64
+/// arms. `S8` (FKC `I8`, increment 0c) is `signed char` — two's-complement
+/// wrapping via integer promotion + store truncation (see the ir.rs table).
 fn scalar_ctype(dt: ElementKind) -> Option<&'static str> {
     Some(match dt {
         ElementKind::F32 | ElementKind::F32Strict => "float",
@@ -108,6 +137,7 @@ fn scalar_ctype(dt: ElementKind) -> Option<&'static str> {
         ElementKind::Bf16 => "__nv_bfloat16",
         ElementKind::I32 => "int",
         ElementKind::I64 => "long long",
+        ElementKind::S8 => "signed char",
         ElementKind::U8 => "unsigned char",
         _ => return None,
     })
@@ -265,6 +295,7 @@ fn dtype_tag(dt: ElementKind) -> &'static str {
         ElementKind::Bf16 => "bf16",
         ElementKind::I32 => "i32",
         ElementKind::I64 => "i64",
+        ElementKind::S8 => "i8",
         ElementKind::U8 => "u8",
         _ => "x",
     }
@@ -2004,6 +2035,21 @@ fn binary_f32(op: BinaryOp, a: String, b: String) -> String {
         BinaryOp::CmpLe => format!("((float){a} <= (float){b} ? 1.0f : 0.0f)"),
         BinaryOp::CmpGt => format!("((float){a} > (float){b} ? 1.0f : 0.0f)"),
         BinaryOp::CmpGe => format!("((float){a} >= (float){b} ? 1.0f : 0.0f)"),
+        // increment-0c INT-ONLY ops: an independent emitter backstop behind
+        // the plan gate (assert_int_op_admissibility) — a bitwise/logical op
+        // must never reach a float speller, including the f16/bf16 promote
+        // path and the reduction-class accumulator lowerings, which all route
+        // through here.
+        BinaryOp::BitAnd
+        | BinaryOp::BitOr
+        | BinaryOp::BitXor
+        | BinaryOp::Shl
+        | BinaryOp::Shr
+        | BinaryOp::LogicalAnd
+        | BinaryOp::LogicalOr
+        | BinaryOp::LogicalXor => {
+            panic!("cuda backend: {op:?} is int-only (I32/I64/S8/U8) — it has no f32 lowering")
+        }
     }
 }
 
@@ -2028,11 +2074,91 @@ fn binary_f64(op: BinaryOp, a: String, b: String) -> String {
         BinaryOp::CmpLe => format!("({a} <= {b} ? 1.0 : 0.0)"),
         BinaryOp::CmpGt => format!("({a} > {b} ? 1.0 : 0.0)"),
         BinaryOp::CmpGe => format!("({a} >= {b} ? 1.0 : 0.0)"),
+        // increment-0c INT-ONLY ops — same backstop as the f32 speller.
+        BinaryOp::BitAnd
+        | BinaryOp::BitOr
+        | BinaryOp::BitXor
+        | BinaryOp::Shl
+        | BinaryOp::Shr
+        | BinaryOp::LogicalAnd
+        | BinaryOp::LogicalOr
+        | BinaryOp::LogicalXor => {
+            panic!("cuda backend: {op:?} is int-only (I32/I64/S8/U8) — it has no f64 lowering")
+        }
+    }
+}
+
+/// Spell an increment-0c INT-ONLY binary op (bitwise/shift/logical) over two
+/// already-lowered integer operand strings — the RAW C operators, matching the
+/// bespoke functors **exactly** (the 0c charter: express the bespoke
+/// functionality, never "improve" it):
+///
+/// - `BitAnd`/`BitOr`/`BitXor`: `binary_bitwise_{and,or,xor}_int.cu`'s
+///   `return a OP b;` — no rounding, no overflow concerns.
+/// - `Shl`/`Shr`: `binary_bitwise_{left,right}_shift_int.cu`'s `return a << b;`
+///   / `return a >> b;` — NO masking or clamping. Out-of-range amounts
+///   (`b < 0` or `b >= 8*sizeof(promoted T)`) inherit the architecture's
+///   behavior (the bespoke caller contract, carried verbatim); signed `>>` is
+///   arithmetic on every CUDA compiler (PTX `shr.s32`/`shr.s64` — the bespoke
+///   kernel's documented reliance), unsigned is logical.
+/// - `LogicalAnd`/`LogicalOr`/`LogicalXor`: `binary_logical_*_bool.cu`'s
+///   normalize-then-op — `(a != 0 OP b != 0) ? 1 : 0`, so the output is
+///   strictly 0/1 even for unnormalized bytes (`2 && 4 == 1`). U8-only (the
+///   bespoke Bool surface); the plan gate enforces it and the assert here is
+///   the independent emitter backstop.
+///
+/// **Integer-promotion note (S8/U8):** the operand strings are `signed char`/
+/// `unsigned char` loads — GUARANTEED, not assumed: the plan gate's 8-bit
+/// composition pin (`plan::assert_int_op_admissibility` rule 3) requires every
+/// int-op operand at `S8`/`U8` to be a leaf `Input`, so a composed operand
+/// (whose inlined un-truncated value would diverge from its hoisted 8-bit-tmp
+/// value under DAG sharing) can never reach this speller. The loads promote to
+/// `int` (sign-/zero-extended) before any operator. NO defeating casts are
+/// emitted, deliberately:
+/// - and/or/xor: promote → op → store-truncate is bit-identical to a native
+///   8-bit op (extension bits AND/OR/XOR among themselves and truncate away);
+/// - `Shl`: the 32-bit shift result store-truncates mod 2⁸ — equal to a
+///   native wrapping 8-bit shift for in-range amounts, and amounts 8..31 take
+///   the promoted (well-defined-in-practice) semantics rather than native-8-bit
+///   UB. This matches how the bespoke i32/i64 kernels compose with C — there
+///   is no bespoke 8-bit shift to defer to, so the promotion semantics ARE the
+///   documented contract (see `BinaryOp::Shl`);
+/// - `Shr`: the promoted value's high bits are the extension of the 8-bit
+///   value, so the shifted result always fits 8 bits — truncation is exact,
+///   arithmetic for `signed char`, logical for `unsigned char`;
+/// - logical ops: the `!= 0` tests and the 0/1 result are promotion-invariant.
+///
+/// The final `other` arm is the second half of the emitter backstop: a float
+/// fn / cmp op that reaches the int speller (i.e. bypassed the plan gate at an
+/// int dtype) panics rather than emitting C that happens to compile.
+fn binary_int(op: BinaryOp, a: String, b: String, dtype: ElementKind) -> String {
+    if op.is_logical() {
+        assert!(
+            dtype == ElementKind::U8,
+            "cuda backend: {op:?} is U8 (Bool)-only — the bespoke logical surface \
+             instantiates exactly uint8_t; got {dtype:?}"
+        );
+    }
+    match op {
+        BinaryOp::BitAnd => format!("({a} & {b})"),
+        BinaryOp::BitOr => format!("({a} | {b})"),
+        BinaryOp::BitXor => format!("({a} ^ {b})"),
+        BinaryOp::Shl => format!("({a} << {b})"),
+        BinaryOp::Shr => format!("({a} >> {b})"),
+        BinaryOp::LogicalAnd => format!("(({a} != 0 && {b} != 0) ? 1 : 0)"),
+        BinaryOp::LogicalOr => format!("(({a} != 0 || {b} != 0) ? 1 : 0)"),
+        BinaryOp::LogicalXor => format!("((({a} != 0) != ({b} != 0)) ? 1 : 0)"),
+        other => panic!(
+            "cuda backend: {other:?} has no integer lowering — the bespoke \
+             elementwise surface instantiates it for float dtypes only \
+             (int dtype {dtype:?} must miss honestly at the plan gate)"
+        ),
     }
 }
 
 /// Lower a non-infix binary op for `dtype` (f32/f64 native; f16/bf16 compute in
-/// float). Mirrors [`cuda_unary`]; integer binary-function math is a follow-up.
+/// float; int dtypes via the [`binary_int`] C-operator speller — bitwise/shift/
+/// logical only, everything else backstop-panics there). Mirrors [`cuda_unary`].
 ///
 /// The f16/bf16 promote→f32-fn→demote round trip is value-correct for every op
 /// here **except `Nextafter`**, which is therefore refused (the JIT gates it in
@@ -2076,6 +2202,13 @@ fn cuda_binary(op: BinaryOp, a: String, b: String, dtype: ElementKind) -> String
                 format!("__bfloat162float({b})")
             )
         ),
+        // Increment 0c: the integer compute dtypes route to the C-operator
+        // speller — legal for the bitwise/shift/logical vocabulary only
+        // (binary_int backstop-panics on everything else, behind the plan
+        // gate's validate-reject).
+        ElementKind::I32 | ElementKind::I64 | ElementKind::S8 | ElementKind::U8 => {
+            binary_int(op, a, b, dtype)
+        }
         other => panic!("cuda backend: no binary math for dtype {other:?}"),
     }
 }
@@ -2102,6 +2235,41 @@ fn params_used(e: &ScalarExpr) -> Vec<u8> {
     let mut set = std::collections::BTreeSet::new();
     rec(e, &mut set);
     set.into_iter().collect()
+}
+
+/// Emitter backstop for the two dtype-blind spellings (increment 0c): panic if
+/// `e` contains an infix [`ScalarExpr::Div`] node or a [`ScalarExpr::Const`]
+/// leaf while [`Cuda::lower`] is lowering an INTEGER dtype. Both are spelled by
+/// shared backend code with no dtype context (`lower_expr` emits C `/` and an
+/// f64 C literal for every dtype), so unlike the unary/binary-fn/int-only ops
+/// they have no per-op speller panic to catch a plan-gate bypass — and they are
+/// exactly the device-dangerous pair: integer `/0` is device-UB, and an
+/// f64-spelled Const injects double math into an int kernel (f64 cannot even
+/// represent all i64). Called from [`Cuda::lower`] over the body and every
+/// reduction-class stage/epilogue, independent of `assert_int_op_admissibility`.
+fn assert_no_int_div_or_const(e: &ScalarExpr, dtype: ElementKind) {
+    match e {
+        ScalarExpr::Input(_) | ScalarExpr::Param(_) | ScalarExpr::Reduced(_) => {}
+        ScalarExpr::Const(_) => panic!(
+            "cuda backend: Const at an integer dtype ({dtype:?}) — a Const is \
+             spelled as an f64 C literal, which would silently run double math \
+             in an integer kernel; the plan gate rejects this (an int-literal \
+             speller is a follow-up)"
+        ),
+        ScalarExpr::Div(_, _) => panic!(
+            "cuda backend: infix Div has no integer lowering ({dtype:?}) — the \
+             bespoke elementwise surface has no int div and C `/` by zero is \
+             device-UB; the plan gate rejects this"
+        ),
+        ScalarExpr::Unary(_, x) => assert_no_int_div_or_const(x, dtype),
+        ScalarExpr::Add(a, b)
+        | ScalarExpr::Sub(a, b)
+        | ScalarExpr::Mul(a, b)
+        | ScalarExpr::Binary(_, a, b) => {
+            assert_no_int_div_or_const(a, dtype);
+            assert_no_int_div_or_const(b, dtype);
+        }
+    }
 }
 
 /// The trailing `, float p0, float p1, …` kernel-signature suffix for the op's
@@ -3558,17 +3726,29 @@ mod tests {
     }
 
     #[test]
-    fn uniform_u8_compute_regions_stay_unsupported() {
+    fn int_compute_dtypes_are_supported_after_the_0c_audit() {
         use crate::backend::Backend;
-        // U8 entered scalar_ctype for predicate STORES only; uniform-u8
-        // COMPUTE (C integer promotion, wrapping, div-by-zero UB) is unaudited
-        // and must keep declining at the JIT/seam trust boundary until
-        // increment 0c gives int semantics their own validation + contract
-        // story. (Review-caught gap: adding U8 to scalar_ctype silently
-        // widened supports_dtype.)
-        assert!(!Cuda.supports_dtype(ElementKind::U8));
-        // The predicate path doesn't consult this gate — u8-OUT kernels at a
-        // float key dtype still lower.
+        // Increment 0c replaced the 0b uniform-u8 hold: U8 and S8 are audited
+        // COMPUTE dtypes now (wrapping semantics + the int-only op set), so
+        // supports_dtype says yes — and the per-OP legality lives in
+        // dtype_compatible / the plan gate, NOT here (a uniform-U8 Div region
+        // still declines; pinned in jit.rs). Both directions:
+        for dt in [ElementKind::U8, ElementKind::S8, ElementKind::I32, ElementKind::I64] {
+            assert!(Cuda.supports_dtype(dt), "{dt:?} is an audited compute dtype");
+        }
+        for dt in [
+            ElementKind::Bool, // FKC has no Bool — masks ride as U8
+            ElementKind::S4,
+            ElementKind::U4,
+            ElementKind::Bin,
+            ElementKind::Fp8E4M3,
+            ElementKind::Fp8E5M2,
+            ElementKind::Complex32,
+            ElementKind::Complex64,
+        ] {
+            assert!(!Cuda.supports_dtype(dt), "{dt:?} must keep declining");
+        }
+        // The u8-OUT predicate path is unchanged by the flip.
         let k = generate(&pred_op("cmp_gt", BinaryOp::CmpGt, ElementKind::F32), &pred_key(ElementKind::F32), &Cuda);
         assert!(k.source.contains("unsigned char* __restrict__ out"));
     }
@@ -3697,5 +3877,488 @@ mod tests {
         );
         op.out_dtype = Some(ElementKind::F16);
         let _ = generate(&op, &pred_key(ElementKind::F32), &Cuda);
+    }
+
+    // =======================================================================
+    // Increment-0c integer compute dtypes + bitwise/shift/logical ops
+    // =======================================================================
+
+    fn int_op(name: &str, bop: BinaryOp, dt: ElementKind) -> OpDef {
+        OpDef::elementwise(name, 2, &[dt], input(0).binary(bop, input(1)))
+    }
+
+    #[test]
+    fn bitwise_emission_goldens_i32_i64() {
+        // One golden per bitwise/shift op at i32 AND i64: the exact raw C
+        // operator (the bespoke functor bodies verbatim — `a & b`, `a << b`,
+        // `a >> b` with NO masking/clamping: out-of-range shifts inherit the
+        // architecture's behavior, signed >> is arithmetic, exactly as
+        // binary_bitwise_*_int.cu documents).
+        let cases: &[(BinaryOp, &str, &str)] = &[
+            (BinaryOp::BitAnd, "band", "&"),
+            (BinaryOp::BitOr, "bor", "|"),
+            (BinaryOp::BitXor, "bxor", "^"),
+            (BinaryOp::Shl, "shl", "<<"),
+            (BinaryOp::Shr, "shr", ">>"),
+        ];
+        for &(bop, name, c) in cases {
+            let ki = generate(
+                &int_op(name, bop, ElementKind::I32),
+                &binary_scalar_key(ElementKind::I32, 4),
+                &Cuda,
+            );
+            assert_eq!(ki.name, format!("baracuda_gen_{name}_i32_scalar"));
+            assert!(ki.source.contains("const int* __restrict__ in0"), "{bop:?}");
+            let store = format!("out[i] = (in0[i] {c} in1[i]);");
+            assert!(ki.source.contains(&store), "{bop:?} i32: missing `{store}` in:\n{}", ki.source);
+            let kl = generate(
+                &int_op(name, bop, ElementKind::I64),
+                &binary_scalar_key(ElementKind::I64, 8),
+                &Cuda,
+            );
+            assert_eq!(kl.name, format!("baracuda_gen_{name}_i64_scalar"));
+            assert!(kl.source.contains("const long long* __restrict__ in0"), "{bop:?}");
+            assert!(kl.source.contains(&store), "{bop:?} i64: missing `{store}`");
+            // Header-light: int kernels need no includes (nvrtc headerless).
+            assert!(!ki.source.contains("#include"), "{bop:?} i32 must be headerless");
+        }
+    }
+
+    #[test]
+    fn bitwise_emission_goldens_i8_u8() {
+        // 8-bit cells: `signed char` / `unsigned char` pointers and the SAME
+        // raw operators with NO defeating casts — deliberately. C integer
+        // promotion widens both operands to `int` (sign-extended for i8,
+        // zero-extended for u8) and the 8-bit store truncates the result:
+        // - and/or/xor: extension bits op among themselves and truncate away —
+        //   bit-identical to a native 8-bit op;
+        // - Shl at u8: the 32-bit shift result truncates mod 2^8 = the native
+        //   wrapping 8-bit shift for in-range amounts (amounts 8..31 take the
+        //   promoted semantics — there is no bespoke 8-bit shift to defer to,
+        //   so promote-then-truncate IS the documented 0c contract);
+        // - Shr: the promoted value's high bits are the extension, so the
+        //   result always fits 8 bits — arithmetic for i8 (sign replicates),
+        //   logical for u8 (zero-extension), matching the signed/unsigned
+        //   split the bespoke i32/i64 kernels pin.
+        let ku = generate(
+            &int_op("shl", BinaryOp::Shl, ElementKind::U8),
+            &binary_scalar_key(ElementKind::U8, 1),
+            &Cuda,
+        );
+        assert_eq!(ku.name, "baracuda_gen_shl_u8_scalar");
+        assert!(ku.source.contains("const unsigned char* __restrict__ in0"));
+        assert!(ku.source.contains("unsigned char* __restrict__ out"));
+        assert!(ku.source.contains("out[i] = (in0[i] << in1[i]);"), "{}", ku.source);
+        assert!(!ku.source.contains("(int)"), "no defeating casts — promotion is the contract");
+        let ks = generate(
+            &int_op("shr", BinaryOp::Shr, ElementKind::S8),
+            &binary_scalar_key(ElementKind::S8, 1),
+            &Cuda,
+        );
+        assert_eq!(ks.name, "baracuda_gen_shr_i8_scalar");
+        assert!(ks.source.contains("const signed char* __restrict__ in0"));
+        assert!(ks.source.contains("out[i] = (in0[i] >> in1[i]);"), "{}", ks.source);
+        let ka = generate(
+            &int_op("band", BinaryOp::BitAnd, ElementKind::U8),
+            &binary_scalar_key(ElementKind::U8, 1),
+            &Cuda,
+        );
+        assert!(ka.source.contains("out[i] = (in0[i] & in1[i]);"));
+        let kx = generate(
+            &int_op("bxor", BinaryOp::BitXor, ElementKind::S8),
+            &binary_scalar_key(ElementKind::S8, 1),
+            &Cuda,
+        );
+        assert!(kx.source.contains("out[i] = (in0[i] ^ in1[i]);"));
+    }
+
+    #[test]
+    fn logical_emission_goldens_u8() {
+        // The exact normalize-then-op ternaries of binary_logical_*_bool.cu:
+        // inputs are normalized with `!= 0` BEFORE the op, so unnormalized
+        // bytes behave boolean (2 && 4 == 1, never the bitwise 2 & 4 == 0)
+        // and the output is strictly 0/1.
+        let cases: &[(BinaryOp, &str, &str)] = &[
+            (
+                BinaryOp::LogicalAnd,
+                "land",
+                "out[i] = ((in0[i] != 0 && in1[i] != 0) ? 1 : 0);",
+            ),
+            (
+                BinaryOp::LogicalOr,
+                "lor",
+                "out[i] = ((in0[i] != 0 || in1[i] != 0) ? 1 : 0);",
+            ),
+            (
+                BinaryOp::LogicalXor,
+                "lxor",
+                "out[i] = (((in0[i] != 0) != (in1[i] != 0)) ? 1 : 0);",
+            ),
+        ];
+        for &(bop, name, store) in cases {
+            let k = generate(&int_op(name, bop, ElementKind::U8), &binary_scalar_key(ElementKind::U8, 1), &Cuda);
+            assert_eq!(k.name, format!("baracuda_gen_{name}_u8_scalar"));
+            assert!(k.source.contains("const unsigned char* __restrict__ in0"), "{bop:?}");
+            assert!(k.source.contains(store), "{bop:?}: missing `{store}` in:\n{}", k.source);
+        }
+    }
+
+    #[test]
+    fn int_infix_wrapping_goldens() {
+        // Wrapping infix arithmetic at the newly-audited 8-bit dtypes: the
+        // native operators, no float detour, no casts (promotion + store
+        // truncation = mod-2^8 wrapping; see the ir.rs table). i64 stays the
+        // native `long long` operators (the pre-0c behavior, unregressed).
+        let addu = OpDef::elementwise("add", 2, &[ElementKind::U8], input(0) + input(1));
+        let ku = generate(&addu, &binary_scalar_key(ElementKind::U8, 1), &Cuda);
+        assert_eq!(ku.name, "baracuda_gen_add_u8_scalar");
+        assert!(ku.source.contains("out[i] = (in0[i] + in1[i]);"));
+        assert!(!ku.source.contains("float"), "no float detour in a u8 kernel");
+        let muls = OpDef::elementwise("mul", 2, &[ElementKind::S8], input(0) * input(1));
+        let ks = generate(&muls, &binary_scalar_key(ElementKind::S8, 1), &Cuda);
+        assert_eq!(ks.name, "baracuda_gen_mul_i8_scalar");
+        assert!(ks.source.contains("out[i] = (in0[i] * in1[i]);"));
+        let subl = OpDef::elementwise("sub", 2, &[ElementKind::I64], input(0) - input(1));
+        let kl = generate(&subl, &binary_scalar_key(ElementKind::I64, 8), &Cuda);
+        assert!(kl.source.contains("out[i] = (in0[i] - in1[i]);"));
+    }
+
+    #[test]
+    fn aligned_int_cells_stay_scalar_no_int_vectorization() {
+        // Increment-0c scope pin (v1): int dtypes take the scalar/strided
+        // paths — `vector_type` has NO int arm today (this was ALREADY true
+        // for i32/i64 pre-0c: an aligned i32 add fell back to scalar, pinned
+        // by the count_unit contract test), and 0c deliberately does not
+        // invent an int4 path. A fully-aligned (V4-keying) i32 cell and a
+        // (V8-keying) u8 cell must both emit the scalar kernel.
+        let ki = generate(
+            &int_op("band", BinaryOp::BitAnd, ElementKind::I32),
+            &binary_scalar_key(ElementKind::I32, 256),
+            &Cuda,
+        );
+        assert_eq!(ki.name, "baracuda_gen_band_i32_scalar", "aligned i32 stays scalar");
+        assert!(!ki.source.contains("int4"), "no invented int vectorization");
+        let addu = OpDef::elementwise("add", 2, &[ElementKind::U8], input(0) + input(1));
+        let ku = generate(&addu, &binary_scalar_key(ElementKind::U8, 256), &Cuda);
+        assert_eq!(ku.name, "baracuda_gen_add_u8_scalar", "aligned u8 stays scalar");
+        assert!(!ku.source.contains("_vec"), "no packed vector struct");
+    }
+
+    #[test]
+    fn int_strided_cell_unravels_with_the_same_operator() {
+        // Transposed i32 views route to the strided emitter with the same raw
+        // C operator at the unraveled offsets.
+        let t = OperandDesc::new(2, &[8, 4], &[1, 8], ElementKind::I32, 256);
+        let d = OperandDesc::new(2, &[8, 4], &[4, 1], ElementKind::I32, 256);
+        let key = structure_key(OpCategory::BinaryElementwise, &[t, d, d], ArchSku::Sm89);
+        let k = generate(&int_op("bxor", BinaryOp::BitXor, ElementKind::I32), &key, &Cuda);
+        assert_eq!(k.name, "baracuda_gen_bxor_i32_strided_r2");
+        assert!(k.source.contains("out[oo] = (in0[o0] ^ in1[o1]);"));
+    }
+
+    // ---- plan-gate validate-rejects (assert_int_op_admissibility): both
+    // directions of the ir.rs admissibility table, every class of illegal cell.
+    //
+    // These call crate::build_plan DIRECTLY, not generate(): the panic must
+    // originate from the PLAN gate. Via generate() five of these rejections
+    // also passed on the EMITTER backstops (empirically: widening plan.rs's
+    // logical U8-only arm to all int dtypes left the whole suite green —
+    // review finding), so a widened/deleted gate arm went undetected. With
+    // build_plan, a gate mutation turns into a should_panic FAILURE; the
+    // emitter backstops keep their own hand-built-plan tests below.
+
+    #[test]
+    #[should_panic(expected = "is int-only")]
+    fn bitand_at_f32_is_rejected_at_the_plan_gate() {
+        let op = int_op("band", BinaryOp::BitAnd, ElementKind::F32);
+        let key = binary_scalar_key(ElementKind::F32, 4);
+        let _ = crate::build_plan(&op, &key);
+    }
+
+    #[test]
+    #[should_panic(expected = "is int-only")]
+    fn shl_at_f16_is_rejected_at_the_plan_gate() {
+        let op = int_op("shl", BinaryOp::Shl, ElementKind::F16);
+        let key = binary_scalar_key(ElementKind::F16, 2);
+        let _ = crate::build_plan(&op, &key);
+    }
+
+    #[test]
+    #[should_panic(expected = "U8 (Bool)-only")]
+    fn logical_and_at_i32_is_rejected_at_the_plan_gate() {
+        // Bespoke logical instantiates ONLY uint8_t — wider ints miss honestly.
+        let op = int_op("land", BinaryOp::LogicalAnd, ElementKind::I32);
+        let key = binary_scalar_key(ElementKind::I32, 4);
+        let _ = crate::build_plan(&op, &key);
+    }
+
+    #[test]
+    #[should_panic(expected = "integer division is rejected")]
+    fn int_div_is_rejected_at_the_plan_gate() {
+        // No bespoke int elementwise div; C `/0` is device-UB — a uniform-u8
+        // Div must not ride in on the 0c dtype flip.
+        let op = OpDef::elementwise("div", 2, &[ElementKind::U8], input(0) / input(1));
+        let key = binary_scalar_key(ElementKind::U8, 1);
+        let _ = crate::build_plan(&op, &key);
+    }
+
+    #[test]
+    #[should_panic(expected = "has no integer lowering")]
+    fn float_fn_at_u8_is_rejected_at_the_plan_gate() {
+        let op = OpDef::elementwise("m", 2, &[ElementKind::U8], input(0).max(input(1)));
+        let key = binary_scalar_key(ElementKind::U8, 1);
+        let _ = crate::build_plan(&op, &key);
+    }
+
+    #[test]
+    #[should_panic(expected = "has no integer lowering")]
+    fn cmp_at_i32_is_rejected_at_the_plan_gate() {
+        // Bespoke cmp is fp-only (binary_cmp_*_fp.cu) — int cmp misses honestly.
+        let op = int_op("lt", BinaryOp::CmpLt, ElementKind::I32);
+        let key = binary_scalar_key(ElementKind::I32, 4);
+        let _ = crate::build_plan(&op, &key);
+    }
+
+    #[test]
+    #[should_panic(expected = "has no integer lowering")]
+    fn unary_at_int_is_rejected_at_the_plan_gate() {
+        use crate::ir::UnaryOp;
+        // The bespoke unary elementwise surface is fp-only — Abs at i32 must
+        // miss honestly at the PLAN gate (not just cuda_unary's panic, which
+        // the reduction-class paths bypass — the 0a lesson).
+        let op = OpDef::elementwise("a", 1, &[ElementKind::I32], input(0).unary(UnaryOp::Abs));
+        let key = unary_scalar_key(ElementKind::I32, 4);
+        let _ = crate::build_plan(&op, &key);
+    }
+
+    #[test]
+    #[should_panic(expected = "Const at int dtype")]
+    fn const_at_int_is_rejected_at_the_plan_gate() {
+        // A Const is spelled as an f64 C literal — at i64 it would silently
+        // run double math (f64 cannot represent all i64). Reject, don't drift.
+        let op = OpDef::elementwise("addk", 1, &[ElementKind::I64], input(0) + konst(2.0));
+        let key = unary_scalar_key(ElementKind::I64, 8);
+        let _ = crate::build_plan(&op, &key);
+    }
+
+    #[test]
+    #[should_panic(expected = "Elementwise-only")]
+    fn bitand_under_reduction_is_rejected_at_the_plan_gate() {
+        use crate::ir::ReduceOp;
+        // Int-only ops are Elementwise-only in 0c: the reduction pre-body
+        // lowers through the FLOAT accumulator spellers (binary_f32/f64),
+        // which have no int arms — the gate must fire before the emitter.
+        let op = OpDef::reduction(
+            "s",
+            1,
+            &[ElementKind::I32],
+            input(0).binary(BinaryOp::BitAnd, input(0)),
+            ReduceOp::Sum,
+        );
+        let key = reduce_key(ElementKind::I32);
+        let _ = crate::build_plan(&op, &key);
+    }
+
+    // ---- 8-bit composition pin (plan-gate rule 3): at U8/S8 every operand
+    // of an int-only op must be a LEAF Input. A composed operand's value
+    // differs between the inlined (un-truncated promoted-int) and hoisted
+    // (8-bit tmp, truncated) spellings — (in0+in1)>>in1 at u8 with
+    // (200,100,1) is 300>>1=150 inlined but 44>>1=22 hoisted — so one body
+    // would compute two results depending on DAG sharing.
+
+    #[test]
+    #[should_panic(expected = "requires LEAF Input operands")]
+    fn composed_operand_of_shr_at_u8_is_rejected_at_the_plan_gate() {
+        // Add-fed Shr: the shifted value observes the un-truncated sum.
+        let op = OpDef::elementwise(
+            "addshr",
+            2,
+            &[ElementKind::U8],
+            (input(0) + input(1)).binary(BinaryOp::Shr, input(1)),
+        );
+        let key = binary_scalar_key(ElementKind::U8, 1);
+        let _ = crate::build_plan(&op, &key);
+    }
+
+    #[test]
+    #[should_panic(expected = "requires LEAF Input operands")]
+    fn composed_operand_of_logical_and_at_u8_is_rejected_at_the_plan_gate() {
+        // Add-fed LogicalAnd: the `!= 0` test observes the un-truncated sum
+        // (255+1 is 0 truncated / false, but 256 promoted / true).
+        let op = OpDef::elementwise(
+            "addland",
+            2,
+            &[ElementKind::U8],
+            (input(0) + input(1)).binary(BinaryOp::LogicalAnd, input(1)),
+        );
+        let key = binary_scalar_key(ElementKind::U8, 1);
+        let _ = crate::build_plan(&op, &key);
+    }
+
+    #[test]
+    #[should_panic(expected = "requires LEAF Input operands")]
+    fn composed_shift_amount_at_i8_is_rejected_at_the_plan_gate() {
+        // The shift AMOUNT position observes the promoted value too — the rhs
+        // operand must be a leaf just like the lhs.
+        let op = OpDef::elementwise(
+            "shlamt",
+            2,
+            &[ElementKind::S8],
+            input(0).binary(BinaryOp::Shl, input(0) + input(1)),
+        );
+        let key = binary_scalar_key(ElementKind::S8, 1);
+        let _ = crate::build_plan(&op, &key);
+    }
+
+    #[test]
+    fn pure_ring_composition_at_u8_still_lowers() {
+        // Add(Add(x,y),x) at u8 — NO int-only op involved: wrapping ring
+        // composition is congruent under deferred truncation (promote, add,
+        // store-truncate ≡ native 8-bit wrapping adds), so the pin must not
+        // touch it.
+        let op = OpDef::elementwise(
+            "add3",
+            2,
+            &[ElementKind::U8],
+            (input(0) + input(1)) + input(0),
+        );
+        let k = generate(&op, &binary_scalar_key(ElementKind::U8, 1), &Cuda);
+        assert_eq!(k.name, "baracuda_gen_add3_u8_scalar");
+        assert!(
+            k.source.contains("out[i] = ((in0[i] + in1[i]) + in0[i]);"),
+            "nested wrapping add must still lower:\n{}",
+            k.source
+        );
+    }
+
+    #[test]
+    fn composed_operand_of_bitand_at_i32_still_lowers() {
+        // At I32/I64 promotion never widens past the compute width — there is
+        // no un-truncated wider value to observe, so compositions stay legal.
+        let op = OpDef::elementwise(
+            "addband",
+            2,
+            &[ElementKind::I32],
+            (input(0) + input(1)).binary(BinaryOp::BitAnd, input(1)),
+        );
+        let k = generate(&op, &binary_scalar_key(ElementKind::I32, 4), &Cuda);
+        assert_eq!(k.name, "baracuda_gen_addband_i32_scalar");
+        assert!(
+            k.source.contains("out[i] = ((in0[i] + in1[i]) & in1[i]);"),
+            "i32 composed bitand must still lower:\n{}",
+            k.source
+        );
+    }
+
+    // ---- emitter backstops, independent of the plan gate (the 0a lesson:
+    // gate every layer; these construct the plan manually to prove the
+    // speller itself refuses even if a future schedule change bypasses
+    // build_plan).
+
+    #[test]
+    #[should_panic(expected = "has no f32 lowering")]
+    fn int_only_op_at_float_is_refused_by_the_emitter_backstop() {
+        use crate::backend::Backend;
+        use crate::plan::{KernelPlan, Schedule};
+        let key = binary_scalar_key(ElementKind::F32, 4);
+        let body = input(0).binary(BinaryOp::BitAnd, input(1)).0;
+        let plan = KernelPlan {
+            op_name: "backstop",
+            n_inputs: 2,
+            dtype: ElementKind::F32,
+            out_dtype: ElementKind::F32,
+            schedule: Schedule::Scalar,
+            key: &key,
+            body: &body,
+            access: &crate::ir::Access::Elementwise,
+        };
+        let _ = Cuda.lower(&plan);
+    }
+
+    #[test]
+    #[should_panic(expected = "must miss honestly at the plan gate")]
+    fn float_fn_at_int_is_refused_by_the_emitter_backstop() {
+        use crate::backend::Backend;
+        use crate::plan::{KernelPlan, Schedule};
+        let key = binary_scalar_key(ElementKind::U8, 1);
+        let body = input(0).binary(BinaryOp::FmaxIeee, input(1)).0;
+        let plan = KernelPlan {
+            op_name: "backstop",
+            n_inputs: 2,
+            dtype: ElementKind::U8,
+            out_dtype: ElementKind::U8,
+            schedule: Schedule::Scalar,
+            key: &key,
+            body: &body,
+            access: &crate::ir::Access::Elementwise,
+        };
+        let _ = Cuda.lower(&plan);
+    }
+
+    #[test]
+    #[should_panic(expected = "bespoke logical surface")]
+    fn logical_at_wide_int_is_refused_by_the_emitter_backstop() {
+        use crate::backend::Backend;
+        use crate::plan::{KernelPlan, Schedule};
+        let key = binary_scalar_key(ElementKind::I64, 8);
+        let body = input(0).binary(BinaryOp::LogicalXor, input(1)).0;
+        let plan = KernelPlan {
+            op_name: "backstop",
+            n_inputs: 2,
+            dtype: ElementKind::I64,
+            out_dtype: ElementKind::I64,
+            schedule: Schedule::Scalar,
+            key: &key,
+            body: &body,
+            access: &crate::ir::Access::Elementwise,
+        };
+        let _ = Cuda.lower(&plan);
+    }
+
+    #[test]
+    #[should_panic(expected = "infix Div has no integer lowering")]
+    fn int_div_is_refused_by_the_emitter_backstop() {
+        use crate::backend::Backend;
+        use crate::plan::{KernelPlan, Schedule};
+        // Div is spelled by the shared dtype-blind lower_expr (`a / b` for
+        // every dtype) — no per-op speller exists to panic, so Cuda::lower's
+        // body-walk is the ONLY emitter-level guard against a plan-gate
+        // bypass emitting device-UB `/0` integer division.
+        let key = binary_scalar_key(ElementKind::U8, 1);
+        let body = (input(0) / input(1)).0;
+        let plan = KernelPlan {
+            op_name: "backstop",
+            n_inputs: 2,
+            dtype: ElementKind::U8,
+            out_dtype: ElementKind::U8,
+            schedule: Schedule::Scalar,
+            key: &key,
+            body: &body,
+            access: &crate::ir::Access::Elementwise,
+        };
+        let _ = Cuda.lower(&plan);
+    }
+
+    #[test]
+    #[should_panic(expected = "Const at an integer dtype")]
+    fn int_const_is_refused_by_the_emitter_backstop() {
+        use crate::backend::Backend;
+        use crate::plan::{KernelPlan, Schedule};
+        // A Const is spelled as an f64 C literal by the shared backend code —
+        // without this backstop a plan-gate bypass would silently run double
+        // math inside an i64 kernel (f64 cannot represent all i64).
+        let key = unary_scalar_key(ElementKind::I64, 8);
+        let body = (input(0) + konst(2.0)).0;
+        let plan = KernelPlan {
+            op_name: "backstop",
+            n_inputs: 1,
+            dtype: ElementKind::I64,
+            out_dtype: ElementKind::I64,
+            schedule: Schedule::Scalar,
+            key: &key,
+            body: &body,
+            access: &crate::ir::Access::Elementwise,
+        };
+        let _ = Cuda.lower(&plan);
     }
 }

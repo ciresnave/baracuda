@@ -520,14 +520,30 @@ fn binary_operands(
     Ok((a, b))
 }
 
-/// Whether the CUDA backend can lower `body` at `dtype`: unary / binary-fn nodes
-/// require a float dtype (`cuda_unary`/`cuda_binary` have no integer math), a
-/// runtime scalar `Param` is f32-only, and `Nextafter` additionally excludes
-/// f16/bf16 (the half path computes promoted-to-f32, which would step the f32
-/// lattice — the wrong neighbor; see `cuda_binary`). Pure infix arithmetic works
-/// at any dtype. The Nextafter arm is defensive today — no region name maps to
-/// it until Fuel adds §4.1 vocabulary — but it keeps the honest-miss gate in
-/// place ahead of the emitter's panic.
+/// Whether the CUDA backend can lower `body` at `dtype` — the JIT's op×dtype
+/// legality gate (gate 2 behind `supports_dtype`; the same table the AOT plan
+/// gate `assert_int_op_admissibility` enforces — see the `ir::BinaryOp` docs):
+///
+/// - unary / float-binary-fn nodes require a float dtype (no integer math);
+///   `Nextafter` additionally excludes f16/bf16 (the half path computes
+///   promoted-to-f32, which would step the f32 lattice — the wrong neighbor;
+///   see `cuda_binary`);
+/// - the increment-0c INT-ONLY ops (bitwise/shift/logical) require an int
+///   dtype (`I32`/`I64`/`S8`/`U8`), the logical ops exactly `U8` — today
+///   defensive-only, since no `OpTag` names them (no region can request one),
+///   but the gate stands ahead of the vocabulary like the Nextafter arm does.
+///   NOTE: the AOT plan gate additionally pins int-op operands at `S8`/`U8`
+///   to leaf `Input`s (rule 3 — composed operands diverge under DAG sharing);
+///   moot here while no OpTag names these ops, but a future vocabulary
+///   extension must mirror that rule HERE before regions can compose them,
+///   or `build_plan` would panic across the JIT trust boundary;
+/// - a runtime scalar `Param` is f32-only; a `Const` is f64-spelled, so it
+///   rejects at int dtypes (double math in an int kernel — see the plan gate);
+/// - infix `Add`/`Sub`/`Mul` work at any supported dtype (int = wrapping);
+///   infix `Div` is FLOAT-ONLY — the bespoke surface has no int elementwise
+///   div and C `/0` is device-UB, so a uniform-int Div region declines even
+///   though the dtype itself is supported (the audited replacement for the 0b
+///   supports_dtype(U8) hold).
 fn dtype_compatible(body: &ScalarExpr, dtype: ElementKind) -> bool {
     let is_float = matches!(
         dtype,
@@ -537,31 +553,49 @@ fn dtype_compatible(body: &ScalarExpr, dtype: ElementKind) -> bool {
             | ElementKind::F32Strict
             | ElementKind::F64
     );
+    let is_int = crate::plan::is_int_dtype(dtype);
     let f32_only = matches!(dtype, ElementKind::F32 | ElementKind::F32Strict);
     let is_half = matches!(dtype, ElementKind::F16 | ElementKind::Bf16);
-    fn walk(e: &ScalarExpr, is_float: bool, f32_only: bool, is_half: bool) -> bool {
+    struct Ctx {
+        is_float: bool,
+        is_int: bool,
+        f32_only: bool,
+        is_half: bool,
+        dtype: ElementKind,
+    }
+    fn walk(e: &ScalarExpr, c: &Ctx) -> bool {
         match e {
             // Reduced only appears in a RowReduce epilogue, which never reaches the
             // JIT path (region_to_op builds Elementwise only) — treat as a benign
             // float scalar leaf for exhaustiveness.
-            ScalarExpr::Input(_) | ScalarExpr::Const(_) | ScalarExpr::Reduced(_) => true,
-            ScalarExpr::Param(_) => f32_only,
-            ScalarExpr::Unary(_, x) => is_float && walk(x, is_float, f32_only, is_half),
+            ScalarExpr::Input(_) | ScalarExpr::Reduced(_) => true,
+            ScalarExpr::Const(_) => !c.is_int,
+            ScalarExpr::Param(_) => c.f32_only,
+            ScalarExpr::Unary(_, x) => c.is_float && walk(x, c),
             ScalarExpr::Binary(op, a, b) => {
-                is_float
-                    && !(is_half && matches!(op, BinaryOp::Nextafter))
-                    && walk(a, is_float, f32_only, is_half)
-                    && walk(b, is_float, f32_only, is_half)
+                let op_ok = if op.is_int_only() {
+                    c.is_int && (!op.is_logical() || c.dtype == ElementKind::U8)
+                } else {
+                    c.is_float && !(c.is_half && matches!(op, BinaryOp::Nextafter))
+                };
+                op_ok && walk(a, c) && walk(b, c)
             }
-            ScalarExpr::Add(a, b)
-            | ScalarExpr::Sub(a, b)
-            | ScalarExpr::Mul(a, b)
-            | ScalarExpr::Div(a, b) => {
-                walk(a, is_float, f32_only, is_half) && walk(b, is_float, f32_only, is_half)
+            ScalarExpr::Div(a, b) => !c.is_int && walk(a, c) && walk(b, c),
+            ScalarExpr::Add(a, b) | ScalarExpr::Sub(a, b) | ScalarExpr::Mul(a, b) => {
+                walk(a, c) && walk(b, c)
             }
         }
     }
-    walk(body, is_float, f32_only, is_half)
+    walk(
+        body,
+        &Ctx {
+            is_float,
+            is_int,
+            f32_only,
+            is_half,
+            dtype,
+        },
+    )
 }
 
 /// Inverse of [`crate::pattern`]'s `binary_name`. The increment-0a binaries
@@ -1111,16 +1145,18 @@ pub mod seam {
         fn synthesizer_declines_unlowerable_dtype_never_panics() {
             // Regression (adversarial review): a PURE-INFIX region (Add over binds —
             // no unary/binary-fn, no Param) at a dtype the CUDA backend can't spell as
-            // a scalar (Bool / S8 / Complex64) used to PANIC in scalar_ctype during
+            // a scalar (Bool / Complex64) used to PANIC in scalar_ctype during
             // `generate`, because dtype_compatible lets pure-infix bodies through for
             // ANY dtype. The backend dtype-lowerability gate must Decline, never unwind
-            // across the trait boundary (which would crash the host).
+            // across the trait boundary (which would crash the host). (S8 left this
+            // list in increment 0c — it is now an audited compute dtype and
+            // synthesizes; see seam_uniform_int_add_synthesizes.)
             let synth = BaracudaSynthesizer::new(1000);
             let region = op(
                 OpTag::Add,
                 vec![SeamNode::Bind { index: 0 }, SeamNode::Bind { index: 1 }],
             );
-            for dt in [ElementKind::Bool, ElementKind::S8, ElementKind::Complex64] {
+            for dt in [ElementKind::Bool, ElementKind::Complex64] {
                 let req = SeamRequest {
                     region: region.clone(),
                     operands: operands(dt, 3),
@@ -1131,6 +1167,68 @@ pub mod seam {
                     "{dt:?} must Decline, not panic",
                 );
             }
+        }
+
+        #[test]
+        fn seam_uniform_int_add_synthesizes_and_div_declines_typed() {
+            // Increment 0c: uniform-U8/S8 COMPUTE regions are audited. There is
+            // no OpTag for the bitwise ops (BitAnd would be the natural probe —
+            // it does not exist in 0.10.2), so the LEGAL-op probe is infix Add
+            // at U8/S8: it must synthesize (wrapping semantics, scalar path,
+            // real contract carrying the U8/I8 dtype)…
+            for (dt, fkc) in [(ElementKind::U8, "[U8]"), (ElementKind::S8, "[I8]")] {
+                let region = op(
+                    OpTag::Add,
+                    vec![SeamNode::Bind { index: 0 }, SeamNode::Bind { index: 1 }],
+                );
+                let resp = synthesize(
+                    &region,
+                    &operands(dt, 3),
+                    OpCategory::BinaryElementwise,
+                    ArchSku::Sm89,
+                    "jit_int_add",
+                    1000,
+                    &Cuda,
+                    &StubCompiler,
+                )
+                .unwrap_or_else(|e| panic!("{dt:?} Add must synthesize, got {e:?}"));
+                assert!(resp.kernel.source.contains("__global__"));
+                assert!(
+                    resp.contract.contains(&format!("dtypes: {fkc}")),
+                    "{dt:?}: {}",
+                    resp.contract
+                );
+            }
+            // …while an ILLEGAL op at the SAME dtype still declines typed:
+            // Div-for-int is rejected (no bespoke int div; /0 is device-UB), so
+            // a uniform-U8 Div region must not ride in on the dtype flip.
+            let div = op(
+                OpTag::Div,
+                vec![SeamNode::Bind { index: 0 }, SeamNode::Bind { index: 1 }],
+            );
+            let err = synthesize(
+                &div,
+                &operands(ElementKind::U8, 3),
+                OpCategory::BinaryElementwise,
+                ArchSku::Sm89,
+                "jit_u8_div",
+                1000,
+                &Cuda,
+                &StubCompiler,
+            )
+            .unwrap_err();
+            assert_eq!(err, JitError::UnsupportedDtype, "U8 Div must decline typed");
+            // And the live envelope path stays a typed Declined, never a panic.
+            let synth = BaracudaSynthesizer::new(1000);
+            let req = SeamRequest {
+                region: op(
+                    OpTag::Div,
+                    vec![SeamNode::Bind { index: 0 }, SeamNode::Bind { index: 1 }],
+                ),
+                operands: operands(ElementKind::U8, 3),
+                arch: ArchSku::Sm89,
+            };
+            assert!(matches!(synth.synthesize(&req), SeamResponse::Declined { .. }));
         }
 
         /// End-to-end live path on-device: a Fuel `JitRequest` through the
@@ -1291,6 +1389,97 @@ mod tests {
         // pure int Add (infix) is fine.
         let add = op_node("Add", vec![PatternNode::Bind(0), PatternNode::Bind(1)]);
         assert!(synthesize(&req(add, 2, ElementKind::I32, "x"), &Cuda, &StubCompiler).is_ok());
+    }
+
+    #[test]
+    fn uniform_int_regions_synthesize_the_audited_set_only() {
+        // Increment 0c: U8/S8 are supported compute dtypes at the JIT boundary
+        // — but ONLY for the audited op set. Legal: infix Add at U8/S8/I32
+        // (wrapping)…
+        for dt in [ElementKind::U8, ElementKind::S8, ElementKind::I32] {
+            let add = op_node("Add", vec![PatternNode::Bind(0), PatternNode::Bind(1)]);
+            let resp = synthesize(&req(add, 2, dt, "jit_add"), &Cuda, &StubCompiler)
+                .unwrap_or_else(|e| panic!("{dt:?} Add must synthesize, got {e:?}"));
+            assert!(resp.kernel.source.contains("__global__"));
+        }
+        // …illegal: Div at any int dtype (bespoke has no int elementwise div;
+        // C `/0` is device-UB) — the gate consults op×dtype legality, not just
+        // the dtype, so a uniform-U8 Div region still declines.
+        for dt in [ElementKind::U8, ElementKind::S8, ElementKind::I32, ElementKind::I64] {
+            let div = op_node("Div", vec![PatternNode::Bind(0), PatternNode::Bind(1)]);
+            assert_eq!(
+                synthesize(&req(div, 2, dt, "x"), &Cuda, &StubCompiler).unwrap_err(),
+                JitError::UnsupportedDtype,
+                "{dt:?} Div must decline typed"
+            );
+        }
+        // …and a float fn at U8 declines exactly like the pre-0c I32 case.
+        let mx = op_node("Maximum", vec![PatternNode::Bind(0), PatternNode::Bind(1)]);
+        assert_eq!(
+            synthesize(&req(mx, 2, ElementKind::U8, "x"), &Cuda, &StubCompiler).unwrap_err(),
+            JitError::UnsupportedDtype
+        );
+    }
+
+    #[test]
+    fn bitwise_names_are_not_region_reachable() {
+        // fuel-kernel-seam-types 0.10.2 has no OpTag for the 0c ops, so no
+        // region can name them — honest UnsupportedOp, and the mapping tables
+        // were NOT extended speculatively (the invented-vocabulary trap).
+        for name in [
+            "BitAnd", "BitOr", "BitXor", "Shl", "Shr",
+            "BitwiseAnd", "LeftShift", "RightShift",
+            "LogicalAnd", "LogicalOr", "LogicalXor",
+        ] {
+            let region = op_node(name, vec![PatternNode::Bind(0), PatternNode::Bind(1)]);
+            assert_eq!(
+                synthesize(&req(region, 2, ElementKind::I32, "x"), &Cuda, &StubCompiler)
+                    .unwrap_err(),
+                JitError::UnsupportedOp(name.to_string()),
+                "{name} must be an honest region miss"
+            );
+            assert!(region_binary(name).is_none());
+        }
+    }
+
+    #[test]
+    fn int_op_dtype_compatible_pins_both_directions() {
+        use crate::ir::input;
+        // The op×dtype table, pinned at the JIT gate (the composition story:
+        // supports_dtype says "the dtype has a scalar C type", THIS says
+        // "this body is legal at that dtype").
+        let band = input(0).binary(BinaryOp::BitAnd, input(1)).0;
+        for dt in [ElementKind::I32, ElementKind::I64, ElementKind::S8, ElementKind::U8] {
+            assert!(dtype_compatible(&band, dt), "BitAnd legal at {dt:?}");
+        }
+        for dt in [ElementKind::F32, ElementKind::F16, ElementKind::Bf16, ElementKind::F64] {
+            assert!(!dtype_compatible(&band, dt), "BitAnd illegal at {dt:?}");
+        }
+        let shl = input(0).binary(BinaryOp::Shl, input(1)).0;
+        assert!(dtype_compatible(&shl, ElementKind::U8));
+        assert!(!dtype_compatible(&shl, ElementKind::F32));
+        // Logical ops: U8 (Bool) ONLY — the bespoke surface instantiates
+        // exactly uint8_t, so wider ints reject too.
+        let land = input(0).binary(BinaryOp::LogicalAnd, input(1)).0;
+        assert!(dtype_compatible(&land, ElementKind::U8));
+        for dt in [ElementKind::I32, ElementKind::I64, ElementKind::S8, ElementKind::F32] {
+            assert!(!dtype_compatible(&land, dt), "LogicalAnd illegal at {dt:?}");
+        }
+        // Div: float-only (int div rejected); Add: legal at ints; Const: f64-
+        // spelled, rejected at ints; cmp: float-only.
+        let div = (input(0) / input(1)).0;
+        assert!(dtype_compatible(&div, ElementKind::F32));
+        for dt in [ElementKind::I32, ElementKind::I64, ElementKind::S8, ElementKind::U8] {
+            assert!(!dtype_compatible(&div, dt), "Div illegal at {dt:?}");
+        }
+        let add = (input(0) + input(1)).0;
+        assert!(dtype_compatible(&add, ElementKind::U8));
+        assert!(dtype_compatible(&add, ElementKind::S8));
+        let addk = (input(0) + crate::ir::konst(2.0)).0;
+        assert!(dtype_compatible(&addk, ElementKind::F32));
+        assert!(!dtype_compatible(&addk, ElementKind::I64), "f64 Const at int rejects");
+        let cmp = input(0).binary(BinaryOp::CmpLt, input(1)).0;
+        assert!(!dtype_compatible(&cmp, ElementKind::I32), "int cmp rejects (bespoke is fp-only)");
     }
 
     #[test]
@@ -1572,6 +1761,39 @@ mod tests {
         let kb = generate(&bw, &bkey, &Cuda);
         let ptxb = cc.compile(&kb.source, &kb.name, 5000).expect("mask-multiply compiles");
         assert!(String::from_utf8(ptxb).unwrap().contains(".entry"));
+    }
+
+    /// The increment-0c integer kernels compile headerless under nvrtc: a
+    /// bitwise i32 kernel (raw C `&`, `int` pointers — zero includes) and a
+    /// u8 wrapping add (`unsigned char` pointers, promotion + store-truncate —
+    /// plain C, zero includes). Numeric correctness is proven by the nvcc host
+    /// harness (`ondevice/int_validate.cu` — see the ondevice README's
+    /// "int ops (increment 0c)" section for the measured results); this
+    /// guards headerless portability. Ignored (needs nvrtc + CUDA).
+    #[cfg(feature = "nvrtc")]
+    #[test]
+    #[ignore = "requires nvrtc runtime + CUDA install"]
+    fn nvrtc_compiles_int_bitwise_and_u8_add() {
+        use crate::generate;
+        use crate::ir::input;
+        let cc = NvrtcCompiler::new(ArchSku::Sm89);
+        let bkey = |dt: ElementKind| {
+            let a = OperandDesc::new(1, &[1 << 20], &[1], dt, 256);
+            structure_key(OpCategory::BinaryElementwise, &[a, a, a], ArchSku::Sm89)
+        };
+        let band = OpDef::elementwise(
+            "band",
+            2,
+            &[ElementKind::I32],
+            input(0).binary(BinaryOp::BitAnd, input(1)),
+        );
+        let k = generate(&band, &bkey(ElementKind::I32), &Cuda);
+        let ptx = cc.compile(&k.source, &k.name, 5000).expect("i32 bitand compiles headerless");
+        assert!(String::from_utf8(ptx).unwrap().contains(".entry"));
+        let addu = OpDef::elementwise("add", 2, &[ElementKind::U8], input(0) + input(1));
+        let ku = generate(&addu, &bkey(ElementKind::U8), &Cuda);
+        let ptxu = cc.compile(&ku.source, &ku.name, 5000).expect("u8 add compiles headerless");
+        assert!(String::from_utf8(ptxu).unwrap().contains(".entry"));
     }
 
     /// The reduction schedule compiles headerless under nvrtc too: f32 mean-of-

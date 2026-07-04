@@ -215,3 +215,72 @@ value in kernel params** (`DimsI32/I64` → constant bank) while ours re-reads
 `shape[]/s0[]/so[]` from **global pointers every loop iteration**. Our split-K
 still wins the cell, but by-value dims params are a legitimate technique to
 extract into the general strided/reduction emitters (queued in the backlog).
+
+---
+
+## `int_validate.cu` — int ops (increment 0c)
+
+Launches the increment-0c integer kernels against the **bespoke**
+`binary_bitwise_*_int.cu` / `binary_logical_*_bool.cu` kernels (bit-exact
+diff, included by absolute path like `audit_reduce_softmax.cu` does) and CPU
+references: two's-complement models on the defined subset, exhaustive 256×256
+for every 8-bit case, and the documented promote-then-truncate model for the
+8-bit shifts.
+
+**Regeneration:** these cells are **not yet emitted by the `bin/kernelgen.rs`
+catalog** (the exception to the header note above). Generate them with the
+library into `<outdir>`, then copy this harness beside them as usual:
+
+```rust
+use baracuda_kernelgen::ir::BinaryOp;
+use baracuda_kernelgen::{generate, input, Cuda, OpDef};
+use baracuda_kernels_types::{structure_key, ArchSku, ElementKind, OpCategory, OperandDesc};
+use ElementKind::{I32, S8, U8};
+
+let out = std::env::args().nth(1).expect("outdir");
+// Scalar binary cell (align 4 keeps the vector classifier off; int dtypes
+// take the scalar path regardless — pinned in the unit suite).
+let key = |dt: ElementKind| {
+    let a = OperandDesc::new(1, &[1 << 16], &[1], dt, 4);
+    structure_key(OpCategory::BinaryElementwise, &[a, a, a], ArchSku::Sm89)
+};
+let emit = |name: &str, dt: ElementKind, body| {
+    let k = generate(&OpDef::elementwise(name, 2, &[dt], body), &key(dt), &Cuda);
+    std::fs::write(format!("{out}/{}.cu", k.name), &k.source).unwrap();
+};
+for (n, b) in [("band", BinaryOp::BitAnd), ("bor", BinaryOp::BitOr),
+               ("bxor", BinaryOp::BitXor), ("shl", BinaryOp::Shl), ("shr", BinaryOp::Shr)] {
+    emit(n, I32, input(0).binary(b, input(1)));
+}
+for (n, b) in [("land", BinaryOp::LogicalAnd), ("lor", BinaryOp::LogicalOr),
+               ("lxor", BinaryOp::LogicalXor)] {
+    emit(n, U8, input(0).binary(b, input(1)));
+}
+for dt in [U8, S8] {
+    emit("addw", dt, input(0) + input(1));
+    emit("mulw", dt, input(0) * input(1));
+}
+emit("shl", U8, input(0).binary(BinaryOp::Shl, input(1)));
+emit("shr", U8, input(0).binary(BinaryOp::Shr, input(1)));
+emit("shr", S8, input(0).binary(BinaryOp::Shr, input(1)));
+```
+
+**Last run:** RTX 4070 Laptop (sm_89), 2026-07-03 — **ALL PASSED**:
+
+- **i32 bitwise/shift** (`band`/`bor`/`bxor`/`shl`/`shr`): generated vs
+  bespoke **bit-exact** over the edge cross + 65,536 randoms per op,
+  **including the out-of-range shift amounts b = 0/31/32/33/-1/64/-32**.
+  Observed (gen == bespoke, architecture-inherited): `1<<31 = -2³¹`,
+  `1<<32 = 0`, `1<<33 = 0`, `1<<-1 = 0`, `1>>32 = 0`, `1>>-1 = 0`. The CPU
+  two's-complement reference additionally matches on the defined subset
+  (and/or/xor everywhere; shifts at b ∈ [0,31]).
+- **u8 logical** (`land`/`lor`/`lxor`): exhaustive 65,536 pairs, generated vs
+  bespoke bit-exact AND vs the CPU `(a != 0) OP (b != 0)` reference —
+  including the normalization probe `2 && 4 == 1` (never the bitwise
+  `2 & 4 == 0`).
+- **u8/i8 wrapping add/mul** (`addw`/`mulw`): exhaustive 65,536 pairs vs a CPU
+  wrapping reference (no bespoke elementwise int add/mul exists — CPU is the
+  oracle).
+- **8-bit shifts** (`shl`/`shr` u8, `shr` i8): match the documented promotion
+  model (promote to int, C shift, store-truncate mod 2⁸) for b ∈ [0,31];
+  i8 `shr` is ARITHMETIC (sign-replicating) — `-128 >> 7 == -1`.

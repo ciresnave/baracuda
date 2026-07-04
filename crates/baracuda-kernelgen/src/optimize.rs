@@ -474,7 +474,9 @@ fn weight(n: &ENode) -> u64 {
             // Copysign/Nextafter are bit-manipulation ops; FmaxIeee/FminIeee are
             // hardware min/max — all cheap, same tier as the Max/Min selects.
             // The Cmp* predicates (increment 0b) are compare-selects too: one
-            // setp + one sel, the same tier as Max/Min.
+            // setp + one sel, the same tier as Max/Min. The increment-0c
+            // bitwise/shift ops are single ALU instructions and the logical
+            // ops a setp pair + sel — all the same compare-select tier.
             BinaryOp::Max
             | BinaryOp::Min
             | BinaryOp::Copysign
@@ -486,7 +488,15 @@ fn weight(n: &ENode) -> u64 {
             | BinaryOp::CmpLt
             | BinaryOp::CmpLe
             | BinaryOp::CmpGt
-            | BinaryOp::CmpGe => 2,
+            | BinaryOp::CmpGe
+            | BinaryOp::BitAnd
+            | BinaryOp::BitOr
+            | BinaryOp::BitXor
+            | BinaryOp::Shl
+            | BinaryOp::Shr
+            | BinaryOp::LogicalAnd
+            | BinaryOp::LogicalOr
+            | BinaryOp::LogicalXor => 2,
             BinaryOp::Rem | BinaryOp::RemTrunc => 8, // division-class
             BinaryOp::Pow | BinaryOp::Atan2 => 16,   // transcendental
         },
@@ -890,6 +900,63 @@ mod tests {
                 Box::new(ScalarExpr::Input(0)),
             );
             assert_eq!(optimize(&same), same, "{op:?}(x, x) must stay as authored");
+        }
+    }
+
+    #[test]
+    fn int_bitwise_logical_ops_are_never_folded_or_rewritten() {
+        use crate::ir::BinaryOp;
+        // The e-graph's consts are host f64 — a host-f64 "fold" of an int op
+        // is WRONG twice over (f64 cannot represent all i64; wrapping
+        // two's-complement differs from float arithmetic), and the e-graph
+        // has no dtype context to even know the operand width. ZERO rules for
+        // ALL EIGHT increment-0c ops, pinned exhaustively (the 0a lesson: pin
+        // all, not a sample — a sampled pin let an Exp2 host-fold pass).
+        const INT_OPS: [BinaryOp; 8] = [
+            BinaryOp::BitAnd,
+            BinaryOp::BitOr,
+            BinaryOp::BitXor,
+            BinaryOp::Shl,
+            BinaryOp::Shr,
+            BinaryOp::LogicalAnd,
+            BinaryOp::LogicalOr,
+            BinaryOp::LogicalXor,
+        ];
+        // No const folds, even const-const — including the tempting all-int
+        // pair, a zero operand (x & 0, x << 0 are classic fold bait), and a
+        // negative shift amount (device-inherited behavior, unknowable here).
+        for op in INT_OPS {
+            for (x, y) in [(6.0, 3.0), (5.0, 0.0), (1.0, -1.0)] {
+                let e = ScalarExpr::Binary(
+                    op,
+                    Box::new(ScalarExpr::Const(x)),
+                    Box::new(ScalarExpr::Const(y)),
+                );
+                assert!(
+                    matches!(optimize(&e), ScalarExpr::Binary(o, _, _) if o == op),
+                    "{op:?}({x}, {y}) must stay symbolic"
+                );
+            }
+        }
+        // And NO identity rewrites: the (x, x) forms stay exactly as authored
+        // (BitAnd(x,x)=x / BitOr(x,x)=x / LogicalXor(x,x)=0 are all true on
+        // device but the rule set stays empty — when-in-doubt-add-no-rule;
+        // this pins the 0a-review mutation class where widening the
+        // max(x,x)->x rule arm passed the suite).
+        for op in INT_OPS {
+            let same = ScalarExpr::Binary(
+                op,
+                Box::new(ScalarExpr::Input(0)),
+                Box::new(ScalarExpr::Input(0)),
+            );
+            assert_eq!(optimize(&same), same, "{op:?}(x, x) must stay as authored");
+        }
+        // Cost entries exist (compare-select tier) so extraction still ranks
+        // bodies containing them — weight, not rules, is the only e-graph
+        // surface the 0c ops touch.
+        for op in INT_OPS {
+            let n = ENode::Binary(op, 0, 1);
+            assert_eq!(weight(&n), 2, "{op:?} must sit in the compare-select tier");
         }
     }
 

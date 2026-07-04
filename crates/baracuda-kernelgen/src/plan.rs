@@ -120,6 +120,7 @@ pub struct KernelPlan<'a> {
 pub fn build_plan<'a>(op: &'a OpDef, key: &'a StructureKey) -> KernelPlan<'a> {
     assert_valid_out_dtype(op);
     assert_no_half_nextafter(op, key.dtype);
+    assert_int_op_admissibility(op, key.dtype);
     let schedule = match op.access {
         Access::Reduction {
             op: rop,
@@ -375,6 +376,168 @@ fn assert_no_half_nextafter(op: &OpDef, dtype: ElementKind) {
              at {dtype:?} must miss honestly",
             op.name
         );
+    }
+}
+
+/// The integer compute dtypes of increment 0c: `I32`/`I64` (already lowering
+/// pre-0c) plus the newly-promoted `S8` (FKC `I8`) and `U8`.
+pub(crate) fn is_int_dtype(dt: ElementKind) -> bool {
+    matches!(
+        dt,
+        ElementKind::I32 | ElementKind::I64 | ElementKind::S8 | ElementKind::U8
+    )
+}
+
+/// Increment-0c op × dtype admissibility gate — the plan-level enforcement of
+/// the table in [`crate::ir::BinaryOp`]'s docs. Runs at the TOP of
+/// [`build_plan`] and walks the body of EVERY Access arm (the 0a lesson: the
+/// emitter backstops alone were bypassed by the reduction-class lowering
+/// paths), so no lowering path — present or future backend — can bypass it.
+///
+/// Two directions, both validate-reject (honest miss, never silent):
+///
+/// 1. **Int-only ops** (`BitAnd`/`BitOr`/`BitXor`/`Shl`/`Shr`/`Logical*`) may
+///    appear ONLY in an [`Access::Elementwise`] body at an int dtype (the
+///    reduction/RowReduce/contraction paths lower through the FLOAT
+///    accumulator spellers, which have no int arms), and the logical ops
+///    narrow further to `U8` — the bespoke Bool surface (`uint8_t` only).
+/// 2. **At an int dtype**, only the audited op set lowers: infix
+///    `Add`/`Sub`/`Mul` (wrapping) and the int-only ops. Everything else —
+///    every `UnaryOp`, infix `Div` (no bespoke int div; `/0` is device-UB),
+///    the float binary fns, and the `Cmp*` predicates (bespoke cmp is
+///    `_fp`-only) — rejects. `Const` rejects too: it is spelled as an f64 C
+///    literal, so an int body would silently run double math (and f64 cannot
+///    even represent all i64); an int-literal speller is a follow-up. `Param`
+///    rejects at int for the same f32-only reason the emitter asserts.
+/// 3. **8-bit composition pin (v1):** at `U8`/`S8`, EVERY operand of an
+///    int-only op must be a leaf [`ScalarExpr::Input`]. Why: `Add`/`Sub`/
+///    `Mul`/`BitAnd`/`BitOr`/`BitXor` compositions are congruent under
+///    deferred truncation (the wrapping ring ops and the bit-local ops
+///    commute with the final 8-bit store truncate), but `Shr`, shift
+///    AMOUNTS, and the logical `!= 0` tests OBSERVE the un-truncated
+///    promoted-`int` value — and the DAG emitter truncates a composed
+///    interior only when sharing hoists it to an 8-bit tmp, so one body
+///    could compute two different results depending on DAG sharing
+///    (`(in0+in1)>>in2` at u8 with `(200,100,1)`: inlined `300>>1 = 150`,
+///    hoisted `44>>1 = 22`). Rather than a per-position observer analysis,
+///    v1 pins ALL int-op operands at 8-bit to leaves — the bespoke surface
+///    has no 8-bit bitwise at all, so zero parity is lost; the dtype-aware
+///    truncating speller is the follow-up that lifts this. At `I32`/`I64`
+///    compositions stay legal: integer promotion never widens past the
+///    compute width there, so no un-truncated wider value exists to observe.
+fn assert_int_op_admissibility(op: &OpDef, dtype: ElementKind) {
+    let int_dt = is_int_dtype(dtype);
+    let elementwise = matches!(op.access, Access::Elementwise);
+    fn walk(
+        e: &ScalarExpr,
+        op_name: &str,
+        dtype: ElementKind,
+        int_dt: bool,
+        elementwise: bool,
+    ) {
+        match e {
+            ScalarExpr::Input(_) | ScalarExpr::Reduced(_) => {}
+            ScalarExpr::Const(_) => assert!(
+                !int_dt,
+                "op '{op_name}': Const at int dtype {dtype:?} is rejected — a Const \
+                 is spelled as an f64 C literal, which would silently run double \
+                 math in an integer kernel (and f64 cannot represent all i64); \
+                 int-literal Const spelling is a follow-up"
+            ),
+            ScalarExpr::Param(_) => assert!(
+                !int_dt,
+                "op '{op_name}': scalar params are f32-only (int dtype {dtype:?})"
+            ),
+            ScalarExpr::Unary(uop, x) => {
+                assert!(
+                    !int_dt,
+                    "op '{op_name}': {uop:?} has no integer lowering — the bespoke \
+                     unary elementwise surface is float-only, so int dtype {dtype:?} \
+                     must miss honestly"
+                );
+                walk(x, op_name, dtype, int_dt, elementwise);
+            }
+            ScalarExpr::Div(a, b) => {
+                assert!(
+                    !int_dt,
+                    "op '{op_name}': integer division is rejected at {dtype:?} — the \
+                     bespoke elementwise surface has no int div (binary_div_fp.cu is \
+                     float-only) and C `/` division by zero is device-undefined; \
+                     miss honestly"
+                );
+                walk(a, op_name, dtype, int_dt, elementwise);
+                walk(b, op_name, dtype, int_dt, elementwise);
+            }
+            ScalarExpr::Binary(bop, a, b) => {
+                if bop.is_int_only() {
+                    assert!(
+                        elementwise,
+                        "op '{op_name}': {bop:?} is Elementwise-only in 0c — the \
+                         reduction-class paths lower through the float accumulator \
+                         spellers, which have no integer arms"
+                    );
+                    assert!(
+                        int_dt,
+                        "op '{op_name}': {bop:?} is int-only (I32/I64/S8/U8) — float \
+                         dtype {dtype:?} must miss honestly (the bespoke bitwise/\
+                         logical kernels have no float instantiation)"
+                    );
+                    assert!(
+                        !bop.is_logical() || dtype == ElementKind::U8,
+                        "op '{op_name}': {bop:?} is U8 (Bool)-only — the bespoke \
+                         binary_logical_*_bool.cu surface instantiates exactly \
+                         uint8_t, so {dtype:?} must miss honestly"
+                    );
+                    // Rule 3 (8-bit composition pin, v1): every operand of an
+                    // int-only op at U8/S8 must be a LEAF Input — a composed
+                    // operand's value differs between the inlined (un-truncated
+                    // promoted-int) and hoisted (8-bit tmp, truncated) spellings,
+                    // so admitting it would make the result depend on DAG
+                    // sharing. See the doc comment above for the full rationale.
+                    if matches!(dtype, ElementKind::U8 | ElementKind::S8) {
+                        for (side, operand) in [("lhs", &**a), ("rhs", &**b)] {
+                            assert!(
+                                matches!(operand, ScalarExpr::Input(_)),
+                                "op '{op_name}': {bop:?} at {dtype:?} requires LEAF \
+                                 Input operands ({side} is a composed expression) — \
+                                 at 8-bit dtypes a composed operand observes the \
+                                 un-truncated promoted-int value when inlined but \
+                                 the truncated 8-bit value when hoisted to a shared \
+                                 tmp (one body, two results); v1 pins all int-op \
+                                 operands at U8/S8 to leaves. Compose at I32/I64, \
+                                 or wait for the dtype-aware truncating speller"
+                            );
+                        }
+                    }
+                } else {
+                    assert!(
+                        !int_dt,
+                        "op '{op_name}': {bop:?} has no integer lowering — the \
+                         bespoke elementwise surface instantiates it for float \
+                         dtypes only, so int dtype {dtype:?} must miss honestly"
+                    );
+                }
+                walk(a, op_name, dtype, int_dt, elementwise);
+                walk(b, op_name, dtype, int_dt, elementwise);
+            }
+            ScalarExpr::Add(a, b) | ScalarExpr::Sub(a, b) | ScalarExpr::Mul(a, b) => {
+                // Wrapping two's-complement at int dtypes — the audited-legal set.
+                walk(a, op_name, dtype, int_dt, elementwise);
+                walk(b, op_name, dtype, int_dt, elementwise);
+            }
+        }
+    }
+    let mut exprs: Vec<&ScalarExpr> = vec![&op.body];
+    match &op.access {
+        Access::RowReduce { stages, epilogue } => {
+            exprs.extend(stages.iter().map(|s| &s.pre));
+            exprs.push(epilogue);
+        }
+        Access::Contraction { epilogue, .. } => exprs.push(epilogue),
+        Access::Elementwise | Access::Reduction { .. } => {}
+    }
+    for e in exprs {
+        walk(e, &op.name, dtype, int_dt, elementwise);
     }
 }
 
