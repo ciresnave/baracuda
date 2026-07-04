@@ -91,6 +91,39 @@ pub fn contract(
         return None;
     }
 
+    // Item-01 LAYOUT-VIEW honest miss (typed, no contract; the kernel still
+    // generates + runs AOT — the Coord/multi-output/nested-cmp precedent). An
+    // address-affecting view (a `Permute`/transpose or `Broadcast` read-through)
+    // means the kernel computes `body(transpose(input))`, but our EMITTED pattern
+    // grammar cannot say so — verified against Fuel's actual sources:
+    //   1. Baracuda's `pattern::PatternNode` is `Op` + `Bind` ONLY — no layout
+    //      node and no `OpAttrs` channel. `derive_pattern` walks `op.body`
+    //      alone (views live on `OpDef::views`, outside the value walk), so the
+    //      pattern it derives describes reading `Input(i)` AT the iteration
+    //      coordinate — silently dropping the transpose. Advertising it (a
+    //      primitive `op_kind: Relu`, or a `fused_op`) would bind where Fuel's
+    //      graph has `relu(transpose(x))`, not `relu(x)`: a wrong bind held off
+    //      only by the structure key.
+    //   2. Fuel CAN express it honestly, but only in a shape our grammar lacks:
+    //      fuel-kernel-seam-types `PatternNode::Op { op: OpTag::Permute, attrs:
+    //      OpAttrs { perm } }` with a `perm` guard. Its §4.3 spec
+    //      (fkc-fusion-patterns.md) is explicit that a layout op whose ATTRIBUTES
+    //      are load-bearing (a transpose's `perm` IS the correctness check) MUST
+    //      be matched with `op:` + a `guard:`, NOT via `see_through` — and Fuel's
+    //      `see_through` skip is a no-op STUB today anyway (fuel-graph
+    //      jit.rs `match_node`'s `SeeThrough` arm). We have no `OpTag`/attrs
+    //      vocabulary to author that guard.
+    //   3. The concrete-region (decompose) direction rejects layout re-emit
+    //      outright (fuel-graph runtime_fused.rs: `Transpose`/`Permute`/`Reshape`
+    //      are `UnRepresentable`), so there is no bidirectional identity to bind.
+    // So: no contract until Baracuda's pattern grammar grows a layout node + an
+    // attrs channel (the `perm` guard). A same-rank `Reshape` / `Identity` view
+    // is NOT address-affecting (identity linear map) and still advertises
+    // normally — the derived `body`-over-inputs pattern is exactly correct there.
+    if crate::plan::op_has_addressing_view(op) {
+        return None;
+    }
+
     // Increment 0b honesty gate (tightened by the adversarial review): a body
     // containing a Cmp* ANYWHERE emits a contract only as the u8-out
     // single-op primitive.
@@ -696,6 +729,44 @@ mod tests {
             crate::derive_pattern(&mm),
             Err(PatternError::NotElementwise)
         ));
+    }
+
+    #[test]
+    fn viewed_op_is_an_honest_miss_no_contract() {
+        use crate::ir::View;
+        use crate::pattern::PatternError;
+        // A fused transpose-elementwise (relu(x^T)) computes body(transpose(x)),
+        // but the Op+Bind pattern grammar (no layout node, no attrs channel) can't
+        // express the transpose — advertising `op_kind: Relu` would bind where
+        // Fuel's graph has relu(transpose(x)). Honest miss (kernel still AOT-runs).
+        let op = OpDef::elementwise("relu_t", 1, &[ElementKind::F32], input(0).relu())
+            .with_views(vec![View::Permute { perm: vec![1, 0] }]);
+        let key = key_for(2, OpCategory::UnaryElementwise);
+        let kernel = generate(&op, &key, &Cuda);
+        assert!(
+            contract(&op, &key, &kernel, "cuda").is_none(),
+            "a viewed op must emit NO contract (the transpose is inexpressible)"
+        );
+        assert!(matches!(
+            crate::derive_pattern(&op),
+            Err(PatternError::ViewUnsupported)
+        ));
+    }
+
+    #[test]
+    fn identity_view_still_advertises_a_contract() {
+        use crate::ir::View;
+        // The view guard is PRECISE to address-affecting views: an all-Identity
+        // view (an identity linear map) leaves the body-over-inputs pattern exactly
+        // correct, so the op still advertises — same as view-free.
+        let op = OpDef::elementwise("add", 2, &[ElementKind::F32], input(0) + input(1))
+            .with_views(vec![View::Identity, View::Identity]);
+        let key = key_for(3, OpCategory::BinaryElementwise);
+        let kernel = generate(&op, &key, &Cuda);
+        assert!(
+            contract(&op, &key, &kernel, "cuda").is_some(),
+            "an all-Identity view must not suppress the contract"
+        );
     }
 
     #[test]

@@ -6,7 +6,7 @@
 //! lowers the plan to a concrete language. Choosing the schedule here, not in
 //! the backend, keeps the decision shared across every backend.
 
-use crate::ir::{Access, OpDef, ReduceOp, ReduceStage, ScalarExpr};
+use crate::ir::{Access, OpDef, ReduceOp, ReduceStage, ScalarExpr, View};
 use baracuda_kernels_types::{
     AxisMask, Contiguity, ElementKind, OperandKey, StructureKey, VecWidth, MAX_OPERANDS,
 };
@@ -119,6 +119,16 @@ pub struct KernelPlan<'a> {
     /// `stages` (and epilogue) off here, since `Schedule` is `Copy` and can't carry
     /// the stage `Vec`.
     pub access: &'a Access,
+    /// Per-input layout [`crate::ir::View`]s (item 01) — index `i` ↔ `Input(i)`.
+    /// **Empty for every view-free op** (every pre-item-01 constructor), so the
+    /// strided emitter's per-operand offset is byte-identical; a non-empty slice
+    /// has length `n_inputs`. Only a [`crate::ir::View::Permute`] entry changes
+    /// emission (the stride-index remap in `cuda::offset_expr`); `Identity` /
+    /// same-rank `Reshape` read at the iteration coordinate, and `Broadcast` is a
+    /// key-driven validation-only declaration in v1. Validated at the top of
+    /// [`build_plan`] ([`assert_valid_views`]) with an independent emitter backstop
+    /// in [`crate::cuda::Cuda::lower`].
+    pub views: &'a [crate::ir::View],
 }
 
 impl KernelPlan<'_> {
@@ -148,6 +158,7 @@ pub fn build_plan<'a>(op: &'a OpDef, key: &'a StructureKey) -> KernelPlan<'a> {
     assert_int_op_admissibility(op, key.dtype);
     assert_coord_admissibility(op, key);
     assert_valid_reduction_post(op);
+    assert_valid_views(op, key);
     let schedule = match op.access {
         Access::Reduction {
             op: rop,
@@ -211,7 +222,20 @@ pub fn build_plan<'a>(op: &'a OpDef, key: &'a StructureKey) -> KernelPlan<'a> {
                 .map(|k| vec_width_elems(key.operands[k].vec_width))
                 .min()
                 .unwrap_or(1);
-            if expr_contains_coord(&op.body) {
+            if op_has_addressing_view(op) {
+                // Item 01: a viewed INPUT (a `Permute`/transpose or a `Broadcast`
+                // read-through) reads the producer through a layout change, which
+                // only the strided emitter folds into address math (`offset_expr`
+                // remaps `c{d}·stride[perm[d]]`). NEVER vectorized/packed/scalar —
+                // a transposed read is non-contiguous, and the vector/packed
+                // emitters iterate a bare linear index that would ignore the view
+                // (silently reading the un-transposed operand). `Identity` and a
+                // same-rank `Reshape` (identity linear map) are NOT addressing
+                // views, so a view-free or all-identity op is unaffected here —
+                // byte-identical. Pinned by the vectorize-never view test in
+                // `cuda` and the independent `assert_views_lowerable` backstop.
+                Schedule::Strided
+            } else if expr_contains_coord(&op.body) {
                 // A Coord body always takes the STRIDED schedule (increment
                 // 0d): the strided emitter is the only one that materializes
                 // the per-axis output coordinates `c{d}` a Coord leaf reads —
@@ -248,6 +272,7 @@ pub fn build_plan<'a>(op: &'a OpDef, key: &'a StructureKey) -> KernelPlan<'a> {
         n_outputs: op.n_outputs(),
         extra_out_bodies: &op.extra_out_bodies,
         access: &op.access,
+        views: &op.views,
     }
 }
 
@@ -563,6 +588,141 @@ fn access_tag(a: &Access) -> &'static str {
         Access::Reduction { .. } => "Reduction",
         Access::RowReduce { .. } => "RowReduce",
         Access::Contraction { .. } => "Contraction",
+    }
+}
+
+/// `true` if `v` is an **address-affecting** view — one that changes which
+/// producer element the strided emitter reads at each iteration coordinate, and
+/// therefore forces the [`Schedule::Strided`] schedule and cannot be
+/// vectorized/packed. In v1 that is [`View::Permute`] (a transposed read, offset
+/// remap `c{d}·stride[perm[d]]`) and [`View::Broadcast`] (stride-0 axes — already
+/// non-contiguous). [`View::Identity`] and a same-rank [`View::Reshape`] (an
+/// identity linear-index map) are NOT addressing: they read at the iteration
+/// coordinate exactly like a view-free operand, so an all-identity op stays
+/// byte-identical to a view-free one.
+pub(crate) fn view_is_addressing(v: &View) -> bool {
+    matches!(v, View::Permute { .. } | View::Broadcast { .. })
+}
+
+/// `true` if any of `op`'s per-input views is address-affecting
+/// ([`view_is_addressing`]). `false` for a view-free op (empty `views`) and for
+/// an all-`Identity`/same-rank-`Reshape` op — the byte-identical cases.
+pub(crate) fn op_has_addressing_view(op: &OpDef) -> bool {
+    op.views.iter().any(view_is_addressing)
+}
+
+/// Item-01 **layout-view** admissibility gate — runs at the TOP of
+/// [`build_plan`] (the house pattern), with an independent emitter backstop in
+/// [`crate::cuda::assert_views_lowerable`]. A view-free op (empty `views`, every
+/// pre-item-01 constructor) returns immediately, and an all-[`View::Identity`] op
+/// returns after the length check — so the established path is unchanged and
+/// emission stays byte-identical. For an op carrying a real (non-`Identity`)
+/// view, the v1 rules, all honest AOT panics (an author/generator error — views
+/// never cross the JIT trust boundary, so a panic is the backstop, not a silent
+/// wrong-bind):
+///
+/// 1. **Shape**: `views.len() == n_inputs` (index `i` ↔ `Input(i)`).
+/// 2. **Access**: a non-`Identity` view is [`Access::Elementwise`]-only in v1.
+///    A reduction/row-reduce/contraction op has its OWN axis machinery (reduced
+///    axes, K-contraction, feature broadcast) that a per-input read-through would
+///    double-count; those reject (pass through only a trivially-`Identity` view).
+/// 3. **Single-output**: a viewed input on a multi-output op is a deferred
+///    composition in v1 (the multi-store DAG × the stride remap is unproven) —
+///    reject. A viewed single-output op is the whole item-01 surface.
+/// 4. **Validity** (every view): [`View::is_valid`] against `key.rank` (a
+///    `Permute` must be a true permutation of `0..rank`).
+/// 5. **`Permute` ⊥ `Broadcast`**: a permuted input's operand key must have an
+///    EMPTY broadcast mask — v1 keeps the transpose remap and the stride-0
+///    broadcast orthogonal (a permuted-and-broadcast operand is deferred). The
+///    offset remap `c{d}·stride[perm[d]]` then folds cleanly with no per-axis
+///    broadcast-skip interaction.
+/// 6. **`Broadcast` agreement**: the view's declared `bcast` axes must be a
+///    SUBSET of the operand key's broadcast mask. Emission is key-driven (the
+///    strided emitter reads `OperandKey::bcast`), so the view is the *named*
+///    form of what the key already encodes (per the `View::Broadcast` doc) — a
+///    view claiming a broadcast the key doesn't have would be a silent lie the
+///    emitter ignores. Validate-only in v1: it changes no address math.
+/// 7. **`Reshape` scope**: v1 accepts only a `producer_rank == key.rank`
+///    (same-rank, identity linear-index map) reshape, carried for
+///    recognition/keying and emitted as identity address math. A rank-change
+///    reshape is genuine rank-change emit (items 03/10) and rejects here.
+fn assert_valid_views(op: &OpDef, key: &StructureKey) {
+    if op.views.is_empty() {
+        return; // view-free — every pre-item-01 op, unchanged.
+    }
+    let name = &op.name;
+    assert_eq!(
+        op.views.len(),
+        op.n_inputs as usize,
+        "OpDef '{name}': views.len() ({}) must equal n_inputs ({})",
+        op.views.len(),
+        op.n_inputs
+    );
+    if op.views.iter().all(View::is_identity) {
+        return; // all-Identity == view-free: byte-identical emission, no gate.
+    }
+    // From here at least one real (address- or recognition-bearing) view.
+    assert!(
+        matches!(op.access, Access::Elementwise),
+        "OpDef '{name}': a non-Identity View is Access::Elementwise-only in v1 — a \
+         {}-class op has its own axis machinery (reduced/contracted/feature axes) \
+         that a per-input read-through would double-count; a view on it must be \
+         Identity",
+        access_tag(&op.access)
+    );
+    assert!(
+        op.n_outputs() == 1,
+        "OpDef '{name}': a viewed input on a multi-output op ({} outputs) is a \
+         deferred composition in v1 (the multi-store DAG × the per-operand stride \
+         remap is unproven) — miss honestly",
+        op.n_outputs()
+    );
+    let rank = key.rank;
+    for (i, v) in op.views.iter().enumerate() {
+        assert!(
+            v.is_valid(rank),
+            "OpDef '{name}': input {i} view {v:?} is invalid for iteration rank \
+             {rank} (a Permute must be a true permutation of 0..rank)"
+        );
+        // Input operands are the first `n_inputs` key operands (inputs then
+        // outputs). The array is fixed [OperandKey; MAX_OPERANDS], so indexing a
+        // valid input slot never panics; a smaller n_operands reads a default
+        // (empty-broadcast) key, which the checks below treat conservatively.
+        let o = key.operands[i];
+        match v {
+            View::Identity => {}
+            View::Permute { .. } => {
+                assert!(
+                    o.bcast.is_empty(),
+                    "OpDef '{name}': input {i} has a Permute view AND a broadcast \
+                     mask ({:#04x}) — v1 keeps the transpose remap and stride-0 \
+                     broadcast orthogonal (a permuted-and-broadcast operand is \
+                     deferred)",
+                    o.bcast.0
+                );
+            }
+            View::Broadcast { bcast } => {
+                assert!(
+                    bcast.0 & !o.bcast.0 == 0,
+                    "OpDef '{name}': input {i} Broadcast view declares axes \
+                     ({:#04x}) the operand key does not broadcast ({:#04x}) — the \
+                     key drives address math, so the named view must agree (a \
+                     view-only broadcast the emitter ignores would be a silent lie)",
+                    bcast.0,
+                    o.bcast.0
+                );
+            }
+            View::Reshape { producer_rank } => {
+                assert!(
+                    *producer_rank == rank,
+                    "OpDef '{name}': input {i} Reshape view producer_rank \
+                     ({producer_rank}) != iteration rank ({rank}) — a rank-change \
+                     reshape is genuine rank-change emit (items 03/10), out of \
+                     item-01 scope; v1 accepts only a same-rank (identity \
+                     linear-map) reshape"
+                );
+            }
+        }
     }
 }
 
@@ -1559,5 +1719,165 @@ mod rowreduce_role_validate {
         );
         let key = structure_key(OpCategory::Softmax, &[rowscalar(), stream()], ArchSku::Sm89);
         let _ = build_plan(&op, &key);
+    }
+}
+
+#[cfg(test)]
+mod view_gate_validate {
+    //! Item-01 layout-view gate-rejection + schedule-routing tests. Per the house
+    //! rule these call `build_plan` DIRECTLY — an emitter panic would mask a gate
+    //! mutation (the 0c lesson).
+    use super::{build_plan, Schedule};
+    use crate::ir::{input, OpDef, ReduceOp, View};
+    use baracuda_kernels_types::{
+        structure_key, ArchSku, AxisMask, ElementKind, OpCategory, OperandDesc, StructureKey,
+    };
+
+    // A rank-2 contiguous [128,256] f32 cell (1 input + 1 output) — the input keys
+    // Contig + a vector width, so a view-free relu VECTORIZES here.
+    fn contig_2d_key() -> StructureKey {
+        let a = OperandDesc::new(2, &[128, 256], &[256, 1], ElementKind::F32, 256);
+        structure_key(OpCategory::UnaryElementwise, &[a, a], ArchSku::Sm89)
+    }
+
+    fn relu() -> OpDef {
+        OpDef::elementwise("relu", 1, &[ElementKind::F32], input(0).relu())
+    }
+    fn relu_t() -> OpDef {
+        relu().with_views(vec![View::Permute { perm: vec![1, 0] }])
+    }
+
+    #[test]
+    fn transpose_view_forces_strided_off_the_vectorized_path() {
+        let key = contig_2d_key();
+        // Baseline: the view-free relu vectorizes on this contiguous cell.
+        assert!(
+            matches!(build_plan(&relu(), &key).schedule, Schedule::Vectorized { .. }),
+            "precondition: the view-free relu must vectorize on a contiguous cell"
+        );
+        // A Permute view forces the STRIDED schedule (a transposed read is
+        // non-contiguous; only the strided emitter folds the stride remap).
+        assert_eq!(build_plan(&relu_t(), &key).schedule, Schedule::Strided);
+        // And the plan carries the view through to the backend.
+        assert_eq!(build_plan(&relu_t(), &key).views.len(), 1);
+    }
+
+    #[test]
+    fn identity_views_route_exactly_like_view_free() {
+        let key = contig_2d_key();
+        // An all-Identity views vec is byte-identical to view-free: same schedule.
+        let identated =
+            OpDef::elementwise("relu", 1, &[ElementKind::F32], input(0).relu())
+                .with_views(vec![View::Identity]);
+        assert_eq!(
+            build_plan(&relu(), &key).schedule,
+            build_plan(&identated, &key).schedule,
+            "all-Identity views must not change the schedule"
+        );
+        assert!(matches!(
+            build_plan(&identated, &key).schedule,
+            Schedule::Vectorized { .. }
+        ));
+    }
+
+    #[test]
+    fn same_rank_reshape_is_not_addressing_and_does_not_force_strided() {
+        // A same-rank Reshape is an identity linear map (recognition/keying only) —
+        // it must NOT force Strided (unlike Permute/Broadcast).
+        let op = OpDef::elementwise("relu", 1, &[ElementKind::F32], input(0).relu())
+            .with_views(vec![View::Reshape { producer_rank: 2 }]);
+        assert!(matches!(
+            build_plan(&op, &contig_2d_key()).schedule,
+            Schedule::Vectorized { .. }
+        ));
+    }
+
+    #[test]
+    #[should_panic(expected = "true permutation")]
+    fn invalid_permutation_rejected() {
+        // perm [0,0] is not a permutation of 0..2 (duplicate axis).
+        let op = relu().with_views(vec![View::Permute { perm: vec![0, 0] }]);
+        let _ = build_plan(&op, &contig_2d_key());
+    }
+
+    #[test]
+    #[should_panic(expected = "Elementwise-only")]
+    fn permute_view_on_reduction_rejected() {
+        // A non-Identity view on a Reduction op: rejected (reductions own their
+        // axis machinery). Build the OpDef with a view via with_views.
+        let op = OpDef::reduction("sum", 1, &[ElementKind::F32], input(0), ReduceOp::Sum)
+            .with_views(vec![View::Permute { perm: vec![1, 0] }]);
+        let a = OperandDesc::new(2, &[256, 128], &[128, 1], ElementKind::F32, 256);
+        let o = OperandDesc::new(1, &[256], &[1], ElementKind::F32, 256);
+        let key = structure_key(OpCategory::Reduction, &[a, o], ArchSku::Sm89);
+        let _ = build_plan(&op, &key);
+    }
+
+    #[test]
+    #[should_panic(expected = "orthogonal")]
+    fn permute_with_broadcast_operand_rejected() {
+        // Input 0 is broadcast on an axis AND carries a Permute view — v1 keeps
+        // them orthogonal.
+        let bcast_in = OperandDesc::new(2, &[128, 256], &[0, 1], ElementKind::F32, 256);
+        let out = OperandDesc::new(2, &[128, 256], &[256, 1], ElementKind::F32, 256);
+        let key = structure_key(OpCategory::UnaryElementwise, &[bcast_in, out], ArchSku::Sm89);
+        let _ = build_plan(&relu_t(), &key);
+    }
+
+    #[test]
+    #[should_panic(expected = "does not broadcast")]
+    fn broadcast_view_disagreeing_with_key_rejected() {
+        // The view declares axis 0 broadcast, but the key operand is dense (no
+        // broadcast) — a lie the key-driven emitter would ignore.
+        let op = relu().with_views(vec![View::Broadcast { bcast: AxisMask(0b01) }]);
+        let _ = build_plan(&op, &contig_2d_key());
+    }
+
+    #[test]
+    #[should_panic(expected = "rank-change")]
+    fn rank_change_reshape_rejected() {
+        // producer_rank 3 != iteration rank 2 — genuine rank-change emit (items
+        // 03/10), out of item-01 scope.
+        let op = relu().with_views(vec![View::Reshape { producer_rank: 3 }]);
+        let _ = build_plan(&op, &contig_2d_key());
+    }
+
+    #[test]
+    #[should_panic(expected = "deferred composition")]
+    fn viewed_multi_output_rejected() {
+        // A viewed input on a multi-output op is deferred in v1.
+        let op = OpDef::elementwise_multi(
+            "dual",
+            1,
+            &[ElementKind::F32],
+            vec![input(0).relu(), input(0)],
+        )
+        .with_views(vec![View::Permute { perm: vec![1, 0] }]);
+        let a = OperandDesc::new(2, &[128, 256], &[256, 1], ElementKind::F32, 256);
+        let key = structure_key(OpCategory::UnaryElementwise, &[a, a, a], ArchSku::Sm89);
+        let _ = build_plan(&op, &key);
+    }
+
+    #[test]
+    #[should_panic(expected = "must equal n_inputs")]
+    fn views_len_mismatch_rejected() {
+        // Bypass the with_views debug_assert to prove the plan gate's own
+        // release-path length check (views.len() != n_inputs).
+        let mut op = OpDef::elementwise("add", 2, &[ElementKind::F32], input(0) + input(1));
+        op.views = vec![View::Permute { perm: vec![1, 0] }]; // len 1, n_inputs 2
+        let a = OperandDesc::new(2, &[128, 256], &[256, 1], ElementKind::F32, 256);
+        let key = structure_key(OpCategory::BinaryElementwise, &[a, a, a], ArchSku::Sm89);
+        let _ = build_plan(&op, &key);
+    }
+
+    #[test]
+    fn reduction_with_identity_view_passes_through() {
+        // A trivially-Identity view on a reduction is allowed (pass-through).
+        let op = OpDef::reduction("sum", 1, &[ElementKind::F32], input(0), ReduceOp::Sum)
+            .with_views(vec![View::Identity]);
+        let a = OperandDesc::new(2, &[256, 128], &[128, 1], ElementKind::F32, 256);
+        let o = OperandDesc::new(1, &[256], &[1], ElementKind::F32, 256);
+        let key = structure_key(OpCategory::Reduction, &[a, o], ArchSku::Sm89);
+        let _ = build_plan(&op, &key); // no panic — trivially-Identity pass-through
     }
 }

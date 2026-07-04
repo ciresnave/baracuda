@@ -565,3 +565,105 @@ Baracuda side `derive_pattern` rejects the RowReduce region (`NotElementwise`). 
 these fused backwards emit **no contract** and stay AOT-only — the same honest miss
 as the reduction family and the multi-output elementwise increment, no new panic
 path.
+
+## `view_validate.cu` — layout/shape views (item 01)
+
+Validates `OpDef::views` — a fused op reading an INPUT through a layout change in
+ONE pass, skipping a materialized `contiguize`/transpose copy (the §1
+memory-optimal win). Two bodies, both routing to the STRIDED schedule (a viewed
+read is non-contiguous — `build_plan` forces it, never vectorized/packed):
+
+- **`relu_t`** — `out[i,j] = relu(x[j,i])`, input 0 read through `View::Permute{[1,0]}`.
+  `x` is the PRODUCER buffer, physically `[N,M]` row-major contiguous; the emitter
+  folds the transpose into address math as `o0 = c0*s0_1 + c1*s0_0` (**swapped
+  strides** — iteration axis `d` reads producer stride `perm[d]`), the output
+  offset unchanged. Diffed BIT-EXACT vs a CPU double reference AND vs the
+  **bespoke** materialize-then-op path = `baracuda::contiguize(x^T)`
+  (`baracuda_contiguize.cuh`, `launch_contiguize<4>`) THEN a contiguous relu — two
+  kernels + a materialized transpose buffer + an extra DRAM round-trip.
+- **`addb_t`** — `out[i,j] = x[j,i] + b[j]`, in0 transposed (`Permute`), in1 a
+  per-column `[N]` bias broadcast over the row axis (`Identity` view; the key
+  carries stride-0 on axis 0, so `o1 = c1*s1_1` drops the row term). Diffed
+  bit-exact vs a CPU reference — the transpose remap composed with a key broadcast.
+
+**Regeneration:** these cells are **not** in the `bin/kernelgen.rs` catalog.
+Generate them into `<outdir>`, then copy the harness beside them:
+
+```rust
+use baracuda_kernelgen::ir::View;
+use baracuda_kernelgen::{generate, input, Cuda, OpDef};
+use baracuda_kernels_types::{structure_key, ArchSku, ElementKind, OpCategory, OperandDesc};
+
+let out = std::env::args().nth(1).expect("outdir");
+let write = |k: baracuda_kernelgen::GeneratedKernel| {
+    std::fs::write(format!("{out}/{}.cu", k.name), &k.source).unwrap();
+};
+// relu(x^T): x producer [N,M] dense (Permute operand 0 must have empty bcast).
+let x = OperandDesc::new(2, &[128, 256], &[256, 1], ElementKind::F32, 256);
+let o = OperandDesc::new(2, &[256, 128], &[128, 1], ElementKind::F32, 256);
+let relu_t = OpDef::elementwise("relu_t", 1, &[ElementKind::F32], input(0).relu())
+    .with_views(vec![View::Permute { perm: vec![1, 0] }]);
+write(generate(&relu_t, &structure_key(OpCategory::UnaryElementwise, &[x, o], ArchSku::Sm89), &Cuda));
+// out[i,j] = x[j,i] + b[j]: in0 transposed, in1 a per-column bias broadcast (key
+// bcast axis 0), Identity view.
+let b = OperandDesc::new(2, &[256, 128], &[0, 1], ElementKind::F32, 256);
+let addb_t = OpDef::elementwise("addb_t", 2, &[ElementKind::F32], input(0) + input(1))
+    .with_views(vec![View::Permute { perm: vec![1, 0] }, View::Identity]);
+write(generate(&addb_t, &structure_key(OpCategory::BinaryElementwise, &[x, b, o], ArchSku::Sm89), &Cuda));
+```
+
+Compile (the bespoke `contiguize` header wants the MSVC conforming preprocessor):
+`nvcc -O3 -arch=sm_89 -std=c++17 -Xcompiler "/Zc:preprocessor /std:c++17" -I <kernels/include> view_validate.cu`.
+
+**Last run:** RTX 4070 Laptop (sm_89), CUDA 13.3 / nvcc 13.3 — **ALL PASSED**,
+`compute-sanitizer --tool memcheck` **0 errors** (the transposed read is strided —
+no OOB). The generator WINS every shape: **one fused pass, no materialized copy**.
+
+| cell | shape | gen==bespoke | gen==ref | gen ms | bespoke (contig+relu) ms | speedup |
+| --- | --- | --- | --- | --- | --- | --- |
+| relu_t square | 512×512 | yes | yes | 0.014 | 0.057 | **4.01×** |
+| relu_t wide | 384×1024 | yes | yes | 0.020 | 0.083 | **4.11×** |
+| relu_t tall | 1024×384 | yes | yes | 0.021 | 0.081 | **3.93×** |
+| relu_t row | 1×4096 | yes | yes | 0.007 | 0.181 | **27.0×** |
+| relu_t large | 4096×4096 | yes | yes | 1.254 | 4.503 | **3.59×** |
+| addb_t square | 512×512 | — | yes | — | — | (bit-exact) |
+| addb_t wide | 384×1024 | — | yes | — | — | (bit-exact) |
+| addb_t large | 4096×4096 | — | yes | — | — | (bit-exact) |
+
+The win is structural: the bespoke path materializes `x^T` to DRAM then re-reads it
+(2× the tensor traffic + a second launch); the generated kernel reads `x`
+transposed in place and writes once. The degenerate `1×4096` row is a 27× blowout
+because the bespoke contiguize + relu is dominated by launch/round-trip overhead
+there. Bit-exact throughout — a transposed read is pure index arithmetic (no math
+reordering), so there is no precision delta to record.
+
+**Fuel contract (honest miss, confirmed against Fuel's sources):** a viewed op
+emits **no contract**. The kernel computes `body(transpose(input))`, but Baracuda's
+emitted pattern grammar (`pattern::PatternNode` = `Op` + `Bind`, no layout node, no
+attrs channel) can only describe reading `Input(i)` at the iteration coordinate —
+`derive_pattern` walks `op.body` alone and would silently drop the transpose.
+Fuel's own grammar CAN express it (`fuel-kernel-seam-types` `PatternNode::Op { op:
+OpTag::Permute, attrs: OpAttrs { perm } }` with a `perm` guard — the fkc §4.3 rule
+for a load-bearing-attribute layout op, explicitly NOT `see_through`, whose skip is
+a no-op stub in `fuel-graph jit.rs` today anyway), but Baracuda has no matching
+`OpTag`/attrs vocabulary to author that guard, and the concrete-region direction
+rejects layout re-emit outright (`fuel-graph runtime_fused.rs`: Transpose/Permute/
+Reshape are `UnRepresentable`). So `contract()`/`derive_pattern` miss honestly
+(typed `PatternError::ViewUnsupported`; the kernel still AOT-generates and runs) —
+the Coord/multi-output precedent. A same-rank `Reshape`/`Identity` view is NOT
+address-affecting and still advertises normally.
+
+**rope — DEFERRED to the gather increment (#4).** The bespoke rope
+(`baracuda_attention.cuh`) rotates pairs `(2i, 2i+1)`:
+`y[2i] = x[2i]·cos θ − x[2i+1]·sin θ`, `y[2i+1] = x[2i+1]·cos θ + x[2i]·sin θ`. This
+is NOT pure-stride-expressible, on three independent counts, each landing squarely
+in #4: (1) **pair-partner cross-read** — each output reads BOTH lanes of its pair,
+so the "odd" stream is the "even" stream at a **+1 element base offset**, and the
+item-01 boundary is explicit that there is no `base_offset` field (a slice offset
+is a runtime launch arg / gather, not a stride view); (2) **interleaved output** —
+`y[2i]` and `y[2i+1]` scatter back into ONE buffer at stride 2, which the
+MULTI_OUTPUT emitter (N distinct contiguous buffers) does not express; (3)
+**θ = pos·base^(−2·pair/D)** needs a transcendental of a *feature* `Coord`
+(`powf`, outside the item-0d `(float)c{d}` vocabulary), and the production path
+(`rope_apply`) instead reads a precomputed cos/sin cache indexed by (position,
+pair) — a GATHER, the definitional #4 case. Not forced.

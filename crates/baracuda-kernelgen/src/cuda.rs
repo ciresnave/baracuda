@@ -132,6 +132,15 @@ impl Backend for Cuda {
             plan.dtype,
             plan.schedule
         );
+        // Item 01: independent layout-VIEW backstop, beside the plan gate
+        // `plan::assert_valid_views` (the 0a lesson: gate every layer). A viewed
+        // input reads the producer through a layout change that ONLY the strided
+        // emitter's per-operand `offset_expr` remap folds — the vector/scalar/
+        // packed emitters iterate a bare linear index and would silently read the
+        // un-viewed operand. This pins: a real view ⇒ Elementwise + single-output
+        // + the Strided schedule, and re-validates each view's structure. A
+        // view-free / all-identity plan returns immediately (byte-identical).
+        assert_views_lowerable(plan);
         // Increment 1: a MULTI-OUTPUT plan routes to the dedicated N-store
         // emitters BEFORE the single-output dispatch below — so the single-output
         // emitters stay byte-for-byte untouched (extra_out_bodies is empty ⇒
@@ -674,11 +683,15 @@ fn emit_strided(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
     }
     for k in 0..n {
         if !is_fully_broadcast(plan.key.operands[k], rank) {
-            let off = offset_expr(plan.key.operands[k], &format!("s{k}"), rank);
+            // Item 01: input `k` may be read through a Permute view (a transposed
+            // read) — `input_perm` remaps its stride indices. Identity/view-free ⇒
+            // `None` ⇒ byte-identical offset.
+            let off = offset_expr(plan.key.operands[k], &format!("s{k}"), rank, input_perm(plan, k));
             s.push_str(&format!("        long long o{k} = {off};\n"));
         }
     }
-    let oo = offset_expr(plan.key.operands[n], "so", rank);
+    // The OUTPUT is never viewed (views are an input-read property) — identity offset.
+    let oo = offset_expr(plan.key.operands[n], "so", rank, None);
     s.push_str(&format!("        long long oo = {oo};\n"));
     let acc = |idx: u8| {
         if is_fully_broadcast(plan.key.operands[idx as usize], rank) {
@@ -758,6 +771,77 @@ fn assert_multi_output_lowerable(plan: &KernelPlan<'_>) {
         plan.op_name,
         plan.key.n_operands
     );
+}
+
+/// Independent emitter backstop for a layout-viewed plan (item 01), beside the
+/// plan gate `plan::assert_valid_views` (the 0a lesson: gate every layer). A
+/// view-free plan (empty `views`) or an all-`Identity`/same-rank-`Reshape` plan
+/// (no address-affecting view) returns immediately — byte-identical. For a plan
+/// carrying a real addressing view, this pins the facts the offset remap relies
+/// on so a future schedule change can't route a viewed operand through a
+/// linear-index emitter that ignores the view:
+///
+/// - **Elementwise + single-output** — the only access/arity item 01 emits.
+/// - **`Schedule::Strided`** — the sole schedule whose `offset_expr` folds the
+///   per-operand stride remap; a viewed read is non-contiguous, so the
+///   vectorized/scalar/packed emitters must never see it.
+/// - Each view is re-validated (`is_valid`), a `Permute` operand's broadcast mask
+///   is empty, a `Broadcast` view agrees with the key, a `Reshape` is same-rank —
+///   the same rules as the plan gate, held independently here.
+fn assert_views_lowerable(plan: &KernelPlan<'_>) {
+    if !plan.views.iter().any(crate::plan::view_is_addressing) {
+        return; // view-free / all-identity — the established path, unchanged.
+    }
+    let name = plan.op_name;
+    assert!(
+        matches!(plan.access, Access::Elementwise),
+        "cuda backend: viewed op '{name}' must be Access::Elementwise (item 01 \
+         views are Elementwise-only)"
+    );
+    assert!(
+        plan.n_outputs == 1,
+        "cuda backend: viewed op '{name}' must be single-output ({} outputs) — a \
+         viewed multi-output op is a deferred composition",
+        plan.n_outputs
+    );
+    assert!(
+        matches!(plan.schedule, Schedule::Strided),
+        "cuda backend: viewed op '{name}' must lower on the Strided schedule (a \
+         viewed read is non-contiguous; only the strided emitter folds the \
+         per-operand stride remap), got {:?}",
+        plan.schedule
+    );
+    let rank = plan.key.rank;
+    for (i, v) in plan.views.iter().enumerate() {
+        assert!(
+            v.is_valid(rank),
+            "cuda backend: viewed op '{name}' input {i} view {v:?} invalid for rank \
+             {rank}"
+        );
+        let o = plan.key.operands[i];
+        match v {
+            crate::ir::View::Identity => {}
+            crate::ir::View::Permute { .. } => assert!(
+                o.bcast.is_empty(),
+                "cuda backend: viewed op '{name}' input {i} Permute view with a \
+                 broadcast mask ({:#04x}) — Permute ⊥ Broadcast in v1",
+                o.bcast.0
+            ),
+            crate::ir::View::Broadcast { bcast } => assert!(
+                bcast.0 & !o.bcast.0 == 0,
+                "cuda backend: viewed op '{name}' input {i} Broadcast view declares \
+                 axes ({:#04x}) the key does not broadcast ({:#04x})",
+                bcast.0,
+                o.bcast.0
+            ),
+            crate::ir::View::Reshape { producer_rank } => assert!(
+                *producer_rank == rank,
+                "cuda backend: viewed op '{name}' input {i} rank-change Reshape \
+                 (producer_rank {producer_rank} != rank {rank}) is out of item-01 \
+                 scope"
+            ),
+        }
+    }
 }
 
 /// Panicking `reduced`/`coord` closures for the multi-output elementwise
@@ -882,12 +966,15 @@ fn emit_strided_multi(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
     }
     for k in 0..n_in {
         if !is_fully_broadcast(plan.key.operands[k], rank) {
-            let off = offset_expr(plan.key.operands[k], &format!("s{k}"), rank);
+            // A viewed input on a multi-output op is rejected at the plan gate
+            // (deferred composition), so `input_perm` is `None` here in v1 — but
+            // threading it keeps the two strided emitters in lockstep.
+            let off = offset_expr(plan.key.operands[k], &format!("s{k}"), rank, input_perm(plan, k));
             s.push_str(&format!("        long long o{k} = {off};\n"));
         }
     }
     for j in 0..n_out {
-        let oo = offset_expr(plan.key.operands[n_in + j], &format!("so{j}"), rank);
+        let oo = offset_expr(plan.key.operands[n_in + j], &format!("so{j}"), rank, None);
         s.push_str(&format!("        long long oo{j} = {oo};\n"));
     }
     let acc = |idx: u8| {
@@ -2567,19 +2654,44 @@ fn is_fully_broadcast(o: OperandKey, rank: usize) -> bool {
 
 /// Element-offset expression for an operand, dropping the terms for broadcast
 /// axes (whose stride is known 0 at compile time).
-fn offset_expr(o: OperandKey, stride_arr: &str, rank: usize) -> String {
+///
+/// `perm` (item 01) is the [`crate::ir::View::Permute`] this input is read
+/// through: iteration axis `d` reads the producer stride at `perm[d]`, so the
+/// term becomes `c{d}·stride[perm[d]]` (a transposed read — the §1 fused-view
+/// win, no materialized contiguize copy). `None` (Identity / Broadcast /
+/// same-rank Reshape / view-free) keeps `c{d}·stride[d]`, so the emitted string
+/// is **byte-identical** to the pre-item-01 emitter for every existing op. A
+/// permuted operand always has an empty broadcast mask (the plan gate
+/// `assert_valid_views` + the `assert_views_lowerable` backstop pin it), so the
+/// broadcast-skip below never interacts with the remap.
+fn offset_expr(o: OperandKey, stride_arr: &str, rank: usize, perm: Option<&[u8]>) -> String {
     let mut terms = Vec::new();
     for d in 0..rank {
         if o.bcast.is_set(d as u8) {
             continue;
         }
+        // Permute view: iteration axis `d` pairs with the producer stride at
+        // `perm[d]`; Identity (perm None) pairs axis `d` with stride `d`.
+        let si = perm.map_or(d, |p| p[d] as usize);
         // By-value scalar param spelling (extraction #1): `s0_1`, `so_0`, …
-        terms.push(format!("c{d}*{stride_arr}_{d}"));
+        terms.push(format!("c{d}*{stride_arr}_{si}"));
     }
     if terms.is_empty() {
         "0".to_string()
     } else {
         terms.join(" + ")
+    }
+}
+
+/// The permutation input operand `k` is read through, or `None` for an identity
+/// read (`Identity` / `Broadcast` / same-rank `Reshape` / a view-free plan).
+/// Only a [`crate::ir::View::Permute`] remaps stride indices in [`offset_expr`];
+/// `plan.views` is empty for every pre-item-01 op, so this is always `None` there
+/// (`.get(k)` on the empty slice) and emission is byte-identical.
+fn input_perm<'a>(plan: &'a KernelPlan<'_>, k: usize) -> Option<&'a [u8]> {
+    match plan.views.get(k) {
+        Some(crate::ir::View::Permute { perm }) => Some(perm.as_slice()),
+        _ => None,
     }
 }
 
@@ -3469,6 +3581,128 @@ mod tests {
         assert!(k.source.contains("long long c1 = lin % shape1; lin /= shape1;"));
         assert!(k.source.contains("long long o0 = c0*s0_0 + c1*s0_1;"));
         assert!(k.source.contains("out[oo] = (in0[o0] + in1[o1]);"));
+    }
+
+    // ---- item 01: layout views (fused transpose-elementwise) ----
+
+    // A rank-2 contiguous [128,256] f32 cell (1 input + 1 output) that would
+    // VECTORIZE view-free — used to prove the view both forces Strided and remaps
+    // the input offset.
+    fn view_2d_key(n_operands: usize) -> baracuda_kernels_types::StructureKey {
+        let a = OperandDesc::new(2, &[128, 256], &[256, 1], ElementKind::F32, 256);
+        let ops: Vec<_> = std::iter::repeat_n(a, n_operands).collect();
+        let cat = if n_operands >= 3 {
+            OpCategory::BinaryElementwise
+        } else {
+            OpCategory::UnaryElementwise
+        };
+        structure_key(cat, &ops, ArchSku::Sm89)
+    }
+
+    #[test]
+    fn transpose_fused_elementwise_reads_input_through_swapped_strides() {
+        use crate::ir::View;
+        // out[i,j] = relu(x[j,i]): input 0 read through Permute{[1,0]}.
+        let op = OpDef::elementwise("relu_t", 1, &[ElementKind::F32], input(0).relu())
+            .with_views(vec![View::Permute { perm: vec![1, 0] }]);
+        let k = generate(&op, &view_2d_key(2), &Cuda);
+        // Forced onto the strided schedule (a transposed read is non-contiguous),
+        // NOT the float4 vectorized path it would take view-free.
+        assert_eq!(k.name, "baracuda_gen_relu_t_f32_strided_r2");
+        // The KEY of the increment: iteration axis d reads producer stride perm[d]
+        // ⇒ `c0*s0_1 + c1*s0_0` (swapped), NOT the identity `c0*s0_0 + c1*s0_1`.
+        assert!(
+            k.source.contains("long long o0 = c0*s0_1 + c1*s0_0;"),
+            "the transposed input offset must use SWAPPED strides"
+        );
+        assert!(!k.source.contains("long long o0 = c0*s0_0 + c1*s0_1;"));
+        // The output offset is unaffected (views are an input-read property).
+        assert!(k.source.contains("long long oo = c0*so_0 + c1*so_1;"));
+        assert!(k.source.contains("out[oo] = ("));
+    }
+
+    #[test]
+    fn two_input_view_transposed_plus_identity() {
+        use crate::ir::View;
+        // out[i,j] = x[j,i] + b[i,j]: in0 transposed, in1 identity.
+        let op = OpDef::elementwise("add_t", 2, &[ElementKind::F32], input(0) + input(1))
+            .with_views(vec![View::Permute { perm: vec![1, 0] }, View::Identity]);
+        let k = generate(&op, &view_2d_key(3), &Cuda);
+        assert_eq!(k.name, "baracuda_gen_add_t_f32_strided_r2");
+        assert!(k.source.contains("long long o0 = c0*s0_1 + c1*s0_0;")); // transposed in0
+        assert!(k.source.contains("long long o1 = c0*s1_0 + c1*s1_1;")); // identity in1
+        assert!(k.source.contains("out[oo] = (in0[o0] + in1[o1]);"));
+    }
+
+    #[test]
+    fn rank3_nontrivial_permute_uses_the_direct_stride_remap() {
+        use crate::ir::View;
+        // Review #3: every other perm golden uses [1,0], an INVOLUTION
+        // (perm == perm^-1), so no rank-2 test can distinguish the direct remap
+        // (c{d}*stride[perm[d]]) from the inverse — an inverse mutation passed all
+        // 282 tests. A rank-3 NON-involutive perm [2,0,1] pins the direction:
+        // iteration axis d reads producer axis perm[d], so producer stride at
+        // perm[d]: d0->s_2, d1->s_0, d2->s_1.
+        let a = OperandDesc::new(3, &[4, 8, 16], &[128, 16, 1], ElementKind::F32, 256);
+        let key = structure_key(OpCategory::UnaryElementwise, &[a, a], ArchSku::Sm89);
+        let op = OpDef::elementwise("relu_p", 1, &[ElementKind::F32], input(0).relu())
+            .with_views(vec![View::Permute { perm: vec![2, 0, 1] }]);
+        let k = generate(&op, &key, &Cuda);
+        // DIRECT remap (mathematically correct: producer stride at perm[d]).
+        assert!(
+            k.source.contains("long long o0 = c0*s0_2 + c1*s0_0 + c2*s0_1;"),
+            "rank-3 perm [2,0,1] must use the DIRECT remap; got:\n{}",
+            k.source
+        );
+        // The INVERSE remap (the mutation this test exists to catch) must NOT appear.
+        assert!(!k.source.contains("long long o0 = c0*s0_1 + c1*s0_2 + c2*s0_0;"));
+        // Identity output offset, unaffected by the input view.
+        assert!(k.source.contains("long long oo = c0*so_0 + c1*so_1 + c2*so_2;"));
+    }
+
+    #[test]
+    fn identity_view_is_byte_identical_to_view_free() {
+        use crate::ir::View;
+        // The byte-identical guarantee: an all-Identity views vec emits the exact
+        // same source (and name) as the view-free op at the same key.
+        let key = view_2d_key(3);
+        let free = generate(&add_op(&[ElementKind::F32]), &key, &Cuda);
+        let ident = OpDef::elementwise("add", 2, &[ElementKind::F32], input(0) + input(1))
+            .with_views(vec![View::Identity, View::Identity]);
+        let viewed = generate(&ident, &key, &Cuda);
+        assert_eq!(free.name, viewed.name);
+        assert_eq!(
+            free.source, viewed.source,
+            "an all-Identity view must emit byte-identical source to view-free"
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "must lower on the Strided schedule")]
+    fn viewed_op_on_a_non_strided_schedule_is_refused_by_the_backstop() {
+        use crate::backend::Backend;
+        use crate::ir::View;
+        use crate::plan::{KernelPlan, Schedule};
+        // Construct a plan manually that pairs a Permute view with the Vectorized
+        // schedule (which build_plan would never produce) — the independent emitter
+        // backstop must refuse it (the vector emitter ignores views).
+        let key = view_2d_key(2);
+        let body = input(0).relu().0;
+        let views = [View::Permute { perm: vec![1, 0] }];
+        let plan = KernelPlan {
+            op_name: "sneaky",
+            n_inputs: 1,
+            dtype: ElementKind::F32,
+            out_dtype: ElementKind::F32,
+            schedule: Schedule::Vectorized { width: 4 },
+            key: &key,
+            body: &body,
+            n_outputs: 1,
+            extra_out_bodies: &[],
+            access: &crate::ir::Access::Elementwise,
+            views: &views,
+        };
+        let _ = Cuda.lower(&plan);
     }
 
     #[test]
@@ -4860,6 +5094,7 @@ mod tests {
             n_outputs: 1,
             extra_out_bodies: &[],
             access: &crate::ir::Access::Elementwise,
+            views: &[],
         };
         let _ = Cuda.lower(&plan);
     }
@@ -5428,6 +5663,7 @@ mod tests {
             n_outputs: 1,
             extra_out_bodies: &[],
             access: &crate::ir::Access::Elementwise,
+            views: &[],
         };
         let _ = Cuda.lower(&plan);
     }
@@ -5450,6 +5686,7 @@ mod tests {
             n_outputs: 1,
             extra_out_bodies: &[],
             access: &crate::ir::Access::Elementwise,
+            views: &[],
         };
         let _ = Cuda.lower(&plan);
     }
@@ -5472,6 +5709,7 @@ mod tests {
             n_outputs: 1,
             extra_out_bodies: &[],
             access: &crate::ir::Access::Elementwise,
+            views: &[],
         };
         let _ = Cuda.lower(&plan);
     }
@@ -5498,6 +5736,7 @@ mod tests {
             n_outputs: 1,
             extra_out_bodies: &[],
             access: &crate::ir::Access::Elementwise,
+            views: &[],
         };
         let _ = Cuda.lower(&plan);
     }
@@ -5523,6 +5762,7 @@ mod tests {
             n_outputs: 1,
             extra_out_bodies: &[],
             access: &crate::ir::Access::Elementwise,
+            views: &[],
         };
         let _ = Cuda.lower(&plan);
     }
@@ -5757,6 +5997,7 @@ mod tests {
             n_outputs: 1,
             extra_out_bodies: &[],
             access: &crate::ir::Access::Elementwise,
+            views: &[],
         };
         let _ = Cuda.lower(&plan);
     }
@@ -5791,6 +6032,7 @@ mod tests {
             n_outputs: 1,
             extra_out_bodies: &[],
             access: &access,
+            views: &[],
         };
         let _ = Cuda.lower(&plan);
     }
@@ -5813,6 +6055,7 @@ mod tests {
             n_outputs: 1,
             extra_out_bodies: &[],
             access: &crate::ir::Access::Elementwise,
+            views: &[],
         };
         let _ = Cuda.lower(&plan);
     }
@@ -5839,6 +6082,7 @@ mod tests {
             n_outputs: 1,
             extra_out_bodies: &[],
             access: &crate::ir::Access::Elementwise,
+            views: &[],
         };
         let _ = Cuda.lower(&plan);
     }

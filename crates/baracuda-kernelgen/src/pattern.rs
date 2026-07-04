@@ -106,6 +106,19 @@ pub enum PatternError {
         /// The axis of (one of) the body's `Coord` leaves.
         axis: u8,
     },
+    /// The op carries an address-affecting layout [`crate::ir::View`] (a
+    /// `Permute`/transpose or `Broadcast` read-through, item 01). The kernel
+    /// computes `body(transpose(input))`, but the emitted [`PatternNode`] grammar
+    /// (`Op` + `Bind`, no layout node, no attrs channel) can only describe reading
+    /// `Input(i)` at the iteration coordinate — it would silently drop the view.
+    /// Fuel's own grammar CAN express it (`OpTag::Permute` + an `OpAttrs.perm`
+    /// guard — the §4.3 rule for a load-bearing-attribute layout op, NOT
+    /// `see_through`), but Baracuda has no matching `OpTag`/attrs vocabulary to
+    /// author that guard. So no pattern, no contract (the honest miss); the kernel
+    /// still generates + lowers. A same-rank `Reshape` / `Identity` view is not
+    /// address-affecting and does NOT trigger this — the `body`-over-inputs
+    /// pattern is correct there.
+    ViewUnsupported,
 }
 
 /// Derive the FKC pattern tree for `op`, or a [`PatternError`] if the body isn't
@@ -124,6 +137,15 @@ pub fn derive_pattern(op: &OpDef) -> Result<PatternNode, PatternError> {
         return Err(PatternError::MultiOutput {
             n_outputs: op.n_outputs(),
         });
+    }
+    // An address-affecting layout view (Permute/transpose or Broadcast) makes the
+    // kernel read `Input(i)` THROUGH a layout change; the Op+Bind grammar (no
+    // layout node, no attrs channel) can't express the transpose, and walking
+    // `op.body` alone derives a pattern that silently drops it. Miss honestly (see
+    // `PatternError::ViewUnsupported`; the full Fuel-source rationale is in
+    // `contract()`'s view guard).
+    if crate::plan::op_has_addressing_view(op) {
+        return Err(PatternError::ViewUnsupported);
     }
     // Canonicalize commutative operands first so two authorings of one body
     // produce byte-identical paths/extracts/YAML (internal determinism); per
