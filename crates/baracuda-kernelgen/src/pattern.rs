@@ -119,6 +119,32 @@ pub enum PatternError {
     /// address-affecting and does NOT trigger this — the `body`-over-inputs
     /// pattern is correct there.
     ViewUnsupported,
+    /// The op carries a data-dependent [`crate::ir::ReadIndex::Indexed`] read (a
+    /// gather, increment 4). Two independent blockers make a contract dishonest,
+    /// both verified against Fuel's actual sources:
+    ///   1. **Per-operand index dtype is unkeyable.** Baracuda's `StructureKey`
+    ///      has no per-operand dtype FIELD (a SINGLE operand-0 dtype, "v1 assumes a
+    ///      uniform operand dtype"), so the token does not name the index operand as
+    ///      i32 vs i64. (Its byte size leaks incidentally into that operand's
+    ///      `vec_width` for a full-shape index, but that collapses to equal for the
+    ///      1-D index of index_select/embedding — an unreliable side-channel, not a
+    ///      keyed guarantee.) Fuel's own gather admissibility is instead an explicit
+    ///      per-operand dtype TUPLE — key `[T, U32, T]` (fuel-dispatch
+    ///      `fkc/cpu_link.rs`: `indices` is a fixed U32 operand slot, `out:
+    ///      passthrough(source)`). A Baracuda contract keyed only on `T` would let
+    ///      Fuel bind an i32-index kernel to an i64-index (or U32) call — the wrong
+    ///      bind the honest-miss rule forbids.
+    ///   2. The `body`-over-inputs `PatternNode` grammar (`Op`+`Bind`, no attrs
+    ///      channel) cannot carry the gather `axis`/OOB semantics; Fuel names
+    ///      `OpTag::Gather`/`IndexSelect` (fuel-kernel-seam-types) but their
+    ///      admissibility rides `OpAttrs.axis` + a `fdx.gather.kind` enum Baracuda
+    ///      has no vocabulary for.
+    ///
+    /// So: no pattern, no contract — an AOT-only honest miss, exactly like the
+    /// Contraction node (shipped AOT-only pending the seam grammar). The kernels
+    /// still generate + lower. Closing it needs the per-operand-dtype key
+    /// extension = a `STRUCTURE_KEY_VERSION` bump = a Fuel propose-first.
+    GatherUnsupported,
 }
 
 /// Derive the FKC pattern tree for `op`, or a [`PatternError`] if the body isn't
@@ -146,6 +172,16 @@ pub fn derive_pattern(op: &OpDef) -> Result<PatternNode, PatternError> {
     // `contract()`'s view guard).
     if crate::plan::op_has_addressing_view(op) {
         return Err(PatternError::ViewUnsupported);
+    }
+    // A gather (data-dependent Indexed read) has no honest v1 contract: the index
+    // operand's dtype is unkeyable in Baracuda's single-dtype token while Fuel's
+    // gather admissibility is a per-operand dtype tuple, and the Op+Bind grammar
+    // can't carry the axis/OOB semantics. Miss honestly BEFORE the body walk (the
+    // body is a bare `Input(0)` copy whose bind-set would otherwise reject as
+    // `BindSetMismatch` — a misleading reason). See `PatternError::GatherUnsupported`
+    // and `contract()`'s gather guard for the full Fuel-source rationale.
+    if crate::plan::op_has_gather(op) {
+        return Err(PatternError::GatherUnsupported);
     }
     // Canonicalize commutative operands first so two authorings of one body
     // produce byte-identical paths/extracts/YAML (internal determinism); per

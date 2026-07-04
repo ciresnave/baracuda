@@ -124,6 +124,42 @@ pub fn contract(
         return None;
     }
 
+    // Increment-4 GATHER honest miss (typed, no contract; the kernel still
+    // generates + runs AOT — the Contraction-node precedent). A data-dependent
+    // `ReadIndex::Indexed` read cannot be advertised honestly against Fuel's
+    // ACTUAL sources:
+    //   1. The index operand's dtype is UNKEYABLE. Baracuda's `StructureKey` has
+    //      NO per-operand dtype FIELD — a single operand-0 dtype (structure_key.rs:
+    //      "v1 assumes a uniform operand dtype"), so nothing in the token names the
+    //      index operand as i32 vs i64. (The dtype's byte size DOES leak
+    //      incidentally into that operand's `vec_width` — for a full-shape index an
+    //      i32 vectorizes wider than an i64 — but that side-channel is unreliable:
+    //      it collapses to equal for the 1-D/broadcast index of index_select /
+    //      embedding, where both dtypes are `Scalar`. So the token neither reliably
+    //      distinguishes nor is meant to distinguish index dtype.) Fuel's gather
+    //      admissibility is instead an explicit per-operand dtype TUPLE —
+    //      fuel-dispatch `fkc/cpu_link.rs` keys gather/index_select as `[T, U32, T]`
+    //      (the `indices` operand is a FIXED U32 slot; `out: passthrough(source)`).
+    //      A Baracuda contract keyed only on T would advertise a kernel Fuel could
+    //      bind to the wrong index dtype (i32-kernel ↔ i64/U32-call) — no keyed
+    //      field guards it.
+    //   2. Even setting dtype aside, the emitted `PatternNode` grammar (`Op` +
+    //      `Bind`, no `OpAttrs` channel) cannot carry the gather `axis` or the OOB
+    //      policy. Fuel DOES name `OpTag::Gather`/`IndexSelect`
+    //      (fuel-kernel-seam-types) — but their identity rides `OpAttrs.axis` and,
+    //      for residency gathers, a `fdx.gather.kind` admissibility enum
+    //      (fuel-dispatch `fkc/validate.rs`) we have no vocabulary to author.
+    //   3. Bespoke gather's OOB semantics (silently skip; embedding zero-fills)
+    //      also differ from torch/Fuel gather's in-bounds contract — a third
+    //      reason the advertised op would mis-describe the kernel.
+    // So: no contract until the per-operand-dtype key extension lands (a
+    // `STRUCTURE_KEY_VERSION` bump = a Fuel propose-first, DEFERRED and FLAGGED —
+    // the same seam-grammar gate the Contraction node waits on). Guarded up front
+    // so no wrong-dtype gather identity is ever emitted.
+    if crate::plan::op_has_gather(op) {
+        return None;
+    }
+
     // Increment 0b honesty gate (tightened by the adversarial review): a body
     // containing a Cmp* ANYWHERE emits a contract only as the u8-out
     // single-op primitive.
@@ -750,6 +786,27 @@ mod tests {
         assert!(matches!(
             crate::derive_pattern(&op),
             Err(PatternError::ViewUnsupported)
+        ));
+    }
+
+    #[test]
+    fn gathered_op_is_an_honest_miss_no_contract() {
+        use crate::ir::OobPolicy;
+        use crate::pattern::PatternError;
+        // A gather's index-operand dtype (i32/i64) is unkeyable in Baracuda's
+        // single-dtype token, while Fuel's gather admissibility is a per-operand
+        // dtype tuple `[T, U32, T]` — advertising `op_kind: Gather` would let Fuel
+        // bind the wrong index dtype. Honest miss, AOT-only (kernel still runs).
+        let op = OpDef::gather("gather", &[ElementKind::F32], 0, OobPolicy::Skip, ElementKind::I32);
+        let key = key_for(3, OpCategory::BinaryElementwise);
+        let kernel = generate(&op, &key, &Cuda);
+        assert!(
+            contract(&op, &key, &kernel, "cuda").is_none(),
+            "a gathered op must emit NO contract (the index dtype is unkeyable)"
+        );
+        assert!(matches!(
+            crate::derive_pattern(&op),
+            Err(PatternError::GatherUnsupported)
         ));
     }
 

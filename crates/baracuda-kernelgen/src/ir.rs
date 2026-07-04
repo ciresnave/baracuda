@@ -1138,6 +1138,95 @@ fn is_permutation(perm: &[u8], rank: u8) -> bool {
     true
 }
 
+/// Out-of-bounds policy for an [`ReadIndex::Indexed`] read (increment 4, GATHER).
+/// The index tensor's value can name a position outside `[0, extent)` along the
+/// gathered axis (a stale index, a negative index, an index past the source
+/// extent); this picks the semantics — matched EXACTLY to what the bespoke
+/// kernels do (`crates/baracuda-kernels-sys/kernels/include/baracuda_indexing.cuh`
+/// / `baracuda_embedding.cuh`), the charter being "express the bespoke
+/// functionality".
+///
+/// **Negative indices are always treated as out-of-bounds** (there is NO
+/// PyTorch-style from-end wrap): the bespoke gather / index_select / embedding
+/// all bounds-check `idx < 0 || idx >= extent` and skip / zero — confirmed per
+/// kernel. A from-end-wrap policy is a deliberate non-feature here (bespoke
+/// parity).
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum OobPolicy {
+    /// Leave the output element **unwritten** when the index is out of range —
+    /// the bespoke `gather` / `index_select` semantics (`continue;` before the
+    /// store; the cell keeps its prior content). A store predicate; NO OOB load
+    /// occurs (the emitter clamps the load address in-bounds and guards the
+    /// store).
+    Skip,
+    /// Clamp the index to `[0, extent-1]` (`min(max(idx,0),extent-1)`) and always
+    /// store — a generator-only policy (no bespoke op clamps; it exists for the
+    /// coverage surface + the on-device probe). Assumes a **non-empty** gathered
+    /// axis (`extent >= 1`); a 0-extent source axis has no valid target and is a
+    /// degenerate shape.
+    Clamp,
+    /// Store the op's zero fill (`0`) when the index is out of range — the
+    /// bespoke `embedding` semantics (OOB / negative / padding row → a zeroed
+    /// output row). A store SELECT; no OOB load (address clamped in-bounds).
+    ZeroFill,
+}
+
+/// How input operand `i` gets the address for ONE iteration axis — the
+/// **data-dependent** read role (increment 4, GATHER; the first access pattern
+/// whose address is a runtime tensor value, not a compile-time layout fact).
+/// Lives per-input on [`OpDef::read_index`], parallel to [`OpDef::views`] and for
+/// the identical reason: it is a per-operand *read-through* the value-math
+/// walkers (optimizer/e-graph, `contract`, `pattern`) must not see, so it is NOT
+/// a [`ScalarExpr`] node and NOT an [`Access`] variant. `Direct` (the default)
+/// reads at the iteration coordinate (today's behavior); `Indexed` replaces the
+/// coordinate along one axis with a value loaded from an integer index operand.
+///
+/// This is orthogonal to [`View`] (a compile-time layout remap): a view reorders
+/// which *coordinate* pairs with which stride; an `Indexed` read substitutes a
+/// runtime *value* for one coordinate. v1 keeps them mutually exclusive on the
+/// same input (a gathered-and-permuted operand is deferred — see the plan gate).
+#[derive(Clone, Debug, PartialEq, Default)]
+pub enum ReadIndex {
+    /// Read operand `i` at the iteration coordinate — no indexing (default; every
+    /// pre-increment-4 op). Byte-identical emission.
+    #[default]
+    Direct,
+    /// Read operand `i` with iteration axis `axis` replaced by the value loaded
+    /// from `index_operand` (an integer tensor) at the iteration coordinate:
+    /// `operand_i[..., index_operand[coord], ...]` (the substituted term is
+    /// `idx·stride[axis]` instead of `c{axis}·stride[axis]`). The index operand is
+    /// itself a keyed input read through its own strides — a **full-shape** index
+    /// (its key varies on every axis) is a torch-`gather`; a **1-D** index (its
+    /// key broadcasts on every axis except `axis`) is an `index_select`/embedding.
+    /// One mechanism, distinguished purely by the index operand's broadcast mask.
+    ///
+    /// `index_dtype` (`I32`/`I64`) rides HERE, on the op — NOT in the structure
+    /// key (which carries a single operand-0 dtype and cannot express a
+    /// per-operand index dtype). It selects the emitted index-load type and the
+    /// `entry_point` symbol infix (`gather_f32_i32` vs `gather_f32_i64`), the same
+    /// way increment 0b's non-primary u8 output dtype rides `OpDef::out_dtype` +
+    /// the symbol rather than the token. See the plan gate for the full rule set.
+    Indexed {
+        /// Which input operand supplies the index values (an integer tensor).
+        index_operand: u8,
+        /// The iteration axis whose coordinate the index value replaces.
+        axis: u8,
+        /// Out-of-range behavior (bespoke-matched).
+        oob: OobPolicy,
+        /// Index element dtype — `I32` or `I64` (rides the op, not the key).
+        index_dtype: ElementKind,
+    },
+}
+
+impl ReadIndex {
+    /// `true` for [`ReadIndex::Direct`] — the back-compat default that reads at
+    /// the iteration coordinate (byte-identical address math).
+    #[must_use]
+    pub fn is_direct(&self) -> bool {
+        matches!(self, ReadIndex::Direct)
+    }
+}
+
 /// An op definition — the **algorithm** half of the algorithm/schedule split.
 ///
 /// Names the op, its input-operand count, the output expression, the accepted
@@ -1197,6 +1286,17 @@ pub struct OpDef {
     /// hoisted `tmp` referenced by multiple stores — strictly fewer global loads
     /// than decomposing into N single-output kernels.
     pub extra_out_bodies: Vec<ScalarExpr>,
+    /// Per-input **data-dependent read role** (index `i` ↔ `Input(i)`; increment
+    /// 4, GATHER). Empty ⇒ every input is [`ReadIndex::Direct`] (back-compat:
+    /// every pre-increment-4 op is index-free, so address math + the whole
+    /// `views`-orthogonal read stays byte-identical). When non-empty, length
+    /// **must** equal `n_inputs`. Set via [`OpDef::with_indexed`] (or the
+    /// [`OpDef::gather`]/[`OpDef::index_select`]/[`OpDef::embedding`] convenience
+    /// constructors). Only a [`ReadIndex::Indexed`] entry changes emission (the
+    /// axis-substitution in the strided offset); validated at the TOP of
+    /// `plan::build_plan` (`assert_valid_gather`) with an independent emitter
+    /// backstop in [`crate::cuda::Cuda::lower`].
+    pub read_index: Vec<ReadIndex>,
 }
 
 impl OpDef {
@@ -1211,6 +1311,7 @@ impl OpDef {
             dtypes: dtypes.to_vec(),
             access: Access::Elementwise,
             views: Vec::new(),
+            read_index: Vec::new(),
             out_dtype: None,
             extra_out_bodies: Vec::new(),
         }
@@ -1233,6 +1334,7 @@ impl OpDef {
             dtypes: dtypes.to_vec(),
             access: Access::Elementwise,
             views: Vec::new(),
+            read_index: Vec::new(),
             out_dtype: Some(ElementKind::U8),
             extra_out_bodies: Vec::new(),
         }
@@ -1281,6 +1383,7 @@ impl OpDef {
             dtypes: dtypes.to_vec(),
             access: Access::Elementwise,
             views: Vec::new(),
+            read_index: Vec::new(),
             out_dtype: None,
             extra_out_bodies,
         }
@@ -1351,6 +1454,7 @@ impl OpDef {
                 post: ScalarExpr::Reduced(0),
             },
             views: Vec::new(),
+            read_index: Vec::new(),
             out_dtype: None,
             extra_out_bodies: Vec::new(),
         }
@@ -1387,6 +1491,7 @@ impl OpDef {
                 post: post.0,
             },
             views: Vec::new(),
+            read_index: Vec::new(),
             out_dtype: None,
             extra_out_bodies: Vec::new(),
         }
@@ -1416,6 +1521,7 @@ impl OpDef {
                 epilogue: epilogue.0,
             },
             views: Vec::new(),
+            read_index: Vec::new(),
             out_dtype: None,
             extra_out_bodies: Vec::new(),
         }
@@ -1444,6 +1550,7 @@ impl OpDef {
                 epilogue: epilogue.0,
             },
             views: Vec::new(),
+            read_index: Vec::new(),
             out_dtype: None,
             extra_out_bodies: Vec::new(),
         }
@@ -1463,6 +1570,84 @@ impl OpDef {
         );
         self.views = views;
         self
+    }
+
+    /// Attach per-input **data-dependent read roles** ([`ReadIndex`], increment
+    /// 4). `read_index[i]` applies to `Input(i)`; `read_index.len()` must equal
+    /// `n_inputs`. An index-free op (the common case) never calls this and keeps
+    /// `read_index` empty. The debug assert catches a generator bug at
+    /// catalog-build time; the full v1 rule set (index dtype integer, axis in
+    /// range, one gathered input, gather ⊥ view, …) is enforced at plan time by
+    /// `assert_valid_gather` once the iteration rank + operand keys are known.
+    #[must_use]
+    pub fn with_indexed(mut self, read_index: Vec<ReadIndex>) -> Self {
+        debug_assert_eq!(
+            read_index.len(),
+            self.n_inputs as usize,
+            "OpDef::with_indexed: read_index.len() must equal n_inputs"
+        );
+        self.read_index = read_index;
+        self
+    }
+
+    /// Build a **gather** op — `out[coord] = data[coord with `axis` replaced by
+    /// index[coord]]` (torch `gather` along `axis`). Two inputs: `Input(0)` is the
+    /// gathered `data`, `Input(1)` is the integer `index` tensor (dtype
+    /// `index_dtype`, `I32`/`I64`); the body is the identity copy `Input(0)`, read
+    /// through the [`ReadIndex::Indexed`] role. The output shape equals the index
+    /// shape (a **full-shape** index — the caller keys `Input(1)` dense on every
+    /// axis). `oob` picks the out-of-range semantics; the bespoke gather is
+    /// [`OobPolicy::Skip`] (silently skips OOB / negative indices), so pass `Skip`
+    /// to match it exactly.
+    #[must_use]
+    pub fn gather(
+        name: &str,
+        dtypes: &[ElementKind],
+        axis: u8,
+        oob: OobPolicy,
+        index_dtype: ElementKind,
+    ) -> Self {
+        Self::elementwise(name, 2, dtypes, Expr(ScalarExpr::Input(0))).with_indexed(vec![
+            ReadIndex::Indexed {
+                index_operand: 1,
+                axis,
+                oob,
+                index_dtype,
+            },
+            ReadIndex::Direct,
+        ])
+    }
+
+    /// Build an **index_select** op — `out[..., j, ...] = data[..., idx[j], ...]`
+    /// along `axis`, where `idx` is a **1-D** index of length
+    /// `out.shape[axis]`. Structurally identical to [`OpDef::gather`] (same
+    /// `Input(0)` copy through an `Indexed` role); the ONLY difference is that the
+    /// caller keys `Input(1)` as a 1-D index that **broadcasts on every axis
+    /// except `axis`** — so the emitted index offset degenerates to
+    /// `c{axis}·stride`, exactly the bespoke `index_select` 1-D lookup. Bespoke is
+    /// [`OobPolicy::Skip`].
+    #[must_use]
+    pub fn index_select(
+        name: &str,
+        dtypes: &[ElementKind],
+        axis: u8,
+        oob: OobPolicy,
+        index_dtype: ElementKind,
+    ) -> Self {
+        Self::gather(name, dtypes, axis, oob, index_dtype)
+    }
+
+    /// Build an **embedding** op — `out[n, :] = weight[ids[n], :]` (a row gather
+    /// on `axis 0` of the `[V, D]` weight, `ids` broadcast over the feature axis).
+    /// Bespoke embedding zeros the output row on an OOB / negative index, so the
+    /// OOB policy is [`OobPolicy::ZeroFill`]. (The bespoke `padding_idx` — zero
+    /// the row where `ids[n] == padding_idx` — is a per-op runtime scalar
+    /// predicate NOT modeled here in v1; pass a disabled padding_idx, i.e. the
+    /// `INT32_MIN` sentinel, to the bespoke oracle so only the OOB path is
+    /// exercised. See the deliverable note.)
+    #[must_use]
+    pub fn embedding(name: &str, dtypes: &[ElementKind], index_dtype: ElementKind) -> Self {
+        Self::gather(name, dtypes, 0, OobPolicy::ZeroFill, index_dtype)
     }
 }
 
@@ -1624,6 +1809,49 @@ mod view_tests {
         assert!(View::Identity.is_valid(4));
         assert!(View::Broadcast { bcast: AxisMask::EMPTY }.is_valid(4));
         assert!(View::Reshape { producer_rank: 2 }.is_valid(3));
+    }
+
+    // ---- increment 4: gather constructor shapes ----
+
+    #[test]
+    fn gather_constructor_builds_the_indexed_read_role() {
+        let op = OpDef::gather("gather", &[ElementKind::F32], 1, OobPolicy::Skip, ElementKind::I64);
+        assert_eq!(op.n_inputs, 2);
+        assert_eq!(op.n_outputs(), 1);
+        // Body is the identity copy of the gathered data operand.
+        assert_eq!(op.body, ScalarExpr::Input(0));
+        // read_index[0] is the Indexed role; input 1 (the index tensor) is Direct.
+        assert_eq!(
+            op.read_index[0],
+            ReadIndex::Indexed {
+                index_operand: 1,
+                axis: 1,
+                oob: OobPolicy::Skip,
+                index_dtype: ElementKind::I64,
+            }
+        );
+        assert!(op.read_index[1].is_direct());
+    }
+
+    #[test]
+    fn embedding_constructor_is_axis0_zerofill() {
+        // embedding zeros the OOB / negative row (bespoke) — ZeroFill on axis 0.
+        let op = OpDef::embedding("emb", &[ElementKind::F32], ElementKind::I32);
+        match op.read_index[0] {
+            ReadIndex::Indexed { axis, oob, index_dtype, .. } => {
+                assert_eq!(axis, 0);
+                assert_eq!(oob, OobPolicy::ZeroFill);
+                assert_eq!(index_dtype, ElementKind::I32);
+            }
+            ReadIndex::Direct => panic!("embedding input 0 must be Indexed"),
+        }
+    }
+
+    #[test]
+    fn index_free_op_has_empty_read_index() {
+        // Back-compat: every plain constructor leaves read_index empty.
+        let op = OpDef::elementwise("add", 2, &[ElementKind::F32], input(0) + input(1));
+        assert!(op.read_index.is_empty());
     }
 }
 

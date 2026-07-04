@@ -141,6 +141,14 @@ impl Backend for Cuda {
         // + the Strided schedule, and re-validates each view's structure. A
         // view-free / all-identity plan returns immediately (byte-identical).
         assert_views_lowerable(plan);
+        // Increment 4: independent GATHER backstop, beside the plan gate
+        // `plan::assert_valid_gather` (the 0a lesson: gate every layer). A gathered
+        // input reads a data-dependent address that ONLY the strided emitter folds;
+        // the vector/packed/scalar emitters iterate a bare linear index and would
+        // ignore the index operand. Pins: a real gather ⇒ Elementwise +
+        // single-output + one gathered input + Strided schedule. An index-free plan
+        // returns immediately (byte-identical).
+        assert_gather_lowerable(plan);
         // Increment 1: a MULTI-OUTPUT plan routes to the dedicated N-store
         // emitters BEFORE the single-output dispatch below — so the single-output
         // emitters stay byte-for-byte untouched (extra_out_bodies is empty ⇒
@@ -635,16 +643,37 @@ fn emit_scalar(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
 fn emit_strided(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
     let rank = plan.key.rank as usize;
     let n = plan.n_inputs as usize;
+    // Increment 4: the single GATHERED input (or `None` for an index-free op).
+    // `(g, idx_op, axis, oob, index_dtype)`: `g` reads its `axis` coordinate from
+    // integer operand `idx_op`. Index-free ⇒ every branch below collapses to the
+    // pre-increment-4 string (byte-identical emission).
+    let gather = crate::plan::gather_of(plan.read_index);
+    // The index dtype rides the ENTRY_POINT symbol (`gather_f32_i32` vs `_i64`) —
+    // it cannot ride the structure key (single operand-0 dtype). Index-free ⇒ no
+    // infix ⇒ byte-identical name.
+    let idx_infix = gather.map_or(String::new(), |(_, _, _, _, idt)| {
+        format!("_{}", dtype_tag(idt))
+    });
     let name = format!(
-        "baracuda_gen_{}_{}_strided_r{}",
+        "baracuda_gen_{}_{}{}_strided_r{}",
         plan.op_name,
         dtype_tag(plan.dtype),
+        idx_infix,
         rank
     );
     let octype = out_ctype(plan, ctype);
     let mut s = header(plan, &name);
     for i in 0..n {
-        s.push_str(&format!("    const {ctype}* __restrict__ in{i},\n"));
+        // The INDEX operand (gather) is an integer tensor — its pointer takes the
+        // index ctype (`int`/`long long`), not the data ctype. Every other input
+        // (and the index-free case) keeps the data ctype ⇒ byte-identical.
+        let ptype = match gather {
+            Some((_, idx_op, _, _, idt)) if idx_op as usize == i => {
+                scalar_ctype(idt).expect("gate pins index dtype to I32/I64")
+            }
+            _ => ctype,
+        };
+        s.push_str(&format!("    const {ptype}* __restrict__ in{i},\n"));
     }
     s.push_str(&format!("    {octype}* __restrict__ out,\n"));
     // Extraction #1 (generated-vs-bespoke audit round 1): dims ride BY VALUE as
@@ -664,10 +693,21 @@ fn emit_strided(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
     for d in 0..rank {
         s.push_str(&format!("    long long so_{d},\n"));
     }
+    // Increment 4: the gathered DATA operand's extent along the gathered axis
+    // (`src_dim_size` in the bespoke launcher) — the OOB bound. A dedicated
+    // scalar slot (the iteration `shape{d}` is the OUTPUT/index shape, which
+    // differs from the source extent along the gathered axis). Emitted ONLY for a
+    // gather ⇒ index-free signature is byte-identical. Placed right before `n`.
+    if gather.is_some() {
+        s.push_str("    long long gext,\n");
+    }
     s.push_str(&format!("    long long n{})\n{{\n", param_args(plan.body)));
     // Hoist fully-broadcast inputs: their offset is loop-invariant, load once.
+    // The INDEX operand is never hoisted here (it is handled specially in the
+    // gather pre-pass, with the correct integer ctype) — skip it.
     for k in 0..n {
-        if is_fully_broadcast(plan.key.operands[k], rank) {
+        let is_index = matches!(gather, Some((_, idx_op, _, _, _)) if idx_op as usize == k);
+        if !is_index && is_fully_broadcast(plan.key.operands[k], rank) {
             s.push_str(&format!("    {ctype} h{k} = in{k}[0];\n"));
         }
     }
@@ -681,8 +721,43 @@ fn emit_strided(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
             "        long long c{d} = lin % shape{d}; lin /= shape{d};\n"
         ));
     }
+    // Increment 4 — GATHER pre-pass. Load the runtime index, then compute a
+    // CLAMPED effective index used for the DATA load (always in-bounds for a
+    // non-empty gathered axis, so the load is memcheck-clean regardless of OOB
+    // policy) plus, for Skip/ZeroFill, an `goob` predicate for the store. Negative
+    // indices are OOB (no from-end wrap) — bespoke parity.
+    if let Some((g, idx_op, axis, oob, _idt)) = gather {
+        // The index operand's own strided offset (a full-shape index varies on
+        // every axis; a 1-D index_select/embedding index broadcasts to
+        // `c{axis}·stride`). Never viewed (gather ⊥ view) ⇒ identity remap.
+        let ioff = offset_expr(plan.key.operands[idx_op as usize], &format!("s{idx_op}"), rank, None);
+        s.push_str(&format!("        long long gidx_off = {ioff};\n"));
+        s.push_str(&format!("        long long gidx_raw = (long long)in{idx_op}[gidx_off];\n"));
+        // Clamp the LOAD address into `[0, gext-1]` (memcheck-safe for gext>=1):
+        s.push_str(
+            "        long long gidx_clamped = gidx_raw < 0 ? 0 : (gidx_raw >= gext ? gext - 1 : gidx_raw);\n",
+        );
+        if matches!(oob, crate::ir::OobPolicy::Skip | crate::ir::OobPolicy::ZeroFill) {
+            s.push_str("        bool goob = (gidx_raw < 0) || (gidx_raw >= gext);\n");
+        }
+        // The gathered DATA operand's offset substitutes `gidx_clamped·stride[axis]`
+        // for the `c{axis}·stride[axis]` term.
+        let goff = gathered_offset_expr(
+            plan.key.operands[g],
+            &format!("s{g}"),
+            rank,
+            axis as usize,
+            "gidx_clamped",
+        );
+        s.push_str(&format!("        long long o{g} = {goff};\n"));
+    }
     for k in 0..n {
-        if !is_fully_broadcast(plan.key.operands[k], rank) {
+        // The gathered DATA operand's offset is emitted in the pre-pass above; the
+        // INDEX operand's offset is `gidx_off` (its value is an address, never a
+        // body leaf) — skip both here.
+        let handled = matches!(gather, Some((g, idx_op, _, _, _))
+            if k == g || idx_op as usize == k);
+        if !handled && !is_fully_broadcast(plan.key.operands[k], rank) {
             // Item 01: input `k` may be read through a Permute view (a transposed
             // read) — `input_perm` remaps its stride indices. Identity/view-free ⇒
             // `None` ⇒ byte-identical offset.
@@ -737,9 +812,99 @@ fn emit_strided(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
     for decl in &prelude {
         s.push_str(&format!("        {decl}\n"));
     }
-    s.push_str(&format!("        out[oo] = {};\n", store_expr(plan, root)));
+    let stored = store_expr(plan, root);
+    // Increment 4 — GATHER store policy. The DATA load inside `stored` is always
+    // in-bounds (`gidx_clamped`), so the policy only shapes the WRITE:
+    //   - Clamp     → always store the clamped-index value (`gidx_clamped` IS the
+    //                 clamp semantics; no predicate). Bespoke: no op clamps.
+    //   - Skip      → store only when in-range; leave the cell unwritten on OOB
+    //                 (bespoke gather/index_select `continue;`).
+    //   - ZeroFill  → store the op zero on OOB, else the value (bespoke embedding).
+    // Index-free ops take the plain store — byte-identical.
+    match gather {
+        Some((_, _, _, crate::ir::OobPolicy::Skip, _)) => {
+            s.push_str(&format!("        if (!goob) out[oo] = {stored};\n"));
+        }
+        Some((_, _, _, crate::ir::OobPolicy::ZeroFill, _)) => {
+            let zero = zero_store_literal(octype);
+            s.push_str(&format!("        out[oo] = goob ? ({zero}) : ({stored});\n"));
+        }
+        // Clamp or index-free: unconditional store.
+        _ => {
+            s.push_str(&format!("        out[oo] = {stored};\n"));
+        }
+    }
     s.push_str("    }\n}\n");
     GeneratedKernel { name, source: s }
+}
+
+/// Independent emitter backstop for a GATHERED plan (increment 4), beside the
+/// plan gate `plan::assert_valid_gather` (the 0a lesson: gate every layer). An
+/// index-free plan (empty `read_index` / all-`Direct`) returns immediately —
+/// byte-identical. For a plan carrying a real gather, this pins the facts the
+/// `emit_strided` substitution relies on so a future schedule change can't route
+/// a gathered operand through a linear-index emitter that ignores the index:
+///
+/// - **Elementwise + single-output** — the only access/arity increment 4 emits.
+/// - **exactly one gathered input** — the emitter substitutes exactly one axis.
+/// - **`Schedule::Strided`** — the sole schedule whose offset emitter folds the
+///   value-substitution (a data-dependent address never coalesces, so the
+///   vectorized/scalar/packed emitters must never see it).
+/// - per gathered input: `index_operand < n_inputs`, `index_operand != g`, an
+///   integer `index_dtype`, `axis < rank`, the index operand is not itself
+///   gathered — the same rules as the plan gate, held independently here.
+fn assert_gather_lowerable(plan: &KernelPlan<'_>) {
+    if crate::plan::gather_of(plan.read_index).is_none() {
+        return; // index-free / all-Direct — the established path, unchanged.
+    }
+    let name = plan.op_name;
+    assert!(
+        matches!(plan.access, Access::Elementwise),
+        "cuda backend: gathered op '{name}' must be Access::Elementwise (increment \
+         4 gathers are Elementwise-only)"
+    );
+    assert!(
+        plan.n_outputs == 1,
+        "cuda backend: gathered op '{name}' must be single-output ({} outputs) — a \
+         gathered multi-output op is a deferred composition",
+        plan.n_outputs
+    );
+    let n_gathered = plan.read_index.iter().filter(|r| !r.is_direct()).count();
+    assert!(
+        n_gathered == 1,
+        "cuda backend: gathered op '{name}' must have exactly one gathered input, \
+         got {n_gathered}"
+    );
+    assert!(
+        matches!(plan.schedule, Schedule::Strided),
+        "cuda backend: gathered op '{name}' must lower on the Strided schedule (a \
+         data-dependent address cannot coalesce; only the strided emitter folds \
+         the value-substitution), got {:?}",
+        plan.schedule
+    );
+    let (g, index_operand, axis, _oob, index_dtype) =
+        crate::plan::gather_of(plan.read_index).expect("gather present (checked above)");
+    assert!(
+        (index_operand as usize) < plan.n_inputs as usize && index_operand as usize != g,
+        "cuda backend: gathered op '{name}' index_operand ({index_operand}) invalid \
+         for {} inputs / gathered input {g}",
+        plan.n_inputs
+    );
+    assert!(
+        matches!(index_dtype, ElementKind::I32 | ElementKind::I64),
+        "cuda backend: gathered op '{name}' index_dtype must be I32/I64, got \
+         {index_dtype:?}"
+    );
+    assert!(
+        (axis as usize) < plan.key.rank as usize,
+        "cuda backend: gathered op '{name}' axis ({axis}) >= rank ({})",
+        plan.key.rank
+    );
+    assert!(
+        plan.read_index[index_operand as usize].is_direct(),
+        "cuda backend: gathered op '{name}' index operand ({index_operand}) must \
+         not itself be gathered"
+    );
 }
 
 /// Independent emitter backstop for a multi-output plan (increment 1), beside
@@ -2695,6 +2860,51 @@ fn input_perm<'a>(plan: &'a KernelPlan<'_>, k: usize) -> Option<&'a [u8]> {
     }
 }
 
+/// Element-offset expression for a GATHERED operand (increment 4): identical to
+/// [`offset_expr`] with an IDENTITY layout (gather ⊥ view), EXCEPT the gathered
+/// `axis` term is `({idx_var})·stride[axis]` — the runtime index value replaces
+/// the loop coordinate `c{axis}`. The gathered axis is never a broadcast axis
+/// (the plan gate pins a live stride), so its term is always present; the other
+/// axes drop their term when broadcast, exactly as [`offset_expr`].
+fn gathered_offset_expr(
+    o: OperandKey,
+    stride_arr: &str,
+    rank: usize,
+    axis: usize,
+    idx_var: &str,
+) -> String {
+    let mut terms = Vec::new();
+    for d in 0..rank {
+        if d == axis {
+            // The data-dependent term: the runtime index, not the coordinate.
+            terms.push(format!("({idx_var})*{stride_arr}_{d}"));
+        } else if o.bcast.is_set(d as u8) {
+            continue;
+        } else {
+            terms.push(format!("c{d}*{stride_arr}_{d}"));
+        }
+    }
+    if terms.is_empty() {
+        "0".to_string()
+    } else {
+        terms.join(" + ")
+    }
+}
+
+/// The properly-typed zero literal for the output ctype — the [`OobPolicy::ZeroFill`]
+/// fill (increment 4). f16/bf16 need the intrinsic constructor (no portable
+/// `T(0)`); everything else takes a plain literal.
+fn zero_store_literal(octype: &str) -> &'static str {
+    match octype {
+        "__half" => "__float2half(0.0f)",
+        "__nv_bfloat16" => "__float2bfloat16(0.0f)",
+        "float" => "0.0f",
+        "double" => "0.0",
+        // int / long long / signed char / unsigned char
+        _ => "0",
+    }
+}
+
 /// Spell a [`UnaryOp`] applied to an already-lowered f32 inner expression.
 /// Inner strings are atomic or parenthesized, so the function-call forms need no
 /// extra wrapping; the operator forms wrap themselves. (`Sigmoid`/`Gelu`/`Silu`
@@ -3199,6 +3409,188 @@ mod tests {
         structure_key(OpCategory::BinaryElementwise, &[a, a, a], ArchSku::Sm89)
     }
 
+    // rank-2 gather cell: data [4,3] (input 0, gathered axis 0), index [4,3] i32
+    // full-shape (input 1), out [4,3]. Non-contig (strided) so it would strided
+    // anyway; the gather forces strided regardless.
+    fn gather_2d_key() -> baracuda_kernels_types::StructureKey {
+        gather_2d_key_idx(ElementKind::I32)
+    }
+
+    fn gather_2d_key_idx(idx_dt: ElementKind) -> baracuda_kernels_types::StructureKey {
+        let data = OperandDesc::new(2, &[4, 3], &[3, 1], ElementKind::F32, 256);
+        let idx = OperandDesc::new(2, &[4, 3], &[3, 1], idx_dt, 256);
+        let out = OperandDesc::new(2, &[4, 3], &[3, 1], ElementKind::F32, 256);
+        structure_key(OpCategory::BinaryElementwise, &[data, idx, out], ArchSku::Sm89)
+    }
+
+    // ---- increment 4: GATHER emission goldens ----
+
+    #[test]
+    fn gather_skip_substitutes_the_index_value_for_the_gathered_axis() {
+        use crate::ir::OobPolicy;
+        // torch-gather along axis 0: out[c] = data[idx[c], c1], skip OOB.
+        let op = OpDef::gather("gather", &[ElementKind::F32], 0, OobPolicy::Skip, ElementKind::I32);
+        let k = generate(&op, &gather_2d_key(), &Cuda);
+        // The index dtype rides the ENTRY_POINT symbol.
+        assert_eq!(k.name, "baracuda_gen_gather_f32_i32_strided_r2");
+        // Index operand is an INT pointer (not the data dtype).
+        assert!(k.source.contains("const int* __restrict__ in1,"));
+        assert!(!k.source.contains("const float* __restrict__ in1,"));
+        // The gathered-axis extent rides a dedicated scalar param.
+        assert!(k.source.contains("long long gext,"));
+        // Index load + clamp + oob predicate.
+        assert!(k.source.contains("long long gidx_off = c0*s1_0 + c1*s1_1;"));
+        assert!(k.source.contains("long long gidx_raw = (long long)in1[gidx_off];"));
+        assert!(k.source.contains(
+            "long long gidx_clamped = gidx_raw < 0 ? 0 : (gidx_raw >= gext ? gext - 1 : gidx_raw);"
+        ));
+        assert!(k.source.contains("bool goob = (gidx_raw < 0) || (gidx_raw >= gext);"));
+        // THE increment: the gathered-axis term is idx·stride[axis], NOT c0·stride.
+        // (Matches bespoke `src_off = idx_val*stride_src[0] + coord[1]*stride_src[1]`.)
+        assert!(
+            k.source.contains("long long o0 = (gidx_clamped)*s0_0 + c1*s0_1;"),
+            "gathered-axis term must use the index value, got:\n{}",
+            k.source
+        );
+        assert!(!k.source.contains("long long o0 = c0*s0_0 + c1*s0_1;"));
+        // Skip policy: predicated store (bespoke `continue;`) — no OOB load, no write.
+        assert!(k.source.contains("if (!goob) out[oo] = in0[o0];"));
+    }
+
+    #[test]
+    fn embedding_zerofill_selects_zero_on_oob() {
+        // embedding = axis-0 gather, ZeroFill (bespoke OOB/neg → zero row).
+        let op = OpDef::embedding("emb", &[ElementKind::F32], ElementKind::I64);
+        let k = generate(&op, &gather_2d_key_idx(ElementKind::I64), &Cuda);
+        assert_eq!(k.name, "baracuda_gen_emb_f32_i64_strided_r2");
+        // i64 index ⇒ long long pointer.
+        assert!(k.source.contains("const long long* __restrict__ in1,"));
+        // ZeroFill: store the zero fill on OOB, else the value (no skip predicate).
+        assert!(k.source.contains("out[oo] = goob ? (0.0f) : (in0[o0]);"));
+        assert!(!k.source.contains("if (!goob)"));
+    }
+
+    #[test]
+    fn embedding_f16_zerofill_uses_the_half_zero_intrinsic() {
+        // The ZeroFill literal must be the fp16 constructor, not a bare `0`.
+        let data = OperandDesc::new(2, &[4, 3], &[3, 1], ElementKind::F16, 256);
+        let idx = OperandDesc::new(2, &[4, 3], &[3, 1], ElementKind::I32, 256);
+        let key = structure_key(OpCategory::BinaryElementwise, &[data, idx, data], ArchSku::Sm89);
+        let op = OpDef::embedding("emb", &[ElementKind::F16], ElementKind::I32);
+        let k = generate(&op, &key, &Cuda);
+        assert!(k.source.contains("out[oo] = goob ? (__float2half(0.0f)) : (in0[o0]);"));
+    }
+
+    #[test]
+    fn gather_clamp_has_no_store_predicate() {
+        use crate::ir::OobPolicy;
+        // Clamp: gidx_clamped IS the effective index; always store, no goob.
+        let op = OpDef::gather("gclamp", &[ElementKind::F32], 0, OobPolicy::Clamp, ElementKind::I32);
+        let k = generate(&op, &gather_2d_key(), &Cuda);
+        assert!(k.source.contains("long long o0 = (gidx_clamped)*s0_0 + c1*s0_1;"));
+        // No OOB predicate at all (Clamp always stores the clamped-index value).
+        assert!(!k.source.contains("goob"));
+        assert!(k.source.contains("out[oo] = in0[o0];"));
+        assert!(!k.source.contains("if (!goob)"));
+    }
+
+    #[test]
+    fn index_select_1d_index_degenerates_to_the_axis_coordinate() {
+        use crate::ir::OobPolicy;
+        // index_select axis 0: the index is 1-D (broadcast on axis 1, stride 0), so
+        // its offset drops the axis-1 term ⇒ `gidx_off = c0*s1_0` — the bespoke
+        // `index_select` 1-D lookup by `coord[select_dim]`.
+        let data = OperandDesc::new(2, &[4, 3], &[3, 1], ElementKind::F32, 256);
+        let idx = OperandDesc::new(2, &[4, 3], &[1, 0], ElementKind::I32, 256); // bcast axis 1
+        let out = OperandDesc::new(2, &[4, 3], &[3, 1], ElementKind::F32, 256);
+        let key = structure_key(OpCategory::BinaryElementwise, &[data, idx, out], ArchSku::Sm89);
+        let op = OpDef::index_select("isel", &[ElementKind::F32], 0, OobPolicy::Skip, ElementKind::I32);
+        let k = generate(&op, &key, &Cuda);
+        assert!(
+            k.source.contains("long long gidx_off = c0*s1_0;"),
+            "1-D index offset must drop the broadcast axis, got:\n{}",
+            k.source
+        );
+        assert!(k.source.contains("long long o0 = (gidx_clamped)*s0_0 + c1*s0_1;"));
+    }
+
+    #[test]
+    fn gather_forces_strided_off_the_vectorized_path() {
+        use crate::ir::OobPolicy;
+        use crate::plan::{build_plan, Schedule};
+        // A fully-contiguous cell that a non-gather copy would VECTORIZE.
+        let data = OperandDesc::new(1, &[1 << 16], &[1], ElementKind::F32, 256);
+        let idx = OperandDesc::new(1, &[1 << 16], &[1], ElementKind::I32, 256);
+        let out = OperandDesc::new(1, &[1 << 16], &[1], ElementKind::F32, 256);
+        let key = structure_key(OpCategory::BinaryElementwise, &[data, idx, out], ArchSku::Sm89);
+        // Baseline: a view-free/index-free copy vectorizes on this contiguous cell.
+        let copy = OpDef::elementwise("copy", 1, &[ElementKind::F32], input(0));
+        let copy_key = {
+            let a = OperandDesc::new(1, &[1 << 16], &[1], ElementKind::F32, 256);
+            structure_key(OpCategory::UnaryElementwise, &[a, a], ArchSku::Sm89)
+        };
+        assert!(matches!(
+            build_plan(&copy, &copy_key).schedule,
+            Schedule::Vectorized { .. }
+        ));
+        // The gather forces Strided (a data-dependent address cannot coalesce).
+        let op = OpDef::gather("gather", &[ElementKind::F32], 0, OobPolicy::Skip, ElementKind::I32);
+        assert_eq!(build_plan(&op, &key).schedule, Schedule::Strided);
+    }
+
+    #[test]
+    fn index_free_op_emits_byte_identical_to_pre_increment4() {
+        // An all-Direct read_index vec must emit the exact same source + name as the
+        // index-free op — the byte-identical guarantee.
+        use crate::ir::ReadIndex;
+        let key = binary_key(ElementKind::F32);
+        let free = generate(&add_op(&[ElementKind::F32]), &key, &Cuda);
+        let with = OpDef::elementwise("add", 2, &[ElementKind::F32], input(0) + input(1))
+            .with_indexed(vec![ReadIndex::Direct, ReadIndex::Direct]);
+        let k = generate(&with, &key, &Cuda);
+        assert_eq!(free.name, k.name);
+        assert_eq!(
+            free.source, k.source,
+            "an all-Direct read_index must emit byte-identical source"
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "must lower on the Strided schedule")]
+    fn gathered_op_on_a_non_strided_schedule_is_refused_by_the_backstop() {
+        use crate::backend::Backend;
+        use crate::ir::{OobPolicy, ReadIndex};
+        use crate::plan::{KernelPlan, Schedule};
+        // A gather manually paired with the Vectorized schedule (build_plan never
+        // produces this) — the independent emitter backstop must refuse it.
+        let key = gather_2d_key();
+        let body = input(0).0;
+        let ri = [
+            ReadIndex::Indexed {
+                index_operand: 1,
+                axis: 0,
+                oob: OobPolicy::Skip,
+                index_dtype: ElementKind::I32,
+            },
+            ReadIndex::Direct,
+        ];
+        let plan = KernelPlan {
+            op_name: "sneaky",
+            n_inputs: 2,
+            dtype: ElementKind::F32,
+            out_dtype: ElementKind::F32,
+            schedule: Schedule::Vectorized { width: 4 },
+            key: &key,
+            body: &body,
+            n_outputs: 1,
+            extra_out_bodies: &[],
+            access: &crate::ir::Access::Elementwise,
+            views: &[],
+            read_index: &ri,
+        };
+        let _ = Cuda.lower(&plan);
+    }
+
     #[test]
     fn f32_contiguous_vectorizes_to_float4() {
         let k = generate(&add_op(&[ElementKind::F32]), &binary_key(ElementKind::F32), &Cuda);
@@ -3701,6 +4093,7 @@ mod tests {
             extra_out_bodies: &[],
             access: &crate::ir::Access::Elementwise,
             views: &views,
+            read_index: &[],
         };
         let _ = Cuda.lower(&plan);
     }
@@ -5095,6 +5488,7 @@ mod tests {
             extra_out_bodies: &[],
             access: &crate::ir::Access::Elementwise,
             views: &[],
+            read_index: &[],
         };
         let _ = Cuda.lower(&plan);
     }
@@ -5664,6 +6058,7 @@ mod tests {
             extra_out_bodies: &[],
             access: &crate::ir::Access::Elementwise,
             views: &[],
+            read_index: &[],
         };
         let _ = Cuda.lower(&plan);
     }
@@ -5687,6 +6082,7 @@ mod tests {
             extra_out_bodies: &[],
             access: &crate::ir::Access::Elementwise,
             views: &[],
+            read_index: &[],
         };
         let _ = Cuda.lower(&plan);
     }
@@ -5710,6 +6106,7 @@ mod tests {
             extra_out_bodies: &[],
             access: &crate::ir::Access::Elementwise,
             views: &[],
+            read_index: &[],
         };
         let _ = Cuda.lower(&plan);
     }
@@ -5737,6 +6134,7 @@ mod tests {
             extra_out_bodies: &[],
             access: &crate::ir::Access::Elementwise,
             views: &[],
+            read_index: &[],
         };
         let _ = Cuda.lower(&plan);
     }
@@ -5763,6 +6161,7 @@ mod tests {
             extra_out_bodies: &[],
             access: &crate::ir::Access::Elementwise,
             views: &[],
+            read_index: &[],
         };
         let _ = Cuda.lower(&plan);
     }
@@ -5998,6 +6397,7 @@ mod tests {
             extra_out_bodies: &[],
             access: &crate::ir::Access::Elementwise,
             views: &[],
+            read_index: &[],
         };
         let _ = Cuda.lower(&plan);
     }
@@ -6033,6 +6433,7 @@ mod tests {
             extra_out_bodies: &[],
             access: &access,
             views: &[],
+            read_index: &[],
         };
         let _ = Cuda.lower(&plan);
     }
@@ -6056,6 +6457,7 @@ mod tests {
             extra_out_bodies: &[],
             access: &crate::ir::Access::Elementwise,
             views: &[],
+            read_index: &[],
         };
         let _ = Cuda.lower(&plan);
     }
@@ -6083,6 +6485,7 @@ mod tests {
             extra_out_bodies: &[],
             access: &crate::ir::Access::Elementwise,
             views: &[],
+            read_index: &[],
         };
         let _ = Cuda.lower(&plan);
     }

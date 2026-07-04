@@ -6,7 +6,7 @@
 //! lowers the plan to a concrete language. Choosing the schedule here, not in
 //! the backend, keeps the decision shared across every backend.
 
-use crate::ir::{Access, OpDef, ReduceOp, ReduceStage, ScalarExpr, View};
+use crate::ir::{Access, OpDef, ReadIndex, ReduceOp, ReduceStage, ScalarExpr, View};
 use baracuda_kernels_types::{
     AxisMask, Contiguity, ElementKind, OperandKey, StructureKey, VecWidth, MAX_OPERANDS,
 };
@@ -129,6 +129,16 @@ pub struct KernelPlan<'a> {
     /// [`build_plan`] ([`assert_valid_views`]) with an independent emitter backstop
     /// in [`crate::cuda::Cuda::lower`].
     pub views: &'a [crate::ir::View],
+    /// Per-input **data-dependent read roles** ([`crate::ir::ReadIndex`], increment
+    /// 4, GATHER) — index `i` ↔ `Input(i)`. **Empty for every index-free op**
+    /// (every pre-increment-4 constructor), so the strided emitter's per-operand
+    /// offset is byte-identical; a non-empty slice has length `n_inputs`. Only a
+    /// [`crate::ir::ReadIndex::Indexed`] entry changes emission (the axis
+    /// value-substitution in `cuda::emit_strided`); `Direct` reads at the
+    /// iteration coordinate. Validated at the top of [`build_plan`]
+    /// ([`assert_valid_gather`]) with an independent emitter backstop in
+    /// [`crate::cuda::Cuda::lower`].
+    pub read_index: &'a [crate::ir::ReadIndex],
 }
 
 impl KernelPlan<'_> {
@@ -159,6 +169,7 @@ pub fn build_plan<'a>(op: &'a OpDef, key: &'a StructureKey) -> KernelPlan<'a> {
     assert_coord_admissibility(op, key);
     assert_valid_reduction_post(op);
     assert_valid_views(op, key);
+    assert_valid_gather(op, key);
     let schedule = match op.access {
         Access::Reduction {
             op: rop,
@@ -222,7 +233,19 @@ pub fn build_plan<'a>(op: &'a OpDef, key: &'a StructureKey) -> KernelPlan<'a> {
                 .map(|k| vec_width_elems(key.operands[k].vec_width))
                 .min()
                 .unwrap_or(1);
-            if op_has_addressing_view(op) {
+            if op_has_gather(op) {
+                // Increment 4: a GATHERED input reads a DATA-DEPENDENT address
+                // (one axis coordinate is a runtime index value), which only the
+                // strided emitter can fold (it substitutes `idx·stride[axis]` for
+                // `c{axis}·stride[axis]`). NEVER vectorized/packed/scalar — a
+                // data-dependent address cannot coalesce into a vector load, and
+                // the vector/packed emitters iterate a bare linear index that
+                // would ignore the index operand entirely. Pinned by the
+                // force-strided gather test + the independent
+                // `assert_gather_lowerable` backstop. Index-free ops never reach
+                // here (empty `read_index`), so emission stays byte-identical.
+                Schedule::Strided
+            } else if op_has_addressing_view(op) {
                 // Item 01: a viewed INPUT (a `Permute`/transpose or a `Broadcast`
                 // read-through) reads the producer through a layout change, which
                 // only the strided emitter folds into address math (`offset_expr`
@@ -273,6 +296,7 @@ pub fn build_plan<'a>(op: &'a OpDef, key: &'a StructureKey) -> KernelPlan<'a> {
         extra_out_bodies: &op.extra_out_bodies,
         access: &op.access,
         views: &op.views,
+        read_index: &op.read_index,
     }
 }
 
@@ -724,6 +748,153 @@ fn assert_valid_views(op: &OpDef, key: &StructureKey) {
             }
         }
     }
+}
+
+/// The single **gathered** input of `read_index` (increment 4), or `None` for an
+/// index-free / all-[`ReadIndex::Direct`] op. Returns the gathered input's slot
+/// plus its [`ReadIndex::Indexed`] fields `(gathered_input, index_operand, axis,
+/// oob, index_dtype)`. v1 admits **at most one** gathered input (the plan gate
+/// `assert_valid_gather` rejects more), so the first match is the only one; the
+/// emitter and its backstop read the gather off this one accessor to stay in
+/// lockstep.
+pub(crate) fn gather_of(
+    read_index: &[ReadIndex],
+) -> Option<(usize, u8, u8, crate::ir::OobPolicy, ElementKind)> {
+    read_index.iter().enumerate().find_map(|(i, r)| match r {
+        ReadIndex::Indexed {
+            index_operand,
+            axis,
+            oob,
+            index_dtype,
+        } => Some((i, *index_operand, *axis, *oob, *index_dtype)),
+        ReadIndex::Direct => None,
+    })
+}
+
+/// `true` if `op` has a [`ReadIndex::Indexed`] input (a gather; increment 4).
+/// `false` for an index-free op (empty `read_index`) and an all-`Direct` op — the
+/// byte-identical cases. Forces the [`Schedule::Strided`] schedule and is the
+/// `contract`/`pattern` honest-miss trigger.
+pub(crate) fn op_has_gather(op: &OpDef) -> bool {
+    op.read_index.iter().any(|r| !r.is_direct())
+}
+
+/// Increment-4 **GATHER** admissibility gate — runs at the TOP of [`build_plan`]
+/// (the house pattern), with an independent emitter backstop in
+/// [`crate::cuda::assert_gather_lowerable`]. An index-free op (empty
+/// `read_index`, every pre-increment-4 constructor) returns immediately, and an
+/// all-[`ReadIndex::Direct`] op returns after the length check — so the
+/// established path is unchanged and emission stays byte-identical. For an op
+/// carrying a real gather the v1 rules, all honest AOT panics (an author/
+/// generator error — the gather role never crosses the JIT trust boundary):
+///
+/// 1. **Shape**: `read_index.len() == n_inputs` (index `i` ↔ `Input(i)`).
+/// 2. **Access**: [`Access::Elementwise`]-only in v1 — a reduction/row-reduce/
+///    contraction op has its own axis machinery a per-input indexed read would
+///    double-count.
+/// 3. **Single-output** in v1 (the multi-store DAG × the address substitution is
+///    unproven).
+/// 4. **One gathered input** in v1 — the emitter handles exactly one substituted
+///    axis; a second data-dependent address (and combining OOB predicates across
+///    two gathers) is deferred. Every bespoke gather/index_select/embedding
+///    gathers exactly one input, so this covers the charter surface.
+/// 5. Per gathered input `g` with `Indexed { index_operand, axis, oob,
+///    index_dtype }`:
+///    - `index_operand < n_inputs` and `index_operand != g` (an input can't index
+///      itself).
+///    - `index_dtype ∈ {I32, I64}` — an **integer** index (a float index address
+///      is meaningless; the emitted load type must be an int).
+///    - `axis < key.rank`.
+///    - the index operand must NOT itself be gathered (`read_index[index_operand]`
+///      is `Direct`) — a data-dependent index-of-an-index is out of v1 scope.
+///    - the gathered input must NOT also carry an address-affecting [`View`]
+///      (Permute/Broadcast) — gather ⊥ view in v1 (a gathered-and-permuted
+///      operand's composed address math is unproven; reject rather than
+///      mis-emit).
+///    - the gathered axis of the DATA operand must have a real stride (its key
+///      broadcast mask must NOT set `axis`) — the substituted `idx·stride[axis]`
+///      term needs a live stride; a broadcast gathered axis is a degenerate
+///      no-op.
+fn assert_valid_gather(op: &OpDef, key: &StructureKey) {
+    if op.read_index.is_empty() {
+        return; // index-free — every pre-increment-4 op, unchanged.
+    }
+    let name = &op.name;
+    assert_eq!(
+        op.read_index.len(),
+        op.n_inputs as usize,
+        "OpDef '{name}': read_index.len() ({}) must equal n_inputs ({})",
+        op.read_index.len(),
+        op.n_inputs
+    );
+    if op.read_index.iter().all(ReadIndex::is_direct) {
+        return; // all-Direct == index-free: byte-identical emission, no gate.
+    }
+    assert!(
+        matches!(op.access, Access::Elementwise),
+        "OpDef '{name}': a gather (Indexed read) is Access::Elementwise-only in v1 \
+         — a {}-class op has its own axis machinery that a per-input indexed read \
+         would double-count",
+        access_tag(&op.access)
+    );
+    assert!(
+        op.n_outputs() == 1,
+        "OpDef '{name}': a gathered input on a multi-output op ({} outputs) is a \
+         deferred composition in v1 — miss honestly",
+        op.n_outputs()
+    );
+    let n_gathered = op.read_index.iter().filter(|r| !r.is_direct()).count();
+    assert!(
+        n_gathered == 1,
+        "OpDef '{name}': v1 admits exactly one gathered input, got {n_gathered} — a \
+         second data-dependent address (and combined OOB predicates) is deferred"
+    );
+    let (g, index_operand, axis, _oob, index_dtype) =
+        gather_of(&op.read_index).expect("one gathered input checked above");
+    assert!(
+        (index_operand as usize) < op.n_inputs as usize,
+        "OpDef '{name}': gather index_operand ({index_operand}) >= n_inputs ({})",
+        op.n_inputs
+    );
+    assert!(
+        index_operand as usize != g,
+        "OpDef '{name}': gather input {g} names ITSELF as its index_operand — an \
+         input cannot index itself"
+    );
+    assert!(
+        matches!(index_dtype, ElementKind::I32 | ElementKind::I64),
+        "OpDef '{name}': gather index_dtype must be an integer (I32/I64), got \
+         {index_dtype:?} — a float index address is meaningless"
+    );
+    assert!(
+        (axis as usize) < key.rank as usize,
+        "OpDef '{name}': gather axis ({axis}) >= iteration rank ({})",
+        key.rank
+    );
+    assert!(
+        op.read_index[index_operand as usize].is_direct(),
+        "OpDef '{name}': the gather index operand ({index_operand}) must not ITSELF \
+         be gathered — an index-of-an-index is out of v1 scope"
+    );
+    // gather ⊥ view (v1): the gathered input must not carry an address-affecting
+    // view. An index-free/all-identity `views` is fine (the common case).
+    if !op.views.is_empty() {
+        assert!(
+            !view_is_addressing(&op.views[g]),
+            "OpDef '{name}': gathered input {g} also carries an address-affecting \
+             View ({:?}) — gather ⊥ view in v1 (the composed address math is \
+             unproven)",
+            op.views[g]
+        );
+    }
+    // The gathered axis of the DATA operand needs a live stride (the substituted
+    // `idx·stride[axis]` term); a broadcast gathered axis is a degenerate no-op.
+    // Input operands are the first `n_inputs` key slots.
+    assert!(
+        !key.operands[g].bcast.is_set(axis),
+        "OpDef '{name}': gathered input {g} broadcasts the gathered axis ({axis}) \
+         — the substituted idx·stride[axis] term needs a live stride"
+    );
 }
 
 fn assert_no_half_nextafter(op: &OpDef, dtype: ElementKind) {
@@ -1879,5 +2050,124 @@ mod view_gate_validate {
         let o = OperandDesc::new(1, &[256], &[1], ElementKind::F32, 256);
         let key = structure_key(OpCategory::Reduction, &[a, o], ArchSku::Sm89);
         let _ = build_plan(&op, &key); // no panic — trivially-Identity pass-through
+    }
+}
+
+#[cfg(test)]
+mod gather_gate_validate {
+    //! Increment-4 GATHER gate-rejection + schedule-routing tests. Per the house
+    //! rule these call `build_plan` DIRECTLY — an emitter panic would mask a gate
+    //! mutation (the 0c lesson).
+    use super::{build_plan, Schedule};
+    use crate::ir::{input, OobPolicy, OpDef, ReadIndex, ReduceOp};
+    use baracuda_kernels_types::{
+        structure_key, ArchSku, ElementKind, OpCategory, OperandDesc, StructureKey,
+    };
+
+    // rank-2 gather cell: data [4,3] (input 0), index [4,3] (input 1), out [4,3].
+    fn gather_key(idx_dt: ElementKind) -> StructureKey {
+        let data = OperandDesc::new(2, &[4, 3], &[3, 1], ElementKind::F32, 256);
+        let idx = OperandDesc::new(2, &[4, 3], &[3, 1], idx_dt, 256);
+        let out = OperandDesc::new(2, &[4, 3], &[3, 1], ElementKind::F32, 256);
+        structure_key(OpCategory::BinaryElementwise, &[data, idx, out], ArchSku::Sm89)
+    }
+
+    #[test]
+    fn gather_forces_the_strided_schedule() {
+        let op = OpDef::gather("g", &[ElementKind::F32], 0, OobPolicy::Skip, ElementKind::I32);
+        assert_eq!(build_plan(&op, &gather_key(ElementKind::I32)).schedule, Schedule::Strided);
+        // The plan carries the read_index through to the backend.
+        assert_eq!(build_plan(&op, &gather_key(ElementKind::I32)).read_index.len(), 2);
+    }
+
+    #[test]
+    #[should_panic(expected = "index_dtype must be an integer")]
+    fn non_integer_index_operand_rejected() {
+        // A float index dtype is meaningless (the emitted load type must be int).
+        let op = OpDef::gather("g", &[ElementKind::F32], 0, OobPolicy::Skip, ElementKind::F32);
+        let _ = build_plan(&op, &gather_key(ElementKind::F32));
+    }
+
+    #[test]
+    #[should_panic(expected = "gather axis")]
+    fn axis_ge_rank_rejected() {
+        // axis 2 on a rank-2 cell.
+        let op = OpDef::gather("g", &[ElementKind::F32], 2, OobPolicy::Skip, ElementKind::I32);
+        let _ = build_plan(&op, &gather_key(ElementKind::I32));
+    }
+
+    #[test]
+    #[should_panic(expected = "index_operand")]
+    fn index_operand_ge_n_inputs_rejected() {
+        // index_operand 2 but only 2 inputs (valid indices 0,1).
+        let op = OpDef::elementwise("g", 2, &[ElementKind::F32], input(0)).with_indexed(vec![
+            ReadIndex::Indexed {
+                index_operand: 2,
+                axis: 0,
+                oob: OobPolicy::Skip,
+                index_dtype: ElementKind::I32,
+            },
+            ReadIndex::Direct,
+        ]);
+        let _ = build_plan(&op, &gather_key(ElementKind::I32));
+    }
+
+    #[test]
+    #[should_panic(expected = "Elementwise-only")]
+    fn gather_on_a_reduction_rejected() {
+        // A gather (Indexed read) on a Reduction op: rejected (reductions own their
+        // axis machinery). read_index length must equal n_inputs (1 here).
+        let op = OpDef::reduction("sum", 1, &[ElementKind::F32], input(0), ReduceOp::Sum)
+            .with_indexed(vec![ReadIndex::Indexed {
+                index_operand: 0,
+                axis: 0,
+                oob: OobPolicy::Skip,
+                index_dtype: ElementKind::I32,
+            }]);
+        let a = OperandDesc::new(2, &[256, 128], &[128, 1], ElementKind::F32, 256);
+        let o = OperandDesc::new(1, &[256], &[1], ElementKind::F32, 256);
+        let key = structure_key(OpCategory::Reduction, &[a, o], ArchSku::Sm89);
+        let _ = build_plan(&op, &key);
+    }
+
+    #[test]
+    #[should_panic(expected = "exactly one gathered input")]
+    fn two_gathered_inputs_rejected() {
+        // Two Indexed inputs — v1 emitter handles exactly one substituted axis.
+        let op = OpDef::elementwise("g", 3, &[ElementKind::F32], input(0) + input(1)).with_indexed(
+            vec![
+                ReadIndex::Indexed {
+                    index_operand: 2,
+                    axis: 0,
+                    oob: OobPolicy::Skip,
+                    index_dtype: ElementKind::I32,
+                },
+                ReadIndex::Indexed {
+                    index_operand: 2,
+                    axis: 0,
+                    oob: OobPolicy::Skip,
+                    index_dtype: ElementKind::I32,
+                },
+                ReadIndex::Direct,
+            ],
+        );
+        let data = OperandDesc::new(2, &[4, 3], &[3, 1], ElementKind::F32, 256);
+        let idx = OperandDesc::new(2, &[4, 3], &[3, 1], ElementKind::I32, 256);
+        let key = structure_key(
+            OpCategory::BinaryElementwise,
+            &[data, data, idx, data],
+            ArchSku::Sm89,
+        );
+        let _ = build_plan(&op, &key);
+    }
+
+    #[test]
+    #[should_panic(expected = "gather \u{22a5} view")]
+    fn gather_plus_view_on_the_same_input_rejected() {
+        use crate::ir::View;
+        // The gathered input 0 also carries a Permute view — gather ⊥ view in v1.
+        let op = OpDef::gather("g", &[ElementKind::F32], 0, OobPolicy::Skip, ElementKind::I32)
+            .with_views(vec![View::Permute { perm: vec![1, 0] }, View::Identity]);
+        let _ = build_plan(&op, &gather_key(ElementKind::I32));
     }
 }

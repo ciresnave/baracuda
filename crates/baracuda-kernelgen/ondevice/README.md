@@ -667,3 +667,133 @@ MULTI_OUTPUT emitter (N distinct contiguous buffers) does not express; (3)
 (`powf`, outside the item-0d `(float)c{d}` vocabulary), and the production path
 (`rope_apply`) instead reads a precomputed cos/sin cache indexed by (position,
 pair) — a GATHER, the definitional #4 case. Not forced.
+
+## `gather_validate.cu` — GATHER (increment 4)
+
+Validates `OpDef::read_index` (the `ReadIndex::Indexed` role) — the first
+DATA-DEPENDENT access pattern: the gathered-axis coordinate `c{axis}` is replaced
+by a value loaded from an integer index tensor. One strided emitter mechanism
+covers the whole bespoke gather surface, distinguished only by the index
+operand's broadcast mask + the OOB policy:
+
+- **`gather`** — `out[r,c] = src[index[r,c], c]` (axis 0, **full-shape** i32/i64
+  index). OOB policy `Skip` — the OOB output cell is left UNWRITTEN (bespoke
+  `gather` `continue;`). Diffed BIT-EXACT vs `baracuda::indexing::launch_gather`
+  (`baracuda_indexing.cuh`) AND a CPU reference.
+- **`isel`** — `out[r,c] = src[idx[r], c]` (axis 0, **1-D** index broadcast over
+  axis 1 ⇒ `gidx_off = c0*s1_0`, the bespoke 1-D `index_select` lookup). `Skip`.
+  Diffed vs `launch_index_select`.
+- **`emb`** — `out[n,d] = weight[ids[n], d]` (axis 0, 1-D ids). OOB policy
+  `ZeroFill` — the OOB / negative row is zeroed (bespoke `embedding`). Diffed vs
+  `baracuda::embedding::launch_embedding` (`baracuda_embedding.cuh`, `padding_idx`
+  disabled). (The bespoke `padding_idx` — zero the row where `ids[n]==padding_idx`
+  — is a per-op runtime scalar predicate deferred in v1; the harness disables it so
+  only the OOB path is exercised.)
+- **`gclamp`** — `out[r,c] = src[clamp(index[r,c],0,V-1), c]` (`Clamp`, a
+  generator-only policy no bespoke op has). Diffed vs a CPU clamp reference.
+
+The emitter emits the offset `o0 = (gidx_clamped)*s0_0 + c1*s0_1` — the runtime
+index value replaces the loop coordinate on the gathered axis, matching bespoke's
+`src_off = idx_val*stride_src[0] + coord[1]*stride_src[1]` exactly. **The load
+address is always CLAMPED in-bounds**, so an OOB gather never issues an
+out-of-range read; the OOB policy shapes only the WRITE (Skip predicates the
+store, ZeroFill selects the fill). Negative indices are OOB (no PyTorch from-end
+wrap) — bespoke parity, confirmed per kernel.
+
+**OOB PROBES are the point.** Every run feeds negative + out-of-range indices and
+requires the generated kernel to match the bespoke policy EXACTLY; the index dtype
+rides the `entry_point` symbol (`gather_f32_i32` vs `gather_f32_i64`), never the
+structure-key token.
+
+**Regeneration:** these cells are **not** in the `bin/kernelgen.rs` catalog.
+Generate them into `<outdir>`, then copy the harness beside them:
+
+```rust
+use baracuda_kernelgen::ir::OobPolicy;
+use baracuda_kernelgen::{generate, Cuda, OpDef};
+use baracuda_kernels_types::{structure_key, ArchSku, ElementKind, OpCategory, OperandDesc};
+
+let out = std::env::args().nth(1).expect("outdir");
+let write = |k: baracuda_kernelgen::GeneratedKernel| {
+    std::fs::write(format!("{out}/{}.cu", k.name), &k.source).unwrap();
+};
+let data = OperandDesc::new(2, &[128, 64], &[64, 1], ElementKind::F32, 256);
+let outp = OperandDesc::new(2, &[128, 64], &[64, 1], ElementKind::F32, 256);
+// gather: FULL-shape index (dense on every axis), i32 + i64.
+let idx32 = OperandDesc::new(2, &[128, 64], &[64, 1], ElementKind::I32, 256);
+let idx64 = OperandDesc::new(2, &[128, 64], &[64, 1], ElementKind::I64, 256);
+let gk32 = structure_key(OpCategory::BinaryElementwise, &[data, idx32, outp], ArchSku::Sm89);
+let gk64 = structure_key(OpCategory::BinaryElementwise, &[data, idx64, outp], ArchSku::Sm89);
+write(generate(&OpDef::gather("gather", &[ElementKind::F32], 0, OobPolicy::Skip, ElementKind::I32), &gk32, &Cuda));
+write(generate(&OpDef::gather("gather", &[ElementKind::F32], 0, OobPolicy::Skip, ElementKind::I64), &gk64, &Cuda));
+write(generate(&OpDef::gather("gclamp", &[ElementKind::F32], 0, OobPolicy::Clamp, ElementKind::I32), &gk32, &Cuda));
+// isel / emb: 1-D index broadcast over axis 1 (stride 0).
+let idx1d = OperandDesc::new(2, &[128, 64], &[1, 0], ElementKind::I32, 256);
+let k1d = structure_key(OpCategory::BinaryElementwise, &[data, idx1d, outp], ArchSku::Sm89);
+write(generate(&OpDef::index_select("isel", &[ElementKind::F32], 0, OobPolicy::Skip, ElementKind::I32), &k1d, &Cuda));
+write(generate(&OpDef::embedding("emb", &[ElementKind::F32], ElementKind::I32), &k1d, &Cuda));
+```
+
+Compile (the bespoke headers want the MSVC conforming preprocessor):
+`nvcc -O3 -arch=sm_89 -std=c++17 -Xcompiler "/Zc:preprocessor /std:c++17" -I <kernels/include> gather_validate.cu`.
+
+**Last run:** RTX 4070 Laptop (sm_89), CUDA 13.3 / nvcc 13.3 — **ALL PASSED**,
+`compute-sanitizer --tool memcheck` **0 errors** under EVERY OOB policy (Skip /
+ZeroFill / Clamp, with negative + out-of-range indices — the load-bearing check:
+the address-clamp keeps every OOB gather read in-bounds).
+
+| cell | shape | policy | gen==bespoke | gen==ref | gen ms | bespoke ms | ratio |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| gather tiny | 6×4 (V=6) | Skip | yes | yes | 0.0063 | 0.0074 | 1.17× |
+| gather mid | 512×64 (V=128) | Skip | yes | yes | 0.0069 | 0.0192 | **2.78×** |
+| gather large | 2048×128 (V=1000) | Skip | yes | yes | 0.0168 | 0.1220 | **7.28×** |
+| gather V=1 | 64×8 (V=1) | Skip | yes | yes | 0.0068 | 0.0064 | 0.94× |
+| gather(i64) mid | 512×64 (V=128) | Skip | yes | yes | — | — | (bit-exact) |
+| index_select tiny | 10×4 (V=6) | Skip | yes | yes | — | — | (bit-exact) |
+| index_select mid | 1024×96 (V=200) | Skip | yes | yes | — | — | (bit-exact) |
+| embedding tiny | 10×4 (V=6) | ZeroFill | yes | yes | — | — | (bit-exact) |
+| embedding mid | 2048×128 (V=512) | ZeroFill | yes | yes | — | — | (bit-exact) |
+| gather-clamp tiny | 6×4 (V=6) | Clamp | (no bespoke) | yes | — | — | (bit-exact) |
+| gather-clamp mid | 1024×64 (V=256) | Clamp | (no bespoke) | yes | — | — | (bit-exact) |
+
+Bit-exact vs bespoke on every cell (a gather is pure address arithmetic — no math
+reorder, so no precision delta), and the OOB probes confirm the Skip/ZeroFill
+policies match bespoke to the byte. Perf was expected to TIE at the memory wall
+(both are plain gathers) — instead the generator **wins 2.8×–7.3× on the mid/large
+cells** and ties at tiny/degenerate: the bespoke gather unravels the linear index
+into a `coord[MAX_RANK]` array and re-reads dims/strides from `DimsI32`/`DimsI64`
+structs per element, while the generated kernel carries dims BY VALUE as flattened
+scalars (extraction #1) with the rank fully unrolled — the same lesson as the
+audit's general-path win, now on the gather path.
+
+**Fuel contract (honest miss, AOT-only, confirmed against Fuel's sources):** a
+gathered op emits **no contract** (`PatternError::GatherUnsupported`). Two
+independent blockers: (1) the index operand's dtype is **unkeyable** — Baracuda's
+`StructureKey` has no per-operand dtype FIELD (a single operand-0 dtype, "v1
+assumes a uniform operand dtype"), so the token does not name the index operand
+as i32 vs i64. (The dtype's byte size leaks *incidentally* into that operand's
+`vec_width` — a full-shape i32 index vectorizes wider than an i64 one, so the
+`gk32`/`gk64` tokens above actually differ there — but that side-channel is
+unreliable: it collapses to equal for the 1-D index of `index_select`/`embedding`
+where both are `Scalar`. So the token neither reliably distinguishes nor is meant
+to distinguish index dtype.) Fuel's gather admissibility is instead an explicit
+per-operand dtype TUPLE — key `[T, U32, T]` (`fuel-dispatch fkc/cpu_link.rs`
+fixes `indices` as a U32 slot, `out: passthrough(source)`). A contract keyed on
+`T` alone would let Fuel bind an i32-index kernel to an i64/U32 call — no keyed
+field guards it. (2) The `Op`+`Bind` pattern grammar cannot carry the
+gather `axis`/OOB semantics; Fuel names `OpTag::Gather`/`IndexSelect` but their
+identity rides `OpAttrs.axis` + a `fdx.gather.kind` enum Baracuda has no vocabulary
+for. So the kernels ship **AOT-only** — the Contraction-node precedent — until the
+per-operand-dtype key extension lands (a `STRUCTURE_KEY_VERSION` bump = a Fuel
+propose-first).
+
+**rope — RE-EVALUATED with gather in hand, STILL DEFERRED (partial closure).**
+Gather closes ONE of rope's three blockers: the precomputed cos/sin cache read
+indexed by (position, pair) IS now an `Indexed` read (the production `rope_apply`
+path). But the other two remain out of #4's reach: (a) the interleaved output —
+`y[2i]`, `y[2i+1]` scatter into ONE buffer at stride 2 — needs SCATTER (#5, a
+`ScatterIndexed` output role), which the read-side gather does not provide; and
+(b) the pair-partner cross-read `(2i ↔ 2i+1)` is a +1 *element* base-offset slice,
+not an index-tensor gather (there is still no `base_offset` operand field). So rope
+stays deferred to #5 (scatter) + the base-offset/slice operand work; gather alone
+does not close it. Not forced.
