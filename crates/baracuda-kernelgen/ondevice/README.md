@@ -702,8 +702,14 @@ wrap) — bespoke parity, confirmed per kernel.
 
 **OOB PROBES are the point.** Every run feeds negative + out-of-range indices and
 requires the generated kernel to match the bespoke policy EXACTLY; the index dtype
-rides the `entry_point` symbol (`gather_f32_i32` vs `gather_f32_i64`), never the
-structure-key token.
+rides the `entry_point` symbol (`gather_f32_i32` vs `gather_f32_i64` vs
+`gather_f32_u32`), never the structure-key token.
+
+- **`gatheru`** — the Model-A `u32`-index gather (the FUEL-FACING variant; Fuel keys
+  the gather index operand as a fixed U32 slot `[T, U32, T]`, so `u32` is the variant
+  that carries the keyed contract). NO bespoke sibling (bespoke `launch_gather` is
+  i32/i64-templated), so it is diffed vs a CPU ref AND cross-checked against the i32
+  kernel on the same non-negative index values (must be bit-identical there).
 
 **Regeneration:** these cells are **not** in the `bin/kernelgen.rs` catalog.
 Generate them into `<outdir>`, then copy the harness beside them:
@@ -727,6 +733,10 @@ let gk64 = structure_key(OpCategory::BinaryElementwise, &[data, idx64, outp], Ar
 write(generate(&OpDef::gather("gather", &[ElementKind::F32], 0, OobPolicy::Skip, ElementKind::I32), &gk32, &Cuda));
 write(generate(&OpDef::gather("gather", &[ElementKind::F32], 0, OobPolicy::Skip, ElementKind::I64), &gk64, &Cuda));
 write(generate(&OpDef::gather("gclamp", &[ElementKind::F32], 0, OobPolicy::Clamp, ElementKind::I32), &gk32, &Cuda));
+// u32-index gather (the Fuel-facing Model-A variant; FULL-shape U32 index).
+let idxu = OperandDesc::new(2, &[128, 64], &[64, 1], ElementKind::U32, 256);
+let gku = structure_key(OpCategory::BinaryElementwise, &[data, idxu, outp], ArchSku::Sm89);
+write(generate(&OpDef::gather("gather", &[ElementKind::F32], 0, OobPolicy::Skip, ElementKind::U32), &gku, &Cuda));
 // isel / emb: 1-D index broadcast over axis 1 (stride 0).
 let idx1d = OperandDesc::new(2, &[128, 64], &[1, 0], ElementKind::I32, 256);
 let k1d = structure_key(OpCategory::BinaryElementwise, &[data, idx1d, outp], ArchSku::Sm89);
@@ -737,10 +747,13 @@ write(generate(&OpDef::embedding("emb", &[ElementKind::F32], ElementKind::I32), 
 Compile (the bespoke headers want the MSVC conforming preprocessor):
 `nvcc -O3 -arch=sm_89 -std=c++17 -Xcompiler "/Zc:preprocessor /std:c++17" -I <kernels/include> gather_validate.cu`.
 
-**Last run:** RTX 4070 Laptop (sm_89), CUDA 13.3 / nvcc 13.3 — **ALL PASSED**,
-`compute-sanitizer --tool memcheck` **0 errors** under EVERY OOB policy (Skip /
-ZeroFill / Clamp, with negative + out-of-range indices — the load-bearing check:
-the address-clamp keeps every OOB gather read in-bounds).
+**Last run:** RTX 4070 Laptop (sm_89), CUDA 13.3 / nvcc 13.3 — **ALL PASSED**
+(incl. the new `gather(u32)` cases: `u32==i32 yes` bit-exact cross-check + `u32==ref
+yes` across tiny/mid/large/V=1, Skip OOB matched), `compute-sanitizer --tool
+memcheck` **ERROR SUMMARY: 0 errors** under EVERY OOB policy (Skip / ZeroFill /
+Clamp, with negative + out-of-range indices, i32/i64/u32 index dtypes — the
+load-bearing check: the address-clamp keeps every OOB gather read in-bounds; for
+the u32 path the `< 0` branch is statically dead, the `>= gext` bound still fires).
 
 | cell | shape | policy | gen==bespoke | gen==ref | gen ms | bespoke ms | ratio |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -749,6 +762,7 @@ the address-clamp keeps every OOB gather read in-bounds).
 | gather large | 2048×128 (V=1000) | Skip | yes | yes | 0.0168 | 0.1220 | **7.28×** |
 | gather V=1 | 64×8 (V=1) | Skip | yes | yes | 0.0068 | 0.0064 | 0.94× |
 | gather(i64) mid | 512×64 (V=128) | Skip | yes | yes | — | — | (bit-exact) |
+| gather(u32) tiny/mid/large/V=1 | 6×4 … 2048×128 | Skip | u32==i32 yes | u32==ref yes | — | — | (bit-exact; Fuel-facing) |
 | index_select tiny | 10×4 (V=6) | Skip | yes | yes | — | — | (bit-exact) |
 | index_select mid | 1024×96 (V=200) | Skip | yes | yes | — | — | (bit-exact) |
 | embedding tiny | 10×4 (V=6) | ZeroFill | yes | yes | — | — | (bit-exact) |

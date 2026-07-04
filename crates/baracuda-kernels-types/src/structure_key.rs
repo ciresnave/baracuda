@@ -705,12 +705,14 @@ fn work_class(od: &OperandDesc) -> WorkClass {
 fn dtype_size_bytes(dt: ElementKind) -> Option<u32> {
     use ElementKind::{
         Bf16, Bin, Bool, Complex32, Complex64, Fp8E4M3, Fp8E5M2, F16, F32, F32Strict, F64, I32,
-        I64, S4, S8, U4, U8,
+        I64, S4, S8, U4, U8, U32,
     };
     Some(match dt {
         S8 | U8 | Bool | Fp8E4M3 | Fp8E5M2 => 1,
         F16 | Bf16 => 2,
-        F32 | F32Strict | I32 => 4,
+        // U32: 4-byte index dtype (the `indices` operand's vec-width side-channel;
+        // never a compute operand). Same width class as I32.
+        F32 | F32Strict | I32 | U32 => 4,
         F64 | I64 | Complex32 => 8,
         Complex64 => 16,
         S4 | U4 | Bin => return None,
@@ -1032,7 +1034,7 @@ fn arch_from_code(s: &str) -> Option<ArchSku> {
 const fn dtype_code(v: ElementKind) -> &'static str {
     use ElementKind::{
         Bf16, Bin, Bool, Complex32, Complex64, Fp8E4M3, Fp8E5M2, F16, F32, F32Strict, F64, I32,
-        I64, S4, S8, U4, U8,
+        I64, S4, S8, U4, U8, U32,
     };
     match v {
         F16 => "f16",
@@ -1044,6 +1046,9 @@ const fn dtype_code(v: ElementKind) -> &'static str {
         U8 => "u8",
         I32 => "i32",
         I64 => "i64",
+        // U32: index dtype. New code, so no pre-existing token changes (no
+        // pre-existing cell keys a u32 operand) — STRUCTURE_KEY_VERSION stays 1.
+        U32 => "u32",
         Bool => "bool",
         Fp8E4M3 => "e4m3",
         Fp8E5M2 => "e5m2",
@@ -1058,7 +1063,7 @@ const fn dtype_code(v: ElementKind) -> &'static str {
 fn dtype_from_code(s: &str) -> Option<ElementKind> {
     use ElementKind::{
         Bf16, Bin, Bool, Complex32, Complex64, Fp8E4M3, Fp8E5M2, F16, F32, F32Strict, F64, I32,
-        I64, S4, S8, U4, U8,
+        I64, S4, S8, U4, U8, U32,
     };
     Some(match s {
         "f16" => F16,
@@ -1070,6 +1075,7 @@ fn dtype_from_code(s: &str) -> Option<ElementKind> {
         "u8" => U8,
         "i32" => I32,
         "i64" => I64,
+        "u32" => U32,
         "bool" => Bool,
         "e4m3" => Fp8E4M3,
         "e5m2" => Fp8E5M2,
@@ -1224,6 +1230,42 @@ mod tests {
         assert_eq!(k, parsed);
         // Token is human-greppable.
         assert!(token.starts_with("sk1|bin|f32|sm89|"));
+    }
+
+    #[test]
+    fn u32_variant_is_additive_preexisting_token_byte_identical() {
+        // The ElementKind::U32 addition (Model-A gather/scatter contract wiring)
+        // MUST be additive: STRUCTURE_KEY_VERSION stays 1 and EVERY pre-existing
+        // token stays byte-identical (no pre-existing cell keys a u32 operand, and
+        // the codec is spelling-keyed, not discriminant-keyed — adding a variant
+        // shifts no existing dtype's code). Pin a known pre-existing f32 token
+        // verbatim so a future reshuffle that perturbs it is caught.
+        assert_eq!(STRUCTURE_KEY_VERSION, 1, "the u32 addition must NOT bump the version");
+        let a = od(&[128, 256], &[256, 1], ElementKind::F32, 256);
+        let k = structure_key(OpCategory::BinaryElementwise, &[a, a, a], ArchSku::Sm89);
+        assert_eq!(
+            k.to_token(),
+            "sk1|bin|f32|sm89|i32|grid|r2|co/00/v4/d16/f;co/00/v4/d16/f;co/00/v4/d16/f|-",
+            "a pre-existing f32 cell's token must be byte-identical after adding U32"
+        );
+    }
+
+    #[test]
+    fn u32_dtype_round_trips_through_the_codec() {
+        // The u32 dtype codec (dtype_code / dtype_from_code) round-trips both
+        // directly AND through a full token (a top-level-u32 key — operand 0's
+        // dtype is the token's dtype field; the per-operand index dtype rides the
+        // OP, not the key, so it is intentionally NOT a per-operand token field).
+        assert_eq!(dtype_code(ElementKind::U32), "u32");
+        assert_eq!(dtype_from_code("u32"), Some(ElementKind::U32));
+        let a = od(&[128, 64], &[64, 1], ElementKind::U32, 256);
+        let k = structure_key(OpCategory::UnaryElementwise, &[a, a], ArchSku::Sm89);
+        assert_eq!(k.dtype, ElementKind::U32);
+        assert_eq!(k.operands[0].vec_width, VecWidth::V4, "u32 is a 4-byte dtype");
+        let token = k.to_token();
+        assert!(token.starts_with("sk1|une|u32|"), "the token spells u32: {token}");
+        let parsed = StructureKey::from_token(&token).expect("u32 token round-trips");
+        assert_eq!(k, parsed, "a u32 key round-trips byte-identically");
     }
 
     #[test]

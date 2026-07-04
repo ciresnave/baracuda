@@ -6,6 +6,9 @@
 // value loaded from an integer index tensor:
 //
 //   gather  : out[r,c] = src[index[r,c], c]      (axis 0, FULL-shape i32/i64 idx)
+//   gatheru : out[r,c] = src[index[r,c], c]      (axis 0, FULL-shape U32 idx —
+//                                                 the Fuel-facing Model-A variant,
+//                                                 cross-checked vs the i32 kernel)
 //   isel    : out[r,c] = src[idx[r], c]          (axis 0, 1-D idx; index_select)
 //   emb     : out[n,d] = weight[ids[n], d]       (axis 0, 1-D idx; ZeroFill OOB)
 //   gclamp  : out[r,c] = src[clamp(index[r,c]),c](axis 0, Clamp — generator-only)
@@ -46,6 +49,7 @@
 
 #include "baracuda_gen_gather_f32_i32_strided_r2.cu"
 #include "baracuda_gen_gather_f32_i64_strided_r2.cu"
+#include "baracuda_gen_gather_f32_u32_strided_r2.cu"
 #include "baracuda_gen_isel_f32_i32_strided_r2.cu"
 #include "baracuda_gen_emb_f32_i32_strided_r2.cu"
 #include "baracuda_gen_gclamp_f32_i32_strided_r2.cu"
@@ -224,6 +228,75 @@ static void run_gather_i64(int V, int R, int C, const char* tag) {
     free(hsrc); free(hidx); free(hg); free(hb);
 }
 
+// u32-index gather (the FUEL-FACING index dtype — Model-A contract wiring). Fuel
+// keys the gather index operand as a fixed U32 slot (`[T, U32, T]`), so u32 is the
+// variant that carries the keyed contract. There is NO bespoke u32 sibling
+// (bespoke launch_gather is i32/i64-templated), so this is diffed vs a CPU ref AND
+// CROSS-CHECKED against the i32 kernel on the SAME non-negative index values (u32
+// and i32 must be bit-identical there — u32 just can't express a negative index).
+static void run_gather_u32(int V, int R, int C, const char* tag) {
+    long long nout = (long long)R * C;
+    size_t sbytes = (size_t)V * C * 4;
+    size_t obytes = (size_t)nout * 4;
+    float* hsrc = (float*)malloc(sbytes);
+    uint32_t* hidx = (uint32_t*)malloc((size_t)nout * 4);
+    int32_t* hidx32 = (int32_t*)malloc((size_t)nout * 4);
+    float* hu = (float*)malloc(obytes); // u32-kernel result
+    float* hi = (float*)malloc(obytes); // i32-kernel result (cross-check oracle)
+    srand(211 + V * 7 + R * 13 + C);
+    for (long long t = 0; t < (long long)V * C; ++t) hsrc[t] = (float)((rand() % 8001) - 4000) * 0.01f;
+    // NON-NEGATIVE indices (u32 has no sign): mix valid + OOB-past-extent. The
+    // same values go into the i32 array so the two kernels are diffed head-to-head.
+    for (long long t = 0; t < nout; ++t) {
+        long long m = t % 5;
+        uint32_t v = (m == 4) ? (uint32_t)(V + (int)(t % 3))        // OOB (>= V)
+                              : (uint32_t)((t * 2654435761u) % (unsigned)V); // valid
+        hidx[t] = v;
+        hidx32[t] = (int32_t)v;
+    }
+
+    float *dsrc, *du, *di; uint32_t* didxu; int32_t* didxi;
+    CHECK(cudaMalloc((void**)&dsrc, sbytes));
+    CHECK(cudaMalloc((void**)&didxu, (size_t)nout * 4));
+    CHECK(cudaMalloc((void**)&didxi, (size_t)nout * 4));
+    CHECK(cudaMalloc((void**)&du, obytes));
+    CHECK(cudaMalloc((void**)&di, obytes));
+    CHECK(cudaMemcpy(dsrc, hsrc, sbytes, cudaMemcpyHostToDevice));
+    CHECK(cudaMemcpy(didxu, hidx, (size_t)nout * 4, cudaMemcpyHostToDevice));
+    CHECK(cudaMemcpy(didxi, hidx32, (size_t)nout * 4, cudaMemcpyHostToDevice));
+    // Pre-fill both outputs with the sentinel (Skip leaves an OOB cell unwritten).
+    for (long long t = 0; t < nout; ++t) hu[t] = kSentinel;
+    CHECK(cudaMemcpy(du, hu, obytes, cudaMemcpyHostToDevice));
+    CHECK(cudaMemcpy(di, hu, obytes, cudaMemcpyHostToDevice));
+
+    int blocks = grid_for(nout);
+    // Identical ABI to the i32 kernel; only in1's pointer type differs (unsigned int).
+    baracuda_gen_gather_f32_u32_strided_r2<<<blocks, 256>>>(
+        dsrc, didxu, du, R, C, C, 1, C, 1, C, 1, V, nout);
+    baracuda_gen_gather_f32_i32_strided_r2<<<blocks, 256>>>(
+        dsrc, didxi, di, R, C, C, 1, C, 1, C, 1, V, nout);
+    CHECK(cudaDeviceSynchronize());
+    CHECK(cudaMemcpy(hu, du, obytes, cudaMemcpyDeviceToHost));
+    CHECK(cudaMemcpy(hi, di, obytes, cudaMemcpyDeviceToHost));
+
+    long long xchk_bad = 0, ref_bad = 0;
+    for (int r = 0; r < R; ++r)
+        for (int c = 0; c < C; ++c) {
+            long long o = (long long)r * C + c;
+            uint32_t idx = hidx[o];
+            float want = (idx < (uint32_t)V) ? hsrc[(long long)idx * C + c] : kSentinel;
+            if (memcmp(&hu[o], &hi[o], 4) != 0) xchk_bad++; // u32 == i32
+            if (memcmp(&hu[o], &want, 4) != 0) ref_bad++;   // u32 == CPU ref
+        }
+    int ok = (xchk_bad == 0) && (ref_bad == 0);
+    if (!ok) g_fail = 1;
+    printf("[%s] gather(u32) %-8s V=%-5d [%4dx%-4d] u32==i32 %s  u32==ref %s (Skip OOB)\n",
+           ok ? " ok " : "FAIL", tag, V, R, C, xchk_bad ? "NO" : "yes", ref_bad ? "NO" : "yes");
+
+    cudaFree(dsrc); cudaFree(didxu); cudaFree(didxi); cudaFree(du); cudaFree(di);
+    free(hsrc); free(hidx); free(hidx32); free(hu); free(hi);
+}
+
 // index_select along axis 0: out[r,c] = src[idx[r], c]. 1-D index (length R).
 static void run_index_select(int V, int R, int C, const char* tag) {
     long long nout = (long long)R * C;
@@ -396,6 +469,11 @@ int main() {
     run_gather(1, 64, 8, "V=1");        // degenerate source extent
     printf("-- gather i64 index --\n");
     run_gather_i64(128, 512, 64, "mid");
+    printf("-- gather u32 index (Fuel-facing; cross-checked vs i32) --\n");
+    run_gather_u32(6, 6, 4, "tiny");
+    run_gather_u32(128, 512, 64, "mid");
+    run_gather_u32(1000, 2048, 128, "large");
+    run_gather_u32(1, 64, 8, "V=1");
     printf("-- index_select (1-D index, Skip OOB) --\n");
     run_index_select(6, 10, 4, "tiny");
     run_index_select(200, 1024, 96, "mid");

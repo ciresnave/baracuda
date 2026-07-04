@@ -34,7 +34,16 @@ impl Backend for Cuda {
         // `dtype_compatible`, and the AOT plan gate
         // `assert_int_op_admissibility` — so a uniform-U8 Div region still
         // declines even though U8 itself is supported here.
-        scalar_ctype(dtype).is_some()
+        //
+        // U32 is the EXCEPTION: it entered `scalar_ctype` ("unsigned int") ONLY
+        // as the gather/scatter index-LOAD type (never as a value/key dtype — no
+        // `impl Element`/`KernelDtype` for `u32`, no int-op admissibility). A U32
+        // COMPUTE/key plan must still be rejected here (else a U32 elementwise add
+        // would silently lower to an `unsigned int` kernel and bypass the int-div
+        // backstop), so exclude it — mirroring the 0b index-only-dtype pattern.
+        // (A valid gather keys `plan.dtype` = the DATA dtype; U32 rides
+        // `read_index`/`write_index`, never `plan.dtype`.)
+        !matches!(dtype, ElementKind::U32) && scalar_ctype(dtype).is_some()
     }
 
     fn lower_variants(&self, plan: &KernelPlan<'_>) -> Vec<Variant> {
@@ -52,6 +61,27 @@ impl Backend for Cuda {
     }
 
     fn lower(&self, plan: &KernelPlan<'_>) -> GeneratedKernel {
+        // U32 has a `scalar_ctype` ("unsigned int") ONLY as an index/address
+        // dtype — it must never reach an ARITHMETIC compute path (a U32
+        // elementwise add would silently lower to an `unsigned int` kernel and
+        // bypass the int-div backstop). It IS a legitimate `plan.dtype` for an
+        // INDEXED op though: a gather keys the DATA dtype (U32 rides
+        // `read_index`), but `bincount` self-indexes — its input IS the u32 x,
+        // so `plan.dtype == U32` while the u32 is used as a scatter ADDRESS, not
+        // a value in arithmetic. So reject a U32 plan ONLY for a NON-indexed
+        // (plain elementwise/reduction) op; the gather/scatter emitters handle
+        // the index dtype themselves. `supports_dtype` declines U32 at the JIT
+        // boundary; this is the independent AOT emitter backstop.
+        let is_indexed = plan
+            .read_index
+            .iter()
+            .any(|r| !matches!(r, crate::ir::ReadIndex::Direct))
+            || !matches!(plan.write_index, crate::ir::WriteIndex::Direct);
+        assert!(
+            !matches!(plan.dtype, ElementKind::U32) || is_indexed,
+            "cuda backend: U32 is an index/address dtype only — a U32 value/key \
+             plan is illegal for a non-indexed op (no u32 arithmetic)"
+        );
         let Some(ctype) = scalar_ctype(plan.dtype) else {
             panic!("cuda backend: unsupported dtype {:?}", plan.dtype);
         };
@@ -251,6 +281,12 @@ fn scalar_ctype(dt: ElementKind) -> Option<&'static str> {
         ElementKind::I64 => "long long",
         ElementKind::S8 => "signed char",
         ElementKind::U8 => "unsigned char",
+        // U32 is the gather/scatter INDEX-operand ctype (`unsigned int`) — a
+        // 4-byte address dtype used ONLY for the index-load pointer type (the
+        // Model-A u32-index path), never a compute operand. It has no `Element`
+        // impl and no vector/packed path; a compute op never keys `plan.dtype =
+        // U32` (no constructor builds one), so this arm serves the index load.
+        ElementKind::U32 => "unsigned int",
         _ => return None,
     })
 }
@@ -422,6 +458,9 @@ fn dtype_tag(dt: ElementKind) -> &'static str {
         ElementKind::I64 => "i64",
         ElementKind::S8 => "i8",
         ElementKind::U8 => "u8",
+        // U32 index-dtype infix: `gather_f32_u32` (the Fuel-facing u32-index
+        // variant's entry_point symbol).
+        ElementKind::U32 => "u32",
         _ => "x",
     }
 }
@@ -1050,8 +1089,8 @@ fn assert_gather_lowerable(plan: &KernelPlan<'_>) {
         plan.n_inputs
     );
     assert!(
-        matches!(index_dtype, ElementKind::I32 | ElementKind::I64),
-        "cuda backend: gathered op '{name}' index_dtype must be I32/I64, got \
+        matches!(index_dtype, ElementKind::I32 | ElementKind::I64 | ElementKind::U32),
+        "cuda backend: gathered op '{name}' index_dtype must be I32/I64/U32, got \
          {index_dtype:?}"
     );
     assert!(
@@ -1106,8 +1145,8 @@ fn assert_scatter_lowerable(plan: &KernelPlan<'_>) {
         plan.n_inputs
     );
     assert!(
-        matches!(index_dtype, ElementKind::I32 | ElementKind::I64),
-        "cuda backend: scattered op '{name}' index_dtype must be I32/I64, got \
+        matches!(index_dtype, ElementKind::I32 | ElementKind::I64 | ElementKind::U32),
+        "cuda backend: scattered op '{name}' index_dtype must be I32/I64/U32, got \
          {index_dtype:?}"
     );
     assert!(
@@ -6135,6 +6174,18 @@ mod tests {
             "bf16 u8 store must bridge through __bfloat162float:\n{}",
             k.source
         );
+    }
+
+    #[test]
+    #[should_panic(expected = "index/address dtype only")]
+    fn u32_compute_plan_is_rejected_by_the_emitter() {
+        // Review (Model-A wiring): U32 gained a scalar_ctype ("unsigned int") for
+        // the gather/scatter index LOAD, which must NOT open a U32 arithmetic
+        // compute path. A plain (non-indexed) U32 elementwise add must be rejected
+        // — else it silently lowers to an `unsigned int` kernel and bypasses the
+        // int-div backstop. (bincount self-indexes → exempt; covered elsewhere.)
+        let op = OpDef::elementwise("add", 2, &[ElementKind::U32], input(0) + input(1));
+        let _ = generate(&op, &binary_scalar_key(ElementKind::U32, 4), &Cuda);
     }
 
     #[test]

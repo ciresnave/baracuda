@@ -439,6 +439,7 @@ fn dispatch_kind(k: ElementKind) -> Option<(i32, bool)> {
         ElementKind::F32 => (4, false),
         ElementKind::F32Strict => (4, false),
         ElementKind::I32 => (4, false),
+        ElementKind::U32 => (4, false), // index dtype; 4-byte, not sub-byte
         ElementKind::F64 => (8, false),
         ElementKind::I64 => (8, false),
         ElementKind::Complex32 => (8, false),

@@ -397,7 +397,7 @@ fn type_size_matches_kind<T>(kind: ElementKind) -> bool {
         | ElementKind::S4
         | ElementKind::U4 => 1,
         ElementKind::F16 | ElementKind::Bf16 => 2,
-        ElementKind::F32 | ElementKind::F32Strict | ElementKind::I32 => 4,
+        ElementKind::F32 | ElementKind::F32Strict | ElementKind::I32 | ElementKind::U32 => 4,
         ElementKind::F64 | ElementKind::I64 | ElementKind::Complex32 => 8,
         ElementKind::Complex64 => 16,
         ElementKind::Bin => return false, // out of scope

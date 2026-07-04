@@ -23,7 +23,7 @@
 //! helpers below so reconciliation is a localized change.
 
 use crate::backend::GeneratedKernel;
-use crate::ir::{BinaryOp, ExprDag, NodeId, OpDef, ScalarExpr, UnaryOp};
+use crate::ir::{BinaryOp, ExprDag, NodeId, OobPolicy, OpDef, ScalarExpr, UnaryOp};
 use crate::pattern::{derive_pattern, to_fkc, PatternNode};
 use baracuda_kernels_types::{Contiguity, ElementKind, StructureKey, VecWidth};
 
@@ -152,52 +152,75 @@ pub fn contract(
     //   3. Bespoke gather's OOB semantics (silently skip; embedding zero-fills)
     //      also differ from torch/Fuel gather's in-bounds contract — a third
     //      reason the advertised op would mis-describe the kernel.
-    // KEYING RESOLVED (Fuel reply 2026-07-04, `docs/fuel-reply-mixed-dtype-key`):
-    // reason 1 is answered — Fuel keys off the FKC per-operand dtype TUPLE
-    // assembled from `accept.inputs[i].dtype`, NOT a coarse token, so filling the
-    // accept block honestly (data `T`, index `U32`) makes wrong-bind structurally
-    // impossible with **no `STRUCTURE_KEY_VERSION` bump** (a Baracuda-only change;
-    // our own `StructureKey` stays uniform-dtype). The keyed `u32`-index gather
-    // contract is therefore a QUEUED Baracuda-only follow-up (emit the u32 variant
-    // + fill accept honestly + advertise an `oob_policy` field), sequenced after
-    // ramp #5. Until that follow-up lands, still no contract (honest miss) — reason
-    // 2 (the `Op`+`Bind` grammar can't carry the gather axis/OOB) also holds today.
-    // Guarded up front so no wrong-dtype gather identity is ever emitted meanwhile.
-    if crate::plan::op_has_gather(op) {
-        return None;
-    }
+    // Increment-6 MODEL-A gather contract wiring: the gather honest-miss guard is
+    // now SELECTIVE (was unconditional through ramp #5). A gather is honestly
+    // advertisable — verified against Fuel's ACTUAL sources — IFF its index dtype
+    // is U32:
+    //   1. **Index dtype (resolved, Fuel reply 2026-07-04 `docs/fuel-reply-mixed-
+    //      dtype-key`).** Fuel keys off the FKC per-operand dtype TUPLE assembled
+    //      from `accept.inputs[i].dtype` (`fkc/lower.rs` `assemble_dtype_variants`
+    //      → `kernel.rs` binding map), NOT a coarse token — so filling the accept
+    //      block honestly (data `T`, index `U32`) makes wrong-bind structurally
+    //      impossible with NO `STRUCTURE_KEY_VERSION` bump. Fuel is **U32-index
+    //      everywhere** (`fkc/cpu_link.rs` gather/index_select key `[T, U32, T]`);
+    //      an i32/i64 index gather is UNREACHABLE from a Fuel graph node, so it
+    //      stays an honest miss (`gather_advert` returns `None` → no contract).
+    //   2. **op_kind (verified spelling).** Every gather structurally maps to a
+    //      REAL Fuel `OpKind` — a full-shape index → `Gather`, a 1-D/broadcast
+    //      index → `IndexSelect` (both in `fkc/lower.rs` `lower_op_kind`'s exact
+    //      string table; `fuel-ir/dispatch.rs` `OpKind::{Gather,IndexSelect}`).
+    //      Reason 2 of the old miss (the `Op`+`Bind` PATTERN grammar can't carry
+    //      the gather axis/OOB) is MOOT for a primitive `op_kind:` advert — a
+    //      primitive carries no `pattern:` block; the axis rides Fuel's graph node
+    //      + `OpParams`, and the OOB rides the new `oob_policy` field (below).
+    //   3. **OOB semantics made explicit (Fuel Q3).** Fuel's gather is in-bounds/
+    //      `error`; ours skips (gather/index_select) or zero-fills (embedding) —
+    //      a genuine mismatch, so the contract advertises it in an `oob_policy`
+    //      field (additive/`#[serde(default)]` on Fuel's side; their parser is
+    //      permissive — `deny_unknown_fields` deliberately unset — so emitting it
+    //      is safe today and load-bearing when Fuel wires the slot in lockstep).
+    // A non-u32 gather (or an un-fkc-spellable data dtype) → `None` → honest miss.
+    let gather_advert = if crate::plan::op_has_gather(op) {
+        match gather_advert(op, key) {
+            Some(g) => Some(g),
+            None => return None,
+        }
+    } else {
+        None
+    };
 
-    // Increment-5 SCATTER honest miss (typed, no contract; the kernel still
-    // generates + runs AOT). A `WriteIndex::ScatterIndexed` write is unadvertisable
-    // against Fuel's ACTUAL sources for BOTH the gather reasons AND a third:
-    //   1. **Index dtype — keyable via Model A, wiring queued** (same as gather;
-    //      Fuel reply 2026-07-04). Fuel keys scatter_add/index_add off the
-    //      per-operand dtype TUPLE `[T, U32, T, T]` (fuel-dispatch `fkc/cpu_link.rs`:
-    //      `base`, FIXED U32 `indices`, `src`, `passthrough(base)` out) assembled
-    //      from the accept block — so a `u32`-index scatter contract with honest
-    //      per-input dtypes binds correctly, NO `STRUCTURE_KEY_VERSION` bump. That's
-    //      the queued Baracuda-only follow-up; NOT the blocker. The blockers below
-    //      are.
-    //   2. The `Op`+`Bind` `PatternNode` grammar can't carry the scatter `axis`, the
-    //      OOB (Skip) policy, or the combine mode. Fuel names `OpKind::ScatterAdd`/
-    //      `IndexAdd` (fuel-ir `dispatch.rs`) but their identity rides `OpAttrs.axis`;
-    //      it has NO bare `Scatter`, NO `Bincount`/`Histogram` op-kind and NO
-    //      scatter-reduce (amax/amin/prod) mode enum at all — so `scatter`
-    //      (pure-assign), `bincount`, and any AtomicMax/Min scatter are a DOUBLE
-    //      honest miss (net-new vocabulary to negotiate).
-    //   3. **Determinism (the increment-5 discipline).** An FP-`atomicAdd` scatter
-    //      is run-to-run non-deterministic; an honest contract would have to set
-    //      `determinism: nondeterministic` (fuel-dispatch `fkc/schema.rs`), which by
-    //      Fuel's precision-coherence rule (`fkc/validate.rs` Rule 9) ALSO obligates
-    //      `precision.bit_stable_on_same_hardware: false` + `audited: true`. Baracuda
-    //      does not yet author that coupled precision block, so emitting a scatter
-    //      contract could ship an INCOHERENT (silently-deterministic-looking) advert
-    //      of a nondeterministic kernel — the exact failure the honest-miss rule
-    //      forbids. The determinism flip is spelled + ready
-    //      (`VariantFidelity::determinism_str` → `nondeterministic`) for when the
-    //      queued Model-A scatter contract wiring lands AND the missing op-kind
-    //      vocabulary (reason 2) is negotiated; until then, no contract for ANY
-    //      scatter. Guarded up front.
+    // Increment-6 SCATTER: STILL an unconditional honest miss (the WRITE-side
+    // guard is NOT lifted, unlike the read-side gather guard above). Re-verified
+    // against Fuel's ACTUAL sources this round; the u32 keying is resolved but
+    // insufficient — three independent, source-grounded blockers remain, EACH
+    // fatal on its own:
+    //   1. **scatter (pure Assign) / bincount / AtomicMax/Min → NO Fuel op_kind.**
+    //      `fuel-ir/dispatch.rs` names ONLY `OpKind::{IndexSelect, Gather, IndexAdd,
+    //      ScatterAdd}` — there is NO bare `Scatter`, NO `Bincount`/`Histogram`, and
+    //      NO scatter-reduce (amax/amin/prod) kind. Net-new vocabulary, a separate
+    //      future negotiation.
+    //   2. **scatter_add / index_add → OPERAND-ARITY mismatch (the decisive new
+    //      finding).** Fuel's `ScatterAdd`/`IndexAdd` key is a FOUR-operand tuple
+    //      `[T, U32, T, T]` — (`base`, U32 `indices`, `src`, `passthrough(base)`
+    //      out); `fuel-ir/dispatch.rs:375` "Inputs (base, indices, src)",
+    //      `fkc/cpu_link.rs` key `[T, U32, T, T]`. Baracuda's scatter_add is
+    //      IN-PLACE accumulation (`out += updates`): 2 inputs (updates=src, index)
+    //      + an in-place output that DOUBLES as `base` — its honest per-operand
+    //      accept tuple is `[T, U32, T]` (3 slots). Fabricating a separate `base`
+    //      INPUT to reach 4 slots would misdescribe the kernel ABI (a dishonest
+    //      accept block). The assembled key can NOT equal Fuel's — a structural
+    //      mismatch, not a spelling gap.
+    //   3. **Determinism (unchanged, still an independent blocker for the FP path).**
+    //      Fuel wires `ScatterAdd`/`IndexAdd` for FLOAT dtypes only (`cpu_link.rs`:
+    //      f32/f64/bf16/f16); a float atomic-add scatter is run-to-run
+    //      nondeterministic, and an honest advert would set `determinism:
+    //      nondeterministic`, which by `fkc/validate.rs` Rule 9 obligates a coupled
+    //      `precision.bit_stable_on_same_hardware: false` + `audited: true` block
+    //      Baracuda does not yet author. (Baracuda's deterministic base for the FP
+    //      cell is the gather-sum reformulation, whose entry_point does compute
+    //      scatter_add semantics — but reasons 2's arity mismatch blocks it anyway.)
+    // So NO contract for ANY scatter/scatter_add/index_add/bincount — the honest
+    // miss the ramp-#5 conclusion reached, now on firmer (arity + op_kind) ground.
     if crate::plan::op_has_scatter(op) {
         return None;
     }
@@ -234,25 +257,35 @@ pub fn contract(
         return None;
     }
     let is_fusion = n_ops > 1;
-    let op_line = match &pattern {
-        // exactly one graph op → a primitive identity (e.g. `Add`, `AddScalar`).
-        // Comparisons use the DISPATCH OpKind spellings (`LessElementwise`, …):
-        // Fuel's FKC importer (fuel-dispatch fkc/lower.rs `lower_op_kind`) is an
-        // exhaustive string table that typed-rejects unknown names — and a
-        // single bad section fails the whole bundle. (The importer expects
-        // `AddElementwise`-style names for the arithmetic primitives too; that
-        // pre-existing spelling reconciliation is tracked in the module
-        // header — comparisons land importable from day one.)
-        Some(_) if n_ops == 1 && out_u8 => {
-            format!("op_kind: {}", cmp_dispatch_op_kind(&op.body))
+    let op_line = if let Some(g) = &gather_advert {
+        // A u32-index gather advertises the verified Fuel primitive OpKind
+        // (`Gather` / `IndexSelect`) — `derive_pattern` intentionally rejects a
+        // gather (its `Op`+`Bind` grammar can't carry the axis), so the gather
+        // op_kind is derived structurally, not from a pattern. A primitive advert
+        // carries NO `pattern:` block (the axis rides Fuel's graph node), so the
+        // pattern-grammar gap is moot here.
+        format!("op_kind: {}", g.op_kind)
+    } else {
+        match &pattern {
+            // exactly one graph op → a primitive identity (e.g. `Add`, `AddScalar`).
+            // Comparisons use the DISPATCH OpKind spellings (`LessElementwise`, …):
+            // Fuel's FKC importer (fuel-dispatch fkc/lower.rs `lower_op_kind`) is an
+            // exhaustive string table that typed-rejects unknown names — and a
+            // single bad section fails the whole bundle. (The importer expects
+            // `AddElementwise`-style names for the arithmetic primitives too; that
+            // pre-existing spelling reconciliation is tracked in the module
+            // header — comparisons land importable from day one.)
+            Some(_) if n_ops == 1 && out_u8 => {
+                format!("op_kind: {}", cmp_dispatch_op_kind(&op.body))
+            }
+            Some(p) if n_ops == 1 => format!("op_kind: {}", root_op_name(p)),
+            // ≥2 graph ops → a fused identity carried by the op's stable name.
+            Some(_) => format!("fused_op: {}", op.name),
+            // body not expressible as a pattern (Const / non-elementwise / bind
+            // mismatch) → not advertisable; skip rather than fake an op_kind from
+            // the op's free-form name (which is not an OpKind dispatch key).
+            None => return None,
         }
-        Some(p) if n_ops == 1 => format!("op_kind: {}", root_op_name(p)),
-        // ≥2 graph ops → a fused identity carried by the op's stable name.
-        Some(_) => format!("fused_op: {}", op.name),
-        // body not expressible as a pattern (Const / non-elementwise / bind
-        // mismatch) → not advertisable; skip rather than fake an op_kind from
-        // the op's free-form name (which is not an OpKind dispatch key).
-        None => return None,
     };
 
     let out_idx = key.n_operands.saturating_sub(1) as usize;
@@ -274,14 +307,40 @@ pub fn contract(
         revision_hash(&kernel.source)
     ));
 
+    // oob_policy (Model-A gather, Fuel Q3): advertise the out-of-bounds semantics
+    // EXPLICITLY so the skip/zero_fill vs Fuel's `error` mismatch is contract-
+    // visible (Fuel wires the schema slot + import validation in lockstep). Only a
+    // gather carries it; a uniform op omits it (byte-identical, no new field).
+    if let Some(g) = &gather_advert {
+        s.push_str(&format!("oob_policy: {}\n", g.oob_policy));
+    }
+
     // accept — the admissibility predicate IS the structure key (the honesty
     // invariant); the per-input dtype/layout lines are a human-readable gloss.
     s.push_str("accept:\n");
     s.push_str(&format!("  structure_key: \"{}\"\n", key.to_token()));
     s.push_str("  inputs:\n");
     for i in 0..op.n_inputs as usize {
+        // Per-operand dtype (Model-A): the INDEX operand of a gather emits its
+        // real dtype (U32) so Fuel assembles the mixed-dtype key `[T, U32, T]`;
+        // every value/data operand emits the uniform key dtype. A non-gather op
+        // has `gather_advert == None`, so EVERY input is `dtype` — byte-identical
+        // to the pre-Model-A emission.
+        let in_dtype = match &gather_advert {
+            Some(g) if g.index_operand == i => g.index_dtype_token,
+            _ => dtype,
+        };
+        // Fuel's FKC `TensorDesc` carries the operand dtype as the PLURAL
+        // `dtypes: [..]` list (fuel-dispatch `fkc/schema.rs` `TensorDesc.dtypes:
+        // Vec<String>`), NOT a singular `dtype:` — and `deny_unknown_fields` is
+        // OFF, so a singular `dtype:` line is silently dropped and the operand
+        // resolves to an EMPTY dtype set → `BadScalarType` at import. Emit the
+        // one-element plural list so Fuel's `resolve_operand_dtypes` /
+        // `assemble_dtype_variants` actually key on it (the Model-A per-operand
+        // dtype is only conveyed this way). Review-confirmed against Fuel's real
+        // `import_bundle_str` (singular → BadScalarType; plural → Ok).
         s.push_str(&format!(
-            "    - dtype: {dtype}\n      layout: {}\n",
+            "    - dtypes: [{in_dtype}]\n      layout: {}\n",
             layout_token(key, i)
         ));
     }
@@ -347,6 +406,74 @@ pub fn contract(
 
     s.push_str("```\n");
     Some(s)
+}
+
+// ---------------------------------------------------------------------------
+// Model-A gather advertisement (increment 6)
+// ---------------------------------------------------------------------------
+
+/// The Fuel-facing advert facts for a u32-index gather, or `None` for a gather
+/// that stays an honest miss. Computed once at the top of [`contract`] and
+/// threaded into the op_kind line, the per-operand accept dtypes, and the
+/// `oob_policy` field.
+struct GatherAdvert {
+    /// The verified Fuel primitive `OpKind` spelling — `"Gather"` (full-shape
+    /// index) or `"IndexSelect"` (1-D / broadcast index). Both are exact strings
+    /// from `fuel-dispatch fkc/lower.rs` `lower_op_kind`.
+    op_kind: &'static str,
+    /// The `oob_policy` value — `skip` (gather / index_select) / `zero_fill`
+    /// (embedding) / `clamp` (generator-only). Fuel's own gather is `error`.
+    oob_policy: &'static str,
+    /// Which input operand is the integer index (its accept slot emits U32).
+    index_operand: usize,
+    /// FKC §5 spelling of the index dtype — always `"U32"` (the guard below only
+    /// admits a U32 index; i32/i64 stay honest misses).
+    index_dtype_token: &'static str,
+}
+
+/// Decide whether a gather `op` at cell `key` is honestly advertisable, and with
+/// what op_kind / oob_policy. `None` ⇒ honest miss (a non-U32 index — Fuel is
+/// U32-index everywhere, so i32/i64 can't bind — or an un-fkc-spellable index).
+///
+/// The op_kind is derived STRUCTURALLY from the index operand's broadcast mask
+/// (matching the [`crate::ir::ReadIndex::Indexed`] doc: a full-shape index →
+/// torch-`Gather`; a 1-D/broadcast index → `IndexSelect` / embedding), NOT from
+/// the op's free-form `name` (which is not a dispatch key).
+fn gather_advert(op: &OpDef, key: &StructureKey) -> Option<GatherAdvert> {
+    let (_g, index_operand, axis, oob, index_dtype) = crate::plan::gather_of(&op.read_index)?;
+    // Fuel keys the index operand as a FIXED U32 slot (`fkc/cpu_link.rs` `[T, U32,
+    // T]`); an i32/i64 index gather is unreachable from a Fuel graph node, so it
+    // stays an honest miss (AOT-only — the kernel still generates + runs).
+    if index_dtype != ElementKind::U32 {
+        return None;
+    }
+    let index_dtype_token = fkc_dtype(index_dtype)?; // "U32"
+    let op_kind = if index_is_1d(key, index_operand as usize, axis) {
+        "IndexSelect"
+    } else {
+        "Gather"
+    };
+    let oob_policy = match oob {
+        OobPolicy::Skip => "skip",
+        OobPolicy::ZeroFill => "zero_fill",
+        OobPolicy::Clamp => "clamp",
+    };
+    Some(GatherAdvert {
+        op_kind,
+        oob_policy,
+        index_operand: index_operand as usize,
+        index_dtype_token,
+    })
+}
+
+/// `true` if the index operand is a **1-D / broadcast** index (index_select /
+/// embedding), `false` for a **full-shape** index (torch-gather). A 1-D index
+/// broadcasts over every iteration axis EXCEPT the gathered `axis`; a full-shape
+/// index broadcasts none. Reads the index operand's broadcast mask off the
+/// structure key (the same fact the emitter's index-offset degeneration uses).
+fn index_is_1d(key: &StructureKey, index_operand: usize, axis: u8) -> bool {
+    let m = key.operands[index_operand].bcast;
+    (0..key.rank).all(|d| if d == axis { !m.is_set(d) } else { m.is_set(d) })
 }
 
 // ---------------------------------------------------------------------------
@@ -683,7 +810,7 @@ fn blurb(op: &OpDef, key: &StructureKey, dtype: &str, is_fusion: bool) -> String
 fn fkc_dtype(dt: ElementKind) -> Option<&'static str> {
     use ElementKind::{
         Bf16, Bin, Bool, Complex32, Complex64, Fp8E4M3, Fp8E5M2, F16, F32, F32Strict, F64, I32,
-        I64, S4, S8, U4, U8,
+        I64, S4, S8, U4, U8, U32,
     };
     Some(match dt {
         F32 | F32Strict => "F32",
@@ -692,6 +819,11 @@ fn fkc_dtype(dt: ElementKind) -> Option<&'static str> {
         F64 => "F64",
         I32 => "I32",
         I64 => "I64",
+        // U32 is the gather/scatter INDEX operand's FKC §5 spelling, verified
+        // against Fuel's `fkc/lower.rs` `lower_dtype` table (`"U32" =>
+        // DType::U32`). Emitted on the index slot of a gather/index_select
+        // accept block so Fuel assembles the key `[T, U32, T]`.
+        U32 => "U32",
         S8 => "I8",        // §5: signed-8 spells I8
         U8 | Bool => "U8", // §5 (B5/E5): Fuel has no Bool — masks are U8
         Fp8E4M3 => "F8E4M3",
@@ -703,7 +835,7 @@ fn fkc_dtype(dt: ElementKind) -> Option<&'static str> {
 fn dtype_short(dt: ElementKind) -> &'static str {
     use ElementKind::{
         Bf16, Bin, Bool, Complex32, Complex64, Fp8E4M3, Fp8E5M2, F16, F32, F32Strict, F64, I32,
-        I64, S4, S8, U4, U8,
+        I64, S4, S8, U4, U8, U32,
     };
     match dt {
         F32 | F32Strict => "f32",
@@ -712,6 +844,7 @@ fn dtype_short(dt: ElementKind) -> &'static str {
         F64 => "f64",
         I32 => "i32",
         I64 => "i64",
+        U32 => "u32",
         S8 => "s8",
         U8 => "u8",
         Bool => "bool",
@@ -746,13 +879,13 @@ fn vec_short(v: VecWidth) -> &'static str {
 fn dtype_size(dt: ElementKind) -> u32 {
     use ElementKind::{
         Bf16, Bin, Bool, Complex32, Complex64, Fp8E4M3, Fp8E5M2, F16, F32, F32Strict, F64, I32,
-        I64, S4, S8, U4, U8,
+        I64, S4, S8, U4, U8, U32,
     };
     match dt {
         S4 | U4 | Bin => 1, // sub-byte: round up to a byte for the declared estimate
         S8 | U8 | Bool | Fp8E4M3 | Fp8E5M2 => 1,
         F16 | Bf16 => 2,
-        F32 | F32Strict | I32 => 4,
+        F32 | F32Strict | I32 | U32 => 4, // U32: 4-byte index dtype
         F64 | I64 | Complex32 => 8,
         Complex64 => 16,
     }
@@ -835,10 +968,11 @@ mod tests {
     fn gathered_op_is_an_honest_miss_no_contract() {
         use crate::ir::OobPolicy;
         use crate::pattern::PatternError;
-        // A gather's index-operand dtype (i32/i64) is unkeyable in Baracuda's
-        // single-dtype token, while Fuel's gather admissibility is a per-operand
-        // dtype tuple `[T, U32, T]` — advertising `op_kind: Gather` would let Fuel
-        // bind the wrong index dtype. Honest miss, AOT-only (kernel still runs).
+        // An i32-index gather stays an honest miss even after the Model-A wiring:
+        // Fuel is U32-index EVERYWHERE (its gather key is `[T, U32, T]`), so an
+        // i32/i64 index is unreachable from a Fuel graph node — `gather_advert`
+        // returns None and no contract is emitted (AOT-only; kernel still runs).
+        // (The u32 variant DOES emit — see `u32_gather_emits_a_keyed_contract…`.)
         let op = OpDef::gather("gather", &[ElementKind::F32], 0, OobPolicy::Skip, ElementKind::I32);
         let key = key_for(3, OpCategory::BinaryElementwise);
         let kernel = generate(&op, &key, &Cuda);
@@ -855,11 +989,11 @@ mod tests {
     #[test]
     fn scattered_op_is_an_honest_miss_no_contract() {
         use crate::pattern::PatternError;
-        // A scatter's index dtype is unkeyable (like gather; Fuel keys scatter_add
-        // as `[T, U32, T, T]`), the Op+Bind grammar can't carry axis/OOB/combine
-        // (Fuel has no bare Scatter/Bincount op-kind), AND an FP-atomic scatter's
-        // determinism flip (nondeterministic + coupled precision) is unauthored.
-        // Honest miss, AOT-only for BOTH the pure-assign scatter and scatter_add.
+        // Scatter stays a full honest miss even at u32 (see
+        // `u32_scatter_family_stays_honest_miss`): scatter (no bare Scatter
+        // op_kind), scatter_add/index_add (Fuel's `[T,U32,T,T]` 4-operand key vs
+        // Baracuda's in-place 3-tuple — an ARITY mismatch), and the FP-atomic
+        // determinism block is unauthored. AOT-only for BOTH cases here (i32).
         let key = key_for(3, OpCategory::BinaryElementwise);
         for op in [
             OpDef::scatter("scatter", &[ElementKind::F32], 0, ElementKind::I32),
@@ -874,6 +1008,153 @@ mod tests {
                 crate::derive_pattern(&op),
                 Err(PatternError::ScatterUnsupported)
             ));
+        }
+    }
+
+    // ---- Increment-6 Model-A gather contract wiring ----
+
+    fn gather_key(index_dt: ElementKind, one_d: bool) -> StructureKey {
+        // [data F32, index `index_dt`, out F32], rank-2 axis-0 gather. `one_d`
+        // keys the index 1-D (broadcast on axis 1 via stride 0) ⇒ index_select /
+        // embedding; else full-shape ⇒ torch-gather.
+        let data = OperandDesc::new(2, &[128, 64], &[64, 1], ElementKind::F32, 256);
+        let idx = if one_d {
+            OperandDesc::new(2, &[128, 64], &[1, 0], index_dt, 256)
+        } else {
+            OperandDesc::new(2, &[128, 64], &[64, 1], index_dt, 256)
+        };
+        let out = OperandDesc::new(2, &[128, 64], &[64, 1], ElementKind::F32, 256);
+        structure_key(OpCategory::BinaryElementwise, &[data, idx, out], ArchSku::Sm89)
+    }
+
+    #[test]
+    fn u32_gather_emits_a_keyed_contract_with_per_operand_dtype_and_oob() {
+        use crate::ir::OobPolicy;
+        // A u32-index torch-gather (full-shape index) is now HONESTLY advertisable
+        // (Model A): op_kind Gather, the accept block carries the mixed-dtype tuple
+        // [F32, U32, F32] (index slot U32, data slot F32) so Fuel assembles the
+        // key `[T, U32, T]`, and oob_policy declares the skip semantics.
+        let op = OpDef::gather("gather", &[ElementKind::F32], 0, OobPolicy::Skip, ElementKind::U32);
+        let key = gather_key(ElementKind::U32, false);
+        let kernel = generate(&op, &key, &Cuda);
+        let c = contract(&op, &key, &kernel, "cuda").unwrap();
+        // Verified Fuel op_kind (fuel-dispatch fkc/lower.rs lower_op_kind).
+        assert!(c.contains("op_kind: Gather"), "{c}");
+        // oob_policy field present + skip.
+        assert!(c.contains("oob_policy: skip"), "{c}");
+        // Per-operand accept dtypes: data F32 + index U32 (order = [data, index]).
+        // PLURAL `dtypes: [..]` — the field Fuel's importer actually reads
+        // (review-confirmed: singular `dtype:` is silently dropped → BadScalarType).
+        assert!(c.contains("    - dtypes: [F32]\n"), "data slot F32: {c}");
+        assert!(c.contains("    - dtypes: [U32]\n"), "index slot U32: {c}");
+        // The ImplId dtype channel stays the DATA (cell) dtype.
+        assert!(c.contains("dtypes: [F32]"));
+        // entry_point carries the u32 index infix.
+        assert!(c.contains("entry_point: baracuda_gen_gather_f32_u32_strided_r2"), "{c}");
+        // A gather forces the strided schedule ⇒ elements.
+        assert!(c.contains("count_unit: elements"));
+    }
+
+    #[test]
+    fn u32_index_select_emits_index_select_op_kind() {
+        use crate::ir::OobPolicy;
+        // A 1-D u32 index ⇒ IndexSelect (structurally, from the index broadcast
+        // mask), skip OOB.
+        let op = OpDef::index_select("isel", &[ElementKind::F32], 0, OobPolicy::Skip, ElementKind::U32);
+        let key = gather_key(ElementKind::U32, true);
+        let kernel = generate(&op, &key, &Cuda);
+        let c = contract(&op, &key, &kernel, "cuda").unwrap();
+        assert!(c.contains("op_kind: IndexSelect"), "{c}");
+        assert!(c.contains("oob_policy: skip"), "{c}");
+        assert!(c.contains("    - dtypes: [U32]\n"), "{c}");
+    }
+
+    #[test]
+    fn u32_embedding_emits_index_select_with_zero_fill() {
+        // embedding is a 1-D-index row gather with ZeroFill OOB ⇒ IndexSelect +
+        // oob_policy zero_fill (Fuel has no `Embedding` op_kind; the zero_fill vs
+        // Fuel's `error` mismatch is made explicit in the field).
+        let op = OpDef::embedding("emb", &[ElementKind::F32], ElementKind::U32);
+        let key = gather_key(ElementKind::U32, true);
+        let kernel = generate(&op, &key, &Cuda);
+        let c = contract(&op, &key, &kernel, "cuda").unwrap();
+        assert!(c.contains("op_kind: IndexSelect"), "{c}");
+        assert!(c.contains("oob_policy: zero_fill"), "{c}");
+    }
+
+    #[test]
+    fn i32_and_i64_gather_stay_honest_misses() {
+        use crate::ir::OobPolicy;
+        // The guard-lift is SELECTIVE: Fuel is U32-index everywhere, so an i32/i64
+        // index gather is unreachable from a Fuel graph node → still no contract.
+        for dt in [ElementKind::I32, ElementKind::I64] {
+            let op = OpDef::gather("gather", &[ElementKind::F32], 0, OobPolicy::Skip, dt);
+            let key = gather_key(dt, false);
+            let kernel = generate(&op, &key, &Cuda);
+            assert!(
+                contract(&op, &key, &kernel, "cuda").is_none(),
+                "a {dt:?}-index gather must stay an honest miss (Fuel can't bind non-u32)"
+            );
+        }
+    }
+
+    #[test]
+    fn u32_scatter_family_stays_honest_miss() {
+        // The WRITE side is NOT lifted even at u32: scatter (no bare Scatter
+        // op_kind), scatter_add/index_add (4-operand `[T,U32,T,T]` key vs
+        // Baracuda's in-place 3-tuple — an operand-arity mismatch), bincount (no
+        // Bincount op_kind). All honest misses.
+        let key3 = key_for(3, OpCategory::BinaryElementwise);
+        for op in [
+            OpDef::scatter("scatter", &[ElementKind::F32], 0, ElementKind::U32),
+            OpDef::scatter_add("scatter_add", &[ElementKind::F32], 0, ElementKind::U32),
+            OpDef::index_add("index_add", &[ElementKind::F32], 0, ElementKind::U32),
+        ] {
+            let kernel = generate(&op, &key3, &Cuda);
+            assert!(
+                contract(&op, &key3, &kernel, "cuda").is_none(),
+                "a u32 scatter/scatter_add/index_add must stay an honest miss"
+            );
+        }
+        // bincount (Const body, self-index) at u32 — also a miss.
+        let x = OperandDesc::new(1, &[1 << 16], &[1], ElementKind::U32, 256);
+        let o = OperandDesc::new(1, &[256], &[1], ElementKind::I32, 256);
+        let bk = structure_key(OpCategory::Indexing, &[x, o], ArchSku::Sm89);
+        let bc = OpDef::bincount("bincount", ElementKind::U32);
+        let bkern = generate(&bc, &bk, &Cuda);
+        assert!(contract(&bc, &bk, &bkern, "cuda").is_none(), "bincount stays a miss");
+    }
+
+    #[test]
+    fn uniform_op_accept_block_is_unchanged_by_the_model_a_fix() {
+        // The per-operand-dtype accept fix must be NEUTRAL for a non-gather op:
+        // every input stays the uniform key dtype and NO oob_policy field appears
+        // (byte-identical to the pre-Model-A emission).
+        let op = OpDef::elementwise("add", 2, &[ElementKind::F32], input(0) + input(1));
+        let key = key_for(3, OpCategory::BinaryElementwise);
+        let kernel = generate(&op, &key, &Cuda);
+        let c = contract(&op, &key, &kernel, "cuda").unwrap();
+        assert!(!c.contains("oob_policy"), "no oob_policy on a uniform op: {c}");
+        assert!(!c.contains("U32"), "no U32 slot on a uniform op: {c}");
+        // Both inputs are F32 — plural `dtypes: [F32]` (the Fuel-readable form).
+        assert_eq!(c.matches("    - dtypes: [F32]\n").count(), 2, "both inputs F32: {c}");
+    }
+
+    #[test]
+    fn advertised_gather_op_kind_is_a_verified_fuel_string() {
+        use crate::ir::OobPolicy;
+        // Contract-import sanity: the emitted op_kind must be one of the exact
+        // strings Fuel's `lower_op_kind` table accepts (else the whole bundle
+        // fails import). Gather + IndexSelect are both in that table.
+        const FUEL_OK: [&str; 2] = ["Gather", "IndexSelect"];
+        for (one_d, _want) in [(false, "Gather"), (true, "IndexSelect")] {
+            let op = OpDef::gather("g", &[ElementKind::F32], 0, OobPolicy::Skip, ElementKind::U32);
+            let key = gather_key(ElementKind::U32, one_d);
+            let kernel = generate(&op, &key, &Cuda);
+            let c = contract(&op, &key, &kernel, "cuda").unwrap();
+            let line = c.lines().find(|l| l.starts_with("op_kind: ")).expect("op_kind line");
+            let spelled = line.trim_start_matches("op_kind: ");
+            assert!(FUEL_OK.contains(&spelled), "op_kind '{spelled}' not a Fuel string");
         }
     }
 

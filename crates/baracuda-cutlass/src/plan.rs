@@ -652,6 +652,7 @@ mod dispatch {
             | (_, ElementKind::S4)
             | (_, ElementKind::U4)
             | (_, ElementKind::Bin)
+            | (_, ElementKind::U32)
             | (_, ElementKind::Complex32)
             | (_, ElementKind::Complex64) => 3,
         }
@@ -707,6 +708,7 @@ mod dispatch {
             | (_, ElementKind::S4)
             | (_, ElementKind::U4)
             | (_, ElementKind::Bin)
+            | (_, ElementKind::U32)
             | (_, ElementKind::Complex32)
             | (_, ElementKind::Complex64) => 0,
         }
@@ -783,6 +785,7 @@ mod dispatch {
             | (_, ElementKind::S4)
             | (_, ElementKind::U4)
             | (_, ElementKind::Bin)
+            | (_, ElementKind::U32)
             | (_, ElementKind::Complex32)
             | (_, ElementKind::Complex64) => 3,
         }
@@ -1228,6 +1231,7 @@ mod dispatch {
             | ElementKind::S4
             | ElementKind::U4
             | ElementKind::Bin
+            | ElementKind::U32
             | ElementKind::Complex32
             | ElementKind::Complex64 => 0,
         }
@@ -1267,6 +1271,7 @@ mod dispatch {
             | ElementKind::S4
             | ElementKind::U4
             | ElementKind::Bin
+            | ElementKind::U32
             | ElementKind::Complex32
             | ElementKind::Complex64 => 0,
         }
@@ -1301,6 +1306,7 @@ mod dispatch {
             | ElementKind::S4
             | ElementKind::U4
             | ElementKind::Bin
+            | ElementKind::U32
             | ElementKind::Complex32
             | ElementKind::Complex64 => 3,
         }
@@ -1367,6 +1373,7 @@ mod dispatch {
             | ElementKind::S4
             | ElementKind::U4
             | ElementKind::Bin
+            | ElementKind::U32
             | ElementKind::Complex32
             | ElementKind::Complex64 => 3,
         }

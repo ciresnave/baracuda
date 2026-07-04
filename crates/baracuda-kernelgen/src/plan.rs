@@ -877,9 +877,9 @@ fn assert_valid_gather(op: &OpDef, key: &StructureKey) {
          input cannot index itself"
     );
     assert!(
-        matches!(index_dtype, ElementKind::I32 | ElementKind::I64),
-        "OpDef '{name}': gather index_dtype must be an integer (I32/I64), got \
-         {index_dtype:?} — a float index address is meaningless"
+        matches!(index_dtype, ElementKind::I32 | ElementKind::I64 | ElementKind::U32),
+        "OpDef '{name}': gather index_dtype must be an integer index dtype \
+         (I32/I64/U32), got {index_dtype:?} — a float index address is meaningless"
     );
     assert!(
         (axis as usize) < key.rank as usize,
@@ -1014,9 +1014,9 @@ fn assert_valid_scatter(op: &OpDef, key: &StructureKey) {
         op.n_inputs
     );
     assert!(
-        matches!(index_dtype, ElementKind::I32 | ElementKind::I64),
-        "OpDef '{name}': scatter index_dtype must be an integer (I32/I64), got \
-         {index_dtype:?} — a float destination address is meaningless"
+        matches!(index_dtype, ElementKind::I32 | ElementKind::I64 | ElementKind::U32),
+        "OpDef '{name}': scatter index_dtype must be an integer index dtype \
+         (I32/I64/U32), got {index_dtype:?} — a float destination address is meaningless"
     );
     assert!(
         (axis as usize) < key.rank as usize,

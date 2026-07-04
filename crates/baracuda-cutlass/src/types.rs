@@ -318,6 +318,11 @@ impl GemmSku {
             // precision as a placeholder — a `GemmSku` constructed
             // with these is a programming error.
             ElementKind::I64 | ElementKind::Bool => MathPrecision::Int8,
+            // `U32` is an INDEX / address dtype (gather/scatter index operand),
+            // never a GEMM element — no CUTLASS SKU consumes it. A `GemmSku` with
+            // `element = U32` is a programming error; defensive Int8 placeholder
+            // (same class as the I32/I64 defensive arms above).
+            ElementKind::U32 => MathPrecision::Int8,
             // FP8 kernels live in baracuda-kernels-sys, not baracuda-cutlass.
             // No CUTLASS SKU produces these element kinds; defensive arm.
             ElementKind::Fp8E4M3 => MathPrecision::Fp8E4M3,

@@ -1078,6 +1078,24 @@ pub enum ElementKind {
     /// cuFFT's `cufftDoubleComplex`, NumPy's `complex128`, and
     /// PyTorch's `torch.complex128`.
     Complex64,
+    /// Unsigned 32-bit integer — an **index / address dtype only**, NOT a
+    /// compute dtype. Added for the Model-A gather/scatter contract wiring:
+    /// Fuel keys the `indices` operand of `gather` / `index_select` /
+    /// `scatter_add` / `index_add` as a FIXED U32 slot (`fuel-dispatch
+    /// fkc/cpu_link.rs` — `[T, U32, T]` / `[T, U32, T, T]`), and the pre-existing
+    /// enum had no `u32`. Device C type is `unsigned int` (4-byte index load);
+    /// its FKC §5 spelling is `U32` (`fuel-dispatch fkc/lower.rs` `lower_dtype`).
+    ///
+    /// Deliberately NARROW: there is **no** `impl Element`/`KernelDtype` for the
+    /// Rust `u32` type keyed to this tag (the index dtype rides the op's
+    /// `ReadIndex`/`WriteIndex` role + the `entry_point` symbol, never a
+    /// `T: Element` plan), and every COMPUTE-path match (arithmetic accumulation,
+    /// reduction, vector/packed classification, `is_int_dtype`) REJECTS it. Only
+    /// the index-load ctype, byte-size, and token/dtype codecs accept it. Adding
+    /// this variant does NOT bump `STRUCTURE_KEY_VERSION` (no pre-existing cell
+    /// uses u32, so every pre-existing token stays byte-identical — the codec
+    /// is spelling-keyed, not discriminant-keyed).
+    U32,
 }
 
 /// Math precision used by the FMA / tensor-core instruction.
