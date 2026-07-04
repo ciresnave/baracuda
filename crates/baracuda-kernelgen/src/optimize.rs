@@ -267,6 +267,13 @@ fn exact_pow2_recip(c: f64) -> Option<f64> {
 /// exact bit-level ops (`Copysign`/`Nextafter`/`FmaxIeee`/`FminIeee`/`RemTrunc`)
 /// stay unfolded under the when-in-doubt-add-no-rule policy (`Nextafter` in
 /// particular is dtype-lattice-dependent, so a host-f64 fold would be wrong).
+/// The increment-0b `Cmp*` predicates are ALSO all skipped — even const-const:
+/// a fold would need the full NaN gate (any cmp with NaN is false except
+/// `CmpNe`), the host f64 compare of two demote-destined constants can disagree
+/// with the device's dtype-width compare (two f64 constants that are distinct
+/// on the host collapse to one f32/f16 value on the device, flipping
+/// `==`/`!=`/`<`), and when-in-doubt-add-no-rule holds. Pinned by
+/// `cmp_predicates_are_never_folded_or_rewritten`.
 fn eval_binary(op: BinaryOp, x: f64, y: f64) -> Option<f64> {
     // Max/Min only fold when neither operand is NaN — the kernel propagates NaN
     // (NaN-select), so folding a NaN operand away (host f64::max suppresses it)
@@ -417,7 +424,12 @@ fn rules(eg: &mut EGraph) -> bool {
                 }
             }
             ENode::Binary(op, a, b) => {
-                // max(x, x) = x ; min(x, x) = x
+                // max(x, x) = x ; min(x, x) = x. STRICTLY Max/Min — never the
+                // Cmp* predicates: CmpEq(x, x) is NOT 1.0 (it is FALSE for NaN
+                // x) and CmpNe(x, x) is NOT 0.0 (TRUE for NaN x); the 0a review
+                // proved a widened rule arm here can pass the suite, so the
+                // non-rewrite is pinned per op in
+                // `cmp_predicates_are_never_folded_or_rewritten`.
                 if matches!(op, BinaryOp::Max | BinaryOp::Min) && eg.find(a) == eg.find(b) {
                     changed |= eg.union(nid, a);
                 }
@@ -461,12 +473,20 @@ fn weight(n: &ENode) -> u64 {
         ENode::Binary(op, ..) => match op {
             // Copysign/Nextafter are bit-manipulation ops; FmaxIeee/FminIeee are
             // hardware min/max — all cheap, same tier as the Max/Min selects.
+            // The Cmp* predicates (increment 0b) are compare-selects too: one
+            // setp + one sel, the same tier as Max/Min.
             BinaryOp::Max
             | BinaryOp::Min
             | BinaryOp::Copysign
             | BinaryOp::Nextafter
             | BinaryOp::FmaxIeee
-            | BinaryOp::FminIeee => 2,
+            | BinaryOp::FminIeee
+            | BinaryOp::CmpEq
+            | BinaryOp::CmpNe
+            | BinaryOp::CmpLt
+            | BinaryOp::CmpLe
+            | BinaryOp::CmpGt
+            | BinaryOp::CmpGe => 2,
             BinaryOp::Rem | BinaryOp::RemTrunc => 8, // division-class
             BinaryOp::Pow | BinaryOp::Atan2 => 16,   // transcendental
         },
@@ -821,6 +841,49 @@ mod tests {
         // NaN-propagating Max/Min). Pinning all three closes the mutation
         // where extending the Max|Min rule arm to FminIeee passed the suite.
         for op in [BinaryOp::FmaxIeee, BinaryOp::FminIeee, BinaryOp::RemTrunc] {
+            let same = ScalarExpr::Binary(
+                op,
+                Box::new(ScalarExpr::Input(0)),
+                Box::new(ScalarExpr::Input(0)),
+            );
+            assert_eq!(optimize(&same), same, "{op:?}(x, x) must stay as authored");
+        }
+    }
+
+    #[test]
+    fn cmp_predicates_are_never_folded_or_rewritten() {
+        use crate::ir::BinaryOp;
+        const CMPS: [BinaryOp; 6] = [
+            BinaryOp::CmpEq,
+            BinaryOp::CmpNe,
+            BinaryOp::CmpLt,
+            BinaryOp::CmpLe,
+            BinaryOp::CmpGt,
+            BinaryOp::CmpGe,
+        ];
+        // No const folds, even const-const (NaN gates + host-vs-device compare
+        // width + when-in-doubt-add-no-rule): every pair stays symbolic —
+        // including the tempting finite pair, the NaN pair, and the ±0 pair
+        // (where -0 == +0 is TRUE, a fold bug magnet).
+        for op in CMPS {
+            for (x, y) in [(2.0, 3.0), (f64::NAN, 1.0), (-0.0, 0.0)] {
+                let e = ScalarExpr::Binary(
+                    op,
+                    Box::new(ScalarExpr::Const(x)),
+                    Box::new(ScalarExpr::Const(y)),
+                );
+                assert!(
+                    matches!(optimize(&e), ScalarExpr::Binary(o, _, _) if o == op),
+                    "{op:?}({x}, {y}) must stay symbolic"
+                );
+            }
+        }
+        // And NO identity rewrites: CmpEq(x, x) must NOT fold to 1.0 — it is
+        // FALSE for NaN x (and CmpNe(x, x) is TRUE for NaN x); the reflexive
+        // form of every predicate stays exactly as authored. This pins the
+        // mutation the 0a review caught for Min|FminIeee: extending the
+        // max(x,x)->x rule arm to any Cmp* must fail here.
+        for op in CMPS {
             let same = ScalarExpr::Binary(
                 op,
                 Box::new(ScalarExpr::Input(0)),

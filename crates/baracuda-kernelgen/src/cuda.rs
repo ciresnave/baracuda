@@ -24,7 +24,15 @@ impl Backend for Cuda {
     }
 
     fn supports_dtype(&self, dtype: ElementKind) -> bool {
-        scalar_ctype(dtype).is_some()
+        // U8 entered `scalar_ctype` for the increment-0b predicate STORES
+        // (which never consult this gate — the plan's out_dtype path carries
+        // them), but uniform-u8 COMPUTE regions must keep declining here:
+        // C integer promotion, wrapping/truncation, and device-undefined
+        // division by zero are unaudited semantics, and the float-derived
+        // precision block would mislabel them. Deferred to increment 0c
+        // (int/bitwise dtype completion), where int semantics get their own
+        // validation + contract story.
+        !matches!(dtype, ElementKind::U8) && scalar_ctype(dtype).is_some()
     }
 
     fn lower_variants(&self, plan: &KernelPlan<'_>) -> Vec<Variant> {
@@ -49,6 +57,20 @@ impl Backend for Cuda {
                 || matches!(plan.dtype, ElementKind::F32 | ElementKind::F32Strict),
             "cuda backend v1: scalar params are f32-only for now (dtype {:?})",
             plan.dtype
+        );
+        // Increment 0b: a hetero-output (u8-predicate) plan reaches only the
+        // scalar/strided emitters — `build_plan` forces the schedule (no packed
+        // u8 store exists) and `assert_valid_out_dtype` pinned the Access to
+        // Elementwise. This emitter-level backstop keeps a future schedule
+        // change from silently routing a u8-mask output through a vector-typed
+        // store (the 0a lesson: gate every layer, not just the first).
+        assert!(
+            plan.out_dtype == plan.dtype
+                || matches!(plan.schedule, Schedule::Scalar | Schedule::Strided),
+            "cuda backend: hetero output (out {:?}, key {:?}) lowers scalar/strided only; got {:?}",
+            plan.out_dtype,
+            plan.dtype,
+            plan.schedule
         );
         match plan.schedule {
             Schedule::Vectorized { width } => match vector_type(plan.dtype, width) {
@@ -75,6 +97,9 @@ impl Backend for Cuda {
 }
 
 /// CUDA scalar type for a dtype, or `None` if the backend can't lower it yet.
+/// `U8` (increment 0b) is the comparison-predicate mask dtype — `unsigned char`
+/// per the FKC §5 Bool→U8 pinning; it also makes uniform-u8 *infix* bodies
+/// lowerable (wrapping mod-256 C semantics), same class as the i32/i64 arms.
 fn scalar_ctype(dt: ElementKind) -> Option<&'static str> {
     Some(match dt {
         ElementKind::F32 | ElementKind::F32Strict => "float",
@@ -83,6 +108,7 @@ fn scalar_ctype(dt: ElementKind) -> Option<&'static str> {
         ElementKind::Bf16 => "__nv_bfloat16",
         ElementKind::I32 => "int",
         ElementKind::I64 => "long long",
+        ElementKind::U8 => "unsigned char",
         _ => return None,
     })
 }
@@ -239,6 +265,7 @@ fn dtype_tag(dt: ElementKind) -> &'static str {
         ElementKind::Bf16 => "bf16",
         ElementKind::I32 => "i32",
         ElementKind::I64 => "i64",
+        ElementKind::U8 => "u8",
         _ => "x",
     }
 }
@@ -395,14 +422,47 @@ fn emit_vectorized_packed(plan: &KernelPlan<'_>, pk: &PackedKind) -> GeneratedKe
     GeneratedKernel { name, source: s }
 }
 
+/// The output pointer's scalar C type — the input `ctype` for a uniform-dtype
+/// plan, `unsigned char` for a u8-predicate plan (increment 0b).
+fn out_ctype<'c>(plan: &KernelPlan<'_>, ctype: &'c str) -> &'c str {
+    if plan.out_dtype == plan.dtype {
+        ctype
+    } else {
+        scalar_ctype(plan.out_dtype).expect("validated out dtype has a scalar ctype")
+    }
+}
+
+/// The store expression for the lowered body root. Uniform-dtype plans store
+/// the root unchanged (byte-identical to pre-0b output). A u8-predicate plan
+/// converts the exact 0.0/1.0 predicate to `unsigned char` — exact by
+/// construction (`assert_valid_out_dtype` pinned the body root to a `Cmp*`).
+/// f16/bf16 re-promote first: the root lowered in the house promote-demote
+/// convention is the demoted `__float2half(<pred_f32>)` (byte-identical math
+/// to a nested cmp, one speller, no special root path), and 1.0/0.0 round-trip
+/// f32→half→f32 bit-exactly, so the extra conversion pair is value-exact (and
+/// folded by ptxas). The direct `(unsigned char)__half` conversion operator is
+/// deliberately avoided — it is a header-configuration-dependent C++ overload,
+/// not a house-audited intrinsic.
+fn store_expr(plan: &KernelPlan<'_>, root: String) -> String {
+    if plan.out_dtype == plan.dtype {
+        return root;
+    }
+    match plan.dtype {
+        ElementKind::F16 => format!("(unsigned char)__half2float({root})"),
+        ElementKind::Bf16 => format!("(unsigned char)__bfloat162float({root})"),
+        _ => format!("(unsigned char){root}"),
+    }
+}
+
 fn emit_scalar(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
     let name = format!("baracuda_gen_{}_{}_scalar", plan.op_name, dtype_tag(plan.dtype));
     let n = plan.n_inputs;
+    let octype = out_ctype(plan, ctype);
     let mut s = header(plan, &name);
     for i in 0..n {
         s.push_str(&format!("    const {ctype}* __restrict__ in{i},\n"));
     }
-    s.push_str(&format!("    {ctype}* __restrict__ out,\n"));
+    s.push_str(&format!("    {octype}* __restrict__ out,\n"));
     s.push_str(&format!("    long long n{})\n{{\n", param_args(plan.body)));
     s.push_str("    long long i = (long long)blockIdx.x * blockDim.x + threadIdx.x;\n");
     s.push_str("    long long step = (long long)gridDim.x * blockDim.x;\n");
@@ -417,8 +477,9 @@ fn emit_scalar(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
             binary: &|op, a, b| cuda_binary(op, a, b, plan.dtype),
         },
     );
+    let store = store_expr(plan, root);
     if prelude.is_empty() {
-        s.push_str(&format!("    for (; i < n; i += step) out[i] = {root};\n"));
+        s.push_str(&format!("    for (; i < n; i += step) out[i] = {store};\n"));
     } else {
         // Shared interiors: hoist the `tmp` block inside the loop (its RHS reads
         // the per-`i` inputs), so a shared value is computed once per element.
@@ -426,7 +487,7 @@ fn emit_scalar(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
         for decl in &prelude {
             s.push_str(&format!("        {decl}\n"));
         }
-        s.push_str(&format!("        out[i] = {root};\n    }}\n"));
+        s.push_str(&format!("        out[i] = {store};\n    }}\n"));
     }
     s.push_str("}\n");
     GeneratedKernel { name, source: s }
@@ -441,11 +502,12 @@ fn emit_strided(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
         dtype_tag(plan.dtype),
         rank
     );
+    let octype = out_ctype(plan, ctype);
     let mut s = header(plan, &name);
     for i in 0..n {
         s.push_str(&format!("    const {ctype}* __restrict__ in{i},\n"));
     }
-    s.push_str(&format!("    {ctype}* __restrict__ out,\n"));
+    s.push_str(&format!("    {octype}* __restrict__ out,\n"));
     // Extraction #1 (generated-vs-bespoke audit round 1): dims ride BY VALUE as
     // flattened scalar params (the constant bank) instead of global-memory
     // pointer arrays re-read every iteration — worth ~3x on the general path at
@@ -508,7 +570,7 @@ fn emit_strided(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
     for decl in &prelude {
         s.push_str(&format!("        {decl}\n"));
     }
-    s.push_str(&format!("        out[oo] = {root};\n"));
+    s.push_str(&format!("        out[oo] = {};\n", store_expr(plan, root)));
     s.push_str("    }\n}\n");
     GeneratedKernel { name, source: s }
 }
@@ -1922,6 +1984,26 @@ fn binary_f32(op: BinaryOp, a: String, b: String) -> String {
         BinaryOp::FmaxIeee => format!("fmaxf({a}, {b})"),
         BinaryOp::FminIeee => format!("fminf({a}, {b})"),
         BinaryOp::RemTrunc => format!("fmodf({a}, {b})"),
+        // increment-0b comparison predicates: the C operators, with BOTH
+        // operands cast to float so the compare is decided IN THE COMPUTE
+        // DTYPE. Without the casts, a `Const` operand (spelled as a
+        // suffix-less double literal) promotes the float side to double and
+        // the compare is decided against the UNROUNDED constant — e.g.
+        // `in0[i] == 0.1` is false at every x including 0.1f, while the
+        // compute-dtype compare (and torch scalar promotion, and this
+        // emitter's own f16 path, which rounds the constant to half first)
+        // says true. The cast is a no-op for already-float operands;
+        // arithmetic ops keep the double-then-round-once convention
+        // (correctly rounded THROUGH the store — compares have no rounding
+        // step, so they must round operands first instead). NaN semantics
+        // are the C operators' (any comparison with NaN is false EXCEPT
+        // `!=`, which is true); the value is EXACTLY 1.0f or 0.0f.
+        BinaryOp::CmpEq => format!("((float){a} == (float){b} ? 1.0f : 0.0f)"),
+        BinaryOp::CmpNe => format!("((float){a} != (float){b} ? 1.0f : 0.0f)"),
+        BinaryOp::CmpLt => format!("((float){a} < (float){b} ? 1.0f : 0.0f)"),
+        BinaryOp::CmpLe => format!("((float){a} <= (float){b} ? 1.0f : 0.0f)"),
+        BinaryOp::CmpGt => format!("((float){a} > (float){b} ? 1.0f : 0.0f)"),
+        BinaryOp::CmpGe => format!("((float){a} >= (float){b} ? 1.0f : 0.0f)"),
     }
 }
 
@@ -1938,6 +2020,14 @@ fn binary_f64(op: BinaryOp, a: String, b: String) -> String {
         BinaryOp::FmaxIeee => format!("fmax({a}, {b})"),
         BinaryOp::FminIeee => format!("fmin({a}, {b})"),
         BinaryOp::RemTrunc => format!("fmod({a}, {b})"),
+        // increment-0b comparison predicates — double literals, same C-operator
+        // NaN semantics as the f32 arms.
+        BinaryOp::CmpEq => format!("({a} == {b} ? 1.0 : 0.0)"),
+        BinaryOp::CmpNe => format!("({a} != {b} ? 1.0 : 0.0)"),
+        BinaryOp::CmpLt => format!("({a} < {b} ? 1.0 : 0.0)"),
+        BinaryOp::CmpLe => format!("({a} <= {b} ? 1.0 : 0.0)"),
+        BinaryOp::CmpGt => format!("({a} > {b} ? 1.0 : 0.0)"),
+        BinaryOp::CmpGe => format!("({a} >= {b} ? 1.0 : 0.0)"),
     }
 }
 
@@ -1956,6 +2046,11 @@ fn binary_f64(op: BinaryOp, a: String, b: String) -> String {
 /// transfer survives the promotion. `Nextafter` does not: the f32 neighbor of a
 /// promoted half is ~2¹³ f32 steps closer than the next *half*, so the demote
 /// rounds straight back to `a` — a silently wrong no-op, hence the honest miss.
+/// The `Cmp*` predicates promote EXACTLY: half→f32 is a lossless,
+/// order-preserving embedding (every f16/bf16 value, ±0, ±inf, and NaN maps to
+/// the f32 value of the same class and order), so the f32 compare decides
+/// identically to a native half compare, and demoting the exact 1.0f/0.0f
+/// result is exact — no lattice is stepped, unlike Nextafter.
 fn cuda_binary(op: BinaryOp, a: String, b: String, dtype: ElementKind) -> String {
     if matches!(dtype, ElementKind::F16 | ElementKind::Bf16)
         && matches!(op, BinaryOp::Nextafter)
@@ -3333,5 +3428,274 @@ mod tests {
         assert!(k.source.contains("erfcf(__half2float(__low2half("));
         assert!(k.source.contains("erfcf(__half2float(__high2half("));
         assert!(!k.source.contains("h2erfc"), "no invented packed intrinsic");
+    }
+
+    // =======================================================================
+    // Increment-0b comparison predicates + u8 mask output
+    // =======================================================================
+
+    use crate::ir::{konst, BinaryOp};
+
+    /// Fully-aligned binary cell with a **U8 output** operand (inputs `dt`):
+    /// the caller-side key shape of an `elementwise_pred` op. Note the aligned
+    /// contiguous u8 output keys V8 on its own — the plan must still force the
+    /// scalar path (no packed u8 store exists).
+    fn pred_key(dt: ElementKind) -> baracuda_kernels_types::StructureKey {
+        let a = OperandDesc::new(1, &[1 << 20], &[1], dt, 256);
+        let o = OperandDesc::new(1, &[1 << 20], &[1], ElementKind::U8, 256);
+        structure_key(OpCategory::BinaryElementwise, &[a, a, o], ArchSku::Sm89)
+    }
+
+    fn pred_op(name: &str, op: BinaryOp, dt: ElementKind) -> OpDef {
+        OpDef::elementwise_pred(name, 2, &[dt], input(0).binary(op, input(1)))
+    }
+
+    #[test]
+    fn cmp_emission_goldens_f32_u8_store() {
+        // One golden per cmp op at f32: the exact C-operator ternary (the NaN
+        // semantics carrier), the u8 output signature, and the exact store cast.
+        let cases: &[(BinaryOp, &str, &str)] = &[
+            (BinaryOp::CmpEq, "cmp_eq", "((float)in0[i] == (float)in1[i] ? 1.0f : 0.0f)"),
+            (BinaryOp::CmpNe, "cmp_ne", "((float)in0[i] != (float)in1[i] ? 1.0f : 0.0f)"),
+            (BinaryOp::CmpLt, "cmp_lt", "((float)in0[i] < (float)in1[i] ? 1.0f : 0.0f)"),
+            (BinaryOp::CmpLe, "cmp_le", "((float)in0[i] <= (float)in1[i] ? 1.0f : 0.0f)"),
+            (BinaryOp::CmpGt, "cmp_gt", "((float)in0[i] > (float)in1[i] ? 1.0f : 0.0f)"),
+            (BinaryOp::CmpGe, "cmp_ge", "((float)in0[i] >= (float)in1[i] ? 1.0f : 0.0f)"),
+        ];
+        for (op, name, ternary) in cases {
+            let k = generate(&pred_op(name, *op, ElementKind::F32), &pred_key(ElementKind::F32), &Cuda);
+            // The op name flows into the entry point (identity is (token, entry_point)).
+            assert_eq!(k.name, format!("baracuda_gen_{name}_f32_scalar"));
+            // Inputs stay the key dtype; ONLY the output is u8.
+            assert!(k.source.contains("const float* __restrict__ in0"), "{name}");
+            assert!(k.source.contains("unsigned char* __restrict__ out"), "{name}");
+            // Exact predicate + exact store conversion (0.0f/1.0f -> 0/1).
+            let store = format!("out[i] = (unsigned char){ternary};");
+            assert!(k.source.contains(&store), "{name}: missing `{store}` in:\n{}", k.source);
+        }
+    }
+
+    #[test]
+    fn cmp_f64_golden_uses_double_literals() {
+        let k = generate(&pred_op("cmp_lt", BinaryOp::CmpLt, ElementKind::F64), &pred_key(ElementKind::F64), &Cuda);
+        assert_eq!(k.name, "baracuda_gen_cmp_lt_f64_scalar");
+        assert!(k.source.contains("out[i] = (unsigned char)(in0[i] < in1[i] ? 1.0 : 0.0);"));
+        assert!(!k.source.contains("1.0f"), "f64 predicate must not use float literals");
+    }
+
+    #[test]
+    fn cmp_f16_promotes_to_f32_for_the_compare() {
+        // f16 compares via promote-to-f32 — EXACT (half->f32 is a lossless,
+        // order-preserving embedding, so the f32 compare decides identically to
+        // a native half compare), and the store re-promotes the demoted 1.0/0.0
+        // before the integer cast (exact round trip; see store_expr).
+        let k = generate(&pred_op("cmp_lt", BinaryOp::CmpLt, ElementKind::F16), &pred_key(ElementKind::F16), &Cuda);
+        assert_eq!(k.name, "baracuda_gen_cmp_lt_f16_scalar");
+        assert!(k.source.contains("#include <cuda_fp16.h>"));
+        assert!(k.source.contains("((float)__half2float(in0[i]) < (float)__half2float(in1[i]) ? 1.0f : 0.0f)"));
+        assert!(k.source.contains("out[i] = (unsigned char)__half2float(__float2half("));
+        assert!(k.source.contains("unsigned char* __restrict__ out"));
+    }
+
+    #[test]
+    fn cmp_u8_out_falls_back_to_scalar_at_aligned_vector_cells() {
+        // Packed-classifier fallback golden: a u8-output op at a fully-aligned
+        // f32 (V4) or f16 (V8) cell must take the SCALAR path — no float4, no
+        // packed half2 struct, no invented packed u8 store. (The aligned
+        // contiguous u8 output operand itself keys V8, so without the plan
+        // gate the min-width rule alone would still say "vectorize".)
+        let kf = generate(&pred_op("cmp_ge", BinaryOp::CmpGe, ElementKind::F32), &pred_key(ElementKind::F32), &Cuda);
+        assert!(kf.name.ends_with("_scalar"), "got {}", kf.name);
+        assert!(!kf.source.contains("float4"));
+        let kh = generate(&pred_op("cmp_eq", BinaryOp::CmpEq, ElementKind::F16), &pred_key(ElementKind::F16), &Cuda);
+        assert!(kh.name.ends_with("_scalar"), "got {}", kh.name);
+        // `__half2 ` (the pair TYPE, trailing space) must not appear — the
+        // scalar promote fn `__half2float` legitimately does.
+        assert!(!kh.source.contains("__half2 "), "no packed pair type: {}", kh.name);
+        assert!(!kh.source.contains("__halves2half2"), "no pair re-join");
+        assert!(!kh.source.contains("_vec"), "no packed vector struct");
+    }
+
+    #[test]
+    #[should_panic(expected = "hetero output")]
+    fn hetero_out_vectorized_schedule_is_refused_by_the_emitter_backstop() {
+        use crate::backend::Backend;
+        use crate::ir::BinaryOp;
+        use crate::plan::{KernelPlan, Schedule};
+        // build_plan never produces this plan (it forces Scalar/Strided for
+        // u8-out) — but the backstop must hold INDEPENDENTLY of the plan gate
+        // (the 0a lesson: gate every layer). A future schedule-selection
+        // change must trip here, never emit a float4 store into a u8 buffer.
+        // (Review-caught gap: deleting the backstop left the suite green.)
+        let key = pred_key(ElementKind::F32);
+        let body = input(0).binary(BinaryOp::CmpLt, input(1)).0;
+        let plan = KernelPlan {
+            op_name: "backstop",
+            n_inputs: 2,
+            dtype: ElementKind::F32,
+            out_dtype: ElementKind::U8,
+            schedule: Schedule::Vectorized { width: 4 },
+            key: &key,
+            body: &body,
+            access: &crate::ir::Access::Elementwise,
+        };
+        let _ = Cuda.lower(&plan);
+    }
+
+    #[test]
+    fn cmp_bf16_u8_store_bridges_through_bfloat162float() {
+        // The direct __nv_bfloat16→integer conversion is a header-configuration-
+        // dependent C++ overload (a headerless-nvrtc hazard) — the store must
+        // bridge through __bfloat162float. (Review-caught gap: the Bf16 arm of
+        // store_expr had zero coverage; only the F16 form was pinned.)
+        let k = generate(&pred_op("cmp_lt", BinaryOp::CmpLt, ElementKind::Bf16), &pred_key(ElementKind::Bf16), &Cuda);
+        assert_eq!(k.name, "baracuda_gen_cmp_lt_bf16_scalar");
+        assert!(
+            k.source.contains("out[i] = (unsigned char)__bfloat162float("),
+            "bf16 u8 store must bridge through __bfloat162float:\n{}",
+            k.source
+        );
+    }
+
+    #[test]
+    fn uniform_u8_compute_regions_stay_unsupported() {
+        use crate::backend::Backend;
+        // U8 entered scalar_ctype for predicate STORES only; uniform-u8
+        // COMPUTE (C integer promotion, wrapping, div-by-zero UB) is unaudited
+        // and must keep declining at the JIT/seam trust boundary until
+        // increment 0c gives int semantics their own validation + contract
+        // story. (Review-caught gap: adding U8 to scalar_ctype silently
+        // widened supports_dtype.)
+        assert!(!Cuda.supports_dtype(ElementKind::U8));
+        // The predicate path doesn't consult this gate — u8-OUT kernels at a
+        // float key dtype still lower.
+        let k = generate(&pred_op("cmp_gt", BinaryOp::CmpGt, ElementKind::F32), &pred_key(ElementKind::F32), &Cuda);
+        assert!(k.source.contains("unsigned char* __restrict__ out"));
+    }
+
+    #[test]
+    fn cmp_u8_out_strided_cell_stores_u8_at_the_unraveled_offset() {
+        // A strided input routes the u8-output op to the strided emitter, which
+        // must carry the same u8 signature + store cast at out[oo].
+        let a = OperandDesc::new(2, &[8, 4], &[1, 8], ElementKind::F32, 256); // transposed
+        let b = OperandDesc::new(2, &[8, 4], &[4, 1], ElementKind::F32, 256);
+        let o = OperandDesc::new(2, &[8, 4], &[4, 1], ElementKind::U8, 256);
+        let key = structure_key(OpCategory::BinaryElementwise, &[a, b, o], ArchSku::Sm89);
+        let k = generate(&pred_op("cmp_ne", BinaryOp::CmpNe, ElementKind::F32), &key, &Cuda);
+        assert_eq!(k.name, "baracuda_gen_cmp_ne_f32_strided_r2");
+        assert!(k.source.contains("unsigned char* __restrict__ out"));
+        assert!(k.source.contains("out[oo] = (unsigned char)((float)in0[o0] != (float)in1[o1] ? 1.0f : 0.0f);"));
+    }
+
+    #[test]
+    fn nested_cmp_in_float_body_emits_inline_ternary_and_float_store() {
+        // The mask-multiply (relu-backward) shape: dy * (x > 0), out_dtype NONE
+        // — the cmp is an inline 0.0f/1.0f float, the output stays the key
+        // dtype, and no u8 machinery appears.
+        let op = OpDef::elementwise(
+            "relu_bw",
+            2,
+            &[ElementKind::F32],
+            input(0) * input(1).binary(BinaryOp::CmpGt, konst(0.0)),
+        );
+        assert_eq!(op.out_dtype, None);
+        let k = generate(&op, &binary_scalar_key(ElementKind::F32, 4), &Cuda);
+        assert_eq!(k.name, "baracuda_gen_relu_bw_f32_scalar");
+        assert!(k.source.contains("out[i] = (in0[i] * ((float)in1[i] > (float)0.0 ? 1.0f : 0.0f));"));
+        assert!(k.source.contains("float* __restrict__ out"));
+        assert!(!k.source.contains("unsigned char"));
+        // …and at a fully-aligned cell the SAME body vectorizes normally
+        // (out_dtype None leaves the schedule untouched).
+        let kv = generate(&op, &binary_scalar_key(ElementKind::F32, 256), &Cuda);
+        assert_eq!(kv.name, "baracuda_gen_relu_bw_f32_co_v4");
+        assert!(kv.source.contains("((float)v1.x > (float)0.0 ? 1.0f : 0.0f)"));
+    }
+
+    #[test]
+    fn cmp_float_mask_toplevel_is_legal_with_none_out_dtype() {
+        // A TOP-LEVEL cmp with out_dtype = None is a legal float-mask kernel
+        // (1.0f/0.0f stored in the key dtype) — validate only gates Some(U8).
+        let op = OpDef::elementwise(
+            "gt_mask",
+            2,
+            &[ElementKind::F32],
+            input(0).binary(BinaryOp::CmpGt, input(1)),
+        );
+        let k = generate(&op, &binary_scalar_key(ElementKind::F32, 4), &Cuda);
+        assert!(k.source.contains("out[i] = ((float)in0[i] > (float)in1[i] ? 1.0f : 0.0f);"));
+        assert!(!k.source.contains("unsigned char"));
+    }
+
+    #[test]
+    #[should_panic(expected = "requires the body ROOT to be a comparison")]
+    fn u8_out_with_non_cmp_body_is_rejected() {
+        // A non-predicate body under a u8 store would truncate real floats
+        // silently — authoring error, panic (honest miss discipline).
+        let mut op = OpDef::elementwise("bad", 1, &[ElementKind::F32], input(0).relu());
+        op.out_dtype = Some(ElementKind::U8);
+        let a = OperandDesc::new(1, &[1 << 20], &[1], ElementKind::F32, 256);
+        let o = OperandDesc::new(1, &[1 << 20], &[1], ElementKind::U8, 256);
+        let key = structure_key(OpCategory::UnaryElementwise, &[a, o], ArchSku::Sm89);
+        let _ = generate(&op, &key, &Cuda);
+    }
+
+    #[test]
+    #[should_panic(expected = "legal only for Access::Elementwise")]
+    fn u8_out_under_reduction_is_rejected() {
+        use crate::ir::ReduceOp;
+        // count(x > 0) as a u8-output reduction: the store is the ACCUMULATOR,
+        // not a predicate — predicate-reductions (any/all/count) are a separate
+        // follow-up, so this must panic, not truncate.
+        let mut op = OpDef::reduction(
+            "count_pos",
+            1,
+            &[ElementKind::F32],
+            input(0).binary(BinaryOp::CmpGt, konst(0.0)),
+            ReduceOp::Sum,
+        );
+        op.out_dtype = Some(ElementKind::U8);
+        let a = OperandDesc::new(2, &[4096, 1024], &[1024, 1], ElementKind::F32, 256);
+        let o = OperandDesc::new(1, &[4096], &[1], ElementKind::U8, 256);
+        let key = structure_key(OpCategory::Reduction, &[a, o], ArchSku::Sm89);
+        let _ = generate(&op, &key, &Cuda);
+    }
+
+    #[test]
+    #[should_panic(expected = "legal only for Access::Elementwise")]
+    fn u8_out_under_row_reduce_is_rejected() {
+        let mut op = softmax_op(ElementKind::F32);
+        op.out_dtype = Some(ElementKind::U8);
+        let _ = generate(&op, &rr_key(ElementKind::F32, OpCategory::Softmax), &Cuda);
+    }
+
+    #[test]
+    #[should_panic(expected = "legal only for Access::Elementwise")]
+    fn u8_out_under_contraction_is_rejected() {
+        use crate::ir::{reduced, ContractionAxes};
+        let mut op = OpDef::contraction(
+            "mm",
+            &[ElementKind::F32],
+            ContractionAxes::matmul(),
+            reduced(0).binary(BinaryOp::CmpGt, konst(0.0)),
+        );
+        op.out_dtype = Some(ElementKind::U8);
+        let lhs = OperandDesc::new(2, &[8, 64], &[64, 1], ElementKind::F32, 256);
+        let rhs = OperandDesc::new(2, &[64, 32], &[32, 1], ElementKind::F32, 256);
+        let out = OperandDesc::new(2, &[8, 32], &[32, 1], ElementKind::U8, 256);
+        let key = structure_key(OpCategory::Gemm, &[lhs, rhs, out], ArchSku::Sm89);
+        let _ = generate(&op, &key, &Cuda);
+    }
+
+    #[test]
+    #[should_panic(expected = "the only hetero output dtype in v1 is U8")]
+    fn non_u8_out_dtype_is_rejected() {
+        let mut op = OpDef::elementwise(
+            "bad_f16_out",
+            2,
+            &[ElementKind::F32],
+            input(0).binary(BinaryOp::CmpLt, input(1)),
+        );
+        op.out_dtype = Some(ElementKind::F16);
+        let _ = generate(&op, &pred_key(ElementKind::F32), &Cuda);
     }
 }

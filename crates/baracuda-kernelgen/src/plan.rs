@@ -89,6 +89,11 @@ pub struct KernelPlan<'a> {
     pub n_inputs: u8,
     /// Element dtype.
     pub dtype: ElementKind,
+    /// Output element dtype — the *resolved* [`crate::ir::OpDef::out_dtype`]
+    /// (`out_dtype.unwrap_or(key.dtype)`), so `out_dtype == dtype` for every
+    /// uniform-dtype op and `U8` only for a validated predicate op. Backends
+    /// read this for the output pointer type + store conversion.
+    pub out_dtype: ElementKind,
     /// The chosen schedule.
     pub schedule: Schedule,
     /// The structure cell this plan targets. Backends read structural detail
@@ -113,6 +118,7 @@ pub struct KernelPlan<'a> {
 /// call, not this function's.)
 #[must_use]
 pub fn build_plan<'a>(op: &'a OpDef, key: &'a StructureKey) -> KernelPlan<'a> {
+    assert_valid_out_dtype(op);
     assert_no_half_nextafter(op, key.dtype);
     let schedule = match op.access {
         Access::Reduction {
@@ -178,7 +184,13 @@ pub fn build_plan<'a>(op: &'a OpDef, key: &'a StructureKey) -> KernelPlan<'a> {
                 .unwrap_or(1);
             if !all_contig {
                 Schedule::Strided
-            } else if min_width >= 2 {
+            } else if min_width >= 2 && op.out_dtype.is_none() {
+                // A hetero-output (u8 predicate) kernel takes the SCALAR path
+                // in v1 — never Vectorized: the vector/packed emitters load and
+                // STORE one vector type, and a u8-mask output has no packed
+                // store (a contiguous u8 output even keys V8, which would
+                // otherwise widen `min_width` past the inputs'). Pinned by the
+                // packed-fallback golden in `cuda`.
                 Schedule::Vectorized { width: min_width }
             } else {
                 Schedule::Scalar
@@ -189,6 +201,7 @@ pub fn build_plan<'a>(op: &'a OpDef, key: &'a StructureKey) -> KernelPlan<'a> {
         op_name: &op.name,
         n_inputs: op.n_inputs,
         dtype: key.dtype,
+        out_dtype: op.out_dtype.unwrap_or(key.dtype),
         schedule,
         key,
         body: &op.body,
@@ -363,6 +376,52 @@ fn assert_no_half_nextafter(op: &OpDef, dtype: ElementKind) {
             op.name
         );
     }
+}
+
+/// Validate [`crate::ir::OpDef::out_dtype`] at plan time (AOT — like
+/// `assert_no_half_nextafter`, this runs at the top of [`build_plan`] so EVERY
+/// Access arm and every lowering path is covered; a panic here is an
+/// author-error backstop, and the JIT never constructs a `Some` out_dtype).
+///
+/// The v1 rule: `Some(U8)` is legal **only** for an [`Access::Elementwise`] op
+/// whose body ROOT is a `Cmp*` predicate — the one shape whose store conversion
+/// is exact (the predicate is exactly 0.0/1.0, and `(unsigned char)` of that is
+/// exactly 1/0). Everything else panics with an honest-miss message:
+/// - a non-cmp body with a u8 output would truncate real float values silently;
+/// - a cmp under `Reduction`/`RowReduce`/`Contraction` stores the *accumulator*,
+///   not a predicate (a predicate-reduce — any/all/count — is the roadmap's
+///   "hetero output dtype" reduction follow-up, not this increment);
+/// - `Some(non-U8)` is unimplemented (no store conversion exists for it).
+///
+/// A `Cmp*` NESTED inside a float body (mask-multiply `dy * (x > 0)`) is legal
+/// with `out_dtype = None` — it is an inline 0.0/1.0 float, no u8 store — and a
+/// top-level cmp with `out_dtype = None` (a float mask) is likewise legal.
+fn assert_valid_out_dtype(op: &OpDef) {
+    let Some(od) = op.out_dtype else { return };
+    assert!(
+        od == ElementKind::U8,
+        "OpDef '{}': out_dtype Some({od:?}) is unsupported — the only hetero \
+         output dtype in v1 is U8 (the comparison-predicate mask; use \
+         OpDef::elementwise_pred)",
+        op.name
+    );
+    assert!(
+        matches!(op.access, Access::Elementwise),
+        "OpDef '{}': out_dtype = Some(U8) is legal only for Access::Elementwise \
+         — a Reduction/RowReduce/Contraction stores its accumulator, not a \
+         0/1 predicate, so a u8 store there would truncate silently; \
+         predicate-reductions (any/all/count) are a separate follow-up",
+        op.name
+    );
+    assert!(
+        matches!(&op.body, ScalarExpr::Binary(bop, _, _) if bop.is_cmp()),
+        "OpDef '{}': out_dtype = Some(U8) requires the body ROOT to be a \
+         comparison (ScalarExpr::Binary with a Cmp* op) — only a predicate \
+         yields exactly 0.0/1.0, so any other body would truncate silently \
+         under the u8 store; nested comparisons in a float body take \
+         out_dtype = None instead",
+        op.name
+    );
 }
 
 fn validate_row_reduce(stages: &[ReduceStage], epilogue: &ScalarExpr, n_inputs: u8, key: &StructureKey) {

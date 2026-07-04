@@ -139,10 +139,14 @@ pub enum UnaryOp {
 }
 
 /// A non-infix binary op — lowered as a backend **function call** (`fmaxf`,
-/// `powf`), unlike the infix arithmetic [`ScalarExpr::Add`]/`Sub`/`Mul`/`Div`.
+/// `powf`) or C operator (the `Cmp*` predicates), unlike the infix arithmetic
+/// [`ScalarExpr::Add`]/`Sub`/`Mul`/`Div`.
 /// Variant names line up with the FKC §4.1 graph-`Op` vocabulary — except the
 /// increment-0a extension (`Atan2` through `RemTrunc`), which §4.1 does not
-/// name yet (see the [`UnaryOp`] docs; same honest-miss rule).
+/// name yet (see the [`UnaryOp`] docs; same honest-miss rule), and the
+/// increment-0b comparisons, whose §4.1 names drop the `Cmp` prefix
+/// (`CmpEq` → `Equal`, `CmpNe` → `Ne`, `CmpLt` → `Lt`, `CmpLe` → `Le`,
+/// `CmpGt` → `Gt`, `CmpGe` → `Ge` — the mapping lives in `pattern::binary_name`).
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub enum BinaryOp {
     /// Elementwise maximum — **NaN-propagating** (`torch.maximum`; commutative).
@@ -180,6 +184,53 @@ pub enum BinaryOp {
     /// Truncated remainder — C `fmod`, sign-of-**dividend** (`torch.fmod`; not
     /// commutative). Distinct from the floored [`BinaryOp::Rem`] (sign-of-divisor).
     RemTrunc,
+    // --- increment-0b comparison predicates (FKC §4.1 names them: `Equal`/`Ne`/
+    // `Lt`/`Le`/`Gt`/`Ge`, "→ U8 mask") ---
+    //
+    // Semantics (all six): the IEEE-754 ordered/unordered comparison of the two
+    // operands in the COMPUTE dtype, producing EXACTLY 1.0 or 0.0 in that dtype
+    // (the C ternary `a < b ? 1.0f : 0.0f`). NaN semantics are the C operators':
+    // any comparison with a NaN operand is FALSE — except `CmpNe`, which is TRUE.
+    // f16/bf16 compare via promote-to-f32, which is EXACT: half→f32 is a lossless,
+    // order-preserving embedding, so the f32 compare decides identically to a
+    // native half compare (and demoting the exact 1.0/0.0 back is exact) — unlike
+    // Nextafter, no lattice is stepped. Nested inside a float body a Cmp* is just
+    // an inline 0.0/1.0 float (the mask-multiply `dy * (x > 0)` shape); as a
+    // TOP-LEVEL body it may pair with `OpDef::elementwise_pred`'s `out_dtype =
+    // Some(U8)` to store the predicate as a `u8` 1/0 mask (exact — see `plan`'s
+    // `assert_valid_out_dtype`). NEVER rewrite `CmpEq(x, x)` to 1.0: it is FALSE
+    // for NaN `x` (and dually `CmpNe(x, x)` is TRUE for NaN).
+    /// Equality `a == b ? 1 : 0` (NaN == anything is false, including NaN == NaN).
+    CmpEq,
+    /// Inequality `a != b ? 1 : 0` — the one comparison that is TRUE on NaN
+    /// operands (`NaN != x` for every `x`, including NaN).
+    CmpNe,
+    /// Less-than `a < b ? 1 : 0` (false on any NaN operand).
+    CmpLt,
+    /// Less-or-equal `a <= b ? 1 : 0` (false on any NaN operand; `-0 <= +0` true).
+    CmpLe,
+    /// Greater-than `a > b ? 1 : 0` (false on any NaN operand).
+    CmpGt,
+    /// Greater-or-equal `a >= b ? 1 : 0` (false on any NaN operand).
+    CmpGe,
+}
+
+impl BinaryOp {
+    /// `true` for the comparison predicates (`CmpEq`…`CmpGe`) — the ops whose
+    /// value is exactly 1.0/0.0 and which may drive a `u8`-mask output
+    /// ([`OpDef::elementwise_pred`]).
+    #[must_use]
+    pub fn is_cmp(self) -> bool {
+        matches!(
+            self,
+            BinaryOp::CmpEq
+                | BinaryOp::CmpNe
+                | BinaryOp::CmpLt
+                | BinaryOp::CmpLe
+                | BinaryOp::CmpGt
+                | BinaryOp::CmpGe
+        )
+    }
 }
 
 // ===========================================================================
@@ -827,6 +878,18 @@ pub struct OpDef {
     /// [`View::Identity`] (back-compat: every existing `OpDef` is view-free). When
     /// non-empty, length **must** equal `n_inputs`. Set via [`OpDef::with_views`].
     pub views: Vec<View>,
+    /// Output element dtype when it differs from the key (input) dtype. `None`
+    /// (every constructor except [`OpDef::elementwise_pred`]) ⇒ output dtype ==
+    /// key dtype — the uniform-dtype behavior every pre-0b op has, unchanged.
+    /// v1 admits exactly `Some(ElementKind::U8)` and only for an
+    /// [`Access::Elementwise`] body whose ROOT is a `Cmp*` predicate (validated
+    /// AOT by `plan::assert_valid_out_dtype`): the store converts the exact
+    /// 0.0/1.0 predicate to a `u8` 1/0 mask — the FKC "comparison → U8 mask"
+    /// convention. Keying is untouched: `StructureKey.dtype` stays operand-0
+    /// (input) dtype per the schema ("v1 assumes a uniform operand dtype;
+    /// mixed-dtype folds in a follow-up"); the caller's output `OperandDesc`
+    /// carries U8, which only shapes that operand's own layout facts.
+    pub out_dtype: Option<ElementKind>,
 }
 
 impl OpDef {
@@ -841,6 +904,28 @@ impl OpDef {
             dtypes: dtypes.to_vec(),
             access: Access::Elementwise,
             views: Vec::new(),
+            out_dtype: None,
+        }
+    }
+
+    /// Build an elementwise **predicate** op: `body`'s root must be a `Cmp*`
+    /// comparison, and the output is stored as a **u8 `1`/`0` mask**
+    /// (`out_dtype = Some(U8)`) — the FKC §4.1 "comparison → U8 mask" shape.
+    /// `dtypes` are the accepted *input* dtypes (the key dtype); the store's
+    /// float→u8 conversion is exact because a `Cmp*` root yields exactly 0.0 or
+    /// 1.0. The root-is-cmp rule (and the Elementwise-only rule) is enforced at
+    /// plan time by `assert_valid_out_dtype` — a non-predicate body with a u8
+    /// output would truncate silently and is an authoring error, not a miss.
+    #[must_use]
+    pub fn elementwise_pred(name: &str, n_inputs: u8, dtypes: &[ElementKind], body: Expr) -> Self {
+        Self {
+            name: name.to_string(),
+            n_inputs,
+            body: body.0,
+            dtypes: dtypes.to_vec(),
+            access: Access::Elementwise,
+            views: Vec::new(),
+            out_dtype: Some(ElementKind::U8),
         }
     }
 
@@ -883,6 +968,7 @@ impl OpDef {
             dtypes: dtypes.to_vec(),
             access: Access::Reduction { op, axes, keepdim },
             views: Vec::new(),
+            out_dtype: None,
         }
     }
 
@@ -910,6 +996,7 @@ impl OpDef {
                 epilogue: epilogue.0,
             },
             views: Vec::new(),
+            out_dtype: None,
         }
     }
 
@@ -936,6 +1023,7 @@ impl OpDef {
                 epilogue: epilogue.0,
             },
             views: Vec::new(),
+            out_dtype: None,
         }
     }
 
@@ -974,6 +1062,69 @@ mod view_tests {
         assert!(ew.views.is_empty());
         let red = OpDef::reduction("sum", 1, &[ElementKind::F32], input(0), ReduceOp::Sum);
         assert!(red.views.is_empty());
+    }
+
+    #[test]
+    fn existing_constructors_have_uniform_out_dtype() {
+        // Back-compat (increment 0b): every pre-existing constructor sets
+        // out_dtype = None (output dtype == key dtype) — zero behavior change.
+        let ew = OpDef::elementwise("relu", 1, &[ElementKind::F32], input(0).relu());
+        assert_eq!(ew.out_dtype, None);
+        let red = OpDef::reduction("sum", 1, &[ElementKind::F32], input(0), ReduceOp::Sum);
+        assert_eq!(red.out_dtype, None);
+        let rr = OpDef::row_reduce(
+            "rms",
+            1,
+            &[ElementKind::F32],
+            vec![ReduceStage { pre: ScalarExpr::Input(0), op: ReduceOp::Mean }],
+            reduced(0),
+        );
+        assert_eq!(rr.out_dtype, None);
+        let mm = OpDef::contraction(
+            "mm",
+            &[ElementKind::F32],
+            ContractionAxes::matmul(),
+            reduced(0),
+        );
+        assert_eq!(mm.out_dtype, None);
+    }
+
+    #[test]
+    fn elementwise_pred_sets_u8_out_dtype_and_is_cmp_covers_exactly_six() {
+        let p = OpDef::elementwise_pred(
+            "cmp_lt",
+            2,
+            &[ElementKind::F32],
+            input(0).binary(BinaryOp::CmpLt, input(1)),
+        );
+        assert_eq!(p.out_dtype, Some(ElementKind::U8));
+        assert!(matches!(p.access, Access::Elementwise));
+        // is_cmp: exactly the six predicates, nothing else (FmaxIeee/Max etc.
+        // must never gain mask-store semantics by drifting into this set).
+        for op in [
+            BinaryOp::CmpEq,
+            BinaryOp::CmpNe,
+            BinaryOp::CmpLt,
+            BinaryOp::CmpLe,
+            BinaryOp::CmpGt,
+            BinaryOp::CmpGe,
+        ] {
+            assert!(op.is_cmp());
+        }
+        for op in [
+            BinaryOp::Max,
+            BinaryOp::Min,
+            BinaryOp::Pow,
+            BinaryOp::Rem,
+            BinaryOp::Atan2,
+            BinaryOp::Copysign,
+            BinaryOp::Nextafter,
+            BinaryOp::FmaxIeee,
+            BinaryOp::FminIeee,
+            BinaryOp::RemTrunc,
+        ] {
+            assert!(!op.is_cmp());
+        }
     }
 
     #[test]

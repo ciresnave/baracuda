@@ -144,7 +144,13 @@ fn canonicalize(e: &ScalarExpr) -> ScalarExpr {
         ScalarExpr::Binary(op, a, b) => {
             let (ca, cb) = (canonicalize(a), canonicalize(b));
             if matches!(op, BinaryOp::Max | BinaryOp::Min) {
-                // commutative (like Add/Mul) — canonical operand order
+                // commutative (like Add/Mul) — canonical operand order. This
+                // set is pinned to FKC §3a.2a's NORMATIVE commutative list
+                // (`Add`, `Mul`, `Maximum`, `Minimum`): the Cmp* predicates are
+                // deliberately EXCLUDED even though `==`/`!=` are symmetric —
+                // Fuel matches comparisons strictly positionally, so a swapped
+                // emission would desync the pattern from the user graph (and
+                // `<`/`<=`/`>`/`>=` are not symmetric at all).
                 let (lo, hi) = order2(ca, cb);
                 ScalarExpr::Binary(*op, Box::new(lo), Box::new(hi))
             } else {
@@ -231,12 +237,21 @@ fn walk(
 /// FKC §4.1 graph-`Op` name for a [`BinaryOp`], or `None` for the increment-0a
 /// fns §4.1 doesn't name yet (Fuel's `OpTag` is `#[non_exhaustive]`; we do NOT
 /// invent tags — the body is rejected as [`PatternError::NoFkcName`] instead).
+/// The comparison predicates ARE named — §4.1 "Comparison (→ U8 mask)":
+/// `Equal`/`Ne`/`Lt`/`Le`/`Gt`/`Ge`, matching `fuel_kernel_seam_types::OpTag`
+/// verbatim.
 fn binary_name(op: BinaryOp) -> Option<&'static str> {
     Some(match op {
         BinaryOp::Max => "Maximum",
         BinaryOp::Min => "Minimum",
         BinaryOp::Pow => "Pow",
         BinaryOp::Rem => "Rem",
+        BinaryOp::CmpEq => "Equal",
+        BinaryOp::CmpNe => "Ne",
+        BinaryOp::CmpLt => "Lt",
+        BinaryOp::CmpLe => "Le",
+        BinaryOp::CmpGt => "Gt",
+        BinaryOp::CmpGe => "Ge",
         BinaryOp::Atan2
         | BinaryOp::Copysign
         | BinaryOp::Nextafter
@@ -650,6 +665,46 @@ pattern:
         // The pre-existing vocabulary is untouched: Erf still emits `op: Erf`.
         let erf = OpDef::elementwise("g", 1, &[ElementKind::F32], input(0).unary(UnaryOp::Erf));
         assert!(to_fkc(&derive_pattern(&erf).unwrap()).contains("op: Erf"));
+    }
+
+    #[test]
+    fn cmp_ops_emit_fkc_names_and_stay_positional() {
+        use crate::ir::BinaryOp;
+        // The §4.1 "Comparison (→ U8 mask)" names, verbatim OpTag spellings.
+        for (op, name) in [
+            (BinaryOp::CmpEq, "Equal"),
+            (BinaryOp::CmpNe, "Ne"),
+            (BinaryOp::CmpLt, "Lt"),
+            (BinaryOp::CmpLe, "Le"),
+            (BinaryOp::CmpGt, "Gt"),
+            (BinaryOp::CmpGe, "Ge"),
+        ] {
+            let o = OpDef::elementwise("c", 2, &[ElementKind::F32], input(0).binary(op, input(1)));
+            let fkc = to_fkc(&derive_pattern(&o).unwrap());
+            assert!(fkc.contains(&format!("op: {name}")), "{op:?} -> {fkc}");
+        }
+        // POSITIONAL, never canonicalized: §3a.2a's normative commutative set
+        // is exactly {Add, Mul, Maximum, Minimum} — Fuel matches comparisons
+        // strictly positionally, so even the symmetric Equal must emit operands
+        // as authored (a swap would desync the pattern from the user graph).
+        let ab = OpDef::elementwise("e", 2, &[ElementKind::F32], input(0).binary(BinaryOp::CmpEq, input(1)));
+        let ba = OpDef::elementwise("e", 2, &[ElementKind::F32], input(1).binary(BinaryOp::CmpEq, input(0)));
+        assert_ne!(
+            to_fkc(&derive_pattern(&ab).unwrap()),
+            to_fkc(&derive_pattern(&ba).unwrap()),
+            "Equal operands must stay positional (not in the §3a.2a commutative set)"
+        );
+        let lt = OpDef::elementwise("l", 2, &[ElementKind::F32], input(0).binary(BinaryOp::CmpLt, input(1)));
+        let fkc = to_fkc(&derive_pattern(&lt).unwrap());
+        assert!(fkc.find("bind: 0").unwrap() < fkc.find("bind: 1").unwrap());
+    }
+
+    #[test]
+    fn cmp_with_param_operand_is_rejected() {
+        use crate::ir::BinaryOp;
+        // x > p0 has no §4.1 scalar form (no GtScalar) — rejected, not faked.
+        let op = OpDef::elementwise("gp", 1, &[ElementKind::F32], input(0).binary(BinaryOp::CmpGt, param(0)));
+        assert_eq!(derive_pattern(&op), Err(PatternError::ScalarParamUnsupported));
     }
 
     #[test]

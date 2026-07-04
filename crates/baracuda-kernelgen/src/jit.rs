@@ -411,6 +411,37 @@ fn region_to_op(
 ) -> Result<(OpDef, PatternNode), JitError> {
     let mut next_param = 0u8;
     let body = node_to_expr(region, &mut next_param)?;
+    // A region ROOTED at a comparison produces a U8 mask (§4.1 "Comparison
+    // (→ U8 mask)"), i.e. an output dtype differing from the inputs' — which
+    // the increment-1 uniform-dtype keying cannot express (an honest Fuel
+    // projection of such a region also carries a U8 output OperandDesc and is
+    // already declined as MixedDtype upstream; this gate closes the
+    // uniform-dtype projection too, so a synthesized "cmp" can never bind as a
+    // key-dtype-store kernel where Fuel expects a 1-byte mask). Typed decline,
+    // never a panic; NESTED comparisons in a float region synthesize normally.
+    if matches!(&body, ScalarExpr::Binary(b, _, _) if b.is_cmp()) {
+        return Err(JitError::UnsupportedOp(
+            "comparison at region root (U8-mask output; uniform-dtype JIT keying \
+             cannot express it)"
+                .to_string(),
+        ));
+    }
+    // INTERIOR comparisons decline too (review-tightened): the response
+    // contract's pattern block would encode the Cmp* as a direct operand of a
+    // float op — an edge no constructible Fuel graph has (Fuel's compare
+    // builders pin U8 output and its binary ops assert dtype equality, so
+    // real mask-multiply graphs interpose Cast(U8→float), which is outside
+    // the §4.1 pattern grammar and the see-through set). Fuel's matcher can
+    // therefore never produce this region from a real graph either — the
+    // decline costs zero live coverage and avoids advertising an unmatchable
+    // pattern. Revisit when Cast joins the pattern vocabulary.
+    if crate::contract::expr_contains_cmp(&body) {
+        return Err(JitError::UnsupportedOp(
+            "interior comparison under float ops (the fused pattern needs Cast \
+             in the §4.1 vocabulary — awaiting the mixed-dtype/Cast follow-up)"
+                .to_string(),
+        ));
+    }
     let op = OpDef {
         name: name.to_string(),
         n_inputs,
@@ -420,6 +451,9 @@ fn region_to_op(
         // Seam regions carry no layout facts (Fuel `OpAttrs` lacks perm/shape —
         // ask F1), so a synthesized op is always view-free until F1 lands.
         views: Vec::new(),
+        // Uniform-dtype (increment 1): a JIT'd op never stores hetero output —
+        // the root-cmp gate above is what keeps this unconditional.
+        out_dtype: None,
     };
     // Reuse the AOT bind-set / elementwise validation, and keep the canonical
     // pattern (so synthesize derives it exactly once).
@@ -533,13 +567,24 @@ fn dtype_compatible(body: &ScalarExpr, dtype: ElementKind) -> bool {
 /// Inverse of [`crate::pattern`]'s `binary_name`. The increment-0a binaries
 /// (`Atan2`/`Copysign`/`Nextafter`/`FmaxIeee`/`FminIeee`/`RemTrunc`) have NO
 /// name here on purpose — §4.1/`OpTag` doesn't name them yet, so no region can
-/// request them (an honest `UnsupportedOp`, never invented vocabulary).
+/// request them (an honest `UnsupportedOp`, never invented vocabulary). The
+/// comparisons ARE §4.1/`OpTag` vocabulary (`Equal`…`Ge`) and map — legal
+/// **nested** in a float region (an inline 0.0/1.0 mask, e.g. relu-backward's
+/// `Mul(dy, Gt(x, zeros))`); a region whose ROOT is a comparison is declined
+/// typed in [`region_to_op`] (its output is a U8 mask the uniform-dtype
+/// increment-1 keying cannot express).
 fn region_binary(op: &str) -> Option<BinaryOp> {
     Some(match op {
         "Maximum" => BinaryOp::Max,
         "Minimum" => BinaryOp::Min,
         "Pow" => BinaryOp::Pow,
         "Rem" => BinaryOp::Rem,
+        "Equal" => BinaryOp::CmpEq,
+        "Ne" => BinaryOp::CmpNe,
+        "Lt" => BinaryOp::CmpLt,
+        "Le" => BinaryOp::CmpLe,
+        "Gt" => BinaryOp::CmpGt,
+        "Ge" => BinaryOp::CmpGe,
         _ => return None,
     })
 }
@@ -708,7 +753,17 @@ pub mod seam {
             OpTag::Sign => "Sign",
             OpTag::AddScalar => "AddScalar",
             OpTag::MulScalar => "MulScalar",
-            // Op::Gelu (tanh), PowI/Clamp, comparisons, Where/MaskedFill, reductions,
+            // Comparisons (→ U8 mask): mapped so a comparison NESTED in a float
+            // region synthesizes (inline 0.0/1.0 mask — the relu-backward
+            // `Mul(dy, Gt(x, z))` shape); a region ROOTED at one is declined
+            // typed by `region_to_op` (hetero U8 output — see its docs).
+            OpTag::Equal => "Equal",
+            OpTag::Ne => "Ne",
+            OpTag::Lt => "Lt",
+            OpTag::Le => "Le",
+            OpTag::Gt => "Gt",
+            OpTag::Ge => "Ge",
+            // Op::Gelu (tanh), PowI/Clamp, Where/MaskedFill, reductions,
             // MatMul, shape/layout, indexing, LogSoftmaxLastDim, Iota — not synthesized.
             _ => return None,
         })
@@ -954,6 +1009,92 @@ pub mod seam {
         }
 
         #[test]
+        fn seam_nested_cmp_region_declines_awaiting_cast_vocabulary() {
+            // relu-backward via the seam grammar: Mul(dy, Gt(x, z)). The
+            // kernel WOULD be correct, but the response contract's pattern
+            // block would encode Gt directly under Mul — an edge no real Fuel
+            // graph has (their compare builders pin U8 output; real graphs
+            // interpose Cast, which the pattern grammar can't express). Fuel's
+            // matcher can't produce this region from a real graph either, so
+            // the typed decline costs zero live coverage. Revisit with Cast.
+            let region = op(
+                OpTag::Mul,
+                vec![
+                    SeamNode::Bind { index: 0 },
+                    op(
+                        OpTag::Gt,
+                        vec![SeamNode::Bind { index: 1 }, SeamNode::Bind { index: 2 }],
+                    ),
+                ],
+            );
+            let err = synthesize(
+                &region,
+                &operands(ElementKind::F32, 4),
+                OpCategory::TernaryElementwise,
+                ArchSku::Sm89,
+                "jit_relu_bw",
+                1000,
+                &Cuda,
+                &StubCompiler,
+            )
+            .unwrap_err();
+            assert!(
+                matches!(&err, JitError::UnsupportedOp(m) if m.contains("interior comparison")),
+                "expected the interior-cmp typed decline, got {err:?}"
+            );
+        }
+
+        #[test]
+        fn seam_root_cmp_region_declines_typed_under_both_projections() {
+            let region = op(
+                OpTag::Gt,
+                vec![SeamNode::Bind { index: 0 }, SeamNode::Bind { index: 1 }],
+            );
+            // Uniform-dtype projection: the root-cmp gate declines (a cmp's
+            // output is a U8 mask, not the key dtype).
+            let err = synthesize(
+                &region,
+                &operands(ElementKind::F32, 3),
+                OpCategory::BinaryElementwise,
+                ArchSku::Sm89,
+                "x",
+                1000,
+                &Cuda,
+                &StubCompiler,
+            )
+            .unwrap_err();
+            assert!(
+                matches!(&err, JitError::UnsupportedOp(m) if m.contains("comparison at region root")),
+                "got {err:?}"
+            );
+            // HONEST projection (f32 inputs, U8 output OperandDesc — the seam
+            // request CAN express it): the increment-1 uniform-dtype gate
+            // declines as MixedDtype before synthesis.
+            let mut ops = operands(ElementKind::F32, 3);
+            ops[2] = OperandDesc::new(2, &[128, 256], &[256, 1], ElementKind::U8, 256);
+            let err = synthesize(
+                &region,
+                &ops,
+                OpCategory::BinaryElementwise,
+                ArchSku::Sm89,
+                "x",
+                1000,
+                &Cuda,
+                &StubCompiler,
+            )
+            .unwrap_err();
+            assert_eq!(err, JitError::MixedDtype);
+            // And the live envelope path is a typed Declined, never a panic.
+            let synth = BaracudaSynthesizer::new(1000);
+            let req = SeamRequest {
+                region,
+                operands: ops,
+                arch: ArchSku::Sm89,
+            };
+            assert!(matches!(synth.synthesize(&req), SeamResponse::Declined { .. }));
+        }
+
+        #[test]
         fn synthesizer_declines_never_panics() {
             // An out-of-vocabulary region (Op::Gelu tanh) is an honest Declined, never
             // an error or a panic across the trait boundary.
@@ -1172,6 +1313,46 @@ mod tests {
     }
 
     #[test]
+    fn nested_cmp_region_declines_awaiting_cast_vocabulary() {
+        // relu-backward mask-multiply in region form: Mul(dy, Gt(x, z)) — the
+        // kernel would be correct, but the contract's pattern block would be
+        // unmatchable against any constructible Fuel graph (real graphs
+        // interpose Cast(U8→float), outside the §4.1 grammar + see-through
+        // set). Typed decline until Cast joins the vocabulary; AOT lowering
+        // of the same body still works (contract withheld there too).
+        let region = op_node(
+            "Mul",
+            vec![
+                PatternNode::Bind(0),
+                op_node("Gt", vec![PatternNode::Bind(1), PatternNode::Bind(2)]),
+            ],
+        );
+        let r = req(region, 3, ElementKind::F32, "jit_relu_bw");
+        let err = synthesize(&r, &Cuda, &StubCompiler).unwrap_err();
+        assert!(
+            matches!(&err, JitError::UnsupportedOp(m) if m.contains("interior comparison")),
+            "expected the interior-cmp typed decline, got {err:?}"
+        );
+    }
+
+    #[test]
+    fn root_cmp_region_is_a_typed_decline() {
+        // A region ROOTED at a comparison produces a U8 mask — hetero output
+        // the increment-1 uniform-dtype keying can't express. Typed decline
+        // for all six, never a panic and never a float-mask kernel advertised
+        // as a §4.1 comparison.
+        for name in ["Equal", "Ne", "Lt", "Le", "Gt", "Ge"] {
+            let region = op_node(name, vec![PatternNode::Bind(0), PatternNode::Bind(1)]);
+            let err = synthesize(&req(region, 2, ElementKind::F32, "x"), &Cuda, &StubCompiler)
+                .unwrap_err();
+            assert!(
+                matches!(&err, JitError::UnsupportedOp(m) if m.contains("comparison at region root")),
+                "{name}: expected the root-cmp typed decline, got {err:?}"
+            );
+        }
+    }
+
+    #[test]
     fn increment_0a_names_are_not_region_reachable() {
         // The new scalar fns have no §4.1/OpTag vocabulary, so no region can name
         // them: honest UnsupportedOp, never a panic, and the mapping tables were
@@ -1337,6 +1518,60 @@ mod tests {
                 assert!(String::from_utf8(ptx).unwrap().contains(".entry"));
             }
         }
+    }
+
+    /// The increment-0b comparison kernels compile headerless under nvrtc: the
+    /// f32-inputs/u8-mask-output predicate (the `unsigned char` signature + the
+    /// `(unsigned char)` store cast are plain C — no includes), plus the f16
+    /// promote form (fp16 header) and the nested mask-multiply. Numeric
+    /// correctness is proven by the nvcc host harness (`cmp_validate.cu`);
+    /// this guards headerless portability. Ignored (needs nvrtc + CUDA).
+    #[cfg(feature = "nvrtc")]
+    #[test]
+    #[ignore = "requires nvrtc runtime + CUDA install"]
+    fn nvrtc_compiles_cmp_u8_kernel() {
+        use crate::generate;
+        use crate::ir::{input, konst};
+        let cc = NvrtcCompiler::new(ArchSku::Sm89);
+        let pred_key = |dt: ElementKind| {
+            let a = OperandDesc::new(1, &[1 << 20], &[1], dt, 256);
+            let o = OperandDesc::new(1, &[1 << 20], &[1], ElementKind::U8, 256);
+            structure_key(OpCategory::BinaryElementwise, &[a, a, o], ArchSku::Sm89)
+        };
+        // f32 in, u8 mask out — the increment-0b headline cell.
+        let lt = OpDef::elementwise_pred(
+            "cmp_lt",
+            2,
+            &[ElementKind::F32],
+            input(0).binary(BinaryOp::CmpLt, input(1)),
+        );
+        let k = generate(&lt, &pred_key(ElementKind::F32), &Cuda);
+        let ptx = cc.compile(&k.source, &k.name, 5000).expect("f32/u8 cmp compiles headerless");
+        assert!(String::from_utf8(ptx).unwrap().contains(".entry"));
+        // f16 promote form (fp16 header under nvrtc).
+        let lth = OpDef::elementwise_pred(
+            "cmp_lt",
+            2,
+            &[ElementKind::F16],
+            input(0).binary(BinaryOp::CmpLt, input(1)),
+        );
+        let kh = generate(&lth, &pred_key(ElementKind::F16), &Cuda);
+        let ptxh = cc.compile(&kh.source, &kh.name, 5000).expect("f16/u8 cmp compiles");
+        assert!(String::from_utf8(ptxh).unwrap().contains(".entry"));
+        // Nested mask-multiply (float out, no u8 machinery).
+        let bw = OpDef::elementwise(
+            "relu_bw",
+            2,
+            &[ElementKind::F32],
+            input(0) * input(1).binary(BinaryOp::CmpGt, konst(0.0)),
+        );
+        let bkey = {
+            let a = OperandDesc::new(1, &[1 << 20], &[1], ElementKind::F32, 256);
+            structure_key(OpCategory::BinaryElementwise, &[a, a, a], ArchSku::Sm89)
+        };
+        let kb = generate(&bw, &bkey, &Cuda);
+        let ptxb = cc.compile(&kb.source, &kb.name, 5000).expect("mask-multiply compiles");
+        assert!(String::from_utf8(ptxb).unwrap().contains(".entry"));
     }
 
     /// The reduction schedule compiles headerless under nvrtc too: f32 mean-of-

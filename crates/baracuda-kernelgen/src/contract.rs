@@ -65,11 +65,50 @@ pub fn contract(
     // contract would corrupt the planner's honest miss signal (§4.3).
     let dtype = fkc_dtype(key.dtype)?;
 
+    // Increment 0b honesty gate (tightened by the adversarial review): a body
+    // containing a Cmp* ANYWHERE emits a contract only as the u8-out
+    // single-op primitive.
+    //
+    // - Float-mask top-level cmp (out_dtype None): a key-dtype-store kernel is
+    //   not Fuel's "comparison → U8 mask" op — advertising `op_kind: Lt` would
+    //   bind where Fuel expects a 1-byte mask. No contract.
+    // - NESTED cmp (e.g. relu-bw `dy * (x > z)`): the emitted pattern would
+    //   encode the interior Cmp* as a DIRECT operand of a float op, but no
+    //   constructible Fuel graph has that edge — Fuel's compare builders pin
+    //   the output to U8 and its binary ops assert operand-dtype equality, so
+    //   every real mask-multiply graph interposes `Cast(U8→float)`, which is
+    //   outside the §4.1 pattern grammar and NOT in the §4.3 see-through set.
+    //   The advertised matcher could therefore never fire on the graphs it
+    //   means (silent coverage loss), while the only structurally-matching
+    //   graphs would be all-U8 mask arithmetic — a wrong bind held off only by
+    //   the structure key. Withheld until `Cast` joins the pattern
+    //   vocabulary; the kernel itself still generates (AOT + seam lowering
+    //   are unaffected).
+    let out_u8 = op.out_dtype == Some(ElementKind::U8);
+    if expr_contains_cmp(&op.body) && !out_u8 {
+        return None;
+    }
+
     let pattern = derive_pattern(op).ok();
     let n_ops = pattern.as_ref().map_or(0, count_ops);
+    // A u8-out predicate advertises ONLY as the single-op primitive; a FUSED
+    // u8-out body would hit the same missing-Cast pattern problem above.
+    if out_u8 && n_ops != 1 {
+        return None;
+    }
     let is_fusion = n_ops > 1;
     let op_line = match &pattern {
         // exactly one graph op → a primitive identity (e.g. `Add`, `AddScalar`).
+        // Comparisons use the DISPATCH OpKind spellings (`LessElementwise`, …):
+        // Fuel's FKC importer (fuel-dispatch fkc/lower.rs `lower_op_kind`) is an
+        // exhaustive string table that typed-rejects unknown names — and a
+        // single bad section fails the whole bundle. (The importer expects
+        // `AddElementwise`-style names for the arithmetic primitives too; that
+        // pre-existing spelling reconciliation is tracked in the module
+        // header — comparisons land importable from day one.)
+        Some(_) if n_ops == 1 && out_u8 => {
+            format!("op_kind: {}", cmp_dispatch_op_kind(&op.body))
+        }
         Some(p) if n_ops == 1 => format!("op_kind: {}", root_op_name(p)),
         // ≥2 graph ops → a fused identity carried by the op's stable name.
         Some(_) => format!("fused_op: {}", op.name),
@@ -119,8 +158,13 @@ pub fn contract(
     }
 
     s.push_str("return:\n  outputs:\n");
+    // A u8-predicate op returns the mask dtype, not the input dtype:
+    // `fixed(U8)` per FKC §5.1 ("a constant … comparisons → U8"), the exact
+    // rule Fuel's own CPU compare contracts carry. Everything else keeps the
+    // uniform-dtype passthrough.
+    let dtype_rule = if out_u8 { "fixed(U8)" } else { "same_as_input(0)" };
     s.push_str(&format!(
-        "    - dtype_rule: same_as_input(0)\n      \
+        "    - dtype_rule: {dtype_rule}\n      \
          shape_rule: same_as_input(0)\n      \
          layout: {}\n      \
          aliasing: none\n",
@@ -128,7 +172,11 @@ pub fn contract(
     ));
 
     s.push_str("caps:\n");
-    s.push_str("  in_place: allowed\n");
+    // A u8 output can never alias a wider input buffer (a 1-byte store into a
+    // 4-byte element corrupts neighbors under the grid-stride order), so the
+    // predicate cells forbid in-place; uniform-dtype cells keep the existing
+    // declaration.
+    s.push_str(if out_u8 { "  in_place: forbidden\n" } else { "  in_place: allowed\n" });
     s.push_str(&format!("  alignment_bytes: {}\n", required_align(key)));
     s.push_str(&format!("  awkward_layout: {}\n", awkward_layout(key)));
     // The unit of the kernel's `n` launch argument: a vectorized/packed cell
@@ -316,6 +364,18 @@ fn binary_ulp(op: BinaryOp) -> f64 {
         | BinaryOp::FmaxIeee
         | BinaryOp::FminIeee
         | BinaryOp::RemTrunc => 0.0,
+        // The Cmp* predicates are exact C-operator compares producing exactly
+        // 1.0/0.0 — 0 ulp. A compare of *approximate* subexpressions is still
+        // an exact compare: this table rates each op's own rounding, and the
+        // subexpressions' tiers are summed by `ulp_bound` as usual (the
+        // decision-boundary sensitivity of a predicate is not a result-ULP
+        // quantity — same modeling call as rating Sign/Step 0 in `unary_ulp`).
+        BinaryOp::CmpEq
+        | BinaryOp::CmpNe
+        | BinaryOp::CmpLt
+        | BinaryOp::CmpLe
+        | BinaryOp::CmpGt
+        | BinaryOp::CmpGe => 0.0,
         BinaryOp::Rem => f64::INFINITY,
         BinaryOp::Atan2 => 3.0, // vendor atan2f: 3 ulp
         BinaryOp::Pow => 4.0,
@@ -326,6 +386,44 @@ fn binary_ulp(op: BinaryOp) -> f64 {
 /// body is all correctly-rounded primitives, else `approximate` with the
 /// conservative [`ulp_bound`]. (`F32Strict` would force `correctly_rounded` — it
 /// is a precision mode, not a wire dtype.)
+/// Whether `e` contains any comparison predicate anywhere (not just the root)
+/// — the contract-withholding walk for the missing-`Cast` pattern gap. Shared
+/// with the JIT's interior-cmp decline (`crate::jit`).
+pub(crate) fn expr_contains_cmp(e: &ScalarExpr) -> bool {
+    match e {
+        ScalarExpr::Input(_)
+        | ScalarExpr::Const(_)
+        | ScalarExpr::Param(_)
+        | ScalarExpr::Reduced(_) => false,
+        ScalarExpr::Add(a, b)
+        | ScalarExpr::Sub(a, b)
+        | ScalarExpr::Mul(a, b)
+        | ScalarExpr::Div(a, b) => expr_contains_cmp(a) || expr_contains_cmp(b),
+        ScalarExpr::Unary(_, a) => expr_contains_cmp(a),
+        ScalarExpr::Binary(bop, a, b) => {
+            bop.is_cmp() || expr_contains_cmp(a) || expr_contains_cmp(b)
+        }
+    }
+}
+
+/// The dispatch `OpKind` spelling for a validated u8-out predicate body (root
+/// IS a Cmp* — `assert_valid_out_dtype` guarantees it before any contract is
+/// emitted). These are the exact strings Fuel's `lower_op_kind` table accepts.
+fn cmp_dispatch_op_kind(body: &ScalarExpr) -> &'static str {
+    let ScalarExpr::Binary(bop, _, _) = body else {
+        unreachable!("u8-out body root is a validated Cmp*");
+    };
+    match bop {
+        BinaryOp::CmpEq => "EqualElementwise",
+        BinaryOp::CmpNe => "NotEqualElementwise",
+        BinaryOp::CmpLt => "LessElementwise",
+        BinaryOp::CmpLe => "LessEqualElementwise",
+        BinaryOp::CmpGt => "GreaterElementwise",
+        BinaryOp::CmpGe => "GreaterEqualElementwise",
+        _ => unreachable!("u8-out body root is a validated Cmp*"),
+    }
+}
+
 fn precision_of(body: &ScalarExpr) -> (&'static str, Option<u32>) {
     let u = ulp_bound(body);
     if u <= 0.0 {
@@ -384,9 +482,10 @@ fn required_align(key: &StructureKey) -> u32 {
 }
 
 fn bytes_per_elem(op: &OpDef, key: &StructureKey) -> u32 {
-    // inputs + one output, each one dtype-wide element (broadcast operands touch
-    // fewer; this is a declared upper estimate).
-    (u32::from(op.n_inputs) + 1) * dtype_size(key.dtype)
+    // inputs at the key dtype + one output at the (possibly narrower, u8-mask)
+    // output dtype (broadcast operands touch fewer; this is a declared upper
+    // estimate). Uniform ops reduce to the old (n_inputs + 1) * size exactly.
+    u32::from(op.n_inputs) * dtype_size(key.dtype) + dtype_size(op.out_dtype.unwrap_or(key.dtype))
 }
 
 /// `<op>_<dtype>_<contig0>_<vec0>` cell discriminator for the readable `kernel`
@@ -752,6 +851,121 @@ mod tests {
         assert_eq!(b(BinaryOp::FmaxIeee), ("correctly_rounded", Some(0)));
         assert_eq!(b(BinaryOp::FminIeee), ("correctly_rounded", Some(0)));
         assert_eq!(b(BinaryOp::RemTrunc), ("correctly_rounded", Some(0)));
+    }
+
+    #[test]
+    fn cmp_predicates_rate_zero_ulp() {
+        use crate::ir::BinaryOp;
+        // The compare itself is exact (0 ulp): a pure-cmp body is
+        // correctly_rounded…
+        for op in [
+            BinaryOp::CmpEq,
+            BinaryOp::CmpNe,
+            BinaryOp::CmpLt,
+            BinaryOp::CmpLe,
+            BinaryOp::CmpGt,
+            BinaryOp::CmpGe,
+        ] {
+            assert_eq!(
+                precision_of(&input(0).binary(op, input(1)).0),
+                ("correctly_rounded", Some(0)),
+                "{op:?}"
+            );
+        }
+        // …and a compare of an APPROXIMATE subexpression adds 0 of its own —
+        // the body ulp is exactly the subexpression's tier (exp -> 2), the
+        // pinned increment-0b modeling decision.
+        let e = input(0).exp().binary(BinaryOp::CmpGt, input(1));
+        assert_eq!(precision_of(&e.0), ("approximate", Some(2)));
+    }
+
+    fn pred_key() -> StructureKey {
+        // f32 inputs, u8 mask output — the elementwise_pred caller key shape.
+        let a = OperandDesc::new(2, &[128, 256], &[256, 1], ElementKind::F32, 256);
+        let o = OperandDesc::new(2, &[128, 256], &[256, 1], ElementKind::U8, 256);
+        structure_key(OpCategory::BinaryElementwise, &[a, a, o], ArchSku::Sm89)
+    }
+
+    #[test]
+    fn cmp_u8_contract_returns_fixed_u8_and_forbids_in_place() {
+        use crate::ir::BinaryOp;
+        let op = OpDef::elementwise_pred(
+            "cmp_lt",
+            2,
+            &[ElementKind::F32],
+            input(0).binary(BinaryOp::CmpLt, input(1)),
+        );
+        let key = pred_key();
+        let kernel = generate(&op, &key, &Cuda);
+        let c = contract(&op, &key, &kernel, "cuda").unwrap();
+        // Primitive identity: the DISPATCH OpKind spelling — the exact string
+        // Fuel's lower_op_kind table accepts (`op_kind: Lt` would typed-reject
+        // and fail the whole bundle import).
+        assert!(c.contains("op_kind: LessElementwise"), "{c}");
+        assert!(!c.contains("op_kind: Lt"), "{c}");
+        // The return dtype is HONEST — the §5.1 constant rule Fuel's own
+        // compare contracts use, never the input passthrough.
+        assert!(c.contains("dtype_rule: fixed(U8)"));
+        assert!(!c.contains("dtype_rule: same_as_input(0)"));
+        // The ImplId dtype channel stays the key (input) dtype.
+        assert!(c.contains("dtypes: [F32]"));
+        // A 1-byte store can't alias a 4-byte input buffer.
+        assert!(c.contains("in_place: forbidden"));
+        // Scalar path (no packed u8 store) => n counts elements…
+        assert!(c.contains("count_unit: elements"));
+        // …and the traffic estimate is 2 f32 reads + 1 u8 write = 9 B/elem.
+        assert!(c.contains("bytes_per_elem: 9"));
+        // The predicate is exact.
+        assert!(c.contains("mode: correctly_rounded"));
+        assert!(c.contains("determinism: bitwise"));
+    }
+
+    #[test]
+    fn float_mask_toplevel_cmp_has_no_contract() {
+        use crate::ir::BinaryOp;
+        // A top-level cmp with out_dtype = None stores 1.0f/0.0f in the KEY
+        // dtype — not Fuel's "comparison → U8 mask" op. The kernel generates,
+        // the pattern even derives (the vocabulary exists), but the contract is
+        // withheld: advertising `op_kind: Gt` for a 4-byte-store kernel would
+        // bind where Fuel expects a 1-byte mask.
+        let op = OpDef::elementwise(
+            "gt_mask",
+            2,
+            &[ElementKind::F32],
+            input(0).binary(BinaryOp::CmpGt, input(1)),
+        );
+        let key = key_for(3, OpCategory::BinaryElementwise);
+        let kernel = generate(&op, &key, &Cuda);
+        assert!(kernel.source.contains("? 1.0f : 0.0f"), "the kernel still lowers");
+        assert!(contract(&op, &key, &kernel, "cuda").is_none(), "but no contract");
+        assert!(derive_pattern(&op).is_ok(), "vocabulary exists; the gate is honesty");
+    }
+
+    #[test]
+    fn nested_cmp_fusion_contract_is_withheld() {
+        use crate::ir::BinaryOp;
+        // relu-backward mask-multiply: dy * (x > z). The kernel is correct and
+        // still generates — but the fused PATTERN would encode Gt as a direct
+        // operand of Mul, an edge no constructible Fuel graph has (Fuel's
+        // compare builders pin U8 output and its binary ops assert dtype
+        // equality, so real graphs interpose Cast(U8→float); Cast is outside
+        // the §4.1 pattern grammar and the §4.3 see-through set). Advertising
+        // it would register a matcher that can never fire on the graphs it
+        // means. Withheld until Cast joins the pattern vocabulary.
+        let op = OpDef::elementwise(
+            "relu_bw",
+            3,
+            &[ElementKind::F32],
+            input(0) * input(1).binary(BinaryOp::CmpGt, input(2)),
+        );
+        let key = key_for(4, OpCategory::TernaryElementwise);
+        let kernel = generate(&op, &key, &Cuda);
+        assert!(kernel.source.contains("? 1.0f : 0.0f"), "the kernel still lowers");
+        assert!(
+            contract(&op, &key, &kernel, "cuda").is_none(),
+            "nested-cmp fused contract is withheld (missing-Cast pattern gap)"
+        );
+        assert!(derive_pattern(&op).is_ok(), "vocabulary exists; the gate is honesty");
     }
 
     #[test]
