@@ -152,11 +152,53 @@ pub fn contract(
     //   3. Bespoke gather's OOB semantics (silently skip; embedding zero-fills)
     //      also differ from torch/Fuel gather's in-bounds contract — a third
     //      reason the advertised op would mis-describe the kernel.
-    // So: no contract until the per-operand-dtype key extension lands (a
-    // `STRUCTURE_KEY_VERSION` bump = a Fuel propose-first, DEFERRED and FLAGGED —
-    // the same seam-grammar gate the Contraction node waits on). Guarded up front
-    // so no wrong-dtype gather identity is ever emitted.
+    // KEYING RESOLVED (Fuel reply 2026-07-04, `docs/fuel-reply-mixed-dtype-key`):
+    // reason 1 is answered — Fuel keys off the FKC per-operand dtype TUPLE
+    // assembled from `accept.inputs[i].dtype`, NOT a coarse token, so filling the
+    // accept block honestly (data `T`, index `U32`) makes wrong-bind structurally
+    // impossible with **no `STRUCTURE_KEY_VERSION` bump** (a Baracuda-only change;
+    // our own `StructureKey` stays uniform-dtype). The keyed `u32`-index gather
+    // contract is therefore a QUEUED Baracuda-only follow-up (emit the u32 variant
+    // + fill accept honestly + advertise an `oob_policy` field), sequenced after
+    // ramp #5. Until that follow-up lands, still no contract (honest miss) — reason
+    // 2 (the `Op`+`Bind` grammar can't carry the gather axis/OOB) also holds today.
+    // Guarded up front so no wrong-dtype gather identity is ever emitted meanwhile.
     if crate::plan::op_has_gather(op) {
+        return None;
+    }
+
+    // Increment-5 SCATTER honest miss (typed, no contract; the kernel still
+    // generates + runs AOT). A `WriteIndex::ScatterIndexed` write is unadvertisable
+    // against Fuel's ACTUAL sources for BOTH the gather reasons AND a third:
+    //   1. **Index dtype — keyable via Model A, wiring queued** (same as gather;
+    //      Fuel reply 2026-07-04). Fuel keys scatter_add/index_add off the
+    //      per-operand dtype TUPLE `[T, U32, T, T]` (fuel-dispatch `fkc/cpu_link.rs`:
+    //      `base`, FIXED U32 `indices`, `src`, `passthrough(base)` out) assembled
+    //      from the accept block — so a `u32`-index scatter contract with honest
+    //      per-input dtypes binds correctly, NO `STRUCTURE_KEY_VERSION` bump. That's
+    //      the queued Baracuda-only follow-up; NOT the blocker. The blockers below
+    //      are.
+    //   2. The `Op`+`Bind` `PatternNode` grammar can't carry the scatter `axis`, the
+    //      OOB (Skip) policy, or the combine mode. Fuel names `OpKind::ScatterAdd`/
+    //      `IndexAdd` (fuel-ir `dispatch.rs`) but their identity rides `OpAttrs.axis`;
+    //      it has NO bare `Scatter`, NO `Bincount`/`Histogram` op-kind and NO
+    //      scatter-reduce (amax/amin/prod) mode enum at all — so `scatter`
+    //      (pure-assign), `bincount`, and any AtomicMax/Min scatter are a DOUBLE
+    //      honest miss (net-new vocabulary to negotiate).
+    //   3. **Determinism (the increment-5 discipline).** An FP-`atomicAdd` scatter
+    //      is run-to-run non-deterministic; an honest contract would have to set
+    //      `determinism: nondeterministic` (fuel-dispatch `fkc/schema.rs`), which by
+    //      Fuel's precision-coherence rule (`fkc/validate.rs` Rule 9) ALSO obligates
+    //      `precision.bit_stable_on_same_hardware: false` + `audited: true`. Baracuda
+    //      does not yet author that coupled precision block, so emitting a scatter
+    //      contract could ship an INCOHERENT (silently-deterministic-looking) advert
+    //      of a nondeterministic kernel — the exact failure the honest-miss rule
+    //      forbids. The determinism flip is spelled + ready
+    //      (`VariantFidelity::determinism_str` → `nondeterministic`) for when the
+    //      queued Model-A scatter contract wiring lands AND the missing op-kind
+    //      vocabulary (reason 2) is negotiated; until then, no contract for ANY
+    //      scatter. Guarded up front.
+    if crate::plan::op_has_scatter(op) {
         return None;
     }
 
@@ -808,6 +850,31 @@ mod tests {
             crate::derive_pattern(&op),
             Err(PatternError::GatherUnsupported)
         ));
+    }
+
+    #[test]
+    fn scattered_op_is_an_honest_miss_no_contract() {
+        use crate::pattern::PatternError;
+        // A scatter's index dtype is unkeyable (like gather; Fuel keys scatter_add
+        // as `[T, U32, T, T]`), the Op+Bind grammar can't carry axis/OOB/combine
+        // (Fuel has no bare Scatter/Bincount op-kind), AND an FP-atomic scatter's
+        // determinism flip (nondeterministic + coupled precision) is unauthored.
+        // Honest miss, AOT-only for BOTH the pure-assign scatter and scatter_add.
+        let key = key_for(3, OpCategory::BinaryElementwise);
+        for op in [
+            OpDef::scatter("scatter", &[ElementKind::F32], 0, ElementKind::I32),
+            OpDef::scatter_add("scatter_add", &[ElementKind::F32], 0, ElementKind::I32),
+        ] {
+            let kernel = generate(&op, &key, &Cuda);
+            assert!(
+                contract(&op, &key, &kernel, "cuda").is_none(),
+                "a scattered op must emit NO contract"
+            );
+            assert!(matches!(
+                crate::derive_pattern(&op),
+                Err(PatternError::ScatterUnsupported)
+            ));
+        }
     }
 
     #[test]

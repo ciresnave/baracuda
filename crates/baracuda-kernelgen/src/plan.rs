@@ -6,7 +6,9 @@
 //! lowers the plan to a concrete language. Choosing the schedule here, not in
 //! the backend, keeps the decision shared across every backend.
 
-use crate::ir::{Access, OpDef, ReadIndex, ReduceOp, ReduceStage, ScalarExpr, View};
+use crate::ir::{
+    Access, OpDef, ReadIndex, ReduceOp, ReduceStage, ScalarExpr, View, WriteCombine, WriteIndex,
+};
 use baracuda_kernels_types::{
     AxisMask, Contiguity, ElementKind, OperandKey, StructureKey, VecWidth, MAX_OPERANDS,
 };
@@ -139,6 +141,15 @@ pub struct KernelPlan<'a> {
     /// ([`assert_valid_gather`]) with an independent emitter backstop in
     /// [`crate::cuda::Cuda::lower`].
     pub read_index: &'a [crate::ir::ReadIndex],
+    /// The output's **data-dependent write role** ([`crate::ir::WriteIndex`],
+    /// increment 5, SCATTER) — the write-side mirror of [`Self::read_index`].
+    /// [`crate::ir::WriteIndex::Direct`] for every non-scatter op (byte-identical
+    /// output offset); a [`crate::ir::WriteIndex::ScatterIndexed`] role
+    /// substitutes a runtime index value for one OUTPUT-axis coordinate and turns
+    /// the store into a [`crate::ir::WriteCombine`] op. Validated at the top of
+    /// [`build_plan`] ([`assert_valid_scatter`]) with an independent emitter
+    /// backstop in [`crate::cuda::Cuda::lower`].
+    pub write_index: &'a crate::ir::WriteIndex,
 }
 
 impl KernelPlan<'_> {
@@ -170,6 +181,7 @@ pub fn build_plan<'a>(op: &'a OpDef, key: &'a StructureKey) -> KernelPlan<'a> {
     assert_valid_reduction_post(op);
     assert_valid_views(op, key);
     assert_valid_gather(op, key);
+    assert_valid_scatter(op, key);
     let schedule = match op.access {
         Access::Reduction {
             op: rop,
@@ -233,17 +245,19 @@ pub fn build_plan<'a>(op: &'a OpDef, key: &'a StructureKey) -> KernelPlan<'a> {
                 .map(|k| vec_width_elems(key.operands[k].vec_width))
                 .min()
                 .unwrap_or(1);
-            if op_has_gather(op) {
-                // Increment 4: a GATHERED input reads a DATA-DEPENDENT address
-                // (one axis coordinate is a runtime index value), which only the
-                // strided emitter can fold (it substitutes `idx·stride[axis]` for
-                // `c{axis}·stride[axis]`). NEVER vectorized/packed/scalar — a
-                // data-dependent address cannot coalesce into a vector load, and
-                // the vector/packed emitters iterate a bare linear index that
-                // would ignore the index operand entirely. Pinned by the
-                // force-strided gather test + the independent
-                // `assert_gather_lowerable` backstop. Index-free ops never reach
-                // here (empty `read_index`), so emission stays byte-identical.
+            if op_has_gather(op) || op_has_scatter(op) {
+                // Increment 4/5: a GATHERED input (read) or a SCATTERED output
+                // (write) resolves a DATA-DEPENDENT address (one axis coordinate
+                // is a runtime index value), which only the strided emitter folds
+                // (it substitutes `idx·stride[axis]` for `c{axis}·stride[axis]`, on
+                // the input side for gather / the output side for scatter). NEVER
+                // vectorized/packed/scalar — a data-dependent address cannot
+                // coalesce into a vector load/store, and the vector/packed emitters
+                // iterate a bare linear index that would ignore the index operand
+                // entirely. Pinned by the force-strided tests + the independent
+                // `assert_gather_lowerable` / `assert_scatter_lowerable` backstops.
+                // Index-free / write-Direct ops never reach here, so emission stays
+                // byte-identical.
                 Schedule::Strided
             } else if op_has_addressing_view(op) {
                 // Item 01: a viewed INPUT (a `Permute`/transpose or a `Broadcast`
@@ -297,6 +311,7 @@ pub fn build_plan<'a>(op: &'a OpDef, key: &'a StructureKey) -> KernelPlan<'a> {
         access: &op.access,
         views: &op.views,
         read_index: &op.read_index,
+        write_index: &op.write_index,
     }
 }
 
@@ -897,6 +912,166 @@ fn assert_valid_gather(op: &OpDef, key: &StructureKey) {
     );
 }
 
+/// `true` if `op` scatters (a [`WriteIndex::ScatterIndexed`] output; increment 5).
+/// `false` for a [`WriteIndex::Direct`] op — the byte-identical case. Forces the
+/// [`Schedule::Strided`] schedule and is the `contract`/`pattern` honest-miss
+/// trigger.
+pub(crate) fn op_has_scatter(op: &OpDef) -> bool {
+    !op.write_index.is_direct()
+}
+
+/// The scattered output's [`WriteIndex::ScatterIndexed`] fields
+/// `(index_operand, axis, combine, oob, index_dtype)`, or `None` for a
+/// [`WriteIndex::Direct`] op. The emitter and its backstop read the scatter off
+/// this one accessor to stay in lockstep (mirror of [`gather_of`]).
+pub(crate) fn scatter_of(
+    write_index: &WriteIndex,
+) -> Option<(u8, u8, WriteCombine, crate::ir::OobPolicy, ElementKind)> {
+    write_index.scatter()
+}
+
+/// Whether the [`WriteCombine`] is legal for `out_dtype` at the emitter's v1
+/// atomic-primitive coverage (used by the gate and the emitter backstop):
+///
+/// - `Assign` — legal for every dtype (a plain store).
+/// - `AtomicAdd` — legal for `f32`/`f64` (native FP atomicAdd) and `i32`/`i64`
+///   (native / `unsigned long long` reinterpret). f16/bf16 need the bespoke CAS
+///   helper (`baracuda_atomic.cuh`), which the header-light generated source
+///   can't include — deferred. u8/s8 need a sub-word CAS — deferred.
+/// - `AtomicMax`/`AtomicMin` — **integer only** in v1 (`i32`/`i64`); float has no
+///   native `atomicMax`/`atomicMin` (a CAS emulation is a follow-up).
+pub(crate) fn combine_legal_for_dtype(combine: WriteCombine, out_dtype: ElementKind) -> bool {
+    match combine {
+        WriteCombine::Assign => true,
+        WriteCombine::AtomicAdd => matches!(
+            out_dtype,
+            ElementKind::F32 | ElementKind::F32Strict | ElementKind::F64 | ElementKind::I32 | ElementKind::I64
+        ),
+        WriteCombine::AtomicMax | WriteCombine::AtomicMin => {
+            matches!(out_dtype, ElementKind::I32 | ElementKind::I64)
+        }
+    }
+}
+
+/// Increment-5 **SCATTER** admissibility gate — runs at the TOP of [`build_plan`]
+/// (the house pattern), with an independent emitter backstop in
+/// [`crate::cuda::assert_scatter_lowerable`]. A write-Direct op (every
+/// pre-increment-5 constructor) returns immediately, so the established path is
+/// unchanged and emission stays byte-identical. For an op carrying a real scatter
+/// the v1 rules, all honest AOT panics (an author/generator error — the scatter
+/// role never crosses the JIT trust boundary):
+///
+/// 1. **Access**: [`Access::Elementwise`]-only in v1 (a reduction/row-reduce/
+///    contraction has its own axis machinery a scatter would double-count).
+/// 2. **Single-output** in v1.
+/// 3. **Not also a gather** — a fused gather+scatter (address-in AND address-out)
+///    is a deferred composition; each ships separately.
+/// 4. For the scatter role `ScatterIndexed { index_operand, axis, combine, oob,
+///    index_dtype }`:
+///    - `index_operand < n_inputs`.
+///    - `index_dtype ∈ {I32, I64}` — an integer index (the emitted load type must
+///      be an int; a float destination address is meaningless).
+///    - `axis < key.rank`.
+///    - the index operand must NOT itself be gathered (no index-of-an-index).
+///    - `oob == Skip` — the only bespoke-matched scatter policy in v1
+///      (Clamp/ZeroFill are gather-side; a scattered ZeroFill would need a
+///      separate zeroing pass over the untouched destination).
+///    - the `combine` op must be legal for the OUTPUT dtype
+///      ([`combine_legal_for_dtype`] — AtomicMax/Min integer-only, atomicAdd
+///      f32/f64/i32/i64).
+///    - the scattered axis of the DESTINATION (the OUTPUT key slot) must have a
+///      real stride (its broadcast mask must NOT set `axis`) — the substituted
+///      `idx·stride_out[axis]` term needs a live stride.
+///    - the output must NOT carry an address-affecting [`View`] (scatter ⊥ view
+///      in v1) — views are an input-read property; a scattered output view is
+///      unproven.
+fn assert_valid_scatter(op: &OpDef, key: &StructureKey) {
+    let Some((index_operand, axis, combine, oob, index_dtype)) = scatter_of(&op.write_index) else {
+        return; // write-Direct — every pre-increment-5 op, unchanged.
+    };
+    let name = &op.name;
+    assert!(
+        matches!(op.access, Access::Elementwise),
+        "OpDef '{name}': a scatter (ScatterIndexed write) is Access::Elementwise-only \
+         in v1 — a {}-class op has its own axis machinery a scattered write would \
+         double-count",
+        access_tag(&op.access)
+    );
+    assert!(
+        op.n_outputs() == 1,
+        "OpDef '{name}': a scattered multi-output op ({} outputs) is a deferred \
+         composition in v1 — miss honestly",
+        op.n_outputs()
+    );
+    assert!(
+        !op_has_gather(op),
+        "OpDef '{name}': a fused gather+scatter (data-dependent read AND write) is a \
+         deferred composition in v1 — each ships separately"
+    );
+    assert!(
+        (index_operand as usize) < op.n_inputs as usize,
+        "OpDef '{name}': scatter index_operand ({index_operand}) >= n_inputs ({})",
+        op.n_inputs
+    );
+    assert!(
+        matches!(index_dtype, ElementKind::I32 | ElementKind::I64),
+        "OpDef '{name}': scatter index_dtype must be an integer (I32/I64), got \
+         {index_dtype:?} — a float destination address is meaningless"
+    );
+    assert!(
+        (axis as usize) < key.rank as usize,
+        "OpDef '{name}': scatter axis ({axis}) >= iteration rank ({})",
+        key.rank
+    );
+    assert!(
+        matches!(oob, crate::ir::OobPolicy::Skip),
+        "OpDef '{name}': scatter OOB policy must be Skip in v1 (bespoke \
+         scatter/scatter_add/index_add/bincount all skip an OOB target), got {oob:?}"
+    );
+    let out_dtype = op.out_dtype.unwrap_or(key.dtype);
+    assert!(
+        combine_legal_for_dtype(combine, out_dtype),
+        "OpDef '{name}': scatter combine {combine:?} is not legal for output dtype \
+         {out_dtype:?} in v1 (AtomicMax/Min integer-only; atomicAdd f32/f64/i32/i64; \
+         f16/bf16/u8 atomics need the bespoke CAS helper the header-light source \
+         can't include)"
+    );
+    // The scattered axis of the DESTINATION (last key slot) needs a live stride.
+    let out_slot = (key.n_operands as usize).saturating_sub(1);
+    assert!(
+        !key.operands[out_slot].bcast.is_set(axis),
+        "OpDef '{name}': scattered output broadcasts the scattered axis ({axis}) — \
+         the substituted idx·stride_out[axis] term needs a live stride"
+    );
+    // scatter ⊥ view (v1): `views` is a per-INPUT slice (an output view would ride
+    // a separate future field, not expressible today), so there is no output-view
+    // to reject here — the scatter output offset is always an identity remap. The
+    // INPUT operands may still carry views (the value operand could be a transposed
+    // read); that composes cleanly (input views are handled by `offset_expr`),
+    // so it is deliberately NOT rejected.
+
+    // Body must be a bare identity value read or a Const (review #5 CRITICAL): the
+    // deterministic gather-sum base (`emit_scatter_gathersum`) sums `in{val_op}`
+    // DIRECTLY rather than lowering `op.body`, so a composed body (e.g.
+    // `Input(0)*Param(0)`) would silently compute `Sum(updates)` instead of
+    // `Sum(f(updates))` — diverging from both the op and its own atomic variant
+    // (which DOES lower the body). Bespoke scatter/scatter_add copy the value
+    // verbatim and bincount stores a constant, so v1 pins the body accordingly; a
+    // fused scatter body is a deferred v1 composition. `val_op` matches the
+    // emitter's derivation exactly.
+    let val_op = (0..op.n_inputs as usize)
+        .find(|&k| k != index_operand as usize)
+        .unwrap_or(0);
+    assert!(
+        matches!(&op.body, ScalarExpr::Input(v) if *v as usize == val_op)
+            || matches!(&op.body, ScalarExpr::Const(_)),
+        "OpDef '{name}': a v1 scatter body must be the identity value read Input({val_op}) \
+         or a constant (bincount), got a composed body — a fused scatter transform is a \
+         deferred v1 composition (the deterministic gather-sum base sums the value operand \
+         directly and would silently drop it)"
+    );
+}
+
 fn assert_no_half_nextafter(op: &OpDef, dtype: ElementKind) {
     use crate::ir::BinaryOp;
     if !matches!(dtype, ElementKind::F16 | ElementKind::Bf16) {
@@ -995,6 +1170,16 @@ pub(crate) fn is_int_dtype(dt: ElementKind) -> bool {
 ///    compositions stay legal: integer promotion never widens past the
 ///    compute width there, so no un-truncated wider value exists to observe.
 fn assert_int_op_admissibility(op: &OpDef, dtype: ElementKind) {
+    // Increment 5 — bincount exemption: a scatter with a bare `Const` body is the
+    // integer-count histogram (`out[x[i]] += 1`). The `Const(1)` is NOT compute
+    // (no int arithmetic, no double-math hazard) — it is a store literal the
+    // scatter combine narrows EXACTLY to the count cell (`(int)(1.0)` = 1). The
+    // input `x` is read only as an integer INDEX, never a value leaf. So the
+    // int-Const rejection (which polices f64 literals inside int arithmetic) does
+    // not apply; skip the walk for this one shape.
+    if op_has_scatter(op) && matches!(op.body, ScalarExpr::Const(_)) {
+        return;
+    }
     let int_dt = is_int_dtype(dtype);
     let elementwise = matches!(op.access, Access::Elementwise);
     fn walk(
@@ -1269,6 +1454,19 @@ fn assert_coord_admissibility(op: &OpDef, key: &StructureKey) {
 fn assert_valid_out_dtype(op: &OpDef) {
     let Some(od) = op.out_dtype else { return };
     match &op.access {
+        // Increment 5 — a SCATTER may write an `I32` counts output (bincount:
+        // `out[x[i]] += 1`), a hetero store distinct from the U8 mask. The body is
+        // a `Const` increment (no input value read), narrowed exactly to the count
+        // cell; the write role's own gate (`assert_valid_scatter`) covers the rest.
+        Access::Elementwise if op_has_scatter(op) => {
+            assert!(
+                od == ElementKind::I32 && matches!(&op.body, ScalarExpr::Const(_)),
+                "OpDef '{}': a hetero-output scatter admits only the bincount shape \
+                 (out_dtype Some(I32) with a Const increment body), got out_dtype \
+                 Some({od:?})",
+                op.name
+            );
+        }
         Access::Elementwise => {
             assert!(
                 od == ElementKind::U8,
@@ -2169,5 +2367,141 @@ mod gather_gate_validate {
         let op = OpDef::gather("g", &[ElementKind::F32], 0, OobPolicy::Skip, ElementKind::I32)
             .with_views(vec![View::Permute { perm: vec![1, 0] }, View::Identity]);
         let _ = build_plan(&op, &gather_key(ElementKind::I32));
+    }
+}
+
+#[cfg(test)]
+mod scatter_gate_validate {
+    //! Increment-5 SCATTER gate-rejection + schedule-routing tests. Per the house
+    //! rule these call `build_plan` DIRECTLY — an emitter panic would mask a gate
+    //! mutation (the 0c lesson).
+    use super::{build_plan, Schedule};
+    use crate::ir::{input, OobPolicy, OpDef, ReduceOp, WriteCombine, WriteIndex};
+    use baracuda_kernels_types::{
+        structure_key, ArchSku, ElementKind, OpCategory, OperandDesc, StructureKey,
+    };
+
+    // rank-2 scatter cell: updates [4,3] (input 0), index [4,3] (input 1), dst
+    // [4,3] (out slot). The dst extent along the scattered axis rides `sext` at
+    // launch; here the key dst just supplies the strides/broadcast facts.
+    fn scatter_key(idx_dt: ElementKind) -> StructureKey {
+        let upd = OperandDesc::new(2, &[4, 3], &[3, 1], ElementKind::F32, 256);
+        let idx = OperandDesc::new(2, &[4, 3], &[3, 1], idx_dt, 256);
+        let dst = OperandDesc::new(2, &[4, 3], &[3, 1], ElementKind::F32, 256);
+        structure_key(OpCategory::BinaryElementwise, &[upd, idx, dst], ArchSku::Sm89)
+    }
+
+    #[test]
+    fn scatter_forces_the_strided_schedule() {
+        let op = OpDef::scatter("s", &[ElementKind::F32], 0, ElementKind::I32);
+        assert_eq!(build_plan(&op, &scatter_key(ElementKind::I32)).schedule, Schedule::Strided);
+        // The plan carries the write role through to the backend.
+        assert!(!build_plan(&op, &scatter_key(ElementKind::I32)).write_index.is_direct());
+    }
+
+    #[test]
+    #[should_panic(expected = "index_dtype must be an integer")]
+    fn non_integer_scatter_index_rejected() {
+        let op = OpDef::scatter("s", &[ElementKind::F32], 0, ElementKind::F32);
+        let _ = build_plan(&op, &scatter_key(ElementKind::F32));
+    }
+
+    #[test]
+    #[should_panic(expected = "scatter axis")]
+    fn scatter_axis_ge_rank_rejected() {
+        let op = OpDef::scatter("s", &[ElementKind::F32], 2, ElementKind::I32);
+        let _ = build_plan(&op, &scatter_key(ElementKind::I32));
+    }
+
+    #[test]
+    #[should_panic(expected = "index_operand")]
+    fn scatter_index_operand_ge_n_inputs_rejected() {
+        let op = OpDef::elementwise("s", 2, &[ElementKind::F32], input(0)).with_scatter(
+            WriteIndex::ScatterIndexed {
+                index_operand: 2,
+                axis: 0,
+                combine: WriteCombine::Assign,
+                oob: OobPolicy::Skip,
+                index_dtype: ElementKind::I32,
+            },
+        );
+        let _ = build_plan(&op, &scatter_key(ElementKind::I32));
+    }
+
+    #[test]
+    #[should_panic(expected = "Elementwise-only")]
+    fn scatter_on_a_reduction_rejected() {
+        let op = OpDef::reduction("sum", 1, &[ElementKind::F32], input(0), ReduceOp::Sum)
+            .with_scatter(WriteIndex::ScatterIndexed {
+                index_operand: 0,
+                axis: 0,
+                combine: WriteCombine::AtomicAdd,
+                oob: OobPolicy::Skip,
+                index_dtype: ElementKind::I32,
+            });
+        let a = OperandDesc::new(2, &[256, 128], &[128, 1], ElementKind::F32, 256);
+        let o = OperandDesc::new(1, &[256], &[1], ElementKind::F32, 256);
+        let key = structure_key(OpCategory::Reduction, &[a, o], ArchSku::Sm89);
+        let _ = build_plan(&op, &key);
+    }
+
+    #[test]
+    #[should_panic(expected = "not legal for output dtype")]
+    fn float_atomic_max_rejected() {
+        // AtomicMax on a float output is not native — integer-only in v1.
+        let op = OpDef::elementwise("smax", 2, &[ElementKind::F32], input(0)).with_scatter(
+            WriteIndex::ScatterIndexed {
+                index_operand: 1,
+                axis: 0,
+                combine: WriteCombine::AtomicMax,
+                oob: OobPolicy::Skip,
+                index_dtype: ElementKind::I32,
+            },
+        );
+        let _ = build_plan(&op, &scatter_key(ElementKind::I32));
+    }
+
+    #[test]
+    #[should_panic(expected = "OOB policy must be Skip")]
+    fn scatter_zerofill_rejected() {
+        let op = OpDef::elementwise("s", 2, &[ElementKind::F32], input(0)).with_scatter(
+            WriteIndex::ScatterIndexed {
+                index_operand: 1,
+                axis: 0,
+                combine: WriteCombine::Assign,
+                oob: OobPolicy::ZeroFill,
+                index_dtype: ElementKind::I32,
+            },
+        );
+        let _ = build_plan(&op, &scatter_key(ElementKind::I32));
+    }
+
+    #[test]
+    #[should_panic(expected = "identity value read")]
+    fn composed_scatter_body_rejected() {
+        // Review #5 CRITICAL: a composed scatter body would be silently DROPPED by
+        // the deterministic gather-sum base (it sums the value operand directly).
+        // A fused `relu(updates)` scatter_add is a v1 deferral. Via build_plan
+        // DIRECTLY so only the plan gate can fire (not an emitter panic).
+        let op = OpDef::elementwise("s", 2, &[ElementKind::F32], input(0).relu())
+            .with_scatter(WriteIndex::ScatterIndexed {
+                index_operand: 1,
+                axis: 0,
+                combine: WriteCombine::AtomicAdd,
+                oob: OobPolicy::Skip,
+                index_dtype: ElementKind::I32,
+            });
+        let _ = build_plan(&op, &scatter_key(ElementKind::I32));
+    }
+
+    #[test]
+    fn integer_scatter_add_is_admitted() {
+        // Integer AtomicAdd (bincount-class) is deterministic and legal.
+        let op = OpDef::scatter_add("isa", &[ElementKind::I32], 0, ElementKind::I32);
+        let iupd = OperandDesc::new(2, &[4, 3], &[3, 1], ElementKind::I32, 256);
+        let idx = OperandDesc::new(2, &[4, 3], &[3, 1], ElementKind::I32, 256);
+        let dst = OperandDesc::new(2, &[4, 3], &[3, 1], ElementKind::I32, 256);
+        let key = structure_key(OpCategory::BinaryElementwise, &[iupd, idx, dst], ArchSku::Sm89);
+        assert_eq!(build_plan(&op, &key).schedule, Schedule::Strided);
     }
 }

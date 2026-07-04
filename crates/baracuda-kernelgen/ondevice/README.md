@@ -797,3 +797,125 @@ path). But the other two remain out of #4's reach: (a) the interleaved output �
 not an index-tensor gather (there is still no `base_offset` operand field). So rope
 stays deferred to #5 (scatter) + the base-offset/slice operand work; gather alone
 does not close it. Not forced.
+
+## `scatter_validate.cu` — SCATTER + ATOMIC_HISTOGRAM (increment 5)
+
+Validates `OpDef::write_index` (the `WriteIndex::ScatterIndexed` role) — the
+write-side mirror of #4's gather: the OUTPUT store's scattered-axis coordinate
+`c{axis}` is replaced by a value from an integer index tensor, and the store
+becomes a `WriteCombine` op. **DETERMINISM is the core discipline** (see the
+module header): duplicate/OOB indices write the same cell from many threads, so
+the combine's algebra decides the op's determinism class:
+
+- **scatter (Assign, unique idx)** — `out[idx[r,c], c] = upd[r,c]`. Unique targets
+  ⇒ race-free ⇒ deterministic. Diffed BIT-EXACT vs `launch_scatter` + a CPU ref.
+- **integer scatter_add (i32)** — `out[idx[r,c], c] += upd[r,c]`. Integer atomicAdd
+  is exact + associative ⇒ order-**independent** ⇒ deterministic. BIT-EXACT vs
+  `launch_scatter_add` + CPU ref. **Ships unconditionally** (the safe primary).
+- **bincount (i32)** — `counts[x[i]] += 1` (the ATOMIC_HISTOGRAM representative).
+  Integer counts ⇒ deterministic. BIT-EXACT vs `launch_bincount` + CPU ref.
+- **FP scatter_add** — the determinism SPLIT. Float atomicAdd is
+  **run-to-run non-deterministic** (order-varying + non-associative). So the BASE
+  lower() is the deterministic **gather-sum** (`_scatter_gathersum_`: one thread
+  per output cell scans the update domain, sums matching values in a fixed order,
+  NO atomics) — BIT-EXACT vs a CPU ref summed in the same order. The ATOMIC
+  scatter (`_strided_`) is the gated `Nondeterministic` VARIANT — value-correct
+  within an FP tolerance vs the f64 ref, never bit-exact, never silently selected.
+
+**OOB PROBES** feed negative + out-of-range indices; the generated kernel clamps
+the write address in-bounds and skips the OOB target (bespoke `continue;`) — so
+`memcheck` is the load-bearing check (0 errors = no OOB scatter), and `racecheck`
+must be 0 hazards on the deterministic kernels (a real race there is a correctness
+bug) while treating the atomic variant's atomicAdd as legitimate.
+
+**Regeneration:** these cells are **not** in the `bin/kernelgen.rs` catalog.
+Generate them into `<outdir>`, then copy the harness beside them:
+
+```rust
+use baracuda_kernelgen::{generate, generate_variants, Cuda, OpDef};
+use baracuda_kernels_types::{structure_key, ArchSku, ElementKind, OpCategory, OperandDesc};
+
+let out = std::env::args().nth(1).expect("outdir");
+let write = |k: &baracuda_kernelgen::GeneratedKernel| {
+    std::fs::write(format!("{out}/{}.cu", k.name), &k.source).unwrap();
+};
+let (f32, i32) = (ElementKind::F32, ElementKind::I32);
+// rank-2 value cells: updates[128,64], index[128,64] full-shape, dst[*,64]; axis 0.
+let upd = OperandDesc::new(2, &[128, 64], &[64, 1], f32, 256);
+let idx = OperandDesc::new(2, &[128, 64], &[64, 1], i32, 256);
+let dst = OperandDesc::new(2, &[128, 64], &[64, 1], f32, 256);
+let key = structure_key(OpCategory::BinaryElementwise, &[upd, idx, dst], ArchSku::Sm89);
+write(&generate(&OpDef::scatter("scatter", &[f32], 0, i32), &key, &Cuda));
+// FP scatter_add: base (gather-sum) + the Nondeterministic atomic variant.
+for v in generate_variants(&OpDef::scatter_add("scatter_add", &[f32], 0, i32), &key, &Cuda) {
+    write(&v.kernels[0]);
+}
+// integer scatter_add (deterministic base).
+let iupd = OperandDesc::new(2, &[128, 64], &[64, 1], i32, 256);
+let ikey = structure_key(OpCategory::BinaryElementwise, &[iupd, iupd, iupd], ArchSku::Sm89);
+write(&generate(&OpDef::scatter_add("scatter_add", &[i32], 0, i32), &ikey, &Cuda));
+// bincount (rank-1 counts).
+let x = OperandDesc::new(1, &[4096], &[1], i32, 256);
+let cnt = OperandDesc::new(1, &[64], &[1], i32, 256);
+let bkey = structure_key(OpCategory::UnaryElementwise, &[x, cnt], ArchSku::Sm89);
+write(&generate(&OpDef::bincount("bincount", i32), &bkey, &Cuda));
+```
+
+Compile (the bespoke headers want the MSVC conforming preprocessor):
+`nvcc -O3 -arch=sm_89 -std=c++17 -Xcompiler "/Zc:preprocessor /std:c++17" -I <kernels/include> scatter_validate.cu`.
+Sanitize with `compute-sanitizer --tool {memcheck,racecheck} ./scatter_validate san`.
+
+**Last run:** RTX 4070 Laptop (sm_89), CUDA 13.3 / nvcc 13.3 — **ALL PASSED** (16
+correctness cases); `compute-sanitizer memcheck` = **0 errors**, `racecheck` = **0
+hazards** (the load-bearing checks — no OOB scatter under the negative/out-of-range
+probes; the deterministic kernels are race-free and racecheck treats the atomic
+variant's atomicAdd as legitimate).
+
+| class | case | vs CPU ref | vs bespoke | determinism |
+| --- | --- | --- | --- | --- |
+| scatter Assign (unique idx) | 100×32 M=128, 64×64 M=100 | **bit-exact** | **bit-exact** | deterministic |
+| integer scatter_add | 128×64 M=64, 256×16 M=40 | **bit-exact** | **bit-exact** | deterministic (int add assoc.) |
+| bincount | N=4096 B=64, N=65536 B=256 | **bit-exact** | **bit-exact** | deterministic (int counts) |
+| FP scatter_add **gather-sum BASE** | 128×32 M=48, 64×8 M=16 | **bit-exact** (j-order) | — | **deterministic default** |
+| FP scatter_add gather-sum vs f64 | — | rel ≤ 1.8e-6 | — | — |
+| FP scatter_add **atomic VARIANT** | — | rel ≤ 3.7e-6 (f64) | within FP tol | **Nondeterministic** |
+
+The FP-atomic variant's **run-to-run non-determinism is DEMONSTRATED**: two launches
+of the identical config differed in 56/1536 (and 12/128) output cells, maxabs
+1.5e-5 — genuinely order-nondeterministic (not merely reassociated), confirming it
+must ship as the gated `VariantFidelity::Nondeterministic` variant while the
+gather-sum base is the reproducible default. bincount / integer scatter_add /
+Assign are all bit-exact to both the bespoke sibling and the CPU reference (integer
+add is exactly associative, so the atomic interleave doesn't affect the result).
+
+**Fuel contract (honest miss, AOT-only, confirmed against Fuel's sources):** a
+scattered op emits **no contract** (`PatternError::ScatterUnsupported`), for the
+gather reasons plus the determinism discipline: (1) the index dtype is **unkeyable**
+in Baracuda's single-operand-0-dtype token, while Fuel keys `scatter_add`/`index_add`
+as `[T, U32, T, T]` (`fuel-dispatch fkc/cpu_link.rs`: `base`, fixed U32 `indices`,
+`src`, `passthrough(base)` out) — a token keyed on `T` alone could bind the wrong
+index dtype. (2) The `Op`+`Bind` pattern grammar can't carry the scatter
+`axis`/OOB/combine; Fuel names `OpKind::ScatterAdd`/`IndexAdd` (`fuel-ir dispatch.rs`)
+but has **no bare `Scatter`, no `Bincount`/`Histogram` op-kind, and no scatter-reduce
+mode enum** — so `scatter`/`bincount`/AtomicMax-Min are a *double* honest miss
+(net-new vocabulary). (3) **Determinism** — an FP-atomic scatter's honest contract
+must set `determinism: nondeterministic` (`fuel-dispatch fkc/schema.rs`, one of
+`bitwise` | `same_hardware_bitwise` | `nondeterministic`), which by Fuel's precision
+coherence rule (`fkc/validate.rs` Rule 9) ALSO obligates
+`precision.bit_stable_on_same_hardware: false` + `audited: true` — a coupled block
+Baracuda does not yet author. The determinism flip is spelled + ready
+(`VariantFidelity::determinism_str` → `nondeterministic`) for when the
+per-operand-dtype key extension lands (a `STRUCTURE_KEY_VERSION` bump = a Fuel
+propose-first, the same gate as gather).
+
+**rope — RE-EVALUATED with scatter in hand, 2 of 3 blockers now CLOSED (STILL
+DEFERRED on the third).** #4 closed the cos/sin cache read (an `Indexed` gather);
+**#5 closes the interleaved output** — `y[2i]`, `y[2i+1]` writing into ONE buffer at
+stride 2 is now expressible as a `ScatterIndexed` write (a stride-2 destination
+address is exactly the write-side substitution this increment adds). The **one
+remaining blocker** is the pair-partner cross-read `(2i ↔ 2i+1)`: each output reads
+BOTH lanes of its pair, i.e. the "odd" stream is the "even" stream at a **+1
+*element* base offset** — a slice, needing a `base_offset` operand field that no
+increment provides yet (it is a runtime launch-arg slice, not a stride view or an
+index gather). So rope is now 2/3 closed; the last third is a small base-offset/slice
+operand (NOT another access-pattern increment). Not forced.

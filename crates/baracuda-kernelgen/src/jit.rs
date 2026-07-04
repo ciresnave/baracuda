@@ -463,6 +463,10 @@ fn region_to_op(
         // is unkeyable in the single-dtype token (see `PatternError::GatherUnsupported`),
         // so a seam region never synthesizes one.
         read_index: Vec::new(),
+        // Write-Direct: a scatter (increment 5) is AOT-only for the same
+        // unkeyable-index-dtype reason (see `PatternError::ScatterUnsupported`) plus
+        // the determinism flip — a seam region never synthesizes one.
+        write_index: crate::ir::WriteIndex::Direct,
     };
     // Reuse the AOT bind-set / elementwise validation, and keep the canonical
     // pattern (so synthesize derives it exactly once).

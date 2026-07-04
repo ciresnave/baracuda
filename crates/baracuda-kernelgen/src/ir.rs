@@ -1227,6 +1227,148 @@ impl ReadIndex {
     }
 }
 
+/// How a [`WriteIndex::ScatterIndexed`] output combines the scattered value into
+/// its (data-dependent) destination cell (increment 5, SCATTER). Duplicate
+/// indices name the same output cell from multiple threads, so the combine op's
+/// algebra decides the op's **determinism class** — the core discipline of this
+/// increment:
+///
+/// - [`Self::Assign`] — a plain store (last-writer-wins on a duplicate-target
+///   race). Deterministic **iff the caller guarantees unique target indices**
+///   (the documented `scatter`/`scatter_nd` precondition — bespoke
+///   `indexing/scatter.cu` documents the same "last writer wins" race). No
+///   accumulation, no atomic.
+/// - [`Self::AtomicAdd`] — `atomicAdd`. Its determinism SPLITS on dtype:
+///   **integer** add is exact + associative, so the accumulated RESULT is
+///   order-independent ⇒ deterministic (bincount / integer scatter_add ship
+///   unconditionally); **floating-point** add is non-associative and
+///   `atomicAdd`'s completion order varies run-to-run ⇒ genuinely
+///   [`crate::backend::VariantFidelity::Nondeterministic`] (ships only as a
+///   gated variant; the deterministic default is the gather-sum reformulation).
+/// - [`Self::AtomicMax`] / [`Self::AtomicMin`] — `atomicMax`/`atomicMin`. A
+///   selection (returns one input verbatim, no rounding), so max/min over a set
+///   is associative + commutative + order-independent for BOTH integer and
+///   floating cells ⇒ the accumulated result is deterministic. v1 supports the
+///   native-atomic INTEGER cells only (float has no native `atomicMax`; a CAS
+///   emulation is a follow-up) — the plan gate enforces this.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum WriteCombine {
+    /// Plain store. Deterministic only with unique target indices.
+    Assign,
+    /// `atomicAdd`. Deterministic for integer cells; non-deterministic for FP.
+    AtomicAdd,
+    /// `atomicMax`. Order-independent (selection); integer cells in v1.
+    AtomicMax,
+    /// `atomicMin`. Order-independent (selection); integer cells in v1.
+    AtomicMin,
+}
+
+impl WriteCombine {
+    /// `true` if this combine accumulates through a **floating-point atomic add**
+    /// for `out_dtype` — the one order-nondeterministic case (FP `atomicAdd`).
+    /// Integer `AtomicAdd`, `Assign`, and `AtomicMax`/`AtomicMin` all produce an
+    /// order-independent result ⇒ `false`. Drives the base-vs-variant split in
+    /// [`crate::cuda`] (an FP-atomic scatter lowers its deterministic gather-sum
+    /// as the base and the atomic as the `Nondeterministic` variant).
+    #[must_use]
+    pub fn is_fp_atomic_add(self, out_dtype: ElementKind) -> bool {
+        matches!(self, WriteCombine::AtomicAdd) && !is_integer_kind(out_dtype)
+    }
+}
+
+/// `true` for an integer [`ElementKind`] (the exact-associative-add dtypes). A
+/// local mirror of `plan::is_int_dtype` so [`WriteCombine`] can classify without
+/// a plan dependency; the `_` arm keeps a future dtype conservative (treated as
+/// non-integer ⇒ the safe nondeterministic-variant route for an atomic add).
+#[must_use]
+fn is_integer_kind(dt: ElementKind) -> bool {
+    matches!(
+        dt,
+        ElementKind::I32 | ElementKind::I64 | ElementKind::U8 | ElementKind::S8
+    )
+}
+
+/// How the **single output** gets the address for ONE iteration axis — the
+/// **data-dependent WRITE** role (increment 5, SCATTER; the write-side mirror of
+/// increment 4's [`ReadIndex`]). Lives on [`OpDef::write_index`] as ONE role (v1
+/// scatters into one output), and — exactly like [`ReadIndex`] — is a per-operand
+/// *address-through* the value-math walkers (optimizer/e-graph, `contract`,
+/// `pattern`) must not see, so it is NOT a [`ScalarExpr`] node and NOT an
+/// [`Access`] variant. `Direct` (the default) writes at the iteration coordinate
+/// (today's behavior, byte-identical); `ScatterIndexed` replaces the output
+/// coordinate along one axis with a value loaded from an integer index operand,
+/// and the store becomes the [`WriteCombine`] op.
+///
+/// The iteration domain of a scatter is the **updates/source** domain (one thread
+/// per update element), NOT the destination — the destination extent along the
+/// scattered axis differs, so it rides a dedicated launch scalar (`sext`), the
+/// write-side mirror of gather's `gext`. Out-of-range indices are **skipped**
+/// (bespoke `scatter`/`scatter_add`/`index_add`/`bincount` all `continue;` — no
+/// negative-index wrap).
+#[derive(Clone, Debug, PartialEq, Default)]
+pub enum WriteIndex {
+    /// Write the output at the iteration coordinate — no scatter (default; every
+    /// pre-increment-5 op). Byte-identical emission.
+    #[default]
+    Direct,
+    /// Write the output with iteration axis `axis` replaced by the value loaded
+    /// from `index_operand` (an integer input tensor) at the iteration
+    /// coordinate: `out[..., index_operand[coord], ...] (combine)= value` (the
+    /// substituted term is `idx·stride_out[axis]` instead of
+    /// `c{axis}·stride_out[axis]`). A **full-shape** index (its key varies on
+    /// every axis) is a torch-`scatter`/`scatter_add`; a **1-D** index (its key
+    /// broadcasts on every axis except `axis`) is an `index_add`. One mechanism,
+    /// distinguished purely by the index operand's broadcast mask — the write-side
+    /// mirror of [`ReadIndex::Indexed`].
+    ///
+    /// `index_dtype` (`I32`/`I64`) rides HERE, on the op — NOT the structure key
+    /// (single operand-0 dtype), exactly like [`ReadIndex::Indexed`]; it selects
+    /// the emitted index-load type + the `entry_point` symbol infix.
+    ScatterIndexed {
+        /// Which input operand supplies the index values (an integer tensor). May
+        /// equal the value operand (bincount indexes `Input(0)` = the data itself
+        /// and writes a `Const(1)`), unlike a gather where an input can't index
+        /// itself — a scatter's index selects the DESTINATION, not a source read.
+        index_operand: u8,
+        /// The iteration axis whose coordinate the index value replaces in the
+        /// OUTPUT address.
+        axis: u8,
+        /// How the value combines into the destination cell (store / atomic).
+        combine: WriteCombine,
+        /// Out-of-range behavior. v1 supports [`OobPolicy::Skip`] only — every
+        /// bespoke scatter/scatter_add/index_add/bincount skips an OOB target.
+        oob: OobPolicy,
+        /// Index element dtype — `I32` or `I64` (rides the op, not the key).
+        index_dtype: ElementKind,
+    },
+}
+
+impl WriteIndex {
+    /// `true` for [`WriteIndex::Direct`] — the back-compat default that writes at
+    /// the iteration coordinate (byte-identical address math).
+    #[must_use]
+    pub fn is_direct(&self) -> bool {
+        matches!(self, WriteIndex::Direct)
+    }
+
+    /// The [`WriteIndex::ScatterIndexed`] fields `(index_operand, axis, combine,
+    /// oob, index_dtype)`, or `None` for [`WriteIndex::Direct`]. The single
+    /// accessor the emitter + its backstop read so they stay in lockstep.
+    #[must_use]
+    pub fn scatter(&self) -> Option<(u8, u8, WriteCombine, OobPolicy, ElementKind)> {
+        match self {
+            WriteIndex::ScatterIndexed {
+                index_operand,
+                axis,
+                combine,
+                oob,
+                index_dtype,
+            } => Some((*index_operand, *axis, *combine, *oob, *index_dtype)),
+            WriteIndex::Direct => None,
+        }
+    }
+}
+
 /// An op definition — the **algorithm** half of the algorithm/schedule split.
 ///
 /// Names the op, its input-operand count, the output expression, the accepted
@@ -1297,6 +1439,17 @@ pub struct OpDef {
     /// `plan::build_plan` (`assert_valid_gather`) with an independent emitter
     /// backstop in [`crate::cuda::Cuda::lower`].
     pub read_index: Vec<ReadIndex>,
+    /// The output's **data-dependent write role** (increment 5, SCATTER) — the
+    /// write-side mirror of [`Self::read_index`]. [`WriteIndex::Direct`] (the
+    /// default for every pre-increment-5 constructor) ⇒ the output is written at
+    /// the iteration coordinate, byte-identical. A [`WriteIndex::ScatterIndexed`]
+    /// role substitutes a runtime index value for one OUTPUT-axis coordinate and
+    /// turns the store into a [`WriteCombine`] op; set via [`OpDef::with_scatter`]
+    /// (or the [`OpDef::scatter`]/[`OpDef::scatter_add`]/[`OpDef::index_add`]/
+    /// [`OpDef::bincount`] convenience constructors). Validated at the TOP of
+    /// `plan::build_plan` (`assert_valid_scatter`) with an independent emitter
+    /// backstop in [`crate::cuda::Cuda::lower`].
+    pub write_index: WriteIndex,
 }
 
 impl OpDef {
@@ -1312,6 +1465,7 @@ impl OpDef {
             access: Access::Elementwise,
             views: Vec::new(),
             read_index: Vec::new(),
+            write_index: WriteIndex::Direct,
             out_dtype: None,
             extra_out_bodies: Vec::new(),
         }
@@ -1335,6 +1489,7 @@ impl OpDef {
             access: Access::Elementwise,
             views: Vec::new(),
             read_index: Vec::new(),
+            write_index: WriteIndex::Direct,
             out_dtype: Some(ElementKind::U8),
             extra_out_bodies: Vec::new(),
         }
@@ -1384,6 +1539,7 @@ impl OpDef {
             access: Access::Elementwise,
             views: Vec::new(),
             read_index: Vec::new(),
+            write_index: WriteIndex::Direct,
             out_dtype: None,
             extra_out_bodies,
         }
@@ -1455,6 +1611,7 @@ impl OpDef {
             },
             views: Vec::new(),
             read_index: Vec::new(),
+            write_index: WriteIndex::Direct,
             out_dtype: None,
             extra_out_bodies: Vec::new(),
         }
@@ -1492,6 +1649,7 @@ impl OpDef {
             },
             views: Vec::new(),
             read_index: Vec::new(),
+            write_index: WriteIndex::Direct,
             out_dtype: None,
             extra_out_bodies: Vec::new(),
         }
@@ -1522,6 +1680,7 @@ impl OpDef {
             },
             views: Vec::new(),
             read_index: Vec::new(),
+            write_index: WriteIndex::Direct,
             out_dtype: None,
             extra_out_bodies: Vec::new(),
         }
@@ -1551,6 +1710,7 @@ impl OpDef {
             },
             views: Vec::new(),
             read_index: Vec::new(),
+            write_index: WriteIndex::Direct,
             out_dtype: None,
             extra_out_bodies: Vec::new(),
         }
@@ -1648,6 +1808,114 @@ impl OpDef {
     #[must_use]
     pub fn embedding(name: &str, dtypes: &[ElementKind], index_dtype: ElementKind) -> Self {
         Self::gather(name, dtypes, 0, OobPolicy::ZeroFill, index_dtype)
+    }
+
+    /// Attach the output's **data-dependent write role** ([`WriteIndex`],
+    /// increment 5). A non-scatter op (the common case) never calls this and keeps
+    /// [`WriteIndex::Direct`]. The full v1 rule set (index dtype integer, axis in
+    /// range, combine legal for the output dtype, scatter ⊥ view/gather, …) is
+    /// enforced at plan time by `assert_valid_scatter` once the iteration rank +
+    /// operand keys are known.
+    #[must_use]
+    pub fn with_scatter(mut self, write_index: WriteIndex) -> Self {
+        self.write_index = write_index;
+        self
+    }
+
+    /// Build a **scatter** op (pure assign) — `out[..., index[..., j, ...], ...] =
+    /// updates[..., j, ...]` along `axis` (torch `scatter`). Two inputs: `Input(0)`
+    /// is the `updates` value, `Input(1)` is the integer `index`; the body is the
+    /// identity copy `Input(0)`, written through the [`WriteIndex::ScatterIndexed`]
+    /// role with [`WriteCombine::Assign`]. The iteration domain is the updates
+    /// shape (a **full-shape** index — the caller keys `Input(1)` dense on every
+    /// axis). **Determinism precondition:** unique target indices — on a duplicate
+    /// target the store races (last-writer-wins), exactly as bespoke
+    /// `indexing/scatter.cu` documents. Bespoke skips an OOB/negative target
+    /// ([`OobPolicy::Skip`]).
+    #[must_use]
+    pub fn scatter(name: &str, dtypes: &[ElementKind], axis: u8, index_dtype: ElementKind) -> Self {
+        Self::elementwise(name, 2, dtypes, Expr(ScalarExpr::Input(0))).with_scatter(
+            WriteIndex::ScatterIndexed {
+                index_operand: 1,
+                axis,
+                combine: WriteCombine::Assign,
+                oob: OobPolicy::Skip,
+                index_dtype,
+            },
+        )
+    }
+
+    /// Build a **scatter_add** op — `out[..., index[..., j, ...], ...] +=
+    /// updates[..., j, ...]` along `axis` ([`WriteCombine::AtomicAdd`], dup-safe
+    /// accumulation). Structurally identical to [`OpDef::scatter`] but the store is
+    /// an `atomicAdd`. **Determinism** depends on the value dtype: an INTEGER
+    /// output accumulates order-independently (deterministic, ships
+    /// unconditionally); a FLOATING output is run-to-run non-deterministic (ships
+    /// as the gated variant, with the gather-sum default as the base — see
+    /// [`crate::cuda`]). Bespoke `indexing/index_add.cu`
+    /// (`scatter_add`)/[`OobPolicy::Skip`].
+    #[must_use]
+    pub fn scatter_add(
+        name: &str,
+        dtypes: &[ElementKind],
+        axis: u8,
+        index_dtype: ElementKind,
+    ) -> Self {
+        Self::elementwise(name, 2, dtypes, Expr(ScalarExpr::Input(0))).with_scatter(
+            WriteIndex::ScatterIndexed {
+                index_operand: 1,
+                axis,
+                combine: WriteCombine::AtomicAdd,
+                oob: OobPolicy::Skip,
+                index_dtype,
+            },
+        )
+    }
+
+    /// Build an **index_add** op — `dst[..., idx[j], ...] += src[..., j, ...]`
+    /// along `axis`, where `idx` is a **1-D** index of length `src.shape[axis]`.
+    /// Structurally identical to [`OpDef::scatter_add`] (same `Input(0)` copy
+    /// through an `AtomicAdd` scatter); the ONLY difference is the caller keys
+    /// `Input(1)` as a 1-D index that **broadcasts on every axis except `axis`** —
+    /// so the emitted index offset degenerates to `c{axis}·stride`, exactly the
+    /// bespoke `index_add` 1-D lookup. Same integer-vs-FP determinism split as
+    /// `scatter_add`. Bespoke `indexing/index_add.cu`/[`OobPolicy::Skip`].
+    #[must_use]
+    pub fn index_add(
+        name: &str,
+        dtypes: &[ElementKind],
+        axis: u8,
+        index_dtype: ElementKind,
+    ) -> Self {
+        Self::scatter_add(name, dtypes, axis, index_dtype)
+    }
+
+    /// Build a **bincount** op — `out[x[i]] += 1` (the integer-count representative
+    /// of the ATOMIC_HISTOGRAM family). ONE input `Input(0)` = the integer data
+    /// `x` (dtype `index_dtype`, `I32`/`I64`), which is ALSO the index operand
+    /// (a scatter's index selects the destination, so an input indexing itself is
+    /// legal here); the body is the constant increment `1`, written through an
+    /// [`WriteCombine::AtomicAdd`] scatter into the `I32` counts output (`axis 0`).
+    /// INTEGER atomic-add ⇒ order-independent ⇒ **deterministic, ships
+    /// unconditionally**. OOB (`x[i] < 0 || x[i] >= num_bins`) is skipped — bespoke
+    /// `sort/histogram.cu` `bincount`. (Float `histogram` = an elementwise
+    /// bin-index map — `floor((x-lo)·scale)` clamped, expressible today — composed
+    /// with this bincount; the computed-bin scatter is a follow-up.)
+    #[must_use]
+    pub fn bincount(name: &str, index_dtype: ElementKind) -> Self {
+        // Input 0 = x (integer); accepted key dtype is the index dtype. Output is
+        // an I32 count (hetero out); the stored value is the constant `1`.
+        Self {
+            out_dtype: Some(ElementKind::I32),
+            ..Self::elementwise(name, 1, &[index_dtype], Expr(ScalarExpr::Const(1.0)))
+        }
+        .with_scatter(WriteIndex::ScatterIndexed {
+            index_operand: 0,
+            axis: 0,
+            combine: WriteCombine::AtomicAdd,
+            oob: OobPolicy::Skip,
+            index_dtype,
+        })
     }
 }
 
@@ -1852,6 +2120,70 @@ mod view_tests {
         // Back-compat: every plain constructor leaves read_index empty.
         let op = OpDef::elementwise("add", 2, &[ElementKind::F32], input(0) + input(1));
         assert!(op.read_index.is_empty());
+    }
+
+    // ---- increment 5: scatter constructor shapes ----
+
+    #[test]
+    fn scatter_constructor_is_assign() {
+        let op = OpDef::scatter("scatter", &[ElementKind::F32], 1, ElementKind::I64);
+        assert_eq!(op.n_inputs, 2);
+        assert_eq!(op.n_outputs(), 1);
+        // Body is the identity copy of the updates operand.
+        assert_eq!(op.body, ScalarExpr::Input(0));
+        assert_eq!(
+            op.write_index,
+            WriteIndex::ScatterIndexed {
+                index_operand: 1,
+                axis: 1,
+                combine: WriteCombine::Assign,
+                oob: OobPolicy::Skip,
+                index_dtype: ElementKind::I64,
+            }
+        );
+        // Scatter is a WRITE role — read_index stays empty (byte-identical reads).
+        assert!(op.read_index.is_empty());
+    }
+
+    #[test]
+    fn scatter_add_and_index_add_are_atomic_add() {
+        let sa = OpDef::scatter_add("scatter_add", &[ElementKind::F32], 0, ElementKind::I32);
+        let (_, _, sc, _, _) = sa.write_index.scatter().expect("scatter role");
+        assert_eq!(sc, WriteCombine::AtomicAdd);
+        // FP scatter_add is the non-deterministic case.
+        assert!(sc.is_fp_atomic_add(ElementKind::F32));
+        // Integer scatter_add accumulates order-independently ⇒ deterministic.
+        assert!(!sc.is_fp_atomic_add(ElementKind::I32));
+        // index_add is scatter_add with a 1-D index (same role).
+        let ia = OpDef::index_add("index_add", &[ElementKind::F32], 0, ElementKind::I32);
+        assert_eq!(ia.write_index, sa.write_index);
+    }
+
+    #[test]
+    fn bincount_is_const1_atomic_add_into_i32() {
+        let op = OpDef::bincount("bincount", ElementKind::I64);
+        assert_eq!(op.n_inputs, 1);
+        assert_eq!(op.body, ScalarExpr::Const(1.0));
+        // Hetero out: i64 data key, i32 counts.
+        assert_eq!(op.out_dtype, Some(ElementKind::I32));
+        match op.write_index {
+            WriteIndex::ScatterIndexed { index_operand, combine, index_dtype, .. } => {
+                // The lone input indexes itself (a scatter's index selects the dst).
+                assert_eq!(index_operand, 0);
+                assert_eq!(combine, WriteCombine::AtomicAdd);
+                assert_eq!(index_dtype, ElementKind::I64);
+                // Integer counts ⇒ deterministic.
+                assert!(!combine.is_fp_atomic_add(ElementKind::I32));
+            }
+            WriteIndex::Direct => panic!("bincount must be a scatter"),
+        }
+    }
+
+    #[test]
+    fn non_scatter_op_is_write_direct() {
+        // Back-compat: every plain constructor leaves write_index Direct.
+        let op = OpDef::elementwise("add", 2, &[ElementKind::F32], input(0) + input(1));
+        assert!(op.write_index.is_direct());
     }
 }
 

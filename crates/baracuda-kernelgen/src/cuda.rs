@@ -47,6 +47,7 @@ impl Backend for Cuda {
         vs.extend(reduction_splitk_variant(plan));
         vs.extend(row_reduce_materialize_variant(plan));
         vs.extend(contraction_splitk_variant(plan));
+        vs.extend(scatter_atomic_variant(plan));
         vs
     }
 
@@ -71,7 +72,13 @@ impl Backend for Cuda {
         // the same coverage as plan.rs's assert_no_half_nextafter walk) so the
         // backstop holds independently of the plan gate — the 0a lesson: gate
         // every layer.
-        if crate::plan::is_int_dtype(plan.dtype) {
+        // Increment 5 — bincount exemption (mirrors `plan::assert_int_op_admissibility`):
+        // a scatter with a bare `Const` body is the integer-count histogram; its
+        // `Const(1)` is a store literal the scatter combine narrows exactly, not
+        // int compute — the double-math hazard this walk polices does not apply.
+        let bincount_shape =
+            plan.write_index.scatter().is_some() && matches!(plan.body, ScalarExpr::Const(_));
+        if crate::plan::is_int_dtype(plan.dtype) && !bincount_shape {
             // Every output body (multi-output: body + extra_out_bodies), plus the
             // reduction-class stages/epilogue — the same coverage as plan.rs.
             let mut exprs: Vec<&ScalarExpr> = plan.output_bodies();
@@ -149,6 +156,14 @@ impl Backend for Cuda {
         // single-output + one gathered input + Strided schedule. An index-free plan
         // returns immediately (byte-identical).
         assert_gather_lowerable(plan);
+        // Increment 5: independent SCATTER backstop, beside the plan gate
+        // `plan::assert_valid_scatter` (the 0a lesson: gate every layer). A
+        // scattered output writes a data-dependent address that ONLY the strided
+        // emitter folds; the vector/packed/scalar emitters iterate a bare linear
+        // index and would ignore the index operand. Pins: a real scatter ⇒
+        // Elementwise + single-output + Strided + a legal combine/dtype pair. A
+        // write-Direct plan returns immediately (byte-identical).
+        assert_scatter_lowerable(plan);
         // Increment 1: a MULTI-OUTPUT plan routes to the dedicated N-store
         // emitters BEFORE the single-output dispatch below — so the single-output
         // emitters stay byte-for-byte untouched (extra_out_bodies is empty ⇒
@@ -195,7 +210,24 @@ impl Backend for Cuda {
                 },
             },
             Schedule::Scalar => emit_scalar(plan, ctype),
-            Schedule::Strided => emit_strided(plan, ctype),
+            Schedule::Strided => {
+                // Increment 5 — DETERMINISM ROUTING. An FP `atomicAdd` scatter is
+                // run-to-run non-deterministic, so per the house variant rule it is
+                // NEVER the silent default: the base `lower()` emits the
+                // deterministic **gather-sum** reformulation (one thread per output
+                // cell scans the update domain and sums matching values in a fixed
+                // order — the bespoke `segment_sorted_kernel` precedent), and the
+                // atomic scatter is offered separately as the `Nondeterministic`
+                // variant (`lower_variants`). Every deterministic combine (Assign,
+                // integer atomicAdd, atomicMax/Min) takes the direct scatter store
+                // in `emit_strided` as its unconditional base.
+                match plan.write_index.scatter() {
+                    Some((_, _, combine, _, _)) if combine.is_fp_atomic_add(plan.out_dtype) => {
+                        emit_scatter_gathersum(plan, ctype)
+                    }
+                    _ => emit_strided(plan, ctype),
+                }
+            }
             Schedule::Reduction { op, .. } => emit_reduction(plan, ctype, op),
             Schedule::RowReduce { .. } => emit_row_reduce(plan, ctype),
             Schedule::Contraction => emit_contraction(plan, ctype),
@@ -648,12 +680,24 @@ fn emit_strided(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
     // integer operand `idx_op`. Index-free ⇒ every branch below collapses to the
     // pre-increment-4 string (byte-identical emission).
     let gather = crate::plan::gather_of(plan.read_index);
-    // The index dtype rides the ENTRY_POINT symbol (`gather_f32_i32` vs `_i64`) —
-    // it cannot ride the structure key (single operand-0 dtype). Index-free ⇒ no
-    // infix ⇒ byte-identical name.
-    let idx_infix = gather.map_or(String::new(), |(_, _, _, _, idt)| {
-        format!("_{}", dtype_tag(idt))
-    });
+    // Increment 5: the SCATTERED output (or `None` for a write-Direct op).
+    // `(idx_op, axis, combine, oob, index_dtype)`: the output writes its `axis`
+    // coordinate from integer operand `idx_op`, combined by `combine`. The plan
+    // gate pins gather ⊥ scatter (at most one is `Some`). Write-Direct ⇒ every
+    // branch below collapses to the pre-increment-5 string (byte-identical).
+    let scatter = crate::plan::scatter_of(plan.write_index);
+    // The single INDEX-operand slot + its integer dtype, from EITHER a gather
+    // (read side) or a scatter (write side) — they share the index-load machinery
+    // (integer pointer type, own strided offset). At most one is present.
+    let index_slot: Option<(usize, ElementKind)> = match (gather, scatter) {
+        (Some((_, idx_op, _, _, idt)), _) => Some((idx_op as usize, idt)),
+        (_, Some((idx_op, _, _, _, idt))) => Some((idx_op as usize, idt)),
+        _ => None,
+    };
+    // The index dtype rides the ENTRY_POINT symbol (`gather_f32_i32` /
+    // `scatter_f32_i64`) — it cannot ride the structure key (single operand-0
+    // dtype). Index-free/write-Direct ⇒ no infix ⇒ byte-identical name.
+    let idx_infix = index_slot.map_or(String::new(), |(_, idt)| format!("_{}", dtype_tag(idt)));
     let name = format!(
         "baracuda_gen_{}_{}{}_strided_r{}",
         plan.op_name,
@@ -664,11 +708,12 @@ fn emit_strided(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
     let octype = out_ctype(plan, ctype);
     let mut s = header(plan, &name);
     for i in 0..n {
-        // The INDEX operand (gather) is an integer tensor — its pointer takes the
-        // index ctype (`int`/`long long`), not the data ctype. Every other input
-        // (and the index-free case) keeps the data ctype ⇒ byte-identical.
-        let ptype = match gather {
-            Some((_, idx_op, _, _, idt)) if idx_op as usize == i => {
+        // The INDEX operand (gather or scatter) is an integer tensor — its pointer
+        // takes the index ctype (`int`/`long long`), not the data ctype. Every
+        // other input (and the index-free/write-Direct case) keeps the data ctype
+        // ⇒ byte-identical.
+        let ptype = match index_slot {
+            Some((idx_op, idt)) if idx_op == i => {
                 scalar_ctype(idt).expect("gate pins index dtype to I32/I64")
             }
             _ => ctype,
@@ -701,12 +746,21 @@ fn emit_strided(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
     if gather.is_some() {
         s.push_str("    long long gext,\n");
     }
+    // Increment 5: the scattered DESTINATION's extent along the scattered axis
+    // (`out_dim_size` in the bespoke launcher) — the OOB bound + the clamp bound
+    // for the write address. A dedicated scalar (the iteration `shape{d}` is the
+    // UPDATES/source shape, which differs from the destination extent along the
+    // scattered axis). Emitted ONLY for a scatter ⇒ write-Direct signature is
+    // byte-identical. gather ⊥ scatter, so `gext`/`sext` are never both present.
+    if scatter.is_some() {
+        s.push_str("    long long sext,\n");
+    }
     s.push_str(&format!("    long long n{})\n{{\n", param_args(plan.body)));
     // Hoist fully-broadcast inputs: their offset is loop-invariant, load once.
-    // The INDEX operand is never hoisted here (it is handled specially in the
-    // gather pre-pass, with the correct integer ctype) — skip it.
+    // The INDEX operand (gather OR scatter) is never hoisted here (it is handled
+    // specially in the index pre-pass, with the correct integer ctype) — skip it.
     for k in 0..n {
-        let is_index = matches!(gather, Some((_, idx_op, _, _, _)) if idx_op as usize == k);
+        let is_index = matches!(index_slot, Some((idx_op, _)) if idx_op == k);
         if !is_index && is_fully_broadcast(plan.key.operands[k], rank) {
             s.push_str(&format!("    {ctype} h{k} = in{k}[0];\n"));
         }
@@ -751,12 +805,33 @@ fn emit_strided(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
         );
         s.push_str(&format!("        long long o{g} = {goff};\n"));
     }
+    // Increment 5 — SCATTER pre-pass. Load the runtime destination index, clamp it
+    // into `[0, sext-1]` for the WRITE address (memcheck-safe for a non-empty
+    // scattered axis regardless of the value), and compute the `soob` skip
+    // predicate. Negative indices are OOB (no from-end wrap) — bespoke parity. The
+    // scattered OUTPUT offset `oo` substitutes `sidx_clamped·stride_out[axis]` for
+    // the `c{axis}·stride_out[axis]` term (the write-side mirror of the gather
+    // input substitution). Output slot is key operand `n` (after the `n_inputs`
+    // input slots).
+    if let Some((idx_op, _axis, _combine, _oob, _idt)) = scatter {
+        // The index operand's own strided offset (a full-shape scatter index varies
+        // on every axis; a 1-D index_add index broadcasts to `c{axis}·stride`).
+        let ioff = offset_expr(plan.key.operands[idx_op as usize], &format!("s{idx_op}"), rank, None);
+        s.push_str(&format!("        long long sidx_off = {ioff};\n"));
+        s.push_str(&format!("        long long sidx_raw = (long long)in{idx_op}[sidx_off];\n"));
+        s.push_str(
+            "        long long sidx_clamped = sidx_raw < 0 ? 0 : (sidx_raw >= sext ? sext - 1 : sidx_raw);\n",
+        );
+        // v1 scatter OOB is always Skip (plan gate) — predicate the combine store.
+        s.push_str("        bool soob = (sidx_raw < 0) || (sidx_raw >= sext);\n");
+    }
     for k in 0..n {
         // The gathered DATA operand's offset is emitted in the pre-pass above; the
-        // INDEX operand's offset is `gidx_off` (its value is an address, never a
-        // body leaf) — skip both here.
+        // INDEX operand's offset is `gidx_off`/`sidx_off` (its value is an address,
+        // never a body leaf) — skip both here.
         let handled = matches!(gather, Some((g, idx_op, _, _, _))
-            if k == g || idx_op as usize == k);
+            if k == g || idx_op as usize == k)
+            || matches!(index_slot, Some((idx_op, _)) if idx_op == k && scatter.is_some());
         if !handled && !is_fully_broadcast(plan.key.operands[k], rank) {
             // Item 01: input `k` may be read through a Permute view (a transposed
             // read) — `input_perm` remaps its stride indices. Identity/view-free ⇒
@@ -765,8 +840,21 @@ fn emit_strided(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
             s.push_str(&format!("        long long o{k} = {off};\n"));
         }
     }
-    // The OUTPUT is never viewed (views are an input-read property) — identity offset.
-    let oo = offset_expr(plan.key.operands[n], "so", rank, None);
+    // The OUTPUT offset. A scattered output (increment 5) substitutes
+    // `sidx_clamped·stride_out[axis]` for the `c{axis}·stride_out[axis]` term (the
+    // write-side mirror of gather); a write-Direct output is the identity offset
+    // (byte-identical). The OUTPUT is never viewed (views are an input-read
+    // property), so `perm` is always `None`.
+    let oo = match scatter {
+        Some((_, axis, _, _, _)) => gathered_offset_expr(
+            plan.key.operands[n],
+            "so",
+            rank,
+            axis as usize,
+            "sidx_clamped",
+        ),
+        None => offset_expr(plan.key.operands[n], "so", rank, None),
+    };
     s.push_str(&format!("        long long oo = {oo};\n"));
     let acc = |idx: u8| {
         if is_fully_broadcast(plan.key.operands[idx as usize], rank) {
@@ -812,30 +900,101 @@ fn emit_strided(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
     for decl in &prelude {
         s.push_str(&format!("        {decl}\n"));
     }
-    let stored = store_expr(plan, root);
-    // Increment 4 — GATHER store policy. The DATA load inside `stored` is always
-    // in-bounds (`gidx_clamped`), so the policy only shapes the WRITE:
-    //   - Clamp     → always store the clamped-index value (`gidx_clamped` IS the
-    //                 clamp semantics; no predicate). Bespoke: no op clamps.
-    //   - Skip      → store only when in-range; leave the cell unwritten on OOB
-    //                 (bespoke gather/index_select `continue;`).
-    //   - ZeroFill  → store the op zero on OOB, else the value (bespoke embedding).
-    // Index-free ops take the plain store — byte-identical.
-    match gather {
-        Some((_, _, _, crate::ir::OobPolicy::Skip, _)) => {
-            s.push_str(&format!("        if (!goob) out[oo] = {stored};\n"));
-        }
-        Some((_, _, _, crate::ir::OobPolicy::ZeroFill, _)) => {
-            let zero = zero_store_literal(octype);
-            s.push_str(&format!("        out[oo] = goob ? ({zero}) : ({stored});\n"));
-        }
-        // Clamp or index-free: unconditional store.
-        _ => {
-            s.push_str(&format!("        out[oo] = {stored};\n"));
+    if let Some((_, _, combine, _, _)) = scatter {
+        // Increment 5 — SCATTER combine store. The value LOAD inside `root` is
+        // always in-bounds (iteration coord over the updates domain); the OOB
+        // policy (v1: Skip) predicates only the WRITE — a duplicate/OOB target
+        // never reads out of bounds (the write address is `sidx_clamped`). Every
+        // combine is guarded by `if (!soob)` (skip the OOB target — bespoke
+        // `continue;`). The scatter narrows a hetero body ITSELF (bincount's
+        // `(int)(1.0)`), so it takes the RAW lowered `root`, NOT `store_expr`'s
+        // u8-only narrowing. Reaching `emit_strided` for an FP `atomicAdd` scatter
+        // means this is the `Nondeterministic` variant (the base is the gather-sum);
+        // an integer atomicAdd / Assign / atomicMax-min is the unconditional base.
+        let hetero = plan.out_dtype != plan.dtype;
+        s.push_str(&format!(
+            "        {}\n",
+            scatter_combine_store(combine, octype, &root, hetero)
+        ));
+    } else {
+        let stored = store_expr(plan, root);
+        // Increment 4 — GATHER store policy. The DATA load inside `stored` is
+        // always in-bounds (`gidx_clamped`), so the policy only shapes the WRITE:
+        //   - Clamp     → always store the clamped-index value (no predicate).
+        //   - Skip      → store only when in-range (bespoke gather `continue;`).
+        //   - ZeroFill  → store 0 on OOB, else the value (bespoke embedding).
+        // Index-free ops take the plain store — byte-identical.
+        match gather {
+            Some((_, _, _, crate::ir::OobPolicy::Skip, _)) => {
+                s.push_str(&format!("        if (!goob) out[oo] = {stored};\n"));
+            }
+            Some((_, _, _, crate::ir::OobPolicy::ZeroFill, _)) => {
+                let zero = zero_store_literal(octype);
+                s.push_str(&format!("        out[oo] = goob ? ({zero}) : ({stored});\n"));
+            }
+            // Clamp or index-free: unconditional store.
+            _ => {
+                s.push_str(&format!("        out[oo] = {stored};\n"));
+            }
         }
     }
     s.push_str("    }\n}\n");
     GeneratedKernel { name, source: s }
+}
+
+/// Spell a [`WriteCombine`] store of the lowered body `root` into `out[oo]`,
+/// guarded by the OOB skip predicate `soob` (increment 5). The atomic combines
+/// route to the native CUDA overload for `octype`, casting `root` to `octype` —
+/// which also narrows a hetero body (bincount: a `Const(1)` `f64` literal into an
+/// `I32` counts cell → `(int)(1.0)` = 1) to the right atomic overload; `i64`
+/// (`long long`) atomicAdd goes through the `unsigned long long` reinterpret (CUDA
+/// has no signed-64 atomicAdd; two's-complement add matches). `Assign` stores the
+/// body verbatim (uniform) or `(octype)`-cast (`hetero`, matching store_expr's
+/// narrow but NOT its u8-only arm). The plan gate + `assert_scatter_lowerable` pin
+/// the combine/dtype pair, so an unreachable pairing panics (a mis-route).
+fn scatter_combine_store(
+    combine: crate::ir::WriteCombine,
+    octype: &str,
+    root: &str,
+    hetero: bool,
+) -> String {
+    use crate::ir::WriteCombine;
+    match combine {
+        WriteCombine::Assign => {
+            let val = if hetero {
+                format!("({octype})({root})")
+            } else {
+                root.to_string()
+            };
+            format!("if (!soob) out[oo] = {val};")
+        }
+        WriteCombine::AtomicAdd => match octype {
+            "long long" => format!(
+                "if (!soob) atomicAdd((unsigned long long*)&out[oo], (unsigned long long)({root}));"
+            ),
+            "float" | "double" | "int" => {
+                format!("if (!soob) atomicAdd(&out[oo], ({octype})({root}));")
+            }
+            other => panic!(
+                "cuda backend: scatter atomicAdd has no v1 spelling for octype '{other}' \
+                 (f16/bf16/u8 need the bespoke CAS helper) — the gate should have refused it"
+            ),
+        },
+        WriteCombine::AtomicMax => scatter_atomic_minmax("atomicMax", octype, root),
+        WriteCombine::AtomicMin => scatter_atomic_minmax("atomicMin", octype, root),
+    }
+}
+
+/// Native integer `atomicMax`/`atomicMin` store (increment 5). Integer only in
+/// v1 (`int`/`long long` have native signed overloads); the gate rejects float.
+fn scatter_atomic_minmax(op: &str, octype: &str, val: &str) -> String {
+    match octype {
+        "int" | "long long" => format!("if (!soob) {op}(&out[oo], ({octype})({val}));"),
+        other => panic!(
+            "cuda backend: scatter {op} has no v1 spelling for octype '{other}' \
+             (integer-only) — the gate should have refused it"
+        ),
+    }
 }
 
 /// Independent emitter backstop for a GATHERED plan (increment 4), beside the
@@ -905,6 +1064,249 @@ fn assert_gather_lowerable(plan: &KernelPlan<'_>) {
         "cuda backend: gathered op '{name}' index operand ({index_operand}) must \
          not itself be gathered"
     );
+}
+
+/// Independent emitter backstop for a SCATTERED plan (increment 5), beside the
+/// plan gate `plan::assert_valid_scatter` (the 0a lesson: gate every layer). A
+/// write-Direct plan returns immediately — byte-identical. For a real scatter this
+/// pins the facts the `emit_strided`/`emit_scatter_gathersum` substitution relies
+/// on: Elementwise + single-output + Strided + `index_operand < n_inputs` +
+/// integer index dtype + `axis < rank` + a legal combine/dtype pair + not also a
+/// gather. Held independently of the plan gate.
+fn assert_scatter_lowerable(plan: &KernelPlan<'_>) {
+    let Some((index_operand, axis, combine, _oob, index_dtype)) = plan.write_index.scatter() else {
+        return; // write-Direct — the established path, unchanged.
+    };
+    let name = plan.op_name;
+    assert!(
+        matches!(plan.access, Access::Elementwise),
+        "cuda backend: scattered op '{name}' must be Access::Elementwise (increment \
+         5 scatters are Elementwise-only)"
+    );
+    assert!(
+        plan.n_outputs == 1,
+        "cuda backend: scattered op '{name}' must be single-output ({} outputs)",
+        plan.n_outputs
+    );
+    assert!(
+        crate::plan::gather_of(plan.read_index).is_none(),
+        "cuda backend: scattered op '{name}' must not also be a gather (a fused \
+         gather+scatter is a deferred composition)"
+    );
+    assert!(
+        matches!(plan.schedule, Schedule::Strided),
+        "cuda backend: scattered op '{name}' must lower on the Strided schedule (a \
+         data-dependent write address cannot coalesce), got {:?}",
+        plan.schedule
+    );
+    assert!(
+        (index_operand as usize) < plan.n_inputs as usize,
+        "cuda backend: scattered op '{name}' index_operand ({index_operand}) >= \
+         n_inputs ({})",
+        plan.n_inputs
+    );
+    assert!(
+        matches!(index_dtype, ElementKind::I32 | ElementKind::I64),
+        "cuda backend: scattered op '{name}' index_dtype must be I32/I64, got \
+         {index_dtype:?}"
+    );
+    assert!(
+        (axis as usize) < plan.key.rank as usize,
+        "cuda backend: scattered op '{name}' axis ({axis}) >= rank ({})",
+        plan.key.rank
+    );
+    assert!(
+        crate::plan::combine_legal_for_dtype(combine, plan.out_dtype),
+        "cuda backend: scattered op '{name}' combine {combine:?} illegal for output \
+         dtype {:?}",
+        plan.out_dtype
+    );
+}
+
+/// The **`Nondeterministic` FP-atomic-add scatter** variant (increment 5). Only
+/// offered for an FP `atomicAdd` scatter — the one order-nondeterministic
+/// schedule. The base `lower()` is the deterministic gather-sum
+/// ([`emit_scatter_gathersum`]); THIS variant is the fast atomic scatter
+/// ([`emit_strided`]'s combine store), the same schedule the bespoke
+/// `scatter_add`/`embedding_backward` use. Per the house variant rule a
+/// [`VariantFidelity::Nondeterministic`] variant is NEVER selected silently —
+/// only through an honest FKC contract whose determinism block flips to
+/// `nondeterministic` (`VariantFidelity::determinism_str`); the `launch_note`
+/// states the run-to-run non-determinism so a caller's precision policy is the
+/// sole gate. Integer atomicAdd / Assign / atomicMax-min are deterministic and
+/// stay the unconditional base (no variant here). `racecheck` on this variant's
+/// atomics is legitimate (an `atomicAdd` is not a hazard); `memcheck` must be
+/// clean (no OOB scatter).
+fn scatter_atomic_variant(plan: &KernelPlan<'_>) -> Option<Variant> {
+    let (_, _, combine, _, _) = plan.write_index.scatter()?;
+    if !combine.is_fp_atomic_add(plan.out_dtype) {
+        return None; // deterministic combine ⇒ the base IS the atomic scatter.
+    }
+    let ctype = scalar_ctype(plan.dtype)?;
+    let atomic = emit_strided(plan, ctype);
+    let entry = atomic.name.clone();
+    Some(Variant {
+        tag: "atomic",
+        kernels: vec![atomic],
+        fidelity: VariantFidelity::Nondeterministic,
+        launch_note: format!(
+            "single-launch FP-atomicAdd scatter ({entry}<<<ceil(n_upd/B), B>>>): iterates \
+             the UPDATE domain (n_upd threads), atomicAdd's each value into out[scatter \
+             index]; pass `sext` = destination extent along the scattered axis. \
+             RUN-TO-RUN NON-DETERMINISTIC — floating atomicAdd completion order varies and \
+             FP add is non-associative, so the result bits differ between launches. \
+             determinism: {det}. Never select silently; the deterministic gather-sum base \
+             (`_scatter_gathersum_`) is the default route. compute-sanitizer racecheck \
+             treats the atomics as legitimate; memcheck must report 0 OOB.",
+            det = VariantFidelity::Nondeterministic.determinism_str(),
+        ),
+    })
+}
+
+/// Emit the DETERMINISTIC **gather-sum** base kernel for an FP `atomicAdd` scatter
+/// (increment 5). Because floating `atomicAdd` is order-nondeterministic, the
+/// scatter form is offered only as the `Nondeterministic` variant; THIS is the
+/// base `lower()` route (never silently nondeterministic — the house variant
+/// rule). One thread per DESTINATION cell scans the entire update domain and sums
+/// the values whose scattered target is this cell, in a FIXED (linear update
+/// index) order — race-free (one writer per cell) + reproducible. This is the
+/// bespoke `segment_sorted_kernel` strategy (one owner per output, in-order
+/// sweep, no atomics) generalized to an arbitrary index; O(n_out · n_upd), the
+/// documented cost of determinism. The destination is accumulated INTO (bespoke
+/// `scatter_add`/`index_add` add into a caller-populated `dst`): `out[oo] +=
+/// acc`, exact for a single owner.
+fn emit_scatter_gathersum(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
+    let rank = plan.key.rank as usize;
+    let n = plan.n_inputs as usize;
+    let (index_operand, axis, _combine, _oob, index_dtype) = plan
+        .write_index
+        .scatter()
+        .expect("emit_scatter_gathersum called on a non-scatter plan");
+    let idx_op = index_operand as usize;
+    let idxct = scalar_ctype(index_dtype).expect("gate pins index dtype to I32/I64");
+    let octype = out_ctype(plan, ctype);
+    // The value operand (updates) is the non-index input; its offset uses the
+    // UPDATE-domain coordinate. bincount-style (index==value) has no separate
+    // value input — but bincount is integer (deterministic), so it never routes
+    // here; an FP scatter always has a distinct value operand. Guard anyway.
+    let val_op = (0..n).find(|&k| k != idx_op).unwrap_or(0);
+    // Emitter backstop (review #5): this path sums `in{val_op}` DIRECTLY (it does
+    // not lower `plan.body`), so the body MUST be the identity value read — the
+    // plan gate `assert_valid_scatter` pins it, and this independent check keeps a
+    // future routing change from silently dropping a composed body. (A `Const`
+    // body is integer bincount, which is deterministic and never routes here.)
+    assert!(
+        matches!(plan.body, ScalarExpr::Input(v) if *v as usize == val_op),
+        "cuda backend: the scatter gather-sum base requires an identity Input({val_op}) \
+         body (it sums the value operand directly); got {:?}",
+        plan.body
+    );
+    let name = format!(
+        "baracuda_gen_{}_{}_{}_scatter_gathersum_r{}",
+        plan.op_name,
+        dtype_tag(plan.dtype),
+        dtype_tag(index_dtype),
+        rank
+    );
+    let mut s = header(plan, &name);
+    // Inputs: value ctype for the value operand, index ctype for the index operand.
+    for i in 0..n {
+        let ptype = if i == idx_op { idxct } else { ctype };
+        s.push_str(&format!("    const {ptype}* __restrict__ in{i},\n"));
+    }
+    s.push_str(&format!("    {octype}* __restrict__ out,\n"));
+    // Destination shape (the iteration domain here) + update-domain shape.
+    for d in 0..rank {
+        s.push_str(&format!("    long long oshape{d},\n"));
+    }
+    for d in 0..rank {
+        s.push_str(&format!("    long long ushape{d},\n"));
+    }
+    // Strides: value operand (s{val_op}_), index operand (s{idx_op}_), output (so_).
+    for d in 0..rank {
+        s.push_str(&format!("    long long sv_{d},\n"));
+    }
+    for d in 0..rank {
+        s.push_str(&format!("    long long si_{d},\n"));
+    }
+    for d in 0..rank {
+        s.push_str(&format!("    long long so_{d},\n"));
+    }
+    // n_out = destination numel (iteration count); n_upd = update-domain numel.
+    s.push_str("    long long n_out,\n    long long n_upd)\n{\n");
+    s.push_str("    long long i = (long long)blockIdx.x * blockDim.x + threadIdx.x;\n");
+    s.push_str("    long long step = (long long)gridDim.x * blockDim.x;\n");
+    let acc = if matches!(plan.dtype, ElementKind::F64 | ElementKind::F32Strict) {
+        "double"
+    } else {
+        "float"
+    };
+    let zero = if acc == "double" { "0.0" } else { "0.0f" };
+    // Load one update value at update-coordinate offset `uoff`, promoting f16/bf16.
+    let load_val = |off: &str| match plan.dtype {
+        ElementKind::F16 => format!("__half2float(in{val_op}[{off}])"),
+        ElementKind::Bf16 => format!("__bfloat162float(in{val_op}[{off}])"),
+        _ => format!("in{val_op}[{off}]"),
+    };
+    let store_acc = |v: String| match plan.dtype {
+        ElementKind::F16 => format!("__float2half({v})"),
+        ElementKind::Bf16 => format!("__float2bfloat16({v})"),
+        _ => v,
+    };
+    s.push_str("    for (; i < n_out; i += step) {\n");
+    // Unravel the destination coordinate.
+    s.push_str("        long long lin = i;\n");
+    for d in (0..rank).rev() {
+        s.push_str(&format!(
+            "        long long oc{d} = lin % oshape{d}; lin /= oshape{d};\n"
+        ));
+    }
+    // Destination offset (identity — the owner cell for this thread), over the
+    // OUTPUT coordinate `oc{d}` (NOT the default `c{d}`).
+    let oo = offset_expr_coord(plan.key.operands[n], "so", "oc", rank);
+    s.push_str(&format!("        long long oo = {oo};\n"));
+    s.push_str(&format!("        {acc} acc = {zero};\n"));
+    // Scan the update domain; sum the values whose scattered target == this cell.
+    s.push_str("        for (long long j = 0; j < n_upd; ++j) {\n");
+    s.push_str("            long long ulin = j;\n");
+    for d in (0..rank).rev() {
+        s.push_str(&format!(
+            "            long long uc{d} = ulin % ushape{d}; ulin /= ushape{d};\n"
+        ));
+    }
+    // The index value at this update coordinate `uc{d}` (full-shape, or 1-D via a
+    // broadcast si_ stride that drops the non-axis terms).
+    let ioff = offset_expr_coord(plan.key.operands[idx_op], "si", "uc", rank);
+    s.push_str(&format!("            long long sidx = (long long)in{idx_op}[{ioff}];\n"));
+    // Match: the scattered target coord equals this destination cell. Axis term is
+    // `sidx == oc{axis}`; every other axis term is `uc{d} == oc{d}`.
+    let mut conds: Vec<String> = Vec::new();
+    conds.push(format!("sidx == oc{axis}"));
+    for d in 0..rank {
+        if d != axis as usize {
+            conds.push(format!("uc{d} == oc{d}"));
+        }
+    }
+    let cond = conds.join(" && ");
+    s.push_str(&format!("            if ({cond}) {{\n"));
+    // Value offset over the update coord `uc{d}`.
+    let uoff = offset_expr_coord(plan.key.operands[val_op], "sv", "uc", rank);
+    s.push_str(&format!("                long long uoff = {uoff};\n"));
+    s.push_str(&format!("                acc += {};\n", load_val("uoff")));
+    s.push_str("            }\n");
+    s.push_str("        }\n");
+    // Accumulate INTO the existing destination (dst += Σ), race-free (one owner).
+    let existing = match plan.dtype {
+        ElementKind::F16 => "__half2float(out[oo])".to_string(),
+        ElementKind::Bf16 => "__bfloat162float(out[oo])".to_string(),
+        _ => "out[oo]".to_string(),
+    };
+    s.push_str(&format!(
+        "        out[oo] = {};\n",
+        store_acc(format!("({existing} + acc)"))
+    ));
+    s.push_str("    }\n}\n");
+    GeneratedKernel { name, source: s }
 }
 
 /// Independent emitter backstop for a multi-output plan (increment 1), beside
@@ -2848,6 +3250,27 @@ fn offset_expr(o: OperandKey, stride_arr: &str, rank: usize, perm: Option<&[u8]>
     }
 }
 
+/// [`offset_expr`] with an arbitrary coordinate-variable prefix (identity layout,
+/// no permutation) — the gather-sum kernel (increment 5) has TWO coordinate
+/// spaces in one kernel (the destination `oc{d}` and the update-domain `uc{d}`),
+/// so it can't use the fixed `c{d}` of [`offset_expr`]. Drops broadcast-axis terms
+/// exactly as [`offset_expr`] does (a 1-D index_add index broadcasts its non-axis
+/// terms to stride 0, degenerating to `{coord}{axis}·stride`).
+fn offset_expr_coord(o: OperandKey, stride_arr: &str, coord: &str, rank: usize) -> String {
+    let mut terms = Vec::new();
+    for d in 0..rank {
+        if o.bcast.is_set(d as u8) {
+            continue;
+        }
+        terms.push(format!("{coord}{d}*{stride_arr}_{d}"));
+    }
+    if terms.is_empty() {
+        "0".to_string()
+    } else {
+        terms.join(" + ")
+    }
+}
+
 /// The permutation input operand `k` is read through, or `None` for an identity
 /// read (`Identity` / `Broadcast` / same-rank `Reshape` / a view-free plan).
 /// Only a [`crate::ir::View::Permute`] remaps stride indices in [`offset_expr`];
@@ -3555,6 +3978,209 @@ mod tests {
         );
     }
 
+    // ---- increment 5: SCATTER emission goldens ----
+
+    // rank-2 scatter cell: updates [4,3] f32 (in0), index [4,3] i32 full-shape
+    // (in1), dst [4,3] f32 (out). The dst extent along the scattered axis rides
+    // `sext`; the key dst supplies strides/broadcast facts.
+    fn scatter_2d_key(idx_dt: ElementKind) -> baracuda_kernels_types::StructureKey {
+        let upd = OperandDesc::new(2, &[4, 3], &[3, 1], ElementKind::F32, 256);
+        let idx = OperandDesc::new(2, &[4, 3], &[3, 1], idx_dt, 256);
+        let dst = OperandDesc::new(2, &[4, 3], &[3, 1], ElementKind::F32, 256);
+        structure_key(OpCategory::BinaryElementwise, &[upd, idx, dst], ArchSku::Sm89)
+    }
+
+    #[test]
+    fn scatter_assign_substitutes_index_for_the_output_axis() {
+        // scatter along axis 0: out[idx[c], c1] = updates[c0, c1], skip OOB target.
+        let op = OpDef::scatter("scatter", &[ElementKind::F32], 0, ElementKind::I32);
+        let k = generate(&op, &scatter_2d_key(ElementKind::I32), &Cuda);
+        // The index dtype rides the entry-point symbol.
+        assert_eq!(k.name, "baracuda_gen_scatter_f32_i32_strided_r2");
+        // The index operand is an INT pointer; the destination extent is a param.
+        assert!(k.source.contains("const int* __restrict__ in1,"));
+        assert!(k.source.contains("long long sext,"));
+        // Index load + clamp + skip predicate (write-side mirror of gather).
+        assert!(k.source.contains("long long sidx_off = c0*s1_0 + c1*s1_1;"));
+        assert!(k.source.contains("long long sidx_raw = (long long)in1[sidx_off];"));
+        assert!(k.source.contains(
+            "long long sidx_clamped = sidx_raw < 0 ? 0 : (sidx_raw >= sext ? sext - 1 : sidx_raw);"
+        ));
+        assert!(k.source.contains("bool soob = (sidx_raw < 0) || (sidx_raw >= sext);"));
+        // THE increment: the OUTPUT-axis term is idx·stride_out[axis], not c0·so.
+        assert!(
+            k.source.contains("long long oo = (sidx_clamped)*so_0 + c1*so_1;"),
+            "scattered-axis term must use the index value, got:\n{}",
+            k.source
+        );
+        // Assign store, predicated by the skip guard (bespoke `continue;`).
+        assert!(k.source.contains("if (!soob) out[oo] = in0[o0];"));
+        // No atomics for a plain assign.
+        assert!(!k.source.contains("atomicAdd"));
+    }
+
+    #[test]
+    fn integer_scatter_add_is_the_deterministic_atomicadd_base() {
+        // i32 scatter_add: integer atomicAdd ⇒ order-independent ⇒ the base lower()
+        // (NOT routed to the gather-sum; NOT a variant).
+        let op = OpDef::scatter_add("scatter_add", &[ElementKind::I32], 0, ElementKind::I32);
+        let iupd = OperandDesc::new(2, &[4, 3], &[3, 1], ElementKind::I32, 256);
+        let idx = OperandDesc::new(2, &[4, 3], &[3, 1], ElementKind::I32, 256);
+        let dst = OperandDesc::new(2, &[4, 3], &[3, 1], ElementKind::I32, 256);
+        let key = structure_key(OpCategory::BinaryElementwise, &[iupd, idx, dst], ArchSku::Sm89);
+        let k = generate(&op, &key, &Cuda);
+        assert_eq!(k.name, "baracuda_gen_scatter_add_i32_i32_strided_r2");
+        assert!(k.source.contains("if (!soob) atomicAdd(&out[oo], (int)(in0[o0]));"));
+        // Deterministic combine ⇒ no variant offered.
+        let vs = crate::generate_variants(&op, &key, &Cuda);
+        assert_eq!(vs.len(), 1, "integer scatter_add ships one unconditional base");
+        assert_eq!(vs[0].fidelity, crate::VariantFidelity::BitIdentical);
+    }
+
+    #[test]
+    fn i64_scatter_add_uses_the_ull_reinterpret() {
+        let op = OpDef::scatter_add("scatter_add", &[ElementKind::I64], 0, ElementKind::I64);
+        let iupd = OperandDesc::new(2, &[4, 3], &[3, 1], ElementKind::I64, 256);
+        let idx = OperandDesc::new(2, &[4, 3], &[3, 1], ElementKind::I64, 256);
+        let dst = OperandDesc::new(2, &[4, 3], &[3, 1], ElementKind::I64, 256);
+        let key = structure_key(OpCategory::BinaryElementwise, &[iupd, idx, dst], ArchSku::Sm89);
+        let k = generate(&op, &key, &Cuda);
+        assert!(k.source.contains(
+            "if (!soob) atomicAdd((unsigned long long*)&out[oo], (unsigned long long)(in0[o0]));"
+        ));
+    }
+
+    #[test]
+    fn bincount_scatters_const1_atomicadd_into_i32_counts() {
+        // bincount: in0 = i64 data (the index), body Const(1), i32 counts out.
+        let op = OpDef::bincount("bincount", ElementKind::I64);
+        let x = OperandDesc::new(1, &[64], &[1], ElementKind::I64, 256);
+        let out = OperandDesc::new(1, &[16], &[1], ElementKind::I32, 256);
+        let key = structure_key(OpCategory::UnaryElementwise, &[x, out], ArchSku::Sm89);
+        let k = generate(&op, &key, &Cuda);
+        assert_eq!(k.name, "baracuda_gen_bincount_i64_i64_strided_r1");
+        // The lone input is the index — an i64 (long long) pointer; i32 out pointer.
+        assert!(k.source.contains("const long long* __restrict__ in0,"));
+        assert!(k.source.contains("int* __restrict__ out,"));
+        // Value is the constant 1 narrowed to the i32 count cell.
+        assert!(k.source.contains("if (!soob) atomicAdd(&out[oo], (int)(1.0));"));
+        // Deterministic integer counts ⇒ ships unconditionally (no variant).
+        assert_eq!(crate::generate_variants(&op, &key, &Cuda).len(), 1);
+    }
+
+    #[test]
+    fn fp_scatter_add_base_is_the_deterministic_gather_sum() {
+        // f32 scatter_add: FP atomicAdd is non-deterministic, so the BASE lower()
+        // is the deterministic gather-sum — one thread per output cell, scan the
+        // update domain, sum matching values, NO atomics.
+        let op = OpDef::scatter_add("scatter_add", &[ElementKind::F32], 0, ElementKind::I32);
+        let k = generate(&op, &scatter_2d_key(ElementKind::I32), &Cuda);
+        assert_eq!(k.name, "baracuda_gen_scatter_add_f32_i32_scatter_gathersum_r2");
+        // No atomics in the deterministic base.
+        assert!(!k.source.contains("atomicAdd"), "gather-sum base must be atomic-free");
+        // The match condition: scattered target == this destination cell.
+        assert!(k.source.contains("if (sidx == oc0 && uc1 == oc1) {"));
+        // Deterministic accumulate into the existing destination (one owner, exact).
+        assert!(k.source.contains("out[oo] = (out[oo] + acc);"));
+    }
+
+    #[test]
+    fn fp_scatter_add_offers_the_nondeterministic_atomic_variant() {
+        // The FP-atomic scatter ships ONLY as a Nondeterministic variant beside the
+        // deterministic gather-sum base — never the silent default.
+        let op = OpDef::scatter_add("scatter_add", &[ElementKind::F32], 0, ElementKind::I32);
+        let vs = crate::generate_variants(&op, &scatter_2d_key(ElementKind::I32), &Cuda);
+        assert_eq!(vs.len(), 2, "base (gather-sum) + atomic variant");
+        // Base is the deterministic gather-sum.
+        assert_eq!(vs[0].fidelity, crate::VariantFidelity::BitIdentical);
+        assert!(vs[0].kernels[0].name.contains("_scatter_gathersum_"));
+        // The atomic variant is Nondeterministic + carries the honest determinism flip.
+        let atomic = &vs[1];
+        assert_eq!(atomic.tag, "atomic");
+        assert_eq!(atomic.fidelity, crate::VariantFidelity::Nondeterministic);
+        assert!(atomic.kernels[0].source.contains("if (!soob) atomicAdd(&out[oo], (float)(in0[o0]));"));
+        assert!(atomic.launch_note.contains("determinism: nondeterministic"));
+        assert!(atomic.launch_note.contains("NON-DETERMINISTIC"));
+    }
+
+    #[test]
+    fn index_add_1d_index_degenerates_to_the_axis_coordinate() {
+        // index_add axis 0 with a 1-D index (broadcast on axis 1, stride 0): the
+        // index offset drops the axis-1 term ⇒ `sidx_off = c0*s1_0`. Integer value
+        // dtype so this is the deterministic atomicAdd base (checks the offset).
+        let upd = OperandDesc::new(2, &[4, 3], &[3, 1], ElementKind::I32, 256);
+        let idx = OperandDesc::new(2, &[4, 3], &[1, 0], ElementKind::I32, 256); // bcast axis 1
+        let dst = OperandDesc::new(2, &[4, 3], &[3, 1], ElementKind::I32, 256);
+        let key = structure_key(OpCategory::BinaryElementwise, &[upd, idx, dst], ArchSku::Sm89);
+        let op = OpDef::index_add("index_add", &[ElementKind::I32], 0, ElementKind::I32);
+        let k = generate(&op, &key, &Cuda);
+        assert!(
+            k.source.contains("long long sidx_off = c0*s1_0;"),
+            "1-D index offset must drop the broadcast axis, got:\n{}",
+            k.source
+        );
+        assert!(k.source.contains("long long oo = (sidx_clamped)*so_0 + c1*so_1;"));
+    }
+
+    #[test]
+    fn scatter_forces_strided_off_the_vectorized_path() {
+        use crate::plan::{build_plan, Schedule};
+        // A fully-contiguous 1-D cell a non-scatter copy would VECTORIZE.
+        let upd = OperandDesc::new(1, &[1 << 16], &[1], ElementKind::F32, 256);
+        let idx = OperandDesc::new(1, &[1 << 16], &[1], ElementKind::I32, 256);
+        let dst = OperandDesc::new(1, &[1 << 16], &[1], ElementKind::F32, 256);
+        let key = structure_key(OpCategory::BinaryElementwise, &[upd, idx, dst], ArchSku::Sm89);
+        let op = OpDef::scatter("scatter", &[ElementKind::F32], 0, ElementKind::I32);
+        assert_eq!(build_plan(&op, &key).schedule, Schedule::Strided);
+    }
+
+    #[test]
+    fn non_scatter_op_emits_byte_identical_to_pre_increment5() {
+        // A write-Direct op must emit the exact same source + name as before #5.
+        let key = binary_key(ElementKind::F32);
+        let free = generate(&add_op(&[ElementKind::F32]), &key, &Cuda);
+        let with = OpDef::elementwise("add", 2, &[ElementKind::F32], input(0) + input(1))
+            .with_scatter(crate::ir::WriteIndex::Direct);
+        let k = generate(&with, &key, &Cuda);
+        assert_eq!(free.name, k.name);
+        assert_eq!(free.source, k.source, "write-Direct must emit byte-identical source");
+    }
+
+    #[test]
+    #[should_panic(expected = "must lower on the Strided schedule")]
+    fn scattered_op_on_a_non_strided_schedule_is_refused_by_the_backstop() {
+        use crate::backend::Backend;
+        use crate::ir::{OobPolicy, WriteCombine, WriteIndex};
+        use crate::plan::{KernelPlan, Schedule};
+        // A scatter manually paired with the Vectorized schedule (build_plan never
+        // produces this) — the independent emitter backstop must refuse it.
+        let key = scatter_2d_key(ElementKind::I32);
+        let body = input(0).0;
+        let wi = WriteIndex::ScatterIndexed {
+            index_operand: 1,
+            axis: 0,
+            combine: WriteCombine::Assign,
+            oob: OobPolicy::Skip,
+            index_dtype: ElementKind::I32,
+        };
+        let plan = KernelPlan {
+            op_name: "sneaky",
+            n_inputs: 2,
+            dtype: ElementKind::F32,
+            out_dtype: ElementKind::F32,
+            schedule: Schedule::Vectorized { width: 4 },
+            key: &key,
+            body: &body,
+            n_outputs: 1,
+            extra_out_bodies: &[],
+            access: &crate::ir::Access::Elementwise,
+            views: &[],
+            read_index: &[],
+            write_index: &wi,
+        };
+        let _ = Cuda.lower(&plan);
+    }
+
     #[test]
     #[should_panic(expected = "must lower on the Strided schedule")]
     fn gathered_op_on_a_non_strided_schedule_is_refused_by_the_backstop() {
@@ -3587,6 +4213,7 @@ mod tests {
             access: &crate::ir::Access::Elementwise,
             views: &[],
             read_index: &ri,
+            write_index: &crate::ir::WriteIndex::Direct,
         };
         let _ = Cuda.lower(&plan);
     }
@@ -4094,6 +4721,7 @@ mod tests {
             access: &crate::ir::Access::Elementwise,
             views: &views,
             read_index: &[],
+            write_index: &crate::ir::WriteIndex::Direct,
         };
         let _ = Cuda.lower(&plan);
     }
@@ -5489,6 +6117,7 @@ mod tests {
             access: &crate::ir::Access::Elementwise,
             views: &[],
             read_index: &[],
+            write_index: &crate::ir::WriteIndex::Direct,
         };
         let _ = Cuda.lower(&plan);
     }
@@ -6059,6 +6688,7 @@ mod tests {
             access: &crate::ir::Access::Elementwise,
             views: &[],
             read_index: &[],
+            write_index: &crate::ir::WriteIndex::Direct,
         };
         let _ = Cuda.lower(&plan);
     }
@@ -6083,6 +6713,7 @@ mod tests {
             access: &crate::ir::Access::Elementwise,
             views: &[],
             read_index: &[],
+            write_index: &crate::ir::WriteIndex::Direct,
         };
         let _ = Cuda.lower(&plan);
     }
@@ -6107,6 +6738,7 @@ mod tests {
             access: &crate::ir::Access::Elementwise,
             views: &[],
             read_index: &[],
+            write_index: &crate::ir::WriteIndex::Direct,
         };
         let _ = Cuda.lower(&plan);
     }
@@ -6135,6 +6767,7 @@ mod tests {
             access: &crate::ir::Access::Elementwise,
             views: &[],
             read_index: &[],
+            write_index: &crate::ir::WriteIndex::Direct,
         };
         let _ = Cuda.lower(&plan);
     }
@@ -6162,6 +6795,7 @@ mod tests {
             access: &crate::ir::Access::Elementwise,
             views: &[],
             read_index: &[],
+            write_index: &crate::ir::WriteIndex::Direct,
         };
         let _ = Cuda.lower(&plan);
     }
@@ -6398,6 +7032,7 @@ mod tests {
             access: &crate::ir::Access::Elementwise,
             views: &[],
             read_index: &[],
+            write_index: &crate::ir::WriteIndex::Direct,
         };
         let _ = Cuda.lower(&plan);
     }
@@ -6434,6 +7069,7 @@ mod tests {
             access: &access,
             views: &[],
             read_index: &[],
+            write_index: &crate::ir::WriteIndex::Direct,
         };
         let _ = Cuda.lower(&plan);
     }
@@ -6458,6 +7094,7 @@ mod tests {
             access: &crate::ir::Access::Elementwise,
             views: &[],
             read_index: &[],
+            write_index: &crate::ir::WriteIndex::Direct,
         };
         let _ = Cuda.lower(&plan);
     }
@@ -6486,6 +7123,7 @@ mod tests {
             access: &crate::ir::Access::Elementwise,
             views: &[],
             read_index: &[],
+            write_index: &crate::ir::WriteIndex::Direct,
         };
         let _ = Cuda.lower(&plan);
     }

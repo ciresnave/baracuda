@@ -142,9 +142,38 @@ pub enum PatternError {
     ///
     /// So: no pattern, no contract — an AOT-only honest miss, exactly like the
     /// Contraction node (shipped AOT-only pending the seam grammar). The kernels
-    /// still generate + lower. Closing it needs the per-operand-dtype key
-    /// extension = a `STRUCTURE_KEY_VERSION` bump = a Fuel propose-first.
+    /// still generate + lower. KEYING RESOLVED (Fuel reply 2026-07-04): Fuel keys
+    /// off the FKC per-operand dtype tuple from `accept.inputs[i].dtype`, not a
+    /// coarse token, so a `u32`-index gather contract with honest per-input dtypes
+    /// binds correctly with NO `STRUCTURE_KEY_VERSION` bump — reason 1 is a queued
+    /// Baracuda-only follow-up, not a Fuel propose-first. The miss holds today only
+    /// on reason 2 (the `Op`+`Bind` grammar can't carry the axis/OOB) until the
+    /// follow-up is wired.
     GatherUnsupported,
+    /// The op carries a data-dependent [`crate::ir::WriteIndex::ScatterIndexed`]
+    /// write (a scatter, increment 5). No honest v1 contract, for the gather
+    /// reasons AND the determinism discipline:
+    ///   1. **Per-operand index dtype is unkeyable** (identical to gather). Fuel
+    ///      keys scatter_add/index_add as `[T, U32, T, T]` (fuel-dispatch
+    ///      `fkc/cpu_link.rs`: `base`, fixed U32 `indices`, `src`,
+    ///      `passthrough(base)`); a token keyed only on `T` could bind the wrong
+    ///      index dtype.
+    ///   2. The `Op`+`Bind` grammar can't carry the scatter `axis`/OOB/combine.
+    ///      Fuel names `OpKind::ScatterAdd`/`IndexAdd` (fuel-ir `dispatch.rs`) but
+    ///      NO bare `Scatter`, NO `Bincount`/`Histogram`, NO scatter-reduce mode —
+    ///      `scatter`/`bincount`/AtomicMax-Min are net-new vocabulary.
+    ///   3. **Determinism** — an FP-atomicAdd scatter is non-deterministic; an
+    ///      honest contract must set `determinism: nondeterministic` +
+    ///      (Fuel Rule 9) `bit_stable_on_same_hardware: false` + `audited: true`,
+    ///      a coupled precision block Baracuda does not yet author. Emitting one
+    ///      risks advertising a nondeterministic kernel as bitwise-stable.
+    ///
+    /// AOT-only honest miss (the kernels still generate + lower). Keying is
+    /// resolved (Model A, same as gather — no `STRUCTURE_KEY_VERSION` bump); the
+    /// miss holds today on the missing op-kind vocabulary + the unauthored
+    /// nondeterministic precision block, and closing it is the queued Baracuda-only
+    /// scatter contract wiring, NOT a Fuel propose-first.
+    ScatterUnsupported,
 }
 
 /// Derive the FKC pattern tree for `op`, or a [`PatternError`] if the body isn't
@@ -182,6 +211,14 @@ pub fn derive_pattern(op: &OpDef) -> Result<PatternNode, PatternError> {
     // and `contract()`'s gather guard for the full Fuel-source rationale.
     if crate::plan::op_has_gather(op) {
         return Err(PatternError::GatherUnsupported);
+    }
+    // A scatter (data-dependent ScatterIndexed write) has no honest v1 contract:
+    // the same unkeyable index dtype as gather, plus the Op+Bind grammar can't
+    // carry the scatter axis/OOB/combine, plus the FP-atomic determinism flip.
+    // Miss honestly BEFORE the body walk. See `PatternError::ScatterUnsupported`
+    // and `contract()`'s scatter guard for the full Fuel-source rationale.
+    if crate::plan::op_has_scatter(op) {
+        return Err(PatternError::ScatterUnsupported);
     }
     // Canonicalize commutative operands first so two authorings of one body
     // produce byte-identical paths/extracts/YAML (internal determinism); per

@@ -32,6 +32,43 @@ pub enum VariantFidelity {
     /// different operation *association* than the default — e.g. a split-K
     /// partial-sum tree vs the sequential fold.
     ReassociatedDeterministic,
+    /// **Run-to-run non-deterministic** (increment 5, SCATTER): the result bits
+    /// vary *between launches of the same configuration* because the schedule
+    /// accumulates through order-varying floating-point atomics (`atomicAdd` on
+    /// an FP cell whose completion order the hardware does not fix), and FP add
+    /// is non-associative. This is strictly weaker than
+    /// [`Self::ReassociatedDeterministic`] (which is at least stable for a fixed
+    /// launch): a `Nondeterministic` variant can differ from ITSELF run to run.
+    ///
+    /// Per the house variant-selection rule this may **never** be selected
+    /// silently — only through an honest FKC contract whose determinism block
+    /// flips to Fuel's `nondeterministic` spelling (and, per Fuel's precision
+    /// coherence rule `fuel-dispatch fkc/validate.rs`, that contract must also
+    /// carry `bit_stable_on_same_hardware: false` + `audited: true`). The
+    /// deterministic default (a gather-sum or sorted-segment sweep — the bespoke
+    /// `segment_sorted_kernel` precedent) stays the base route.
+    Nondeterministic,
+}
+
+impl VariantFidelity {
+    /// The Fuel FKC `determinism:` block spelling for this fidelity — the exact
+    /// string Fuel's contract schema accepts (`fuel-dispatch fkc/schema.rs`:
+    /// `bitwise` | `same_hardware_bitwise` | `nondeterministic`). Used when a
+    /// variant's contract is emitted so the determinism block flips **honestly**
+    /// with the schedule's numeric class (never a hardcoded `bitwise`).
+    ///
+    /// `Nondeterministic` maps to `nondeterministic`, which — per Fuel's
+    /// precision coherence rule (`fkc/validate.rs` Rule 9) — additionally
+    /// obligates the emitted precision block to declare
+    /// `bit_stable_on_same_hardware: false` + `audited: true`.
+    #[must_use]
+    pub fn determinism_str(self) -> &'static str {
+        match self {
+            VariantFidelity::BitIdentical => "bitwise",
+            VariantFidelity::ReassociatedDeterministic => "same_hardware_bitwise",
+            VariantFidelity::Nondeterministic => "nondeterministic",
+        }
+    }
 }
 
 /// One alternative schedule for a cell: a tagged set of kernels (most variants
