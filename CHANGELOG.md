@@ -8,6 +8,42 @@ alpha represents one or more completed phases.
 The phase numbering is Fuel-driven (Fuel is baracuda's primary downstream
 consumer); see `ROADMAP.md` for the active phase board.
 
+## 0.0.1-alpha.74 — 2026-07-04 (prefix scan + JIT-envelope conform)
+
+Two changes; the seam surface bump unblocks Fuel's JIT adoption path.
+
+### Added
+
+- **Prefix scan (`Access::Scan`)** in `baracuda-kernelgen` — cumsum / cumprod /
+  cummax / cummin along the innermost (contiguous) axis, with inclusive/exclusive
+  and forward/reverse. A serial-fold **base** (`BitIdentical`, serves every
+  dtype/direction incl. integer + reverse) plus a **forward FP Sum/Prod block-scan
+  variant** (Kogge-Stone warp scan + cross-warp offset + cross-chunk carry,
+  re-emitted headerless inline; `ReassociatedDeterministic`). AOT-only honest miss
+  on the Fuel seam; keying additive (`baracuda-kernels-types` untouched). On-device
+  (RTX 4070 sm_89): all correctness cases pass, four compute-sanitizer tools clean;
+  the block-scan hits **227 GB/s** (copy-bandwidth ceiling, 43× the bespoke naive
+  scan), the base 17×. Adversarially reviewed (7 minor findings, all fixed and
+  mutation-verified: header-light `±inf` identity, exclusive-only warp shuffle,
+  gate-rejection test coverage, reverse block-scan declined to the base pending
+  device validation).
+
+### Changed
+
+- **`BaracudaSynthesizer` conforms to the frozen JIT envelope** (`fuel-kernel-seam`
+  **0.10.2 → 0.10.3**). Fuel froze the §5.2 two-step handover and Baracuda now builds
+  against it: `take_kernel` is a **trait** method (Fuel calls it via `&dyn
+  Synthesizer`); `synthesize` returns the light `JitResponse::Synthesized {
+  entry_point }`; `take_kernel` hands back the **envelope** `SynthArtifact` (the
+  debug-only `.cu` source and the recipe are dropped — the re-fuse `pattern:` rides
+  in the contract, `decompose` is the region Fuel holds); `ArtifactKind` is
+  loadable-only `{Ptx|Cubin}` and a non-loadable stub returns `Declined` (no
+  unloadable placeholder ever crosses the seam); the compile budget is read
+  per-request from `JitRequest.budget`. The on-device nvrtc handover
+  (`JitRequest` → `Synthesized` → `take_kernel` → real PTX artifact) passes
+  end-to-end on sm_89. See
+  [`docs/fuel-reply-jit-envelope-reconcile-2026-07-04.md`](docs/fuel-reply-jit-envelope-reconcile-2026-07-04.md).
+
 ## 0.0.1-alpha.73 — 2026-07-04 (kernel specialization — generated kernels replace the bespoke surface)
 
 The kernel-specialization release. `baracuda-kernelgen` grows from an
