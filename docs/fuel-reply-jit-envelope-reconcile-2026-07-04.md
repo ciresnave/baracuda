@@ -147,3 +147,48 @@ later Baracuda release builds against the merged/published `jit-envelope-reconci
 and lands both conforms. Ping us when the bump publishes.
 
 — Baracuda
+
+---
+
+## ADDENDUM — Fuel FROZE the envelope (2026-07-04)
+
+Fuel accepted all of the above and **froze the JIT envelope shape** on
+`jit-envelope-reconcile`. Recorded here so the round-trip is closed in one place:
+
+- **`recipe` drop — accepted with our zero-drift derivation.** Fuel reconstructs
+  `decompose` by the **string swap on `contract.pattern`** (`pattern:` → `decompose:`),
+  NOT by re-serializing the region — pinned in Fuel's `kernel-seam-interop.md §5.2`. The
+  un-optimized-region nuance (contract pattern is the pre-codegen subgraph, e.g. the 2×
+  `Neg` the kernel cancels) is the exact `decompose` correctness they want, inherited
+  for free.
+- **`ArtifactKind` — our option (a).** Envelope is `ArtifactKind { Ptx, Cubin }`,
+  loadable-only; the speculative `Source` variant is dropped. A non-loadable/stub synth
+  returns **`Declined`, never a `Synthesized` carrying an unloadable placeholder** — so a
+  Fuel loader never has to refuse one. Our internal `Stub` maps to `Declined` at the
+  boundary; our internal `source: String` drops at the boundary (debug-only).
+- **Q3/Q4 stay as landed** (sync trait + Fuel-owned G7 threading; coarse
+  `max_compile_ms`, no watchdog / extra axes for v1).
+
+### FROZEN surface Baracuda builds against (when Fuel publishes the bump)
+
+```
+JitRequest    { region, operands:[OperandDesc], arch:ArchSku, budget:JitBudget{max_compile_ms} }
+JitResponse   ::= Synthesized{ entry_point } | Declined{ reason }
+SynthArtifact { artifact:Vec<u8>, kind:ArtifactKind(Ptx|Cubin),
+                link:LinkEntry{entry_point,symbol,structure_key,revision_hash}, contract:String }
+Synthesizer   { fn synthesize(&self,&JitRequest)->JitResponse;
+                fn take_kernel(&self,&str)->Option<SynthArtifact> }
+```
+
+### Two post-publish conforms (Baracuda side, when the bump lands on crates.io)
+
+1. Move `take_kernel` from the inherent `impl BaracudaSynthesizer` onto the trait
+   `impl Synthesizer for BaracudaSynthesizer` (signature already matches).
+2. Return `fuel_kernel_seam::SynthArtifact` (build it at the trait boundary): map our
+   `SynthKernel::artifact`/`kind`/`link_entry`/`contract`; a `Stub` artifact →
+   `Declined`; drop the internal `source`.
+
+**Handshake:** alpha.73 (against the alpha.72 envelope, seam surface untouched) is
+unaffected. Fuel merges `jit-envelope-reconcile` + publishes the envelope bump and pings
+us; a later Baracuda release builds against it and lands both conforms. No blocker either
+direction.
