@@ -20,7 +20,7 @@ use baracuda_cutlass::{
     EpilogueKind, GemmArgs, GemmDescriptor, GemmPlan, GroupedGemmPlan, GroupedPlanPreference,
     GroupedProblem, LayoutSku, MatrixMut, MatrixRef, PlanPreference, Workspace,
 };
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Stream};
+use baracuda_driver::{Context, Device, DeviceBuffer, Stream, init};
 use half::f16;
 
 fn cpu_gemm_rcr(m: usize, n: usize, k: usize, a: &[f32], b: &[f32], d: &mut [f32]) {
@@ -204,8 +204,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             plan.prepare(&groups)?
         };
 
-        let mut workspace: DeviceBuffer<u8> =
-            DeviceBuffer::zeros(&ctx, prepared.workspace_size())?;
+        let mut workspace: DeviceBuffer<u8> = DeviceBuffer::zeros(&ctx, prepared.workspace_size())?;
         prepared.run(&stream, Workspace::Borrowed(workspace.as_slice_mut()))?;
 
         let tol = (k as f32) * 5e-3;

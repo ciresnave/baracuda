@@ -1,0 +1,12 @@
+# Format to the Rust 2024 edition style, project-wide.
+#
+# `edition` pins the PARSE edition rustfmt uses (matching the workspace
+# `edition = "2024"`), so `cargo fmt -p <crate>` no longer silently defaults to
+# the 2015 parser and "reformats" already-clean code — it agrees with
+# `cargo fmt --all`, which is what CI enforces (`cargo fmt --all -- --check`).
+#
+# `style_edition` pins the formatting rules to the 2024 style (case-sensitive
+# import sorting, etc.) so the layout is explicit and version-stable rather than
+# relying on the rustfmt default tracking the crate edition.
+edition = "2024"
+style_edition = "2024"

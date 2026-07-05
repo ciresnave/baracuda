@@ -17,7 +17,7 @@
 //! Requires a working CUDA toolkit (for `nvcc` at build time) and an NVIDIA
 //! GPU + driver (for kernel execution at runtime).
 
-use baracuda_driver::{init, Context, Device, DeviceBuffer, Module};
+use baracuda_driver::{Context, Device, DeviceBuffer, Module, init};
 
 const PTX: &str = include_str!(concat!(env!("OUT_DIR"), "/forge_hello.ptx"));
 
@@ -75,14 +75,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     if max_err == 0.0 {
-        println!(
-            "forge_hello: ✅ pass — {N} elements, exact match against CPU reference"
-        );
+        println!("forge_hello: ✅ pass — {N} elements, exact match against CPU reference");
         Ok(())
     } else {
-        Err(format!(
-            "forge_hello: ❌ fail — max abs error {max_err} across {N} elements"
-        )
-        .into())
+        Err(format!("forge_hello: ❌ fail — max abs error {max_err} across {N} elements").into())
     }
 }
