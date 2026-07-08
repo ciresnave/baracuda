@@ -968,6 +968,33 @@ mod tests {
     }
 
     #[test]
+    fn window_is_an_honest_miss_no_contract() {
+        use crate::ir::ReduceOp;
+        use crate::pattern::PatternError;
+        // Increment 7 WINDOW (pooling) is an AOT-only honest miss: Fuel exposes no
+        // Pool/Window OpKind (the pool family rides bespoke cuDNN, opaque), and
+        // neither contract.rs nor pattern.rs has any Window vocabulary, so a window
+        // emits NO FKC contract (the kernel still generates + runs AOT) — the
+        // Reduction/Scan/Contraction precedent. `derive_pattern` rejects it as
+        // NotElementwise BEFORE any body walk; `contract()` then returns None.
+        let p = OpDef::window_simple(
+            "maxpool", &[ElementKind::F32], ReduceOp::Max, 1, 2, 2, 1, 0, 0, false,
+        );
+        let a = OperandDesc::new(2, &[256, 128], &[128, 1], ElementKind::F32, 256);
+        let o = OperandDesc::new(2, &[256, 64], &[64, 1], ElementKind::F32, 256);
+        let key = structure_key(OpCategory::UnaryElementwise, &[a, o], ArchSku::Sm89);
+        let kernel = generate(&p, &key, &Cuda);
+        assert!(
+            contract(&p, &key, &kernel, "cuda").is_none(),
+            "a window (pool) must emit NO contract (no Fuel Pool/Window OpKind; AOT-only honest miss)"
+        );
+        assert!(matches!(
+            crate::derive_pattern(&p),
+            Err(PatternError::NotElementwise)
+        ));
+    }
+
+    #[test]
     fn viewed_op_is_an_honest_miss_no_contract() {
         use crate::ir::View;
         use crate::pattern::PatternError;

@@ -131,6 +131,13 @@ impl Backend for Cuda {
                     exprs.push(pre);
                     exprs.push(post);
                 }
+                // Increment 7 WINDOW: `pre`/`post` lower at the accumulator dtype
+                // (an int sum/max pool rides the same fold), so gate both for int
+                // Div/Const.
+                Access::Window { pre, post, .. } => {
+                    exprs.push(pre);
+                    exprs.push(post);
+                }
                 Access::Elementwise => {}
             }
             for e in exprs {
@@ -158,6 +165,12 @@ impl Backend for Cuda {
                 // Increment 6 SCAN: a Coord in `pre`/`post` is rejected here (the
                 // scan iterates the (row, j) space, not the elementwise output space).
                 Access::Scan { pre, post, .. } => {
+                    exprs.push(pre);
+                    exprs.push(post);
+                }
+                // Increment 7 WINDOW: a Coord in `pre`/`post` is rejected here (the
+                // window iterates the (row, o) space, not the elementwise output space).
+                Access::Window { pre, post, .. } => {
                     exprs.push(pre);
                     exprs.push(post);
                 }
@@ -282,6 +295,10 @@ impl Backend for Cuda {
             // serial-fold base); the cooperative block-scan is produced separately
             // by `scan_blockscan_variant`, never routed through `lower()`.
             Schedule::Scan { .. } => emit_scan(plan, ctype),
+            // Increment 7 WINDOW: one thread per output element (grid-stride) folds
+            // the local pooling window — no variant (each output is an independent
+            // fixed-order fold, BitIdentical).
+            Schedule::Window { .. } => emit_window(plan, ctype),
         }
     }
 }
@@ -3795,6 +3812,284 @@ fn scan_blockscan_variant(plan: &KernelPlan<'_>) -> Option<Variant> {
             fidelity.determinism_str()
         ),
     })
+}
+
+// ============================================================================
+// Increment 7 WINDOW — sliding-window reduction (max_pool/avg_pool/sum/min pool).
+// ============================================================================
+
+/// The serial-fold pooling emitter (`Schedule::Window`) —
+/// [`crate::backend::VariantFidelity::BitIdentical`]. One thread per OUTPUT
+/// element (grid-stride over `n_out * k_out`): each thread computes its
+/// `(row, o)`, walks the local window of `size` taps at input position
+/// `p = o*stride - pad_lo + kk*dilation`, reduces the in-bounds taps with `op`
+/// (NaN-propagating Max/Min via `v != v`; padding contributes the additive
+/// identity for Sum and is skipped for Max/Min), and stores the downsampled
+/// output. Independent per-output folds ⇒ naturally parallel and bit-reproducible.
+///
+/// The window geometry is baked as compile-time literals; `n_out` (outer product),
+/// `k_in` (input inner extent), `k_out` (downsampled output inner extent) are
+/// runtime launch args — the `k_in → k_out` relationship is the caller's
+/// window-arithmetic precondition (the structure key carries no extents; see
+/// `plan::validate_window`).
+fn emit_window(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
+    let (pre, post) = match plan.access {
+        Access::Window { pre, post, .. } => (pre, post),
+        _ => unreachable!("emit_window requires Access::Window"),
+    };
+    let (wop, axis, size, stride, dilation, pad_lo, pad_hi, count_include_pad) = match plan.schedule
+    {
+        Schedule::Window {
+            op,
+            axis,
+            size,
+            stride,
+            dilation,
+            pad_lo,
+            pad_hi,
+            count_include_pad,
+        } => (op, axis, size, stride, dilation, pad_lo, pad_hi, count_include_pad),
+        _ => unreachable!("emit_window on a non-Window schedule"),
+    };
+
+    // ---- Independent emitter backstops (belt-and-suspenders; validate_window
+    // validates the same — the 0a lesson: gate every layer). cuda-prefixed
+    // messages distinct from the plan gate's. ----
+    let rank = plan.key.rank;
+    assert!(rank >= 1, "cuda backend: Window needs a pooled axis (rank >= 1)");
+    let last = rank - 1;
+    assert!(
+        axis == last,
+        "cuda backend: Window v1 emits the innermost (contiguous) axis only (axis {axis} != rank-1 {last})"
+    );
+    assert!(
+        size >= 1 && stride >= 1 && dilation >= 1,
+        "cuda backend: Window size/stride/dilation must be >= 1"
+    );
+    assert!(
+        !matches!(wop, ReduceOp::Prod),
+        "cuda backend: Window Prod is not a pool (validate_window rejects it)"
+    );
+    {
+        let o0 = plan.key.operands[0];
+        assert!(
+            rr_role(o0, last) == RrRole::RowStreamed
+                && o0.contig == Contiguity::Contig
+                && !o0.flipped,
+            "cuda backend: Window input 0 must be the forward-dense contiguous pooled tensor (idx = base+p)"
+        );
+    }
+    let is_mean = matches!(wop, ReduceOp::Mean);
+    if is_mean {
+        assert!(
+            matches!(
+                plan.dtype,
+                ElementKind::F16
+                    | ElementKind::Bf16
+                    | ElementKind::F32
+                    | ElementKind::F32Strict
+                    | ElementKind::F64
+            ),
+            "cuda backend: Window Mean (avg_pool) is float-only; got {:?}",
+            plan.dtype
+        );
+    }
+
+    let dbl = matches!(plan.dtype, ElementKind::F64 | ElementKind::F32Strict);
+    let int_acc = crate::plan::is_int_dtype(plan.dtype);
+    // Accumulator: double for f64/f32-strict, native ctype for integers (wrapping
+    // sum-pool / exact max-pool), float otherwise (incl. f16/bf16 up-convert).
+    let acc = if dbl {
+        "double"
+    } else if int_acc {
+        ctype
+    } else {
+        "float"
+    };
+
+    let combine_tag = match wop {
+        ReduceOp::Sum => "sum",
+        ReduceOp::Mean => "mean",
+        ReduceOp::Max => "max",
+        ReduceOp::Min => "min",
+        ReduceOp::Prod => unreachable!("Window rejects Prod at validate_window"),
+    };
+    let dtag = dtype_tag(plan.dtype);
+    // count_include_pad only affects Mean; suffix it there so the two avg_pool
+    // divisor policies never collide on the entry-point symbol.
+    let cip_suf = if is_mean && count_include_pad { "_cip" } else { "" };
+    let name = format!(
+        "baracuda_gen_{}_{dtag}_window_{combine_tag}{cip_suf}",
+        plan.op_name
+    );
+
+    // Role-aware load (mirrors emit_scan_impl): the pooled input reads `in_i[idx]`
+    // (idx = base+p); a per-column operand `in_i[p]`; a per-row scalar the hoisted
+    // `rs{i}`. f16/bf16/f32-strict up-convert to the acc width.
+    let load = |i: u8| {
+        let role = rr_role(plan.key.operands[i as usize], last);
+        if role == RrRole::RowScalar {
+            return format!("rs{i}");
+        }
+        let pos = match role {
+            RrRole::RowStreamed => "idx",
+            RrRole::ColBroadcast => "p",
+            RrRole::RowScalar => unreachable!("row-scalar handled above"),
+        };
+        match plan.dtype {
+            ElementKind::F16 => format!("__half2float(in{i}[{pos}])"),
+            ElementKind::Bf16 => format!("__bfloat162float(in{i}[{pos}])"),
+            ElementKind::F32Strict => format!("(double)in{i}[{pos}]"),
+            _ => format!("in{i}[{pos}]"),
+        }
+    };
+    // `pre` (per-tap pre-map) lowers over the loaded tap; NO window result exists
+    // yet, so a Reduced leaf panics (validate_window rejects it).
+    let pre_str = lower_expr(
+        pre,
+        &Lowering {
+            leaf: &load,
+            reduced: &|s| panic!("cuda backend: Window pre-map read Reduced({s}) — no window result in the pre-map"),
+            coord: &|d| panic!("cuda backend: Window Coord({d}) is Elementwise-only"),
+            unary: &|op, x| if dbl { unary_f64(op, x) } else { unary_f32(op, x) },
+            binary: &|op, a, b| if dbl { binary_f64(op, a, b) } else { binary_f32(op, a, b) },
+        },
+    );
+    // `post` (per-output epilogue) lowers over the finalized window result, bound to
+    // the `prefix` register (Reduced(0)); the identity post yields `"prefix"`.
+    let post_str = lower_expr(
+        post,
+        &Lowering {
+            leaf: &load,
+            reduced: &|s| {
+                assert_eq!(s, 0, "Window post references Reduced({s}); only 0 (the window result) exists");
+                "prefix".to_string()
+            },
+            coord: &|d| panic!("cuda backend: Window Coord({d}) is Elementwise-only"),
+            unary: &|op, x| if dbl { unary_f64(op, x) } else { unary_f32(op, x) },
+            binary: &|op, a, b| if dbl { binary_f64(op, a, b) } else { binary_f32(op, a, b) },
+        },
+    );
+    let store = |v: &str| -> String {
+        match plan.dtype {
+            ElementKind::F16 => format!("__float2half({v})"),
+            ElementKind::Bf16 => format!("__float2bfloat16({v})"),
+            _ => v.to_string(),
+        }
+    };
+    let stored = store(&post_str);
+
+    // ---- Preamble + signature. ----
+    let mut s = format!(
+        "// Generated by baracuda-kernelgen — do not edit.\n// op: {} | cell: {}\n",
+        plan.op_name,
+        plan.key.to_token()
+    );
+    if let Some(inc) = extra_include(plan.dtype) {
+        s.push_str(inc);
+    }
+    s.push('\n');
+    s.push_str(&format!("extern \"C\" __global__ void {name}(\n"));
+    for i in 0..plan.n_inputs {
+        s.push_str(&format!("    const {ctype}* __restrict__ in{i},\n"));
+    }
+    s.push_str(&format!("    {ctype}* __restrict__ out,\n"));
+    s.push_str(&format!(
+        "    long long n_out,\n    long long k_in,\n    long long k_out{})\n{{\n",
+        param_args_multi(&[pre, post])
+    ));
+    s.push_str("    if (k_out == 0) return;\n");
+    s.push_str("    long long total = n_out * k_out;\n");
+
+    // Window geometry as compile-time literals (i64 to keep the tap arithmetic
+    // signed — `p` can go negative under pad_lo).
+    let (sz, st, dil, plo) = (
+        i64::from(size),
+        i64::from(stride),
+        i64::from(dilation),
+        i64::from(pad_lo),
+    );
+    let _ = pad_hi; // baked into the caller's k_out; the tap loop bounds-checks p < k_in.
+
+    // Grid-stride over output elements. `row = t / k_out`, `o = t % k_out`.
+    s.push_str("    for (long long t = (long long)blockIdx.x * (long long)blockDim.x + (long long)threadIdx.x;\n");
+    s.push_str("         t < total; t += (long long)gridDim.x * (long long)blockDim.x) {\n");
+    s.push_str("        long long row = t / k_out;\n");
+    s.push_str("        long long o = t - row * k_out;\n");
+    s.push_str("        long long base = row * k_in;\n");
+    // Hoist per-row scalar operands once per output (emits nothing for single-input).
+    for i in 0..plan.n_inputs {
+        if rr_role(plan.key.operands[i as usize], last) == RrRole::RowScalar {
+            let conv = match plan.dtype {
+                ElementKind::F16 => format!("__half2float(in{i}[row])"),
+                ElementKind::Bf16 => format!("__bfloat162float(in{i}[row])"),
+                ElementKind::F32Strict => format!("(double)in{i}[row]"),
+                _ => format!("in{i}[row]"),
+            };
+            s.push_str(&format!("        {acc} rs{i} = {conv};\n"));
+        }
+    }
+
+    match wop {
+        ReduceOp::Sum | ReduceOp::Mean => {
+            let zero = scan_identity(ReduceOp::Sum, plan.dtype); // "0" / "0.0" / "0.0f"
+            s.push_str(&format!("        {acc} acc = {zero};\n"));
+            s.push_str("        long long cnt = 0;\n");
+            s.push_str(&format!("        for (int kk = 0; kk < {sz}; ++kk) {{\n"));
+            s.push_str(&format!(
+                "            long long p = o * {st} - {plo} + (long long)kk * {dil};\n"
+            ));
+            s.push_str("            if (p >= 0 && p < k_in) {\n");
+            s.push_str("                long long idx = base + p;\n");
+            s.push_str(&format!("                {acc} v = {pre_str};\n"));
+            s.push_str("                acc = acc + v;\n");
+            s.push_str("                cnt += 1;\n");
+            s.push_str("            }\n");
+            s.push_str("        }\n");
+            if is_mean {
+                // avg_pool divisor: `size` (count_include_pad) or the valid-tap count.
+                // A cnt==0 window (only reachable at count_include_pad=false, and only
+                // for a degenerate all-pad edge the 2*pad<=span gate makes unreachable
+                // for the FIRST/LAST windows) stores 0 rather than 0/0 = NaN.
+                if count_include_pad {
+                    s.push_str(&format!("        {acc} prefix = acc / ({acc}){sz};\n"));
+                } else {
+                    s.push_str(&format!(
+                        "        {acc} prefix = (cnt > 0) ? (acc / ({acc})cnt) : ({acc})0;\n"
+                    ));
+                }
+            } else {
+                s.push_str(&format!("        {acc} prefix = acc;\n"));
+                s.push_str("        (void)cnt;\n");
+            }
+            s.push_str(&format!("        out[t] = {stored};\n"));
+        }
+        ReduceOp::Max | ReduceOp::Min => {
+            let cmp = if matches!(wop, ReduceOp::Max) { ">" } else { "<" };
+            let ident = scan_identity(wop, plan.dtype); // type min (Max) / max (Min)
+            s.push_str(&format!("        {acc} best = {ident}; int have = 0;\n"));
+            s.push_str(&format!("        for (int kk = 0; kk < {sz}; ++kk) {{\n"));
+            s.push_str(&format!(
+                "            long long p = o * {st} - {plo} + (long long)kk * {dil};\n"
+            ));
+            s.push_str("            if (p >= 0 && p < k_in) {\n");
+            s.push_str("                long long idx = base + p;\n");
+            s.push_str(&format!("                {acc} v = {pre_str};\n"));
+            // NaN propagates via `v != v`; padding taps never enter this branch.
+            s.push_str(&format!(
+                "                if (!have || v != v || v {cmp} best) {{ best = v; have = 1; }}\n"
+            ));
+            s.push_str("            }\n");
+            s.push_str("        }\n");
+            // An all-pad window (no valid tap) emits the monoid identity.
+            s.push_str(&format!("        {acc} prefix = have ? best : ({ident});\n"));
+            s.push_str(&format!("        out[t] = {stored};\n"));
+        }
+        ReduceOp::Prod => unreachable!("Window rejects Prod"),
+    }
+
+    s.push_str("    }\n}\n");
+    GeneratedKernel { name, source: s }
 }
 
 /// `true` if every iteration axis of `o` is a broadcast axis — its offset is
@@ -8157,5 +8452,163 @@ mod scan_tests {
         // f64 serial base (Sum) for the double-precision bit-exact case.
         let scd = OpDef::scan_simple("cumsum", &[ElementKind::F64], ReduceOp::Sum, 1, false, false);
         write(generate(&scd, &scan_key(ElementKind::F64), &Cuda));
+    }
+}
+
+#[cfg(test)]
+mod window_tests {
+    //! Increment-7 WINDOW emitter tests: the one-thread-per-output pooling base
+    //! generates valid, structurally-correct CUDA. On-device numeric proof is
+    //! `ondevice/window_validate.cu`; these are source-shape + geometry pins.
+    use crate::ir::{Access, OpDef, ReduceOp};
+    use crate::plan::Schedule;
+    use crate::{build_plan, generate, Cuda};
+    use baracuda_kernels_types::{
+        structure_key, ArchSku, ElementKind, OpCategory, OperandDesc, StructureKey,
+    };
+
+    // input [8, k_in] contiguous, output [8, k_out] contiguous (downsampled).
+    fn window_key(dt: ElementKind, k_in: i64, k_out: i64) -> StructureKey {
+        let a = OperandDesc::new(2, &[8, k_in], &[k_in, 1], dt, 256);
+        let o = OperandDesc::new(2, &[8, k_out], &[k_out, 1], dt, 256);
+        structure_key(OpCategory::UnaryElementwise, &[a, o], ArchSku::Sm89)
+    }
+
+    #[test]
+    fn schedule_and_access_are_window() {
+        let p = OpDef::window_simple("pool", &[ElementKind::F32], ReduceOp::Max, 1, 3, 2, 1, 1, 1, false);
+        let key = window_key(ElementKind::F32, 128, 64);
+        let plan = build_plan(&p, &key);
+        assert!(matches!(plan.schedule, Schedule::Window { .. }));
+        assert!(matches!(plan.access, Access::Window { .. }));
+    }
+
+    #[test]
+    fn max_pool_emits_grid_stride_have_flag_and_nan_probe() {
+        let p = OpDef::window_simple("pool", &[ElementKind::F32], ReduceOp::Max, 1, 3, 2, 1, 1, 1, false);
+        let k = generate(&p, &window_key(ElementKind::F32, 128, 64), &Cuda);
+        assert_eq!(k.name, "baracuda_gen_pool_f32_window_max");
+        // one thread per OUTPUT element, grid-stride over n_out*k_out.
+        assert!(k.source.contains("long long total = n_out * k_out;"), "{}", k.source);
+        assert!(k.source.contains("long long o = t - row * k_out;"), "{}", k.source);
+        // tap position with stride/pad/dilation baked as literals (size 3, stride 2, pad 1, dil 1).
+        assert!(k.source.contains("long long p = o * 2 - 1 + (long long)kk * 1;"), "{}", k.source);
+        assert!(k.source.contains("if (p >= 0 && p < k_in)"), "{}", k.source);
+        // have-flag + NaN-propagate probe.
+        assert!(k.source.contains("if (!have || v != v || v > best)"), "{}", k.source);
+    }
+
+    #[test]
+    fn maxmin_pool_identity_is_header_light_no_infinity() {
+        // The Max/Min identity must be the bit-cast ±inf intrinsic, NOT the
+        // <cmath> INFINITY macro (the headerless-nvrtc discipline the scan/reduce
+        // paths follow).
+        for (op, ident) in [
+            (ReduceOp::Max, "__int_as_float(0xff800000u)"),
+            (ReduceOp::Min, "__int_as_float(0x7f800000u)"),
+        ] {
+            let p = OpDef::window_simple("pool", &[ElementKind::F32], op, 1, 2, 2, 1, 0, 0, false);
+            let k = generate(&p, &window_key(ElementKind::F32, 128, 64), &Cuda);
+            assert!(k.source.contains(ident), "{}", k.source);
+            assert!(!k.source.contains("INFINITY"), "no INFINITY macro:\n{}", k.source);
+        }
+    }
+
+    #[test]
+    fn min_pool_uses_less_than_compare() {
+        let p = OpDef::window_simple("pool", &[ElementKind::F32], ReduceOp::Min, 1, 2, 2, 1, 0, 0, false);
+        let k = generate(&p, &window_key(ElementKind::F32, 128, 64), &Cuda);
+        assert_eq!(k.name, "baracuda_gen_pool_f32_window_min");
+        assert!(k.source.contains("v != v || v < best"), "{}", k.source);
+    }
+
+    #[test]
+    fn avg_pool_exclude_pad_divides_by_valid_count() {
+        // count_include_pad=false ⇒ divide by the valid-tap count, guarded on cnt>0.
+        let p = OpDef::window_simple("pool", &[ElementKind::F32], ReduceOp::Mean, 1, 3, 1, 1, 1, 1, false);
+        let k = generate(&p, &window_key(ElementKind::F32, 128, 128), &Cuda);
+        assert_eq!(k.name, "baracuda_gen_pool_f32_window_mean");
+        assert!(k.source.contains("acc = acc + v;"), "{}", k.source);
+        assert!(k.source.contains("cnt += 1;"), "{}", k.source);
+        assert!(
+            k.source.contains("(cnt > 0) ? (acc / (float)cnt) : (float)0;"),
+            "{}",
+            k.source
+        );
+    }
+
+    #[test]
+    fn avg_pool_include_pad_divides_by_size_literal() {
+        // count_include_pad=true ⇒ divide by the window size literal; the entry
+        // point is suffixed `_cip` so the two divisor policies never collide.
+        let p = OpDef::window_simple("pool", &[ElementKind::F32], ReduceOp::Mean, 1, 4, 1, 1, 1, 1, true);
+        let k = generate(&p, &window_key(ElementKind::F32, 128, 128), &Cuda);
+        assert_eq!(k.name, "baracuda_gen_pool_f32_window_mean_cip");
+        assert!(k.source.contains("float prefix = acc / (float)4;"), "{}", k.source);
+    }
+
+    #[test]
+    fn sum_pool_has_no_divide() {
+        let p = OpDef::window_simple("pool", &[ElementKind::F32], ReduceOp::Sum, 1, 3, 1, 1, 0, 0, false);
+        let k = generate(&p, &window_key(ElementKind::F32, 128, 126), &Cuda);
+        assert_eq!(k.name, "baracuda_gen_pool_f32_window_sum");
+        assert!(k.source.contains("float prefix = acc;"), "{}", k.source);
+        assert!(!k.source.contains("/ (float)"), "sum-pool never divides:\n{}", k.source);
+    }
+
+    #[test]
+    fn f16_pool_upconverts_and_stores_half() {
+        let p = OpDef::window_simple("pool", &[ElementKind::F16], ReduceOp::Mean, 1, 2, 2, 1, 0, 0, false);
+        let k = generate(&p, &window_key(ElementKind::F16, 128, 64), &Cuda);
+        assert!(k.source.contains("#include <cuda_fp16.h>"), "{}", k.source);
+        assert!(k.source.contains("float v = __half2float(in0[idx]);"), "{}", k.source);
+        assert!(k.source.contains("out[t] = __float2half(prefix);"), "{}", k.source);
+    }
+
+    #[test]
+    fn integer_max_pool_uses_native_accumulator_no_infinity() {
+        // I32 max-pool selects in the native ctype; the identity is the exact int
+        // minimum literal (never a float INFINITY).
+        let p = OpDef::window_simple("pool", &[ElementKind::I32], ReduceOp::Max, 1, 2, 2, 1, 0, 0, false);
+        let k = generate(&p, &window_key(ElementKind::I32, 128, 64), &Cuda);
+        assert!(k.source.contains("int best = (-2147483647 - 1);"), "{}", k.source);
+        assert!(!k.source.contains("INFINITY"), "{}", k.source);
+        assert!(!k.source.contains("float"), "no float accumulator for int pool:\n{}", k.source);
+    }
+
+    /// Manual dump tool (not a wired assertion): regenerate the window `.cu`
+    /// sources the on-device validator `#include`s. Run with:
+    ///   `cargo test -p baracuda-kernelgen dump_window_sources -- --ignored --nocapture`
+    #[test]
+    #[ignore = "manual regeneration tool for ondevice/window_validate.cu"]
+    fn dump_window_sources() {
+        let out = std::env::var("WINDOW_OUT").unwrap_or_else(|_| ".".to_string());
+        let write = |k: crate::GeneratedKernel| {
+            std::fs::write(format!("{out}/{}.cu", k.name), &k.source).unwrap();
+            println!("wrote {out}/{}.cu", k.name);
+        };
+        // Geometry-encoded op_names so distinct (combine, geometry) cells emit
+        // distinct entry symbols (the kernel name encodes op/dtype/combine but NOT
+        // geometry — two geometries of one combine would otherwise collide). The
+        // harness `window_validate.cu` mirrors this matrix. Fields:
+        //   (op_name, dtype, combine, size, stride, dilation, pad_lo, pad_hi, cip)
+        let cases: &[(&str, ElementKind, ReduceOp, u8, u8, u8, u8, u8, bool)] = &[
+            // f32 — stride>1 no pad; stride1 + pad (NaN); dilated + pad both ends.
+            ("mx_a", ElementKind::F32, ReduceOp::Max, 2, 2, 1, 0, 0, false),
+            ("mx_b", ElementKind::F32, ReduceOp::Max, 3, 1, 1, 1, 1, false),
+            ("mx_c", ElementKind::F32, ReduceOp::Max, 3, 2, 2, 2, 2, false),
+            ("mn_b", ElementKind::F32, ReduceOp::Min, 3, 1, 1, 1, 1, false),
+            ("sm_d", ElementKind::F32, ReduceOp::Sum, 3, 2, 1, 0, 0, false),
+            ("av_b", ElementKind::F32, ReduceOp::Mean, 3, 1, 1, 1, 1, false),
+            ("ai_b", ElementKind::F32, ReduceOp::Mean, 3, 1, 1, 1, 1, true),
+            ("av_c", ElementKind::F32, ReduceOp::Mean, 3, 2, 2, 2, 2, false),
+            // f64 oracle-exact avg + max (dilated + padded).
+            ("av_c64", ElementKind::F64, ReduceOp::Mean, 3, 2, 2, 2, 2, false),
+            ("mx_c64", ElementKind::F64, ReduceOp::Max, 3, 2, 2, 2, 2, false),
+        ];
+        for &(name, dt, op, size, stride, dil, plo, phi, cip) in cases {
+            let p = OpDef::window_simple(name, &[dt], op, 1, size, stride, dil, plo, phi, cip);
+            write(generate(&p, &window_key(dt, 64, 32), &Cuda));
+        }
     }
 }

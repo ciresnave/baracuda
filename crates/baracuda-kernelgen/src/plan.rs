@@ -83,6 +83,31 @@ pub enum Schedule {
         /// `false` = serial-fold base; `true` = cooperative block-scan variant.
         block: bool,
     },
+    /// **Sliding-window reduction** along one axis (increment 7) — the POOLING
+    /// family (max_pool / avg_pool / sum_pool / min_pool). One thread per output
+    /// element (grid-stride) walks the local window of `size` taps, reduces with
+    /// `op`, and stores the downsampled output — [`crate::backend::VariantFidelity::BitIdentical`]
+    /// (each output is an independent fixed-order fold; no cross-output
+    /// dependence, unlike [`Schedule::Scan`]). The window geometry rides here
+    /// (this enum is `Copy`); `pre`/`post` ride on [`KernelPlan::access`].
+    Window {
+        /// The window combine (`Max`/`Min`/`Sum`/`Mean`).
+        op: ReduceOp,
+        /// The pooled axis (v1: `rank - 1`, innermost/contiguous).
+        axis: u8,
+        /// Window length in taps.
+        size: u8,
+        /// Output downsampling stride.
+        stride: u8,
+        /// Inter-tap dilation.
+        dilation: u8,
+        /// Low-side padding.
+        pad_lo: u8,
+        /// High-side padding.
+        pad_hi: u8,
+        /// Mean divisor policy: `size` (`true`) vs. valid-tap count (`false`).
+        count_include_pad: bool,
+    },
 }
 
 /// Reduce-axis geometry (design-doc predicate #9). All classes lower to the same
@@ -274,6 +299,33 @@ pub fn build_plan<'a>(op: &'a OpDef, key: &'a StructureKey) -> KernelPlan<'a> {
                 reverse,
                 exclusive,
                 block: false,
+            }
+        }
+        // Increment 7 WINDOW: validate admissibility (mirrors the Scan arm's
+        // `validate_scan` call), then derive the one-thread-per-output pooling
+        // schedule. The window geometry is Copy, so it rides the schedule; `pre`/
+        // `post` ride on `KernelPlan::access` (Scan/RowReduce precedent).
+        Access::Window {
+            op: wop,
+            axis,
+            size,
+            stride,
+            dilation,
+            pad_lo,
+            pad_hi,
+            count_include_pad,
+            ..
+        } => {
+            validate_window(op, key, axis, size, stride, dilation, pad_lo, pad_hi);
+            Schedule::Window {
+                op: wop,
+                axis,
+                size,
+                stride,
+                dilation,
+                pad_lo,
+                pad_hi,
+                count_include_pad,
             }
         }
         Access::Elementwise => {
@@ -668,6 +720,7 @@ fn access_tag(a: &Access) -> &'static str {
         Access::RowReduce { .. } => "RowReduce",
         Access::Contraction { .. } => "Contraction",
         Access::Scan { .. } => "Scan",
+        Access::Window { .. } => "Window",
     }
 }
 
@@ -1152,6 +1205,14 @@ fn assert_no_half_nextafter(op: &OpDef, dtype: ElementKind) {
             exprs.push(pre);
             exprs.push(post);
         }
+        // Increment 7 WINDOW: `pre` (per-tap pre-map) and `post` (per-output
+        // epilogue) both lower through the accumulator-width spellers (body ==
+        // post is already in), so a half `Nextafter` hidden in `pre` must miss
+        // honestly.
+        Access::Window { pre, post, .. } => {
+            exprs.push(pre);
+            exprs.push(post);
+        }
         // Review-caught gate asymmetry (increment 1): a multi-output op's EXTRA
         // output bodies must be walked too — else a half `Nextafter` hidden in an
         // extra body bypasses this honest-miss gate. Non-elementwise multi-output
@@ -1354,6 +1415,13 @@ fn assert_int_op_admissibility(op: &OpDef, dtype: ElementKind) {
             exprs.push(pre);
             exprs.push(post);
         }
+        // Increment 7 WINDOW: `pre`/`post` lower at the accumulator dtype (an int
+        // sum/max pool rides the same fold), so a Const/Param/Div/unary/int-only
+        // op there hits the same int hazards — gate both.
+        Access::Window { pre, post, .. } => {
+            exprs.push(pre);
+            exprs.push(post);
+        }
         // Review-caught gate asymmetry (increment 1): walk the EXTRA output bodies
         // too. Without this, an int-only op with a COMPOSED operand hides in a
         // multi-output extra body at U8/S8 and bypasses the 8-bit leaf-operand pin
@@ -1473,6 +1541,14 @@ fn assert_coord_admissibility(op: &OpDef, key: &StructureKey) {
             exprs.push(pre);
             exprs.push(post);
         }
+        // Increment 7 WINDOW: a Coord in `pre`/`post` is doubly rejected (here, the
+        // window is non-elementwise → the Coord arm fires; and the emitter's
+        // panicking `coord` closure). The window iterates the (row, o) space, not an
+        // elementwise output coordinate space.
+        Access::Window { pre, post, .. } => {
+            exprs.push(pre);
+            exprs.push(post);
+        }
         Access::Elementwise => {}
     }
     for e in exprs {
@@ -1586,6 +1662,15 @@ fn assert_valid_out_dtype(op: &OpDef) {
         Access::Scan { .. } => panic!(
             "OpDef '{}': out_dtype = Some({od:?}) is rejected under Scan — a prefix \
              scan is same-dtype as its input (a cumulative op does not change \
+             dtype), so there is no hetero store; use out_dtype = None",
+            op.name
+        ),
+        // Increment 7 WINDOW: a pool preserves the input dtype (max/avg pool output
+        // is same-dtype as the pooled tensor), so a hetero out_dtype has no exact
+        // store — reject it, exactly like Scan/RowReduce/Contraction.
+        Access::Window { .. } => panic!(
+            "OpDef '{}': out_dtype = Some({od:?}) is rejected under Window — a \
+             pooling reduction is same-dtype as its input (a pool does not change \
              dtype), so there is no hetero store; use out_dtype = None",
             op.name
         ),
@@ -1952,6 +2037,213 @@ fn validate_scan(op: &OpDef, key: &StructureKey, axis: u8, reverse: bool, exclus
             ScalarExpr::Const(v) => assert!(
                 v.is_finite(),
                 "Scan '{name}' {ctx} Const must be finite, got {v}"
+            ),
+            ScalarExpr::Param(_) | ScalarExpr::Coord(_) => {}
+            ScalarExpr::Unary(_, x) => check(x, n_inputs, allow_reduced, ctx, name),
+            ScalarExpr::Add(a, b)
+            | ScalarExpr::Sub(a, b)
+            | ScalarExpr::Mul(a, b)
+            | ScalarExpr::Div(a, b)
+            | ScalarExpr::Binary(_, a, b) => {
+                check(a, n_inputs, allow_reduced, ctx, name);
+                check(b, n_inputs, allow_reduced, ctx, name);
+            }
+        }
+    }
+    check(pre, op.n_inputs, false, "pre-map", name);
+    check(post, op.n_inputs, true, "post-epilogue", name);
+}
+
+/// Validate an [`Access::Window`] op at build time (increment 7; AOT — a window
+/// never crosses the JIT trust boundary, so a panic here is an author-error
+/// backstop). Mirrors [`validate_scan`]'s operand-role + layout checks, with the
+/// pooling-specific window-parameter gate:
+///
+/// - **`op != Prod`** — `Prod` is not a pool (a windowed product is niche and not
+///   in the pool family); rejected. `Max`/`Min`/`Sum`/`Mean` are admitted.
+/// - **`Mean` requires a float dtype** — an integer average has rounding
+///   semantics (i32 `sum/count` truncates); avg_pool is float-only. `Max`/`Min`/
+///   `Sum` are legal on the integer base too (max/min-pool select; sum-pool
+///   wraps, matching the reduction Sum contract).
+/// - **`axis == rank - 1`** — v1 pools the innermost (contiguous) axis only; a
+///   non-inner axis needs a strided window skeleton (deferred).
+/// - **`size`/`stride`/`dilation >= 1`** — a zero window / stride / dilation is a
+///   degenerate (empty-window) config.
+/// - **`2*pad_lo <= span` and `2*pad_hi <= span`** where the tap footprint is
+///   `span = dilation*(size-1) + 1` — each edge window must overlap the input by
+///   at least 1 tap (the bespoke `pool1d` `pad*2 <= window` constraint,
+///   generalized to dilation). A pad exceeding half the window would place an
+///   entire edge window in padding.
+///
+/// The `in_len → out_len` window arithmetic (`out_len = floor((in_len + pad_lo +
+/// pad_hi - dilation*(size-1) - 1)/stride) + 1`) is a **runtime-launch-arg caller
+/// precondition**, NOT a plan-time check: [`StructureKey`] deliberately abstracts
+/// numeric extents away (it carries per-operand contiguity/broadcast/flip, never
+/// shapes), so the plan gate cannot see `in_len`/`out_len` — the same trust level
+/// as RowReduce's `k`/`n_out` and `Coord`'s exact-integer extent bound. The output
+/// operand's LAYOUT (forward-dense contiguous, downsampled extent) IS keyed and is
+/// checked here.
+#[allow(clippy::too_many_arguments)]
+fn validate_window(
+    op: &OpDef,
+    key: &StructureKey,
+    axis: u8,
+    size: u8,
+    stride: u8,
+    dilation: u8,
+    pad_lo: u8,
+    pad_hi: u8,
+) {
+    let Access::Window {
+        op: wop, pre, post, ..
+    } = &op.access
+    else {
+        unreachable!("validate_window on a non-Window op");
+    };
+    let name = &op.name;
+
+    // Prod is not a pool; reject before anything else so the message is
+    // unambiguous. Max/Min/Sum/Mean are the admitted window combines.
+    assert!(
+        !matches!(wop, ReduceOp::Prod),
+        "OpDef '{name}': Window combine Prod is not a pool (a windowed product is \
+         out of the pooling family) — v1 pools Max/Min/Sum/Mean only"
+    );
+    // Mean (avg_pool) is float-only: an integer average rounds (i32 sum/count
+    // truncates). Max/Min/Sum ride the integer base too.
+    if matches!(wop, ReduceOp::Mean) {
+        assert!(
+            matches!(
+                key.dtype,
+                ElementKind::F16
+                    | ElementKind::Bf16
+                    | ElementKind::F32
+                    | ElementKind::F32Strict
+                    | ElementKind::F64
+            ),
+            "OpDef '{name}': Window Mean (avg_pool) requires a float dtype, got \
+             {:?} — an integer average has rounding semantics (miss honestly; \
+             integer max/min/sum-pool are legal)",
+            key.dtype
+        );
+    }
+
+    let n = op.n_inputs as usize;
+    assert!(
+        (1..MAX_OPERANDS).contains(&n),
+        "Window n_inputs {} out of [1, MAX_OPERANDS)",
+        op.n_inputs
+    );
+    assert!(
+        key.n_operands as usize == n + 1,
+        "Window expects n_inputs+1 operands (inputs then output); got {}",
+        key.n_operands
+    );
+    let rank = key.rank as usize;
+    assert!(rank >= 1, "Window needs a pooled axis (rank >= 1)");
+    let last = (rank - 1) as u8;
+
+    // v1: the innermost (contiguous, trailing) axis only.
+    assert!(
+        axis == last,
+        "Window v1 pools the innermost (contiguous) axis only: axis {axis} != \
+         rank-1 ({last}) — a non-inner window axis is a deferred follow-up (reject \
+         so the miss is honest, not silently wrong)"
+    );
+
+    // Window-parameter legality — a degenerate (empty-window) config is a reject.
+    assert!(size >= 1, "Window size must be >= 1 (an empty window has no taps)");
+    assert!(stride >= 1, "Window stride must be >= 1");
+    assert!(dilation >= 1, "Window dilation must be >= 1");
+    // span = the tap footprint (dilation*(size-1)+1); each edge window must overlap
+    // the input by >= 1 tap, i.e. 2*pad <= span (bespoke `pool1d` pad*2 <= window,
+    // generalized to dilation). u32 arithmetic avoids u8 overflow for large params.
+    let span = u32::from(dilation) * (u32::from(size) - 1) + 1;
+    assert!(
+        2 * u32::from(pad_lo) <= span,
+        "Window pad_lo {pad_lo} exceeds half the window span {span} \
+         (dilation*(size-1)+1) — an entire low-edge window would fall in padding; \
+         2*pad_lo <= span (bespoke pool1d pad*2 <= window)"
+    );
+    assert!(
+        2 * u32::from(pad_hi) <= span,
+        "Window pad_hi {pad_hi} exceeds half the window span {span} \
+         (dilation*(size-1)+1) — an entire high-edge window would fall in padding; \
+         2*pad_hi <= span (bespoke pool1d pad*2 <= window)"
+    );
+
+    // Operand roles + layout legality (mirrors validate_scan). Input 0 is the
+    // row-streamed pooled tensor: `base = row*k_in` + the tap walk `idx = base+p`
+    // assume a dense, forward inner axis, so it must be Contig and NOT flipped.
+    let mut input0_streamed = false;
+    #[allow(clippy::needless_range_loop)]
+    for i in 0..n {
+        let o = key.operands[i];
+        match rr_role(o, last) {
+            RrRole::RowStreamed => {
+                assert!(
+                    o.contig == Contiguity::Contig,
+                    "Window streamed input {i} must be contiguous (base = row*k_in assumes a dense pooled axis)"
+                );
+                assert!(
+                    !o.flipped,
+                    "Window streamed input {i} must not be reversed along an axis (idx = base+p reads forward-dense; a flipped view reads mirrored/OOB)"
+                );
+                input0_streamed |= i == 0;
+            }
+            RrRole::ColBroadcast => {
+                assert!(
+                    !o.bcast.is_set(last) && (0..last).all(|d| o.bcast.is_set(d)),
+                    "Window column input {i} must broadcast every outer axis and vary along the pooled axis (in_i[p])"
+                );
+                assert!(!o.flipped, "Window column input {i} must not be reversed");
+            }
+            RrRole::RowScalar => {
+                assert!(
+                    rank >= 2 && (0..last).all(|d| !o.bcast.is_set(d)),
+                    "Window row-scalar input {i} needs rank >= 2 and no outer-axis broadcast (in_i[row]); an all-broadcast operand is a true scalar (bake as Const)"
+                );
+                assert!(!o.flipped, "Window row-scalar input {i} must not be reversed");
+            }
+        }
+    }
+    assert!(
+        input0_streamed,
+        "Window Input0 must be the row-streamed pooled tensor, not a column-broadcast weight or a per-row scalar"
+    );
+    // The output is full-width forward-dense contiguous (a DOWNSAMPLED extent — the
+    // caller sizes it via the window formula, a runtime precondition — but the same
+    // layout class as the input's inner axis).
+    let out = key.operands[n];
+    assert!(
+        out.bcast.is_empty() && out.contig == Contiguity::Contig && !out.flipped,
+        "Window output must be full-width forward-dense contiguous (empty bcast, not flipped)"
+    );
+
+    // Expression legality (mirrors validate_scan): `pre` (per-tap pre-map) runs
+    // BEFORE the fold, so it must NOT read the window result (`Reduced` rejected in
+    // `pre`); `post` (per-output epilogue) reads the result as the single
+    // `Reduced(0)` leaf. Coord is rejected upstream (non-elementwise); Param is
+    // f32-only (emitter). Input indices must be in range.
+    fn check(e: &ScalarExpr, n_inputs: u8, allow_reduced: bool, ctx: &str, name: &str) {
+        match e {
+            ScalarExpr::Input(i) => assert!(
+                *i < n_inputs,
+                "Window '{name}' {ctx} Input({i}) >= n_inputs {n_inputs}"
+            ),
+            ScalarExpr::Reduced(s) => {
+                assert!(
+                    allow_reduced,
+                    "Window '{name}' {ctx} must not read Reduced({s}) — the window result does not exist in the pre-map (it reads taps only)"
+                );
+                assert!(
+                    *s == 0,
+                    "Window '{name}' {ctx} Reduced({s}) — the window result is the single Reduced(0) leaf"
+                );
+            }
+            ScalarExpr::Const(v) => assert!(
+                v.is_finite(),
+                "Window '{name}' {ctx} Const must be finite, got {v}"
             ),
             ScalarExpr::Param(_) | ScalarExpr::Coord(_) => {}
             ScalarExpr::Unary(_, x) => check(x, n_inputs, allow_reduced, ctx, name),
@@ -2926,5 +3218,328 @@ mod scan_gate_validate {
         let key = structure_key(OpCategory::UnaryElementwise, &[a, o], ArchSku::Sm89);
         let sc = OpDef::scan_simple("cum", &[ElementKind::F32], ReduceOp::Sum, 1, false, false);
         let _ = build_plan(&sc, &key);
+    }
+}
+
+#[cfg(test)]
+mod window_gate_validate {
+    //! Increment-7 WINDOW gate-rejection tests. Per the house rule these call
+    //! `build_plan` DIRECTLY — an emitter panic would mask a gate mutation (the 0c
+    //! lesson). Every `validate_window` (and `assert_valid_out_dtype`) rejection
+    //! has a test here; each window-specific gate is mutation-checked both
+    //! directions by a targeted reverse-edit.
+    use super::{build_plan, Schedule};
+    use crate::ir::{input, konst, reduced, OpDef, ReduceOp};
+    use baracuda_kernels_types::{
+        structure_key, ArchSku, ElementKind, OpCategory, OperandDesc, StructureKey,
+    };
+
+    // A rank-2 window cell: contiguous input [256,128] + downsampled contiguous
+    // output [256,64] (the extent is NOT keyed — only the layout class is — so any
+    // Contig output stands in; the k_in→k_out arithmetic is a runtime precondition).
+    fn window_key(dt: ElementKind) -> StructureKey {
+        let a = OperandDesc::new(2, &[256, 128], &[128, 1], dt, 256);
+        let o = OperandDesc::new(2, &[256, 64], &[64, 1], dt, 256);
+        structure_key(OpCategory::UnaryElementwise, &[a, o], ArchSku::Sm89)
+    }
+
+    // A plain single-input pool: size/stride/dilation/pad_lo/pad_hi/cip.
+    #[allow(clippy::too_many_arguments)]
+    fn pool(
+        op: ReduceOp,
+        dt: ElementKind,
+        axis: u8,
+        size: u8,
+        stride: u8,
+        dilation: u8,
+        pad_lo: u8,
+        pad_hi: u8,
+        cip: bool,
+    ) -> OpDef {
+        OpDef::window_simple("pool", &[dt], op, axis, size, stride, dilation, pad_lo, pad_hi, cip)
+    }
+
+    #[test]
+    fn valid_window_builds_all_combines_and_geometry() {
+        // Max/Min/Sum/Mean × a spread of stride/dilation/pad build; the schedule is
+        // the pooling Window on the innermost axis (rank-1 = 1).
+        for op in [ReduceOp::Max, ReduceOp::Min, ReduceOp::Sum, ReduceOp::Mean] {
+            for &(size, stride, dilation, pad) in
+                &[(2u8, 2u8, 1u8, 0u8), (3, 1, 1, 1), (3, 2, 2, 2), (5, 3, 1, 2)]
+            {
+                let p = pool(op, ElementKind::F32, 1, size, stride, dilation, pad, pad, false);
+                let key = window_key(ElementKind::F32);
+                let plan = build_plan(&p, &key);
+                assert_eq!(
+                    plan.schedule,
+                    Schedule::Window {
+                        op,
+                        axis: 1,
+                        size,
+                        stride,
+                        dilation,
+                        pad_lo: pad,
+                        pad_hi: pad,
+                        count_include_pad: false,
+                    }
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn integer_max_min_sum_pool_builds() {
+        // Max/Min/Sum ride the integer base (select / wrapping sum); only Mean is
+        // float-gated.
+        for op in [ReduceOp::Max, ReduceOp::Min, ReduceOp::Sum] {
+            let p = pool(op, ElementKind::I32, 1, 2, 2, 1, 0, 0, false);
+            let _ = build_plan(&p, &window_key(ElementKind::I32));
+        }
+    }
+
+    #[test]
+    fn avg_pool_count_include_pad_flag_rides_schedule() {
+        let p = pool(ReduceOp::Mean, ElementKind::F32, 1, 3, 1, 1, 1, 1, true);
+        let key = window_key(ElementKind::F32);
+        let plan = build_plan(&p, &key);
+        assert!(matches!(
+            plan.schedule,
+            Schedule::Window { op: ReduceOp::Mean, count_include_pad: true, .. }
+        ));
+    }
+
+    // ---- window-specific gates (each mutation-checked both directions) ----
+
+    #[test]
+    #[should_panic(expected = "not a pool")]
+    fn prod_combine_rejected() {
+        let p = pool(ReduceOp::Prod, ElementKind::F32, 1, 2, 2, 1, 0, 0, false);
+        let _ = build_plan(&p, &window_key(ElementKind::F32));
+    }
+
+    #[test]
+    #[should_panic(expected = "requires a float dtype")]
+    fn mean_on_integer_rejected() {
+        // avg_pool (Mean) at an integer dtype rounds — reject (Max/Min/Sum are OK).
+        let p = pool(ReduceOp::Mean, ElementKind::I32, 1, 2, 2, 1, 0, 0, false);
+        let _ = build_plan(&p, &window_key(ElementKind::I32));
+    }
+
+    #[test]
+    #[should_panic(expected = "innermost")]
+    fn non_inner_axis_rejected() {
+        let p = pool(ReduceOp::Max, ElementKind::F32, 0, 2, 2, 1, 0, 0, false);
+        let _ = build_plan(&p, &window_key(ElementKind::F32));
+    }
+
+    #[test]
+    #[should_panic(expected = "size must be >= 1")]
+    fn zero_size_rejected() {
+        let p = pool(ReduceOp::Max, ElementKind::F32, 1, 0, 2, 1, 0, 0, false);
+        let _ = build_plan(&p, &window_key(ElementKind::F32));
+    }
+
+    #[test]
+    #[should_panic(expected = "stride must be >= 1")]
+    fn zero_stride_rejected() {
+        let p = pool(ReduceOp::Max, ElementKind::F32, 1, 2, 0, 1, 0, 0, false);
+        let _ = build_plan(&p, &window_key(ElementKind::F32));
+    }
+
+    #[test]
+    #[should_panic(expected = "dilation must be >= 1")]
+    fn zero_dilation_rejected() {
+        let p = pool(ReduceOp::Max, ElementKind::F32, 1, 2, 2, 0, 0, 0, false);
+        let _ = build_plan(&p, &window_key(ElementKind::F32));
+    }
+
+    #[test]
+    #[should_panic(expected = "pad_lo")]
+    fn pad_lo_over_half_span_rejected() {
+        // span = dilation*(size-1)+1 = 1*(2-1)+1 = 2; pad_lo=2 ⇒ 2*2=4 > 2 → reject.
+        let p = pool(ReduceOp::Max, ElementKind::F32, 1, 2, 2, 1, 2, 0, false);
+        let _ = build_plan(&p, &window_key(ElementKind::F32));
+    }
+
+    #[test]
+    #[should_panic(expected = "pad_hi")]
+    fn pad_hi_over_half_span_rejected() {
+        let p = pool(ReduceOp::Max, ElementKind::F32, 1, 2, 2, 1, 0, 2, false);
+        let _ = build_plan(&p, &window_key(ElementKind::F32));
+    }
+
+    // ---- operand-role / output-layout / expr gates (mirror validate_scan) ----
+
+    #[test]
+    #[should_panic(expected = "must be contiguous")]
+    fn non_contig_pooled_input_rejected() {
+        let a = OperandDesc::new(2, &[256, 128], &[1, 256], ElementKind::F32, 256);
+        let o = OperandDesc::new(2, &[256, 64], &[64, 1], ElementKind::F32, 256);
+        let key = structure_key(OpCategory::UnaryElementwise, &[a, o], ArchSku::Sm89);
+        let p = pool(ReduceOp::Max, ElementKind::F32, 1, 2, 2, 1, 0, 0, false);
+        let _ = build_plan(&p, &key);
+    }
+
+    #[test]
+    #[should_panic(expected = "must not be reversed")]
+    fn flipped_input_rejected() {
+        let a = OperandDesc::new(2, &[256, 128], &[128, -1], ElementKind::F32, 256);
+        let o = OperandDesc::new(2, &[256, 64], &[64, 1], ElementKind::F32, 256);
+        let key = structure_key(OpCategory::UnaryElementwise, &[a, o], ArchSku::Sm89);
+        let p = pool(ReduceOp::Max, ElementKind::F32, 1, 2, 2, 1, 0, 0, false);
+        let _ = build_plan(&p, &key);
+    }
+
+    #[test]
+    #[should_panic(expected = "full-width forward-dense")]
+    fn flipped_output_rejected() {
+        let a = OperandDesc::new(2, &[256, 128], &[128, 1], ElementKind::F32, 256);
+        let o = OperandDesc::new(2, &[256, 64], &[64, -1], ElementKind::F32, 256);
+        let key = structure_key(OpCategory::UnaryElementwise, &[a, o], ArchSku::Sm89);
+        let p = pool(ReduceOp::Max, ElementKind::F32, 1, 2, 2, 1, 0, 0, false);
+        let _ = build_plan(&p, &key);
+    }
+
+    #[test]
+    #[should_panic(expected = "Input0 must be the row-streamed")]
+    fn input0_not_streamed_rejected() {
+        // Input0 broadcast along the pooled (last) axis keys as a per-row scalar.
+        let a = OperandDesc::new(2, &[256, 128], &[1, 0], ElementKind::F32, 256);
+        let o = OperandDesc::new(2, &[256, 64], &[64, 1], ElementKind::F32, 256);
+        let key = structure_key(OpCategory::UnaryElementwise, &[a, o], ArchSku::Sm89);
+        let p = pool(ReduceOp::Max, ElementKind::F32, 1, 2, 2, 1, 0, 0, false);
+        let _ = build_plan(&p, &key);
+    }
+
+    #[test]
+    #[should_panic(expected = "rejected under Window")]
+    fn hetero_out_dtype_rejected() {
+        let mut p = pool(ReduceOp::Max, ElementKind::F32, 1, 2, 2, 1, 0, 0, false);
+        p.out_dtype = Some(ElementKind::U8);
+        let _ = build_plan(&p, &window_key(ElementKind::F32));
+    }
+
+    #[test]
+    #[should_panic(expected = "must not read Reduced")]
+    fn pre_map_reading_reduced_rejected() {
+        let p = OpDef::window(
+            "pool", 1, &[ElementKind::F32], ReduceOp::Sum, 1, 2, 2, 1, 0, 0, false,
+            reduced(0), reduced(0),
+        );
+        let _ = build_plan(&p, &window_key(ElementKind::F32));
+    }
+
+    #[test]
+    #[should_panic(expected = "single Reduced(0) leaf")]
+    fn post_reading_reduced_nonzero_rejected() {
+        let p = OpDef::window(
+            "pool", 1, &[ElementKind::F32], ReduceOp::Sum, 1, 2, 2, 1, 0, 0, false,
+            input(0), reduced(1),
+        );
+        let _ = build_plan(&p, &window_key(ElementKind::F32));
+    }
+
+    #[test]
+    #[should_panic(expected = ">= n_inputs")]
+    fn pre_input_out_of_range_rejected() {
+        let p = OpDef::window(
+            "pool", 1, &[ElementKind::F32], ReduceOp::Sum, 1, 2, 2, 1, 0, 0, false,
+            input(5), reduced(0),
+        );
+        let _ = build_plan(&p, &window_key(ElementKind::F32));
+    }
+
+    #[test]
+    #[should_panic(expected = "Const must be finite")]
+    fn nonfinite_const_in_post_rejected() {
+        let p = OpDef::window(
+            "pool", 1, &[ElementKind::F32], ReduceOp::Sum, 1, 2, 2, 1, 0, 0, false,
+            input(0),
+            crate::ir::Expr(crate::ir::ScalarExpr::Add(
+                Box::new(reduced(0).0),
+                Box::new(konst(f64::NAN).0),
+            )),
+        );
+        let _ = build_plan(&p, &window_key(ElementKind::F32));
+    }
+
+    // ---- review-caught coverage: pin the pad <= half-span EQUALITY boundary
+    // from BOTH sides (a `<=`->`<` mutation previously survived — every positive
+    // geometry had 2*pad strictly < span, yet size=2/pad=1 is the PyTorch-legal
+    // kernel_size=2/padding=1 pool and MUST build). ----
+
+    #[test]
+    fn pad_equal_to_half_span_builds() {
+        // span = dilation*(size-1)+1 = 2; 2*pad_lo = 2*pad_hi = 2 == span — the
+        // boundary case is legal (each edge window still overlaps >= 1 tap).
+        let p = pool(ReduceOp::Max, ElementKind::F32, 1, 2, 2, 1, 1, 1, false);
+        let key = window_key(ElementKind::F32);
+        let plan = build_plan(&p, &key);
+        assert!(matches!(plan.schedule, Schedule::Window { pad_lo: 1, pad_hi: 1, .. }));
+    }
+
+    #[test]
+    #[should_panic(expected = "pad_lo 2 exceeds half the window span")]
+    fn pad_lo_one_past_half_span_rejected() {
+        // span = 2; 2*pad_lo = 4 > 2 — one past the boundary rejects.
+        let p = pool(ReduceOp::Max, ElementKind::F32, 1, 2, 2, 1, 2, 0, false);
+        let _ = build_plan(&p, &window_key(ElementKind::F32));
+    }
+
+    #[test]
+    #[should_panic(expected = "pad_hi 2 exceeds half the window span")]
+    fn pad_hi_one_past_half_span_rejected() {
+        let p = pool(ReduceOp::Max, ElementKind::F32, 1, 2, 2, 1, 0, 2, false);
+        let _ = build_plan(&p, &window_key(ElementKind::F32));
+    }
+
+    // ---- review-caught coverage: the ColBroadcast / RowScalar operand-role gates
+    // were unreachable by any test (every pool was single-input). A 2-input window
+    // (pre = input(0)*input(1), the per-column-weight shape validate_scan also
+    // admits) reaches them for i >= 1. ----
+
+    // A 2-input window cell: streamed input0 + a second operand with the given
+    // key, then the downsampled output.
+    fn two_input_pool(second: OperandDesc) -> (OpDef, StructureKey) {
+        let a = OperandDesc::new(2, &[256, 128], &[128, 1], ElementKind::F32, 256);
+        let o = OperandDesc::new(2, &[256, 64], &[64, 1], ElementKind::F32, 256);
+        let key = structure_key(OpCategory::BinaryElementwise, &[a, second, o], ArchSku::Sm89);
+        let p = OpDef::window(
+            "wpool", 2, &[ElementKind::F32], ReduceOp::Sum, 1, 2, 2, 1, 0, 0, false,
+            input(0) * input(1),
+            reduced(0),
+        );
+        (p, key)
+    }
+
+    #[test]
+    fn weighted_pool_with_column_weight_builds() {
+        // input1 = a per-column weight broadcast over rows (stride 0 on the outer
+        // axis, varying along the pooled axis) — the ColBroadcast happy path. Full
+        // iteration shape with a 0 stride marks the broadcast (the scan-test
+        // convention).
+        let w = OperandDesc::new(2, &[256, 128], &[0, 1], ElementKind::F32, 256);
+        let (p, key) = two_input_pool(w);
+        let _ = build_plan(&p, &key);
+    }
+
+    #[test]
+    #[should_panic(expected = "column input 1 must not be reversed")]
+    fn flipped_column_weight_rejected() {
+        // The same column weight REVERSED along the pooled axis: |stride|-varying +
+        // flipped — the in_i[p] read would be mirrored.
+        let w = OperandDesc::new(2, &[256, 128], &[0, -1], ElementKind::F32, 256);
+        let (p, key) = two_input_pool(w);
+        let _ = build_plan(&p, &key);
+    }
+
+    #[test]
+    #[should_panic(expected = "row-scalar input 1 must not be reversed")]
+    fn flipped_row_scalar_rejected() {
+        // input1 = a per-row scalar (broadcast along the pooled axis) but REVERSED
+        // along the outer axis — in_i[row] would read mirrored.
+        let s = OperandDesc::new(2, &[256, 128], &[-1, 0], ElementKind::F32, 256);
+        let (p, key) = two_input_pool(s);
+        let _ = build_plan(&p, &key);
     }
 }

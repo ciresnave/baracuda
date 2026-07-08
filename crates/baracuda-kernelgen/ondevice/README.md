@@ -1058,3 +1058,112 @@ Scan is a **stronger miss** than those: before this increment it could not even 
 represented; after it, the AOT kernel generates and runs (proven here) but still
 crosses no Fuel wire. Keying stays **additive** (`baracuda-kernels-types` UNTOUCHED —
 the `_blockscan` entry_point disambiguates the variant on the wire, never the token).
+
+## `window_validate.cu` — sliding-window pooling (increment 7)
+
+Validates `Access::Window` — a sliding-window reduction (the POOLING family:
+`max_pool` / `min_pool` / `sum_pool` / `avg_pool`) along the innermost (contiguous)
+axis, with `size` / `stride` / `dilation` / `pad_lo` / `pad_hi` and a
+`count_include_pad` divisor policy (Mean only). One form ships:
+
+- **serial-fold BASE** (`_window_{max,min,sum,mean}[_cip]`) —
+  `VariantFidelity::BitIdentical`, **one thread per OUTPUT element** (grid-stride)
+  walking the local window at input tap `p = o*stride − pad_lo + kk*dilation` for
+  `kk in 0..size`. Each output is an **independent fixed-order fold** (no cross-output
+  dependence, unlike the scan prefix), so it is naturally parallel AND
+  bit-reproducible. Padding taps are **skipped** for Max/Min (padding never wins) and
+  **contribute the additive identity** for Sum; `avg_pool` divides by `size`
+  (`count_include_pad`) or the valid-tap count. NaN propagates through Max/Min via the
+  `v != v` probe. No variant (a pool has no reassociation to offer — it is already
+  memory-optimal, see the perf row).
+
+The window geometry is baked into each kernel as **compile-time literals**, and the
+kernel name encodes op/dtype/combine but NOT geometry, so the dump tool gives each
+`(combine, geometry)` cell a geometry-encoding `op_name` (`mx_a`, `av_c`, …) to keep
+entry symbols distinct.
+
+**Regeneration:** these cells are **not** in the `bin/kernelgen.rs` catalog.
+
+```sh
+WINDOW_OUT=<outdir> cargo test -p baracuda-kernelgen dump_window_sources -- --ignored --nocapture
+cp crates/baracuda-kernelgen/ondevice/window_validate.cu <outdir>/
+nvcc -O3 -arch=sm_89 <outdir>/window_validate.cu -o <outdir>/window_validate && <outdir>/window_validate
+```
+
+The dump tool (`cuda::window_tests::dump_window_sources`) writes the 8 f32 cells
+(max/min/sum + avg exclude/include, across a stride/dilation/pad spread) and 2 f64
+cells (avg + max, dilated + padded) — the exact `#include` set the harness names.
+
+**Sanitizers** (small shapes via the `san` argv):
+
+```sh
+compute-sanitizer --tool memcheck  ./window_validate san
+compute-sanitizer --tool racecheck ./window_validate san
+compute-sanitizer --tool synccheck ./window_validate san
+compute-sanitizer --tool initcheck ./window_validate san
+```
+
+**Last run:** RTX 4070 Laptop (sm_89), CUDA 13.3 / nvcc 13.3 — **RESULT: ALL PASSED**
+(12 checks); `compute-sanitizer` **memcheck / racecheck / synccheck / initcheck all 0
+errors**.
+
+Every cell below is **device-launched** (not equivalence-covered) unless noted:
+
+- **max/min/sum-pool bit-exact** — memcmp-exact vs a CPU float oracle mirroring the
+  tap order, across **stride 1 and >1**, **dilation 1 and >1**, and **pad both ends**
+  (`s2 d1 p0`, `s1 d1 p1`, `s2 d2 p2`). The `s2 d2 p2` geometry's edge windows
+  **overhang both ends** (span 5, pad 2) — the padding-skip path, device-exercised.
+- **avg_pool** — both divisor policies device-launched: **exclude-pad** (divide by the
+  valid-tap count, `cnt>0`-guarded) and **include-pad** (`_cip`, divide by the `size`
+  literal), across stride 1 and the dilated `s2 d2 p2`. Diffed **within 1 ULP** for the
+  FP divide — and observed **bit-exact (0 ULP)** in this run (the CPU oracle divides in
+  the same float order).
+- **f64 oracle-exact** — avg + max at `s2 d2 p2` memcmp-exact vs a double oracle
+  (0 ULP). The f16/bf16 pools use the same **float accumulator + fold as the
+  device-validated f32 window cells** (only the loads/stores differ, through the
+  `__half2float`/`__float2half` convert primitive the packed-f16 elementwise path
+  already exercises), so they are **covered by equivalence, not a separate launch**.
+- **NaN propagation** — a planted NaN inside a `max_pool` window makes every covering
+  output NaN (`v != v`), the others unaffected; device-launched, and the full output
+  is additionally memcmp-exact vs the NaN-aware oracle.
+
+**Extract-the-delta — vs the memory-bandwidth ceiling (NOT a math-matched bespoke).**
+The bespoke fixed-window `MaxPool1d`/`AvgPool1d` (`crates/baracuda-kernels/src/pool/
+{max,avg}_pool1d.rs`) ride **cuDNN's Nd-pooling descriptor** — an **opaque library**
+path with **no exposed `_run` launcher and no fixed-window `.cu`** whose math order we
+could match bit-for-bit. The bespoke pool `.cu` kernels that DO expose `_run`
+launchers — `adaptive_{avg,max}_pool*`, `fractional_max_pool*`, `lp_pool1d` — are all
+DIFFERENT reductions/windowing schemes (non-uniform windows, or an Lp p-norm), none a
+math-matched sibling for fixed-window max/avg/sum pooling. So there is nothing to
+memcmp against; pooling is memory-bound, so the figure of merit is GB/s vs the copy
+ceiling:
+
+| kernel | technique | ms | GB/s (read+write) | vs copy ceiling |
+| --- | --- | --- | --- | --- |
+| gen `max_pool` 2× | one thread per output | 1.75 | **230.6** | **102%** |
+| `cudaMemcpy` D2D | copy | — | 225.4 | 100% |
+
+`max_pool` 2×-downsample on `8192×8192` f32 reads at **230.6 GB/s — the
+copy-bandwidth ceiling** (memory optimal; the ~102%-of-copy figure reflects the pool
+writing only half the input on a 2× downsample). No losing cell to record; the
+generator saturates bandwidth, which the opaque cuDNN path cannot beat on a
+memory-bound op. (A math-matched bespoke comparison is impossible until a bespoke
+fixed-window pool `.cu` with a `_run` launcher exists.)
+
+**Fuel contract (honest miss, AOT-only):** a window emits **no contract** — neither
+`contract.rs` nor `pattern.rs` has any Pool/Window vocabulary and Fuel exposes no
+Pool/Window `OpKind` (the pool family rides bespoke cuDNN, opaque), so
+`derive_pattern` rejects it as `NotElementwise` before any body walk and `contract()`
+returns `None` (the Reduction/Scan/Contraction precedent — pinned by
+`contract::tests::window_is_an_honest_miss_no_contract`). Keying stays **additive**
+(`baracuda-kernels-types` UNTOUCHED — the window params ride the `OpDef` + the
+`_window_<combine>[_cip]` entry_point, never the token).
+
+**De-scoped from v1** (queued follow-ups, documented in `Access::Window`): im2col
+(dimension EXPANSION, not reduction), causal_conv1d (needs a weight operand → windowed
+contraction), interpolate/bilinear (Coord-computed weights, 2-D window), N-D /
+multi-axis windows, overlap-backward (rides atomics / gather-sum), and the non-inner
+window axis. The `in_len → out_len` window arithmetic is a **runtime-launch-arg caller
+precondition** (the structure key abstracts numeric extents away — the same trust
+level as RowReduce's `k`/`n_out`); the output operand's LAYOUT (forward-dense
+contiguous, downsampled) IS keyed and gate-checked.

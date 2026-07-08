@@ -1028,6 +1028,70 @@ pub enum Access {
         /// same bridge `RowReduce`/`Contraction` epilogues use).
         post: ScalarExpr,
     },
+    /// **Sliding-window reduction** along a single axis (increment 7) — the
+    /// POOLING family (`max_pool`/`avg_pool`, plus the free `min_pool`/`sum_pool`
+    /// the same monoid machinery yields). Structurally a cousin of
+    /// [`Access::Reduction`], but the fold runs over a **sliding local
+    /// neighborhood** of `size` taps rather than a whole axis, and the output axis
+    /// is **DOWNSAMPLED**: `out_len = floor((in_len + pad_lo + pad_hi -
+    /// dilation*(size-1) - 1)/stride) + 1`. Not a [`View`] (a view is a 1:1
+    /// coordinate remap — one read per output); a window is a MULTI-TAP access
+    /// (`size` reads per output) with a different output extent.
+    ///
+    /// For output coord `o` the window taps input position
+    /// `p = o*stride - pad_lo + k*dilation` for `k in 0..size`. A tap with
+    /// `p ∉ [0, in_len)` is **out of bounds**: it is SKIPPED for `Max`/`Min`
+    /// (padding never wins), contributes the additive identity `0` for `Sum`, and
+    /// for `Mean` (avg_pool) is excluded from the sum and — per
+    /// `count_include_pad` — from the divisor (`false`: divide by the valid-tap
+    /// count; `true`: divide by `size`). NaN propagates through `Max`/`Min` via the
+    /// `v != v` probe (the same rule as [`Access::Scan`]/[`Access::Reduction`]).
+    ///
+    /// v1 scope (`plan::validate_window`): `axis == rank - 1` (innermost,
+    /// contiguous); `op ∈ {Max, Min, Sum, Mean}` (`Prod` rejected — not a pool;
+    /// `Mean` requires a float dtype — integer average rounds); `size`/`stride`/
+    /// `dilation >= 1`; `2*pad_lo <= span` and `2*pad_hi <= span` where
+    /// `span = dilation*(size-1)+1` (each edge window overlaps the input — the
+    /// bespoke `pool1d` `pad*2 <= window` constraint, generalized to dilation).
+    /// The `in_len → out_len` window arithmetic is a **runtime-launch-arg caller
+    /// precondition** (the structure key abstracts numeric extents away, so it
+    /// cannot be validated at plan time — the same trust level as RowReduce's
+    /// `k`/`n_out`). Deferred: im2col (dimension EXPANSION), causal_conv1d (needs a
+    /// weight operand → windowed contraction), interpolate/bilinear (Coord weights,
+    /// 2-D), N-D / multi-axis windows, and overlap-backward (rides atomics /
+    /// gather-sum).
+    Window {
+        /// The window combine (reuses [`ReduceOp`]). `Mean` = avg_pool (fold as a
+        /// sum, then divide by the count per `count_include_pad`); `Sum` = sum_pool;
+        /// `Max`/`Min` = max/min pool. `Prod` is rejected at `plan::validate_window`.
+        op: ReduceOp,
+        /// The pooled axis. v1 asserts `axis == rank - 1` (innermost, contiguous).
+        axis: u8,
+        /// Window length in taps (`>= 1`).
+        size: u8,
+        /// Output downsampling stride (`>= 1`).
+        stride: u8,
+        /// Inter-tap dilation (`>= 1`; `1` = dense taps).
+        dilation: u8,
+        /// Zero-/skip padding before the axis (low side).
+        pad_lo: u8,
+        /// Zero-/skip padding after the axis (high side).
+        pad_hi: u8,
+        /// **Mean only**: divide by `size` (`true`, count padding in the divisor —
+        /// the TensorFlow / `count_include_pad=True` convention) vs. by the
+        /// valid-tap count (`false` — the PyTorch avg_pool default). Ignored by
+        /// `Max`/`Min`/`Sum` (padding is skipped / contributes the identity there).
+        count_include_pad: bool,
+        /// Per-tap **pre-map** applied to each in-bounds input tap before it enters
+        /// the fold (identity default = `ScalarExpr::Input(0)`). Reads inputs only
+        /// (no running result exists yet) — a `Reduced` leaf is rejected.
+        pre: ScalarExpr,
+        /// Per-output **epilogue** applied to the finalized window result, which it
+        /// references as the single `Reduced(0)` leaf (identity default =
+        /// `ScalarExpr::Reduced(0)`) — the same bridge `Scan`/`RowReduce`/
+        /// `Contraction` epilogues use.
+        post: ScalarExpr,
+    },
 }
 
 /// Per-axis role in a contraction — the `{Batch, FreeM, FreeN, ContractedK}`
@@ -1805,6 +1869,92 @@ impl OpDef {
             axis,
             reverse,
             exclusive,
+            Expr(ScalarExpr::Input(0)),
+            Expr(ScalarExpr::Reduced(0)),
+        )
+    }
+
+    /// Build a **sliding-window reduction** op (increment 7): a max_pool / avg_pool
+    /// / sum_pool / min_pool along `axis` with `size`/`stride`/`dilation`/`pad_lo`/
+    /// `pad_hi` and a `count_include_pad` divisor policy (Mean only). `pre` is the
+    /// per-tap pre-map applied before the fold (identity: `input(0)`); `post` is the
+    /// per-output epilogue over the finalized window result, referenced as
+    /// `reduced(0)` (identity: `reduced(0)`). `body == post`, mirroring
+    /// [`OpDef::scan`]/[`OpDef::row_reduce`], so every body-walker (params/flops/ulp/
+    /// DAG/`derive_pattern`) operates on the primary output expr unchanged. v1
+    /// asserts `axis == rank - 1` and the window-param legality at
+    /// `plan::validate_window`. See [`Access::Window`].
+    #[must_use]
+    #[allow(clippy::too_many_arguments)]
+    pub fn window(
+        name: &str,
+        n_inputs: u8,
+        dtypes: &[ElementKind],
+        op: ReduceOp,
+        axis: u8,
+        size: u8,
+        stride: u8,
+        dilation: u8,
+        pad_lo: u8,
+        pad_hi: u8,
+        count_include_pad: bool,
+        pre: Expr,
+        post: Expr,
+    ) -> Self {
+        Self {
+            name: name.to_string(),
+            n_inputs,
+            body: post.0.clone(),
+            dtypes: dtypes.to_vec(),
+            access: Access::Window {
+                op,
+                axis,
+                size,
+                stride,
+                dilation,
+                pad_lo,
+                pad_hi,
+                count_include_pad,
+                pre: pre.0,
+                post: post.0,
+            },
+            views: Vec::new(),
+            read_index: Vec::new(),
+            write_index: WriteIndex::Direct,
+            out_dtype: None,
+            extra_out_bodies: Vec::new(),
+        }
+    }
+
+    /// The common no-pre/no-post single-input [`OpDef::window`]: `pre = input(0)`,
+    /// `post = reduced(0)` (the plain pool). `count_include_pad` picks the avg_pool
+    /// divisor policy (ignored for Max/Min/Sum).
+    #[must_use]
+    #[allow(clippy::too_many_arguments)]
+    pub fn window_simple(
+        name: &str,
+        dtypes: &[ElementKind],
+        op: ReduceOp,
+        axis: u8,
+        size: u8,
+        stride: u8,
+        dilation: u8,
+        pad_lo: u8,
+        pad_hi: u8,
+        count_include_pad: bool,
+    ) -> Self {
+        Self::window(
+            name,
+            1,
+            dtypes,
+            op,
+            axis,
+            size,
+            stride,
+            dilation,
+            pad_lo,
+            pad_hi,
+            count_include_pad,
             Expr(ScalarExpr::Input(0)),
             Expr(ScalarExpr::Reduced(0)),
         )
