@@ -106,6 +106,7 @@ pub struct SdpaBlockSparseDescriptor {
 }
 
 /// Args bundle for a block-sparse SDPA forward launch.
+#[derive(Debug)]
 pub struct SdpaBlockSparseArgs<'a, T: Element> {
     /// Query — `[B, H, Q_len, D_k]`, contiguous.
     pub q: TensorRef<'a, T, 4>,
@@ -139,6 +140,7 @@ pub struct SdpaBlockSparseArgs<'a, T: Element> {
 /// **Precision guarantee**: deterministic; bit-stable on the same
 /// hardware. No atomicAdd anywhere (one CUDA block per `(b, h, qb)`
 /// owns its output rows entirely).
+#[derive(Debug)]
 pub struct SdpaBlockSparsePlan<T: Element> {
     desc: SdpaBlockSparseDescriptor,
     sku: KernelSku,

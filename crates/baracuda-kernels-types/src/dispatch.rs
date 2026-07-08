@@ -336,7 +336,7 @@ pub fn reported_entry(
         .into_iter()
         .filter_map(|c| {
             let ns = c.latency_ns?;
-            (ns > 0).then(|| CandidateResult {
+            (ns > 0).then_some(CandidateResult {
                 implementor: c.implementor,
                 median_ns: ns as f64,
                 entry_point: c.entry_point,

@@ -46,6 +46,12 @@ pub struct QuantizePerTensorDescriptor {
     pub output_element: ElementKind,
 }
 
+impl<'a, TIn: Element, TOut: IntElement> core::fmt::Debug for QuantizePerTensorArgs<'a, TIn, TOut> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("QuantizePerTensorArgs").finish_non_exhaustive()
+    }
+}
+
 /// Args bundle for a `quantize_per_tensor` forward launch.
 ///
 /// The input / output tensors are 1-D for the trailblazer — the caller
@@ -89,6 +95,7 @@ pub struct QuantizePerTensorArgs<'a, TIn: Element, TOut: IntElement> {
 ///
 /// **Precision guarantee**: deterministic, bit-stable. Round-ties-
 /// even (`__float2int_rn`).
+#[derive(Debug)]
 pub struct QuantizePerTensorPlan<TIn: Element, TOut: IntElement> {
     desc: QuantizePerTensorDescriptor,
     sku: KernelSku,
@@ -179,7 +186,7 @@ impl<TIn: Element, TOut: IntElement> QuantizePerTensorPlan<TIn, TOut> {
         }
         let x_ptr = args.input.data.as_raw().0 as *const c_void;
         let q_ptr = args.output.data.as_raw().0 as *mut c_void;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let zp = args.zero_point;
         let qmin = self.desc.q_min;
         let qmax = self.desc.q_max;

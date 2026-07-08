@@ -42,6 +42,7 @@ pub struct BinaryCmpDescriptor<const N: usize> {
 /// Inputs are `T`; output is `u8` (0 / 1). Aliasing `y` with `a` or `b`
 /// is unsafe because `y` has a different element size than the inputs;
 /// the kernel does NOT alias-check.
+#[derive(Debug)]
 pub struct BinaryCmpArgs<'a, T: Element, const N: usize> {
     /// First input.
     pub a: TensorRef<'a, T, N>,
@@ -55,6 +56,7 @@ pub struct BinaryCmpArgs<'a, T: Element, const N: usize> {
 ///
 /// `T: Element` is the input element type (today: must be `f32`).
 /// Output is always `u8`. `const N: usize` is the tensor rank.
+#[derive(Debug)]
 pub struct BinaryCmpPlan<T: Element, const N: usize> {
     desc: BinaryCmpDescriptor<N>,
     sku: KernelSku,
@@ -233,7 +235,7 @@ impl<T: Element, const N: usize> BinaryCmpPlan<T, N> {
         let a_ptr = args.a.data.as_raw().0 as *const c_void;
         let b_ptr = args.b.data.as_raw().0 as *const c_void;
         let y_ptr = args.y.data.as_raw().0 as *mut c_void;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
 
         let all_contig_same_shape = args.a.shape == args.y.shape
             && args.b.shape == args.y.shape

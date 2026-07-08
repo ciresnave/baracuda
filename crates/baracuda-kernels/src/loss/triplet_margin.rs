@@ -33,6 +33,7 @@ pub struct TripletMarginLossDescriptor {
 }
 
 /// Args bundle for a TripletMargin FW launch.
+#[derive(Debug)]
 pub struct TripletMarginLossArgs<'a, T: Element> {
     /// Anchor tensor [N, D].
     pub anchor: TensorRef<'a, T, 2>,
@@ -45,6 +46,7 @@ pub struct TripletMarginLossArgs<'a, T: Element> {
 }
 
 /// TripletMargin forward plan.
+#[derive(Debug)]
 pub struct TripletMarginLossPlan<T: Element> {
     desc: TripletMarginLossDescriptor,
     sku: KernelSku,
@@ -133,7 +135,7 @@ impl<T: Element> TripletMarginLossPlan<T> {
             return Ok(());
         }
         let (ws_ptr, ws_bytes) = unpack_workspace(workspace, self.workspace_size())?;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let a_ptr = args.anchor.data.as_raw().0 as *const c_void;
         let p_ptr = args.positive.data.as_raw().0 as *const c_void;
         let n_ptr = args.negative.data.as_raw().0 as *const c_void;
@@ -201,6 +203,7 @@ pub struct TripletMarginLossBackwardDescriptor {
 }
 
 /// Args bundle for a TripletMargin BW launch.
+#[derive(Debug)]
 pub struct TripletMarginLossBackwardArgs<'a, T: Element> {
     /// Anchor saved from FW.
     pub anchor: TensorRef<'a, T, 2>,
@@ -219,6 +222,7 @@ pub struct TripletMarginLossBackwardArgs<'a, T: Element> {
 }
 
 /// TripletMargin backward plan.
+#[derive(Debug)]
 pub struct TripletMarginLossBackwardPlan<T: Element> {
     desc: TripletMarginLossBackwardDescriptor,
     sku: KernelSku,
@@ -311,7 +315,7 @@ impl<T: Element> TripletMarginLossBackwardPlan<T> {
         };
         let margin = self.desc.margin;
         let p_norm = self.desc.p_norm;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let a_ptr = args.anchor.data.as_raw().0 as *const c_void;
         let p_ptr = args.positive.data.as_raw().0 as *const c_void;
         let n_ptr = args.negative.data.as_raw().0 as *const c_void;

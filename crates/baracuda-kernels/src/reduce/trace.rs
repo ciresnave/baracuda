@@ -38,6 +38,7 @@ pub struct TraceDescriptor {
 ///
 /// `x` is the 2-D input matrix of shape `[n, n]`. `y` is a rank-0
 /// scalar output buffer (empty `shape == []`).
+#[derive(Debug)]
 pub struct TraceArgs<'a, T: Element> {
     /// Input matrix, shape `[n, n]`.
     pub x: TensorRef<'a, T, 2>,
@@ -49,6 +50,7 @@ pub struct TraceArgs<'a, T: Element> {
 ///
 /// `T: Element` is the element type. Supported: `f32`, `f16`, `bf16`,
 /// `f64`.
+#[derive(Debug)]
 pub struct TracePlan<T: Element> {
     desc: TraceDescriptor,
     sku: KernelSku,
@@ -176,7 +178,7 @@ impl<T: Element> TracePlan<T> {
         }
         let x_ptr = args.x.data.as_raw().0 as *const c_void;
         let y_ptr = args.y.data.as_raw().0 as *mut c_void;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let n = self.desc.n;
         let stride_row = args.x.stride[0];
         let stride_col = args.x.stride[1];

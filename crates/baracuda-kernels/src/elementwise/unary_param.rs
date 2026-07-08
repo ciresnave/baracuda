@@ -76,6 +76,7 @@ pub struct UnaryParamDescriptor<const N: usize> {
 }
 
 /// Args bundle for a parameterized unary elementwise launch.
+#[derive(Debug)]
 pub struct UnaryParamArgs<'a, T: Element, const N: usize> {
     /// Input.
     pub x: TensorRef<'a, T, N>,
@@ -84,6 +85,7 @@ pub struct UnaryParamArgs<'a, T: Element, const N: usize> {
 }
 
 /// Parameterized unary elementwise plan.
+#[derive(Debug)]
 pub struct UnaryParamPlan<T: Element, const N: usize> {
     desc: UnaryParamDescriptor<N>,
     sku: KernelSku,
@@ -216,7 +218,7 @@ impl<T: Element, const N: usize> UnaryParamPlan<T, N> {
         }
         let x_ptr = args.x.data.as_raw().0 as *const c_void;
         let y_ptr = args.y.data.as_raw().0 as *mut c_void;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let p0 = self.desc.params[0];
         let p1 = self.desc.params[1];
 

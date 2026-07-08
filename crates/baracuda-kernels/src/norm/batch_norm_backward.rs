@@ -45,6 +45,7 @@ impl<const N: usize> BatchNormBackwardDescriptor<N> {
 }
 
 /// Args bundle for BatchNorm BW.
+#[derive(Debug)]
 pub struct BatchNormBackwardArgs<'a, T: Element, const N: usize> {
     /// Upstream gradient.
     pub dy: TensorRef<'a, T, N>,
@@ -65,6 +66,7 @@ pub struct BatchNormBackwardArgs<'a, T: Element, const N: usize> {
 }
 
 /// BatchNorm backward plan.
+#[derive(Debug)]
 pub struct BatchNormBackwardPlan<T: Element, const N: usize> {
     desc: BatchNormBackwardDescriptor<N>,
     sku: KernelSku,
@@ -218,7 +220,7 @@ impl<T: Element, const N: usize> BatchNormBackwardPlan<T, N> {
             }
         };
 
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let dy_ptr = args.dy.data.as_raw().0 as *const c_void;
         let x_ptr = args.x.data.as_raw().0 as *const c_void;
         let mean_ptr = args.saved_mean.data.as_raw().0 as *const c_void;

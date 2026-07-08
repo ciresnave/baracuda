@@ -30,6 +30,12 @@ pub struct DequantizePerTensorDescriptor {
     pub output_element: ElementKind,
 }
 
+impl<'a, TIn: Element, TOut: IntElement> core::fmt::Debug for DequantizePerTensorArgs<'a, TIn, TOut> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("DequantizePerTensorArgs").finish_non_exhaustive()
+    }
+}
+
 /// Args bundle for a `dequantize_per_tensor` launch.
 pub struct DequantizePerTensorArgs<'a, TIn: Element, TOut: IntElement> {
     /// Input int tensor `[numel]`.
@@ -59,6 +65,7 @@ pub struct DequantizePerTensorArgs<'a, TIn: Element, TOut: IntElement> {
 /// **Workspace**: none.
 ///
 /// **Precision guarantee**: deterministic, bit-stable.
+#[derive(Debug)]
 pub struct DequantizePerTensorPlan<TIn: Element, TOut: IntElement> {
     desc: DequantizePerTensorDescriptor,
     sku: KernelSku,
@@ -140,7 +147,7 @@ impl<TIn: Element, TOut: IntElement> DequantizePerTensorPlan<TIn, TOut> {
         }
         let q_ptr = args.input.data.as_raw().0 as *const c_void;
         let x_ptr = args.output.data.as_raw().0 as *mut c_void;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let zp = args.zero_point;
 
         let status = if <TIn::Scalar as ScalarType>::IS_F64 {

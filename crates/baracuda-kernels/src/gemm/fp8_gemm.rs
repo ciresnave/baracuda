@@ -87,6 +87,7 @@ pub struct Fp8GemmArgs<'a, T: FpElement> {
 ///
 /// Parameterized on `T: FpElement` ([`Fp8E4M3`] or [`Fp8E5M2`]). No
 /// bias-element generic — FP8 bias is always `f32`.
+#[derive(Debug)]
 pub struct Fp8GemmPlan<T: FpElement> {
     desc: Fp8GemmDescriptor,
     sku: GemmSku,
@@ -266,7 +267,7 @@ impl<T: FpElement> Fp8GemmPlan<T> {
             ));
         }
 
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let m = self.desc.m;
         let n = self.desc.n;
         let k = self.desc.k;

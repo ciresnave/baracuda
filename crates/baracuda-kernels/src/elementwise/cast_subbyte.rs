@@ -84,6 +84,7 @@ pub struct CastSubByteDescriptor {
 /// `numel / 2` bytes), not the element view; the caller types it as
 /// `TensorRef<'a, S4, 1>` and the plan handles the `numel / 2` byte
 /// math internally.
+#[derive(Debug)]
 pub struct CastSubByteArgs<'a, TIn: DeviceRepr + Copy + 'static, TOut: DeviceRepr + Copy + 'static>
 {
     /// Input — `TIn` element type.
@@ -105,6 +106,7 @@ pub struct CastSubByteArgs<'a, TIn: DeviceRepr + Copy + 'static, TOut: DeviceRep
 /// any pair outside the explicit table with [`Error::Unsupported`].
 ///
 /// **Workspace**: none.
+#[derive(Debug)]
 pub struct CastSubBytePlan<
     TIn: DeviceRepr + Copy + 'static,
     TOut: DeviceRepr + Copy + 'static,
@@ -255,7 +257,7 @@ impl<TIn: DeviceRepr + Copy + 'static, TOut: DeviceRepr + Copy + 'static>
         }
         let x_ptr = args.input.data.as_raw().0 as *const c_void;
         let y_ptr = args.output.data.as_raw().0 as *mut c_void;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
 
         let status = match (self.desc.input_element, self.desc.output_element) {
             // ---- Bool -> T ----

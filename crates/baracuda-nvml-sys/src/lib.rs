@@ -760,9 +760,9 @@ pub fn nvml() -> Result<&'static Nvml, LoaderError> {
         return Ok(n);
     }
     let lib = match Library::open("nvml", nvml_candidates()) {
-        /// ok
+        // ok
         Ok(l) => l,
-        /// err
+        // err
         Err(_) => {
             // Fall back to explicit NVSMI path on Windows.
             let mut found: Option<Library> = None;
@@ -785,6 +785,6 @@ pub fn nvml() -> Result<&'static Nvml, LoaderError> {
     };
     let n = Nvml::empty(lib);
     let _ = NVML.set(n);
-    /// ok
+    // ok
     Ok(NVML.get().expect("OnceLock set or lost race"))
 }

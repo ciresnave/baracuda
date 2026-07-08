@@ -144,6 +144,7 @@ impl Default for Nf4MmvqMultiMDescriptor {
 // =============================================================================
 
 /// Args bundle for [`Nf4DequantizePlan`]. Output dtype = `T`.
+#[derive(Debug)]
 pub struct Nf4DequantizeArgs<'a, T: Nf4Activation> {
     /// Packed NF4 weight bytes, length `(N/2) * K` (pair-packed nibbles).
     pub weight: TensorRef<'a, U8, 1>,
@@ -154,6 +155,7 @@ pub struct Nf4DequantizeArgs<'a, T: Nf4Activation> {
 }
 
 /// Args bundle for [`Nf4MmvqPlan`] (M=1 single-vector decode).
+#[derive(Debug)]
 pub struct Nf4MmvqArgs<'a, T: Nf4Activation> {
     /// Packed NF4 weight bytes, length `(N/2) * K`.
     pub weight: TensorRef<'a, U8, 1>,
@@ -166,6 +168,7 @@ pub struct Nf4MmvqArgs<'a, T: Nf4Activation> {
 }
 
 /// Args bundle for [`Nf4MmvqMultiMPlan`] (M ∈ {1, 2, 4, 8}).
+#[derive(Debug)]
 pub struct Nf4MmvqMultiMArgs<'a, T: Nf4Activation> {
     /// Packed NF4 weight bytes, length `(N/2) * K`.
     pub weight: TensorRef<'a, U8, 1>,
@@ -186,6 +189,7 @@ pub struct Nf4MmvqMultiMArgs<'a, T: Nf4Activation> {
 /// Inference path uses [`Nf4MmvqPlan`] / [`Nf4MmvqMultiMPlan`] instead
 /// (fused dequant + GEMV avoids the intermediate `[N, K]` materialization).
 /// This plan is primarily a debug / reference / weight-export tool.
+#[derive(Debug)]
 pub struct Nf4DequantizePlan<T: Nf4Activation> {
     desc: Nf4Descriptor,
     sku: KernelSku,
@@ -270,7 +274,7 @@ impl<T: Nf4Activation> Nf4DequantizePlan<T> {
         let w_ptr = args.weight.data.as_raw().0 as *const c_void;
         let amax_ptr = args.absmax.data.as_raw().0 as *const c_void;
         let out_ptr = args.output.data.as_raw().0 as *mut c_void;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
 
         let status = unsafe {
             dispatch_dequant::<T>(
@@ -298,6 +302,7 @@ impl<T: Nf4Activation> Nf4DequantizePlan<T> {
 ///
 /// Used for the LLM decode hot path on QLoRA-trained models. For
 /// prefill / batched-decode use [`Nf4MmvqMultiMPlan`] with `M > 1`.
+#[derive(Debug)]
 pub struct Nf4MmvqPlan<T: Nf4Activation> {
     desc: Nf4Descriptor,
     sku: KernelSku,
@@ -400,7 +405,7 @@ impl<T: Nf4Activation> Nf4MmvqPlan<T> {
         let amax_ptr = args.absmax.data.as_raw().0 as *const c_void;
         let y_ptr = args.activation.data.as_raw().0 as *const c_void;
         let out_ptr = args.output.data.as_raw().0 as *mut c_void;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
 
         let status = unsafe {
             dispatch_gemv_m1::<T>(
@@ -432,6 +437,7 @@ impl<T: Nf4Activation> Nf4MmvqPlan<T> {
 /// Use for **prefill** (M ∈ [2, 8]) and **batched decode**. M values
 /// outside `{1, 2, 4, 8}` are rejected — caller tiles down to these
 /// chunk sizes per the Phase 33 pattern.
+#[derive(Debug)]
 pub struct Nf4MmvqMultiMPlan<T: Nf4Activation> {
     desc: Nf4MmvqMultiMDescriptor,
     sku: KernelSku,
@@ -538,7 +544,7 @@ impl<T: Nf4Activation> Nf4MmvqMultiMPlan<T> {
         let amax_ptr = args.absmax.data.as_raw().0 as *const c_void;
         let y_ptr = args.activations.data.as_raw().0 as *const c_void;
         let out_ptr = args.output.data.as_raw().0 as *mut c_void;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
 
         let status = unsafe {
             dispatch_gemv_multim::<T>(
@@ -641,6 +647,9 @@ unsafe fn dispatch_dequant<T: Nf4Activation>(
 
 #[cfg(not(feature = "bnb_nf4"))]
 #[inline]
+// `T` is unused in this feature-off stub but must match the `bnb_nf4` variant's
+// signature: call sites use turbofish (`dispatch_dequant::<T>`).
+#[allow(clippy::extra_unused_type_parameters)]
 unsafe fn dispatch_dequant<T: Nf4Activation>(
     _: i32, _: i32, _: i32, _: *const c_void, _: *const c_void, _: *mut c_void, _: *mut c_void,
 ) -> i32 {
@@ -678,6 +687,9 @@ unsafe fn dispatch_gemv_m1<T: Nf4Activation>(
 
 #[cfg(not(feature = "bnb_nf4"))]
 #[inline]
+// `T` is unused in this feature-off stub but must match the `bnb_nf4` variant's
+// signature: call sites use turbofish (`dispatch_gemv_m1::<T>`).
+#[allow(clippy::extra_unused_type_parameters)]
 unsafe fn dispatch_gemv_m1<T: Nf4Activation>(
     _: i32, _: i32, _: i32, _: *const c_void, _: *const c_void, _: *const c_void,
     _: *mut c_void, _: *mut c_void,
@@ -730,6 +742,9 @@ unsafe fn dispatch_gemv_multim<T: Nf4Activation>(
 
 #[cfg(not(feature = "bnb_nf4"))]
 #[inline]
+// `T` is unused in this feature-off stub but must match the `bnb_nf4` variant's
+// signature: call sites use turbofish (`dispatch_gemv_multim::<T>`).
+#[allow(clippy::extra_unused_type_parameters)]
 unsafe fn dispatch_gemv_multim<T: Nf4Activation>(
     _: i32, _: i32, _: i32, _: i32, _: *const c_void, _: *const c_void, _: *const c_void,
     _: *mut c_void, _: *mut c_void,
@@ -749,20 +764,20 @@ unsafe fn dispatch_gemv_multim<T: Nf4Activation>(
 /// quantile pinned to exactly 0.0.
 pub const NF4_CODEBOOK: [f32; 16] = [
     -1.0,
-    -0.6961928009986877,
-    -0.5250730514526367,
-    -0.39491748809814453,
-    -0.28444138169288635,
-    -0.18477343022823334,
-    -0.09105003625154495,
+    -0.696_192_8,
+    -0.525_073_05,
+    -0.394_917_5,
+    -0.284_441_38,
+    -0.184_773_43,
+    -0.091_050_036,
     0.0,
-    0.07958029955625534,
-    0.16093020141124725,
-    0.24611230194568634,
-    0.33791524171829224,
-    0.44070982933044434,
-    0.5626170039176941,
-    0.7229568362236023,
+    0.079_580_3,
+    0.160_930_2,
+    0.246_112_3,
+    0.337_915_24,
+    0.440_709_83,
+    0.562_617,
+    0.722_956_84,
     1.0,
 ];
 

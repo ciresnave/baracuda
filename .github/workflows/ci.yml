@@ -34,3 +34,18 @@ jobs:
         run: cargo test --workspace
       - name: cargo doc
         run: cargo doc --workspace --no-deps
+      # ---- feature-gated surfaces the default --workspace build never compiles.
+      # These features are deliberately CI-safe: `cuvs` is a lazy dynamic loader
+      # (no RAPIDS needed to build/test; GPU-touching tests are #[ignore]d), and
+      # kernelgen's `seam`/`nvrtc` pull only crates.io Rust deps (all
+      # toolkit-dependent tests are #[ignore]d). Regression guard for the class
+      # of bug where `missing_docs = deny` (and clippy) never fired on a
+      # feature-gated module because CI never compiled it.
+      - name: clippy cuvs surfaces (feature-gated)
+        run: cargo clippy -p baracuda-cuvs-sys -p baracuda-cuvs --features cuvs -- -D warnings
+      - name: test cuvs surfaces (feature-gated)
+        run: cargo test -p baracuda-cuvs-sys -p baracuda-cuvs --features cuvs
+      - name: clippy kernelgen seam+nvrtc (feature-gated)
+        run: cargo clippy -p baracuda-kernelgen --features seam,nvrtc -- -D warnings
+      - name: test kernelgen seam (feature-gated)
+        run: cargo test -p baracuda-kernelgen --features seam

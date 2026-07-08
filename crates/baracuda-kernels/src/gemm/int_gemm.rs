@@ -34,6 +34,12 @@ use baracuda_kernels_types::{
 // `baracuda_kernels`.
 pub use baracuda_cutlass::{GemmSku, IntGemmArgs, IntGemmDescriptor};
 
+impl<T: IntElement, BT: BiasElement> core::fmt::Debug for IntGemmPlan<T, BT> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("IntGemmPlan").finish_non_exhaustive()
+    }
+}
+
 /// Unified integer GEMM plan.
 ///
 /// `T: IntElement` is the kernel element type ([`S8`] / [`U8`]).
@@ -224,7 +230,7 @@ impl<T: IntElement, BT: BiasElement> IntGemmPlan<T, BT> {
                     ));
                 }
 
-                let stream_ptr = stream.as_raw() as *mut c_void;
+                let stream_ptr = stream.as_raw();
                 let m = self.desc.m;
                 let n = self.desc.n;
                 let k = self.desc.k;

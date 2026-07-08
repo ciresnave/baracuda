@@ -116,7 +116,7 @@ const FA2_SUPPORTED_HEAD_DIMS: &[i32] = &[32, 64, 96, 128, 160, 192, 224, 256, 5
 #[cfg(feature = "fa2")]
 #[inline]
 fn fa2_supports_head_dim(d: i32) -> bool {
-    FA2_SUPPORTED_HEAD_DIMS.iter().any(|&v| v == d)
+    FA2_SUPPORTED_HEAD_DIMS.contains(&d)
 }
 
 /// Physical buffer span of a rank-4 view: the highest element offset
@@ -326,6 +326,7 @@ impl FlashSdpaDescriptor {
 /// requires `H == H_k`; the strided-FFI sibling routes GQA via
 /// stride[1] = 0. Phase 59a's FA2 path supports GQA natively via FA2's
 /// `h_h_k_ratio` mechanism — pass distinct H_k in `k`/`v` shapes.
+#[derive(Debug)]
 pub struct FlashSdpaArgs<'a, T: Element> {
     /// Query tensor — shape `[B, H, Q, D_k]`, contiguous.
     pub q: TensorRef<'a, T, 4>,
@@ -404,6 +405,7 @@ pub struct FlashSdpaArgs<'a, T: Element> {
 /// hardware. Each output cell is written by exactly one block — no
 /// atomicAdd. Flash and naive SDPA differ in float-order so they are
 /// *not* bit-identical to each other.
+#[derive(Debug)]
 pub struct FlashSdpaPlan<T: Element> {
     desc: FlashSdpaDescriptor,
     sku: KernelSku,
@@ -802,7 +804,7 @@ impl<T: Element> FlashSdpaPlan<T> {
             return self.run_broadcast_route(stream, workspace, args);
         }
 
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let q_ptr = args.q.data.as_raw().0 as *const c_void;
         let k_ptr = args.k.data.as_raw().0 as *const c_void;
         let v_ptr = args.v.data.as_raw().0 as *const c_void;
@@ -1080,7 +1082,7 @@ impl<T: Element> FlashSdpaPlan<T> {
         workspace: Workspace<'_>,
         args: &FlashSdpaArgs<'_, T>,
     ) -> Result<()> {
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let q_ptr = args.q.data.as_raw().0 as *const c_void;
         let k_ptr = args.k.data.as_raw().0 as *const c_void;
         let v_ptr = args.v.data.as_raw().0 as *const c_void;

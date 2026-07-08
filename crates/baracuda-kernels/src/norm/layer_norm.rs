@@ -46,9 +46,9 @@ impl<const N: usize> LayerNormDescriptor<N> {
     #[inline]
     pub fn save_shape(&self) -> [i32; N] {
         let mut s = self.input_shape;
-        for d in 0..N {
+        for (d, slot) in s.iter_mut().enumerate() {
             if (self.norm_axes_mask >> d) & 1 == 1 {
-                s[d] = 1;
+                *slot = 1;
             }
         }
         s
@@ -68,6 +68,7 @@ impl<const N: usize> LayerNormDescriptor<N> {
 }
 
 /// Args bundle for a LayerNorm forward launch.
+#[derive(Debug)]
 pub struct LayerNormArgs<'a, T: Element, const N: usize> {
     /// Input tensor.
     pub x: TensorRef<'a, T, N>,
@@ -86,6 +87,7 @@ pub struct LayerNormArgs<'a, T: Element, const N: usize> {
 }
 
 /// LayerNorm forward plan.
+#[derive(Debug)]
 pub struct LayerNormPlan<T: Element, const N: usize> {
     desc: LayerNormDescriptor<N>,
     sku: KernelSku,
@@ -276,7 +278,7 @@ impl<T: Element, const N: usize> LayerNormPlan<T, N> {
         if numel == 0 {
             return Ok(());
         }
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let x_ptr = args.x.data.as_raw().0 as *const c_void;
         let y_ptr = args.y.data.as_raw().0 as *mut c_void;
         let mean_ptr = args.mean.data.as_raw().0 as *mut c_void;

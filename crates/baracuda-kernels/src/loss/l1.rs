@@ -28,6 +28,7 @@ pub struct L1LossDescriptor<const N: usize> {
 }
 
 /// Args bundle for an L1 FW launch.
+#[derive(Debug)]
 pub struct L1LossArgs<'a, T: Element, const N: usize> {
     /// Predictions tensor.
     pub pred: TensorRef<'a, T, N>,
@@ -38,6 +39,7 @@ pub struct L1LossArgs<'a, T: Element, const N: usize> {
 }
 
 /// L1 loss forward plan.
+#[derive(Debug)]
 pub struct L1LossPlan<T: Element, const N: usize> {
     desc: L1LossDescriptor<N>,
     sku: KernelSku,
@@ -128,7 +130,7 @@ impl<T: Element, const N: usize> L1LossPlan<T, N> {
             return Ok(());
         }
         let (ws_ptr, ws_bytes) = unpack_workspace(workspace, self.workspace_size())?;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let pred_ptr = args.pred.data.as_raw().0 as *const c_void;
         let target_ptr = args.target.data.as_raw().0 as *const c_void;
         let out_ptr = args.out.data.as_raw().0 as *mut c_void;
@@ -181,6 +183,7 @@ pub struct L1LossBackwardDescriptor<const N: usize> {
 }
 
 /// Args bundle for an L1 BW launch.
+#[derive(Debug)]
 pub struct L1LossBackwardArgs<'a, T: Element, const N: usize> {
     /// Predictions (saved from FW).
     pub pred: TensorRef<'a, T, N>,
@@ -193,6 +196,7 @@ pub struct L1LossBackwardArgs<'a, T: Element, const N: usize> {
 }
 
 /// L1 backward plan.
+#[derive(Debug)]
 pub struct L1LossBackwardPlan<T: Element, const N: usize> {
     desc: L1LossBackwardDescriptor<N>,
     sku: KernelSku,
@@ -281,7 +285,7 @@ impl<T: Element, const N: usize> L1LossBackwardPlan<T, N> {
             LossReduction::Mean => 1.0 / (numel as f32),
             LossReduction::Sum => 1.0,
         };
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let pred_ptr = args.pred.data.as_raw().0 as *const c_void;
         let target_ptr = args.target.data.as_raw().0 as *const c_void;
         let dy_ptr = args.dy.data.as_raw().0 as *const c_void;

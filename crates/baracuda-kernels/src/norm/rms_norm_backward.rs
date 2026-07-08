@@ -44,9 +44,9 @@ impl<const N: usize> RMSNormBackwardDescriptor<N> {
     #[inline]
     pub fn rms_shape(&self) -> [i32; N] {
         let mut s = self.input_shape;
-        for d in 0..N {
+        for (d, slot) in s.iter_mut().enumerate() {
             if (self.norm_axes_mask >> d) & 1 == 1 {
-                s[d] = 1;
+                *slot = 1;
             }
         }
         s
@@ -66,6 +66,7 @@ impl<const N: usize> RMSNormBackwardDescriptor<N> {
 }
 
 /// Args bundle for an RMSNorm BW launch.
+#[derive(Debug)]
 pub struct RMSNormBackwardArgs<'a, T: Element, const N: usize> {
     /// Upstream gradient.
     pub dy: TensorRef<'a, T, N>,
@@ -95,6 +96,7 @@ pub struct RMSNormBackwardArgs<'a, T: Element, const N: usize> {
 /// `dgamma` reduction uses a one-block-per-feature kernel with warp
 /// shuffles + smem (no atomic-add), so it's bit-stable regardless of the
 /// half / bf16 atomicAdd arch quirks. f16 / bf16 accumulate in f32.
+#[derive(Debug)]
 pub struct RMSNormBackwardPlan<T: Element, const N: usize> {
     desc: RMSNormBackwardDescriptor<N>,
     sku: KernelSku,
@@ -260,7 +262,7 @@ impl<T: Element, const N: usize> RMSNormBackwardPlan<T, N> {
         if numel == 0 {
             return Ok(());
         }
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let dy_ptr = args.dy.data.as_raw().0 as *const c_void;
         let x_ptr = args.x.data.as_raw().0 as *const c_void;
         let rms_ptr = args.rms.data.as_raw().0 as *const c_void;

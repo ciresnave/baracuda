@@ -2,7 +2,7 @@
 //!
 //! Wraps cuSOLVER's `cusolverDnSgesvdjBatched` / `DgesvdjBatched`. Unlike
 //! the non-batched [`super::svd::SvdPlan`] which uses `gesvd` (R-bidiag
-//! + QR-sweep), this plan uses the **one-sided Jacobi** method
+//! plus QR-sweep), this plan uses the **one-sided Jacobi** method
 //! (`gesvdj`), which cuSOLVER batches across independent matrices.
 //!
 //! **Constraints**:
@@ -22,7 +22,6 @@
 //! should inspect `info` after the call.
 
 use core::cell::Cell;
-use core::ffi::c_void;
 use core::marker::PhantomData;
 
 use baracuda_cutlass::{Error, Result};
@@ -61,6 +60,7 @@ pub struct BatchedSvdDescriptor {
 /// for the Jacobi sweeps). When `compute_vectors == false`, the `u` /
 /// `v` tensor fields are unused (the caller may pass zero-sized
 /// tensors — the plan does not read them).
+#[derive(Debug)]
 pub struct BatchedSvdArgs<'a, T: Element> {
     /// Input stack `[batch, N, N]` column-major. Overwritten in place.
     pub a: TensorMut<'a, T, 3>,
@@ -98,6 +98,7 @@ pub struct BatchedSvdArgs<'a, T: Element> {
 ///
 /// Owns a lazy cuSOLVER handle + Jacobi-params object (`!Sync` /
 /// `!Send`); destroyed on `Drop`.
+#[derive(Debug)]
 pub struct BatchedSvdPlan<T: Element> {
     desc: BatchedSvdDescriptor,
     sku: KernelSku,
@@ -221,7 +222,7 @@ impl<T: Element> BatchedSvdPlan<T> {
     }
 
     fn bind_stream(&self, h: cusolverDnHandle_t, stream: &Stream) -> Result<()> {
-        let status = unsafe { cusolverDnSetStream(h, stream.as_raw() as *mut c_void) };
+        let status = unsafe { cusolverDnSetStream(h, stream.as_raw()) };
         if status != 0 {
             return Err(Error::CutlassInternal(-status));
         }

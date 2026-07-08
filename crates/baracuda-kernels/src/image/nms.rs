@@ -34,6 +34,7 @@ pub struct NmsDescriptor {
 }
 
 /// Args bundle for `nms`.
+#[derive(Debug)]
 pub struct NmsArgs<'a, T: Element> {
     /// Boxes `[num_boxes, 4]` in `(x1, y1, x2, y2)`. Pre-sorted by
     /// score, descending.
@@ -62,6 +63,7 @@ pub struct NmsArgs<'a, T: Element> {
 ///
 /// **Precision guarantee**: deterministic, bit-stable on identical
 /// hardware. Output `count` is the number of `1`s in `keep_mask`.
+#[derive(Debug)]
 pub struct NmsPlan<T: Element> {
     desc: NmsDescriptor,
     sku: KernelSku,
@@ -168,7 +170,7 @@ impl<T: Element> NmsPlan<T> {
         let boxes_ptr = args.boxes.data.as_raw().0 as *const c_void;
         let mask_ptr = args.keep_mask.data.as_raw().0 as *mut c_void;
         let count_ptr = args.count.data.as_raw().0 as *mut c_void;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let status = match T::KIND {
             ElementKind::F32 => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_nms_f32_run(

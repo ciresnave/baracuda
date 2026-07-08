@@ -44,6 +44,7 @@ impl<const N: usize> BoolReduceDescriptor<N> {
 }
 
 /// Args bundle. Output is always [`Bool`] regardless of input dtype.
+#[derive(Debug)]
 pub struct BoolReduceArgs<'a, T: Element, const N: usize> {
     /// Input tensor.
     pub x: TensorRef<'a, T, N>,
@@ -52,6 +53,7 @@ pub struct BoolReduceArgs<'a, T: Element, const N: usize> {
 }
 
 /// Plan for an any / all axis reduction.
+#[derive(Debug)]
 pub struct BoolReducePlan<T: Element, const N: usize> {
     desc: BoolReduceDescriptor<N>,
     sku: KernelSku,
@@ -201,7 +203,7 @@ impl<T: Element, const N: usize> BoolReducePlan<T, N> {
         }
         let x_ptr = args.x.data.as_raw().0 as *const c_void;
         let y_ptr = args.y.data.as_raw().0 as *mut c_void;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
 
         let output_shape = self.desc.output_shape();
         let stride_x = args.x.stride;

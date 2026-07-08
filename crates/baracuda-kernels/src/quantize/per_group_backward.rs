@@ -47,6 +47,7 @@ impl QuantizePerGroupBackwardDescriptor {
 }
 
 /// Args for the per-group BW launch.
+#[derive(Debug)]
 pub struct QuantizePerGroupBackwardArgs<'a, TIn: Element> {
     /// Upstream gradient `[outer, axis_size]`.
     pub d_output: TensorRef<'a, TIn, 2>,
@@ -77,6 +78,7 @@ pub struct QuantizePerGroupBackwardArgs<'a, TIn: Element> {
 /// **Workspace**: none.
 ///
 /// **Precision guarantee**: deterministic, bit-stable.
+#[derive(Debug)]
 pub struct QuantizePerGroupBackwardPlan<TIn: Element> {
     desc: QuantizePerGroupBackwardDescriptor,
     sku: KernelSku,
@@ -183,7 +185,7 @@ impl<TIn: Element> QuantizePerGroupBackwardPlan<TIn> {
         let sc_ptr = args.scale.data.as_raw().0 as *const c_void;
         let zp_ptr = args.zero_point.data.as_raw().0 as *const c_void;
         let dx_ptr = args.d_input.data.as_raw().0 as *mut c_void;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let (outer, axis, g, qmin, qmax) = (
             self.desc.outer_size,
             self.desc.axis_size,

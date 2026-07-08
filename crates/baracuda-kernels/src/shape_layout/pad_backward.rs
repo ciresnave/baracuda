@@ -51,8 +51,8 @@ impl<const N: usize> PadBackwardDescriptor<N> {
     /// `input_shape + pad_low + pad_high` per axis.
     pub fn dy_shape(&self) -> [i32; N] {
         let mut out = [0i32; N];
-        for d in 0..N {
-            out[d] = self.input_shape[d] + self.pad_low[d] + self.pad_high[d];
+        for (d, out_d) in out.iter_mut().enumerate() {
+            *out_d = self.input_shape[d] + self.pad_low[d] + self.pad_high[d];
         }
         out
     }
@@ -64,6 +64,7 @@ impl<const N: usize> PadBackwardDescriptor<N> {
 /// pad_low + pad_high` per axis). `dx.shape` must match
 /// `desc.input_shape`. No saved forward tensors are needed — the BW
 /// formula is a pure slice.
+#[derive(Debug)]
 pub struct PadBackwardArgs<'a, T: Element, const N: usize> {
     /// Upstream gradient — full forward output shape.
     pub dy: TensorRef<'a, T, N>,
@@ -94,6 +95,7 @@ pub struct PadBackwardArgs<'a, T: Element, const N: usize> {
 /// `Circular` modes is not yet wired — those need a scatter-add
 /// (multiple pad cells can map to the same input coord). `select()`
 /// returns `Unsupported` for non-`Constant` modes today.
+#[derive(Debug)]
 pub struct PadBackwardPlan<T: Element, const N: usize> {
     desc: PadBackwardDescriptor<N>,
     sku: KernelSku,
@@ -232,7 +234,7 @@ impl<T: Element, const N: usize> PadBackwardPlan<T, N> {
         }
         let dy_ptr = args.dy.data.as_raw().0 as *const c_void;
         let dx_ptr = args.dx.data.as_raw().0 as *mut c_void;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
 
         let input_shape = self.desc.input_shape;
         let pad_low = self.desc.pad_low;

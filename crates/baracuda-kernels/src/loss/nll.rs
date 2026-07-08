@@ -36,6 +36,7 @@ pub struct NllLossDescriptor {
 /// Target is rank-1 `[n_rows]` of `i64`. For `None` mode, output is
 /// rank-1 `[n_rows]`. For `Mean` / `Sum`, output is rank-1 `[1]`
 /// (scalar) — wrapper accepts any TensorMut with numel ≥ 1.
+#[derive(Debug)]
 pub struct NllLossArgs<'a, T: Element> {
     /// Input log-probabilities `[n_rows, class_extent]`.
     pub input: TensorRef<'a, T, 2>,
@@ -46,6 +47,7 @@ pub struct NllLossArgs<'a, T: Element> {
 }
 
 /// NLL loss forward plan.
+#[derive(Debug)]
 pub struct NllLossPlan<T: Element> {
     desc: NllLossDescriptor,
     sku: KernelSku,
@@ -144,7 +146,7 @@ impl<T: Element> NllLossPlan<T> {
         // row_stride is the i64 stride of the leading (n_rows) axis.
         let row_stride_input: i64 = args.input.stride[0];
         let (ws_ptr, ws_bytes) = unpack_workspace(workspace, self.workspace_size())?;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let input_ptr = args.input.data.as_raw().0 as *const c_void;
         let target_ptr = args.target.data.as_raw().0 as *const c_void;
         let out_ptr = args.out.data.as_raw().0 as *mut c_void;
@@ -203,6 +205,7 @@ pub struct NllLossBackwardDescriptor {
 }
 
 /// Args bundle for an NLL BW launch.
+#[derive(Debug)]
 pub struct NllLossBackwardArgs<'a, T: Element> {
     /// Upstream gradient: `[n_rows]` for None, scalar `[1]` for Mean / Sum.
     pub dy: TensorRef<'a, T, 1>,
@@ -213,6 +216,7 @@ pub struct NllLossBackwardArgs<'a, T: Element> {
 }
 
 /// NLL backward plan.
+#[derive(Debug)]
 pub struct NllLossBackwardPlan<T: Element> {
     desc: NllLossBackwardDescriptor,
     sku: KernelSku,
@@ -312,7 +316,7 @@ impl<T: Element> NllLossBackwardPlan<T> {
             LossReduction::Mean => 1.0 / (n_rows as f32),
             LossReduction::Sum => 1.0,
         };
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let dy_ptr = args.dy.data.as_raw().0 as *const c_void;
         let target_ptr = args.target.data.as_raw().0 as *const c_void;
         let dinput_ptr = args.dinput.data.as_raw().0 as *mut c_void;

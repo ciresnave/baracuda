@@ -144,6 +144,7 @@ impl Default for GgufMmvqBatchedDescriptor {
 /// activation dtype may not be under the [`Element`] trait for every
 /// future variant (S4 / U4 / Fp8 are conceptually wireable), but for
 /// now only `f32` / `f16` / `bf16` are wired.
+#[derive(Debug)]
 pub struct GgufMmvqBatchedArgs<'a, T: DeviceRepr + Copy + 'static = f32> {
     /// Weight tensor.
     ///
@@ -199,6 +200,7 @@ pub struct GgufMmvqBatchedArgs<'a, T: DeviceRepr + Copy + 'static = f32> {
 ///     (same warp-shuffle reduction as the single-MMVQ plan).
 ///   * `top_k > 1`: NOT bit-stable across launches (atomicAdd ordering
 ///     varies). Numerically equivalent up to atomic-summation reorder.
+#[derive(Debug)]
 pub struct GgufMmvqBatchedPlan<T: DeviceRepr + Copy + 'static = f32> {
     desc: GgufMmvqBatchedDescriptor,
     sku: KernelSku,
@@ -404,7 +406,7 @@ impl<T: GgufMmvqBatchedActivation> GgufMmvqBatchedPlan<T> {
             .as_ref()
             .map(|t| t.data.as_raw().0 as *const f32)
             .unwrap_or(core::ptr::null());
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
 
         let status = unsafe {
             dispatch_ffi::<T>(

@@ -31,6 +31,7 @@ pub struct DequantizePerChannelBackwardDescriptor {
 }
 
 /// Args bundle for a `dequantize_per_channel` backward launch.
+#[derive(Debug)]
 pub struct DequantizePerChannelBackwardArgs<'a, TIn: Element, TOut: IntElement> {
     /// Per-channel scale `[C]` (same values used in FW).
     pub scale: TensorRef<'a, TIn, 1>,
@@ -56,6 +57,7 @@ pub struct DequantizePerChannelBackwardArgs<'a, TIn: Element, TOut: IntElement> 
 /// **Workspace**: none.
 ///
 /// **Precision guarantee**: deterministic, bit-stable.
+#[derive(Debug)]
 pub struct DequantizePerChannelBackwardPlan<TIn: Element, TOut: IntElement> {
     desc: DequantizePerChannelBackwardDescriptor,
     sku: KernelSku,
@@ -152,7 +154,7 @@ impl<TIn: Element, TOut: IntElement> DequantizePerChannelBackwardPlan<TIn, TOut>
         let sc_ptr = args.scale.data.as_raw().0 as *const c_void;
         let dy_ptr = args.d_output.data.as_raw().0 as *const c_void;
         let dq_ptr = args.d_input.data.as_raw().0 as *mut c_void;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let shape4 = self.desc.shape.as_ptr();
         let axis = self.desc.axis as i32;
 

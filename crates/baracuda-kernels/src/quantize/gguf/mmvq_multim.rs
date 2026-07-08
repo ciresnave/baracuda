@@ -98,6 +98,7 @@ impl Default for GgufMmvqMultiMDescriptor {
 }
 
 /// Args bundle for a multi-M GGUF MMVQ launch.
+#[derive(Debug)]
 pub struct GgufMmvqMultiMArgs<'a, T: GgufMmvqActivation = f32> {
     /// Packed GGUF weight bytes (single matrix).
     pub weight: TensorRef<'a, U8, 1>,
@@ -112,6 +113,7 @@ pub struct GgufMmvqMultiMArgs<'a, T: GgufMmvqActivation = f32> {
 /// See the module docs for the full op shape, scope, and numerical
 /// caveats. Workspace bytes are the staged Q8_1 activation buffer
 /// (`M × ceil(ncols / 32) × 36`).
+#[derive(Debug)]
 pub struct GgufMmvqMultiMPlan<T: GgufMmvqActivation = f32> {
     desc: GgufMmvqMultiMDescriptor,
     sku: KernelSku,
@@ -256,7 +258,7 @@ impl<T: GgufMmvqActivation> GgufMmvqMultiMPlan<T> {
         let w_ptr = args.weight.data.as_raw().0 as *const c_void;
         let y_ptr = args.activations.data.as_raw().0 as *const c_void;
         let dst_ptr = args.output.data.as_raw().0 as *mut c_void;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let ncols = self.desc.ncols;
         let nrows = self.desc.nrows;
         let w_off = self.desc.w_start_byte_offset;

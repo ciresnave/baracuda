@@ -161,6 +161,7 @@ impl InterpolateDescriptor {
 }
 
 /// Args bundle for an `interpolate` launch.
+#[derive(Debug)]
 pub struct InterpolateArgs<'a, T: Element> {
     /// Input `[N, C, IH, IW]`. NCHW row-major contiguous.
     pub input: TensorRef<'a, T, 4>,
@@ -192,6 +193,7 @@ pub struct InterpolateArgs<'a, T: Element> {
 ///
 /// **Precision guarantee**: deterministic, bit-stable on identical
 /// hardware. No atomics on FW.
+#[derive(Debug)]
 pub struct InterpolatePlan<T: Element> {
     desc: InterpolateDescriptor,
     sku: KernelSku,
@@ -336,7 +338,7 @@ impl<T: Element> InterpolatePlan<T> {
         }
         let input_ptr = args.input.data.as_raw().0 as *const c_void;
         let output_ptr = args.output.data.as_raw().0 as *mut c_void;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let ac: i32 = if self.desc.align_corners { 1 } else { 0 };
         // Sentinel: 0.0 = "derive from sizes" on the C side.
         let sh: f64 = self.desc.scale_h.unwrap_or(0.0);

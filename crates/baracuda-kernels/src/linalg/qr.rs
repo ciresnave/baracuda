@@ -68,6 +68,7 @@ pub struct QrDescriptor {
 /// contents of `a` are the cuSOLVER `geqrf` output (Householder
 /// reflectors + R packed). `q` receives the dense `Q` (`[M, M]`); `r`
 /// is written by a small host-side trampoline (see plan docs).
+#[derive(Debug)]
 pub struct QrArgs<'a, T: Element> {
     /// Input matrix `[M, N]` column-major. Overwritten in place by
     /// `geqrf`.
@@ -103,6 +104,7 @@ pub struct QrArgs<'a, T: Element> {
 /// **Precision guarantee**: deterministic; not bit-stable across runs.
 ///
 /// Owns a lazy cuSOLVER handle (`!Sync` / `!Send`); destroyed on `Drop`.
+#[derive(Debug)]
 pub struct QrPlan<T: Element> {
     desc: QrDescriptor,
     sku: KernelSku,
@@ -279,7 +281,7 @@ impl<T: Element> QrPlan<T> {
     }
 
     fn bind_stream(&self, h: cusolverDnHandle_t, stream: &Stream) -> Result<()> {
-        let status = unsafe { cusolverDnSetStream(h, stream.as_raw() as *mut c_void) };
+        let status = unsafe { cusolverDnSetStream(h, stream.as_raw()) };
         if status != 0 {
             return Err(Error::CutlassInternal(-status));
         }
@@ -468,7 +470,7 @@ unsafe fn copy_d2h(
         ) -> CUresult;
     }
     let status = unsafe {
-        cuMemcpyDtoHAsync_v2(dst, src as u64, bytes, stream.as_raw() as *mut c_void)
+        cuMemcpyDtoHAsync_v2(dst, src as u64, bytes, stream.as_raw())
     };
     if status != 0 {
         return Err(Error::CutlassInternal(-status));
@@ -493,7 +495,7 @@ unsafe fn copy_h2d_typed(
         ) -> CUresult;
     }
     let status = unsafe {
-        cuMemcpyHtoDAsync_v2(dst as u64, src, bytes, stream.as_raw() as *mut c_void)
+        cuMemcpyHtoDAsync_v2(dst as u64, src, bytes, stream.as_raw())
     };
     if status != 0 {
         return Err(Error::CutlassInternal(-status));

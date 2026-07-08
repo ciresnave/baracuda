@@ -53,6 +53,7 @@ pub struct SdpaBackwardDescriptor {
 }
 
 /// Args bundle for a SDPA backward launch.
+#[derive(Debug)]
 pub struct SdpaBackwardArgs<'a, T: Element> {
     /// Query tensor used in FW — shape `[B, H, Q, D_k]`.
     pub q: TensorRef<'a, T, 4>,
@@ -108,6 +109,7 @@ pub struct SdpaBackwardArgs<'a, T: Element> {
 /// kernel atomicAdd-accumulates Q-head contributions into the shared
 /// kv-head slot. The non-broadcast path performs plain stores and is
 /// safe with any initial buffer contents.
+#[derive(Debug)]
 pub struct SdpaBackwardPlan<T: Element> {
     desc: SdpaBackwardDescriptor,
     sku: KernelSku,
@@ -329,7 +331,7 @@ impl<T: Element> SdpaBackwardPlan<T> {
         if args.attn.numel() == 0 {
             return Ok(());
         }
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let q_ptr = args.q.data.as_raw().0 as *const c_void;
         let k_ptr = args.k.data.as_raw().0 as *const c_void;
         let v_ptr = args.v.data.as_raw().0 as *const c_void;

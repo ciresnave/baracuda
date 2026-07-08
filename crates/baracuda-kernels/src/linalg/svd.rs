@@ -16,7 +16,6 @@
 //! - `s`: always `[K]`.
 
 use core::cell::Cell;
-use core::ffi::c_void;
 use core::marker::PhantomData;
 
 use baracuda_cutlass::{Error, Result};
@@ -51,6 +50,7 @@ pub struct SvdDescriptor {
 /// `a` is **overwritten** by cuSOLVER's `gesvd` during the call. The
 /// post-`run` contents of `a` are not meaningful (the routine uses it
 /// as scratch).
+#[derive(Debug)]
 pub struct SvdArgs<'a, T: Element> {
     /// Input matrix `[M, N]` column-major. Overwritten in place.
     pub a: TensorMut<'a, T, 2>,
@@ -86,6 +86,7 @@ pub struct SvdArgs<'a, T: Element> {
 /// **Precision guarantee**: deterministic; not bit-stable across runs.
 ///
 /// Owns a lazy cuSOLVER handle (`!Sync` / `!Send`); destroyed on `Drop`.
+#[derive(Debug)]
 pub struct SvdPlan<T: Element> {
     desc: SvdDescriptor,
     sku: KernelSku,
@@ -202,7 +203,7 @@ impl<T: Element> SvdPlan<T> {
     }
 
     fn bind_stream(&self, h: cusolverDnHandle_t, stream: &Stream) -> Result<()> {
-        let status = unsafe { cusolverDnSetStream(h, stream.as_raw() as *mut c_void) };
+        let status = unsafe { cusolverDnSetStream(h, stream.as_raw()) };
         if status != 0 {
             return Err(Error::CutlassInternal(-status));
         }

@@ -45,6 +45,7 @@ pub struct RandomDescriptor<const N: usize> {
 }
 
 /// Args bundle for Uniform / Normal (T = f32 | f64).
+#[derive(Debug)]
 pub struct RandomArgs<'a, T: Element, const N: usize> {
     /// Output tensor — written by cuRAND directly. Must be contiguous.
     pub y: TensorMut<'a, T, N>,
@@ -56,6 +57,7 @@ pub struct RandomArgs<'a, T: Element, const N: usize> {
 /// then writes Bool output cells via the bespoke threshold kernel. The
 /// workspace must be at least `numel * sizeof(f32)` bytes (see
 /// [`RandomPlan::workspace_size`]).
+#[derive(Debug)]
 pub struct RandomBoolArgs<'a, const N: usize> {
     /// Output tensor — packed Bool, one byte per cell.
     pub y: TensorMut<'a, Bool, N>,
@@ -72,6 +74,7 @@ pub struct RandomBoolArgs<'a, const N: usize> {
 /// first call to `run` (or any of the typed `run_*` accessors). cuRAND
 /// generators are not thread-safe; the plan is `!Sync` and `!Send` as a
 /// consequence (the `Cell<curandGenerator_t>` makes both negative).
+#[derive(Debug)]
 pub struct RandomPlan<T: Element, const N: usize> {
     desc: RandomDescriptor<N>,
     sku: KernelSku,
@@ -127,14 +130,17 @@ impl<T: Element, const N: usize> RandomPlan<T, N> {
         // Bernoulli wants p in [0, 1].
         if matches!(desc.kind, RandomKind::Bernoulli) {
             let p = desc.param1;
-            if !(p >= 0.0 && p <= 1.0) {
+            if !(0.0..=1.0).contains(&p) {
                 return Err(Error::InvalidProblem(
                     "baracuda-kernels::RandomPlan(Bernoulli): p must be in [0, 1]",
                 ));
             }
         }
         // Normal wants stddev > 0.
-        if matches!(desc.kind, RandomKind::Normal) && !(desc.param2 > 0.0) {
+        // NaN-aware: Normal stddev (param2) must be strictly positive (NaN/incomparable => reject).
+        if matches!(desc.kind, RandomKind::Normal)
+            && desc.param2.partial_cmp(&0.0) != Some(core::cmp::Ordering::Greater)
+        {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::RandomPlan(Normal): stddev (param2) must be > 0",
             ));
@@ -238,7 +244,7 @@ impl<T: Element, const N: usize> RandomPlan<T, N> {
     /// associates each generator with at most one stream at a time;
     /// rebinding on every run lets the plan be reused across streams.
     fn bind_stream(&self, gen_handle: curandGenerator_t, stream: &Stream) -> Result<()> {
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let status = unsafe { curandSetStream(gen_handle, stream_ptr) };
         if status != 0 {
             return Err(Error::CutlassInternal(curand_to_status(status)));
@@ -443,7 +449,7 @@ impl<const N: usize> RandomPlan<Bool, N> {
         }
 
         let y_ptr = args.y.data.as_raw().0 as *mut c_void;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let status = unsafe {
             baracuda_kernels_sys::baracuda_kernels_bernoulli_run(
                 numel,
@@ -517,7 +523,7 @@ fn affine_transform_f32(
     scale: f32,
     offset: f32,
 ) -> Result<()> {
-    let stream_ptr = stream.as_raw() as *mut c_void;
+    let stream_ptr = stream.as_raw();
     let status = unsafe {
         baracuda_kernels_sys::baracuda_kernels_affine_inplace_f32_run(
             n as i64,
@@ -539,7 +545,7 @@ fn affine_transform_f64(
     scale: f64,
     offset: f64,
 ) -> Result<()> {
-    let stream_ptr = stream.as_raw() as *mut c_void;
+    let stream_ptr = stream.as_raw();
     let status = unsafe {
         baracuda_kernels_sys::baracuda_kernels_affine_inplace_f64_run(
             n as i64,

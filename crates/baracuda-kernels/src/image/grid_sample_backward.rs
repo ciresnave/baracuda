@@ -40,6 +40,7 @@ pub struct GridSampleBackwardDescriptor {
 }
 
 /// Args bundle for a `grid_sample_backward` launch.
+#[derive(Debug)]
 pub struct GridSampleBackwardArgs<'a, T: Element> {
     /// Upstream gradient `[N, C, OH, OW]`.
     pub dout: TensorRef<'a, T, 4>,
@@ -71,6 +72,7 @@ pub struct GridSampleBackwardArgs<'a, T: Element> {
 ///
 /// **Precision guarantee**: **non-deterministic** (atomicAdd into
 /// `dinput`).
+#[derive(Debug)]
 pub struct GridSampleBackwardPlan<T: Element> {
     desc: GridSampleBackwardDescriptor,
     sku: KernelSku,
@@ -176,7 +178,7 @@ impl<T: Element> GridSampleBackwardPlan<T> {
         let grid_ptr = args.grid.data.as_raw().0 as *const c_void;
         let din_ptr = args.dinput.data.as_raw().0 as *mut c_void;
         let dgrid_ptr = args.dgrid.data.as_raw().0 as *mut c_void;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let status = match T::KIND {
             ElementKind::F32 => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_grid_sample_2d_backward_f32_run(

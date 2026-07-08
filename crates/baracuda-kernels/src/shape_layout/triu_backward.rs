@@ -39,6 +39,7 @@ pub struct TriuBackwardDescriptor<const N: usize> {
 ///
 /// No saved forward tensors are needed: `d_input = triu(d_output,
 /// diagonal)` doesn't reference the forward `input` or `output`.
+#[derive(Debug)]
 pub struct TriuBackwardArgs<'a, T: Element, const N: usize> {
     /// Upstream gradient — same shape as the forward output (== input).
     pub grad_output: TensorRef<'a, T, N>,
@@ -61,6 +62,7 @@ pub struct TriuBackwardArgs<'a, T: Element, const N: usize> {
 ///
 /// **Precision guarantee**: deterministic, bit-stable, bit-exact —
 /// pure select-or-zero, reuses the FW kernel.
+#[derive(Debug)]
 pub struct TriuBackwardPlan<T: Element, const N: usize> {
     desc: TriuBackwardDescriptor<N>,
     sku: KernelSku,
@@ -185,7 +187,7 @@ impl<T: Element, const N: usize> TriuBackwardPlan<T, N> {
         }
         let dy_ptr = args.grad_output.data.as_raw().0 as *const c_void;
         let dx_ptr = args.grad_input.data.as_raw().0 as *mut c_void;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let shape = self.desc.shape;
         let rank = N as i32;
         let diagonal = self.desc.diagonal;

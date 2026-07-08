@@ -52,6 +52,7 @@ impl SegDescView for UnsortedSegmentMeanDescriptor {
 }
 
 /// Args bundle for an `unsorted_segment_mean` launch.
+#[derive(Debug)]
 pub struct UnsortedSegmentMeanArgs<'a, T: Element> {
     /// Input `[N, D]`.
     pub input: TensorRef<'a, T, 2>,
@@ -82,6 +83,7 @@ pub struct UnsortedSegmentMeanArgs<'a, T: Element> {
 ///
 /// **Precision guarantee**: **non-deterministic** — atomicAdd
 /// ordering during accumulation.
+#[derive(Debug)]
 pub struct UnsortedSegmentMeanPlan<T: Element> {
     desc: UnsortedSegmentMeanDescriptor,
     sku: KernelSku,
@@ -168,7 +170,7 @@ impl<T: Element> UnsortedSegmentMeanPlan<T> {
         let in_ptr = args.input.data.as_raw().0 as *const c_void;
         let id_ptr = args.segment_ids.data.as_raw().0 as *const c_void;
         let out_ptr = args.output.data.as_raw().0 as *mut c_void;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let status = match T::KIND {
             ElementKind::F32 => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unsorted_segment_mean_f32_run(

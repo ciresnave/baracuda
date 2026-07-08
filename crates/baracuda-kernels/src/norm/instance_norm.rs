@@ -38,6 +38,7 @@ pub struct InstanceNormDescriptor<const N: usize> {
 }
 
 /// Args bundle for InstanceNorm FW.
+#[derive(Debug)]
 pub struct InstanceNormArgs<'a, T: Element, const N: usize> {
     /// Input.
     pub x: TensorRef<'a, T, N>,
@@ -55,6 +56,7 @@ pub struct InstanceNormArgs<'a, T: Element, const N: usize> {
 
 /// InstanceNorm forward plan. Thin wrapper over [`GroupNormPlan`] with
 /// `num_groups == num_channels`.
+#[derive(Debug)]
 pub struct InstanceNormPlan<T: Element, const N: usize> {
     inner: GroupNormPlan<T, N>,
 }

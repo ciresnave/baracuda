@@ -79,6 +79,8 @@
 //! tensor of rank up to [`FFTSHIFT_ND_MAX_RANK`]. The 1-D
 //! [`FftShiftPlan`] remains the fast path for single-axis shifts.
 
+// Renaming this submodule is API-breaking (it is part of the public module path).
+#[allow(clippy::module_inception)]
 pub mod fft;
 pub mod fftn;
 pub mod fftshift;

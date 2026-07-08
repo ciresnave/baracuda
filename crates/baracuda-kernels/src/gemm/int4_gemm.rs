@@ -41,7 +41,7 @@ use core::marker::PhantomData;
 use baracuda_cutlass::{Error, Result};
 use baracuda_driver::Stream;
 use baracuda_kernels_types::{
-    ArchSku, BiasElement, BiasElementKind, ElementKind, EpilogueKind, IntElement, LayoutSku,
+    ArchSku, BiasElement, ElementKind, EpilogueKind, IntElement, LayoutSku,
     MatrixMut, MatrixRef, PlanPreference, PrecisionGuarantee, S4, U4, VectorRef, Workspace,
 };
 
@@ -126,6 +126,7 @@ pub struct Int4GemmArgs<'a, T: IntElement, BT: BiasElement = f32> {
 /// Parameterized on `T: IntElement` ([`S4`] / [`U4`]; trailblazer SKU
 /// is [`S4`] only) and `BT: BiasElement` (`f32` default, or `i32`,
 /// matching the int8 family's bias-element convention).
+#[derive(Debug)]
 pub struct Int4GemmPlan<T: IntElement, BT: BiasElement = f32> {
     desc: Int4GemmDescriptor,
     sku: GemmSku,
@@ -342,7 +343,7 @@ impl<T: IntElement, BT: BiasElement> Int4GemmPlan<T, BT> {
             ));
         }
 
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let m = self.desc.m;
         let n = self.desc.n;
         let k = self.desc.k;

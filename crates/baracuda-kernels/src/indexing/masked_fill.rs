@@ -80,6 +80,7 @@ impl<const N: usize> MaskedFillDescriptor<N> {
 }
 
 /// Args bundle for a `masked_fill` launch.
+#[derive(Debug)]
 pub struct MaskedFillArgs<'a, T: Element, const N: usize> {
     /// Source tensor.
     pub src: TensorRef<'a, T, N>,
@@ -111,6 +112,7 @@ pub struct MaskedFillArgs<'a, T: Element, const N: usize> {
 ///
 /// **Precision guarantee**: deterministic, bit-stable on same
 /// hardware. Pure element-select, no arithmetic — bit-exact.
+#[derive(Debug)]
 pub struct MaskedFillPlan<T: Element, const N: usize> {
     desc: MaskedFillDescriptor<N>,
     sku: KernelSku,
@@ -251,7 +253,7 @@ impl<T: Element, const N: usize> MaskedFillPlan<T, N> {
         let src_ptr = args.src.data.as_raw().0 as *const c_void;
         let mask_ptr = args.mask.data.as_raw().0 as *const c_void;
         let out_ptr = args.out.data.as_raw().0 as *mut c_void;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
 
         let status = match T::KIND {
             ElementKind::F32 => unsafe {

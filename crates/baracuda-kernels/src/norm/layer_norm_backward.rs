@@ -44,9 +44,9 @@ impl<const N: usize> LayerNormBackwardDescriptor<N> {
     #[inline]
     pub fn save_shape(&self) -> [i32; N] {
         let mut s = self.input_shape;
-        for d in 0..N {
+        for (d, slot) in s.iter_mut().enumerate() {
             if (self.norm_axes_mask >> d) & 1 == 1 {
-                s[d] = 1;
+                *slot = 1;
             }
         }
         s
@@ -66,6 +66,7 @@ impl<const N: usize> LayerNormBackwardDescriptor<N> {
 }
 
 /// Args bundle for a LayerNorm BW launch.
+#[derive(Debug)]
 pub struct LayerNormBackwardArgs<'a, T: Element, const N: usize> {
     /// Upstream gradient.
     pub dy: TensorRef<'a, T, N>,
@@ -86,6 +87,7 @@ pub struct LayerNormBackwardArgs<'a, T: Element, const N: usize> {
 }
 
 /// LayerNorm backward plan.
+#[derive(Debug)]
 pub struct LayerNormBackwardPlan<T: Element, const N: usize> {
     desc: LayerNormBackwardDescriptor<N>,
     sku: KernelSku,
@@ -280,7 +282,7 @@ impl<T: Element, const N: usize> LayerNormBackwardPlan<T, N> {
         if numel == 0 {
             return Ok(());
         }
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let dy_ptr = args.dy.data.as_raw().0 as *const c_void;
         let x_ptr = args.x.data.as_raw().0 as *const c_void;
         let mean_ptr = args.mean.data.as_raw().0 as *const c_void;

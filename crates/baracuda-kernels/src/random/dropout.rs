@@ -52,6 +52,7 @@ pub struct DropoutDescriptor<const N: usize> {
 }
 
 /// Args bundle for a dropout forward launch.
+#[derive(Debug)]
 pub struct DropoutArgs<'a, T: Element, const N: usize> {
     /// Input tensor.
     pub x: TensorRef<'a, T, N>,
@@ -66,6 +67,7 @@ pub struct DropoutArgs<'a, T: Element, const N: usize> {
 ///
 /// Owns a cuRAND generator (lazy + `!Sync`); see [`super::RandomPlan`]
 /// for the shared rationale.
+#[derive(Debug)]
 pub struct DropoutPlan<T: Element, const N: usize> {
     desc: DropoutDescriptor<N>,
     sku: KernelSku,
@@ -233,7 +235,7 @@ impl<const N: usize> DropoutPlan<f32, N> {
             }
         };
 
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let x_ptr = args.x.data.as_raw().0 as *const c_void;
         let y_ptr = args.y.data.as_raw().0 as *mut c_void;
         let mask_ptr = args.mask.data.as_raw().0 as *mut c_void;
@@ -308,7 +310,7 @@ impl<const N: usize> DropoutPlan<f64, N> {
             }
         };
 
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let x_ptr = args.x.data.as_raw().0 as *const c_void;
         let y_ptr = args.y.data.as_raw().0 as *mut c_void;
         let mask_ptr = args.mask.data.as_raw().0 as *mut c_void;
@@ -376,6 +378,7 @@ pub struct DropoutBackwardDescriptor<const N: usize> {
 }
 
 /// Args bundle for dropout backward.
+#[derive(Debug)]
 pub struct DropoutBackwardArgs<'a, T: Element, const N: usize> {
     /// Upstream gradient.
     pub dy: TensorRef<'a, T, N>,
@@ -386,6 +389,7 @@ pub struct DropoutBackwardArgs<'a, T: Element, const N: usize> {
 }
 
 /// Dropout backward plan.
+#[derive(Debug)]
 pub struct DropoutBackwardPlan<T: Element, const N: usize> {
     desc: DropoutBackwardDescriptor<N>,
     sku: KernelSku,
@@ -508,7 +512,7 @@ impl<const N: usize> DropoutBackwardPlan<f32, N> {
         if numel == 0 {
             return Ok(());
         }
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let dy_ptr = args.dy.data.as_raw().0 as *const c_void;
         let mask_ptr = args.mask.data.as_raw().0 as *const c_void;
         let dx_ptr = args.dx.data.as_raw().0 as *mut c_void;
@@ -543,7 +547,7 @@ impl<const N: usize> DropoutBackwardPlan<f64, N> {
         if numel == 0 {
             return Ok(());
         }
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let dy_ptr = args.dy.data.as_raw().0 as *const c_void;
         let mask_ptr = args.mask.data.as_raw().0 as *const c_void;
         let dx_ptr = args.dx.data.as_raw().0 as *mut c_void;

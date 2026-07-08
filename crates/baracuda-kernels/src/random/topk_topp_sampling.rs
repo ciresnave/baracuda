@@ -96,6 +96,7 @@ pub struct TopKTopPSamplingDescriptor {
 }
 
 /// Args bundle for a sort-free sampling launch.
+#[derive(Debug)]
 pub struct TopKTopPSamplingArgs<'a> {
     /// Row-normalized probabilities `[batch, vocab]` f32.
     pub probs: TensorRef<'a, f32, 2>,
@@ -114,6 +115,7 @@ pub struct TopKTopPSamplingArgs<'a> {
 ///
 /// Routes to FlashInfer's `Top*FromProb` family. Requires the
 /// `flashinfer` cargo feature.
+#[derive(Debug)]
 pub struct TopKTopPSamplingPlan {
     desc: TopKTopPSamplingDescriptor,
     sku: KernelSku,

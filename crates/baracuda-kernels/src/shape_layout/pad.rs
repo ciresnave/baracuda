@@ -52,8 +52,8 @@ impl<const N: usize> PadDescriptor<N> {
     /// Compute the output shape from input shape + pad amounts.
     pub fn output_shape(&self) -> [i32; N] {
         let mut out = [0i32; N];
-        for d in 0..N {
-            out[d] = self.input_shape[d] + self.pad_low[d] + self.pad_high[d];
+        for (d, out_d) in out.iter_mut().enumerate() {
+            *out_d = self.input_shape[d] + self.pad_low[d] + self.pad_high[d];
         }
         out
     }
@@ -65,6 +65,7 @@ impl<const N: usize> PadDescriptor<N> {
 /// output shape derived from descriptor (`input_shape + pad_low +
 /// pad_high` per axis). Both can be strided views — the kernel walks
 /// per-axis strides.
+#[derive(Debug)]
 pub struct PadArgs<'a, T: Element, const N: usize> {
     /// Input tensor.
     pub x: TensorRef<'a, T, N>,
@@ -96,6 +97,7 @@ pub struct PadArgs<'a, T: Element, const N: usize> {
 ///
 /// **Precision guarantee**: deterministic, bit-stable, bit-exact (no
 /// arithmetic — pure index + copy / value-write).
+#[derive(Debug)]
 pub struct PadPlan<T: Element, const N: usize> {
     desc: PadDescriptor<N>,
     sku: KernelSku,
@@ -237,7 +239,7 @@ impl<T: Element, const N: usize> PadPlan<T, N> {
         }
         let x_ptr = args.x.data.as_raw().0 as *const c_void;
         let y_ptr = args.y.data.as_raw().0 as *mut c_void;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
 
         let input_shape = self.desc.input_shape;
         let output_shape = self.desc.output_shape();

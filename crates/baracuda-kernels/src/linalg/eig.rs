@@ -57,7 +57,7 @@
 //!    handle).
 //! 2. Sizes are `int64_t`, not `int`.
 //! 3. The buffer-size query returns **two** byte counts (host workspace
-//!    + device workspace). The plan allocates the device workspace from
+//!    plus device workspace). The plan allocates the device workspace from
 //!    `Workspace::Borrowed` and the host workspace from a `Vec<u8>` it
 //!    owns transparently.
 
@@ -102,6 +102,7 @@ pub struct EigDescriptor {
 /// **All output tensors take the same element type `T` as the input**
 /// (matches cuSOLVER Xgeev's API exactly). The interpretation depends on
 /// whether `T` is real or complex — see module-level docs.
+#[derive(Debug)]
 pub struct EigArgs<'a, T: Element> {
     /// Input matrix `[N, N]` column-major. Destroyed in place.
     pub a: TensorMut<'a, T, 2>,
@@ -151,6 +152,7 @@ pub struct EigArgs<'a, T: Element> {
 ///
 /// Owns a lazy cuSOLVER handle + params object (`!Sync` / `!Send`);
 /// destroyed on `Drop`.
+#[derive(Debug)]
 pub struct EigPlan<T: Element> {
     desc: EigDescriptor,
     sku: KernelSku,
@@ -328,7 +330,7 @@ impl<T: Element> EigPlan<T> {
     }
 
     fn bind_stream(&self, h: cusolverDnHandle_t, stream: &Stream) -> Result<()> {
-        let status = unsafe { cusolverDnSetStream(h, stream.as_raw() as *mut c_void) };
+        let status = unsafe { cusolverDnSetStream(h, stream.as_raw()) };
         if status != 0 {
             return Err(Error::CutlassInternal(-status));
         }

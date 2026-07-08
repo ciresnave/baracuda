@@ -41,6 +41,7 @@ pub struct TopkDescriptor {
 }
 
 /// Args bundle for a `topk` launch.
+#[derive(Debug)]
 pub struct TopkArgs<'a, T: Element> {
     /// Input `[batch, row_len]`.
     pub input: TensorRef<'a, T, 2>,
@@ -71,6 +72,7 @@ pub struct TopkArgs<'a, T: Element> {
 ///
 /// **Saved-indices contract**: FW emits both `values` and `indices`;
 /// BW reads saved indices verbatim. Retain `indices` for autograd.
+#[derive(Debug)]
 pub struct TopkPlan<T: Element> {
     desc: TopkDescriptor,
     sku: KernelSku,
@@ -178,7 +180,7 @@ impl<T: Element> TopkPlan<T> {
         let in_ptr = args.input.data.as_raw().0 as *const c_void;
         let vals_ptr = args.values.data.as_raw().0 as *mut c_void;
         let idx_ptr = args.indices.data.as_raw().0 as *mut c_void;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let largest_flag = if self.desc.largest { 1 } else { 0 };
 
         let status = match T::KIND {

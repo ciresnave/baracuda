@@ -26,6 +26,7 @@ pub struct RollDescriptor<const N: usize> {
 }
 
 /// Args bundle for a Roll launch.
+#[derive(Debug)]
 pub struct RollArgs<'a, T: Element, const N: usize> {
     /// Input.
     pub x: TensorRef<'a, T, N>,
@@ -50,6 +51,7 @@ pub struct RollArgs<'a, T: Element, const N: usize> {
 /// **Workspace**: none.
 ///
 /// **Precision guarantee**: deterministic, bit-stable, bit-exact.
+#[derive(Debug)]
 pub struct RollPlan<T: Element, const N: usize> {
     desc: RollDescriptor<N>,
     sku: KernelSku,
@@ -168,7 +170,7 @@ impl<T: Element, const N: usize> RollPlan<T, N> {
         }
         let x_ptr = args.x.data.as_raw().0 as *const c_void;
         let y_ptr = args.y.data.as_raw().0 as *mut c_void;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
 
         let shape = self.desc.shape;
         let shifts = self.desc.shifts;

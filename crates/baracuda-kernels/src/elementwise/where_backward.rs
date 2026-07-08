@@ -50,6 +50,7 @@ pub struct WhereBackwardDescriptor<const N: usize> {
 /// `cond` is the FW mask (`u8`, 0 = false). `dy` is the upstream
 /// gradient (same dtype as the FW value inputs). `da` and `db` are the
 /// gradients w.r.t. the FW `a` and `b` respectively.
+#[derive(Debug)]
 pub struct WhereBackwardArgs<'a, T: Element, const N: usize> {
     /// Boolean mask from the forward pass (`0u8` selected `b`,
     /// any other value selected `a`).
@@ -66,6 +67,7 @@ pub struct WhereBackwardArgs<'a, T: Element, const N: usize> {
 ///
 /// `T: Element` is the value dtype (`dy` / `da` / `db`). The cond is
 /// always `u8`. `const N: usize` is the tensor rank.
+#[derive(Debug)]
 pub struct WhereBackwardPlan<T: Element, const N: usize> {
     desc: WhereBackwardDescriptor<N>,
     sku: KernelSku,
@@ -239,7 +241,7 @@ impl<T: Element, const N: usize> WhereBackwardPlan<T, N> {
         let dy_ptr = args.dy.data.as_raw().0 as *const c_void;
         let da_ptr = args.da.data.as_raw().0 as *mut c_void;
         let db_ptr = args.db.data.as_raw().0 as *mut c_void;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
 
         let status = match T::KIND {
             ElementKind::F32 => unsafe {

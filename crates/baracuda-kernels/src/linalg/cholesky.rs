@@ -54,6 +54,7 @@ pub struct CholeskyDescriptor {
 ///
 /// `a` is **overwritten in place** with the requested triangular factor.
 /// The opposite triangle's contents are not meaningful after the call.
+#[derive(Debug)]
 pub struct CholeskyArgs<'a, T: Element> {
     /// Input / output matrix stack `[batch, N, N]` row-major contiguous.
     /// Overwritten with `L` (or `U`) in place.
@@ -92,6 +93,7 @@ pub struct CholeskyArgs<'a, T: Element> {
 /// implementation-defined.
 ///
 /// Owns a lazy cuSOLVER handle (`!Sync` / `!Send`); destroyed on `Drop`.
+#[derive(Debug)]
 pub struct CholeskyPlan<T: Element> {
     desc: CholeskyDescriptor,
     sku: KernelSku,
@@ -264,7 +266,7 @@ impl<T: Element> CholeskyPlan<T> {
     /// handle with at most one stream at a time; rebinding on every run
     /// lets the plan be reused across streams.
     fn bind_stream(&self, h: cusolverDnHandle_t, stream: &Stream) -> Result<()> {
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let status = unsafe { cusolverDnSetStream(h, stream_ptr) };
         if status != 0 {
             return Err(Error::CutlassInternal(-status));
@@ -520,7 +522,7 @@ pub(crate) unsafe fn copy_h2d(
         ) -> CUresult;
     }
     let status = unsafe {
-        cuMemcpyHtoDAsync_v2(dst as u64, src, bytes, stream.as_raw() as *mut c_void)
+        cuMemcpyHtoDAsync_v2(dst as u64, src, bytes, stream.as_raw())
     };
     if status != 0 {
         return Err(Error::CutlassInternal(-status));
@@ -530,6 +532,6 @@ pub(crate) unsafe fn copy_h2d(
     // device array to be populated.
     stream
         .synchronize()
-        .map_err(|e| Error::Driver(e))?;
+        .map_err(Error::Driver)?;
     Ok(())
 }

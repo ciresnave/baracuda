@@ -45,6 +45,7 @@ impl SegDescView for UnsortedSegmentMaxDescriptor {
 }
 
 /// Args bundle for an `unsorted_segment_max` launch.
+#[derive(Debug)]
 pub struct UnsortedSegmentMaxArgs<'a, T: Element> {
     /// Input `[N, D]`.
     pub input: TensorRef<'a, T, 2>,
@@ -73,6 +74,7 @@ pub struct UnsortedSegmentMaxArgs<'a, T: Element> {
 ///
 /// **Precision guarantee**: **non-deterministic** — atomic-CAS
 /// retry ordering varies across launches.
+#[derive(Debug)]
 pub struct UnsortedSegmentMaxPlan<T: Element> {
     desc: UnsortedSegmentMaxDescriptor,
     sku: KernelSku,
@@ -140,7 +142,7 @@ impl<T: Element> UnsortedSegmentMaxPlan<T> {
         let in_ptr = args.input.data.as_raw().0 as *const c_void;
         let id_ptr = args.segment_ids.data.as_raw().0 as *const c_void;
         let out_ptr = args.output.data.as_raw().0 as *mut c_void;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let status = match T::KIND {
             ElementKind::F32 => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unsorted_segment_max_f32_run(

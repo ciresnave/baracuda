@@ -42,6 +42,7 @@ impl SegDescView for UnsortedSegmentMinBackwardDescriptor {
 }
 
 /// Args bundle for an `unsorted_segment_min_backward` launch.
+#[derive(Debug)]
 pub struct UnsortedSegmentMinBackwardArgs<'a, T: Element> {
     /// Upstream gradient `[num_segments, D]`.
     pub d_output: TensorRef<'a, T, 2>,
@@ -58,6 +59,7 @@ pub struct UnsortedSegmentMinBackwardArgs<'a, T: Element> {
 /// **Dtypes**: `{f32, f64}`. See
 /// [`UnsortedSegmentMaxBackwardPlan`](crate::UnsortedSegmentMaxBackwardPlan)
 /// for the tie-break + FW-consistency notes.
+#[derive(Debug)]
 pub struct UnsortedSegmentMinBackwardPlan<T: Element> {
     desc: UnsortedSegmentMinBackwardDescriptor,
     sku: KernelSku,
@@ -138,7 +140,7 @@ impl<T: Element> UnsortedSegmentMinBackwardPlan<T> {
         let in_ptr = args.input.data.as_raw().0 as *const c_void;
         let id_ptr = args.segment_ids.data.as_raw().0 as *const c_void;
         let di_ptr = args.d_input.data.as_raw().0 as *mut c_void;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let status = match T::KIND {
             ElementKind::F32 => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unsorted_segment_min_backward_f32_run(

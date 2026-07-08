@@ -38,6 +38,7 @@ pub struct QuantizePerChannelBackwardDescriptor {
 }
 
 /// Args bundle for a `quantize_per_channel` backward launch.
+#[derive(Debug)]
 pub struct QuantizePerChannelBackwardArgs<'a, TIn: Element, TOut: IntElement> {
     /// Saved FW input `[D0, D1, D2, D3]` in FP — required for mask
     /// recomputation.
@@ -72,6 +73,7 @@ pub struct QuantizePerChannelBackwardArgs<'a, TIn: Element, TOut: IntElement> {
 /// **Workspace**: none.
 ///
 /// **Precision guarantee**: deterministic, bit-stable.
+#[derive(Debug)]
 pub struct QuantizePerChannelBackwardPlan<TIn: Element, TOut: IntElement> {
     desc: QuantizePerChannelBackwardDescriptor,
     sku: KernelSku,
@@ -173,7 +175,7 @@ impl<TIn: Element, TOut: IntElement> QuantizePerChannelBackwardPlan<TIn, TOut> {
         let zp_ptr = args.zero_point.data.as_raw().0 as *const c_void;
         let dy_ptr = args.d_output.data.as_raw().0 as *const c_void;
         let dx_ptr = args.d_input.data.as_raw().0 as *mut c_void;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let shape4 = self.desc.shape.as_ptr();
         let axis = self.desc.axis as i32;
         let qmin = self.desc.q_min;

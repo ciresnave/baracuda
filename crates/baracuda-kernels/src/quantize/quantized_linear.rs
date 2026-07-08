@@ -82,6 +82,7 @@ pub struct QuantizedLinearDescriptor {
 /// scale. They are part of the args bundle (not workspace) so callers
 /// can reuse them across launches without re-allocation — the Plan's
 /// `workspace_size()` returns 0.
+#[derive(Debug)]
 pub struct QuantizedLinearArgs<'a, TIn: Element, TWQ: IntElement> {
     /// FP activation `[M, K]`.
     pub activation: TensorRef<'a, TIn, 2>,
@@ -137,6 +138,7 @@ pub struct QuantizedLinearArgs<'a, TIn: Element, TWQ: IntElement> {
 /// correctness; tiled-smem / mma.sync optimizations land in a perf
 /// milestone — current variant is **correctness-scaffold, not
 /// throughput-optimized**.
+#[derive(Debug)]
 pub struct QuantizedLinearPlan<TIn: Element, TWQ: IntElement> {
     desc: QuantizedLinearDescriptor,
     sku: KernelSku,
@@ -272,7 +274,7 @@ impl<TIn: Element, TWQ: IntElement> QuantizedLinearPlan<TIn, TWQ> {
             return Ok(());
         }
 
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
 
         // ---- Pass 1: dynamic-range per-token symmetric quantize the
         //              FP activation into the int8 scratch. -----------

@@ -49,6 +49,7 @@ impl SegDescView for SegmentMaxDescriptor {
 }
 
 /// Args bundle for a `segment_max` launch.
+#[derive(Debug)]
 pub struct SegmentMaxArgs<'a, T: Element> {
     /// Input `[N, D]`.
     pub input: TensorRef<'a, T, 2>,
@@ -77,6 +78,7 @@ pub struct SegmentMaxArgs<'a, T: Element> {
 ///
 /// **Index policy**: out-of-range IDs dropped. Empty segments emit
 /// zero (per-op identity sentinel from `segment_sorted_kernel`).
+#[derive(Debug)]
 pub struct SegmentMaxPlan<T: Element> {
     desc: SegmentMaxDescriptor,
     sku: KernelSku,

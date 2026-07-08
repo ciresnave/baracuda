@@ -90,6 +90,7 @@ pub struct FftShiftNdDescriptor {
 }
 
 /// Args bundle for an N-D `fftshift` / `ifftshift` launch.
+#[derive(Debug)]
 pub struct FftShiftNdArgs<'a, T: Element, const N: usize> {
     /// Input tensor (rank `N`). Must be dense and contiguous.
     pub input: TensorRef<'a, T, N>,
@@ -124,6 +125,7 @@ pub struct FftShiftNdArgs<'a, T: Element, const N: usize> {
 /// **Precision guarantee**: bit-exact (pure index permutation).
 ///
 /// No cuFFT handle / state — bespoke kernel.
+#[derive(Debug)]
 pub struct FftShiftNdPlan<T: Element, const N: usize> {
     desc: FftShiftNdDescriptor,
     sku: KernelSku,
@@ -247,9 +249,7 @@ impl<T: Element, const N: usize> FftShiftNdPlan<T, N> {
         let ndim = self.desc.ndim as usize;
         let mut expected_shape = [0i32; N];
         // Copy the leading `ndim` entries (guaranteed == N by `select`).
-        for i in 0..ndim {
-            expected_shape[i] = self.desc.shape[i];
-        }
+        expected_shape[..ndim].copy_from_slice(&self.desc.shape[..ndim]);
         if args.input.shape != expected_shape {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::FftShiftNdPlan: input shape != descriptor.shape",
@@ -304,13 +304,10 @@ impl<T: Element, const N: usize> FftShiftNdPlan<T, N> {
         let mut shift_amt_arr = [0i32; FFTSHIFT_ND_MAX_RANK];
         let mut stride_arr = [0i64; FFTSHIFT_ND_MAX_RANK];
 
-        for i in 0..ndim {
-            shape_arr[i] = self.desc.shape[i];
-            // Stride layout matches the kernel's expectation
-            // (`stride[d] = product(shape[d+1..ndim])` — dense row-
-            // major).
-            stride_arr[i] = args.output.stride[i];
-        }
+        shape_arr[..ndim].copy_from_slice(&self.desc.shape[..ndim]);
+        // Stride layout matches the kernel's expectation
+        // (`stride[d] = product(shape[d+1..ndim])` — dense row-major).
+        stride_arr[..ndim].copy_from_slice(&args.output.stride[..ndim]);
         // Build the per-axis shift map from the shifted-axes set.
         let num_shift_axes = self.desc.num_shift_axes as usize;
         for &axis in &self.desc.shift_axes[..num_shift_axes] {
@@ -322,7 +319,7 @@ impl<T: Element, const N: usize> FftShiftNdPlan<T, N> {
 
         let x_ptr = args.input.data.as_raw().0 as *const c_void;
         let y_ptr = args.output.data.as_raw().0 as *mut c_void;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let rank = ndim as i32;
 
         let size = core::mem::size_of::<T>();

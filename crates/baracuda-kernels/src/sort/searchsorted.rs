@@ -33,6 +33,7 @@ pub struct SearchsortedDescriptor {
 }
 
 /// Args bundle for a `searchsorted` launch.
+#[derive(Debug)]
 pub struct SearchsortedArgs<'a, T: Element> {
     /// Sorted sequence `[len_sorted]`.
     pub sorted_seq: TensorRef<'a, T, 1>,
@@ -61,6 +62,7 @@ pub struct SearchsortedArgs<'a, T: Element> {
 ///
 /// **Precision guarantee**: deterministic, bit-stable. Pure binary
 /// search.
+#[derive(Debug)]
 pub struct SearchsortedPlan<T: Element> {
     desc: SearchsortedDescriptor,
     sku: KernelSku,
@@ -173,7 +175,7 @@ impl<T: Element> SearchsortedPlan<T> {
         let seq_ptr = args.sorted_seq.data.as_raw().0 as *const c_void;
         let val_ptr = args.values.data.as_raw().0 as *const c_void;
         let out_ptr = args.output.data.as_raw().0 as *mut c_void;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let right_flag = if self.desc.right { 1 } else { 0 };
 
         let status = match T::KIND {

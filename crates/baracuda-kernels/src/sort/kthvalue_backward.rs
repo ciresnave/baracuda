@@ -32,6 +32,7 @@ pub struct KthvalueBackwardDescriptor {
 }
 
 /// Args bundle for a `kthvalue_backward` launch.
+#[derive(Debug)]
 pub struct KthvalueBackwardArgs<'a, T: Element> {
     /// Upstream grad `[batch]` (one cell per row).
     pub dy: TensorRef<'a, T, 1>,
@@ -57,6 +58,7 @@ pub struct KthvalueBackwardArgs<'a, T: Element> {
 /// **Workspace**: none.
 ///
 /// **Precision guarantee**: deterministic, bit-stable.
+#[derive(Debug)]
 pub struct KthvalueBackwardPlan<T: Element> {
     desc: KthvalueBackwardDescriptor,
     sku: KernelSku,
@@ -150,7 +152,7 @@ impl<T: Element> KthvalueBackwardPlan<T> {
         let dy_ptr = args.dy.data.as_raw().0 as *const c_void;
         let idx_ptr = args.indices.data.as_raw().0 as *const c_void;
         let dx_ptr = args.dx.data.as_raw().0 as *mut c_void;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let k = 1i32;
 
         let status = match T::KIND {

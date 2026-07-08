@@ -301,6 +301,11 @@ mod shim_stubs {
     use super::*;
 
     /// TensorRT shim: Runtime Deserialize Cuda Engine.
+    ///
+    /// # Safety
+    ///
+    /// Shim no-op mirroring the raw TensorRT C-API signature; callers must
+    /// uphold the same contract as the real symbol (valid handles/pointers).
     #[inline]
     pub unsafe fn trtRuntimeDeserializeCudaEngine(
         _runtime: trtIRuntime_t,
@@ -310,18 +315,38 @@ mod shim_stubs {
         core::ptr::null_mut()
     }
     /// TensorRT shim: Runtime Destroy.
+    ///
+    /// # Safety
+    ///
+    /// Shim no-op mirroring the raw TensorRT C-API signature; callers must
+    /// uphold the same contract as the real symbol (valid handles/pointers).
     #[inline]
     pub unsafe fn trtRuntimeDestroy(_runtime: trtIRuntime_t) {}
 
     /// TensorRT shim: Cuda Engine Destroy.
+    ///
+    /// # Safety
+    ///
+    /// Shim no-op mirroring the raw TensorRT C-API signature; callers must
+    /// uphold the same contract as the real symbol (valid handles/pointers).
     #[inline]
     pub unsafe fn trtCudaEngineDestroy(_engine: trtICudaEngine_t) {}
     /// TensorRT shim: Cuda Engine Get Nb I O Tensors.
+    ///
+    /// # Safety
+    ///
+    /// Shim no-op mirroring the raw TensorRT C-API signature; callers must
+    /// uphold the same contract as the real symbol (valid handles/pointers).
     #[inline]
     pub unsafe fn trtCudaEngineGetNbIOTensors(_engine: trtICudaEngine_t) -> i32 {
         0
     }
     /// TensorRT shim: Cuda Engine Get I O Tensor Name.
+    ///
+    /// # Safety
+    ///
+    /// Shim no-op mirroring the raw TensorRT C-API signature; callers must
+    /// uphold the same contract as the real symbol (valid handles/pointers).
     #[inline]
     pub unsafe fn trtCudaEngineGetIOTensorName(
         _engine: trtICudaEngine_t,
@@ -330,6 +355,11 @@ mod shim_stubs {
         core::ptr::null()
     }
     /// TensorRT shim: Cuda Engine Get Tensor I O Mode.
+    ///
+    /// # Safety
+    ///
+    /// Shim no-op mirroring the raw TensorRT C-API signature; callers must
+    /// uphold the same contract as the real symbol (valid handles/pointers).
     #[inline]
     pub unsafe fn trtCudaEngineGetTensorIOMode(
         _engine: trtICudaEngine_t,
@@ -338,6 +368,11 @@ mod shim_stubs {
         trtTensorIOMode_t::None
     }
     /// TensorRT shim: Cuda Engine Get Tensor Data Type.
+    ///
+    /// # Safety
+    ///
+    /// Shim no-op mirroring the raw TensorRT C-API signature; callers must
+    /// uphold the same contract as the real symbol (valid handles/pointers).
     #[inline]
     pub unsafe fn trtCudaEngineGetTensorDataType(
         _engine: trtICudaEngine_t,
@@ -346,6 +381,11 @@ mod shim_stubs {
         trtDataType_t::Float
     }
     /// TensorRT shim: Cuda Engine Get Tensor Shape.
+    ///
+    /// # Safety
+    ///
+    /// Shim no-op mirroring the raw TensorRT C-API signature; callers must
+    /// uphold the same contract as the real symbol (valid handles/pointers).
     #[inline]
     pub unsafe fn trtCudaEngineGetTensorShape(
         _engine: trtICudaEngine_t,
@@ -357,6 +397,11 @@ mod shim_stubs {
         }
     }
     /// TensorRT shim: Cuda Engine Get Tensor Bytes Per Component.
+    ///
+    /// # Safety
+    ///
+    /// Shim no-op mirroring the raw TensorRT C-API signature; callers must
+    /// uphold the same contract as the real symbol (valid handles/pointers).
     #[inline]
     pub unsafe fn trtCudaEngineGetTensorBytesPerComponent(
         _engine: trtICudaEngine_t,
@@ -365,6 +410,11 @@ mod shim_stubs {
         0
     }
     /// TensorRT shim: Cuda Engine Create Execution Context.
+    ///
+    /// # Safety
+    ///
+    /// Shim no-op mirroring the raw TensorRT C-API signature; callers must
+    /// uphold the same contract as the real symbol (valid handles/pointers).
     #[inline]
     pub unsafe fn trtCudaEngineCreateExecutionContext(
         _engine: trtICudaEngine_t,
@@ -372,6 +422,11 @@ mod shim_stubs {
         core::ptr::null_mut()
     }
     /// TensorRT shim: Cuda Engine Create Execution Context With Strategy.
+    ///
+    /// # Safety
+    ///
+    /// Shim no-op mirroring the raw TensorRT C-API signature; callers must
+    /// uphold the same contract as the real symbol (valid handles/pointers).
     #[inline]
     pub unsafe fn trtCudaEngineCreateExecutionContextWithStrategy(
         _engine: trtICudaEngine_t,
@@ -380,25 +435,50 @@ mod shim_stubs {
         core::ptr::null_mut()
     }
     /// TensorRT shim: Cuda Engine Get Name.
+    ///
+    /// # Safety
+    ///
+    /// Shim no-op mirroring the raw TensorRT C-API signature; callers must
+    /// uphold the same contract as the real symbol (valid handles/pointers).
     #[inline]
     pub unsafe fn trtCudaEngineGetName(_engine: trtICudaEngine_t) -> *const c_char {
         core::ptr::null()
     }
     /// TensorRT shim: Cuda Engine Get Nb Optimization Profiles.
+    ///
+    /// # Safety
+    ///
+    /// Shim no-op mirroring the raw TensorRT C-API signature; callers must
+    /// uphold the same contract as the real symbol (valid handles/pointers).
     #[inline]
     pub unsafe fn trtCudaEngineGetNbOptimizationProfiles(_engine: trtICudaEngine_t) -> i32 {
         0
     }
     /// TensorRT shim: Cuda Engine Serialize.
+    ///
+    /// # Safety
+    ///
+    /// Shim no-op mirroring the raw TensorRT C-API signature; callers must
+    /// uphold the same contract as the real symbol (valid handles/pointers).
     #[inline]
     pub unsafe fn trtCudaEngineSerialize(_engine: trtICudaEngine_t) -> trtIHostMemory_t {
         core::ptr::null_mut()
     }
 
     /// TensorRT shim: Execution Context Destroy.
+    ///
+    /// # Safety
+    ///
+    /// Shim no-op mirroring the raw TensorRT C-API signature; callers must
+    /// uphold the same contract as the real symbol (valid handles/pointers).
     #[inline]
     pub unsafe fn trtExecutionContextDestroy(_ctx: trtIExecutionContext_t) {}
     /// TensorRT shim: Execution Context Set Input Shape.
+    ///
+    /// # Safety
+    ///
+    /// Shim no-op mirroring the raw TensorRT C-API signature; callers must
+    /// uphold the same contract as the real symbol (valid handles/pointers).
     #[inline]
     pub unsafe fn trtExecutionContextSetInputShape(
         _ctx: trtIExecutionContext_t,
@@ -408,6 +488,11 @@ mod shim_stubs {
         false
     }
     /// TensorRT shim: Execution Context Get Tensor Shape.
+    ///
+    /// # Safety
+    ///
+    /// Shim no-op mirroring the raw TensorRT C-API signature; callers must
+    /// uphold the same contract as the real symbol (valid handles/pointers).
     #[inline]
     pub unsafe fn trtExecutionContextGetTensorShape(
         _ctx: trtIExecutionContext_t,
@@ -419,6 +504,11 @@ mod shim_stubs {
         }
     }
     /// TensorRT shim: Execution Context Set Tensor Address.
+    ///
+    /// # Safety
+    ///
+    /// Shim no-op mirroring the raw TensorRT C-API signature; callers must
+    /// uphold the same contract as the real symbol (valid handles/pointers).
     #[inline]
     pub unsafe fn trtExecutionContextSetTensorAddress(
         _ctx: trtIExecutionContext_t,
@@ -428,6 +518,11 @@ mod shim_stubs {
         false
     }
     /// TensorRT shim: Execution Context Get Tensor Address.
+    ///
+    /// # Safety
+    ///
+    /// Shim no-op mirroring the raw TensorRT C-API signature; callers must
+    /// uphold the same contract as the real symbol (valid handles/pointers).
     #[inline]
     pub unsafe fn trtExecutionContextGetTensorAddress(
         _ctx: trtIExecutionContext_t,
@@ -436,6 +531,11 @@ mod shim_stubs {
         core::ptr::null_mut()
     }
     /// TensorRT shim: Execution Context Enqueue V3.
+    ///
+    /// # Safety
+    ///
+    /// Shim no-op mirroring the raw TensorRT C-API signature; callers must
+    /// uphold the same contract as the real symbol (valid handles/pointers).
     #[inline]
     pub unsafe fn trtExecutionContextEnqueueV3(
         _ctx: trtIExecutionContext_t,
@@ -445,16 +545,31 @@ mod shim_stubs {
     }
 
     /// TensorRT shim: Host Memory Data.
+    ///
+    /// # Safety
+    ///
+    /// Shim no-op mirroring the raw TensorRT C-API signature; callers must
+    /// uphold the same contract as the real symbol (valid handles/pointers).
     #[inline]
     pub unsafe fn trtHostMemoryData(_mem: trtIHostMemory_t) -> *mut c_void {
         core::ptr::null_mut()
     }
     /// TensorRT shim: Host Memory Size.
+    ///
+    /// # Safety
+    ///
+    /// Shim no-op mirroring the raw TensorRT C-API signature; callers must
+    /// uphold the same contract as the real symbol (valid handles/pointers).
     #[inline]
     pub unsafe fn trtHostMemorySize(_mem: trtIHostMemory_t) -> usize {
         0
     }
     /// TensorRT shim: Host Memory Destroy.
+    ///
+    /// # Safety
+    ///
+    /// Shim no-op mirroring the raw TensorRT C-API signature; callers must
+    /// uphold the same contract as the real symbol (valid handles/pointers).
     #[inline]
     pub unsafe fn trtHostMemoryDestroy(_mem: trtIHostMemory_t) {}
 }

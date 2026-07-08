@@ -30,6 +30,8 @@
 //! treated as "skip" (no PyTorch-style wrap-around). The
 //! padding-disabled sentinel is `i32::MIN` (mapped from `Option::None`).
 
+// Renaming this submodule is API-breaking (it is part of the public module path).
+#[allow(clippy::module_inception)]
 pub mod embedding;
 pub mod embedding_backward;
 pub mod embedding_bag;

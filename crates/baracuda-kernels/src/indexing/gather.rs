@@ -51,6 +51,7 @@ pub struct GatherDescriptor<const N: usize> {
 /// (`i32` or `i64`). The plan dispatches to the matching `_i64idx_`
 /// FFI symbol when `I == i64` at launch time. `I` defaults to `i32`
 /// for source-compat with pre-Phase-11.5 callers.
+#[derive(Debug)]
 pub struct GatherArgs<'a, T: Element, const N: usize, I: IndexElement = i32> {
     /// Source tensor.
     pub src: TensorRef<'a, T, N>,
@@ -83,6 +84,7 @@ pub struct GatherArgs<'a, T: Element, const N: usize, I: IndexElement = i32> {
 ///
 /// **Index policy**: out-of-bounds indices skip the write; negative
 /// indices are treated as out-of-bounds (no PyTorch-style wraparound).
+#[derive(Debug)]
 pub struct GatherPlan<T: Element, const N: usize> {
     desc: GatherDescriptor<N>,
     sku: KernelSku,
@@ -248,7 +250,7 @@ impl<T: Element, const N: usize> GatherPlan<T, N> {
         let src_ptr = args.src.data.as_raw().0 as *const c_void;
         let idx_ptr = args.index.data.as_raw().0 as *const c_void;
         let out_ptr = args.out.data.as_raw().0 as *mut c_void;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
 
         let out_shape = self.desc.out_shape;
         let stride_src = args.src.stride;

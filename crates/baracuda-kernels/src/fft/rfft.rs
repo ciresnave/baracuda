@@ -58,6 +58,7 @@ pub struct RfftDescriptor {
 ///
 /// `T` is the *real* element type (`f32` / `f64`). The complex output
 /// uses [`Complex32`] / [`Complex64`] depending on `T`.
+#[derive(Debug)]
 pub struct RfftArgs<'a, T: Element, C: Element> {
     /// Real input tensor `[batch, n]`.
     pub x: TensorRef<'a, T, 2>,
@@ -86,6 +87,7 @@ pub struct RfftArgs<'a, T: Element, C: Element> {
 /// cuFFT versions.
 ///
 /// Owns a lazy cuFFT handle (`!Sync` / `!Send`); destroyed on `Drop`.
+#[derive(Debug)]
 pub struct RfftPlan<T: Element> {
     desc: RfftDescriptor,
     sku: KernelSku,
@@ -196,7 +198,7 @@ impl<T: Element> RfftPlan<T> {
     }
 
     fn bind_stream(&self, handle: cufftHandle, stream: &Stream) -> Result<()> {
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let status = unsafe { cufftSetStream(handle, stream_ptr) };
         if status != 0 {
             return Err(Error::CutlassInternal(cufft_to_status(status)));
@@ -348,6 +350,7 @@ pub struct IrfftDescriptor {
 ///
 /// `T` is the *real* output type; `C` is the matching complex input
 /// type ([`Complex32`] for `f32`, [`Complex64`] for `f64`).
+#[derive(Debug)]
 pub struct IrfftArgs<'a, T: Element, C: Element> {
     /// Complex input tensor `[batch, n/2 + 1]`.
     pub x: TensorRef<'a, C, 2>,
@@ -378,6 +381,7 @@ pub struct IrfftArgs<'a, T: Element, C: Element> {
 /// cuFFT versions.
 ///
 /// Owns a lazy cuFFT handle (`!Sync` / `!Send`); destroyed on `Drop`.
+#[derive(Debug)]
 pub struct IrfftPlan<T: Element> {
     desc: IrfftDescriptor,
     sku: KernelSku,
@@ -491,7 +495,7 @@ impl<T: Element> IrfftPlan<T> {
     }
 
     fn bind_stream(&self, handle: cufftHandle, stream: &Stream) -> Result<()> {
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let status = unsafe { cufftSetStream(handle, stream_ptr) };
         if status != 0 {
             return Err(Error::CutlassInternal(cufft_to_status(status)));
@@ -553,7 +557,7 @@ impl IrfftPlan<f32> {
 
         // Apply 1/n normalization.
         let scale = 1.0_f32 / (n as f32);
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let s = unsafe {
             baracuda_kernels_scale_inplace_real_f32_run(
                 out_numel,
@@ -619,7 +623,7 @@ impl IrfftPlan<f64> {
         }
 
         let scale = 1.0_f64 / (n as f64);
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let s = unsafe {
             baracuda_kernels_scale_inplace_real_f64_run(
                 out_numel,

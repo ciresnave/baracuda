@@ -97,6 +97,7 @@ pub struct LstSqDescriptor {
 /// `B`). The plan surfaces both buffers; callers that want the LAPACK
 /// in-place convention can pass the same buffer for `b` and `x` — but
 /// must ensure it is at least `max(M, N) * NRHS` elements long.
+#[derive(Debug)]
 pub struct LstSqArgs<'a, T: Element> {
     /// Coefficient matrix `[M, N]` (column-major). Overwritten in
     /// place by the factorization.
@@ -145,6 +146,7 @@ pub struct LstSqArgs<'a, T: Element> {
 ///
 /// Owns a lazy cuSOLVER + cuBLAS handle pair (`!Sync` / `!Send`);
 /// destroyed on `Drop`.
+#[derive(Debug)]
 pub struct LstSqPlan<T: Element> {
     desc: LstSqDescriptor,
     sku: KernelSku,
@@ -281,7 +283,7 @@ impl<T: Element> LstSqPlan<T> {
     }
 
     fn bind_stream(&self, h: cusolverDnHandle_t, stream: &Stream) -> Result<()> {
-        let status = unsafe { cusolverDnSetStream(h, stream.as_raw() as *mut c_void) };
+        let status = unsafe { cusolverDnSetStream(h, stream.as_raw()) };
         if status != 0 {
             return Err(Error::CutlassInternal(-status));
         }
@@ -289,7 +291,7 @@ impl<T: Element> LstSqPlan<T> {
     }
 
     fn bind_cublas_stream(&self, h: cublasHandle_t, stream: &Stream) -> Result<()> {
-        let status = unsafe { cublasSetStream_v2(h, stream.as_raw() as *mut c_void) };
+        let status = unsafe { cublasSetStream_v2(h, stream.as_raw()) };
         if status != 0 {
             return Err(Error::CutlassInternal(-status));
         }
@@ -705,7 +707,7 @@ unsafe fn copy_d2d(
         ) -> CUresult;
     }
     let status = unsafe {
-        cuMemcpyDtoDAsync_v2(dst as u64, src as u64, bytes, stream.as_raw() as *mut c_void)
+        cuMemcpyDtoDAsync_v2(dst as u64, src as u64, bytes, stream.as_raw())
     };
     if status != 0 {
         return Err(Error::CutlassInternal(-status));

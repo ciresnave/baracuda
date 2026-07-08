@@ -41674,6 +41674,7 @@ unsafe extern "C" {
     /// Dropout forward (f32). Writes:
     /// - `y[i] = (rand[i] < (1 - p)) ? x[i] * scale : 0`
     /// - `mask[i] = (rand[i] < (1 - p)) ? 1 : 0` (encoded as `uint8_t`)
+    ///
     /// where `scale = 1 / (1 - p)`. Caller computes `scale` to keep the
     /// kernel branch-free of the `p == 1` edge case.
     ///
@@ -46207,7 +46208,7 @@ unsafe extern "C" {
     // is workspace-free.
 
     /// `cusolverDnSgetrs` — solve `op(A) · X = B` using the packed `LU`
-    /// + pivot produced by `cusolverDnSgetrf`. `B` is overwritten in
+    /// plus pivot produced by `cusolverDnSgetrf`. `B` is overwritten in
     /// place with the solution `X`. `trans` selects `op(A)`:
     /// `CUBLAS_OP_N` for `A`, `CUBLAS_OP_T` for `A^T`.
     ///
@@ -48200,7 +48201,7 @@ unsafe extern "C" {
 unsafe extern "C" {
     /// Batched-`ormqr`, `f32`. Applies the implicit `Q` (or `Q^T`) from a
     /// `BatchedQrPlan` packed output (`A_packed [B, M, K]` column-major
-    /// + `tau [B, K]`) to a stack of right-hand-side matrices
+    /// plus `tau [B, K]`) to a stack of right-hand-side matrices
     /// `C [B, M, N]` in place. One CUDA block per batch slot. `side` is
     /// fixed to `0` (Left) in the trailblazer; `op` is `0` (N — apply Q)
     /// or `1` (T — apply Q^T). Status: 0 success, 2 invalid problem,

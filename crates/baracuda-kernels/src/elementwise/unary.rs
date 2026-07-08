@@ -45,6 +45,7 @@ pub struct UnaryDescriptor<const N: usize> {
 ///
 /// Aliasing `y` with `x` is allowed (in-place) — the kernel reads
 /// `x[i]` before writing `y[i]` per thread, no inter-thread race.
+#[derive(Debug)]
 pub struct UnaryArgs<'a, T: Element, const N: usize> {
     /// Input.
     pub x: TensorRef<'a, T, N>,
@@ -56,6 +57,7 @@ pub struct UnaryArgs<'a, T: Element, const N: usize> {
 ///
 /// `T: Element` is the kernel's element type (today: must be `f32`).
 /// `const N: usize` is the tensor rank.
+#[derive(Debug)]
 pub struct UnaryPlan<T: Element, const N: usize> {
     desc: UnaryDescriptor<N>,
     sku: KernelSku,
@@ -255,7 +257,7 @@ impl<T: Element, const N: usize> UnaryPlan<T, N> {
         }
         let x_ptr = args.x.data.as_raw().0 as *const c_void;
         let y_ptr = args.y.data.as_raw().0 as *mut c_void;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
 
         // Contig fast path requires both operands to be fully contiguous.
         // Any other case (transposed / strided view) routes to the

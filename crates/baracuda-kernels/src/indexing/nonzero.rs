@@ -51,6 +51,7 @@ pub struct NonzeroDescriptor<const N: usize> {
 /// (`i32` or `i64`). The counter shares the same dtype. Defaults to
 /// `I = i32` for source-compat with pre-Phase-15.2 callers (the i64
 /// variant matches PyTorch's `torch.nonzero` convention).
+#[derive(Debug)]
 pub struct NonzeroArgs<'a, T: Element, const N: usize, I: IndexElement = i32> {
     /// Input tensor.
     pub x: TensorRef<'a, T, N>,
@@ -98,6 +99,7 @@ pub struct NonzeroArgs<'a, T: Element, const N: usize, I: IndexElement = i32> {
 /// **Known limitations**: a future milestone may replace the atomic
 /// counter with a two-pass prefix-sum kernel that preserves row-major
 /// order.
+#[derive(Debug)]
 pub struct NonzeroPlan<T: Element, const N: usize> {
     desc: NonzeroDescriptor<N>,
     sku: KernelSku,
@@ -250,7 +252,7 @@ impl<T: Element, const N: usize> NonzeroPlan<T, N> {
         let x_ptr = args.x.data.as_raw().0 as *const c_void;
         let coords_ptr = args.out_coords.data.as_raw().0 as *mut c_void;
         let counter_ptr = args.counter.data.as_raw().0 as *mut c_void;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
 
         let shape = self.desc.shape;
         let stride_x = args.x.stride;

@@ -45,6 +45,7 @@ pub struct CastDescriptor {
 
 /// Args bundle for a cast launch. Both `input` and `output` are
 /// rank-1 contiguous views over `numel` elements.
+#[derive(Debug)]
 pub struct CastArgs<'a, TIn: Element, TOut: Element> {
     /// Input — `TIn` element type.
     pub input: TensorRef<'a, TIn, 1>,
@@ -55,6 +56,7 @@ pub struct CastArgs<'a, TIn: Element, TOut: Element> {
 /// Cast plan.
 ///
 /// `TIn` is the input element type. `TOut` is the output element type.
+#[derive(Debug)]
 pub struct CastPlan<TIn: Element, TOut: Element> {
     desc: CastDescriptor,
     sku: KernelSku,
@@ -180,7 +182,7 @@ impl<TIn: Element, TOut: Element> CastPlan<TIn, TOut> {
         }
         let x_ptr = args.input.data.as_raw().0 as *const c_void;
         let y_ptr = args.output.data.as_raw().0 as *mut c_void;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
 
         // Dispatch table — each cell calls the matching
         // `cast_<sin>_<sout>` FFI. The `match` is on the runtime kinds

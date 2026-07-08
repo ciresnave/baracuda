@@ -73,6 +73,7 @@ pub struct SdpaDescriptor {
 }
 
 /// Args bundle for a SDPA forward launch.
+#[derive(Debug)]
 pub struct SdpaArgs<'a, T: Element> {
     /// Query tensor — shape `[B, H, Q, D_k]`, contiguous.
     pub q: TensorRef<'a, T, 4>,
@@ -118,6 +119,7 @@ pub struct SdpaArgs<'a, T: Element> {
 ///
 /// **Precision guarantee**: deterministic; bit-stable on the same
 /// hardware. No atomicAdd anywhere.
+#[derive(Debug)]
 pub struct SdpaPlan<T: Element> {
     desc: SdpaDescriptor,
     sku: KernelSku,
@@ -370,7 +372,7 @@ impl<T: Element> SdpaPlan<T> {
         if args.attn.numel() == 0 || args.y.numel() == 0 {
             return Ok(());
         }
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let q_ptr = args.q.data.as_raw().0 as *const c_void;
         let k_ptr = args.k.data.as_raw().0 as *const c_void;
         let v_ptr = args.v.data.as_raw().0 as *const c_void;

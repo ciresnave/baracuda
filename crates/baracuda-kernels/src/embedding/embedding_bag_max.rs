@@ -53,6 +53,7 @@ pub struct EmbeddingBagMaxDescriptor {
 }
 
 /// Args bundle for an `embedding_bag` Max-mode launch.
+#[derive(Debug)]
 pub struct EmbeddingBagMaxArgs<'a, T: Element, I: IndexElement = i32> {
     /// Weight matrix `[V, D]`.
     pub weight: TensorRef<'a, T, 2>,
@@ -87,6 +88,7 @@ pub struct EmbeddingBagMaxArgs<'a, T: Element, I: IndexElement = i32> {
 /// bag emits zero output and `-1` in every `output_index` cell.
 ///
 /// **Tie-break**: first occurrence — diverges from PyTorch (last).
+#[derive(Debug)]
 pub struct EmbeddingBagMaxPlan<T: Element> {
     desc: EmbeddingBagMaxDescriptor,
     sku: KernelSku,
@@ -229,7 +231,7 @@ impl<T: Element> EmbeddingBagMaxPlan<T> {
         let off_ptr = args.offsets.data.as_raw().0 as *const c_void;
         let out_ptr = args.output.data.as_raw().0 as *mut c_void;
         let out_idx_ptr = args.output_index.data.as_raw().0 as *mut c_void;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let padding_idx: i64 = self.desc.padding_idx.unwrap_or(PADDING_DISABLED) as i64;
 
         let status = match (T::KIND, I::KIND) {

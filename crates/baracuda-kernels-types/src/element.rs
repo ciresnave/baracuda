@@ -755,7 +755,7 @@ impl Bin {
     pub fn unpack(self) -> [bool; 8] {
         let b = self.0;
         [
-            (b >> 0) & 1 != 0,
+            b & 1 != 0,
             (b >> 1) & 1 != 0,
             (b >> 2) & 1 != 0,
             (b >> 3) & 1 != 0,

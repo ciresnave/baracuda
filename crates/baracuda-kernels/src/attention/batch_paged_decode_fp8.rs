@@ -57,6 +57,7 @@ pub struct BatchPagedDecodeFp8Descriptor {
 }
 
 /// Args bundle for an FP8 KV-cache paged decode launch.
+#[derive(Debug)]
 pub struct BatchPagedDecodeFp8Args<'a, T: Element> {
     /// Query rows — `[batch, num_qo_heads, head_dim]` element `T`.
     pub q: TensorRef<'a, T, 3>,
@@ -78,6 +79,7 @@ pub struct BatchPagedDecodeFp8Args<'a, T: Element> {
 }
 
 /// FP8 KV-cache paged decode plan (Q/O in `T` = f16/bf16, KV in fp8).
+#[derive(Debug)]
 pub struct BatchPagedDecodeFp8Plan<T: Element> {
     desc: BatchPagedDecodeFp8Descriptor,
     sku: KernelSku,

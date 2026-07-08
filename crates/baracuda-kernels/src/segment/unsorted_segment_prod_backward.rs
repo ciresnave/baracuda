@@ -49,6 +49,7 @@ impl SegDescView for UnsortedSegmentProdBackwardDescriptor {
 }
 
 /// Args bundle for an `unsorted_segment_prod_backward` launch.
+#[derive(Debug)]
 pub struct UnsortedSegmentProdBackwardArgs<'a, T: Element> {
     /// Upstream gradient `[num_segments, D]`.
     pub d_output: TensorRef<'a, T, 2>,
@@ -68,6 +69,7 @@ pub struct UnsortedSegmentProdBackwardArgs<'a, T: Element> {
 /// distinct plan for SKU-tagging and API symmetry. Same zero-input
 /// limitation as
 /// [`SegmentProdBackwardPlan`](crate::SegmentProdBackwardPlan).
+#[derive(Debug)]
 pub struct UnsortedSegmentProdBackwardPlan<T: Element> {
     desc: UnsortedSegmentProdBackwardDescriptor,
     sku: KernelSku,
@@ -154,7 +156,7 @@ impl<T: Element> UnsortedSegmentProdBackwardPlan<T> {
         let out_ptr = args.output.data.as_raw().0 as *const c_void;
         let id_ptr = args.segment_ids.data.as_raw().0 as *const c_void;
         let di_ptr = args.d_input.data.as_raw().0 as *mut c_void;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let status = match T::KIND {
             ElementKind::F32 => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unsorted_segment_prod_backward_f32_run(

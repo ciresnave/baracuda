@@ -44,6 +44,7 @@ pub struct KthvalueDescriptor {
 }
 
 /// Args bundle for a `kthvalue` launch.
+#[derive(Debug)]
 pub struct KthvalueArgs<'a, T: Element> {
     /// Input `[batch, row_len]`.
     pub input: TensorRef<'a, T, 2>,
@@ -74,6 +75,7 @@ pub struct KthvalueArgs<'a, T: Element> {
 ///
 /// **Precision guarantee**: deterministic, bit-stable (inherits topk's
 /// fixed-network guarantee).
+#[derive(Debug)]
 pub struct KthvaluePlan<T: Element> {
     desc: KthvalueDescriptor,
     sku: KernelSku,
@@ -307,7 +309,7 @@ unsafe fn copy_h2d_async(
         ) -> CUresult;
     }
     let status =
-        unsafe { cuMemcpyHtoDAsync_v2(dst as u64, src, bytes, stream.as_raw() as *mut c_void) };
+        unsafe { cuMemcpyHtoDAsync_v2(dst as u64, src, bytes, stream.as_raw()) };
     if status != 0 {
         return Err(Error::CutlassInternal(-status));
     }
@@ -335,7 +337,7 @@ unsafe fn copy_d2h_async(
         ) -> CUresult;
     }
     let status =
-        unsafe { cuMemcpyDtoHAsync_v2(dst, src, bytes, stream.as_raw() as *mut c_void) };
+        unsafe { cuMemcpyDtoHAsync_v2(dst, src, bytes, stream.as_raw()) };
     if status != 0 {
         return Err(Error::CutlassInternal(-status));
     }

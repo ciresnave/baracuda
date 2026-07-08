@@ -923,8 +923,8 @@ pub enum LinalgKind {
     /// deferred). Wired in Milestone 6.14.
     BatchedOrmqr = 13,
     /// Bespoke "materialize dense Q and R from batched-`geqrf` packed
-    /// output". Tiny upper-triangle-copy kernel for R; identity-stage
-    /// + [`Self::BatchedOrmqr`] for Q. Wired in Milestone 6.14 as the
+    /// output". Tiny upper-triangle-copy kernel for R; identity-stage plus
+    /// [`Self::BatchedOrmqr`] for Q. Wired in Milestone 6.14 as the
     /// consumer of `BatchedOrmqrPlan`.
     BatchedQrMaterialize = 14,
     /// WY-blocked batched-`ormqr` — applies the implicit `Q` (or `Q^T`)
@@ -1283,8 +1283,8 @@ pub enum AttentionKind {
     HyperConnection = 6,
     /// Mamba-2 State-Space Duality (SSD) chunk-scan (Phase 50). Bespoke
     /// kernel powering the Mamba-2 family (Mamba-2 8B, Codestral-Mamba,
-    /// Falcon-Mamba, Zamba2). Operates on rank-4 `[B, L, H, D]` input
-    /// + rank-4 `[B, L, H, N]` `B` / `C` modulation tensors + per-head
+    /// Falcon-Mamba, Zamba2). Operates on rank-4 `[B, L, H, D]` input plus
+    /// rank-4 `[B, L, H, N]` `B` / `C` modulation tensors plus per-head
     /// scalar SSM eigenvalue `A: [H]`, producing rank-4 `[B, L, H, D]`
     /// output. State residency is `H * D * N` floats in SMEM (trailblazer
     /// caps `D, N ≤ 256` for FW, `≤ 64` for BW). Behind the `mamba`

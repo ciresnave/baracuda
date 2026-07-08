@@ -87,6 +87,7 @@ pub struct GemmSparse24Descriptor {
 }
 
 /// Args bundle for a 2:4 sparse GEMM launch.
+#[derive(Debug)]
 pub struct GemmSparse24Args<'a, T: Element> {
     /// Compressed weight — `[M, K/2]`, row-major contiguous.
     pub w_compressed: TensorRef<'a, T, 2>,
@@ -115,6 +116,7 @@ pub struct GemmSparse24Args<'a, T: Element> {
 /// performance is NOT competitive with cuBLAS at this stage. The
 /// API + compression format are what Phase 54 delivers; the
 /// sparse-tensor-core speedup lands in Tier 2.
+#[derive(Debug)]
 pub struct GemmSparse24Plan<T: Element> {
     desc: GemmSparse24Descriptor,
     sku: KernelSku,

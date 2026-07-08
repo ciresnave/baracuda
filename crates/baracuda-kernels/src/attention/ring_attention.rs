@@ -173,6 +173,7 @@ pub struct RingAttentionDescriptor {
 /// `k_chunk_elems = v_chunk_elems = B * H * K_chunk * D`. This keeps
 /// the plan zero-copy on the K/V data — no D2D copies, just NCCL
 /// `send`/`recv` ping-pong between `kv_scratch_a` and `kv_scratch_b`.
+#[derive(Debug)]
 pub struct RingAttentionArgs<'a, T: Element> {
     /// Query tensor — shape `[B, H, Q_local, D]`, contiguous.
     pub q: TensorRef<'a, T, 4>,
@@ -227,6 +228,7 @@ pub struct RingAttentionArgs<'a, T: Element> {
 /// different summation order) so results are NOT bit-identical across
 /// different cluster sizes. Comparable to within typical f16/bf16
 /// streaming-softmax tolerances.
+#[derive(Debug)]
 pub struct RingAttentionPlan<T: Element> {
     desc: RingAttentionDescriptor,
     sku: KernelSku,

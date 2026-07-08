@@ -148,8 +148,8 @@ pub fn gate_cell<'a>(
     candidates: Vec<(Implementor, Option<String>, Box<dyn FnMut() + 'a>)>,
 ) -> Option<DispatchEntry> {
     let mut results = Vec::with_capacity(candidates.len());
-    for (implementor, entry_point, mut launch) in candidates {
-        let median_ns = measure_median_ns(ctx, stream, samples, inner, || launch());
+    for (implementor, entry_point, launch) in candidates {
+        let median_ns = measure_median_ns(ctx, stream, samples, inner, launch);
         results.push(CandidateResult {
             implementor,
             median_ns,
@@ -533,8 +533,8 @@ pub const CROSS_MMVQ_SHAPES: &[(i32, i32)] = &[
     (32000, 4096),
 ];
 
-/// Conv2d shape set — same as `CONV2D_SWEEP` (the Phase-10 sweep is
-/// already minimal at 3 picks).
+// Conv2d shape set — same as `CONV2D_SWEEP` (the Phase-10 sweep is
+// already minimal at 3 picks).
 
 /// Pool2d shape set: NCHW (1, 64, 56, 56) is the ResNet stem after
 /// conv1; (1, 256, 14, 14) is a deep-stage feature map. Window 3×3,

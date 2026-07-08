@@ -65,6 +65,7 @@ pub struct KvCacheAppendDescriptor {
 }
 
 /// Args bundle for a KV-cache append launch.
+#[derive(Debug)]
 pub struct KvCacheAppendArgs<'a, T: Element> {
     /// New K rows — shape `[B, H, L_new, D_k]`, contiguous.
     pub k_new: TensorRef<'a, T, 4>,
@@ -105,6 +106,7 @@ pub struct KvCacheAppendArgs<'a, T: Element> {
 /// **Workspace**: zero (pure in-place copy).
 ///
 /// **Precision guarantee**: bit-exact (no math at all).
+#[derive(Debug)]
 pub struct KvCacheAppendPlan<T: Element> {
     desc: KvCacheAppendDescriptor,
     sku: KernelSku,
@@ -292,7 +294,7 @@ impl<T: Element> KvCacheAppendPlan<T> {
         {
             return Ok(());
         }
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let k_new_ptr = args.k_new.data.as_raw().0 as *const c_void;
         let v_new_ptr = args.v_new.data.as_raw().0 as *const c_void;
         let offsets_ptr = args.cache_offsets.data.as_raw().0 as *const c_void;

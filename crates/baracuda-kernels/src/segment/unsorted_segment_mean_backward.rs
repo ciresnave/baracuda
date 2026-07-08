@@ -47,6 +47,7 @@ impl SegDescView for UnsortedSegmentMeanBackwardDescriptor {
 }
 
 /// Args bundle for an `unsorted_segment_mean_backward` launch.
+#[derive(Debug)]
 pub struct UnsortedSegmentMeanBackwardArgs<'a, T: Element> {
     /// Upstream gradient `[num_segments, D]`.
     pub d_output: TensorRef<'a, T, 2>,
@@ -73,6 +74,7 @@ pub struct UnsortedSegmentMeanBackwardArgs<'a, T: Element> {
 /// buffer. Use [`Self::workspace_size`].
 ///
 /// **Precision guarantee**: deterministic, bit-stable.
+#[derive(Debug)]
 pub struct UnsortedSegmentMeanBackwardPlan<T: Element> {
     desc: UnsortedSegmentMeanBackwardDescriptor,
     sku: KernelSku,
@@ -166,7 +168,7 @@ impl<T: Element> UnsortedSegmentMeanBackwardPlan<T> {
         let do_ptr = args.d_output.data.as_raw().0 as *const c_void;
         let id_ptr = args.segment_ids.data.as_raw().0 as *const c_void;
         let di_ptr = args.d_input.data.as_raw().0 as *mut c_void;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let status = match T::KIND {
             ElementKind::F32 => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_unsorted_segment_mean_backward_f32_run(

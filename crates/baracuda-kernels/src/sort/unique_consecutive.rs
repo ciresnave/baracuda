@@ -43,6 +43,7 @@ pub struct UniqueConsecutiveDescriptor {
 }
 
 /// Args bundle for a `unique_consecutive` launch.
+#[derive(Debug)]
 pub struct UniqueConsecutiveArgs<'a, T: Element> {
     /// Input `[batch, row_len]`.
     pub input: TensorRef<'a, T, 2>,
@@ -80,6 +81,7 @@ pub struct UniqueConsecutiveArgs<'a, T: Element> {
 /// *set* of detected uniques is data-determined; only the row
 /// ordering varies. Callers needing input-order output should sort
 /// the result on `[batch, counter]` rows afterward.
+#[derive(Debug)]
 pub struct UniqueConsecutivePlan<T: Element> {
     desc: UniqueConsecutiveDescriptor,
     sku: KernelSku,
@@ -178,7 +180,7 @@ impl<T: Element> UniqueConsecutivePlan<T> {
         let vals_ptr = args.values.data.as_raw().0 as *mut c_void;
         let counts_ptr = args.counts.data.as_raw().0 as *mut c_void;
         let counter_ptr = args.counter.data.as_raw().0 as *mut c_void;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
 
         let status = match T::KIND {
             ElementKind::F32 => unsafe {

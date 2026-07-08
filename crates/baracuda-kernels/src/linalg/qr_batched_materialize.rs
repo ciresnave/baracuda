@@ -57,6 +57,7 @@ pub struct BatchedQrMaterializeDescriptor {
 /// `a_packed` and `tau` are the *unmodified* outputs of
 /// [`super::qr_batched::BatchedQrPlan::run`]. `q` and `r` are caller-
 /// owned destination buffers; both are written by the plan.
+#[derive(Debug)]
 pub struct BatchedQrMaterializeArgs<'a, T: Element> {
     /// `geqrf`-packed input from `BatchedQrPlan`: `[batch, M, N]`
     /// column-major.
@@ -97,6 +98,7 @@ pub struct BatchedQrMaterializeArgs<'a, T: Element> {
 ///
 /// **Precision guarantee**: deterministic; not bit-stable across runs
 /// (cuBLAS reduction order).
+#[derive(Debug)]
 pub struct BatchedQrMaterializePlan<T: Element> {
     desc: BatchedQrMaterializeDescriptor,
     sku: KernelSku,
@@ -262,7 +264,7 @@ impl<T: Element> BatchedQrMaterializePlan<T> {
         let m = self.desc.m;
         let n = self.desc.n;
         let k = m.min(n);
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
 
         // ----- Step 1: upper-triangle copy → R ---------------------------
         let a_ptr = args.a_packed.data.as_raw().0 as *const c_void;

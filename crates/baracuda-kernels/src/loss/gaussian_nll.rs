@@ -31,6 +31,7 @@ pub struct GaussianNllLossDescriptor<const N: usize> {
 }
 
 /// Args bundle for a GaussianNLL FW launch.
+#[derive(Debug)]
 pub struct GaussianNllLossArgs<'a, T: Element, const N: usize> {
     /// Mean predictions.
     pub input: TensorRef<'a, T, N>,
@@ -43,6 +44,7 @@ pub struct GaussianNllLossArgs<'a, T: Element, const N: usize> {
 }
 
 /// GaussianNLL forward plan.
+#[derive(Debug)]
 pub struct GaussianNllLossPlan<T: Element, const N: usize> {
     desc: GaussianNllLossDescriptor<N>,
     sku: KernelSku,
@@ -140,7 +142,7 @@ impl<T: Element, const N: usize> GaussianNllLossPlan<T, N> {
             return Ok(());
         }
         let (ws_ptr, ws_bytes) = unpack_workspace(workspace, self.workspace_size())?;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let input_ptr = args.input.data.as_raw().0 as *const c_void;
         let target_ptr = args.target.data.as_raw().0 as *const c_void;
         let var_ptr = args.var.data.as_raw().0 as *const c_void;
@@ -201,6 +203,7 @@ pub struct GaussianNllLossBackwardDescriptor<const N: usize> {
 }
 
 /// Args bundle for a GaussianNLL BW launch.
+#[derive(Debug)]
 pub struct GaussianNllLossBackwardArgs<'a, T: Element, const N: usize> {
     /// Input (saved from FW).
     pub input: TensorRef<'a, T, N>,
@@ -215,6 +218,7 @@ pub struct GaussianNllLossBackwardArgs<'a, T: Element, const N: usize> {
 }
 
 /// GaussianNLL backward plan.
+#[derive(Debug)]
 pub struct GaussianNllLossBackwardPlan<T: Element, const N: usize> {
     desc: GaussianNllLossBackwardDescriptor<N>,
     sku: KernelSku,
@@ -310,7 +314,7 @@ impl<T: Element, const N: usize> GaussianNllLossBackwardPlan<T, N> {
             LossReduction::Sum => 1.0,
         };
         let eps = self.desc.eps;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let input_ptr = args.input.data.as_raw().0 as *const c_void;
         let target_ptr = args.target.data.as_raw().0 as *const c_void;
         let var_ptr = args.var.data.as_raw().0 as *const c_void;

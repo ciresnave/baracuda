@@ -2,7 +2,7 @@
 //!
 //! Pure-Rust host-side routine that converts a GPTQ-format quantized
 //! weight tensor (asymmetric int4 with per-group scales + zero-points
-//! + optional `g_idx` activation-order permutation) into the symmetric
+//! plus optional `g_idx` activation-order permutation) into the symmetric
 //! int4 layout expected by [`super::int4_marlin::Int4MarlinGemmPlan`].
 //!
 //! Reference: AutoGPTQ's `use_marlin=True` repack path

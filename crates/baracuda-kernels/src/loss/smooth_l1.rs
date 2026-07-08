@@ -29,6 +29,7 @@ pub struct SmoothL1LossDescriptor<const N: usize> {
 }
 
 /// Args bundle for a SmoothL1 FW launch.
+#[derive(Debug)]
 pub struct SmoothL1LossArgs<'a, T: Element, const N: usize> {
     /// Predictions.
     pub pred: TensorRef<'a, T, N>,
@@ -39,6 +40,7 @@ pub struct SmoothL1LossArgs<'a, T: Element, const N: usize> {
 }
 
 /// SmoothL1 forward plan.
+#[derive(Debug)]
 pub struct SmoothL1LossPlan<T: Element, const N: usize> {
     desc: SmoothL1LossDescriptor<N>,
     sku: KernelSku,
@@ -133,7 +135,7 @@ impl<T: Element, const N: usize> SmoothL1LossPlan<T, N> {
             return Ok(());
         }
         let (ws_ptr, ws_bytes) = unpack_workspace(workspace, self.workspace_size())?;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let pred_ptr = args.pred.data.as_raw().0 as *const c_void;
         let target_ptr = args.target.data.as_raw().0 as *const c_void;
         let out_ptr = args.out.data.as_raw().0 as *mut c_void;
@@ -189,6 +191,7 @@ pub struct SmoothL1LossBackwardDescriptor<const N: usize> {
 }
 
 /// Args bundle for a SmoothL1 BW launch.
+#[derive(Debug)]
 pub struct SmoothL1LossBackwardArgs<'a, T: Element, const N: usize> {
     /// Predictions (saved from FW).
     pub pred: TensorRef<'a, T, N>,
@@ -201,6 +204,7 @@ pub struct SmoothL1LossBackwardArgs<'a, T: Element, const N: usize> {
 }
 
 /// SmoothL1 backward plan.
+#[derive(Debug)]
 pub struct SmoothL1LossBackwardPlan<T: Element, const N: usize> {
     desc: SmoothL1LossBackwardDescriptor<N>,
     sku: KernelSku,
@@ -295,7 +299,7 @@ impl<T: Element, const N: usize> SmoothL1LossBackwardPlan<T, N> {
             LossReduction::Sum => 1.0,
         };
         let beta = self.desc.beta;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let pred_ptr = args.pred.data.as_raw().0 as *const c_void;
         let target_ptr = args.target.data.as_raw().0 as *const c_void;
         let dy_ptr = args.dy.data.as_raw().0 as *const c_void;

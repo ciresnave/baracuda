@@ -108,6 +108,7 @@ pub struct MoeDescriptor {
 /// so the same struct shape works for FP weights (`Wmma` variant) and
 /// GGUF-packed weights (`ScalarGguf` / `WmmaGguf`). Plan-side
 /// validation checks the byte length against the descriptor.
+#[derive(Debug)]
 pub struct MoeArgs<'a, T>
 where
     T: baracuda_types::DeviceRepr + Copy + 'static,
@@ -189,6 +190,7 @@ where
 /// output as kernel-defined until the reference lands. See
 /// `crates/baracuda-kernels/src/moe/mod.rs` and the integration
 /// tests under `crates/baracuda-kernels/tests/moe*.rs`.
+#[derive(Debug)]
 pub struct MoePlan {
     desc: MoeDescriptor,
     sku: KernelSku,
@@ -295,7 +297,7 @@ impl MoePlan {
     where
         T: baracuda_types::DeviceRepr + Copy + 'static,
     {
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let acts_ptr = args.activations.data.as_raw().0 as *const c_void;
         let weights_ptr = args.expert_matrices.data.as_raw().0 as *const c_void;
         let sorted_token_ids_ptr = args.sorted_token_ids.data.as_raw().0 as *const i32;

@@ -42,8 +42,8 @@ impl<const N: usize> RepeatBackwardDescriptor<N> {
     /// `input_shape[d] * repeats[d]` per axis.
     pub fn dy_shape(&self) -> [i32; N] {
         let mut out = [0i32; N];
-        for d in 0..N {
-            out[d] = self.input_shape[d] * self.repeats[d];
+        for (d, out_d) in out.iter_mut().enumerate() {
+            *out_d = self.input_shape[d] * self.repeats[d];
         }
         out
     }
@@ -55,6 +55,7 @@ impl<const N: usize> RepeatBackwardDescriptor<N> {
 /// repeats[d]` per axis). `dx.shape` must match `desc.input_shape`. No
 /// saved forward tensors are needed — the BW formula is a pure sum over
 /// dy.
+#[derive(Debug)]
 pub struct RepeatBackwardArgs<'a, T: Element, const N: usize> {
     /// Upstream gradient — full forward output shape.
     pub dy: TensorRef<'a, T, N>,
@@ -83,6 +84,7 @@ pub struct RepeatBackwardArgs<'a, T: Element, const N: usize> {
 /// per output cell, deterministic iteration order). Conservatively
 /// reported as **not bit-stable** because summation order matters in
 /// FP semantics and a future refactor might reorder the inner loop.
+#[derive(Debug)]
 pub struct RepeatBackwardPlan<T: Element, const N: usize> {
     desc: RepeatBackwardDescriptor<N>,
     sku: KernelSku,
@@ -216,7 +218,7 @@ impl<T: Element, const N: usize> RepeatBackwardPlan<T, N> {
         }
         let dy_ptr = args.dy.data.as_raw().0 as *const c_void;
         let dx_ptr = args.dx.data.as_raw().0 as *mut c_void;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
 
         let input_shape = self.desc.input_shape;
         let repeats = self.desc.repeats;

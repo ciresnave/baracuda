@@ -67,6 +67,7 @@ pub struct CascadeAttentionDescriptor {
 ///
 /// `v` / `s` are merged in place; `v_other` / `s_other` are read-only
 /// inputs.
+#[derive(Debug)]
 pub struct CascadeAttentionArgs<'a, T: Element> {
     /// Merged `v` — `[seq_len, num_heads, head_dim]`, in-place.
     pub v: TensorMut<'a, T, 3>,
@@ -87,6 +88,7 @@ pub struct CascadeAttentionArgs<'a, T: Element> {
 ///
 /// **Precision guarantee**: deterministic on same-hardware repeat.
 /// f16/bf16 accumulate in f32 internally.
+#[derive(Debug)]
 pub struct CascadeAttentionPlan<T: Element> {
     desc: CascadeAttentionDescriptor,
     sku: KernelSku,
@@ -276,6 +278,7 @@ pub struct CascadeMergeStatesDescriptor {
 ///
 /// Inputs are stacked along the `num_index_sets` axis; outputs collapse
 /// that axis away.
+#[derive(Debug)]
 pub struct CascadeMergeStatesArgs<'a, T: Element> {
     /// Stacked partial `v` —
     /// `[seq_len, num_index_sets, num_heads, head_dim]`.
@@ -296,6 +299,7 @@ pub struct CascadeMergeStatesArgs<'a, T: Element> {
 ///
 /// **Workspace**: zero. **Precision**: f32 accumulation; deterministic on
 /// same-hardware repeat.
+#[derive(Debug)]
 pub struct CascadeMergeStatesPlan<T: Element> {
     desc: CascadeMergeStatesDescriptor,
     sku: KernelSku,

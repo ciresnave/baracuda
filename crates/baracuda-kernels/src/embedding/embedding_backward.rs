@@ -44,6 +44,7 @@ pub struct EmbeddingBackwardDescriptor {
 /// Args bundle for an `embedding_backward` launch.
 ///
 /// Phase 11.5: `I: IndexElement` generic (`i32` or `i64`).
+#[derive(Debug)]
 pub struct EmbeddingBackwardArgs<'a, T: Element, I: IndexElement = i32> {
     /// Upstream gradient `[N, D]`. Row-major contiguous.
     pub dout: TensorRef<'a, T, 2>,
@@ -71,6 +72,7 @@ pub struct EmbeddingBackwardArgs<'a, T: Element, I: IndexElement = i32> {
 ///
 /// **Precision guarantee**: **non-deterministic** — atomicAdd
 /// ordering varies between launches.
+#[derive(Debug)]
 pub struct EmbeddingBackwardPlan<T: Element> {
     desc: EmbeddingBackwardDescriptor,
     sku: KernelSku,
@@ -219,7 +221,7 @@ impl<T: Element> EmbeddingBackwardPlan<T> {
         let dout_ptr = args.dout.data.as_raw().0 as *const c_void;
         let idx_ptr = args.indices.data.as_raw().0 as *const c_void;
         let dweight_ptr = args.dweight.data.as_raw().0 as *mut c_void;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         // Phase 11.5: padding_idx widens to i64 across FFI.
         let padding_idx: i64 = self.desc.padding_idx.unwrap_or(PADDING_DISABLED) as i64;
 

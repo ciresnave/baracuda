@@ -41,6 +41,7 @@ pub struct AlibiDescriptor {
 }
 
 /// Args bundle for an ALiBi forward launch.
+#[derive(Debug)]
 pub struct AlibiArgs<'a, T: Element> {
     /// Attention scores `A` — shape `[B, H, Q, K]`, contiguous.
     pub scores: TensorRef<'a, T, 4>,
@@ -71,6 +72,7 @@ pub struct AlibiArgs<'a, T: Element> {
 ///
 /// **Precision guarantee**: deterministic; bit-stable on the same
 /// hardware. Single add per cell, no atomics.
+#[derive(Debug)]
 pub struct AlibiPlan<T: Element> {
     desc: AlibiDescriptor,
     sku: KernelSku,
@@ -199,7 +201,7 @@ impl<T: Element> AlibiPlan<T> {
         if numel == 0 {
             return Ok(());
         }
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let scores_ptr = args.scores.data.as_raw().0 as *const c_void;
         let slopes_ptr = args.slopes.data.as_raw().0 as *const c_void;
         let out_ptr = args.out.data.as_raw().0 as *mut c_void;

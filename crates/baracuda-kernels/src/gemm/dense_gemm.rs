@@ -153,6 +153,7 @@ pub struct DenseGemmArgs<'a, T: Element> {
 
 /// Dense floating-point GEMM plan (cuBLAS-backed). See the module docs
 /// for scope and the relationship to `baracuda_cutlass::GemmPlan`.
+#[derive(Debug)]
 pub struct DenseGemmPlan<T: Element> {
     desc: DenseGemmDescriptor,
     _marker: PhantomData<T>,
@@ -423,7 +424,7 @@ impl<T: Element> DenseGemmPlan<T> {
         let a_ptr = args.a.data.as_raw().0 as *const c_void;
         let b_ptr = args.b.data.as_raw().0 as *const c_void;
         let d_ptr = args.d.data.as_raw().0 as *mut c_void;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
 
         let status = match T::KIND {
             ElementKind::F32 => unsafe {

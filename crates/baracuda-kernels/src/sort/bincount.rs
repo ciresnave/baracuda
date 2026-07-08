@@ -28,6 +28,7 @@ pub struct BincountDescriptor {
 }
 
 /// Args bundle for a `bincount` launch.
+#[derive(Debug)]
 pub struct BincountArgs<'a, T: Element> {
     /// Input `[numel]`.
     pub input: TensorRef<'a, T, 1>,
@@ -52,6 +53,7 @@ pub struct BincountArgs<'a, T: Element> {
 ///
 /// **Precision guarantee**: **non-deterministic** — atomic
 /// accumulation order varies. Counts are data-determined.
+#[derive(Debug)]
 pub struct BincountPlan<T: Element> {
     desc: BincountDescriptor,
     sku: KernelSku,
@@ -134,7 +136,7 @@ impl<T: Element> BincountPlan<T> {
         }
         let in_ptr = args.input.data.as_raw().0 as *const c_void;
         let out_ptr = args.output.data.as_raw().0 as *mut c_void;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
 
         let status = match T::KIND {
             ElementKind::I32 => unsafe {

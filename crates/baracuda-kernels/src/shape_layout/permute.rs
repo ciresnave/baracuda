@@ -38,14 +38,15 @@ impl<const N: usize> PermuteDescriptor<N> {
     /// Compute the output shape from input shape and permutation.
     pub fn output_shape(&self) -> [i32; N] {
         let mut out = [0i32; N];
-        for d in 0..N {
-            out[d] = self.input_shape[self.dims[d] as usize];
+        for (d, out_d) in out.iter_mut().enumerate() {
+            *out_d = self.input_shape[self.dims[d] as usize];
         }
         out
     }
 }
 
 /// Args bundle for a Permute launch.
+#[derive(Debug)]
 pub struct PermuteArgs<'a, T: Element, const N: usize> {
     /// Input tensor.
     pub x: TensorRef<'a, T, N>,
@@ -72,6 +73,7 @@ pub struct PermuteArgs<'a, T: Element, const N: usize> {
 /// **Workspace**: none.
 ///
 /// **Precision guarantee**: deterministic, bit-stable, bit-exact.
+#[derive(Debug)]
 pub struct PermutePlan<T: Element, const N: usize> {
     desc: PermuteDescriptor<N>,
     sku: KernelSku,
@@ -219,7 +221,7 @@ impl<T: Element, const N: usize> PermutePlan<T, N> {
         }
         let x_ptr = args.x.data.as_raw().0 as *const c_void;
         let y_ptr = args.y.data.as_raw().0 as *mut c_void;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
 
         let input_shape = self.desc.input_shape;
         let dims = self.desc.dims;

@@ -42,6 +42,7 @@ pub struct GumbelSoftmaxBackwardDescriptor<const N: usize> {
 /// `y` is the SAVED forward soft output (always the soft form, even
 /// when the FW ran in `hard` mode — that's how straight-through
 /// gradient works).
+#[derive(Debug)]
 pub struct GumbelSoftmaxBackwardArgs<'a, T: Element, const N: usize> {
     /// Upstream gradient.
     pub dy: TensorRef<'a, T, N>,
@@ -52,6 +53,7 @@ pub struct GumbelSoftmaxBackwardArgs<'a, T: Element, const N: usize> {
 }
 
 /// GumbelSoftmax backward plan.
+#[derive(Debug)]
 pub struct GumbelSoftmaxBackwardPlan<T: Element, const N: usize> {
     desc: GumbelSoftmaxBackwardDescriptor<N>,
     sku: KernelSku,
@@ -87,7 +89,10 @@ impl<T: Element, const N: usize> GumbelSoftmaxBackwardPlan<T, N> {
                 "baracuda-kernels::GumbelSoftmaxBackwardPlan: tensor rank > 8 not supported",
             ));
         }
-        if !(desc.temperature > 0.0) || !desc.temperature.is_finite() {
+        // NaN-aware: temperature must be strictly positive (NaN/incomparable => reject).
+        if desc.temperature.partial_cmp(&0.0) != Some(core::cmp::Ordering::Greater)
+            || !desc.temperature.is_finite()
+        {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::GumbelSoftmaxBackwardPlan: temperature must be > 0 and finite",
             ));
@@ -212,7 +217,7 @@ impl<T: Element, const N: usize> GumbelSoftmaxBackwardPlan<T, N> {
         let dy_ptr = args.dy.data.as_raw().0 as *const c_void;
         let y_ptr = args.y.data.as_raw().0 as *const c_void;
         let dx_ptr = args.dx.data.as_raw().0 as *mut c_void;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
 
         let axis = self.desc.softmax_axis as usize;
         let shape = self.desc.input_shape;

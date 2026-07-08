@@ -59,6 +59,7 @@ pub struct ScanBackwardDescriptor<const N: usize> {
 ///
 /// Pass `None` for unused slots. The plan's `can_implement` validates
 /// the op-specific requirement.
+#[derive(Debug)]
 pub struct ScanBackwardArgs<'a, T: Element, const N: usize> {
     /// Upstream gradient — same shape as the forward output.
     pub dy: TensorRef<'a, T, N>,
@@ -86,6 +87,7 @@ fn op_needs_saved_y(kind: ScanKind) -> bool {
 }
 
 /// Single-axis scan backward plan.
+#[derive(Debug)]
 pub struct ScanBackwardPlan<T: Element, const N: usize> {
     desc: ScanBackwardDescriptor<N>,
     sku: KernelSku,
@@ -253,7 +255,7 @@ impl<T: Element, const N: usize> ScanBackwardPlan<T, N> {
         }
         let dy_ptr = args.dy.data.as_raw().0 as *const c_void;
         let dx_ptr = args.dx.data.as_raw().0 as *mut c_void;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
 
         let axis = self.desc.scan_axis as usize;
         let shape = self.desc.input_shape;

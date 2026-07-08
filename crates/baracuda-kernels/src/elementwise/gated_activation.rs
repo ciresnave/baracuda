@@ -56,6 +56,7 @@ impl<const N: usize> GatedActivationDescriptor<N> {
 }
 
 /// Args bundle for a gated-activation forward launch.
+#[derive(Debug)]
 pub struct GatedActivationArgs<'a, T: Element, const N: usize> {
     /// Input tensor — shape `desc.input_shape`.
     pub x: TensorRef<'a, T, N>,
@@ -64,6 +65,7 @@ pub struct GatedActivationArgs<'a, T: Element, const N: usize> {
 }
 
 /// Gated-activation forward plan.
+#[derive(Debug)]
 pub struct GatedActivationPlan<T: Element, const N: usize> {
     desc: GatedActivationDescriptor<N>,
     sku: KernelSku,
@@ -237,7 +239,7 @@ impl<T: Element, const N: usize> GatedActivationPlan<T, N> {
         let half = self.desc.input_shape[sd] as i64 / 2;
         let x_half_offset = half * args.x.stride[sd];
 
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let x_ptr = args.x.data.as_raw().0 as *const c_void;
         let y_ptr = args.y.data.as_raw().0 as *mut c_void;
 

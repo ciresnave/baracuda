@@ -36,6 +36,7 @@ pub struct PixelUnshuffleDescriptor {
 }
 
 /// Args bundle for `pixel_unshuffle`.
+#[derive(Debug)]
 pub struct PixelUnshuffleArgs<'a, T: Element> {
     /// Input `[N, C, H * r, W * r]`.
     pub input: TensorRef<'a, T, 4>,
@@ -59,6 +60,7 @@ pub struct PixelUnshuffleArgs<'a, T: Element> {
 /// **Workspace**: none.
 ///
 /// **Precision guarantee**: deterministic, bit-stable, bit-exact.
+#[derive(Debug)]
 pub struct PixelUnshufflePlan<T: Element> {
     desc: PixelUnshuffleDescriptor,
     sku: KernelSku,
@@ -166,7 +168,7 @@ impl<T: Element> PixelUnshufflePlan<T> {
         }
         let input_ptr = args.input.data.as_raw().0 as *const c_void;
         let out_ptr = args.output.data.as_raw().0 as *mut c_void;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let (n, c, h, w, r) = (
             self.desc.n,
             self.desc.c,

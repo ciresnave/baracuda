@@ -31,6 +31,7 @@ pub struct RollBackwardDescriptor<const N: usize> {
 }
 
 /// Args bundle for a Roll backward launch.
+#[derive(Debug)]
 pub struct RollBackwardArgs<'a, T: Element, const N: usize> {
     /// Upstream gradient.
     pub dy: TensorRef<'a, T, N>,
@@ -53,6 +54,7 @@ pub struct RollBackwardArgs<'a, T: Element, const N: usize> {
 /// **Workspace**: none.
 ///
 /// **Precision guarantee**: deterministic, bit-stable, bit-exact.
+#[derive(Debug)]
 pub struct RollBackwardPlan<T: Element, const N: usize> {
     desc: RollBackwardDescriptor<N>,
     sku: KernelSku,
@@ -173,14 +175,14 @@ impl<T: Element, const N: usize> RollBackwardPlan<T, N> {
         }
         let dy_ptr = args.dy.data.as_raw().0 as *const c_void;
         let dx_ptr = args.dx.data.as_raw().0 as *mut c_void;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
 
         let shape = self.desc.shape;
         let mut neg_shifts = [0i32; 8];
-        for d in 0..N {
+        for (d, slot) in neg_shifts.iter_mut().enumerate().take(N) {
             // `i32::wrapping_neg` keeps `i32::MIN` safe; the kernel
             // normalizes via `((c - s) % extent + extent) % extent`.
-            neg_shifts[d] = self.desc.shifts[d].wrapping_neg();
+            *slot = self.desc.shifts[d].wrapping_neg();
         }
         let stride_dy = args.dy.stride;
         let stride_dx = args.dx.stride;

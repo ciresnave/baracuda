@@ -26,6 +26,7 @@ pub struct MseLossDescriptor<const N: usize> {
 }
 
 /// Args bundle for an MSE FW launch.
+#[derive(Debug)]
 pub struct MseLossArgs<'a, T: Element, const N: usize> {
     /// Predictions tensor.
     pub pred: TensorRef<'a, T, N>,
@@ -37,6 +38,7 @@ pub struct MseLossArgs<'a, T: Element, const N: usize> {
 }
 
 /// MSE loss forward plan.
+#[derive(Debug)]
 pub struct MseLossPlan<T: Element, const N: usize> {
     desc: MseLossDescriptor<N>,
     sku: KernelSku,
@@ -127,7 +129,7 @@ impl<T: Element, const N: usize> MseLossPlan<T, N> {
             return Ok(());
         }
         let (ws_ptr, ws_bytes) = unpack_workspace(workspace, self.workspace_size())?;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let pred_ptr = args.pred.data.as_raw().0 as *const c_void;
         let target_ptr = args.target.data.as_raw().0 as *const c_void;
         let out_ptr = args.out.data.as_raw().0 as *mut c_void;
@@ -183,6 +185,7 @@ pub struct MseLossBackwardDescriptor<const N: usize> {
 ///
 /// `dy` shape: same as `input_shape` for `None` mode; rank-N scalar
 /// (numel ≥ 1, kernel reads `dy[0]`) for `Mean` / `Sum`.
+#[derive(Debug)]
 pub struct MseLossBackwardArgs<'a, T: Element, const N: usize> {
     /// Predictions tensor (saved from FW).
     pub pred: TensorRef<'a, T, N>,
@@ -195,6 +198,7 @@ pub struct MseLossBackwardArgs<'a, T: Element, const N: usize> {
 }
 
 /// MSE backward plan.
+#[derive(Debug)]
 pub struct MseLossBackwardPlan<T: Element, const N: usize> {
     desc: MseLossBackwardDescriptor<N>,
     sku: KernelSku,
@@ -283,7 +287,7 @@ impl<T: Element, const N: usize> MseLossBackwardPlan<T, N> {
             LossReduction::Mean => 1.0 / (numel as f32),
             LossReduction::Sum => 1.0,
         };
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let pred_ptr = args.pred.data.as_raw().0 as *const c_void;
         let target_ptr = args.target.data.as_raw().0 as *const c_void;
         let dy_ptr = args.dy.data.as_raw().0 as *const c_void;

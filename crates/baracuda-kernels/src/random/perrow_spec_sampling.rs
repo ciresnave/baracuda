@@ -49,6 +49,7 @@ pub struct PerRowSamplingDescriptor {
 
 /// Args for a per-row sampling launch. Supply the array(s) the chosen
 /// [`PerRowSampler`] needs; leave the others `None`.
+#[derive(Debug)]
 pub struct PerRowSamplingArgs<'a> {
     /// Row-normalized probabilities `[batch, vocab]` f32.
     pub probs: TensorRef<'a, f32, 2>,
@@ -69,6 +70,7 @@ pub struct PerRowSamplingArgs<'a> {
 }
 
 /// Per-row sort-free sampling plan.
+#[derive(Debug)]
 pub struct PerRowSamplingPlan {
     desc: PerRowSamplingDescriptor,
     sku: KernelSku,
@@ -262,6 +264,7 @@ pub struct SpeculativeSamplingDescriptor {
 }
 
 /// Args bundle for speculative verification.
+#[derive(Debug)]
 pub struct SpeculativeSamplingArgs<'a> {
     /// Draft probabilities `[batch, num_spec, vocab]` f32.
     pub draft_probs: TensorRef<'a, f32, 3>,
@@ -282,6 +285,7 @@ pub struct SpeculativeSamplingArgs<'a> {
 }
 
 /// Speculative-decode verification plan (FlashInfer `ChainSpeculativeSampling`).
+#[derive(Debug)]
 pub struct SpeculativeSamplingPlan {
     desc: SpeculativeSamplingDescriptor,
     sku: KernelSku,

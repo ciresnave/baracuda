@@ -44,6 +44,7 @@ pub struct RoiPoolDescriptor {
 }
 
 /// Args bundle for `roi_pool`.
+#[derive(Debug)]
 pub struct RoiPoolArgs<'a, T: Element> {
     /// Input `[N, C, H, W]`.
     pub input: TensorRef<'a, T, 4>,
@@ -77,6 +78,7 @@ pub struct RoiPoolArgs<'a, T: Element> {
 /// as part of [`RoiPoolArgs`] (BW requires it).
 ///
 /// **Precision guarantee**: deterministic, bit-stable.
+#[derive(Debug)]
 pub struct RoiPoolPlan<T: Element> {
     desc: RoiPoolDescriptor,
     sku: KernelSku,
@@ -194,7 +196,7 @@ impl<T: Element> RoiPoolPlan<T> {
         let rois_ptr = args.rois.data.as_raw().0 as *const c_void;
         let out_ptr = args.output.data.as_raw().0 as *mut c_void;
         let arg_ptr = args.argmax.data.as_raw().0 as *mut c_void;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let status = match T::KIND {
             ElementKind::F32 => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_roi_pool_f32_run(

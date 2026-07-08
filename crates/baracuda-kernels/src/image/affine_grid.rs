@@ -37,6 +37,7 @@ pub struct AffineGridDescriptor {
 }
 
 /// Args bundle for `affine_grid`.
+#[derive(Debug)]
 pub struct AffineGridArgs<'a, T: Element> {
     /// Affine parameters `[N, 2, 3]`.
     pub theta: TensorRef<'a, T, 3>,
@@ -63,6 +64,7 @@ pub struct AffineGridArgs<'a, T: Element> {
 /// **Workspace**: none.
 ///
 /// **Precision guarantee**: deterministic, bit-stable.
+#[derive(Debug)]
 pub struct AffineGridPlan<T: Element> {
     desc: AffineGridDescriptor,
     sku: KernelSku,
@@ -165,7 +167,7 @@ impl<T: Element> AffineGridPlan<T> {
         }
         let theta_ptr = args.theta.data.as_raw().0 as *const c_void;
         let grid_ptr = args.grid.data.as_raw().0 as *mut c_void;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let status = match T::KIND {
             ElementKind::F32 => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_affine_grid_2d_f32_run(

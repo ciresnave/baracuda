@@ -25,6 +25,7 @@ pub struct InstanceNormBackwardDescriptor<const N: usize> {
 }
 
 /// Args bundle for InstanceNorm BW.
+#[derive(Debug)]
 pub struct InstanceNormBackwardArgs<'a, T: Element, const N: usize> {
     /// Upstream gradient.
     pub dy: TensorRef<'a, T, N>,
@@ -45,6 +46,7 @@ pub struct InstanceNormBackwardArgs<'a, T: Element, const N: usize> {
 }
 
 /// InstanceNorm BW plan — wraps [`GroupNormBackwardPlan`].
+#[derive(Debug)]
 pub struct InstanceNormBackwardPlan<T: Element, const N: usize> {
     inner: GroupNormBackwardPlan<T, N>,
 }

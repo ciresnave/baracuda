@@ -164,6 +164,7 @@ impl FlashSdpaVarlenDescriptor {
 // ---------------------------------------------------------------------------
 
 /// Args bundle for a packed-batch Flash Attention forward launch.
+#[derive(Debug)]
 pub struct FlashSdpaVarlenArgs<'a, T: Element> {
     /// Query — packed `[total_q, H, D_k]` row-major contiguous.
     pub q: TensorRef<'a, T, 3>,
@@ -188,6 +189,7 @@ pub struct FlashSdpaVarlenArgs<'a, T: Element> {
 ///
 /// Routes through the FA2 varlen FW path (`fa2_varlen_launcher.cu`).
 /// `f16` / `bf16` only.
+#[derive(Debug)]
 pub struct FlashSdpaVarlenPlan<T: Element> {
     desc: FlashSdpaVarlenDescriptor,
     sku: KernelSku,
@@ -304,7 +306,7 @@ impl<T: Element> FlashSdpaVarlenPlan<T> {
             ));
         }
         let needed_lse = self.lse_size(total_q);
-        let lse_n = (args.lse.numel() as usize).max(0);
+        let lse_n = args.lse.numel() as usize;
         if lse_n < needed_lse {
             return Err(Error::BufferTooSmall {
                 needed: needed_lse,
@@ -359,7 +361,7 @@ impl<T: Element> FlashSdpaVarlenPlan<T> {
         {
             let total_q = args.q.shape[0];
             let total_k = args.k.shape[0];
-            let stream_ptr = stream.as_raw() as *mut c_void;
+            let stream_ptr = stream.as_raw();
             let q_ptr = args.q.data.as_raw().0 as *const c_void;
             let k_ptr = args.k.data.as_raw().0 as *const c_void;
             let v_ptr = args.v.data.as_raw().0 as *const c_void;
@@ -419,6 +421,7 @@ impl<T: Element> FlashSdpaVarlenPlan<T> {
 // ---------------------------------------------------------------------------
 
 /// Args bundle for a packed-batch Flash Attention backward launch.
+#[derive(Debug)]
 pub struct FlashSdpaVarlenBackwardArgs<'a, T: Element> {
     /// Query (saved from FW) — packed `[total_q, H, D_k]`.
     pub q: TensorRef<'a, T, 3>,
@@ -447,6 +450,7 @@ pub struct FlashSdpaVarlenBackwardArgs<'a, T: Element> {
 }
 
 /// Flash Attention varlen BW plan (Phase 59b).
+#[derive(Debug)]
 pub struct FlashSdpaVarlenBackwardPlan<T: Element> {
     desc: FlashSdpaVarlenDescriptor,
     sku: KernelSku,
@@ -639,7 +643,7 @@ impl<T: Element> FlashSdpaVarlenBackwardPlan<T> {
                 }
             };
 
-            let stream_ptr = stream.as_raw() as *mut c_void;
+            let stream_ptr = stream.as_raw();
             let q_ptr = args.q.data.as_raw().0 as *const c_void;
             let k_ptr = args.k.data.as_raw().0 as *const c_void;
             let v_ptr = args.v.data.as_raw().0 as *const c_void;

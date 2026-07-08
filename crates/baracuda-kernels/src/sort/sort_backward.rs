@@ -28,6 +28,7 @@ pub struct SortBackwardDescriptor {
 }
 
 /// Args bundle for a `sort_backward` launch.
+#[derive(Debug)]
 pub struct SortBackwardArgs<'a, T: Element> {
     /// Upstream grad of sorted-values output `[batch, row_len]`.
     pub dy: TensorRef<'a, T, 2>,
@@ -54,6 +55,7 @@ pub struct SortBackwardArgs<'a, T: Element> {
 /// **Workspace**: none.
 ///
 /// **Precision guarantee**: deterministic, bit-stable.
+#[derive(Debug)]
 pub struct SortBackwardPlan<T: Element> {
     desc: SortBackwardDescriptor,
     sku: KernelSku,
@@ -133,7 +135,7 @@ impl<T: Element> SortBackwardPlan<T> {
         let dy_ptr = args.dy.data.as_raw().0 as *const c_void;
         let idx_ptr = args.indices.data.as_raw().0 as *const c_void;
         let dx_ptr = args.dx.data.as_raw().0 as *mut c_void;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
 
         let status = match T::KIND {
             ElementKind::F32 => unsafe {

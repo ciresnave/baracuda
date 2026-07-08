@@ -45,6 +45,7 @@ pub struct SoftmaxDescriptor<const N: usize> {
 }
 
 /// Args bundle for a softmax launch.
+#[derive(Debug)]
 pub struct SoftmaxArgs<'a, T: Element, const N: usize> {
     /// Input tensor.
     pub x: TensorRef<'a, T, N>,
@@ -57,6 +58,7 @@ pub struct SoftmaxArgs<'a, T: Element, const N: usize> {
 ///
 /// `T: Element` is the element type (`f32` / `f64` / `f16` / `bf16`).
 /// `const N: usize` is the tensor rank (1..=8).
+#[derive(Debug)]
 pub struct SoftmaxPlan<T: Element, const N: usize> {
     desc: SoftmaxDescriptor<N>,
     sku: KernelSku,
@@ -191,7 +193,7 @@ impl<T: Element, const N: usize> SoftmaxPlan<T, N> {
         }
         let x_ptr = args.x.data.as_raw().0 as *const c_void;
         let y_ptr = args.y.data.as_raw().0 as *mut c_void;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
 
         let axis = self.desc.softmax_axis as usize;
         let shape = self.desc.input_shape;

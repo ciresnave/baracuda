@@ -17,7 +17,6 @@
 //! requires the same interpretation throughout.
 
 use core::cell::Cell;
-use core::ffi::c_void;
 use core::marker::PhantomData;
 
 use baracuda_cutlass::{Error, Result};
@@ -50,6 +49,7 @@ pub struct LuDescriptor {
 }
 
 /// Args bundle for an LU launch.
+#[derive(Debug)]
 pub struct LuArgs<'a, T: Element> {
     /// Input / output matrix stack `[batch, M, N]` row-major contiguous.
     /// Overwritten with packed `LU` in place.
@@ -82,6 +82,7 @@ pub struct LuArgs<'a, T: Element> {
 /// bit-stable across runs.
 ///
 /// Owns a lazy cuSOLVER handle (`!Sync` / `!Send`); destroyed on `Drop`.
+#[derive(Debug)]
 pub struct LuPlan<T: Element> {
     desc: LuDescriptor,
     sku: KernelSku,
@@ -217,7 +218,7 @@ impl<T: Element> LuPlan<T> {
     }
 
     fn bind_stream(&self, h: cusolverDnHandle_t, stream: &Stream) -> Result<()> {
-        let status = unsafe { cusolverDnSetStream(h, stream.as_raw() as *mut c_void) };
+        let status = unsafe { cusolverDnSetStream(h, stream.as_raw()) };
         if status != 0 {
             return Err(Error::CutlassInternal(-status));
         }

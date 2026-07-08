@@ -196,7 +196,8 @@ pub unsafe extern "C" fn baracuda_kernels_curand_uniform_f32_run(
     if numel < 0 || y.is_null() {
         return INVALID;
     }
-    if !(high > low) && numel > 0 {
+    // NaN-aware: reject unless high is STRICTLY greater (NaN/incomparable => reject).
+    if high.partial_cmp(&low) != Some(core::cmp::Ordering::Greater) && numel > 0 {
         return INVALID;
     }
     if numel == 0 {
@@ -250,7 +251,8 @@ pub unsafe extern "C" fn baracuda_kernels_curand_uniform_f64_run(
     if numel < 0 || y.is_null() {
         return INVALID;
     }
-    if !(high > low) && numel > 0 {
+    // NaN-aware: reject unless high is STRICTLY greater (NaN/incomparable => reject).
+    if high.partial_cmp(&low) != Some(core::cmp::Ordering::Greater) && numel > 0 {
         return INVALID;
     }
     if numel == 0 {
@@ -347,7 +349,8 @@ pub unsafe extern "C" fn baracuda_kernels_curand_normal_f32_run(
     _workspace_bytes: usize,
     stream: *mut c_void,
 ) -> i32 {
-    if numel < 0 || y.is_null() || !(stddev > 0.0) {
+    // NaN-aware: stddev must be strictly positive (NaN/incomparable => reject).
+    if numel < 0 || y.is_null() || stddev.partial_cmp(&0.0) != Some(core::cmp::Ordering::Greater) {
         return INVALID;
     }
     if numel == 0 {
@@ -381,7 +384,8 @@ pub unsafe extern "C" fn baracuda_kernels_curand_normal_f64_run(
     _workspace_bytes: usize,
     stream: *mut c_void,
 ) -> i32 {
-    if numel < 0 || y.is_null() || !(stddev > 0.0) {
+    // NaN-aware: stddev must be strictly positive (NaN/incomparable => reject).
+    if numel < 0 || y.is_null() || stddev.partial_cmp(&0.0) != Some(core::cmp::Ordering::Greater) {
         return INVALID;
     }
     if numel == 0 {

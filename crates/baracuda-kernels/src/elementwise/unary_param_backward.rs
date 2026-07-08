@@ -46,6 +46,7 @@ pub struct UnaryParamBackwardDescriptor<const N: usize> {
 }
 
 /// Args bundle for a parameterized unary backward launch.
+#[derive(Debug)]
 pub struct UnaryParamBackwardArgs<'a, T: Element, const N: usize> {
     /// Upstream gradient (input to backward).
     pub dy: TensorRef<'a, T, N>,
@@ -56,6 +57,7 @@ pub struct UnaryParamBackwardArgs<'a, T: Element, const N: usize> {
 }
 
 /// Parameterized unary backward plan.
+#[derive(Debug)]
 pub struct UnaryParamBackwardPlan<T: Element, const N: usize> {
     desc: UnaryParamBackwardDescriptor<N>,
     sku: KernelSku,
@@ -189,7 +191,7 @@ impl<T: Element, const N: usize> UnaryParamBackwardPlan<T, N> {
         let dy_ptr = args.dy.data.as_raw().0 as *const c_void;
         let x_ptr = args.x.data.as_raw().0 as *const c_void;
         let dx_ptr = args.dx.data.as_raw().0 as *mut c_void;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let p0 = self.desc.params[0];
         let p1 = self.desc.params[1];
 

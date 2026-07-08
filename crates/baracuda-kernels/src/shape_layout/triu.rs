@@ -41,6 +41,7 @@ pub struct TriuDescriptor<const N: usize> {
 }
 
 /// Args bundle for a Triu launch.
+#[derive(Debug)]
 pub struct TriuArgs<'a, T: Element, const N: usize> {
     /// Input — same shape as output.
     pub input: TensorRef<'a, T, N>,
@@ -67,6 +68,7 @@ pub struct TriuArgs<'a, T: Element, const N: usize> {
 ///
 /// **Precision guarantee**: deterministic, bit-stable, bit-exact —
 /// pure element select + zero, no arithmetic.
+#[derive(Debug)]
 pub struct TriuPlan<T: Element, const N: usize> {
     desc: TriuDescriptor<N>,
     sku: KernelSku,
@@ -195,7 +197,7 @@ impl<T: Element, const N: usize> TriuPlan<T, N> {
         }
         let input_ptr = args.input.data.as_raw().0 as *const c_void;
         let output_ptr = args.output.data.as_raw().0 as *mut c_void;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let shape = self.desc.shape;
         let rank = N as i32;
         let diagonal = self.desc.diagonal;

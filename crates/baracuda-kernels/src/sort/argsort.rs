@@ -45,6 +45,7 @@ pub struct ArgsortDescriptor {
 }
 
 /// Args bundle for an `argsort` launch.
+#[derive(Debug)]
 pub struct ArgsortArgs<'a, T: Element> {
     /// Input `[batch, row_len]`.
     pub input: TensorRef<'a, T, 2>,
@@ -70,6 +71,7 @@ pub struct ArgsortArgs<'a, T: Element> {
 /// **Workspace**: none.
 ///
 /// **Precision guarantee**: deterministic, bit-stable.
+#[derive(Debug)]
 pub struct ArgsortPlan<T: Element> {
     desc: ArgsortDescriptor,
     sku: KernelSku,
@@ -193,7 +195,7 @@ impl<T: Element> ArgsortPlan<T> {
         }
         let in_ptr = args.input.data.as_raw().0 as *const c_void;
         let idx_ptr = args.indices.data.as_raw().0 as *mut c_void;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let desc_flag = if self.desc.descending { 1 } else { 0 };
 
         // Phase 40 dispatch: `row_len > 1024` → multi-block radix path

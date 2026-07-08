@@ -44,6 +44,12 @@ pub struct QuantizePerTensorBackwardDescriptor {
     pub output_element: ElementKind,
 }
 
+impl<'a, TIn: Element, TOut: IntElement> core::fmt::Debug for QuantizePerTensorBackwardArgs<'a, TIn, TOut> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("QuantizePerTensorBackwardArgs").finish_non_exhaustive()
+    }
+}
+
 /// Args bundle for a `quantize_per_tensor` backward launch.
 pub struct QuantizePerTensorBackwardArgs<'a, TIn: Element, TOut: IntElement> {
     /// Saved FW input `[numel]` in FP — required for mask recomputation.
@@ -83,6 +89,7 @@ pub struct QuantizePerTensorBackwardArgs<'a, TIn: Element, TOut: IntElement> {
 ///
 /// **Precision guarantee**: deterministic, bit-stable. The `1/scale`
 /// factor is mandatory (omitting it is the most common STE-grad bug).
+#[derive(Debug)]
 pub struct QuantizePerTensorBackwardPlan<TIn: Element, TOut: IntElement> {
     desc: QuantizePerTensorBackwardDescriptor,
     sku: KernelSku,
@@ -177,7 +184,7 @@ impl<TIn: Element, TOut: IntElement> QuantizePerTensorBackwardPlan<TIn, TOut> {
         let x_ptr = args.input.data.as_raw().0 as *const c_void;
         let dy_ptr = args.d_output.data.as_raw().0 as *const c_void;
         let dx_ptr = args.d_input.data.as_raw().0 as *mut c_void;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let zp = args.zero_point;
         let qmin = self.desc.q_min;
         let qmax = self.desc.q_max;

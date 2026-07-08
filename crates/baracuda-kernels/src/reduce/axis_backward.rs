@@ -75,6 +75,7 @@ impl<const N: usize> ReduceBackwardDescriptor<N> {
 ///   to every position where `x[c] == y[c_reduced]` (split-across-ties
 ///   semantic; matches JAX, differs from PyTorch's first-index pick).
 /// - Prod, Norm2 (future): same dual-save requirement.
+#[derive(Debug)]
 pub struct ReduceBackwardArgs<'a, T: Element, const N: usize> {
     /// Upstream gradient — keepdim shape matching forward output.
     pub dy: TensorRef<'a, T, N>,
@@ -89,6 +90,7 @@ pub struct ReduceBackwardArgs<'a, T: Element, const N: usize> {
 }
 
 /// Single-axis reduction backward plan.
+#[derive(Debug)]
 pub struct ReduceBackwardPlan<T: Element, const N: usize> {
     desc: ReduceBackwardDescriptor<N>,
     sku: KernelSku,
@@ -323,7 +325,7 @@ impl<T: Element, const N: usize> ReduceBackwardPlan<T, N> {
         let rank = N as i32;
         let dy_ptr = args.dy.data.as_raw().0 as *const c_void;
         let dx_ptr = args.dx.data.as_raw().0 as *mut c_void;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
 
         let status = match (self.desc.kind, T::KIND) {
             (ReduceKind::Sum, ElementKind::F32) => unsafe {

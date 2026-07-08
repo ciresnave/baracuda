@@ -53,6 +53,7 @@ pub struct RoiAlignDescriptor {
 }
 
 /// Args bundle for `roi_align`.
+#[derive(Debug)]
 pub struct RoiAlignArgs<'a, T: Element> {
     /// Input `[N, C, H, W]`.
     pub input: TensorRef<'a, T, 4>,
@@ -86,6 +87,7 @@ pub struct RoiAlignArgs<'a, T: Element> {
 /// **Workspace**: none.
 ///
 /// **Precision guarantee**: deterministic, bit-stable.
+#[derive(Debug)]
 pub struct RoiAlignPlan<T: Element> {
     desc: RoiAlignDescriptor,
     sku: KernelSku,
@@ -204,7 +206,7 @@ impl<T: Element> RoiAlignPlan<T> {
         let input_ptr = args.input.data.as_raw().0 as *const c_void;
         let rois_ptr = args.rois.data.as_raw().0 as *const c_void;
         let out_ptr = args.output.data.as_raw().0 as *mut c_void;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let aligned = if self.desc.aligned { 1 } else { 0 };
         let status = match T::KIND {
             ElementKind::F32 => unsafe {

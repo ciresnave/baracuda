@@ -42,6 +42,7 @@ pub struct IndexAddDescriptor<const N: usize> {
 }
 
 /// Args bundle for an `index_add` launch.
+#[derive(Debug)]
 pub struct IndexAddArgs<'a, T: Element, const N: usize, I: IndexElement = i32> {
     /// Source tensor (values to add into `dst`).
     pub src: TensorRef<'a, T, N>,
@@ -76,6 +77,7 @@ pub struct IndexAddArgs<'a, T: Element, const N: usize, I: IndexElement = i32> {
 /// (atomicAdd). Per-thread arithmetic is bit-stable on same hardware.
 ///
 /// **Index policy**: out-of-bounds and negative indices skipped.
+#[derive(Debug)]
 pub struct IndexAddPlan<T: Element, const N: usize> {
     desc: IndexAddDescriptor<N>,
     sku: KernelSku,
@@ -228,7 +230,7 @@ impl<T: Element, const N: usize> IndexAddPlan<T, N> {
         let src_ptr = args.src.data.as_raw().0 as *const c_void;
         let idx_ptr = args.idx.data.as_raw().0 as *const c_void;
         let dst_ptr = args.dst.data.as_raw().0 as *mut c_void;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
 
         let src_shape = self.desc.src_shape;
         let stride_src = args.src.stride;

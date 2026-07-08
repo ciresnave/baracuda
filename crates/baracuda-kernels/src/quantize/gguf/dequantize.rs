@@ -31,6 +31,7 @@ pub struct GgufDequantizeDescriptor {
 /// The input weight buffer is carried as a `TensorRef<u8, 1>` over the
 /// raw packed bytes — its `shape[0]` must equal
 /// `(numel / block_size) * block_format.type_size()`.
+#[derive(Debug)]
 pub struct GgufDequantizeArgs<'a> {
     /// Packed GGUF weight bytes.
     pub input: TensorRef<'a, U8, 1>,
@@ -62,6 +63,7 @@ pub struct GgufDequantizeArgs<'a> {
 ///
 /// **Precision guarantee**: deterministic, bit-stable. No
 /// accumulation, no atomics — pure unpack arithmetic.
+#[derive(Debug)]
 pub struct GgufDequantizePlan {
     desc: GgufDequantizeDescriptor,
     sku: KernelSku,
@@ -140,7 +142,7 @@ impl GgufDequantizePlan {
         }
         let x_ptr = args.input.data.as_raw().0 as *const c_void;
         let y_ptr = args.output.data.as_raw().0 as *mut c_void;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let numel = self.desc.numel;
 
         let status = unsafe {

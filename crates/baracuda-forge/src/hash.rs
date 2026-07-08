@@ -20,7 +20,7 @@ pub struct BuildCache {
 
 /// Entry for a single source file.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CacheEntry {
+pub(crate) struct CacheEntry {
     /// SHA-256 hash of file content.
     pub content_hash: String,
     /// Combined hash of watched paths.
@@ -170,7 +170,7 @@ fn source_path_from_key<'a>(key: &'a str, object_path: &str) -> Option<&'a str> 
 }
 
 /// Compute SHA-256 hash of a file's contents.
-pub fn hash_file(path: &Path) -> Result<String> {
+pub(crate) fn hash_file(path: &Path) -> Result<String> {
     let mut file = fs::File::open(path)?;
     let mut hasher = Sha256::new();
     let mut buffer = [0u8; 8192];
@@ -187,7 +187,7 @@ pub fn hash_file(path: &Path) -> Result<String> {
 }
 
 /// Hash a list of arguments for cache comparison.
-pub fn hash_args(args: &[String]) -> String {
+pub(crate) fn hash_args(args: &[String]) -> String {
     let mut hasher = Sha256::new();
     for arg in args {
         hasher.update(arg.as_bytes());
@@ -197,7 +197,7 @@ pub fn hash_args(args: &[String]) -> String {
 }
 
 /// Compute a combined hash of multiple paths (files or directories).
-pub fn hash_paths(paths: &[PathBuf]) -> String {
+pub(crate) fn hash_paths(paths: &[PathBuf]) -> String {
     let mut hasher = Sha256::new();
 
     let mut sorted_paths = paths.to_vec();
@@ -243,7 +243,7 @@ pub fn hash_paths(paths: &[PathBuf]) -> String {
 
 /// Check if output file is newer than all input files.
 #[allow(dead_code)]
-pub fn output_is_current(output: &Path, inputs: &[PathBuf]) -> bool {
+pub(crate) fn output_is_current(output: &Path, inputs: &[PathBuf]) -> bool {
     let output_modified = match output.metadata().and_then(|m| m.modified()) {
         Ok(t) => t,
         Err(_) => return false,

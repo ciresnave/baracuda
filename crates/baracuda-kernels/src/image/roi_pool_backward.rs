@@ -38,6 +38,7 @@ pub struct RoiPoolBackwardDescriptor {
 }
 
 /// Args bundle for `roi_pool_backward`.
+#[derive(Debug)]
 pub struct RoiPoolBackwardArgs<'a, T: Element> {
     /// Upstream gradient `[num_rois, C, pooled_h, pooled_w]`.
     pub dout: TensorRef<'a, T, 4>,
@@ -67,6 +68,7 @@ pub struct RoiPoolBackwardArgs<'a, T: Element> {
 /// **Precision guarantee**: **non-deterministic** — multiple RoI
 /// cells can map to the same input position; atomicAdd ordering
 /// varies.
+#[derive(Debug)]
 pub struct RoiPoolBackwardPlan<T: Element> {
     desc: RoiPoolBackwardDescriptor,
     sku: KernelSku,
@@ -185,7 +187,7 @@ impl<T: Element> RoiPoolBackwardPlan<T> {
         let rois_ptr = args.rois.data.as_raw().0 as *const c_void;
         let arg_ptr = args.argmax.data.as_raw().0 as *const c_void;
         let din_ptr = args.dinput.data.as_raw().0 as *mut c_void;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let status = match T::KIND {
             ElementKind::F32 => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_roi_pool_backward_f32_run(

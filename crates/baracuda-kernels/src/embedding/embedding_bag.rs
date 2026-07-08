@@ -98,6 +98,7 @@ pub struct EmbeddingBagDescriptor {
 ///
 /// Phase 11.5: `I: IndexElement` generic (`i32` or `i64`) for the
 /// index tensor. `offsets` stays i32 — bag boundaries fit comfortably.
+#[derive(Debug)]
 pub struct EmbeddingBagArgs<'a, T: Element, I: IndexElement = i32> {
     /// Weight matrix `[V, D]`. Row-major contiguous.
     pub weight: TensorRef<'a, T, 2>,
@@ -146,6 +147,7 @@ pub struct EmbeddingBagArgs<'a, T: Element, I: IndexElement = i32> {
 /// **Known limitations**: `Max` mode is deferred — it needs
 /// per-feature argmax tracking on FW so the BW can scatter into the
 /// contributing rows.
+#[derive(Debug)]
 pub struct EmbeddingBagPlan<T: Element> {
     desc: EmbeddingBagDescriptor,
     sku: KernelSku,
@@ -312,7 +314,7 @@ impl<T: Element> EmbeddingBagPlan<T> {
         let idx_ptr = args.indices.data.as_raw().0 as *const c_void;
         let off_ptr = args.offsets.data.as_raw().0 as *const c_void;
         let out_ptr = args.output.data.as_raw().0 as *mut c_void;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         // Phase 11.5: padding_idx widens to i64 across FFI.
         let padding_idx: i64 = self.desc.padding_idx.unwrap_or(PADDING_DISABLED) as i64;
         let mode = self.desc.mode.ffi_tag();

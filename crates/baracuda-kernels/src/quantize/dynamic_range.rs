@@ -116,6 +116,7 @@ pub struct DynamicRangeQuantizeDescriptor {
 /// has access to the same scale.
 ///
 /// `zero_point` is implicit (= 0 for symmetric) and is not materialized.
+#[derive(Debug)]
 pub struct DynamicRangeQuantizeArgs<'a, TIn: Element, TOut: IntElement> {
     /// Input `[N, D]` in FP.
     pub input: TensorRef<'a, TIn, 2>,
@@ -155,6 +156,7 @@ pub struct DynamicRangeQuantizeArgs<'a, TIn: Element, TOut: IntElement> {
 /// **Precision guarantee**: deterministic, bit-stable. One block
 /// per row, no atomics; block-tree reduction is associative-stable
 /// on a single GPU.
+#[derive(Debug)]
 pub struct DynamicRangeQuantizePlan<TIn: Element, TOut: IntElement> {
     desc: DynamicRangeQuantizeDescriptor,
     sku: KernelSku,
@@ -289,7 +291,7 @@ impl<TIn: Element, TOut: IntElement> DynamicRangeQuantizePlan<TIn, TOut> {
         let in_ptr = args.input.data.as_raw().0 as *const c_void;
         let sc_ptr = args.scale_out.data.as_raw().0 as *mut c_void;
         let out_ptr = args.output.data.as_raw().0 as *mut c_void;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
 
         let status = match (TIn::KIND, TOut::KIND) {
             (ElementKind::F32, ElementKind::S8) => unsafe {

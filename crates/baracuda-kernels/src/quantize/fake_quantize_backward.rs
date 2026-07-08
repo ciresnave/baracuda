@@ -34,6 +34,12 @@ pub struct FakeQuantizeBackwardDescriptor {
     pub input_element: ElementKind,
 }
 
+impl<'a, TIn: Element> core::fmt::Debug for FakeQuantizeBackwardArgs<'a, TIn> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("FakeQuantizeBackwardArgs").finish_non_exhaustive()
+    }
+}
+
 /// Args bundle for a `fake_quantize` backward launch.
 pub struct FakeQuantizeBackwardArgs<'a, TIn: Element> {
     /// Saved FW input `[numel]` — required for mask recomputation.
@@ -66,6 +72,7 @@ pub struct FakeQuantizeBackwardArgs<'a, TIn: Element> {
 /// **Workspace**: none.
 ///
 /// **Precision guarantee**: deterministic, bit-stable.
+#[derive(Debug)]
 pub struct FakeQuantizeBackwardPlan<TIn: Element> {
     desc: FakeQuantizeBackwardDescriptor,
     sku: KernelSku,
@@ -145,7 +152,7 @@ impl<TIn: Element> FakeQuantizeBackwardPlan<TIn> {
         let x_ptr = args.input.data.as_raw().0 as *const c_void;
         let dy_ptr = args.d_output.data.as_raw().0 as *const c_void;
         let dx_ptr = args.d_input.data.as_raw().0 as *mut c_void;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let zp = args.zero_point;
         let qmin = self.desc.q_min;
         let qmax = self.desc.q_max;

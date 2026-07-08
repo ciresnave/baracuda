@@ -36,8 +36,8 @@ impl<const N: usize> PermuteBackwardDescriptor<N> {
     /// Compute the dy shape (= forward output shape).
     pub fn dy_shape(&self) -> [i32; N] {
         let mut out = [0i32; N];
-        for d in 0..N {
-            out[d] = self.input_shape[self.dims[d] as usize];
+        for (d, out_d) in out.iter_mut().enumerate() {
+            *out_d = self.input_shape[self.dims[d] as usize];
         }
         out
     }
@@ -53,6 +53,7 @@ impl<const N: usize> PermuteBackwardDescriptor<N> {
 }
 
 /// Args bundle for a Permute backward launch.
+#[derive(Debug)]
 pub struct PermuteBackwardArgs<'a, T: Element, const N: usize> {
     /// Upstream gradient — forward output shape (= `dy_shape()`).
     pub dy: TensorRef<'a, T, N>,
@@ -76,6 +77,7 @@ pub struct PermuteBackwardArgs<'a, T: Element, const N: usize> {
 /// **Workspace**: none.
 ///
 /// **Precision guarantee**: deterministic, bit-stable, bit-exact.
+#[derive(Debug)]
 pub struct PermuteBackwardPlan<T: Element, const N: usize> {
     desc: PermuteBackwardDescriptor<N>,
     sku: KernelSku,
@@ -218,7 +220,7 @@ impl<T: Element, const N: usize> PermuteBackwardPlan<T, N> {
         }
         let dy_ptr = args.dy.data.as_raw().0 as *const c_void;
         let dx_ptr = args.dx.data.as_raw().0 as *mut c_void;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
 
         // Reuse forward permute: walks "x" = dy and writes "y" = dx,
         // applying `inv_dims` so the source coord on each output axis

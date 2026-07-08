@@ -56,6 +56,7 @@ pub struct BatchRaggedPrefillDescriptor {
 }
 
 /// Args bundle for a batched ragged-KV prefill launch.
+#[derive(Debug)]
 pub struct BatchRaggedPrefillArgs<'a, T: Element> {
     /// Ragged query rows — `[total_num_rows, num_qo_heads, head_dim]`.
     pub q: TensorRef<'a, T, 3>,
@@ -75,6 +76,7 @@ pub struct BatchRaggedPrefillArgs<'a, T: Element> {
 
 /// Batched ragged-KV prefill plan. f16 / bf16. Requires the `flashinfer`
 /// cargo feature.
+#[derive(Debug)]
 pub struct BatchRaggedPrefillPlan<T: Element> {
     desc: BatchRaggedPrefillDescriptor,
     sku: KernelSku,

@@ -31,6 +31,7 @@ pub struct TopkBackwardDescriptor {
 }
 
 /// Args bundle for a `topk_backward` launch.
+#[derive(Debug)]
 pub struct TopkBackwardArgs<'a, T: Element> {
     /// Upstream grad of top-k values `[batch, k]`.
     pub dy: TensorRef<'a, T, 2>,
@@ -58,6 +59,7 @@ pub struct TopkBackwardArgs<'a, T: Element> {
 ///
 /// **Precision guarantee**: deterministic, bit-stable (no atomics —
 /// top-k indices form an injection into row positions).
+#[derive(Debug)]
 pub struct TopkBackwardPlan<T: Element> {
     desc: TopkBackwardDescriptor,
     sku: KernelSku,
@@ -158,7 +160,7 @@ impl<T: Element> TopkBackwardPlan<T> {
         let dy_ptr = args.dy.data.as_raw().0 as *const c_void;
         let idx_ptr = args.indices.data.as_raw().0 as *const c_void;
         let dx_ptr = args.dx.data.as_raw().0 as *mut c_void;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
 
         let status = match T::KIND {
             ElementKind::F32 => unsafe {

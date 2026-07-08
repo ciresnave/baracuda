@@ -1171,6 +1171,10 @@ svda_batched_pair!(
 macro_rules! eigh_real_pair {
     ($name:ident, $ws_name:ident, $syevd:ident, $syevd_bs:ident, $T:ty) => {
         /// Eigh workspace size in bytes for the real symmetric `syevd` path.
+        ///
+        /// # Safety
+        ///
+        /// `out_bytes` must be a valid, writable pointer to a `usize`.
         #[unsafe(no_mangle)]
         pub unsafe extern "C" fn $ws_name(uplo: i32, n: i32, out_bytes: *mut usize) -> i32 {
             if n <= 0 || out_bytes.is_null() {

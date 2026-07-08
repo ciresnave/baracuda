@@ -50,6 +50,7 @@ pub struct QuantizePerChannelDescriptor {
 }
 
 /// Args bundle for a `quantize_per_channel` forward launch.
+#[derive(Debug)]
 pub struct QuantizePerChannelArgs<'a, TIn: Element, TOut: IntElement> {
     /// Input `[D0, D1, D2, D3]` in FP.
     pub input: TensorRef<'a, TIn, 4>,
@@ -86,6 +87,7 @@ pub struct QuantizePerChannelArgs<'a, TIn: Element, TOut: IntElement> {
 ///
 /// **Precision guarantee**: deterministic, bit-stable on same
 /// hardware. Round-ties-even.
+#[derive(Debug)]
 pub struct QuantizePerChannelPlan<TIn: Element, TOut: IntElement> {
     desc: QuantizePerChannelDescriptor,
     sku: KernelSku,
@@ -199,7 +201,7 @@ impl<TIn: Element, TOut: IntElement> QuantizePerChannelPlan<TIn, TOut> {
         let sc_ptr = args.scale.data.as_raw().0 as *const c_void;
         let zp_ptr = args.zero_point.data.as_raw().0 as *const c_void;
         let q_ptr = args.output.data.as_raw().0 as *mut c_void;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let shape4 = self.desc.shape.as_ptr();
         let axis = self.desc.axis as i32;
         let qmin = self.desc.q_min;

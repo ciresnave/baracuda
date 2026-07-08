@@ -44,6 +44,7 @@ impl<const N: usize> GroupNormBackwardDescriptor<N> {
 }
 
 /// Args bundle for GroupNorm BW.
+#[derive(Debug)]
 pub struct GroupNormBackwardArgs<'a, T: Element, const N: usize> {
     /// Upstream gradient.
     pub dy: TensorRef<'a, T, N>,
@@ -64,6 +65,7 @@ pub struct GroupNormBackwardArgs<'a, T: Element, const N: usize> {
 }
 
 /// GroupNorm backward plan.
+#[derive(Debug)]
 pub struct GroupNormBackwardPlan<T: Element, const N: usize> {
     desc: GroupNormBackwardDescriptor<N>,
     sku: KernelSku,
@@ -220,7 +222,7 @@ impl<T: Element, const N: usize> GroupNormBackwardPlan<T, N> {
             }
         };
 
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let dy_ptr = args.dy.data.as_raw().0 as *const c_void;
         let x_ptr = args.x.data.as_raw().0 as *const c_void;
         let mean_ptr = args.saved_mean.data.as_raw().0 as *const c_void;

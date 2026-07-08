@@ -261,6 +261,6 @@ pub fn nvjitlink() -> Result<&'static NvJitLink, LoaderError> {
     let lib = Library::open("nvjitlink", nvjitlink_candidates())?;
     let n = NvJitLink::empty(lib);
     let _ = NVJITLINK.set(n);
-    /// ok
+    // ok
     Ok(NVJITLINK.get().expect("OnceLock set or lost race"))
 }

@@ -58,7 +58,6 @@
 
 #![deny(missing_docs)]
 
-use core::ffi::c_void;
 use core::ptr;
 
 use baracuda_driver::Stream;
@@ -371,6 +370,7 @@ impl PrecisionGuarantee {
 /// **Not `Sync`**: ozIMMU handles wrap a cuBLAS handle, which is
 /// `!Sync` per the cuBLAS contract (one host thread at a time). The
 /// PhantomData below records that.
+#[derive(Debug)]
 pub struct Handle {
     raw: sys::OzimmuHandleT,
     _not_sync: core::marker::PhantomData<*mut ()>,
@@ -411,7 +411,7 @@ impl Handle {
     /// the handle is held thread-local but used across multiple
     /// per-request streams. The bind is sticky across calls.
     pub fn set_stream(&self, stream: &Stream) {
-        let raw_stream = stream.as_raw() as *mut c_void;
+        let raw_stream = stream.as_raw();
         // SAFETY: handle is non-null (constructor enforces); raw_stream
         // is a valid CUstream alias for the stream's lifetime.
         unsafe {

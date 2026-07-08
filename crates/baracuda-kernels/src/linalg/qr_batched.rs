@@ -63,6 +63,7 @@ pub struct BatchedQrDescriptor {
 /// cuBLAS's batched-geqrf contract returns a single host-side
 /// argument-validity flag (NOT a per-slot device array); any non-zero
 /// value surfaces as [`Error::CutlassInternal`] from `run`.
+#[derive(Debug)]
 pub struct BatchedQrArgs<'a, T: Element> {
     /// Input batch stack `[batch, M, N]` column-major contiguous.
     /// Overwritten with cuBLAS `geqrf`-packed output per batch slot.
@@ -99,6 +100,7 @@ pub struct BatchedQrArgs<'a, T: Element> {
 /// **Precision guarantee**: deterministic; not bit-stable across runs.
 ///
 /// Owns a lazy cuBLAS handle (`!Sync` / `!Send`); destroyed on `Drop`.
+#[derive(Debug)]
 pub struct BatchedQrPlan<T: Element> {
     desc: BatchedQrDescriptor,
     sku: KernelSku,
@@ -218,7 +220,7 @@ impl<T: Element> BatchedQrPlan<T> {
     }
 
     fn bind_stream(&self, h: cublasHandle_t, stream: &Stream) -> Result<()> {
-        let status = unsafe { cublasSetStream_v2(h, stream.as_raw() as *mut c_void) };
+        let status = unsafe { cublasSetStream_v2(h, stream.as_raw()) };
         if status != 0 {
             return Err(Error::CutlassInternal(-status));
         }

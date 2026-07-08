@@ -64,6 +64,7 @@ impl QuantizePerGroupDescriptor {
 }
 
 /// Args bundle for a `quantize_per_group` forward launch.
+#[derive(Debug)]
 pub struct QuantizePerGroupArgs<'a, TIn: Element, TOut: IntElement> {
     /// Input `[outer_size, axis_size]` in FP.
     pub input: TensorRef<'a, TIn, 2>,
@@ -100,6 +101,7 @@ pub struct QuantizePerGroupArgs<'a, TIn: Element, TOut: IntElement> {
 ///
 /// **Precision guarantee**: deterministic, bit-stable. Round-ties-
 /// even.
+#[derive(Debug)]
 pub struct QuantizePerGroupPlan<TIn: Element, TOut: IntElement> {
     desc: QuantizePerGroupDescriptor,
     sku: KernelSku,
@@ -204,7 +206,7 @@ impl<TIn: Element, TOut: IntElement> QuantizePerGroupPlan<TIn, TOut> {
         let sc_ptr = args.scale.data.as_raw().0 as *const c_void;
         let zp_ptr = args.zero_point.data.as_raw().0 as *const c_void;
         let out_ptr = args.output.data.as_raw().0 as *mut c_void;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let (outer, axis, g, qmin, qmax) = (
             self.desc.outer_size,
             self.desc.axis_size,

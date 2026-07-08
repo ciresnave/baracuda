@@ -48,6 +48,7 @@ pub struct GumbelSoftmaxDescriptor<const N: usize> {
 }
 
 /// Args bundle for a GumbelSoftmax forward launch.
+#[derive(Debug)]
 pub struct GumbelSoftmaxArgs<'a, T: Element, const N: usize> {
     /// Input logits.
     pub x: TensorRef<'a, T, N>,
@@ -59,6 +60,7 @@ pub struct GumbelSoftmaxArgs<'a, T: Element, const N: usize> {
 ///
 /// Owns a cuRAND generator (lazy, `!Sync`) — same lifetime / threading
 /// model as [`crate::random::RandomPlan`].
+#[derive(Debug)]
 pub struct GumbelSoftmaxPlan<T: Element, const N: usize> {
     desc: GumbelSoftmaxDescriptor<N>,
     sku: KernelSku,
@@ -95,7 +97,10 @@ impl<T: Element, const N: usize> GumbelSoftmaxPlan<T, N> {
                 "baracuda-kernels::GumbelSoftmaxPlan: tensor rank > 8 not supported",
             ));
         }
-        if !(desc.temperature > 0.0) || !desc.temperature.is_finite() {
+        // NaN-aware: temperature must be strictly positive (NaN/incomparable => reject).
+        if desc.temperature.partial_cmp(&0.0) != Some(core::cmp::Ordering::Greater)
+            || !desc.temperature.is_finite()
+        {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::GumbelSoftmaxPlan: temperature must be > 0 and finite",
             ));
@@ -237,7 +242,7 @@ impl<T: Element, const N: usize> GumbelSoftmaxPlan<T, N> {
             }
         };
 
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let gen_handle = self.ensure_generator()?;
         let status = unsafe { curandSetStream(gen_handle, stream_ptr) };
         if status != 0 {

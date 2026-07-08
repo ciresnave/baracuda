@@ -59,6 +59,7 @@ pub struct FftDescriptor {
 /// same `DeviceBuffer` at the plan-args layer (which the lifetime
 /// system would block, so for now we leave that to a follow-up that
 /// exposes a dedicated in-place args shape).
+#[derive(Debug)]
 pub struct FftArgs<'a, T: Element> {
     /// Input tensor `[batch, n]` (complex).
     pub x: TensorRef<'a, T, 2>,
@@ -94,6 +95,7 @@ pub struct FftArgs<'a, T: Element> {
 ///
 /// Owns a lazy cuFFT handle (`!Sync` / `!Send` via the
 /// `Cell<cufftHandle>`). Destroyed on `Drop`.
+#[derive(Debug)]
 pub struct FftPlan<T: Element> {
     desc: FftDescriptor,
     sku: KernelSku,
@@ -216,7 +218,7 @@ impl<T: Element> FftPlan<T> {
 
     /// Bind the cuFFT plan to the caller's stream.
     fn bind_stream(&self, handle: cufftHandle, stream: &Stream) -> Result<()> {
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let status = unsafe { cufftSetStream(handle, stream_ptr) };
         if status != 0 {
             return Err(Error::CutlassInternal(cufft_to_status(status)));
@@ -288,7 +290,7 @@ impl FftPlan<Complex32> {
 
         if self.desc.inverse {
             let scale = 1.0_f32 / (self.desc.n as f32);
-            let stream_ptr = stream.as_raw() as *mut c_void;
+            let stream_ptr = stream.as_raw();
             let s = unsafe {
                 baracuda_kernels_scale_inplace_c32_run(
                     numel,
@@ -336,7 +338,7 @@ impl FftPlan<Complex64> {
 
         if self.desc.inverse {
             let scale = 1.0_f64 / (self.desc.n as f64);
-            let stream_ptr = stream.as_raw() as *mut c_void;
+            let stream_ptr = stream.as_raw();
             let s = unsafe {
                 baracuda_kernels_scale_inplace_c64_run(
                     numel,

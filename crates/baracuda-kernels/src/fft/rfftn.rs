@@ -94,6 +94,7 @@ impl RfftNdDescriptor {
 }
 
 /// Args for an ND RFFT. `T` is the real type, `C` the matching complex.
+#[derive(Debug)]
 pub struct RfftNdArgs<'a, T: Element, C: Element> {
     /// Real input — `batch * product(dims[..rank])` cells.
     pub x: DeviceSlice<'a, T>,
@@ -124,6 +125,7 @@ pub struct RfftNdArgs<'a, T: Element, C: Element> {
 /// cuFFT versions.
 ///
 /// Owns a lazy cuFFT handle (`!Sync` / `!Send`); destroyed on `Drop`.
+#[derive(Debug)]
 pub struct RfftNdPlan<T: Element> {
     desc: RfftNdDescriptor,
     sku: KernelSku,
@@ -257,7 +259,7 @@ impl<T: Element> RfftNdPlan<T> {
     }
 
     fn bind_stream(&self, handle: cufftHandle, stream: &Stream) -> Result<()> {
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let status = unsafe { cufftSetStream(handle, stream_ptr) };
         if status != 0 {
             return Err(Error::CutlassInternal(cufft_to_status(status)));
@@ -412,6 +414,7 @@ impl IrfftNdDescriptor {
 }
 
 /// Args for an ND IRFFT.
+#[derive(Debug)]
 pub struct IrfftNdArgs<'a, T: Element, C: Element> {
     /// Complex input — `batch * complex_numel()` cells.
     pub x: DeviceSlice<'a, C>,
@@ -442,6 +445,7 @@ pub struct IrfftNdArgs<'a, T: Element, C: Element> {
 /// cuFFT versions.
 ///
 /// Owns a lazy cuFFT handle (`!Sync` / `!Send`); destroyed on `Drop`.
+#[derive(Debug)]
 pub struct IrfftNdPlan<T: Element> {
     desc: IrfftNdDescriptor,
     sku: KernelSku,
@@ -575,7 +579,7 @@ impl<T: Element> IrfftNdPlan<T> {
     }
 
     fn bind_stream(&self, handle: cufftHandle, stream: &Stream) -> Result<()> {
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let status = unsafe { cufftSetStream(handle, stream_ptr) };
         if status != 0 {
             return Err(Error::CutlassInternal(cufft_to_status(status)));
@@ -626,7 +630,7 @@ impl IrfftNdPlan<f32> {
 
         let n = self.desc.real_numel() as f32;
         let scale = 1.0_f32 / n;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let s = unsafe {
             baracuda_kernels_scale_inplace_real_f32_run(
                 real_total,
@@ -682,7 +686,7 @@ impl IrfftNdPlan<f64> {
 
         let n = self.desc.real_numel() as f64;
         let scale = 1.0_f64 / n;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let s = unsafe {
             baracuda_kernels_scale_inplace_real_f64_run(
                 real_total,

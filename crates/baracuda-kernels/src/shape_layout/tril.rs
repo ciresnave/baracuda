@@ -34,6 +34,7 @@ pub struct TrilDescriptor<const N: usize> {
 }
 
 /// Args bundle for a Tril launch.
+#[derive(Debug)]
 pub struct TrilArgs<'a, T: Element, const N: usize> {
     /// Input — same shape as output.
     pub input: TensorRef<'a, T, N>,
@@ -56,6 +57,7 @@ pub struct TrilArgs<'a, T: Element, const N: usize> {
 /// **Workspace**: none.
 ///
 /// **Precision guarantee**: deterministic, bit-stable, bit-exact.
+#[derive(Debug)]
 pub struct TrilPlan<T: Element, const N: usize> {
     desc: TrilDescriptor<N>,
     sku: KernelSku,
@@ -181,7 +183,7 @@ impl<T: Element, const N: usize> TrilPlan<T, N> {
         }
         let input_ptr = args.input.data.as_raw().0 as *const c_void;
         let output_ptr = args.output.data.as_raw().0 as *mut c_void;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let shape = self.desc.shape;
         let rank = N as i32;
         let diagonal = self.desc.diagonal;

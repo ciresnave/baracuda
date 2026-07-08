@@ -35,6 +35,7 @@ pub struct PReluDescriptor<const N: usize> {
 }
 
 /// Args bundle for a PReLU FW launch.
+#[derive(Debug)]
 pub struct PReluArgs<'a, T: Element, const N: usize> {
     /// Input tensor.
     pub x: TensorRef<'a, T, N>,
@@ -45,6 +46,7 @@ pub struct PReluArgs<'a, T: Element, const N: usize> {
 }
 
 /// PReLU forward plan.
+#[derive(Debug)]
 pub struct PReluPlan<T: Element, const N: usize> {
     desc: PReluDescriptor<N>,
     sku: KernelSku,
@@ -167,7 +169,7 @@ impl<T: Element, const N: usize> PReluPlan<T, N> {
         if numel == 0 {
             return Ok(());
         }
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let x_ptr = args.x.data.as_raw().0 as *const c_void;
         let weight_ptr = args.weight.data.as_raw().0 as *const c_void;
         let y_ptr = args.y.data.as_raw().0 as *mut c_void;

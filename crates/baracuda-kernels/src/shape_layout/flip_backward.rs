@@ -41,6 +41,7 @@ pub struct FlipBackwardDescriptor<const N: usize> {
 ///
 /// No saved forward tensors are needed — the BW formula `dx = flip(dy,
 /// dims)` doesn't reference `x` or `y`.
+#[derive(Debug)]
 pub struct FlipBackwardArgs<'a, T: Element, const N: usize> {
     /// Upstream gradient — same shape as the forward output (= input).
     pub dy: TensorRef<'a, T, N>,
@@ -62,6 +63,7 @@ pub struct FlipBackwardArgs<'a, T: Element, const N: usize> {
 /// **Workspace**: none.
 ///
 /// **Precision guarantee**: deterministic, bit-stable, bit-exact.
+#[derive(Debug)]
 pub struct FlipBackwardPlan<T: Element, const N: usize> {
     desc: FlipBackwardDescriptor<N>,
     sku: KernelSku,
@@ -182,11 +184,11 @@ impl<T: Element, const N: usize> FlipBackwardPlan<T, N> {
         }
         let dy_ptr = args.dy.data.as_raw().0 as *const c_void;
         let dx_ptr = args.dx.data.as_raw().0 as *mut c_void;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
 
         let mut flip_axes_i32 = [0i32; 8];
-        for d in 0..N {
-            flip_axes_i32[d] = if self.desc.flip_axes[d] { 1 } else { 0 };
+        for (d, slot) in flip_axes_i32.iter_mut().enumerate().take(N) {
+            *slot = if self.desc.flip_axes[d] { 1 } else { 0 };
         }
 
         let shape = self.desc.shape;

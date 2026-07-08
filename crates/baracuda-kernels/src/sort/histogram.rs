@@ -31,6 +31,7 @@ pub struct HistogramDescriptor {
 }
 
 /// Args bundle for a `histogram` launch.
+#[derive(Debug)]
 pub struct HistogramArgs<'a, T: Element> {
     /// Input `[numel]` (interpreted as a flat 1-D buffer).
     pub input: TensorRef<'a, T, 1>,
@@ -56,6 +57,7 @@ pub struct HistogramArgs<'a, T: Element> {
 /// **Precision guarantee**: **non-deterministic** — atomic-bin
 /// accumulation order varies across launches. Final counts are
 /// data-determined.
+#[derive(Debug)]
 pub struct HistogramPlan<T: Element> {
     desc: HistogramDescriptor,
     sku: KernelSku,
@@ -79,7 +81,8 @@ impl<T: Element> HistogramPlan<T> {
                 "baracuda-kernels::HistogramPlan: numel / num_bins must be non-negative",
             ));
         }
-        if !(desc.hi > desc.lo) {
+        // NaN-aware: hi must be strictly greater than lo (NaN/incomparable => reject).
+        if desc.hi.partial_cmp(&desc.lo) != Some(core::cmp::Ordering::Greater) {
             return Err(Error::InvalidProblem(
                 "baracuda-kernels::HistogramPlan: hi must be > lo",
             ));
@@ -143,7 +146,7 @@ impl<T: Element> HistogramPlan<T> {
         }
         let in_ptr = args.input.data.as_raw().0 as *const c_void;
         let out_ptr = args.output.data.as_raw().0 as *mut c_void;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
 
         let status = match T::KIND {
             ElementKind::F32 => unsafe {

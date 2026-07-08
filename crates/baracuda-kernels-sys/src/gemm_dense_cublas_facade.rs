@@ -358,11 +358,11 @@ fn validate(
 /// second operand = our A:
 ///
 /// - RRR: `transa = N` (B storage cm-view = Bᵀ, `[N,K]`, ld = ldb),
-///        `transb = N` (A storage cm-view = Aᵀ, `[K,M]`, ld = lda).
+///   `transb = N` (A storage cm-view = Aᵀ, `[K,M]`, ld = lda).
 /// - RCR: B is stored col-major `[K,N]` so its cm-view is B itself —
-///        `transa = T` recovers Bᵀ.
+///   `transa = T` recovers Bᵀ.
 /// - CRR: A is stored col-major `[M,K]` so its cm-view is A itself —
-///        `transb = T` recovers Aᵀ.
+///   `transb = T` recovers Aᵀ.
 unsafe fn gemm_dense_run_impl(
     m: i32,
     n: i32,

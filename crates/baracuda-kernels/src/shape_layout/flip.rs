@@ -26,6 +26,7 @@ pub struct FlipDescriptor<const N: usize> {
 }
 
 /// Args bundle for a Flip launch.
+#[derive(Debug)]
 pub struct FlipArgs<'a, T: Element, const N: usize> {
     /// Input.
     pub x: TensorRef<'a, T, N>,
@@ -52,6 +53,7 @@ pub struct FlipArgs<'a, T: Element, const N: usize> {
 /// **Workspace**: none.
 ///
 /// **Precision guarantee**: deterministic, bit-stable, bit-exact.
+#[derive(Debug)]
 pub struct FlipPlan<T: Element, const N: usize> {
     desc: FlipDescriptor<N>,
     sku: KernelSku,
@@ -170,12 +172,12 @@ impl<T: Element, const N: usize> FlipPlan<T, N> {
         }
         let x_ptr = args.x.data.as_raw().0 as *const c_void;
         let y_ptr = args.y.data.as_raw().0 as *mut c_void;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
 
         // Convert bool flip_axes to i32 array for the FFI.
         let mut flip_axes_i32 = [0i32; 8];
-        for d in 0..N {
-            flip_axes_i32[d] = if self.desc.flip_axes[d] { 1 } else { 0 };
+        for (d, slot) in flip_axes_i32.iter_mut().enumerate().take(N) {
+            *slot = if self.desc.flip_axes[d] { 1 } else { 0 };
         }
 
         let shape = self.desc.shape;

@@ -28,14 +28,15 @@ impl<const N: usize> RepeatDescriptor<N> {
     /// Compute the output shape: `input.shape[d] * repeats[d]` per axis.
     pub fn output_shape(&self) -> [i32; N] {
         let mut out = [0i32; N];
-        for d in 0..N {
-            out[d] = self.input_shape[d] * self.repeats[d];
+        for (d, out_d) in out.iter_mut().enumerate() {
+            *out_d = self.input_shape[d] * self.repeats[d];
         }
         out
     }
 }
 
 /// Args bundle for a Repeat launch.
+#[derive(Debug)]
 pub struct RepeatArgs<'a, T: Element, const N: usize> {
     /// Input.
     pub x: TensorRef<'a, T, N>,
@@ -59,6 +60,7 @@ pub struct RepeatArgs<'a, T: Element, const N: usize> {
 /// **Workspace**: none.
 ///
 /// **Precision guarantee**: deterministic, bit-stable, bit-exact.
+#[derive(Debug)]
 pub struct RepeatPlan<T: Element, const N: usize> {
     desc: RepeatDescriptor<N>,
     sku: KernelSku,
@@ -190,7 +192,7 @@ impl<T: Element, const N: usize> RepeatPlan<T, N> {
         }
         let x_ptr = args.x.data.as_raw().0 as *const c_void;
         let y_ptr = args.y.data.as_raw().0 as *mut c_void;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
 
         let input_shape = self.desc.input_shape;
         let output_shape = self.desc.output_shape();

@@ -42,6 +42,7 @@ pub struct TokenPenaltyDescriptor {
 }
 
 /// Args bundle for a token-penalty launch.
+#[derive(Debug)]
 pub struct TokenPenaltyArgs<'a> {
     /// Logits `[batch, vocab]` f32, modified in place.
     pub logits: TensorMut<'a, f32, 2>,
@@ -50,6 +51,7 @@ pub struct TokenPenaltyArgs<'a> {
 }
 
 /// Token-penalty plan (native baracuda; always available).
+#[derive(Debug)]
 pub struct TokenPenaltyPlan {
     desc: TokenPenaltyDescriptor,
     sku: KernelSku,
@@ -129,7 +131,7 @@ impl TokenPenaltyPlan {
         args: TokenPenaltyArgs<'_>,
     ) -> Result<()> {
         self.can_implement(&args)?;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let logits_ptr = args.logits.data.as_raw().0 as *mut c_void;
         let counts_ptr = args.counts.data.as_raw().0 as *const c_void;
         let status = unsafe {

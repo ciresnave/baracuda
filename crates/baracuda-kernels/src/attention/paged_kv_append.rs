@@ -35,6 +35,7 @@ pub struct PagedKvAppendDescriptor {
 }
 
 /// Args bundle for a paged KV-cache append launch.
+#[derive(Debug)]
 pub struct PagedKvAppendArgs<'a, T: Element> {
     /// New K rows — shape `[batch, num_kv_heads, head_dim]`.
     pub key: TensorRef<'a, T, 3>,
@@ -55,6 +56,7 @@ pub struct PagedKvAppendArgs<'a, T: Element> {
 }
 
 /// Paged KV-cache append plan (decode-time, 1 token per request).
+#[derive(Debug)]
 pub struct PagedKvAppendPlan<T: Element> {
     desc: PagedKvAppendDescriptor,
     sku: KernelSku,

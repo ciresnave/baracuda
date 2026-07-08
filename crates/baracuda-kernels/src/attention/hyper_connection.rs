@@ -61,6 +61,7 @@ pub struct HyperConnectionDescriptor {
 }
 
 /// Args bundle for a `HyperConnectionPlan` launch.
+#[derive(Debug)]
 pub struct HyperConnectionArgs<'a, T: Element> {
     /// Residual-stream input — `[B, n, C]` row-major contiguous.
     pub x_expanded: TensorRef<'a, T, 3>,
@@ -102,6 +103,7 @@ pub struct HyperConnectionArgs<'a, T: Element> {
 /// **State**: this plan owns a native `MHCLayer*` handle with
 /// ~`B*n*C*sizeof(float)` bytes of GPU scratch. Reuse across many
 /// `run()` calls; construction is heavy.
+#[derive(Debug)]
 pub struct HyperConnectionPlan<T: Element> {
     desc: HyperConnectionDescriptor,
     sku: KernelSku,

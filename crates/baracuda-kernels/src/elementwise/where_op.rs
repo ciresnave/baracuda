@@ -45,6 +45,7 @@ pub struct WhereDescriptor<const N: usize> {
 /// `cond` is `u8` (0 = false, non-zero = true). `a`, `b`, `y` share
 /// dtype `T`. All four operands can broadcast independently to
 /// `y.shape` via stride-0 axes.
+#[derive(Debug)]
 pub struct WhereArgs<'a, T: Element, const N: usize> {
     /// Boolean mask. `0u8` selects `b`, any other value selects `a`.
     pub cond: TensorRef<'a, u8, N>,
@@ -60,6 +61,7 @@ pub struct WhereArgs<'a, T: Element, const N: usize> {
 ///
 /// `T: Element` is the value dtype (a / b / y). The cond is always `u8`.
 /// `const N: usize` is the tensor rank.
+#[derive(Debug)]
 pub struct WherePlan<T: Element, const N: usize> {
     desc: WhereDescriptor<N>,
     sku: KernelSku,
@@ -243,7 +245,7 @@ impl<T: Element, const N: usize> WherePlan<T, N> {
         let a_ptr = args.a.data.as_raw().0 as *const c_void;
         let b_ptr = args.b.data.as_raw().0 as *const c_void;
         let y_ptr = args.y.data.as_raw().0 as *mut c_void;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
 
         let all_contig_same_shape = args.cond.shape == args.y.shape
             && args.a.shape == args.y.shape

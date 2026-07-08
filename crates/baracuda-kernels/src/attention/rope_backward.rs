@@ -39,6 +39,7 @@ pub struct RopeBackwardDescriptor {
 }
 
 /// Args bundle for a RoPE backward launch.
+#[derive(Debug)]
 pub struct RopeBackwardArgs<'a, T: Element> {
     /// Upstream gradient `dy` — shape `[B, H, S, D]`, contiguous.
     pub dy: TensorRef<'a, T, 4>,
@@ -60,6 +61,7 @@ pub struct RopeBackwardArgs<'a, T: Element> {
 ///
 /// **Dtypes / shape limits / workspace / precision**: identical to
 /// [`super::RopePlan`].
+#[derive(Debug)]
 pub struct RopeBackwardPlan<T: Element> {
     desc: RopeBackwardDescriptor,
     sku: KernelSku,
@@ -212,7 +214,7 @@ impl<T: Element> RopeBackwardPlan<T> {
         if numel == 0 {
             return Ok(());
         }
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let dy_ptr = args.dy.data.as_raw().0 as *const c_void;
         let dx_ptr = args.dx.data.as_raw().0 as *mut c_void;
         let (pos_ptr, pos_default_flag) = match &args.positions {

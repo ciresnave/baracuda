@@ -40,6 +40,7 @@ pub struct BinaryParamBackwardDescriptor<const N: usize> {
 ///
 /// `Lerp` BW doesn't need saved forward inputs — the gradient is a pure
 /// function of `dy` and the scalar param.
+#[derive(Debug)]
 pub struct BinaryParamBackwardArgs<'a, T: Element, const N: usize> {
     /// Upstream gradient.
     pub dy: TensorRef<'a, T, N>,
@@ -50,6 +51,7 @@ pub struct BinaryParamBackwardArgs<'a, T: Element, const N: usize> {
 }
 
 /// Parameterized binary backward plan.
+#[derive(Debug)]
 pub struct BinaryParamBackwardPlan<T: Element, const N: usize> {
     desc: BinaryParamBackwardDescriptor<N>,
     sku: KernelSku,
@@ -178,7 +180,7 @@ impl<T: Element, const N: usize> BinaryParamBackwardPlan<T, N> {
         let dy_ptr = args.dy.data.as_raw().0 as *const c_void;
         let da_ptr = args.da.data.as_raw().0 as *mut c_void;
         let db_ptr = args.db.data.as_raw().0 as *mut c_void;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let p = self.desc.param;
 
         let status = match (self.desc.kind, T::KIND) {

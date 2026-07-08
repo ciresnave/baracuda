@@ -95,6 +95,7 @@ impl FftNdDescriptor {
 /// Both buffers are flat device slices — the descriptor's `dims` +
 /// `batch` define the logical shape. Required length is
 /// `batch * product(dims[..rank])` cells each.
+#[derive(Debug)]
 pub struct FftNdArgs<'a, T: Element> {
     /// Input data — `batch * product(dims[..rank])` complex cells.
     pub x: DeviceSlice<'a, T>,
@@ -127,6 +128,7 @@ pub struct FftNdArgs<'a, T: Element> {
 /// cuFFT versions.
 ///
 /// Owns a lazy cuFFT handle (`!Sync` / `!Send`); destroyed on `Drop`.
+#[derive(Debug)]
 pub struct FftNdPlan<T: Element> {
     desc: FftNdDescriptor,
     sku: KernelSku,
@@ -261,7 +263,7 @@ impl<T: Element> FftNdPlan<T> {
     }
 
     fn bind_stream(&self, handle: cufftHandle, stream: &Stream) -> Result<()> {
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let status = unsafe { cufftSetStream(handle, stream_ptr) };
         if status != 0 {
             return Err(Error::CutlassInternal(cufft_to_status(status)));
@@ -319,7 +321,7 @@ impl FftNdPlan<Complex32> {
         if self.desc.inverse {
             let per = self.desc.transform_numel() as f32;
             let scale = 1.0_f32 / per;
-            let stream_ptr = stream.as_raw() as *mut c_void;
+            let stream_ptr = stream.as_raw();
             let s = unsafe {
                 baracuda_kernels_scale_inplace_c32_run(
                     total,
@@ -367,7 +369,7 @@ impl FftNdPlan<Complex64> {
         if self.desc.inverse {
             let per = self.desc.transform_numel() as f64;
             let scale = 1.0_f64 / per;
-            let stream_ptr = stream.as_raw() as *mut c_void;
+            let stream_ptr = stream.as_raw();
             let s = unsafe {
                 baracuda_kernels_scale_inplace_c64_run(
                     total,

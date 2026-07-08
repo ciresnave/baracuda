@@ -29,6 +29,7 @@ pub struct MaskedFillBackwardDescriptor<const N: usize> {
 }
 
 /// Args bundle for a `masked_fill_backward` launch.
+#[derive(Debug)]
 pub struct MaskedFillBackwardArgs<'a, T: Element, const N: usize> {
     /// Upstream gradient.
     pub dout: TensorRef<'a, T, N>,
@@ -54,6 +55,7 @@ pub struct MaskedFillBackwardArgs<'a, T: Element, const N: usize> {
 ///
 /// **Precision guarantee**: deterministic, bit-stable. Pure
 /// mask + copy + zero — no arithmetic, no atomics.
+#[derive(Debug)]
 pub struct MaskedFillBackwardPlan<T: Element, const N: usize> {
     desc: MaskedFillBackwardDescriptor<N>,
     sku: KernelSku,
@@ -195,7 +197,7 @@ impl<T: Element, const N: usize> MaskedFillBackwardPlan<T, N> {
         let dout_ptr = args.dout.data.as_raw().0 as *const c_void;
         let mask_ptr = args.mask.data.as_raw().0 as *const c_void;
         let dsrc_ptr = args.dsrc.data.as_raw().0 as *mut c_void;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
 
         let status = match T::KIND {
             ElementKind::F32 => unsafe {

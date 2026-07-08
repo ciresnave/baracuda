@@ -146,12 +146,13 @@ impl Int4MarlinGemmDescriptor {
 // =============================================================================
 
 /// Per-launch arguments for [`Int4MarlinGemmPlan::run`].
+#[derive(Debug)]
 pub struct Int4MarlinGemmArgs<'a, T: MarlinActivation> {
     /// Activation `[M, K]` row-major in `T`.
     pub activation: TensorRef<'a, T, 2>,
     /// Marlin-packed int4 weight buffer. Shape `[K/16, N*16/8]` of
-    /// `i32` storage; expressed here as a flat `i32` count `(K/16)
-    /// * (N*16/8) = K * N / 8`. The packer (host-side, see
+    /// `i32` storage; expressed here as a flat `i32` count
+    /// `(K/16) * (N*16/8) = K * N / 8`. The packer (host-side, see
     /// [`crate::gemm::gptq_to_marlin`]) is responsible for placing
     /// the pre-shuffled int4 nibbles in the layout the tensor-core
     /// fragments expect.
@@ -181,6 +182,7 @@ pub struct Int4MarlinGemmArgs<'a, T: MarlinActivation> {
 /// Marlin's symmetric layout at model load time via
 /// [`super::gptq_to_marlin::repack`]; once repacked they're directly
 /// usable by this plan.
+#[derive(Debug)]
 pub struct Int4MarlinGemmPlan<T: MarlinActivation> {
     desc: Int4MarlinGemmDescriptor,
     sku: KernelSku,
@@ -333,7 +335,7 @@ impl<T: MarlinActivation> Int4MarlinGemmPlan<T> {
         let s_ptr = args.scales.data.as_raw().0 as *const c_void;
         let ws_ptr = args.workspace.data.as_raw().0 as *mut c_void;
         let c_ptr = args.output.data.as_raw().0 as *mut c_void;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
 
         let status = unsafe {
             dispatch_marlin::<T>(
@@ -404,6 +406,9 @@ unsafe fn dispatch_marlin<T: MarlinActivation>(
 
 #[cfg(not(feature = "marlin"))]
 #[inline]
+// `T` is unused in this feature-off stub but must match the `marlin` variant's
+// signature: call sites use turbofish (`dispatch_marlin::<T>`).
+#[allow(clippy::extra_unused_type_parameters)]
 unsafe fn dispatch_marlin<T: MarlinActivation>(
     _: i32, _: i32, _: i32,
     _: *const c_void, _: *const c_void, _: *mut c_void, _: *const c_void,

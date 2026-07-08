@@ -46,6 +46,7 @@ impl DequantizePerGroupDescriptor {
 }
 
 /// Args for the dequant-per-group launch.
+#[derive(Debug)]
 pub struct DequantizePerGroupArgs<'a, TIn: Element, TOut: IntElement> {
     /// Quantized input `[outer, axis_size]` in int.
     pub input: TensorRef<'a, TOut, 2>,
@@ -75,6 +76,7 @@ pub struct DequantizePerGroupArgs<'a, TIn: Element, TOut: IntElement> {
 /// **Workspace**: none.
 ///
 /// **Precision guarantee**: deterministic, bit-stable.
+#[derive(Debug)]
 pub struct DequantizePerGroupPlan<TIn: Element, TOut: IntElement> {
     desc: DequantizePerGroupDescriptor,
     sku: KernelSku,
@@ -174,7 +176,7 @@ impl<TIn: Element, TOut: IntElement> DequantizePerGroupPlan<TIn, TOut> {
         let sc_ptr = args.scale.data.as_raw().0 as *const c_void;
         let zp_ptr = args.zero_point.data.as_raw().0 as *const c_void;
         let out_ptr = args.output.data.as_raw().0 as *mut c_void;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let (outer, axis, g) = (
             self.desc.outer_size,
             self.desc.axis_size,

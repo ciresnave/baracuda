@@ -53,6 +53,7 @@ impl<const N: usize> GatedActivationBackwardDescriptor<N> {
 }
 
 /// Args bundle for a gated-activation backward launch.
+#[derive(Debug)]
 pub struct GatedActivationBackwardArgs<'a, T: Element, const N: usize> {
     /// Upstream gradient — shape `desc.output_shape()`.
     pub dy: TensorRef<'a, T, N>,
@@ -63,6 +64,7 @@ pub struct GatedActivationBackwardArgs<'a, T: Element, const N: usize> {
 }
 
 /// Gated-activation backward plan.
+#[derive(Debug)]
 pub struct GatedActivationBackwardPlan<T: Element, const N: usize> {
     desc: GatedActivationBackwardDescriptor<N>,
     sku: KernelSku,
@@ -241,7 +243,7 @@ impl<T: Element, const N: usize> GatedActivationBackwardPlan<T, N> {
         let x_half_offset = half * args.x.stride[sd];
         let dx_half_offset = half * args.dx.stride[sd];
 
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let x_ptr = args.x.data.as_raw().0 as *const c_void;
         let dy_ptr = args.dy.data.as_raw().0 as *const c_void;
         let dx_ptr = args.dx.data.as_raw().0 as *mut c_void;

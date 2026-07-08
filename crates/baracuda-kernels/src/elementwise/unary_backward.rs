@@ -51,6 +51,7 @@ pub struct UnaryBackwardDescriptor<const N: usize> {
 /// - Saved-y ops (Exp, Sigmoid, Tanh, Sqrt, ...): pass `y`; leave `x = None`.
 ///
 /// The dispatcher validates the match against `desc.kind`.
+#[derive(Debug)]
 pub struct UnaryBackwardArgs<'a, T: Element, const N: usize> {
     /// Upstream gradient (input to backward).
     pub dy: TensorRef<'a, T, N>,
@@ -127,6 +128,7 @@ fn save_shape_for(kind: UnaryKind) -> Option<SaveShape> {
 }
 
 /// Unary backward plan.
+#[derive(Debug)]
 pub struct UnaryBackwardPlan<T: Element, const N: usize> {
     desc: UnaryBackwardDescriptor<N>,
     sku: KernelSku,
@@ -356,7 +358,7 @@ impl<T: Element, const N: usize> UnaryBackwardPlan<T, N> {
                 .as_raw()
                 .0 as *const c_void,
         };
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
 
         let status = match (self.desc.kind, T::KIND) {
             // -------- Sin (saved-x, transcendental) --------

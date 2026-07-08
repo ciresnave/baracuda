@@ -35,6 +35,7 @@ pub struct DequantizePerChannelDescriptor {
 }
 
 /// Args bundle for a `dequantize_per_channel` launch.
+#[derive(Debug)]
 pub struct DequantizePerChannelArgs<'a, TIn: Element, TOut: IntElement> {
     /// Input int tensor `[D0, D1, D2, D3]`.
     pub input: TensorRef<'a, TOut, 4>,
@@ -63,6 +64,7 @@ pub struct DequantizePerChannelArgs<'a, TIn: Element, TOut: IntElement> {
 /// **Workspace**: none.
 ///
 /// **Precision guarantee**: deterministic, bit-stable.
+#[derive(Debug)]
 pub struct DequantizePerChannelPlan<TIn: Element, TOut: IntElement> {
     desc: DequantizePerChannelDescriptor,
     sku: KernelSku,
@@ -154,7 +156,7 @@ impl<TIn: Element, TOut: IntElement> DequantizePerChannelPlan<TIn, TOut> {
         let sc_ptr = args.scale.data.as_raw().0 as *const c_void;
         let zp_ptr = args.zero_point.data.as_raw().0 as *const c_void;
         let x_ptr = args.output.data.as_raw().0 as *mut c_void;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let shape4 = self.desc.shape.as_ptr();
         let axis = self.desc.axis as i32;
 

@@ -44,6 +44,7 @@ impl DequantizePerGroupBackwardDescriptor {
 /// `TOut` is a phantom mirroring [`super::DequantizePerGroupPlan`]'s
 /// `(TIn, TOut)` signature so a caller can carry the FW tuple straight
 /// through to the BW plan type.
+#[derive(Debug)]
 pub struct DequantizePerGroupBackwardArgs<'a, TIn: Element, TOut: IntElement> {
     /// Upstream gradient `[outer, axis_size]`.
     pub d_output: TensorRef<'a, TIn, 2>,
@@ -72,6 +73,7 @@ pub struct DequantizePerGroupBackwardArgs<'a, TIn: Element, TOut: IntElement> {
 /// **Workspace**: none.
 ///
 /// **Precision guarantee**: deterministic, bit-stable.
+#[derive(Debug)]
 pub struct DequantizePerGroupBackwardPlan<TIn: Element, TOut: IntElement> {
     desc: DequantizePerGroupBackwardDescriptor,
     sku: KernelSku,
@@ -170,7 +172,7 @@ impl<TIn: Element, TOut: IntElement> DequantizePerGroupBackwardPlan<TIn, TOut> {
         let dy_ptr = args.d_output.data.as_raw().0 as *const c_void;
         let sc_ptr = args.scale.data.as_raw().0 as *const c_void;
         let dx_ptr = args.d_input.data.as_raw().0 as *mut c_void;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let (outer, axis, g) = (
             self.desc.outer_size,
             self.desc.axis_size,

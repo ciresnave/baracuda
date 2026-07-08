@@ -44,6 +44,7 @@ pub struct RoiAlignBackwardDescriptor {
 }
 
 /// Args bundle for `roi_align_backward`.
+#[derive(Debug)]
 pub struct RoiAlignBackwardArgs<'a, T: Element> {
     /// Upstream gradient `[num_rois, C, pooled_h, pooled_w]`.
     pub dout: TensorRef<'a, T, 4>,
@@ -68,6 +69,7 @@ pub struct RoiAlignBackwardArgs<'a, T: Element> {
 /// **Workspace**: none. Caller MUST zero `dinput`.
 ///
 /// **Precision guarantee**: **non-deterministic** (atomicAdd).
+#[derive(Debug)]
 pub struct RoiAlignBackwardPlan<T: Element> {
     desc: RoiAlignBackwardDescriptor,
     sku: KernelSku,
@@ -186,7 +188,7 @@ impl<T: Element> RoiAlignBackwardPlan<T> {
         let dout_ptr = args.dout.data.as_raw().0 as *const c_void;
         let rois_ptr = args.rois.data.as_raw().0 as *const c_void;
         let din_ptr = args.dinput.data.as_raw().0 as *mut c_void;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let aligned = if self.desc.aligned { 1 } else { 0 };
         let status = match T::KIND {
             ElementKind::F32 => unsafe {

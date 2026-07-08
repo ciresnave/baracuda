@@ -35,6 +35,7 @@ pub struct SegmentSumDescriptor {
 }
 
 /// Args bundle for a `segment_sum` launch.
+#[derive(Debug)]
 pub struct SegmentSumArgs<'a, T: Element> {
     /// Input `[N, D]`.
     pub input: TensorRef<'a, T, 2>,
@@ -73,6 +74,7 @@ pub struct SegmentSumArgs<'a, T: Element> {
 /// `≥ num_segments`) are silently dropped (TF / JAX semantic).
 /// Output buffer is fully overwritten (no accumulation into prior
 /// state).
+#[derive(Debug)]
 pub struct SegmentSumPlan<T: Element> {
     desc: SegmentSumDescriptor,
     sku: KernelSku,
@@ -177,7 +179,7 @@ pub(crate) fn validate_desc(
 }
 
 /// Trait abstracting the four descriptor fields shared by every sorted
-/// + unsorted segment plan. Lets `validate_desc` accept any descriptor
+/// plus unsorted segment plan. Lets `validate_desc` accept any descriptor
 /// without forcing a concrete type.
 pub(crate) trait SegDescView {
     fn view(&self) -> (i32, i32, i32, ElementKind);
@@ -296,7 +298,7 @@ pub(crate) fn run_sorted_fw<T: Element>(
     let in_ptr = input.data.as_raw().0 as *const c_void;
     let id_ptr = segment_ids.data.as_raw().0 as *const c_void;
     let out_ptr = output.data.as_raw().0 as *mut c_void;
-    let stream_ptr = stream.as_raw() as *mut c_void;
+    let stream_ptr = stream.as_raw();
 
     let status = match (T::KIND, op) {
         (ElementKind::F32, SortedFwOp::Sum) => unsafe {

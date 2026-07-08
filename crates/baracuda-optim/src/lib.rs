@@ -268,6 +268,7 @@ unsafe extern "C" {
 ///
 /// `TensorList::new` borrows the underlying buffers; it does not take
 /// ownership. The plan's `step` call must outlive the borrow.
+#[derive(Debug)]
 pub struct TensorList<'a, T: DeviceRepr> {
     sizes: Vec<i32>,
     ptrs: Vec<*mut c_void>,
@@ -564,6 +565,7 @@ pub trait AdamParamDtype: sealed::Sealed + DeviceRepr {
 }
 
 #[doc(hidden)]
+#[derive(Debug)]
 pub struct AdamFfi(
     pub  unsafe extern "C" fn(
         i32,
@@ -666,7 +668,7 @@ impl<T: AdamParamDtype> AdamStepPlan<T> {
                 self.cfg.weight_decay,
                 if self.cfg.bias_correction { 1 } else { 0 },
                 self.cfg.mode.to_ffi(),
-                stream.as_raw() as *mut c_void,
+                stream.as_raw(),
             )
         };
         if status == 0 {
@@ -714,7 +716,7 @@ impl<T: AdamParamDtype> AdamStepPlan<T> {
                 self.cfg.weight_decay,
                 if self.cfg.bias_correction { 1 } else { 0 },
                 self.cfg.mode.to_ffi(),
-                stream.as_raw() as *mut c_void,
+                stream.as_raw(),
             )
         };
         if status == 0 {
@@ -737,6 +739,7 @@ pub trait SgdParamDtype: sealed::Sealed + DeviceRepr {
 }
 
 #[doc(hidden)]
+#[derive(Debug)]
 pub struct SgdFfi(
     pub  unsafe extern "C" fn(
         i32,
@@ -835,7 +838,7 @@ impl<T: SgdParamDtype> SgdStepPlan<T> {
                     0
                 },
                 self.cfg.grad_scale,
-                stream.as_raw() as *mut c_void,
+                stream.as_raw(),
             )
         };
         if status == 0 {
@@ -881,7 +884,7 @@ impl<T: SgdParamDtype> SgdStepPlan<T> {
                     0
                 },
                 self.cfg.grad_scale,
-                stream.as_raw() as *mut c_void,
+                stream.as_raw(),
             )
         };
         if status == 0 {
@@ -1015,7 +1018,7 @@ impl LambStepPlan {
                 self.cfg.max_global_grad_norm,
                 self.cfg.trust_lr_lower_bound,
                 self.cfg.trust_lr_upper_bound,
-                stream.as_raw() as *mut c_void,
+                stream.as_raw(),
             )
         };
         if status == 0 {

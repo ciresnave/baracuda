@@ -52,6 +52,7 @@ use core::ffi::c_int;
 /// a single PhantomData private field would be equivalent but adds no
 /// information for the FFI surface).
 #[repr(C)]
+#[derive(Debug)]
 pub struct OzimmuHandle {
     _opaque: [u8; 0],
 }

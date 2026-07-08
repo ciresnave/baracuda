@@ -39,6 +39,7 @@ pub struct GatherBackwardDescriptor<const N: usize> {
 /// Args bundle for a `gather_backward` launch.
 ///
 /// Phase 11.5: index tensor is generic over `I: IndexElement`.
+#[derive(Debug)]
 pub struct GatherBackwardArgs<'a, T: Element, const N: usize, I: IndexElement = i32> {
     /// Upstream gradient.
     pub dout: TensorRef<'a, T, N>,
@@ -70,6 +71,7 @@ pub struct GatherBackwardArgs<'a, T: Element, const N: usize, I: IndexElement = 
 ///
 /// **Precision guarantee**: **non-deterministic** — `atomicAdd`
 /// ordering varies between launches, so results are not bit-stable.
+#[derive(Debug)]
 pub struct GatherBackwardPlan<T: Element, const N: usize> {
     desc: GatherBackwardDescriptor<N>,
     sku: KernelSku,
@@ -77,9 +79,9 @@ pub struct GatherBackwardPlan<T: Element, const N: usize> {
 }
 
 impl<T: Element, const N: usize> GatherBackwardPlan<T, N> {
-    /// Pick a kernel for `desc`. Validates `T::KIND == element`, rank
-    /// > 0, `gather_dim` in range, `src_dim_size ≥ 0`, and that dtype
-    /// is `{f32, f64}`.
+    /// Pick a kernel for `desc`. Validates `T::KIND == element`,
+    /// `rank > 0`, `gather_dim` in range, `src_dim_size ≥ 0`, and that
+    /// dtype is `{f32, f64}`.
     pub fn select(
         _stream: &Stream,
         desc: &GatherBackwardDescriptor<N>,
@@ -216,7 +218,7 @@ impl<T: Element, const N: usize> GatherBackwardPlan<T, N> {
         let dout_ptr = args.dout.data.as_raw().0 as *const c_void;
         let idx_ptr = args.index.data.as_raw().0 as *const c_void;
         let dsrc_ptr = args.dsrc.data.as_raw().0 as *mut c_void;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
 
         let out_shape = self.desc.out_shape;
         let stride_dout = args.dout.stride;

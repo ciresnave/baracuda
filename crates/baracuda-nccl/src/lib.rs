@@ -256,7 +256,7 @@ impl Communicator {
         check(unsafe { cu(comms.as_mut_ptr(), ndev, devices.as_ptr()) })?;
         comms
             .into_iter()
-            .map(|handle| Self::from_raw_handle(handle))
+            .map(Self::from_raw_handle)
             .collect()
     }
 

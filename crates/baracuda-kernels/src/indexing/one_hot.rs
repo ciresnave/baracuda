@@ -51,6 +51,7 @@ pub struct OneHotDescriptor<const N: usize> {
 /// or `i64`). The plan dispatches to the matching `_i64idx_` FFI symbol
 /// when `I == i64` at launch time. `I` defaults to `i32` for
 /// source-compat with pre-Phase-15.2 callers.
+#[derive(Debug)]
 pub struct OneHotArgs<'a, T: Element, const N: usize, I: IndexElement = i32> {
     /// Class-index input. Treated as a 1-D contiguous array of
     /// `out_numel / num_classes` cells by the kernel. Type parameter
@@ -79,6 +80,7 @@ pub struct OneHotArgs<'a, T: Element, const N: usize, I: IndexElement = i32> {
 ///
 /// **Precision guarantee**: deterministic, bit-stable. Pure
 /// equality + store, no arithmetic.
+#[derive(Debug)]
 pub struct OneHotPlan<T: Element, const N: usize> {
     desc: OneHotDescriptor<N>,
     sku: KernelSku,
@@ -235,7 +237,7 @@ impl<T: Element, const N: usize> OneHotPlan<T, N> {
         }
         let src_ptr = args.src.data.as_raw().0 as *const c_void;
         let out_ptr = args.out.data.as_raw().0 as *mut c_void;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
 
         let status = match (T::KIND, I::KIND) {
             (ElementKind::F32, IndexElementKind::I32) => unsafe {

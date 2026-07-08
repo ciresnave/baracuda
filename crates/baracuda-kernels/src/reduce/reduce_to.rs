@@ -74,6 +74,7 @@ pub struct ReduceToDescriptor<const N: usize> {
 /// `x.shape` must match `desc.input_shape`; arbitrary (non-contiguous)
 /// strides are fine — they pass through to the kernel. `y.shape` must
 /// match `desc.output_shape` and `y` MUST be contiguous.
+#[derive(Debug)]
 pub struct ReduceToArgs<'a, T: Element, const N: usize> {
     /// Input tensor — may be a strided (transposed / sliced) view.
     pub x: TensorRef<'a, T, N>,
@@ -86,6 +87,7 @@ pub struct ReduceToArgs<'a, T: Element, const N: usize> {
 ///
 /// `T: Element` is the element type (`f32` / `f64` / `f16` / `bf16`).
 /// `const N: usize` is the tensor rank (input and output share it).
+#[derive(Debug)]
 pub struct ReduceToPlan<T: Element, const N: usize> {
     desc: ReduceToDescriptor<N>,
     sku: KernelSku,
@@ -272,7 +274,7 @@ impl<T: Element, const N: usize> ReduceToPlan<T, N> {
         }
         let x_ptr = args.x.data.as_raw().0 as *const c_void;
         let y_ptr = args.y.data.as_raw().0 as *mut c_void;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
 
         let input_shape = self.desc.input_shape;
         let input_stride = args.x.stride;

@@ -36,7 +36,7 @@
 //! Mirrors TE's published `transformer_engine/common/recipe/delayed_scaling.cu`:
 //!
 //! 1. **During each forward pass**: the [`Fp8CastPlan`] fuses cast
-//!    + `max(|x|)` reduction in one kernel. The reduced amax is
+//!    plus `max(|x|)` reduction in one kernel. The reduced amax is
 //!    `atomicMax`-published into `amax_history[write_pos]`.
 //! 2. **After the forward pass**: [`Fp8Recipe::update_after_pass`]
 //!    reduces the amax history ring with `fmax`, computes
@@ -238,6 +238,7 @@ impl Fp8WideDtype for half::bf16 {
 /// saturated values for large inputs. This matches TE's published
 /// behavior — the recipe stabilizes after `amax_history_len`
 /// passes (typically a fraction of a training step).
+#[derive(Debug)]
 pub struct Fp8Recipe {
     format: Fp8Format,
     amax_history: DeviceBuffer<f32>,
@@ -390,6 +391,7 @@ impl Fp8Recipe {
 /// calls and across many recipe instances. The [`Fp8CastPlan::run`]
 /// method takes the recipe by `&mut Self` because each launch
 /// mutates the recipe's amax history slot via atomicMax.
+#[derive(Debug)]
 pub struct Fp8CastPlan<TIn: Fp8WideDtype> {
     _marker: PhantomData<TIn>,
 }
@@ -460,6 +462,7 @@ impl<TIn: Fp8WideDtype> Fp8CastPlan<TIn> {
 /// Symmetric to [`Fp8CastPlan`]; uses `recipe.scale_inv` to map
 /// FP8 values back to the wide dtype. No amax bookkeeping (dequant
 /// doesn't influence the recipe state — it's a pure read).
+#[derive(Debug)]
 pub struct Fp8DequantPlan<TOut: Fp8WideDtype> {
     _marker: PhantomData<TOut>,
 }
@@ -527,5 +530,5 @@ fn device_ptr_mut<T: DeviceRepr>(buf: &DeviceBuffer<T>) -> *mut c_void {
 }
 
 fn stream_as_raw(stream: &Stream) -> *mut c_void {
-    stream.as_raw() as *mut c_void
+    stream.as_raw()
 }

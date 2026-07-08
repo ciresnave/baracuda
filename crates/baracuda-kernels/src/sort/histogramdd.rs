@@ -28,6 +28,7 @@ pub struct HistogramddDescriptor {
 }
 
 /// Args bundle for a `histogramdd` launch.
+#[derive(Debug)]
 pub struct HistogramddArgs<'a, T: Element> {
     /// Input `[numel, ndim]`.
     pub input: TensorRef<'a, T, 2>,
@@ -46,6 +47,7 @@ pub struct HistogramddArgs<'a, T: Element> {
 /// **When the real kernel lands**: PyTorch `torch.histogramdd`
 /// shape — input `[numel, ndim]`, output flat
 /// `[prod(num_bins_per_dim)]`.
+#[derive(Debug)]
 pub struct HistogramddPlan<T: Element> {
     _desc: HistogramddDescriptor,
     _sku: KernelSku,

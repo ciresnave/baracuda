@@ -355,15 +355,22 @@ mod imp {
     /// below the dataset row count (a common rule of thumb is `~sqrt(n_rows)`).
     #[derive(Copy, Clone, Debug)]
     pub struct IvfFlatBuildParams {
+        /// Distance metric the index is built (and later searched) under.
         pub metric: Metric,
+        /// Number of inverted-file clusters (see the rule of thumb above).
         pub n_lists: u32,
+        /// k-means iterations used to train the cluster centroids.
         pub kmeans_n_iters: u32,
+        /// Fraction of the dataset sampled for centroid training (`0..=1`).
         pub kmeans_trainset_fraction: f64,
         /// Add the dataset to the index during build. Keep `true` so the
         /// index owns its vectors (the Rust wrapper relies on this — see the
         /// crate-level lifetime note).
         pub add_data_on_build: bool,
+        /// Re-fit each cluster's center to its assigned vectors after build
+        /// (higher recall; the centers drift from the k-means partition).
         pub adaptive_centers: bool,
+        /// Trade build/search speed for lower peak memory during construction.
         pub conservative_memory_allocation: bool,
     }
 

@@ -39,6 +39,7 @@ pub struct GridSampleDescriptor {
 }
 
 /// Args bundle for a `grid_sample` launch.
+#[derive(Debug)]
 pub struct GridSampleArgs<'a, T: Element> {
     /// Input `[N, C, IH, IW]`. NCHW row-major contiguous.
     pub input: TensorRef<'a, T, 4>,
@@ -66,6 +67,7 @@ pub struct GridSampleArgs<'a, T: Element> {
 /// **Workspace**: none.
 ///
 /// **Precision guarantee**: deterministic, bit-stable.
+#[derive(Debug)]
 pub struct GridSamplePlan<T: Element> {
     desc: GridSampleDescriptor,
     sku: KernelSku,
@@ -174,7 +176,7 @@ impl<T: Element> GridSamplePlan<T> {
         let input_ptr = args.input.data.as_raw().0 as *const c_void;
         let grid_ptr = args.grid.data.as_raw().0 as *const c_void;
         let out_ptr = args.output.data.as_raw().0 as *mut c_void;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let status = match T::KIND {
             ElementKind::F32 => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_grid_sample_2d_f32_run(

@@ -28,7 +28,6 @@
 //! **Dtypes**: `f32` + `f64` only.
 
 use core::cell::Cell;
-use core::ffi::c_void;
 use core::marker::PhantomData;
 
 use baracuda_cutlass::{Error, Result};
@@ -76,6 +75,7 @@ pub struct BatchedSvdaDescriptor {
 /// cuSOLVER writes per-slot residual Frobenius norms into. Pass `None`
 /// if you don't care — the plan will allocate a scratch `Vec<f64>` for
 /// the call and drop it.
+#[derive(Debug)]
 pub struct BatchedSvdaArgs<'a, T: Element> {
     /// Input stack `[batch, M, N]` (column-major per slot). Read-only
     /// for cuSOLVER's `gesvdaStridedBatched`.
@@ -119,6 +119,7 @@ pub struct BatchedSvdaArgs<'a, T: Element> {
 /// Approximate: results are accurate to the requested rank only.
 ///
 /// Owns a lazy cuSOLVER handle (`!Sync` / `!Send`); destroyed on `Drop`.
+#[derive(Debug)]
 pub struct BatchedSvdaPlan<T: Element> {
     desc: BatchedSvdaDescriptor,
     sku: KernelSku,
@@ -232,7 +233,7 @@ impl<T: Element> BatchedSvdaPlan<T> {
     }
 
     fn bind_stream(&self, h: cusolverDnHandle_t, stream: &Stream) -> Result<()> {
-        let status = unsafe { cusolverDnSetStream(h, stream.as_raw() as *mut c_void) };
+        let status = unsafe { cusolverDnSetStream(h, stream.as_raw()) };
         if status != 0 {
             return Err(Error::CutlassInternal(-status));
         }

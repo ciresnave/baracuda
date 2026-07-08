@@ -33,6 +33,7 @@ pub struct MsortDescriptor {
 }
 
 /// Args bundle for an `msort` launch.
+#[derive(Debug)]
 pub struct MsortArgs<'a, T: Element> {
     /// Input `[batch, row_len]`.
     pub input: TensorRef<'a, T, 2>,
@@ -60,6 +61,7 @@ pub struct MsortArgs<'a, T: Element> {
 /// **Workspace**: none.
 ///
 /// **Precision guarantee**: deterministic, bit-stable.
+#[derive(Debug)]
 pub struct MsortPlan<T: Element> {
     desc: MsortDescriptor,
     sku: KernelSku,
@@ -126,7 +128,7 @@ impl<T: Element> MsortPlan<T> {
         let in_ptr = args.input.data.as_raw().0 as *const c_void;
         let vals_ptr = args.values.data.as_raw().0 as *mut c_void;
         let idx_ptr = args.indices.data.as_raw().0 as *mut c_void;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let desc_flag = if self.desc.descending { 1 } else { 0 };
 
         let status = match T::KIND {
@@ -206,6 +208,7 @@ pub struct MsortBackwardDescriptor {
 }
 
 /// Args bundle for an `msort_backward` launch.
+#[derive(Debug)]
 pub struct MsortBackwardArgs<'a, T: Element> {
     /// Upstream grad of sorted-values output `[batch, row_len]`.
     pub dy: TensorRef<'a, T, 2>,
@@ -230,6 +233,7 @@ pub struct MsortBackwardArgs<'a, T: Element> {
 /// **Workspace**: none.
 ///
 /// **Precision guarantee**: deterministic, bit-stable.
+#[derive(Debug)]
 pub struct MsortBackwardPlan<T: Element> {
     desc: MsortBackwardDescriptor,
     sku: KernelSku,
@@ -309,7 +313,7 @@ impl<T: Element> MsortBackwardPlan<T> {
         let dy_ptr = args.dy.data.as_raw().0 as *const c_void;
         let idx_ptr = args.indices.data.as_raw().0 as *const c_void;
         let dx_ptr = args.dx.data.as_raw().0 as *mut c_void;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
 
         let status = match T::KIND {
             ElementKind::F32 => unsafe {

@@ -33,6 +33,7 @@ pub struct DequantizePerTokenBackwardDescriptor {
 }
 
 /// Args bundle for a `dequantize_per_token` backward launch.
+#[derive(Debug)]
 pub struct DequantizePerTokenBackwardArgs<'a, TIn: Element, TOut: IntElement> {
     /// Per-row scale `[N]` in FP. Used to scale dy.
     pub scale: TensorRef<'a, TIn, 1>,
@@ -63,6 +64,7 @@ pub struct DequantizePerTokenBackwardArgs<'a, TIn: Element, TOut: IntElement> {
 /// **Workspace**: none.
 ///
 /// **Precision guarantee**: deterministic, bit-stable.
+#[derive(Debug)]
 pub struct DequantizePerTokenBackwardPlan<TIn: Element, TOut: IntElement> {
     desc: DequantizePerTokenBackwardDescriptor,
     sku: KernelSku,
@@ -150,7 +152,7 @@ impl<TIn: Element, TOut: IntElement> DequantizePerTokenBackwardPlan<TIn, TOut> {
         let dy_ptr = args.d_output.data.as_raw().0 as *const c_void;
         let sc_ptr = args.scale.data.as_raw().0 as *const c_void;
         let dx_ptr = args.d_input.data.as_raw().0 as *mut c_void;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
 
         let status = match TIn::KIND {
             ElementKind::F32 => unsafe {

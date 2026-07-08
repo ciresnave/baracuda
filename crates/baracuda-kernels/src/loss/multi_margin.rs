@@ -33,6 +33,7 @@ pub struct MultiMarginLossDescriptor {
 }
 
 /// Args bundle for a MultiMargin FW launch.
+#[derive(Debug)]
 pub struct MultiMarginLossArgs<'a, T: Element> {
     /// Input tensor [N, C].
     pub input: TensorRef<'a, T, 2>,
@@ -43,6 +44,7 @@ pub struct MultiMarginLossArgs<'a, T: Element> {
 }
 
 /// MultiMargin forward plan.
+#[derive(Debug)]
 pub struct MultiMarginLossPlan<T: Element> {
     desc: MultiMarginLossDescriptor,
     sku: KernelSku,
@@ -131,7 +133,7 @@ impl<T: Element> MultiMarginLossPlan<T> {
             return Ok(());
         }
         let (ws_ptr, ws_bytes) = unpack_workspace(workspace, self.workspace_size())?;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let input_ptr = args.input.data.as_raw().0 as *const c_void;
         let target_ptr = args.target.data.as_raw().0 as *const c_void;
         let out_ptr = args.out.data.as_raw().0 as *mut c_void;
@@ -198,6 +200,7 @@ pub struct MultiMarginLossBackwardDescriptor {
 }
 
 /// Args bundle for a MultiMargin BW launch.
+#[derive(Debug)]
 pub struct MultiMarginLossBackwardArgs<'a, T: Element> {
     /// Input saved from FW.
     pub input: TensorRef<'a, T, 2>,
@@ -210,6 +213,7 @@ pub struct MultiMarginLossBackwardArgs<'a, T: Element> {
 }
 
 /// MultiMargin backward plan.
+#[derive(Debug)]
 pub struct MultiMarginLossBackwardPlan<T: Element> {
     desc: MultiMarginLossBackwardDescriptor,
     sku: KernelSku,
@@ -302,7 +306,7 @@ impl<T: Element> MultiMarginLossBackwardPlan<T> {
         };
         let margin = self.desc.margin;
         let p_norm = self.desc.p_norm;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let input_ptr = args.input.data.as_raw().0 as *const c_void;
         let target_ptr = args.target.data.as_raw().0 as *const c_void;
         let dy_ptr = args.dy.data.as_raw().0 as *const c_void;

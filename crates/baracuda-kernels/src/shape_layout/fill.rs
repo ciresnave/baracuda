@@ -39,6 +39,7 @@ pub struct FillDescriptor<T: Element> {
 }
 
 /// Args bundle for a fill launch.
+#[derive(Debug)]
 pub struct FillArgs<'a, T: Element> {
     /// Output tensor — rank-1 contiguous view over `numel` elements.
     pub output: TensorMut<'a, T, 1>,
@@ -63,6 +64,7 @@ pub struct FillArgs<'a, T: Element> {
 /// **Precision guarantee**: deterministic, bit-stable, bit-exact.
 /// f16 / bf16 transport `value` via raw `u16` bit pattern; the safe
 /// plan layer performs the bit cast.
+#[derive(Debug)]
 pub struct FillPlan<T: Element> {
     desc: FillDescriptor<T>,
     sku: KernelSku,
@@ -166,7 +168,7 @@ impl<T: Element> FillPlan<T> {
             return Ok(());
         }
         let y_ptr = args.output.data.as_raw().0 as *mut c_void;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
 
         // Dispatch by runtime element kind. The descriptor's `value`
         // is already typed as `T` at the Rust level — we just need to

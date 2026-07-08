@@ -73,6 +73,7 @@ pub struct TernaryBackwardDescriptor<const N: usize> {
 /// kernel reads all four (dy, a, b, c) per cell; ops where one
 /// save is algebraically unused (Fma's `c`, Addcmul/Addcdiv's `a`)
 /// still read it for ABI uniformity.
+#[derive(Debug)]
 pub struct TernaryBackwardArgs<'a, T: Element, const N: usize> {
     /// Upstream gradient (input to backward).
     pub dy: TensorRef<'a, T, N>,
@@ -91,6 +92,7 @@ pub struct TernaryBackwardArgs<'a, T: Element, const N: usize> {
 }
 
 /// Ternary backward plan.
+#[derive(Debug)]
 pub struct TernaryBackwardPlan<T: Element, const N: usize> {
     desc: TernaryBackwardDescriptor<N>,
     sku: KernelSku,
@@ -263,7 +265,7 @@ impl<T: Element, const N: usize> TernaryBackwardPlan<T, N> {
         let da_ptr = args.da.data.as_raw().0 as *mut c_void;
         let db_ptr = args.db.data.as_raw().0 as *mut c_void;
         let dc_ptr = args.dc.data.as_raw().0 as *mut c_void;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let scale = self.desc.scale;
 
         let status = match (self.desc.kind, T::KIND) {

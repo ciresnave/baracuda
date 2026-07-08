@@ -43,6 +43,7 @@ impl SegDescView for SegmentMinBackwardDescriptor {
 }
 
 /// Args bundle for a `segment_min_backward` launch.
+#[derive(Debug)]
 pub struct SegmentMinBackwardArgs<'a, T: Element> {
     /// Upstream gradient `[num_segments, D]`.
     pub d_output: TensorRef<'a, T, 2>,
@@ -61,6 +62,7 @@ pub struct SegmentMinBackwardArgs<'a, T: Element> {
 /// argmin instead of argmax.
 ///
 /// **Dtypes**: `{f32, f64}`. **Tie-break**: first occurrence.
+#[derive(Debug)]
 pub struct SegmentMinBackwardPlan<T: Element> {
     desc: SegmentMinBackwardDescriptor,
     sku: KernelSku,
@@ -141,7 +143,7 @@ impl<T: Element> SegmentMinBackwardPlan<T> {
         let in_ptr = args.input.data.as_raw().0 as *const c_void;
         let id_ptr = args.segment_ids.data.as_raw().0 as *const c_void;
         let di_ptr = args.d_input.data.as_raw().0 as *mut c_void;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let status = match T::KIND {
             ElementKind::F32 => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_segment_min_backward_f32_run(

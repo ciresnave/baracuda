@@ -1047,6 +1047,7 @@ fn archive_with_msvc_lib(
 }
 
 /// Output from PTX compilation.
+#[derive(Debug)]
 pub struct PtxOutput {
     paths: Vec<PathBuf>,
     #[allow(dead_code)]

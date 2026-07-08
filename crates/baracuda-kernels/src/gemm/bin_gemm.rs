@@ -80,6 +80,7 @@ pub struct BinGemmArgs<'a> {
 }
 
 /// Binary GEMM plan.
+#[derive(Debug)]
 pub struct BinGemmPlan {
     desc: BinGemmDescriptor,
     sku: GemmSku,
@@ -205,7 +206,7 @@ impl BinGemmPlan {
         let b_ptr = args.b.data.as_raw().0 as *const c_void;
         let d_ptr = args.d.data.as_raw().0 as *mut c_void;
 
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let m = self.desc.m;
         let n = self.desc.n;
         let k = self.desc.k;

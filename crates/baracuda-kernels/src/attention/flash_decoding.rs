@@ -167,6 +167,7 @@ impl FlashDecodingDescriptor {
 /// mapping via integer division `kv_head = q_head / group_size`. For
 /// pure MHA the caller just passes `H_kv == H_q` and the same data
 /// shape as before.
+#[derive(Debug)]
 pub struct FlashDecodingArgs<'a, T: Element> {
     /// Query tensor — shape `[B, H_q, D]`. Arbitrary strides via the
     /// supplied stride array; typical case is contig.
@@ -199,6 +200,7 @@ pub struct FlashDecodingArgs<'a, T: Element> {
 /// **Precision guarantee**: f32 accumulators throughout the split AND
 /// combine kernels. Deterministic — each output cell is written by
 /// exactly one block; no atomicAdd.
+#[derive(Debug)]
 pub struct FlashDecodingPlan<T: Element> {
     desc: FlashDecodingDescriptor,
     sku: KernelSku,
@@ -355,7 +357,7 @@ impl<T: Element> FlashDecodingPlan<T> {
             }
         };
 
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let q_ptr = args.q.data.as_raw().0 as *const c_void;
         let k_ptr = args.k.data.as_raw().0 as *const c_void;
         let v_ptr = args.v.data.as_raw().0 as *const c_void;

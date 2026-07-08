@@ -42,6 +42,7 @@ pub struct SortDescriptor {
 }
 
 /// Args bundle for a `sort` launch.
+#[derive(Debug)]
 pub struct SortArgs<'a, T: Element> {
     /// Input `[batch, row_len]`.
     pub input: TensorRef<'a, T, 2>,
@@ -74,6 +75,7 @@ pub struct SortArgs<'a, T: Element> {
 /// **Saved-indices contract**: FW emits both `values` and `indices`
 /// in a single launch. BW reads the saved indices verbatim; callers
 /// must retain `indices` for autograd.
+#[derive(Debug)]
 pub struct SortPlan<T: Element> {
     desc: SortDescriptor,
     sku: KernelSku,
@@ -140,7 +142,7 @@ impl<T: Element> SortPlan<T> {
         let in_ptr = args.input.data.as_raw().0 as *const c_void;
         let vals_ptr = args.values.data.as_raw().0 as *mut c_void;
         let idx_ptr = args.indices.data.as_raw().0 as *mut c_void;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let desc_flag = if self.desc.descending { 1 } else { 0 };
 
         let status = match T::KIND {

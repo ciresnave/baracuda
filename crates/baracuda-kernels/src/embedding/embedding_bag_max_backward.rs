@@ -37,6 +37,7 @@ pub struct EmbeddingBagMaxBackwardDescriptor {
 }
 
 /// Args bundle for an `embedding_bag` Max-mode BW launch.
+#[derive(Debug)]
 pub struct EmbeddingBagMaxBackwardArgs<'a, T: Element> {
     /// Upstream gradient `[num_bags, D]`.
     pub dout: TensorRef<'a, T, 2>,
@@ -55,6 +56,7 @@ pub struct EmbeddingBagMaxBackwardArgs<'a, T: Element> {
 ///
 /// **Precision guarantee**: **non-deterministic** — atomicAdd ordering
 /// varies across launches when multiple bags share a contributing row.
+#[derive(Debug)]
 pub struct EmbeddingBagMaxBackwardPlan<T: Element> {
     desc: EmbeddingBagMaxBackwardDescriptor,
     sku: KernelSku,
@@ -170,7 +172,7 @@ impl<T: Element> EmbeddingBagMaxBackwardPlan<T> {
         let dout_ptr = args.dout.data.as_raw().0 as *const c_void;
         let idx_ptr = args.output_index.data.as_raw().0 as *const c_void;
         let dw_ptr = args.dweight.data.as_raw().0 as *mut c_void;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let status = match T::KIND {
             ElementKind::F32 => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_embedding_bag_max_backward_f32_run(

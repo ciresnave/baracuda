@@ -45,6 +45,7 @@ pub struct SparsemaxDescriptor<const N: usize> {
 }
 
 /// Args bundle for a Sparsemax forward launch.
+#[derive(Debug)]
 pub struct SparsemaxArgs<'a, T: Element, const N: usize> {
     /// Input logits.
     pub x: TensorRef<'a, T, N>,
@@ -53,6 +54,7 @@ pub struct SparsemaxArgs<'a, T: Element, const N: usize> {
 }
 
 /// Sparsemax forward plan.
+#[derive(Debug)]
 pub struct SparsemaxPlan<T: Element, const N: usize> {
     desc: SparsemaxDescriptor<N>,
     sku: KernelSku,
@@ -192,7 +194,7 @@ impl<T: Element, const N: usize> SparsemaxPlan<T, N> {
         }
         let x_ptr = args.x.data.as_raw().0 as *const c_void;
         let y_ptr = args.y.data.as_raw().0 as *mut c_void;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
 
         let axis = self.desc.softmax_axis as usize;
         let shape = self.desc.input_shape;

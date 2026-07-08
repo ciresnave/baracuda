@@ -31,6 +31,7 @@ pub struct HingeEmbeddingLossDescriptor<const N: usize> {
 }
 
 /// Args bundle for a HingeEmbedding FW launch.
+#[derive(Debug)]
 pub struct HingeEmbeddingLossArgs<'a, T: Element, const N: usize> {
     /// Input tensor.
     pub input: TensorRef<'a, T, N>,
@@ -41,6 +42,7 @@ pub struct HingeEmbeddingLossArgs<'a, T: Element, const N: usize> {
 }
 
 /// HingeEmbedding forward plan.
+#[derive(Debug)]
 pub struct HingeEmbeddingLossPlan<T: Element, const N: usize> {
     desc: HingeEmbeddingLossDescriptor<N>,
     sku: KernelSku,
@@ -132,7 +134,7 @@ impl<T: Element, const N: usize> HingeEmbeddingLossPlan<T, N> {
             return Ok(());
         }
         let (ws_ptr, ws_bytes) = unpack_workspace(workspace, self.workspace_size())?;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let input_ptr = args.input.data.as_raw().0 as *const c_void;
         let target_ptr = args.target.data.as_raw().0 as *const c_void;
         let out_ptr = args.out.data.as_raw().0 as *mut c_void;
@@ -191,6 +193,7 @@ pub struct HingeEmbeddingLossBackwardDescriptor<const N: usize> {
 }
 
 /// Args bundle for a HingeEmbedding BW launch.
+#[derive(Debug)]
 pub struct HingeEmbeddingLossBackwardArgs<'a, T: Element, const N: usize> {
     /// Input saved from FW.
     pub input: TensorRef<'a, T, N>,
@@ -203,6 +206,7 @@ pub struct HingeEmbeddingLossBackwardArgs<'a, T: Element, const N: usize> {
 }
 
 /// HingeEmbedding backward plan.
+#[derive(Debug)]
 pub struct HingeEmbeddingLossBackwardPlan<T: Element, const N: usize> {
     desc: HingeEmbeddingLossBackwardDescriptor<N>,
     sku: KernelSku,
@@ -292,7 +296,7 @@ impl<T: Element, const N: usize> HingeEmbeddingLossBackwardPlan<T, N> {
             LossReduction::Sum => 1.0,
         };
         let margin = self.desc.margin;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let input_ptr = args.input.data.as_raw().0 as *const c_void;
         let target_ptr = args.target.data.as_raw().0 as *const c_void;
         let dy_ptr = args.dy.data.as_raw().0 as *const c_void;

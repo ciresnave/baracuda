@@ -148,6 +148,7 @@ impl Int4AwqGemmDescriptor {
 // =============================================================================
 
 /// Per-launch arguments for [`Int4AwqGemmPlan::run`].
+#[derive(Debug)]
 pub struct Int4AwqGemmArgs<'a, T: AwqActivation> {
     /// Activation `[M, IC]` row-major in `T`.
     pub activation: TensorRef<'a, T, 2>,
@@ -175,6 +176,7 @@ pub struct Int4AwqGemmArgs<'a, T: AwqActivation> {
 /// decode-batch hot path on already-repacked symmetric weights,
 /// prefer [`super::int4_marlin::Int4MarlinGemmPlan`] (faster at
 /// M ∈ [1, 64]).
+#[derive(Debug)]
 pub struct Int4AwqGemmPlan<T: AwqActivation> {
     desc: Int4AwqGemmDescriptor,
     sku: KernelSku,
@@ -338,7 +340,7 @@ impl<T: AwqActivation> Int4AwqGemmPlan<T> {
         let s_ptr = args.scales.data.as_raw().0 as *const c_void;
         let z_ptr = args.zeros.data.as_raw().0 as *const c_void;
         let o_ptr = args.output.data.as_raw().0 as *mut c_void;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
 
         let status = unsafe {
             dispatch_awq::<T>(
@@ -414,6 +416,9 @@ unsafe fn dispatch_awq<T: AwqActivation>(
 
 #[cfg(not(feature = "awq"))]
 #[inline]
+// `T` is unused in this feature-off stub but must match the `awq` variant's
+// signature: call sites use turbofish (`dispatch_awq::<T>`).
+#[allow(clippy::extra_unused_type_parameters)]
 unsafe fn dispatch_awq<T: AwqActivation>(
     _: i32, _: i32, _: i32, _: i32, _: i32,
     _: *const c_void, _: *const c_void, _: *const c_void, _: *const c_void,

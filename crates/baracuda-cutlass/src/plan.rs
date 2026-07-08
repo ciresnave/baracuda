@@ -2262,11 +2262,11 @@ fn validate_ozaki_request(
 ) -> Result<()> {
     #[cfg(not(feature = "ozimmu"))]
     {
-        return Err(Error::Unsupported(
+        Err(Error::Unsupported(
             "PlanPreference::prefer_backend = Some(Ozaki {..}) requires the \
              `ozimmu` cargo feature on baracuda-cutlass (off by default — \
              enable on baracuda-kernels too if going through the kernels facade)",
-        ));
+        ))
     }
     #[cfg(feature = "ozimmu")]
     {

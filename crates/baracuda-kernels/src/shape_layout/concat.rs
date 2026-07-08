@@ -48,6 +48,7 @@ impl<const N: usize> ConcatDescriptor<N> {
 }
 
 /// Args bundle for a Concat launch.
+#[derive(Debug)]
 pub struct ConcatArgs<'a, T: Element, const N: usize> {
     /// First input. `a.shape` must equal `desc.a_shape`.
     pub a: TensorRef<'a, T, N>,
@@ -75,6 +76,7 @@ pub struct ConcatArgs<'a, T: Element, const N: usize> {
 ///
 /// **Precision guarantee**: deterministic, bit-stable, bit-exact
 /// (pure load + store).
+#[derive(Debug)]
 pub struct ConcatPlan<T: Element, const N: usize> {
     desc: ConcatDescriptor<N>,
     sku: KernelSku,
@@ -234,7 +236,7 @@ impl<T: Element, const N: usize> ConcatPlan<T, N> {
         let a_ptr = args.a.data.as_raw().0 as *const c_void;
         let b_ptr = args.b.data.as_raw().0 as *const c_void;
         let y_ptr = args.y.data.as_raw().0 as *mut c_void;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
 
         let output_shape = self.desc.output_shape();
         let stride_a = args.a.stride;

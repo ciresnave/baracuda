@@ -64,6 +64,7 @@ impl<const N: usize> ConcatBackwardDescriptor<N> {
 /// `dy.shape` must match `desc.output_shape`. `da.shape` and `db.shape`
 /// must match `desc.da_shape()` / `desc.db_shape()` respectively. No
 /// saved forward tensors are needed — the BW formula is a pure copy.
+#[derive(Debug)]
 pub struct ConcatBackwardArgs<'a, T: Element, const N: usize> {
     /// Upstream gradient — full forward output shape.
     pub dy: TensorRef<'a, T, N>,
@@ -88,6 +89,7 @@ pub struct ConcatBackwardArgs<'a, T: Element, const N: usize> {
 /// **Workspace**: none.
 ///
 /// **Precision guarantee**: deterministic, bit-stable, bit-exact.
+#[derive(Debug)]
 pub struct ConcatBackwardPlan<T: Element, const N: usize> {
     desc: ConcatBackwardDescriptor<N>,
     sku: KernelSku,
@@ -248,7 +250,7 @@ impl<T: Element, const N: usize> ConcatBackwardPlan<T, N> {
         let dy_ptr = args.dy.data.as_raw().0 as *const c_void;
         let da_ptr = args.da.data.as_raw().0 as *mut c_void;
         let db_ptr = args.db.data.as_raw().0 as *mut c_void;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
 
         let output_shape = self.desc.output_shape;
         let stride_dy = args.dy.stride;

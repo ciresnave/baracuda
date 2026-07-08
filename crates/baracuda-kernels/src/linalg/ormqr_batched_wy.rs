@@ -55,9 +55,9 @@
 //! - `T scratch`:   `B * num_blocks * nb * nb` elements
 //! - `V scratch`:   `B * M * nb`               elements
 //! - `W scratch`:   `B * nb * N`               elements (used twice
-//!                  per block: first as `V^T·C`, then as `T·W`).
+//!   per block: first as `V^T·C`, then as `T·W`).
 //! - `W2 scratch`:  `B * nb * N`               elements (output of
-//!                  `T·W`, then read by the rank-`nb` update).
+//!   `T·W`, then read by the rank-`nb` update).
 //!
 //! All four buffers come from the caller-provided workspace, byte-
 //! contiguous in the order above.
@@ -127,6 +127,7 @@ pub struct BatchedOrmqrWyDescriptor {
 /// Note: `a` is taken as `TensorMut` for API symmetry with `BatchedQrPlan`
 /// and to allow the WY plan to materialize V into caller workspace
 /// (which is `TensorMut` shape).
+#[derive(Debug)]
 pub struct BatchedOrmqrWyArgs<'a, T: Element> {
     /// `geqrf`-packed input: `[batch, M, K]` column-major (per slot,
     /// strict lower triangle holds the Householder reflectors).
@@ -172,6 +173,7 @@ pub struct BatchedOrmqrWyArgs<'a, T: Element> {
 /// bit-stable (cuBLAS reduction order).
 ///
 /// Owns a lazy cuBLAS handle (`!Sync` / `!Send`); destroyed on `Drop`.
+#[derive(Debug)]
 pub struct BatchedOrmqrWyPlan<T: Element> {
     desc: BatchedOrmqrWyDescriptor,
     sku: KernelSku,
@@ -332,7 +334,7 @@ impl<T: Element> BatchedOrmqrWyPlan<T> {
     }
 
     fn bind_stream(&self, h: cublasHandle_t, stream: &Stream) -> Result<()> {
-        let status = unsafe { cublasSetStream_v2(h, stream.as_raw() as *mut c_void) };
+        let status = unsafe { cublasSetStream_v2(h, stream.as_raw()) };
         if status != 0 {
             return Err(Error::CutlassInternal(-status));
         }
@@ -476,7 +478,7 @@ macro_rules! impl_batched_ormqr_wy_run {
                 let a_ptr_v = args.a.data.as_raw().0 as *const c_void;
                 let tau_ptr_v = args.tau.data.as_raw().0 as *const c_void;
                 let c_ptr = args.c.data.as_raw().0 as *mut $CublasT;
-                let stream_ptr = stream.as_raw() as *mut c_void;
+                let stream_ptr = stream.as_raw();
 
                 // ----- Step 1: build T for every block in one launch ---------
                 let status = unsafe {

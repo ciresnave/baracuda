@@ -80,6 +80,7 @@ pub struct WriteSliceDescriptor<const N: usize> {
 /// contiguous row-major with zero offset relative to their backing
 /// device buffer (Fuel's plan layer materializes strided / offset
 /// inputs upstream via `Contiguize`).
+#[derive(Debug)]
 pub struct WriteSliceArgs<'a, T: DeviceRepr + Copy + 'static, const N: usize> {
     /// Destination tensor — written in the per-axis range window.
     /// Bytes outside the window are untouched.
@@ -112,6 +113,7 @@ pub struct WriteSliceArgs<'a, T: DeviceRepr + Copy + 'static, const N: usize> {
 ///
 /// **Precision guarantee**: deterministic, bit-stable, bit-exact (no
 /// arithmetic — pure memcpy / index + copy).
+#[derive(Debug)]
 pub struct WriteSlicePlan<T: DeviceRepr + Copy + 'static, const N: usize> {
     desc: WriteSliceDescriptor<N>,
     sku: KernelSku,
@@ -316,7 +318,7 @@ impl<T: DeviceRepr + Copy + 'static, const N: usize> WriteSlicePlan<T, N> {
         }
         let dest_ptr_u64 = args.dest.data.as_raw().0;
         let source_ptr_u64 = args.source.data.as_raw().0;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
 
         // -------------------- Fast paths --------------------
         match self.fast_path {
@@ -355,8 +357,8 @@ impl<T: DeviceRepr + Copy + 'static, const N: usize> WriteSlicePlan<T, N> {
         let dest_shape = self.desc.dest_shape;
         let source_shape = self.desc.source_shape;
         let mut range_start = [0i32; N];
-        for d in 0..N {
-            range_start[d] = self.desc.ranges[d].0;
+        for (d, slot) in range_start.iter_mut().enumerate() {
+            *slot = self.desc.ranges[d].0;
         }
 
         let status = if self.is_nibble {
@@ -503,8 +505,8 @@ fn detect_fast_path<const N: usize>(desc: &WriteSliceDescriptor<N>) -> FastPath 
 #[inline]
 fn product_i64<const N: usize>(shape: [i32; N]) -> i64 {
     let mut p: i64 = 1;
-    for d in 0..N {
-        p = p.saturating_mul(shape[d] as i64);
+    for &s in &shape {
+        p = p.saturating_mul(s as i64);
     }
     p
 }

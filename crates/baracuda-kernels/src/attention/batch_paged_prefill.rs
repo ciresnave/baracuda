@@ -79,6 +79,7 @@ pub struct BatchPagedPrefillDescriptor {
 }
 
 /// Args bundle for a batched paged-KV prefill launch.
+#[derive(Debug)]
 pub struct BatchPagedPrefillArgs<'a, T: Element> {
     /// Ragged query rows — `[total_num_rows, num_qo_heads, head_dim]`.
     pub q: TensorRef<'a, T, 3>,
@@ -104,6 +105,7 @@ pub struct BatchPagedPrefillArgs<'a, T: Element> {
 ///
 /// Routes to FlashInfer's `BatchPrefillWithPagedKVCacheDispatched`.
 /// Requires the `flashinfer` cargo feature. f16 / bf16 only.
+#[derive(Debug)]
 pub struct BatchPagedPrefillPlan<T: Element> {
     desc: BatchPagedPrefillDescriptor,
     sku: KernelSku,

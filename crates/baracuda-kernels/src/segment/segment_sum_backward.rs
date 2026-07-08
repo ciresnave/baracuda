@@ -47,6 +47,7 @@ impl SegDescView for SegmentSumBackwardDescriptor {
 }
 
 /// Args bundle for a `segment_sum_backward` launch.
+#[derive(Debug)]
 pub struct SegmentSumBackwardArgs<'a, T: Element> {
     /// Upstream gradient `[num_segments, D]`.
     pub d_output: TensorRef<'a, T, 2>,
@@ -75,6 +76,7 @@ pub struct SegmentSumBackwardArgs<'a, T: Element> {
 ///
 /// **Precision guarantee**: deterministic, bit-stable. Pure gather,
 /// no atomics — output buffer is overwritten in full.
+#[derive(Debug)]
 pub struct SegmentSumBackwardPlan<T: Element> {
     desc: SegmentSumBackwardDescriptor,
     sku: KernelSku,
@@ -149,7 +151,7 @@ impl<T: Element> SegmentSumBackwardPlan<T> {
         let do_ptr = args.d_output.data.as_raw().0 as *const c_void;
         let id_ptr = args.segment_ids.data.as_raw().0 as *const c_void;
         let di_ptr = args.d_input.data.as_raw().0 as *mut c_void;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let status = match T::KIND {
             ElementKind::F32 => unsafe {
                 baracuda_kernels_sys::baracuda_kernels_segment_sum_backward_f32_run(

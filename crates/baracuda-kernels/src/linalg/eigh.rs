@@ -22,7 +22,6 @@
 //! because its caller-facing factor is asymmetric).
 
 use core::cell::Cell;
-use core::ffi::c_void;
 use core::marker::PhantomData;
 
 use baracuda_cutlass::{Error, Result};
@@ -66,6 +65,7 @@ pub struct EighDescriptor {
 /// (rather than just `T::Scalar`) sidesteps the
 /// `T::Scalar: DeviceRepr` propagation gap in the [`Element`] trait —
 /// the constraint lands on the concrete `TW` instead.
+#[derive(Debug)]
 pub struct EighArgs<'a, T: Element, TW: Element> {
     /// Input symmetric / Hermitian matrix `[N, N]` column-major. Only
     /// the triangle selected by `descriptor.uplo` is read. Overwritten
@@ -108,6 +108,7 @@ pub struct EighArgs<'a, T: Element, TW: Element> {
 /// **Precision guarantee**: deterministic; not bit-stable across runs.
 ///
 /// Owns a lazy cuSOLVER handle (`!Sync` / `!Send`); destroyed on `Drop`.
+#[derive(Debug)]
 pub struct EighPlan<T: Element> {
     desc: EighDescriptor,
     sku: KernelSku,
@@ -276,7 +277,7 @@ impl<T: Element> EighPlan<T> {
     }
 
     fn bind_stream(&self, h: cusolverDnHandle_t, stream: &Stream) -> Result<()> {
-        let status = unsafe { cusolverDnSetStream(h, stream.as_raw() as *mut c_void) };
+        let status = unsafe { cusolverDnSetStream(h, stream.as_raw()) };
         if status != 0 {
             return Err(Error::CutlassInternal(-status));
         }

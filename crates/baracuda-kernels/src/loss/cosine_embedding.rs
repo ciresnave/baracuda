@@ -45,6 +45,7 @@ pub struct CosineEmbeddingLossDescriptor {
 }
 
 /// Args bundle for a CosineEmbedding FW launch.
+#[derive(Debug)]
 pub struct CosineEmbeddingLossArgs<'a, T: Element> {
     /// First input tensor, shape [N, D].
     pub x1: TensorRef<'a, T, 2>,
@@ -57,6 +58,7 @@ pub struct CosineEmbeddingLossArgs<'a, T: Element> {
 }
 
 /// CosineEmbedding forward plan.
+#[derive(Debug)]
 pub struct CosineEmbeddingLossPlan<T: Element> {
     desc: CosineEmbeddingLossDescriptor,
     sku: KernelSku,
@@ -140,7 +142,7 @@ impl<T: Element> CosineEmbeddingLossPlan<T> {
             return Ok(());
         }
         let (ws_ptr, ws_bytes) = unpack_workspace(workspace, self.workspace_size())?;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let x1_ptr = args.x1.data.as_raw().0 as *const c_void;
         let x2_ptr = args.x2.data.as_raw().0 as *const c_void;
         let t_ptr = args.t.data.as_raw().0 as *const c_void;
@@ -205,6 +207,7 @@ pub struct CosineEmbeddingLossBackwardDescriptor {
 }
 
 /// Args bundle for a CosineEmbedding BW launch.
+#[derive(Debug)]
 pub struct CosineEmbeddingLossBackwardArgs<'a, T: Element> {
     /// x1 saved from FW.
     pub x1: TensorRef<'a, T, 2>,
@@ -221,6 +224,7 @@ pub struct CosineEmbeddingLossBackwardArgs<'a, T: Element> {
 }
 
 /// CosineEmbedding backward plan.
+#[derive(Debug)]
 pub struct CosineEmbeddingLossBackwardPlan<T: Element> {
     desc: CosineEmbeddingLossBackwardDescriptor,
     sku: KernelSku,
@@ -307,7 +311,7 @@ impl<T: Element> CosineEmbeddingLossBackwardPlan<T> {
             LossReduction::Sum => 1.0,
         };
         let margin = self.desc.margin;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let x1_ptr = args.x1.data.as_raw().0 as *const c_void;
         let x2_ptr = args.x2.data.as_raw().0 as *const c_void;
         let t_ptr = args.t.data.as_raw().0 as *const c_void;

@@ -67,6 +67,7 @@ pub struct CtcLossDescriptor {
 }
 
 /// Args bundle for a CTCLoss FW launch.
+#[derive(Debug)]
 pub struct CtcLossArgs<'a, T: Element> {
     /// Log-probabilities `[max_time, batch_size, num_classes]`. Must be
     /// row-major contiguous along the class axis.
@@ -88,6 +89,7 @@ pub struct CtcLossArgs<'a, T: Element> {
 }
 
 /// CTCLoss FW plan.
+#[derive(Debug)]
 pub struct CtcLossPlan<T: Element> {
     desc: CtcLossDescriptor,
     sku: KernelSku,
@@ -235,7 +237,7 @@ impl<T: Element> CtcLossPlan<T> {
             });
         }
         let (ws_ptr, ws_bytes) = unpack_workspace(workspace, self.workspace_size())?;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let log_probs_ptr = args.log_probs.data.as_raw().0 as *const c_void;
         let targets_ptr = args.targets.data.as_raw().0 as *const c_void;
         let input_lengths_ptr = args.input_lengths.data.as_raw().0 as *const c_void;
@@ -362,6 +364,7 @@ pub struct CtcLossBackwardDescriptor {
 }
 
 /// Args bundle for a CTCLoss BW launch.
+#[derive(Debug)]
 pub struct CtcLossBackwardArgs<'a, T: Element> {
     /// Same `log_probs` `[max_time, batch_size, num_classes]` as FW.
     pub log_probs: TensorRef<'a, T, 3>,
@@ -388,6 +391,7 @@ pub struct CtcLossBackwardArgs<'a, T: Element> {
 }
 
 /// CTCLoss BW plan.
+#[derive(Debug)]
 pub struct CtcLossBackwardPlan<T: Element> {
     desc: CtcLossBackwardDescriptor,
     sku: KernelSku,
@@ -500,7 +504,7 @@ impl<T: Element> CtcLossBackwardPlan<T> {
             ));
         }
         let (ws_ptr, ws_bytes) = unpack_workspace(workspace, self.workspace_size())?;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let log_probs_ptr = args.log_probs.data.as_raw().0 as *const c_void;
         let targets_ptr = args.targets.data.as_raw().0 as *const c_void;
         let input_lengths_ptr = args.input_lengths.data.as_raw().0 as *const c_void;

@@ -63,6 +63,7 @@ impl<const N: usize> BatchNormDescriptor<N> {
 }
 
 /// Args bundle for BatchNorm forward.
+#[derive(Debug)]
 pub struct BatchNormArgs<'a, T: Element, const N: usize> {
     /// Input tensor `[N, C, ...]`.
     pub x: TensorRef<'a, T, N>,
@@ -79,6 +80,7 @@ pub struct BatchNormArgs<'a, T: Element, const N: usize> {
 }
 
 /// BatchNorm forward plan.
+#[derive(Debug)]
 pub struct BatchNormPlan<T: Element, const N: usize> {
     desc: BatchNormDescriptor<N>,
     sku: KernelSku,
@@ -223,7 +225,7 @@ impl<T: Element, const N: usize> BatchNormPlan<T, N> {
         if n_extent == 0 || c_extent == 0 || s_extent == 0 {
             return Ok(());
         }
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let x_ptr = args.x.data.as_raw().0 as *const c_void;
         let y_ptr = args.y.data.as_raw().0 as *mut c_void;
         let mean_ptr = args.saved_mean.data.as_raw().0 as *mut c_void;

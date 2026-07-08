@@ -34,6 +34,7 @@ pub struct QuantizePerTokenBackwardDescriptor {
 }
 
 /// Args bundle for the per-token BW launch.
+#[derive(Debug)]
 pub struct QuantizePerTokenBackwardArgs<'a, TIn: Element> {
     /// Upstream gradient `[N, D]`.
     pub d_output: TensorRef<'a, TIn, 2>,
@@ -65,6 +66,7 @@ pub struct QuantizePerTokenBackwardArgs<'a, TIn: Element> {
 /// **Workspace**: none.
 ///
 /// **Precision guarantee**: deterministic, bit-stable.
+#[derive(Debug)]
 pub struct QuantizePerTokenBackwardPlan<TIn: Element> {
     desc: QuantizePerTokenBackwardDescriptor,
     sku: KernelSku,
@@ -171,7 +173,7 @@ impl<TIn: Element> QuantizePerTokenBackwardPlan<TIn> {
         let sc_ptr = args.scale.data.as_raw().0 as *const c_void;
         let zp_ptr = args.zero_point.data.as_raw().0 as *const c_void;
         let dx_ptr = args.d_input.data.as_raw().0 as *mut c_void;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
 
         let status = match TIn::KIND {
             ElementKind::F32 => unsafe {

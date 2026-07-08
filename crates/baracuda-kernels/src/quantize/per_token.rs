@@ -40,6 +40,7 @@ pub struct QuantizePerTokenDescriptor {
 }
 
 /// Args bundle for a `quantize_per_token` forward launch.
+#[derive(Debug)]
 pub struct QuantizePerTokenArgs<'a, TIn: Element, TOut: IntElement> {
     /// Input `[N, D]` in FP.
     pub input: TensorRef<'a, TIn, 2>,
@@ -74,6 +75,7 @@ pub struct QuantizePerTokenArgs<'a, TIn: Element, TOut: IntElement> {
 ///
 /// **Precision guarantee**: deterministic, bit-stable. One thread
 /// per output cell, no atomics. Round-ties-even.
+#[derive(Debug)]
 pub struct QuantizePerTokenPlan<TIn: Element, TOut: IntElement> {
     desc: QuantizePerTokenDescriptor,
     sku: KernelSku,
@@ -176,7 +178,7 @@ impl<TIn: Element, TOut: IntElement> QuantizePerTokenPlan<TIn, TOut> {
         let sc_ptr = args.scale.data.as_raw().0 as *const c_void;
         let zp_ptr = args.zero_point.data.as_raw().0 as *const c_void;
         let out_ptr = args.output.data.as_raw().0 as *mut c_void;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
 
         let status = match (TIn::KIND, TOut::KIND) {
             (ElementKind::F32, ElementKind::S8) => unsafe {

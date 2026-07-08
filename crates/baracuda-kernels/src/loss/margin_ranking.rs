@@ -31,6 +31,7 @@ pub struct MarginRankingLossDescriptor<const N: usize> {
 }
 
 /// Args bundle for a MarginRanking FW launch.
+#[derive(Debug)]
 pub struct MarginRankingLossArgs<'a, T: Element, const N: usize> {
     /// First operand tensor.
     pub x1: TensorRef<'a, T, N>,
@@ -43,6 +44,7 @@ pub struct MarginRankingLossArgs<'a, T: Element, const N: usize> {
 }
 
 /// MarginRanking forward plan.
+#[derive(Debug)]
 pub struct MarginRankingLossPlan<T: Element, const N: usize> {
     desc: MarginRankingLossDescriptor<N>,
     sku: KernelSku,
@@ -135,7 +137,7 @@ impl<T: Element, const N: usize> MarginRankingLossPlan<T, N> {
             return Ok(());
         }
         let (ws_ptr, ws_bytes) = unpack_workspace(workspace, self.workspace_size())?;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let x1_ptr = args.x1.data.as_raw().0 as *const c_void;
         let x2_ptr = args.x2.data.as_raw().0 as *const c_void;
         let t_ptr = args.t.data.as_raw().0 as *const c_void;
@@ -195,6 +197,7 @@ pub struct MarginRankingLossBackwardDescriptor<const N: usize> {
 }
 
 /// Args bundle for a MarginRanking BW launch.
+#[derive(Debug)]
 pub struct MarginRankingLossBackwardArgs<'a, T: Element, const N: usize> {
     /// x1 saved from FW.
     pub x1: TensorRef<'a, T, N>,
@@ -211,6 +214,7 @@ pub struct MarginRankingLossBackwardArgs<'a, T: Element, const N: usize> {
 }
 
 /// MarginRanking backward plan.
+#[derive(Debug)]
 pub struct MarginRankingLossBackwardPlan<T: Element, const N: usize> {
     desc: MarginRankingLossBackwardDescriptor<N>,
     sku: KernelSku,
@@ -302,7 +306,7 @@ impl<T: Element, const N: usize> MarginRankingLossBackwardPlan<T, N> {
             LossReduction::Sum => 1.0,
         };
         let margin = self.desc.margin;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let x1_ptr = args.x1.data.as_raw().0 as *const c_void;
         let x2_ptr = args.x2.data.as_raw().0 as *const c_void;
         let t_ptr = args.t.data.as_raw().0 as *const c_void;

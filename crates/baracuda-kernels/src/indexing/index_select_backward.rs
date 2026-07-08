@@ -35,6 +35,7 @@ pub struct IndexSelectBackwardDescriptor<const N: usize> {
 /// Args bundle for an `index_select_backward` launch.
 ///
 /// Phase 11.5: `I: IndexElement` generic (`i32` or `i64`).
+#[derive(Debug)]
 pub struct IndexSelectBackwardArgs<'a, T: Element, const N: usize, I: IndexElement = i32> {
     /// Upstream gradient.
     pub dout: TensorRef<'a, T, N>,
@@ -60,6 +61,7 @@ pub struct IndexSelectBackwardArgs<'a, T: Element, const N: usize, I: IndexEleme
 ///
 /// **Precision guarantee**: **non-deterministic** — atomicAdd
 /// ordering varies across launches.
+#[derive(Debug)]
 pub struct IndexSelectBackwardPlan<T: Element, const N: usize> {
     desc: IndexSelectBackwardDescriptor<N>,
     sku: KernelSku,
@@ -203,7 +205,7 @@ impl<T: Element, const N: usize> IndexSelectBackwardPlan<T, N> {
         let dout_ptr = args.dout.data.as_raw().0 as *const c_void;
         let idx_ptr = args.idx.data.as_raw().0 as *const c_void;
         let dsrc_ptr = args.dsrc.data.as_raw().0 as *mut c_void;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
 
         let out_shape = self.desc.out_shape;
         let stride_dout = args.dout.stride;

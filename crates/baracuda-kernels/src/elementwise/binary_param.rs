@@ -41,6 +41,7 @@ pub struct BinaryParamDescriptor<const N: usize> {
 }
 
 /// Args bundle for a parameterized binary elementwise launch.
+#[derive(Debug)]
 pub struct BinaryParamArgs<'a, T: Element, const N: usize> {
     /// First input.
     pub a: TensorRef<'a, T, N>,
@@ -51,6 +52,7 @@ pub struct BinaryParamArgs<'a, T: Element, const N: usize> {
 }
 
 /// Parameterized binary elementwise plan.
+#[derive(Debug)]
 pub struct BinaryParamPlan<T: Element, const N: usize> {
     desc: BinaryParamDescriptor<N>,
     sku: KernelSku,
@@ -180,7 +182,7 @@ impl<T: Element, const N: usize> BinaryParamPlan<T, N> {
         let a_ptr = args.a.data.as_raw().0 as *const c_void;
         let b_ptr = args.b.data.as_raw().0 as *const c_void;
         let y_ptr = args.y.data.as_raw().0 as *mut c_void;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let p = self.desc.param;
 
         let status = match (self.desc.kind, T::KIND) {

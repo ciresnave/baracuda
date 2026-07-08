@@ -37,6 +37,7 @@ pub struct DequantizePerTokenDescriptor {
 /// type vocabulary consistent: `TIn` is the FP type the FW consumed
 /// (and the BW + dequant produce), `TOut` is the int storage type the
 /// FW produced (and the dequant consumes).
+#[derive(Debug)]
 pub struct DequantizePerTokenArgs<'a, TIn: Element, TOut: IntElement> {
     /// Quantized input `[N, D]` in int.
     pub input: TensorRef<'a, TOut, 2>,
@@ -65,6 +66,7 @@ pub struct DequantizePerTokenArgs<'a, TIn: Element, TOut: IntElement> {
 /// **Workspace**: none.
 ///
 /// **Precision guarantee**: deterministic, bit-stable.
+#[derive(Debug)]
 pub struct DequantizePerTokenPlan<TIn: Element, TOut: IntElement> {
     desc: DequantizePerTokenDescriptor,
     sku: KernelSku,
@@ -162,7 +164,7 @@ impl<TIn: Element, TOut: IntElement> DequantizePerTokenPlan<TIn, TOut> {
         let sc_ptr = args.scale.data.as_raw().0 as *const c_void;
         let zp_ptr = args.zero_point.data.as_raw().0 as *const c_void;
         let out_ptr = args.output.data.as_raw().0 as *mut c_void;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
 
         let status = match (TIn::KIND, TOut::KIND) {
             (ElementKind::F32, ElementKind::S8) => unsafe {

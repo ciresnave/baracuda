@@ -115,7 +115,7 @@ const FA2_BW_SUPPORTED_HEAD_DIMS: &[i32] = &[32, 64, 96, 128, 192, 256];
 #[cfg(feature = "fa2")]
 #[inline]
 fn fa2_bw_supports_head_dim(d: i32) -> bool {
-    FA2_BW_SUPPORTED_HEAD_DIMS.iter().any(|&v| v == d)
+    FA2_BW_SUPPORTED_HEAD_DIMS.contains(&d)
 }
 
 /// FA2 BW routing heuristic. More permissive than the FW heuristic:
@@ -235,6 +235,7 @@ impl FlashSdpaBackwardDescriptor {
 /// `d_ws` arg is IGNORED on the FA2 backend — FA2 uses a single
 /// caller-supplied `workspace` (sized via [`FlashSdpaBackwardPlan::workspace_size`])
 /// rather than a typed scratch slot.
+#[derive(Debug)]
 pub struct FlashSdpaBackwardArgs<'a, T: Element> {
     /// Query tensor used in FW — shape `[B, H, Q, D_k]`.
     pub q: TensorRef<'a, T, 4>,
@@ -294,6 +295,7 @@ pub struct FlashSdpaBackwardArgs<'a, T: Element> {
 /// **Precision guarantee**: bespoke is deterministic + bit-stable;
 /// FA2 uses `atomicAdd` into `dq_accum` and is NOT bit-stable
 /// run-to-run.
+#[derive(Debug)]
 pub struct FlashSdpaBackwardPlan<T: Element> {
     desc: FlashSdpaBackwardDescriptor,
     sku: KernelSku,
@@ -628,7 +630,7 @@ impl<T: Element> FlashSdpaBackwardPlan<T> {
         let _ = workspace;
 
         // Bespoke path (preserved from pre-Phase-59b).
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let q_ptr = args.q.data.as_raw().0 as *const c_void;
         let k_ptr = args.k.data.as_raw().0 as *const c_void;
         let v_ptr = args.v.data.as_raw().0 as *const c_void;
@@ -699,7 +701,7 @@ impl<T: Element> FlashSdpaBackwardPlan<T> {
         workspace: Workspace<'_>,
         args: &FlashSdpaBackwardArgs<'_, T>,
     ) -> Result<()> {
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let q_ptr = args.q.data.as_raw().0 as *const c_void;
         let k_ptr = args.k.data.as_raw().0 as *const c_void;
         let v_ptr = args.v.data.as_raw().0 as *const c_void;

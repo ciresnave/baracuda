@@ -49,6 +49,7 @@ pub struct EmbeddingBagBackwardDescriptor {
 /// Args bundle for an `embedding_bag_backward` launch.
 ///
 /// Phase 11.5: `I: IndexElement` generic (`i32` or `i64`) for indices.
+#[derive(Debug)]
 pub struct EmbeddingBagBackwardArgs<'a, T: Element, I: IndexElement = i32> {
     /// Upstream gradient `[num_bags, D]`. Row-major contiguous.
     pub dout: TensorRef<'a, T, 2>,
@@ -82,6 +83,7 @@ pub struct EmbeddingBagBackwardArgs<'a, T: Element, I: IndexElement = i32> {
 ///
 /// **Precision guarantee**: **non-deterministic** — atomicAdd
 /// ordering varies between launches.
+#[derive(Debug)]
 pub struct EmbeddingBagBackwardPlan<T: Element> {
     desc: EmbeddingBagBackwardDescriptor,
     sku: KernelSku,
@@ -248,7 +250,7 @@ impl<T: Element> EmbeddingBagBackwardPlan<T> {
         let idx_ptr = args.indices.data.as_raw().0 as *const c_void;
         let off_ptr = args.offsets.data.as_raw().0 as *const c_void;
         let dw_ptr = args.dweight.data.as_raw().0 as *mut c_void;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         // Phase 11.5: padding_idx widens to i64 across FFI.
         let padding_idx: i64 = self.desc.padding_idx.unwrap_or(PADDING_DISABLED) as i64;
         let mode = self.desc.mode.ffi_tag();

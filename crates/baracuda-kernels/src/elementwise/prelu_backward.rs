@@ -27,6 +27,7 @@ pub struct PReluBackwardDescriptor<const N: usize> {
 }
 
 /// Args bundle for a PReLU BW launch.
+#[derive(Debug)]
 pub struct PReluBackwardArgs<'a, T: Element, const N: usize> {
     /// Upstream gradient.
     pub dy: TensorRef<'a, T, N>,
@@ -42,6 +43,7 @@ pub struct PReluBackwardArgs<'a, T: Element, const N: usize> {
 }
 
 /// PReLU backward plan.
+#[derive(Debug)]
 pub struct PReluBackwardPlan<T: Element, const N: usize> {
     desc: PReluBackwardDescriptor<N>,
     sku: KernelSku,
@@ -166,7 +168,7 @@ impl<T: Element, const N: usize> PReluBackwardPlan<T, N> {
         if numel == 0 {
             return Ok(());
         }
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let dy_ptr = args.dy.data.as_raw().0 as *const c_void;
         let x_ptr = args.x.data.as_raw().0 as *const c_void;
         let weight_ptr = args.weight.data.as_raw().0 as *const c_void;

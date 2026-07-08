@@ -108,6 +108,7 @@ impl InterpolateBackwardDescriptor {
 }
 
 /// Args bundle for an `interpolate_backward` launch.
+#[derive(Debug)]
 pub struct InterpolateBackwardArgs<'a, T: Element> {
     /// Upstream gradient `[N, C, OH, OW]`.
     pub dout: TensorRef<'a, T, 4>,
@@ -133,6 +134,7 @@ pub struct InterpolateBackwardArgs<'a, T: Element> {
 ///
 /// **Precision guarantee**: **non-deterministic** — atomicAdd
 /// ordering varies between launches.
+#[derive(Debug)]
 pub struct InterpolateBackwardPlan<T: Element> {
     desc: InterpolateBackwardDescriptor,
     sku: KernelSku,
@@ -276,7 +278,7 @@ impl<T: Element> InterpolateBackwardPlan<T> {
         }
         let dout_ptr = args.dout.data.as_raw().0 as *const c_void;
         let din_ptr = args.dinput.data.as_raw().0 as *mut c_void;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let ac: i32 = if self.desc.align_corners { 1 } else { 0 };
         let sh: f64 = self.desc.scale_h.unwrap_or(0.0);
         let sw: f64 = self.desc.scale_w.unwrap_or(0.0);

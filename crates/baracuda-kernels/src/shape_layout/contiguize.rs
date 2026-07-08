@@ -64,6 +64,7 @@ pub struct ContiguizeDescriptor<const N: usize> {
 /// `dest` MUST be a contiguous, zero-offset allocation. This is enforced
 /// at `can_implement` time (`dest.is_contiguous()` + no offset is
 /// implicit because dest is a raw [`TensorMut`] over a fresh buffer).
+#[derive(Debug)]
 pub struct ContiguizeArgs<'a, T: DeviceRepr + Copy + 'static, const N: usize> {
     /// Source: raw byte buffer. The kernel reads
     /// `source.data[source_offset + Σ i_k * source_strides[k]]` for
@@ -103,6 +104,7 @@ pub struct ContiguizeArgs<'a, T: DeviceRepr + Copy + 'static, const N: usize> {
 ///
 /// **Precision guarantee**: deterministic, bit-stable, bit-exact —
 /// pure copy, no arithmetic.
+#[derive(Debug)]
 pub struct ContiguizePlan<T: DeviceRepr + Copy + 'static, const N: usize> {
     desc: ContiguizeDescriptor<N>,
     sku: KernelSku,
@@ -283,7 +285,7 @@ impl<T: DeviceRepr + Copy + 'static, const N: usize> ContiguizePlan<T, N> {
         }
         let source_ptr = args.source.data.as_raw().0 as *const c_void;
         let dest_ptr = args.dest.data.as_raw().0 as *mut c_void;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let shape = self.desc.shape;
         let source_strides = self.desc.source_strides;
         let source_offset = self.desc.source_offset;

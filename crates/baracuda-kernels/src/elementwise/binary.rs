@@ -52,6 +52,7 @@ pub struct BinaryDescriptor<const N: usize> {
 /// element type `T` is shared too (heterogeneous-dtype ops like
 /// `compare(f32, f32) -> bool` use a future `BinaryWithOutDtypePlan`,
 /// not this one).
+#[derive(Debug)]
 pub struct BinaryArgs<'a, T: Element, const N: usize> {
     /// First input.
     pub a: TensorRef<'a, T, N>,
@@ -66,6 +67,7 @@ pub struct BinaryArgs<'a, T: Element, const N: usize> {
 /// `T: Element` is the kernel's element type (today: must be `f32`).
 /// `const N: usize` is the tensor rank — fixed at compile time to keep
 /// the descriptor heap-free and the rank invariants type-checked.
+#[derive(Debug)]
 pub struct BinaryPlan<T: Element, const N: usize> {
     desc: BinaryDescriptor<N>,
     sku: KernelSku,
@@ -347,7 +349,7 @@ impl<T: Element, const N: usize> BinaryPlan<T, N> {
         let a_ptr = args.a.data.as_raw().0 as *const c_void;
         let b_ptr = args.b.data.as_raw().0 as *const c_void;
         let y_ptr = args.y.data.as_raw().0 as *mut c_void;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
 
         // Contig fast path requires all three operands to be fully
         // contiguous AND have identical shape (no broadcast). Any other

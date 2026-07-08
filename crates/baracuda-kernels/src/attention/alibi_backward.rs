@@ -44,6 +44,7 @@ pub struct AlibiBackwardDescriptor {
 /// Either `dscores` or `dslopes` may be `None` to skip computing that
 /// gradient (mirrors the optional-output convention of other BW plans
 /// in the family). Both `None` is rejected.
+#[derive(Debug)]
 pub struct AlibiBackwardArgs<'a, T: Element> {
     /// Upstream gradient `dY` — shape `[B, H, Q, K]`, contiguous.
     pub dy: TensorRef<'a, T, 4>,
@@ -70,6 +71,7 @@ pub struct AlibiBackwardArgs<'a, T: Element> {
 /// **Precision guarantee**: deterministic; bit-stable on the same
 /// hardware. The reduction runs as one block per head with a
 /// warp-shuffle tree reduction — no atomicAdd.
+#[derive(Debug)]
 pub struct AlibiBackwardPlan<T: Element> {
     desc: AlibiBackwardDescriptor,
     sku: KernelSku,
@@ -223,7 +225,7 @@ impl<T: Element> AlibiBackwardPlan<T> {
         if numel == 0 {
             return Ok(());
         }
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let dy_ptr = args.dy.data.as_raw().0 as *const c_void;
         let da_ptr = match &args.dscores {
             Some(d) => d.data.as_raw().0 as *mut c_void,

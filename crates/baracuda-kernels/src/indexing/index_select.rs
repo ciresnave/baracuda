@@ -40,6 +40,7 @@ pub struct IndexSelectDescriptor<const N: usize> {
 /// Args bundle for an `index_select` launch.
 ///
 /// Phase 11.5: `I: IndexElement` generic (`i32` or `i64`).
+#[derive(Debug)]
 pub struct IndexSelectArgs<'a, T: Element, const N: usize, I: IndexElement = i32> {
     /// Source tensor.
     pub src: TensorRef<'a, T, N>,
@@ -73,6 +74,7 @@ pub struct IndexSelectArgs<'a, T: Element, const N: usize, I: IndexElement = i32
 /// dtype.
 ///
 /// **Index policy**: out-of-bounds and negative indices skipped.
+#[derive(Debug)]
 pub struct IndexSelectPlan<T: Element, const N: usize> {
     desc: IndexSelectDescriptor<N>,
     sku: KernelSku,
@@ -216,7 +218,7 @@ impl<T: Element, const N: usize> IndexSelectPlan<T, N> {
         let src_ptr = args.src.data.as_raw().0 as *const c_void;
         let idx_ptr = args.idx.data.as_raw().0 as *const c_void;
         let out_ptr = args.out.data.as_raw().0 as *mut c_void;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
 
         let out_shape = self.desc.out_shape;
         let stride_src = args.src.stride;

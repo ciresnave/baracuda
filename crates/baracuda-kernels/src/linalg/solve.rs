@@ -25,7 +25,6 @@
 //! `cusolverDnSgetrf_bufferSize` / `Dgetrf_bufferSize`.
 
 use core::cell::Cell;
-use core::ffi::c_void;
 use core::marker::PhantomData;
 
 use baracuda_cutlass::{Error, Result};
@@ -60,6 +59,7 @@ pub struct SolveDescriptor {
 /// receives cuSOLVER's 1-based pivot indices (length `M`). `info`
 /// receives the single factorization-status word (`0` on success,
 /// `k > 0` if `U[k, k] == 0` at step `k`).
+#[derive(Debug)]
 pub struct SolveArgs<'a, T: Element> {
     /// Coefficient matrix `[M, M]` (column-major). Overwritten with
     /// packed `LU` in place.
@@ -95,6 +95,7 @@ pub struct SolveArgs<'a, T: Element> {
 /// **Precision guarantee**: deterministic; not bit-stable across runs.
 ///
 /// Owns a lazy cuSOLVER handle (`!Sync` / `!Send`); destroyed on `Drop`.
+#[derive(Debug)]
 pub struct SolvePlan<T: Element> {
     desc: SolveDescriptor,
     sku: KernelSku,
@@ -230,7 +231,7 @@ impl<T: Element> SolvePlan<T> {
     }
 
     fn bind_stream(&self, h: cusolverDnHandle_t, stream: &Stream) -> Result<()> {
-        let status = unsafe { cusolverDnSetStream(h, stream.as_raw() as *mut c_void) };
+        let status = unsafe { cusolverDnSetStream(h, stream.as_raw()) };
         if status != 0 {
             return Err(Error::CutlassInternal(-status));
         }

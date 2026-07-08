@@ -52,6 +52,7 @@ pub struct TernaryDescriptor<const N: usize> {
 /// `y.shape` via stride-0 axes (typical use case for `clamp(x, lo, hi)`
 /// where `lo` and `hi` are scalars: pass them as rank-N tensors with
 /// `shape[d] = 1` and `stride[d] = 0` on every axis).
+#[derive(Debug)]
 pub struct TernaryArgs<'a, T: Element, const N: usize> {
     /// First input. For `clamp`, this is `x` (the value to clamp).
     pub a: TensorRef<'a, T, N>,
@@ -67,6 +68,7 @@ pub struct TernaryArgs<'a, T: Element, const N: usize> {
 ///
 /// `T: Element` is the kernel's element type (today: must be `f32`).
 /// `const N: usize` is the tensor rank.
+#[derive(Debug)]
 pub struct TernaryPlan<T: Element, const N: usize> {
     desc: TernaryDescriptor<N>,
     sku: KernelSku,
@@ -245,7 +247,7 @@ impl<T: Element, const N: usize> TernaryPlan<T, N> {
         let b_ptr = args.b.data.as_raw().0 as *const c_void;
         let c_ptr = args.c.data.as_raw().0 as *const c_void;
         let y_ptr = args.y.data.as_raw().0 as *mut c_void;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
 
         let all_contig_same_shape = args.a.shape == args.y.shape
             && args.b.shape == args.y.shape

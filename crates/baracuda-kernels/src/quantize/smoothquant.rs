@@ -124,6 +124,7 @@ impl SmoothQuantLinearDescriptor {
 /// per-row form the underlying `quantized_linear_w8a8` kernel
 /// consumes. Caller-owned so it can be reused across launches without
 /// re-allocation — the Plan's `workspace_size()` returns 0.
+#[derive(Debug)]
 pub struct SmoothQuantLinearArgs<'a, TIn: Element, TWQ: IntElement> {
     /// Pre-quantized int8 activation `[M, K]`.
     pub act_q: TensorRef<'a, S8, 2>,
@@ -167,6 +168,7 @@ pub struct SmoothQuantLinearArgs<'a, TIn: Element, TWQ: IntElement> {
 /// hardware (inherits from the underlying `quantized_linear_w8a8`
 /// kernel — register-only int32 accumulator + serial FP scale
 /// multiply, no atomics).
+#[derive(Debug)]
 pub struct SmoothQuantLinearPlan<TIn: Element, TWQ: IntElement> {
     desc: SmoothQuantLinearDescriptor,
     sku: KernelSku,
@@ -322,7 +324,7 @@ impl<TIn: Element, TWQ: IntElement> SmoothQuantLinearPlan<TIn, TWQ> {
             return Ok(());
         }
 
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
 
         // ---- Pass 1: broadcast `act_scale` across [M]. ---------------
         //

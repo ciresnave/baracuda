@@ -85,6 +85,7 @@ impl Default for GgufMmvqDescriptor {
 ///
 /// Generic on the activation / destination dtype `T`. Default
 /// `T = f32` keeps the original (pre-Phase-18.1) source surface.
+#[derive(Debug)]
 pub struct GgufMmvqArgs<'a, T: GgufMmvqActivation = f32> {
     /// Packed GGUF weight bytes. Length must equal
     /// `nrows * (ncols / block_size) * type_size`.
@@ -122,6 +123,7 @@ pub struct GgufMmvqArgs<'a, T: GgufMmvqActivation = f32> {
 /// **Precision guarantee**: deterministic, bit-stable on identical
 /// hardware. Single-pass warp reduction; no atomics. f32 accumulator
 /// in every variant (f16 / bf16 activations are cast to f32 at load).
+#[derive(Debug)]
 pub struct GgufMmvqPlan<T: GgufMmvqActivation = f32> {
     desc: GgufMmvqDescriptor,
     sku: KernelSku,
@@ -265,7 +267,7 @@ impl<T: GgufMmvqActivation> GgufMmvqPlan<T> {
         let w_ptr = args.weight.data.as_raw().0 as *const c_void;
         let y_ptr = args.activation.data.as_raw().0 as *const c_void;
         let dst_ptr = args.output.data.as_raw().0 as *mut c_void;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let ncols = self.desc.ncols;
         let nrows = self.desc.nrows;
         let w_off = self.desc.w_start_byte_offset;

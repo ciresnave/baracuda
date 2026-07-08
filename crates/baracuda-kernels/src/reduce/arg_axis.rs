@@ -62,6 +62,7 @@ impl<const N: usize> ArgReduceDescriptor<N> {
 ///
 /// Note the asymmetric dtypes: `x` is the value dtype `T`, `y` is the
 /// index dtype `I` (defaults to `i64` — PyTorch convention).
+#[derive(Debug)]
 pub struct ArgReduceArgs<'a, T: Element, const N: usize, I: IndexOutputElement = i64> {
     /// Input.
     pub x: TensorRef<'a, T, N>,
@@ -80,6 +81,7 @@ pub struct ArgReduceArgs<'a, T: Element, const N: usize, I: IndexOutputElement =
 /// The `I = i64` default preserves source-compat for pre-Phase-12.2
 /// callers; new callers opt into narrower output dtypes via
 /// `ArgReducePlan::<T, N, u32>::select(...)` or `<T, N, i32>`.
+#[derive(Debug)]
 pub struct ArgReducePlan<T: Element, const N: usize, I: IndexOutputElement = i64> {
     desc: ArgReduceDescriptor<N>,
     sku: KernelSku,
@@ -231,7 +233,7 @@ impl<T: Element, const N: usize, I: IndexOutputElement> ArgReducePlan<T, N, I> {
         }
         let x_ptr = args.x.data.as_raw().0 as *const c_void;
         let y_ptr = args.y.data.as_raw().0 as *mut c_void;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
 
         let output_shape = self.desc.output_shape();
         let stride_x = args.x.stride;

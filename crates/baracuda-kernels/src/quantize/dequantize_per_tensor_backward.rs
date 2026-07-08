@@ -30,6 +30,12 @@ pub struct DequantizePerTensorBackwardDescriptor {
     pub output_element: ElementKind,
 }
 
+impl<'a, TIn: Element, TOut: IntElement> core::fmt::Debug for DequantizePerTensorBackwardArgs<'a, TIn, TOut> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("DequantizePerTensorBackwardArgs").finish_non_exhaustive()
+    }
+}
+
 /// Args bundle for a `dequantize_per_tensor` backward launch.
 pub struct DequantizePerTensorBackwardArgs<'a, TIn: Element, TOut: IntElement> {
     /// Scalar scale (same value used in FW).
@@ -63,6 +69,7 @@ pub struct DequantizePerTensorBackwardArgs<'a, TIn: Element, TOut: IntElement> {
 /// **Workspace**: none.
 ///
 /// **Precision guarantee**: deterministic, bit-stable.
+#[derive(Debug)]
 pub struct DequantizePerTensorBackwardPlan<TIn: Element, TOut: IntElement> {
     desc: DequantizePerTensorBackwardDescriptor,
     sku: KernelSku,
@@ -153,7 +160,7 @@ impl<TIn: Element, TOut: IntElement> DequantizePerTensorBackwardPlan<TIn, TOut> 
         }
         let dy_ptr = args.d_output.data.as_raw().0 as *const c_void;
         let dq_ptr = args.d_input.data.as_raw().0 as *mut c_void;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
 
         let status = if <TIn::Scalar as ScalarType>::IS_F64 {
             let scale_f64 = args.scale.to_f64();

@@ -47,6 +47,7 @@ pub struct EmbeddingDescriptor {
 /// Args bundle for an `embedding` launch.
 ///
 /// Phase 11.5: `I: IndexElement` generic (`i32` or `i64`).
+#[derive(Debug)]
 pub struct EmbeddingArgs<'a, T: Element, I: IndexElement = i32> {
     /// Weight matrix `[V, D]`. Row-major contiguous.
     pub weight: TensorRef<'a, T, 2>,
@@ -82,6 +83,7 @@ pub struct EmbeddingArgs<'a, T: Element, I: IndexElement = i32> {
 ///
 /// **Index policy**: negative or out-of-range indices emit an
 /// all-zero row (no PyTorch-style wrap-around).
+#[derive(Debug)]
 pub struct EmbeddingPlan<T: Element> {
     desc: EmbeddingDescriptor,
     sku: KernelSku,
@@ -230,7 +232,7 @@ impl<T: Element> EmbeddingPlan<T> {
         let weight_ptr = args.weight.data.as_raw().0 as *const c_void;
         let indices_ptr = args.indices.data.as_raw().0 as *const c_void;
         let out_ptr = args.output.data.as_raw().0 as *mut c_void;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         // Phase 11.5: `padding_idx` widens to i64 across the FFI to
         // share the same parameter slot with the i64-index variants
         // (sign-extending the i32 `kPaddingDisabled` sentinel).

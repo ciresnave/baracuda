@@ -51,6 +51,7 @@ impl SegDescView for SegmentProdDescriptor {
 }
 
 /// Args bundle for a `segment_prod` launch.
+#[derive(Debug)]
 pub struct SegmentProdArgs<'a, T: Element> {
     /// Input `[N, D]`.
     pub input: TensorRef<'a, T, 2>,
@@ -80,6 +81,7 @@ pub struct SegmentProdArgs<'a, T: Element> {
 ///
 /// **Index policy**: out-of-range IDs dropped. Empty segments emit
 /// identity (1.0).
+#[derive(Debug)]
 pub struct SegmentProdPlan<T: Element> {
     desc: SegmentProdDescriptor,
     sku: KernelSku,

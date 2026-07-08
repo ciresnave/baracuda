@@ -16,11 +16,11 @@
 //!   element type `T`, contiguous, kHND.
 //! - `indices`           : `[total_used_pages]` i32 — physical page IDs.
 //! - `indptr`            : `[batch + 1]` i32 — prefix sum into `indices`.
-//!                         Request `b`'s pages are at
-//!                         `indices[indptr[b] .. indptr[b+1]]`.
+//!   Request `b`'s pages are at
+//!   `indices[indptr[b] .. indptr[b+1]]`.
 //! - `last_page_len`     : `[batch]` i32 — number of valid rows in
-//!                         each request's last page; values in
-//!                         `[0, page_size]`.
+//!   each request's last page; values in
+//!   `[0, page_size]`.
 //!
 //! Query / output:
 //!
@@ -92,6 +92,7 @@ pub struct BatchPagedDecodeDescriptor {
 }
 
 /// Args bundle for a batched paged-KV decode launch.
+#[derive(Debug)]
 pub struct BatchPagedDecodeArgs<'a, T: Element> {
     /// Query rows — shape `[batch, num_qo_heads, head_dim]`.
     pub q: TensorRef<'a, T, 3>,
@@ -124,6 +125,7 @@ pub struct BatchPagedDecodeArgs<'a, T: Element> {
 /// **Precision guarantee**: deterministic on same-hardware repeat
 /// (FlashInfer's decode path is reduction-free across CTAs in the
 /// no-split mode this plan uses). f16/bf16 accumulate in f32.
+#[derive(Debug)]
 pub struct BatchPagedDecodePlan<T: Element> {
     desc: BatchPagedDecodeDescriptor,
     sku: KernelSku,

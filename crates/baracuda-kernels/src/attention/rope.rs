@@ -51,6 +51,7 @@ pub struct RopeDescriptor {
 }
 
 /// Args bundle for a RoPE forward launch.
+#[derive(Debug)]
 pub struct RopeArgs<'a, T: Element> {
     /// Input Q or K tensor — shape `[B, H, S, D]`, contiguous row-major.
     pub x: TensorRef<'a, T, 4>,
@@ -82,6 +83,7 @@ pub struct RopeArgs<'a, T: Element> {
 ///
 /// **Precision guarantee**: deterministic; bit-stable on the same
 /// hardware. Per-cell write, no atomics.
+#[derive(Debug)]
 pub struct RopePlan<T: Element> {
     desc: RopeDescriptor,
     sku: KernelSku,
@@ -245,7 +247,7 @@ impl<T: Element> RopePlan<T> {
         if numel == 0 {
             return Ok(());
         }
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let x_ptr = args.x.data.as_raw().0 as *const c_void;
         let y_ptr = args.y.data.as_raw().0 as *mut c_void;
         let (pos_ptr, pos_default_flag) = match &args.positions {

@@ -45,6 +45,7 @@ impl<const N: usize> CountReduceDescriptor<N> {
 }
 
 /// Args bundle. Output is always `i64` regardless of input dtype.
+#[derive(Debug)]
 pub struct CountReduceArgs<'a, T: Element, const N: usize> {
     /// Input tensor.
     pub x: TensorRef<'a, T, N>,
@@ -53,6 +54,7 @@ pub struct CountReduceArgs<'a, T: Element, const N: usize> {
 }
 
 /// Plan for a count-nonzero axis reduction.
+#[derive(Debug)]
 pub struct CountReducePlan<T: Element, const N: usize> {
     desc: CountReduceDescriptor<N>,
     sku: KernelSku,
@@ -199,7 +201,7 @@ impl<T: Element, const N: usize> CountReducePlan<T, N> {
         }
         let x_ptr = args.x.data.as_raw().0 as *const c_void;
         let y_ptr = args.y.data.as_raw().0 as *mut c_void;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
 
         let output_shape = self.desc.output_shape();
         let stride_x = args.x.stride;

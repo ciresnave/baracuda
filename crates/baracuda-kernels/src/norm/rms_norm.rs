@@ -49,9 +49,9 @@ impl<const N: usize> RMSNormDescriptor<N> {
     #[inline]
     pub fn rms_shape(&self) -> [i32; N] {
         let mut s = self.input_shape;
-        for d in 0..N {
+        for (d, slot) in s.iter_mut().enumerate() {
             if (self.norm_axes_mask >> d) & 1 == 1 {
-                s[d] = 1;
+                *slot = 1;
             }
         }
         s
@@ -72,6 +72,7 @@ impl<const N: usize> RMSNormDescriptor<N> {
 }
 
 /// Args bundle for an RMSNorm forward launch.
+#[derive(Debug)]
 pub struct RMSNormArgs<'a, T: Element, const N: usize> {
     /// Input tensor.
     pub x: TensorRef<'a, T, N>,
@@ -104,6 +105,7 @@ pub struct RMSNormArgs<'a, T: Element, const N: usize> {
 /// per-output-cell two-pass kernel has no atomic-add. f16 / bf16 mean-
 /// square reduces in f32 (mandatory — variance in half precision is
 /// catastrophic); f64 keeps everything in double.
+#[derive(Debug)]
 pub struct RMSNormPlan<T: Element, const N: usize> {
     desc: RMSNormDescriptor<N>,
     sku: KernelSku,
@@ -306,7 +308,7 @@ impl<T: Element, const N: usize> RMSNormPlan<T, N> {
         if numel == 0 {
             return Ok(());
         }
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let x_ptr = args.x.data.as_raw().0 as *const c_void;
         let y_ptr = args.y.data.as_raw().0 as *mut c_void;
         let rms_ptr = args.rms.data.as_raw().0 as *mut c_void;

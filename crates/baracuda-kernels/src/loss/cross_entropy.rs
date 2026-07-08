@@ -45,6 +45,7 @@ pub struct CrossEntropyLossDescriptor {
 ///
 /// Exactly one of `target` (class-index) or `soft_target` (soft probability)
 /// must be `Some` to match the descriptor's `target_kind`.
+#[derive(Debug)]
 pub struct CrossEntropyLossArgs<'a, T: Element> {
     /// Input logits `[n_rows, class_extent]`.
     pub input: TensorRef<'a, T, 2>,
@@ -59,6 +60,7 @@ pub struct CrossEntropyLossArgs<'a, T: Element> {
 }
 
 /// CrossEntropyLoss forward plan.
+#[derive(Debug)]
 pub struct CrossEntropyLossPlan<T: Element> {
     desc: CrossEntropyLossDescriptor,
     sku: KernelSku,
@@ -158,7 +160,7 @@ impl<T: Element> CrossEntropyLossPlan<T> {
         }
         let row_stride_input: i64 = args.input.stride[0];
         let (ws_ptr, ws_bytes) = unpack_workspace(workspace, self.workspace_size())?;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let input_ptr = args.input.data.as_raw().0 as *const c_void;
         let out_ptr = args.out.data.as_raw().0 as *mut c_void;
         let mode = self.desc.reduction as i32;
@@ -277,6 +279,7 @@ pub struct CrossEntropyLossBackwardDescriptor {
 }
 
 /// Args bundle for a CrossEntropyLoss BW launch.
+#[derive(Debug)]
 pub struct CrossEntropyLossBackwardArgs<'a, T: Element> {
     /// Input logits (saved from FW).
     pub input: TensorRef<'a, T, 2>,
@@ -293,6 +296,7 @@ pub struct CrossEntropyLossBackwardArgs<'a, T: Element> {
 }
 
 /// CrossEntropyLoss backward plan.
+#[derive(Debug)]
 pub struct CrossEntropyLossBackwardPlan<T: Element> {
     desc: CrossEntropyLossBackwardDescriptor,
     sku: KernelSku,
@@ -391,7 +395,7 @@ impl<T: Element> CrossEntropyLossBackwardPlan<T> {
             LossReduction::Mean => 1.0 / (n_rows as f32),
             LossReduction::Sum => 1.0,
         };
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let input_ptr = args.input.data.as_raw().0 as *const c_void;
         let dy_ptr = args.dy.data.as_raw().0 as *const c_void;
         let dinput_ptr = args.dinput.data.as_raw().0 as *mut c_void;

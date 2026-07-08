@@ -28,6 +28,7 @@ pub struct KlDivLossDescriptor<const N: usize> {
 }
 
 /// Args bundle for a KLDiv FW launch.
+#[derive(Debug)]
 pub struct KlDivLossArgs<'a, T: Element, const N: usize> {
     /// Input tensor (log-probabilities — PyTorch convention).
     pub input: TensorRef<'a, T, N>,
@@ -38,6 +39,7 @@ pub struct KlDivLossArgs<'a, T: Element, const N: usize> {
 }
 
 /// KLDiv loss forward plan.
+#[derive(Debug)]
 pub struct KlDivLossPlan<T: Element, const N: usize> {
     desc: KlDivLossDescriptor<N>,
     sku: KernelSku,
@@ -128,7 +130,7 @@ impl<T: Element, const N: usize> KlDivLossPlan<T, N> {
             return Ok(());
         }
         let (ws_ptr, ws_bytes) = unpack_workspace(workspace, self.workspace_size())?;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let input_ptr = args.input.data.as_raw().0 as *const c_void;
         let target_ptr = args.target.data.as_raw().0 as *const c_void;
         let out_ptr = args.out.data.as_raw().0 as *mut c_void;
@@ -181,6 +183,7 @@ pub struct KlDivLossBackwardDescriptor<const N: usize> {
 }
 
 /// Args bundle for a KLDiv BW launch.
+#[derive(Debug)]
 pub struct KlDivLossBackwardArgs<'a, T: Element, const N: usize> {
     /// Targets (saved from FW).
     pub target: TensorRef<'a, T, N>,
@@ -191,6 +194,7 @@ pub struct KlDivLossBackwardArgs<'a, T: Element, const N: usize> {
 }
 
 /// KLDiv backward plan.
+#[derive(Debug)]
 pub struct KlDivLossBackwardPlan<T: Element, const N: usize> {
     desc: KlDivLossBackwardDescriptor<N>,
     sku: KernelSku,
@@ -277,7 +281,7 @@ impl<T: Element, const N: usize> KlDivLossBackwardPlan<T, N> {
             LossReduction::Mean => 1.0 / (numel as f32),
             LossReduction::Sum => 1.0,
         };
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let target_ptr = args.target.data.as_raw().0 as *const c_void;
         let dy_ptr = args.dy.data.as_raw().0 as *const c_void;
         let dinput_ptr = args.dinput.data.as_raw().0 as *mut c_void;

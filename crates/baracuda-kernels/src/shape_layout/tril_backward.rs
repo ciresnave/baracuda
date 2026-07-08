@@ -28,6 +28,7 @@ pub struct TrilBackwardDescriptor<const N: usize> {
 }
 
 /// Args bundle for a Tril backward launch.
+#[derive(Debug)]
 pub struct TrilBackwardArgs<'a, T: Element, const N: usize> {
     /// Upstream gradient — same shape as the forward output (== input).
     pub grad_output: TensorRef<'a, T, N>,
@@ -49,6 +50,7 @@ pub struct TrilBackwardArgs<'a, T: Element, const N: usize> {
 /// **Workspace**: none.
 ///
 /// **Precision guarantee**: deterministic, bit-stable, bit-exact.
+#[derive(Debug)]
 pub struct TrilBackwardPlan<T: Element, const N: usize> {
     desc: TrilBackwardDescriptor<N>,
     sku: KernelSku,
@@ -173,7 +175,7 @@ impl<T: Element, const N: usize> TrilBackwardPlan<T, N> {
         }
         let dy_ptr = args.grad_output.data.as_raw().0 as *const c_void;
         let dx_ptr = args.grad_input.data.as_raw().0 as *mut c_void;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let shape = self.desc.shape;
         let rank = N as i32;
         let diagonal = self.desc.diagonal;

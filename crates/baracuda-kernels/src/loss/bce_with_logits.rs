@@ -31,6 +31,7 @@ pub struct BceWithLogitsLossDescriptor<const N: usize> {
 }
 
 /// Args bundle for a BCEWithLogits FW launch.
+#[derive(Debug)]
 pub struct BceWithLogitsLossArgs<'a, T: Element, const N: usize> {
     /// Raw logits tensor (NOT pre-sigmoid'd).
     pub logits: TensorRef<'a, T, N>,
@@ -41,6 +42,7 @@ pub struct BceWithLogitsLossArgs<'a, T: Element, const N: usize> {
 }
 
 /// BCEWithLogits forward plan.
+#[derive(Debug)]
 pub struct BceWithLogitsLossPlan<T: Element, const N: usize> {
     desc: BceWithLogitsLossDescriptor<N>,
     sku: KernelSku,
@@ -132,7 +134,7 @@ impl<T: Element, const N: usize> BceWithLogitsLossPlan<T, N> {
             return Ok(());
         }
         let (ws_ptr, ws_bytes) = unpack_workspace(workspace, self.workspace_size())?;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let logits_ptr = args.logits.data.as_raw().0 as *const c_void;
         let target_ptr = args.target.data.as_raw().0 as *const c_void;
         let out_ptr = args.out.data.as_raw().0 as *mut c_void;
@@ -185,6 +187,7 @@ pub struct BceWithLogitsLossBackwardDescriptor<const N: usize> {
 }
 
 /// Args bundle for a BCEWithLogits BW launch.
+#[derive(Debug)]
 pub struct BceWithLogitsLossBackwardArgs<'a, T: Element, const N: usize> {
     /// Raw logits (saved from FW).
     pub logits: TensorRef<'a, T, N>,
@@ -197,6 +200,7 @@ pub struct BceWithLogitsLossBackwardArgs<'a, T: Element, const N: usize> {
 }
 
 /// BCEWithLogits backward plan.
+#[derive(Debug)]
 pub struct BceWithLogitsLossBackwardPlan<T: Element, const N: usize> {
     desc: BceWithLogitsLossBackwardDescriptor<N>,
     sku: KernelSku,
@@ -285,7 +289,7 @@ impl<T: Element, const N: usize> BceWithLogitsLossBackwardPlan<T, N> {
             LossReduction::Mean => 1.0 / (numel as f32),
             LossReduction::Sum => 1.0,
         };
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let logits_ptr = args.logits.data.as_raw().0 as *const c_void;
         let target_ptr = args.target.data.as_raw().0 as *const c_void;
         let dy_ptr = args.dy.data.as_raw().0 as *const c_void;

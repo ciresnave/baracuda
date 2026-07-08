@@ -46,6 +46,7 @@ impl<const N: usize> GroupNormDescriptor<N> {
 }
 
 /// Args bundle for GroupNorm FW.
+#[derive(Debug)]
 pub struct GroupNormArgs<'a, T: Element, const N: usize> {
     /// Input tensor.
     pub x: TensorRef<'a, T, N>,
@@ -62,6 +63,7 @@ pub struct GroupNormArgs<'a, T: Element, const N: usize> {
 }
 
 /// GroupNorm forward plan.
+#[derive(Debug)]
 pub struct GroupNormPlan<T: Element, const N: usize> {
     desc: GroupNormDescriptor<N>,
     sku: KernelSku,
@@ -199,7 +201,7 @@ impl<T: Element, const N: usize> GroupNormPlan<T, N> {
         if n_extent == 0 || c_extent == 0 || s_extent == 0 { return Ok(()); }
         let num_groups = self.desc.num_groups as i32;
 
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let x_ptr = args.x.data.as_raw().0 as *const c_void;
         let y_ptr = args.y.data.as_raw().0 as *mut c_void;
         let mean_ptr = args.saved_mean.data.as_raw().0 as *mut c_void;

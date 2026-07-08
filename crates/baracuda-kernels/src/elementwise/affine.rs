@@ -44,6 +44,7 @@ pub struct AffineDescriptor<T: Element> {
 }
 
 /// Args bundle for an affine launch.
+#[derive(Debug)]
 pub struct AffineArgs<'a, T: Element> {
     /// Input tensor — rank-1 contiguous view.
     pub input: TensorRef<'a, T, 1>,
@@ -52,6 +53,7 @@ pub struct AffineArgs<'a, T: Element> {
 }
 
 /// Affine plan.
+#[derive(Debug)]
 pub struct AffinePlan<T: Element> {
     desc: AffineDescriptor<T>,
     sku: KernelSku,
@@ -172,7 +174,7 @@ impl<T: Element> AffinePlan<T> {
         }
         let x_ptr = args.input.data.as_raw().0 as *const c_void;
         let y_ptr = args.output.data.as_raw().0 as *mut c_void;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
 
         // Contig fast path: rank-1, input.stride == [1], output.stride == [1].
         let contig =

@@ -29,6 +29,7 @@ pub struct MultilabelSoftMarginLossDescriptor {
 }
 
 /// Args bundle for a MultilabelSoftMargin FW launch.
+#[derive(Debug)]
 pub struct MultilabelSoftMarginLossArgs<'a, T: Element> {
     /// Input tensor [N, C] (raw logits).
     pub input: TensorRef<'a, T, 2>,
@@ -39,6 +40,7 @@ pub struct MultilabelSoftMarginLossArgs<'a, T: Element> {
 }
 
 /// MultilabelSoftMargin forward plan.
+#[derive(Debug)]
 pub struct MultilabelSoftMarginLossPlan<T: Element> {
     desc: MultilabelSoftMarginLossDescriptor,
     sku: KernelSku,
@@ -122,7 +124,7 @@ impl<T: Element> MultilabelSoftMarginLossPlan<T> {
             return Ok(());
         }
         let (ws_ptr, ws_bytes) = unpack_workspace(workspace, self.workspace_size())?;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let input_ptr = args.input.data.as_raw().0 as *const c_void;
         let target_ptr = args.target.data.as_raw().0 as *const c_void;
         let out_ptr = args.out.data.as_raw().0 as *mut c_void;
@@ -184,6 +186,7 @@ pub struct MultilabelSoftMarginLossBackwardDescriptor {
 }
 
 /// Args bundle for a MultilabelSoftMargin BW launch.
+#[derive(Debug)]
 pub struct MultilabelSoftMarginLossBackwardArgs<'a, T: Element> {
     /// Input saved from FW.
     pub input: TensorRef<'a, T, 2>,
@@ -196,6 +199,7 @@ pub struct MultilabelSoftMarginLossBackwardArgs<'a, T: Element> {
 }
 
 /// MultilabelSoftMargin backward plan.
+#[derive(Debug)]
 pub struct MultilabelSoftMarginLossBackwardPlan<T: Element> {
     desc: MultilabelSoftMarginLossBackwardDescriptor,
     sku: KernelSku,
@@ -281,7 +285,7 @@ impl<T: Element> MultilabelSoftMarginLossBackwardPlan<T> {
             LossReduction::Mean => 1.0 / (n_rows as f32),
             LossReduction::Sum => 1.0,
         };
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let input_ptr = args.input.data.as_raw().0 as *const c_void;
         let target_ptr = args.target.data.as_raw().0 as *const c_void;
         let dy_ptr = args.dy.data.as_raw().0 as *const c_void;

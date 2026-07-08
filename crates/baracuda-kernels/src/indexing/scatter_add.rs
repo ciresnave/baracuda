@@ -43,6 +43,7 @@ pub struct ScatterAddDescriptor<const N: usize> {
 /// Args bundle for a `scatter_add` launch.
 ///
 /// Phase 11.5: `I: IndexElement` generic (`i32` or `i64`).
+#[derive(Debug)]
 pub struct ScatterAddArgs<'a, T: Element, const N: usize, I: IndexElement = i32> {
     /// Update values.
     pub updates: TensorRef<'a, T, N>,
@@ -78,6 +79,7 @@ pub struct ScatterAddArgs<'a, T: Element, const N: usize, I: IndexElement = i32>
 ///
 /// **Index policy**: out-of-bounds and negative indices are skipped
 /// (no PyTorch-style wraparound).
+#[derive(Debug)]
 pub struct ScatterAddPlan<T: Element, const N: usize> {
     desc: ScatterAddDescriptor<N>,
     sku: KernelSku,
@@ -229,7 +231,7 @@ impl<T: Element, const N: usize> ScatterAddPlan<T, N> {
         let upd_ptr = args.updates.data.as_raw().0 as *const c_void;
         let idx_ptr = args.index.data.as_raw().0 as *const c_void;
         let out_ptr = args.out.data.as_raw().0 as *mut c_void;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
 
         let upd_shape = self.desc.upd_shape;
         let stride_upd = args.updates.stride;

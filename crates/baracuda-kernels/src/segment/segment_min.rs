@@ -46,6 +46,7 @@ impl SegDescView for SegmentMinDescriptor {
 }
 
 /// Args bundle for a `segment_min` launch.
+#[derive(Debug)]
 pub struct SegmentMinArgs<'a, T: Element> {
     /// Input `[N, D]`.
     pub input: TensorRef<'a, T, 2>,
@@ -74,6 +75,7 @@ pub struct SegmentMinArgs<'a, T: Element> {
 ///
 /// **Index policy**: out-of-range IDs dropped. Empty segments emit
 /// the per-op identity sentinel.
+#[derive(Debug)]
 pub struct SegmentMinPlan<T: Element> {
     desc: SegmentMinDescriptor,
     sku: KernelSku,

@@ -54,6 +54,7 @@ pub struct FftShiftDescriptor {
 }
 
 /// Args bundle for an fftshift / ifftshift.
+#[derive(Debug)]
 pub struct FftShiftArgs<'a, T: Element> {
     /// Input tensor `[batch, n]`.
     pub x: TensorRef<'a, T, 2>,
@@ -89,6 +90,7 @@ pub struct FftShiftArgs<'a, T: Element> {
 /// arithmetic).
 ///
 /// No cuFFT handle / state — the plan is just configuration.
+#[derive(Debug)]
 pub struct FftShiftPlan<T: Element> {
     desc: FftShiftDescriptor,
     sku: KernelSku,
@@ -218,7 +220,7 @@ impl<T: Element> FftShiftPlan<T> {
 
         let x_ptr = args.x.data.as_raw().0 as *const c_void;
         let y_ptr = args.y.data.as_raw().0 as *mut c_void;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let batch = self.desc.batch as i64;
         let n = self.desc.n;
 

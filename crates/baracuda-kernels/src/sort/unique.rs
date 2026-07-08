@@ -39,6 +39,7 @@ pub struct UniqueDescriptor {
 }
 
 /// Args bundle for a `unique` launch.
+#[derive(Debug)]
 pub struct UniqueArgs<'a, T: Element> {
     /// Input `[batch, row_len]`.
     pub input: TensorRef<'a, T, 2>,
@@ -79,6 +80,7 @@ pub struct UniqueArgs<'a, T: Element> {
 /// [`UniqueArgs`].
 ///
 /// **Precision guarantee**: deterministic, bit-stable.
+#[derive(Debug)]
 pub struct UniquePlan<T: Element> {
     desc: UniqueDescriptor,
     sku: KernelSku,

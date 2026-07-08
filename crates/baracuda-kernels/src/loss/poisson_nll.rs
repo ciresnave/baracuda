@@ -33,6 +33,7 @@ pub struct PoissonNllLossDescriptor<const N: usize> {
 }
 
 /// Args bundle for a PoissonNLL FW launch.
+#[derive(Debug)]
 pub struct PoissonNllLossArgs<'a, T: Element, const N: usize> {
     /// Input (pre-log'd when `log_input == true`, raw rate otherwise).
     pub input: TensorRef<'a, T, N>,
@@ -43,6 +44,7 @@ pub struct PoissonNllLossArgs<'a, T: Element, const N: usize> {
 }
 
 /// PoissonNLL forward plan.
+#[derive(Debug)]
 pub struct PoissonNllLossPlan<T: Element, const N: usize> {
     desc: PoissonNllLossDescriptor<N>,
     sku: KernelSku,
@@ -132,7 +134,7 @@ impl<T: Element, const N: usize> PoissonNllLossPlan<T, N> {
             return Ok(());
         }
         let (ws_ptr, ws_bytes) = unpack_workspace(workspace, self.workspace_size())?;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let input_ptr = args.input.data.as_raw().0 as *const c_void;
         let target_ptr = args.target.data.as_raw().0 as *const c_void;
         let out_ptr = args.out.data.as_raw().0 as *mut c_void;
@@ -192,6 +194,7 @@ pub struct PoissonNllLossBackwardDescriptor<const N: usize> {
 }
 
 /// Args bundle for a PoissonNLL BW launch.
+#[derive(Debug)]
 pub struct PoissonNllLossBackwardArgs<'a, T: Element, const N: usize> {
     /// Input (saved from FW).
     pub input: TensorRef<'a, T, N>,
@@ -204,6 +207,7 @@ pub struct PoissonNllLossBackwardArgs<'a, T: Element, const N: usize> {
 }
 
 /// PoissonNLL backward plan.
+#[derive(Debug)]
 pub struct PoissonNllLossBackwardPlan<T: Element, const N: usize> {
     desc: PoissonNllLossBackwardDescriptor<N>,
     sku: KernelSku,
@@ -293,7 +297,7 @@ impl<T: Element, const N: usize> PoissonNllLossBackwardPlan<T, N> {
             LossReduction::Sum => 1.0,
         };
         let log_input_flag: i32 = if self.desc.log_input { 1 } else { 0 };
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let input_ptr = args.input.data.as_raw().0 as *const c_void;
         let target_ptr = args.target.data.as_raw().0 as *const c_void;
         let dy_ptr = args.dy.data.as_raw().0 as *const c_void;

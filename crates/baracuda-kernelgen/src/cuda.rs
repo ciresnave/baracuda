@@ -382,14 +382,11 @@ fn vector_type(dt: ElementKind, width: u32) -> Option<(&'static str, &'static [&
 /// scalar fallbacks (unpackable dtype, const/param f16 body).
 pub(crate) fn effective_count_width(plan: &KernelPlan<'_>) -> u32 {
     match plan.schedule {
-        Schedule::Vectorized { width } => {
+        Schedule::Vectorized { width }
             if vector_type(plan.dtype, width).is_some()
-                || (packed_kind(plan.dtype, width).is_some() && bodies_pack(plan))
-            {
-                width
-            } else {
-                1
-            }
+                || (packed_kind(plan.dtype, width).is_some() && bodies_pack(plan)) =>
+        {
+            width
         }
         _ => 1,
     }

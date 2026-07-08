@@ -46,6 +46,7 @@ pub struct SoftmaxBackwardDescriptor<const N: usize> {
 ///
 /// `y` is the SAVED forward output. Required by all softmax-family BW
 /// kernels (the gradient formula references it).
+#[derive(Debug)]
 pub struct SoftmaxBackwardArgs<'a, T: Element, const N: usize> {
     /// Upstream gradient.
     pub dy: TensorRef<'a, T, N>,
@@ -60,6 +61,7 @@ pub struct SoftmaxBackwardArgs<'a, T: Element, const N: usize> {
 ///
 /// `T: Element` is the element type (`f32` / `f64` / `f16` / `bf16`).
 /// `const N: usize` is the tensor rank (1..=8).
+#[derive(Debug)]
 pub struct SoftmaxBackwardPlan<T: Element, const N: usize> {
     desc: SoftmaxBackwardDescriptor<N>,
     sku: KernelSku,
@@ -198,7 +200,7 @@ impl<T: Element, const N: usize> SoftmaxBackwardPlan<T, N> {
         let dy_ptr = args.dy.data.as_raw().0 as *const c_void;
         let y_ptr = args.y.data.as_raw().0 as *const c_void;
         let dx_ptr = args.dx.data.as_raw().0 as *mut c_void;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
 
         let axis = self.desc.softmax_axis as usize;
         let shape = self.desc.input_shape;

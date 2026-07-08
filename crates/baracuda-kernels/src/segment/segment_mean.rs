@@ -47,6 +47,7 @@ impl SegDescView for SegmentMeanDescriptor {
 }
 
 /// Args bundle for a `segment_mean` launch.
+#[derive(Debug)]
 pub struct SegmentMeanArgs<'a, T: Element> {
     /// Input `[N, D]`.
     pub input: TensorRef<'a, T, 2>,
@@ -76,6 +77,7 @@ pub struct SegmentMeanArgs<'a, T: Element> {
 ///
 /// **Index policy**: out-of-range IDs dropped. Empty segments emit
 /// zero (division is guarded; no NaN).
+#[derive(Debug)]
 pub struct SegmentMeanPlan<T: Element> {
     desc: SegmentMeanDescriptor,
     sku: KernelSku,

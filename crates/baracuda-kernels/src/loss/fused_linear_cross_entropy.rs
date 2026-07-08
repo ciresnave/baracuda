@@ -159,6 +159,7 @@ impl FusedLinearCrossEntropyDescriptor {
 /// `grad_input` and `grad_weight` are **always written** if `Some`
 /// — they're free given the BW-during-FW design. Pass `None` for
 /// either to skip the corresponding GEMM (inference-only path).
+#[derive(Debug)]
 pub struct FusedLinearCrossEntropyArgs<'a, T: Element> {
     /// Hidden states. Row-major `[BT, H]`, contiguous.
     pub input: TensorRef<'a, T, 2>,
@@ -184,6 +185,7 @@ pub struct FusedLinearCrossEntropyArgs<'a, T: Element> {
 /// Plan for Fused Linear Cross-Entropy.
 ///
 /// Owns a lazy cuBLAS handle (`!Sync` / `!Send`); destroyed on `Drop`.
+#[derive(Debug)]
 pub struct FusedLinearCrossEntropyPlan<T: Element> {
     desc: FusedLinearCrossEntropyDescriptor,
     sku: KernelSku,
@@ -322,7 +324,7 @@ impl<T: Element> FusedLinearCrossEntropyPlan<T> {
     }
 
     fn bind_stream(&self, h: cublasHandle_t, stream: &Stream) -> Result<()> {
-        let status = unsafe { cublasSetStream_v2(h, stream.as_raw() as *mut c_void) };
+        let status = unsafe { cublasSetStream_v2(h, stream.as_raw()) };
         if status != 0 {
             return Err(Error::CutlassInternal(-status));
         }
@@ -443,7 +445,7 @@ impl<T: Element> FusedLinearCrossEntropyPlan<T> {
         self.bind_stream(handle, stream)?;
 
         // ---- Chunked outer loop ---------------------------------------
-        let chunk_size_u = chunk_size as i32;
+        let chunk_size_u = chunk_size;
         let n_chunks = (bt + chunk_size_u - 1) / chunk_size_u;
 
         // Raw pointers for the GEMM dispatch — kept here so the loop
@@ -531,9 +533,9 @@ impl<T: Element> FusedLinearCrossEntropyPlan<T> {
                 },
                 weight_ptr,
                 v,           // m marker (informational)
-                h as i32,    // lda (storage leading-dim of weight col-view [H, V])
+                h,           // lda (storage leading-dim of weight col-view [H, V])
                 input_chunk_ptr,
-                h as i32,    // ldb (storage leading-dim of input col-view [H, n])
+                h,           // ldb (storage leading-dim of input col-view [H, n])
                 if T::KIND == ElementKind::F64 {
                     &beta_zero_f64 as *const f64 as *const c_void
                 } else {
@@ -561,22 +563,22 @@ impl<T: Element> FusedLinearCrossEntropyPlan<T> {
                     ElementKind::F32 => baracuda_kernels_sys::baracuda_kernels_loss_flce_per_row_f32_run(
                         n_rows, v, row_stride_logits, self.desc.ignore_index, scale_per_row,
                         logits_ptr, target_chunk_ptr, loss_1d_chunk_ptr,
-                        stream.as_raw() as *mut c_void,
+                        stream.as_raw(),
                     ),
                     ElementKind::F16 => baracuda_kernels_sys::baracuda_kernels_loss_flce_per_row_f16_run(
                         n_rows, v, row_stride_logits, self.desc.ignore_index, scale_per_row,
                         logits_ptr, target_chunk_ptr, loss_1d_chunk_ptr,
-                        stream.as_raw() as *mut c_void,
+                        stream.as_raw(),
                     ),
                     ElementKind::Bf16 => baracuda_kernels_sys::baracuda_kernels_loss_flce_per_row_bf16_run(
                         n_rows, v, row_stride_logits, self.desc.ignore_index, scale_per_row,
                         logits_ptr, target_chunk_ptr, loss_1d_chunk_ptr,
-                        stream.as_raw() as *mut c_void,
+                        stream.as_raw(),
                     ),
                     ElementKind::F64 => baracuda_kernels_sys::baracuda_kernels_loss_flce_per_row_f64_run(
                         n_rows, v, row_stride_logits, self.desc.ignore_index, scale_per_row,
                         logits_ptr, target_chunk_ptr, loss_1d_chunk_ptr,
-                        stream.as_raw() as *mut c_void,
+                        stream.as_raw(),
                     ),
                     _ => return Err(Error::Unsupported(
                         "baracuda-kernels::FusedLinearCrossEntropyPlan::run unwired dtype",
@@ -604,7 +606,7 @@ impl<T: Element> FusedLinearCrossEntropyPlan<T> {
             // correct transa/transb for this call but the comment block
             // was confused — clarified above so the next reviewer can
             // skip the derivation.)
-            if let Some(_) = args.grad_input.as_ref() {
+            if args.grad_input.as_ref().is_some() {
                 let grad_input_chunk_ptr = unsafe {
                     (grad_input_ptr_base as *mut u8)
                         .offset(start as isize * grad_input_row_stride_elems * elem_t)
@@ -624,16 +626,16 @@ impl<T: Element> FusedLinearCrossEntropyPlan<T> {
                     },
                     weight_ptr,
                     h,           // m marker
-                    h as i32,    // lda (storage of weight col-view [H, V])
+                    h,           // lda (storage of weight col-view [H, V])
                     logits_ptr,
-                    v as i32,    // ldb (storage of grad_logits col-view [V, n])
+                    v,           // ldb (storage of grad_logits col-view [V, n])
                     if T::KIND == ElementKind::F64 {
                         &beta_zero_f64 as *const f64 as *const c_void
                     } else {
                         &beta_zero_f32 as *const f32 as *const c_void
                     },
                     grad_input_chunk_ptr,
-                    h as i32,    // ldc
+                    h,           // ldc
                 )?;
             }
 
@@ -654,7 +656,7 @@ impl<T: Element> FusedLinearCrossEntropyPlan<T> {
             //   transa = N on input (col-major [H, n], lda = H).
             //   transb = T on grad_logits (col-major [V, n], transpose to [n, V], ldb = V).
             // Output: D col-major [H, V] = row-major [V, H], ldc = H. β = 1 (accumulate).
-            if let Some(_) = args.grad_weight.as_ref() {
+            if args.grad_weight.as_ref().is_some() {
                 let beta_one_f32 = 1.0f32;
                 let beta_one_f64 = 1.0f64;
                 self.gemm_ex(
@@ -671,16 +673,16 @@ impl<T: Element> FusedLinearCrossEntropyPlan<T> {
                     },
                     input_chunk_ptr,
                     h,            // m
-                    h as i32,     // lda
+                    h,            // lda
                     logits_ptr,
-                    v as i32,     // ldb
+                    v,            // ldb
                     if T::KIND == ElementKind::F64 {
                         &beta_one_f64 as *const f64 as *const c_void
                     } else {
                         &beta_one_f32 as *const f32 as *const c_void
                     },
                     grad_weight_ptr,
-                    h as i32,     // ldc
+                    h,            // ldc
                 )?;
             }
         }
@@ -692,13 +694,13 @@ impl<T: Element> FusedLinearCrossEntropyPlan<T> {
             LossReduction::None => unsafe {
                 match T::KIND {
                     ElementKind::F32 => baracuda_kernels_sys::baracuda_kernels_loss_flce_per_row_cast_f32_run(
-                        bt_i64, loss_1d_ptr as *const c_void, out_ptr, stream.as_raw() as *mut c_void),
+                        bt_i64, loss_1d_ptr as *const c_void, out_ptr, stream.as_raw()),
                     ElementKind::F16 => baracuda_kernels_sys::baracuda_kernels_loss_flce_per_row_cast_f16_run(
-                        bt_i64, loss_1d_ptr as *const c_void, out_ptr, stream.as_raw() as *mut c_void),
+                        bt_i64, loss_1d_ptr as *const c_void, out_ptr, stream.as_raw()),
                     ElementKind::Bf16 => baracuda_kernels_sys::baracuda_kernels_loss_flce_per_row_cast_bf16_run(
-                        bt_i64, loss_1d_ptr as *const c_void, out_ptr, stream.as_raw() as *mut c_void),
+                        bt_i64, loss_1d_ptr as *const c_void, out_ptr, stream.as_raw()),
                     ElementKind::F64 => baracuda_kernels_sys::baracuda_kernels_loss_flce_per_row_cast_f64_run(
-                        bt_i64, loss_1d_ptr as *const c_void, out_ptr, stream.as_raw() as *mut c_void),
+                        bt_i64, loss_1d_ptr as *const c_void, out_ptr, stream.as_raw()),
                     _ => return Err(Error::Unsupported("unwired dtype")),
                 }
             },
@@ -710,13 +712,13 @@ impl<T: Element> FusedLinearCrossEntropyPlan<T> {
                 unsafe {
                     match T::KIND {
                         ElementKind::F32 => baracuda_kernels_sys::baracuda_kernels_loss_flce_scalar_finalize_f32_run(
-                            bt_i64, denom_inv, loss_1d_ptr as *const c_void, out_ptr, stream.as_raw() as *mut c_void),
+                            bt_i64, denom_inv, loss_1d_ptr as *const c_void, out_ptr, stream.as_raw()),
                         ElementKind::F16 => baracuda_kernels_sys::baracuda_kernels_loss_flce_scalar_finalize_f16_run(
-                            bt_i64, denom_inv, loss_1d_ptr as *const c_void, out_ptr, stream.as_raw() as *mut c_void),
+                            bt_i64, denom_inv, loss_1d_ptr as *const c_void, out_ptr, stream.as_raw()),
                         ElementKind::Bf16 => baracuda_kernels_sys::baracuda_kernels_loss_flce_scalar_finalize_bf16_run(
-                            bt_i64, denom_inv, loss_1d_ptr as *const c_void, out_ptr, stream.as_raw() as *mut c_void),
+                            bt_i64, denom_inv, loss_1d_ptr as *const c_void, out_ptr, stream.as_raw()),
                         ElementKind::F64 => baracuda_kernels_sys::baracuda_kernels_loss_flce_scalar_finalize_f64_run(
-                            bt_i64, denom_inv, loss_1d_ptr as *const c_void, out_ptr, stream.as_raw() as *mut c_void),
+                            bt_i64, denom_inv, loss_1d_ptr as *const c_void, out_ptr, stream.as_raw()),
                         _ => return Err(Error::Unsupported("unwired dtype")),
                     }
                 }
@@ -801,7 +803,7 @@ impl<T: Element> FusedLinearCrossEntropyPlan<T> {
                 self.desc.ignore_index,
                 target.data.as_raw().0 as *const c_void,
                 count_dev.as_slice_mut().as_raw().0 as *mut c_void,
-                stream.as_raw() as *mut c_void,
+                stream.as_raw(),
             )
         };
         if status != 0 {
@@ -929,6 +931,7 @@ impl FusedLinearCrossEntropyBackwardDescriptor {
 /// general case via a kernel-side `.item()` sync, which we avoid by
 /// pushing the scalar through the API. The vast majority of callers
 /// will pass `1.0` and hit the fast path.
+#[derive(Debug)]
 pub struct FusedLinearCrossEntropyBackwardArgs<'a, T: Element> {
     /// Upstream gradient scalar (host-side f32). `1.0` is the common
     /// "CE is the last layer" case — pass that to hit the fast path
@@ -944,6 +947,7 @@ pub struct FusedLinearCrossEntropyBackwardArgs<'a, T: Element> {
 
 /// Backward plan for FLCE. Just multiplies the saved gradients by
 /// the upstream `dy` scalar.
+#[derive(Debug)]
 pub struct FusedLinearCrossEntropyBackwardPlan<T: Element> {
     // The BW plan validates `desc` at `select()` time and then runs a
     // pure dy-scalar broadcast; nothing on the runtime path reads the
@@ -1044,16 +1048,16 @@ impl<T: Element> FusedLinearCrossEntropyBackwardPlan<T> {
                 match T::KIND {
                     ElementKind::F32 => baracuda_kernels_sys::baracuda_kernels_loss_flce_inplace_scale_f32_run(
                         numel, dy_scalar_f32, gi.data.as_raw().0 as *mut c_void,
-                        stream.as_raw() as *mut c_void),
+                        stream.as_raw()),
                     ElementKind::F16 => baracuda_kernels_sys::baracuda_kernels_loss_flce_inplace_scale_f16_run(
                         numel, dy_scalar_f32, gi.data.as_raw().0 as *mut c_void,
-                        stream.as_raw() as *mut c_void),
+                        stream.as_raw()),
                     ElementKind::Bf16 => baracuda_kernels_sys::baracuda_kernels_loss_flce_inplace_scale_bf16_run(
                         numel, dy_scalar_f32, gi.data.as_raw().0 as *mut c_void,
-                        stream.as_raw() as *mut c_void),
+                        stream.as_raw()),
                     ElementKind::F64 => baracuda_kernels_sys::baracuda_kernels_loss_flce_inplace_scale_f64_run(
                         numel, dy_scalar_f32, gi.data.as_raw().0 as *mut c_void,
-                        stream.as_raw() as *mut c_void),
+                        stream.as_raw()),
                     _ => return Err(Error::Unsupported("unwired dtype")),
                 }
             };
@@ -1067,16 +1071,16 @@ impl<T: Element> FusedLinearCrossEntropyBackwardPlan<T> {
                 match T::KIND {
                     ElementKind::F32 => baracuda_kernels_sys::baracuda_kernels_loss_flce_inplace_scale_f32_run(
                         numel, dy_scalar_f32, gw.data.as_raw().0 as *mut c_void,
-                        stream.as_raw() as *mut c_void),
+                        stream.as_raw()),
                     ElementKind::F16 => baracuda_kernels_sys::baracuda_kernels_loss_flce_inplace_scale_f16_run(
                         numel, dy_scalar_f32, gw.data.as_raw().0 as *mut c_void,
-                        stream.as_raw() as *mut c_void),
+                        stream.as_raw()),
                     ElementKind::Bf16 => baracuda_kernels_sys::baracuda_kernels_loss_flce_inplace_scale_bf16_run(
                         numel, dy_scalar_f32, gw.data.as_raw().0 as *mut c_void,
-                        stream.as_raw() as *mut c_void),
+                        stream.as_raw()),
                     ElementKind::F64 => baracuda_kernels_sys::baracuda_kernels_loss_flce_inplace_scale_f64_run(
                         numel, dy_scalar_f32, gw.data.as_raw().0 as *mut c_void,
-                        stream.as_raw() as *mut c_void),
+                        stream.as_raw()),
                     _ => return Err(Error::Unsupported("unwired dtype")),
                 }
             };

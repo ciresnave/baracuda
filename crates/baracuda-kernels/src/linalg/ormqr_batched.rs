@@ -117,6 +117,7 @@ pub struct BatchedOrmqrDescriptor {
 /// Shape semantics depend on Side:
 /// - Side = Left: `a_packed: [batch, M, K]`, `tau: [batch, K]`.
 /// - Side = Right: `a_packed: [batch, N, N]`, `tau: [batch, N]`.
+#[derive(Debug)]
 pub struct BatchedOrmqrArgs<'a, T: Element> {
     /// `geqrf`-packed input. Strict lower triangle holds the
     /// Householder reflectors; the upper triangle is `R` and is not
@@ -157,6 +158,7 @@ pub struct BatchedOrmqrArgs<'a, T: Element> {
 /// **Precision guarantee**: deterministic per launch but not
 /// bit-stable across configurations (reduction order can change with
 /// block geometry).
+#[derive(Debug)]
 pub struct BatchedOrmqrPlan<T: Element> {
     desc: BatchedOrmqrDescriptor,
     sku: KernelSku,
@@ -318,7 +320,7 @@ impl<T: Element> BatchedOrmqrPlan<T> {
         args: BatchedOrmqrArgs<'_, T>,
     ) -> Result<()> {
         self.check_args(&args)?;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let a_ptr = args.a_packed.data.as_raw().0 as *const c_void;
         let tau_ptr = args.tau.data.as_raw().0 as *const c_void;
         let c_ptr = args.c.data.as_raw().0 as *mut c_void;

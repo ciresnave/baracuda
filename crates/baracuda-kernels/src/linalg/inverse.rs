@@ -16,7 +16,7 @@
 //!   that need the original `A` preserved should copy before invoking.
 //! - `inv` is overwritten in place with `A^{-1}`. The plan stages an
 //!   identity matrix into `inv` at the start of `run` (host-side build
-//!   + async H2D), then `getrs` solves `A · X = I` in place over `inv`
+//!   plus async H2D), then `getrs` solves `A · X = I` in place over `inv`
 //!   giving `X = A^{-1}`.
 //!
 //! **Storage convention**: column-major end-to-end (matches the rest
@@ -62,6 +62,7 @@ pub struct InverseDescriptor {
 /// overwritten in place with `A^{-1}` — its contents on entry are
 /// ignored (the plan stages an identity into it at the start of
 /// `run`). `pivot` receives cuSOLVER's 1-based pivot indices.
+#[derive(Debug)]
 pub struct InverseArgs<'a, T: Element> {
     /// Input matrix `[M, M]` (column-major). Overwritten with packed
     /// `LU` in place.
@@ -97,6 +98,7 @@ pub struct InverseArgs<'a, T: Element> {
 /// **Precision guarantee**: deterministic; not bit-stable across runs.
 ///
 /// Owns a lazy cuSOLVER handle (`!Sync` / `!Send`); destroyed on `Drop`.
+#[derive(Debug)]
 pub struct InversePlan<T: Element> {
     desc: InverseDescriptor,
     sku: KernelSku,
@@ -226,7 +228,7 @@ impl<T: Element> InversePlan<T> {
     }
 
     fn bind_stream(&self, h: cusolverDnHandle_t, stream: &Stream) -> Result<()> {
-        let status = unsafe { cusolverDnSetStream(h, stream.as_raw() as *mut c_void) };
+        let status = unsafe { cusolverDnSetStream(h, stream.as_raw()) };
         if status != 0 {
             return Err(Error::CutlassInternal(-status));
         }
@@ -373,7 +375,7 @@ unsafe fn copy_h2d(
         ) -> CUresult;
     }
     let status =
-        unsafe { cuMemcpyHtoDAsync_v2(dst as u64, src, bytes, stream.as_raw() as *mut c_void) };
+        unsafe { cuMemcpyHtoDAsync_v2(dst as u64, src, bytes, stream.as_raw()) };
     if status != 0 {
         return Err(Error::CutlassInternal(-status));
     }

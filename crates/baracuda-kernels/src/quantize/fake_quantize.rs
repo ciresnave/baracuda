@@ -37,6 +37,12 @@ pub struct FakeQuantizeDescriptor {
     pub input_element: ElementKind,
 }
 
+impl<'a, TIn: Element> core::fmt::Debug for FakeQuantizeArgs<'a, TIn> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("FakeQuantizeArgs").finish_non_exhaustive()
+    }
+}
+
 /// Args bundle for a `fake_quantize` forward launch.
 pub struct FakeQuantizeArgs<'a, TIn: Element> {
     /// Input FP tensor `[numel]`.
@@ -68,6 +74,7 @@ pub struct FakeQuantizeArgs<'a, TIn: Element> {
 ///
 /// **Precision guarantee**: deterministic, bit-stable. Round-ties-
 /// even matches FW quantize.
+#[derive(Debug)]
 pub struct FakeQuantizePlan<TIn: Element> {
     desc: FakeQuantizeDescriptor,
     sku: KernelSku,
@@ -146,7 +153,7 @@ impl<TIn: Element> FakeQuantizePlan<TIn> {
         }
         let x_ptr = args.input.data.as_raw().0 as *const c_void;
         let y_ptr = args.output.data.as_raw().0 as *mut c_void;
-        let stream_ptr = stream.as_raw() as *mut c_void;
+        let stream_ptr = stream.as_raw();
         let zp = args.zero_point;
         let qmin = self.desc.q_min;
         let qmax = self.desc.q_max;
