@@ -8,6 +8,46 @@ alpha represents one or more completed phases.
 The phase numbering is Fuel-driven (Fuel is baracuda's primary downstream
 consumer); see `ROADMAP.md` for the active phase board.
 
+## 0.0.1-alpha.75 — 2026-07-08 (window pooling + row sort — the IR-expansion ramp is COMPLETE)
+
+The final two increments of the `baracuda-kernelgen` IR-expansion ramp (0a–#8). The
+generator IR can now express the functionality of the bespoke kernel surface across
+every access class the roadmap chartered: elementwise (+multi-output), reductions,
+row-reductions, contraction, layout views, gather, scatter/histogram, prefix scan,
+sliding-window pooling, and row sort/argsort. Both increments adversarially reviewed;
+each review's confirmed findings fixed and mutation-verified.
+
+### Added
+
+- **Sliding-window pooling (`Access::Window`, ramp #7)** — max / min / sum / avg pool
+  along the innermost axis with stride, dilation, and padding (both avg divisor
+  policies), output axis downsampled. One-thread-per-output emitter; every input tap
+  bounds-checked (a wrong caller `out_len` cannot OOB-read). 17 gates, each
+  mutation-checked. On-device: 12 checks pass, four sanitizers clean, `max_pool` at
+  **102% of the copy-bandwidth ceiling** (the bespoke fixed-window pools ride cuDNN —
+  no math-matched sibling). AOT-only honest miss; keying additive.
+- **Stable row sort / argsort (`Access::RowSort`, ramp #8)** — ascending/descending,
+  always the stable `(key, original-index)` pair-sort (unique total order ⇒
+  deterministic, base ≡ variant byte-identical); NaN-greatest ordering (torch
+  convention) with NaN payloads and `-0.0` preserved raw-bit. Values-sort plus an
+  I32-output argsort (mutually consistent). Base = any-`k` rank sort; variant =
+  bitonic smem pair-sort (k ≤ 1024 launch precondition), **1.59× the bespoke stable
+  `msort`** on device — and the audit surfaced that the bespoke stable tie-break is
+  not input-order-preserving, while the generated argsort matches
+  `torch.sort(stable=True)`. 212 device checks + four sanitizers clean. The
+  adversarial review's headline catch (an `int` tie index that was also the load
+  address — OOB past 2³¹ on the any-k base) is fixed (`long long` end-to-end) and
+  re-validated on device.
+
+### Fixed
+
+- `baracuda-cuvs-sys`: all 74 feature-gated FFI items documented (the `cuvs` feature
+  is never compiled in CI, so `missing_docs = deny` had never fired on it).
+
+### Build
+
+- Workspace `rustfmt.toml` pinning `edition`/`style_edition` 2024.
+
 ## 0.0.1-alpha.74 — 2026-07-04 (prefix scan + JIT-envelope conform)
 
 Two changes; the seam surface bump unblocks Fuel's JIT adoption path.
