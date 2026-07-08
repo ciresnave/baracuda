@@ -21,6 +21,13 @@
 //! / layout enums) are reconstructed from the FKC annex and reconciled when the
 //! full `kernel-contract-format.md` is wired. They are isolated in the small
 //! helpers below so reconciliation is a localized change.
+//!
+//! The single-op **primitive `op_kind` spelling** is likewise reconciled — the
+//! internal pattern roots (`Add`, `Relu`, `GeluErf`, …) are mapped to the exact
+//! importer spellings (`AddElementwise`, `ReluElementwise`, …) by
+//! [`fuel_primitive_op_kind`], verbatim against fuel-dispatch `fkc/lower.rs`
+//! `lower_op_kind`; a root with no importable Fuel `OpKind` is an honest miss
+//! (the contract is withheld) rather than a bundle-poisoning unknown name.
 
 use crate::backend::GeneratedKernel;
 use crate::ir::{BinaryOp, ExprDag, NodeId, OobPolicy, OpDef, ScalarExpr, UnaryOp};
@@ -267,18 +274,36 @@ pub fn contract(
         format!("op_kind: {}", g.op_kind)
     } else {
         match &pattern {
-            // exactly one graph op → a primitive identity (e.g. `Add`, `AddScalar`).
-            // Comparisons use the DISPATCH OpKind spellings (`LessElementwise`, …):
-            // Fuel's FKC importer (fuel-dispatch fkc/lower.rs `lower_op_kind`) is an
-            // exhaustive string table that typed-rejects unknown names — and a
-            // single bad section fails the whole bundle. (The importer expects
-            // `AddElementwise`-style names for the arithmetic primitives too; that
-            // pre-existing spelling reconciliation is tracked in the module
-            // header — comparisons land importable from day one.)
+            // exactly one graph op → a primitive identity. BOTH the comparison
+            // predicates (via `cmp_dispatch_op_kind`) and the arithmetic
+            // primitives (via `fuel_primitive_op_kind`) emit the DISPATCH OpKind
+            // spellings Fuel's importer accepts (`AddElementwise`,
+            // `LessElementwise`, …) — NOT the internal pattern spellings
+            // (`Add`, `Lt`, …) `root_op_name` yields. This is load-bearing for
+            // the WHOLE bundle: Fuel's FKC importer (fuel-dispatch
+            // `fkc/lower.rs` `lower_op_kind`) is an exhaustive string table that
+            // typed-rejects unknown names with `UnknownOpKind`; `fkc/validate.rs`
+            // `validate_file` propagates it with `?`; and `fkc/register.rs`
+            // `import_bundle_str` runs `validate_file(&file)?` over the whole
+            // bundle — so ONE unknown op_kind fails the ENTIRE import, poisoning
+            // every correctly-spelled contract beside it. An unmapped primitive
+            // is therefore WITHHELD (honest miss), never emitted with a raw
+            // internal spelling (see `fuel_primitive_op_kind`).
             Some(_) if n_ops == 1 && out_u8 => {
                 format!("op_kind: {}", cmp_dispatch_op_kind(&op.body))
             }
-            Some(p) if n_ops == 1 => format!("op_kind: {}", root_op_name(p)),
+            Some(p) if n_ops == 1 => match fuel_primitive_op_kind(&root_op_name(p)) {
+                Some(spelling) => format!("op_kind: {spelling}"),
+                // A single-op root with no importable Fuel `OpKind` — e.g.
+                // `AddScalar`/`MulScalar`: Fuel has no scalar-param OpKind (it
+                // maps `Op::AddScalar`/`MulScalar` onto the `Affine` kernel
+                // `y = a*x + b`, whose op_params + `extract:` scalar routing
+                // live only inside a `pattern:`/`fused_op` block, not a bare
+                // primitive contract). Withheld rather than emit an unimportable
+                // name that would poison the bundle; the kernel still generates
+                // + lowers AOT.
+                None => return None,
+            },
             // ≥2 graph ops → a fused identity carried by the op's stable name.
             Some(_) => format!("fused_op: {}", op.name),
             // body not expressible as a pattern (Const / non-elementwise / bind
@@ -492,6 +517,98 @@ fn root_op_name(node: &PatternNode) -> String {
         PatternNode::Op { op, .. } => op.clone(),
         PatternNode::Bind(_) => "Identity".to_string(),
     }
+}
+
+/// Map an internal single-op pattern-root spelling ([`root_op_name`], e.g.
+/// `"Add"`, `"Relu"`, `"GeluErf"`) to the EXACT `op_kind` string Fuel's FKC
+/// importer accepts, or `None` for a root with no importable Fuel `OpKind` (an
+/// honest miss — the contract is then withheld).
+///
+/// # Source anchor
+/// Every right-hand side below is a verbatim arm of fuel-dispatch
+/// `src/fkc/lower.rs` `lower_op_kind` — the exhaustive `&str -> OpKind` table
+/// (read 2026-07-08). The `fuel_primitive_op_kind_outputs_are_accepted_fuel_strings`
+/// test cross-checks every output against an independently-copied verbatim
+/// snapshot of that table, so a spelling drift fails the build rather than
+/// poisoning an import at runtime.
+///
+/// # Blast radius (why an unmapped root is WITHHELD, not force-emitted)
+/// `lower_op_kind` returns `Err(UnknownOpKind)` on any unknown name;
+/// `fkc/validate.rs` `validate_file` propagates it with `?`; `fkc/register.rs`
+/// `import_bundle_str` runs `validate_file(&file)?` over the WHOLE bundle — so a
+/// single bad `op_kind:` line fails the entire import, taking down every
+/// correctly-spelled contract sharing the bundle. Emitting the raw internal
+/// spelling (the pre-fix bug) made every bundle containing an arithmetic
+/// primitive unimportable. Hence `Some` → emit, `None` → withhold.
+///
+/// # Semantic reconciliations (confirmed against Fuel's sources, not assumed)
+/// - `Rem` → `RemElementwise`: Baracuda pins FLOORED remainder (the 0.10.2
+///   reconcile) and Fuel's `RemElementwise` is the PyTorch convention
+///   `a - floor(a/b)*b` (sign of the divisor) — fuel-dispatch
+///   `tests/cuda_dispatch_live.rs` ("PyTorch convention", `-5 % 3 = 1`,
+///   `5 % -3 = -1`). Same semantics.
+/// - `Step` → `StepElementwise`: both are the `x > 0` Heaviside step (1.0 where
+///   `x > 0`, else 0.0) — fuel-dispatch `tests/{cuda,vulkan}_dispatch_live.rs`
+///   ("Heaviside step (1.0 where x > 0, else 0.0)"). Same semantics.
+/// - `GeluErf` → `GeluErfElementwise` (exact-erf GELU), NOT `GeluElementwise`
+///   (the tanh approximation). Baracuda's `UnaryOp::Gelu` lowers to exact erf
+///   (`cuda.rs`, aec3bf7 provenance) and `pattern.rs` `unary_name` emits the
+///   `GeluErf` root, so the exact flavor is carried end to end.
+///
+/// `AddScalar`/`MulScalar` are deliberately absent: Fuel has no scalar-param
+/// primitive `OpKind` (see the branch note in [`contract`]) — they are honest
+/// misses as a standalone single-op advert, and ride the `pattern:` block
+/// (with `extract:` scalar routing) when they appear inside a larger fusion.
+fn fuel_primitive_op_kind(root: &str) -> Option<&'static str> {
+    Some(match root {
+        // Infix binary (tensor ⊗ tensor) primitives.
+        "Add" => "AddElementwise",
+        "Sub" => "SubElementwise",
+        "Mul" => "MulElementwise",
+        "Div" => "DivElementwise",
+        // Non-infix binary primitives.
+        "Maximum" => "MaximumElementwise",
+        "Minimum" => "MinimumElementwise",
+        "Pow" => "PowElementwise",
+        "Rem" => "RemElementwise",
+        // Unary primitives.
+        "Neg" => "NegElementwise",
+        "Abs" => "AbsElementwise",
+        "Sqr" => "SqrElementwise",
+        "Sqrt" => "SqrtElementwise",
+        "Rsqrt" => "RsqrtElementwise",
+        "Recip" => "RecipElementwise",
+        "Exp" => "ExpElementwise",
+        "Log" => "LogElementwise",
+        "Tanh" => "TanhElementwise",
+        "Sigmoid" => "SigmoidElementwise",
+        // `Relu` is WITHHELD (review-caught, 2026-07-08): our synthesized relu is
+        // deliberately NaN-PROPAGATING (`x < 0 ? 0 : x`, torch.relu semantics —
+        // cuda.rs pins it), but Fuel's `ReluElementwise` slot is NaN-AS-MISSING in
+        // all three of its authorities (CPU reference `x.max(0.0)`, the FKC doc
+        // "NaN-as-missing (f32::max)", and the incumbent CUDA binding — bespoke
+        // `unary_relu_fp.cu` `fmaxf(x, 0)`). Advertising it would let a JIT adopt
+        // silently flip NaN elements between 0.0 and NaN on the SAME backend.
+        // Honest miss until the NaN convention is reconciled with Fuel (their
+        // scrub disagrees with torch.relu — proposed Fuel-side; channel note).
+        // NOTE Maximum/Minimum stay mapped: Fuel's incumbent CUDA binding for
+        // them IS our NaN-propagating bespoke kernel, so the adopt is
+        // behaviorally identical on the advertised backend.
+        "Relu" => return None,
+        "Erf" => "ErfElementwise",
+        "GeluErf" => "GeluErfElementwise",
+        "Silu" => "SiluElementwise",
+        "Sin" => "SinElementwise",
+        "Cos" => "CosElementwise",
+        "Floor" => "FloorElementwise",
+        "Ceil" => "CeilElementwise",
+        "Round" => "RoundElementwise",
+        "Sign" => "SignElementwise",
+        "Step" => "StepElementwise",
+        // `AddScalar`/`MulScalar` and any other spelling have no importable
+        // primitive `OpKind` — honest miss (see the fn-level docs).
+        _ => return None,
+    })
 }
 
 // ---------------------------------------------------------------------------
@@ -1392,8 +1509,11 @@ mod tests {
         let kernel = generate(&op, &key, &Cuda);
         let c = contract(&op, &key, &kernel, "cuda").unwrap();
 
-        // primitive → op_kind, no fused_op, no pattern block.
-        assert!(c.contains("op_kind: Add"));
+        // primitive → op_kind, no fused_op, no pattern block. The emitted
+        // spelling is the Fuel-importer DISPATCH name (`AddElementwise`), not
+        // the internal pattern root (`Add`) — the reconciled arithmetic spelling.
+        assert!(c.contains("op_kind: AddElementwise"), "{c}");
+        assert!(!c.contains("op_kind: Add\n"), "internal spelling must not leak: {c}");
         assert!(!c.contains("fused_op:"));
         assert!(!c.contains("pattern:"));
         // ImplId five fields all present + separable.
@@ -1583,7 +1703,7 @@ mod tests {
         let ku = key_dtype(ElementKind::U8, 3);
         let k = generate(&addu, &ku, &Cuda);
         let c = contract(&addu, &ku, &k, "cuda").unwrap();
-        assert!(c.contains("op_kind: Add"));
+        assert!(c.contains("op_kind: AddElementwise"), "{c}");
         assert!(c.contains("dtypes: [U8]"));
         assert!(c.contains("mode: correctly_rounded"));
         assert!(c.contains("count_unit: elements"));
@@ -1767,6 +1887,265 @@ mod tests {
         assert!(matches!(
             crate::derive_pattern(&at2),
             Err(PatternError::NoFkcName { ref op }) if op == "Atan2"
+        ));
+    }
+
+    // ===================================================================
+    // op_kind SPELLING RECONCILIATION (Baracuda arithmetic primitives →
+    // Fuel FKC importer spellings). See `fuel_primitive_op_kind`.
+    // ===================================================================
+
+    /// A VERBATIM snapshot of every `op_kind` string fuel-dispatch
+    /// `src/fkc/lower.rs` `lower_op_kind` accepts — copied literal-for-literal
+    /// from that table (read 2026-07-08). This is the INDEPENDENT ground truth:
+    /// it is NOT derived from `fuel_primitive_op_kind`, so a typo that maps a
+    /// Baracuda root to a non-existent Fuel spelling is caught here rather than
+    /// poisoning a real bundle import.
+    const FUEL_LOWER_OP_KIND_ACCEPTED: &[&str] = &[
+        "MatMul", "AddElementwise", "SubElementwise", "MulElementwise",
+        "DivElementwise", "ReluElementwise", "NegElementwise", "SqrElementwise",
+        "SqrtElementwise", "RecipElementwise", "AbsElementwise", "TanhElementwise",
+        "ExpElementwise", "LogElementwise", "SinElementwise", "CosElementwise",
+        "SigmoidElementwise", "SiluElementwise", "GeluElementwise", "StepElementwise",
+        "SumReduce", "MaxReduce", "MinReduce", "MeanReduce", "Cast", "Conv2D",
+        "ConvTranspose2D", "ReduceSumTo", "ReduceMaxTo", "FusedLinear", "FlashAttn",
+        "FlashAttnBackwardQ", "FlashAttnBackwardK", "FlashAttnBackwardV", "PagedAttn",
+        "Affine", "ClampElementwise", "PowIElementwise", "PowIElementwiseBackward",
+        "MaximumElementwise", "MinimumElementwise", "EqualElementwise",
+        "NotEqualElementwise", "LessElementwise", "LessEqualElementwise",
+        "GreaterElementwise", "GreaterEqualElementwise", "Where", "FloorElementwise",
+        "CeilElementwise", "RoundElementwise", "SignElementwise", "ErfElementwise",
+        "GeluErfElementwise", "PowElementwise", "RsqrtElementwise", "RemElementwise",
+        "Flip", "Roll", "CumSum", "Pad", "Triu", "Tril", "LogSoftmaxLastDim",
+        "LogSoftmaxLastDimBackward", "MaskedFill", "PadBackward", "Concat",
+        "SoftmaxLastDim", "SoftmaxLastDimBackward", "RmsNormLastDim",
+        "RmsNormLastDimBackward", "LayerNormLastDim", "LayerNormLastDimBackward",
+        "ReduceMaxToBackward", "IndexSelect", "Gather", "Rope", "IndexAdd",
+        "ScatterAdd", "ArgMaxDim", "ArgMinDim", "QMatMul", "WriteSlice",
+        "WriteSliceRotating", "Copy", "ReluInplace", "SiluInplace", "GeluInplace",
+        "TanhInplace", "SigmoidInplace", "NegInplace", "AbsInplace", "SqrInplace",
+        "SqrtInplace", "RsqrtInplace", "RecipInplace", "ExpInplace", "LogInplace",
+        "SinInplace", "CosInplace", "SignInplace", "FloorInplace", "CeilInplace",
+        "RoundInplace", "ErfInplace", "GeluErfInplace", "ClampInplace", "PowIInplace",
+        "InplaceAffine", "FusedSoftmaxCrossEntropy", "CausalConv1d", "SelectiveScan",
+        "SsdChunkScan", "Nf4Matmul",
+    ];
+
+    /// The 28 internal single-op roots (`root_op_name` outputs) that MUST map to
+    /// an importable Fuel spelling, with the exact expected spelling. Mirrors
+    /// `pattern.rs` `binary_name`/`unary_name` + the infix `Add`/`Sub`/`Mul`/`Div`.
+    /// `Relu` is deliberately ABSENT: it is a semantic honest miss (our relu is
+    /// NaN-propagating; Fuel's ReluElementwise slot is NaN-as-missing in its CPU
+    /// reference, FKC doc, and incumbent CUDA binding) — see
+    /// `fuel_primitive_op_kind` and `relu_is_a_semantic_honest_miss` below.
+    const MAPPED_ROOTS: &[(&str, &str)] = &[
+        ("Add", "AddElementwise"),
+        ("Sub", "SubElementwise"),
+        ("Mul", "MulElementwise"),
+        ("Div", "DivElementwise"),
+        ("Maximum", "MaximumElementwise"),
+        ("Minimum", "MinimumElementwise"),
+        ("Pow", "PowElementwise"),
+        ("Rem", "RemElementwise"),
+        ("Neg", "NegElementwise"),
+        ("Abs", "AbsElementwise"),
+        ("Sqr", "SqrElementwise"),
+        ("Sqrt", "SqrtElementwise"),
+        ("Rsqrt", "RsqrtElementwise"),
+        ("Recip", "RecipElementwise"),
+        ("Exp", "ExpElementwise"),
+        ("Log", "LogElementwise"),
+        ("Tanh", "TanhElementwise"),
+        ("Sigmoid", "SigmoidElementwise"),
+        ("Erf", "ErfElementwise"),
+        ("GeluErf", "GeluErfElementwise"),
+        ("Silu", "SiluElementwise"),
+        ("Sin", "SinElementwise"),
+        ("Cos", "CosElementwise"),
+        ("Floor", "FloorElementwise"),
+        ("Ceil", "CeilElementwise"),
+        ("Round", "RoundElementwise"),
+        ("Sign", "SignElementwise"),
+        ("Step", "StepElementwise"),
+    ];
+
+    #[test]
+    fn relu_is_a_semantic_honest_miss() {
+        // Review-caught (2026-07-08): the spelling exists in Fuel's table, but the
+        // SEMANTICS diverge — our synthesized relu NaN-propagates (torch.relu)
+        // while Fuel's ReluElementwise slot NaN-scrubs (CPU `x.max(0.0)`, the FKC
+        // doc's "NaN-as-missing", and the incumbent CUDA `fmaxf` kernel). A mapped
+        // Relu would let a JIT adopt silently flip NaN elements between 0.0 and
+        // NaN on the same backend. Withheld until reconciled with Fuel.
+        assert_eq!(fuel_primitive_op_kind("Relu"), None);
+        // The spelling itself IS importable — the miss is semantic, not lexical
+        // (pinning this so a future "just map it, the string is in the table"
+        // change has to confront the NaN question).
+        assert!(FUEL_LOWER_OP_KIND_ACCEPTED.contains(&"ReluElementwise"));
+    }
+
+    #[test]
+    fn fuel_primitive_op_kind_outputs_are_accepted_fuel_strings() {
+        // The VERBATIM cross-check: every mapping output must be a real string
+        // Fuel's `lower_op_kind` accepts (else the whole bundle fails import),
+        // AND every declared root must actually map (no silent gap).
+        for (root, want) in MAPPED_ROOTS {
+            let got = fuel_primitive_op_kind(root)
+                .unwrap_or_else(|| panic!("root {root:?} must map to a Fuel spelling"));
+            assert_eq!(got, *want, "root {root:?} mapped to the wrong spelling");
+            assert!(
+                FUEL_LOWER_OP_KIND_ACCEPTED.contains(&got),
+                "mapping output {got:?} (root {root:?}) is NOT in Fuel's lower_op_kind table"
+            );
+        }
+        // Sanity: the semantic-critical pairs are exactly as reconciled.
+        // Rem = floored / torch.remainder; Step = x>0 heaviside; GeluErf = exact
+        // erf (NOT the tanh-approx GeluElementwise).
+        assert_eq!(fuel_primitive_op_kind("Rem"), Some("RemElementwise"));
+        assert_eq!(fuel_primitive_op_kind("Step"), Some("StepElementwise"));
+        assert_eq!(fuel_primitive_op_kind("GeluErf"), Some("GeluErfElementwise"));
+        assert_ne!(fuel_primitive_op_kind("GeluErf"), Some("GeluElementwise"));
+    }
+
+    #[test]
+    fn unmapped_primitive_root_is_an_honest_miss() {
+        // The honest-miss policy, exercised build-DIRECTLY (not via the emitter):
+        // AddScalar/MulScalar (Fuel has no scalar-param primitive OpKind) and any
+        // exotic/hand-built spelling map to None → the contract is withheld.
+        assert_eq!(fuel_primitive_op_kind("AddScalar"), None);
+        assert_eq!(fuel_primitive_op_kind("MulScalar"), None);
+        assert_eq!(fuel_primitive_op_kind("Identity"), None); // Bind root (never single-op anyway)
+        assert_eq!(fuel_primitive_op_kind("Gelu"), None); // bare tanh-Gelu root is not one we emit
+        assert_eq!(fuel_primitive_op_kind("TotallyBogusOp"), None);
+        // No mapping output may EVER be a raw internal spelling that Fuel rejects.
+        for (root, _) in MAPPED_ROOTS {
+            assert_ne!(
+                fuel_primitive_op_kind(root),
+                Some(*root),
+                "root {root:?} must be reconciled, not passed through raw"
+            );
+        }
+    }
+
+    #[test]
+    fn every_mapped_primitive_root_emits_its_fuel_op_kind_through_the_emitter() {
+        use crate::ir::{BinaryOp, Expr, UnaryOp};
+        // UNARY single-op roots driven end-to-end through the real emitter.
+        let unary: &[(UnaryOp, &str)] = &[
+            (UnaryOp::Neg, "NegElementwise"),
+            (UnaryOp::Abs, "AbsElementwise"),
+            (UnaryOp::Sqr, "SqrElementwise"),
+            (UnaryOp::Sqrt, "SqrtElementwise"),
+            (UnaryOp::Rsqrt, "RsqrtElementwise"),
+            (UnaryOp::Recip, "RecipElementwise"),
+            (UnaryOp::Exp, "ExpElementwise"),
+            (UnaryOp::Log, "LogElementwise"),
+            (UnaryOp::Tanh, "TanhElementwise"),
+            (UnaryOp::Sigmoid, "SigmoidElementwise"),
+            // Relu deliberately absent — semantic honest miss (NaN convention
+            // divergence; see relu_is_a_semantic_honest_miss). Emitter-checked below.
+            (UnaryOp::Erf, "ErfElementwise"),
+            (UnaryOp::Gelu, "GeluErfElementwise"), // exact-erf flavor, NOT tanh Gelu
+            (UnaryOp::Silu, "SiluElementwise"),
+            (UnaryOp::Sin, "SinElementwise"),
+            (UnaryOp::Cos, "CosElementwise"),
+            (UnaryOp::Floor, "FloorElementwise"),
+            (UnaryOp::Ceil, "CeilElementwise"),
+            (UnaryOp::Round, "RoundElementwise"),
+            (UnaryOp::Sign, "SignElementwise"),
+            (UnaryOp::Step, "StepElementwise"),
+        ];
+        for (uop, want) in unary {
+            let op = OpDef::elementwise("u", 1, &[ElementKind::F32], input(0).unary(*uop));
+            let key = key_for(2, OpCategory::UnaryElementwise);
+            let kernel = generate(&op, &key, &Cuda);
+            let c = contract(&op, &key, &kernel, "cuda")
+                .unwrap_or_else(|| panic!("{uop:?} must emit a contract"));
+            assert!(
+                c.contains(&format!("op_kind: {want}\n")),
+                "{uop:?} -> want op_kind: {want}, got:\n{c}"
+            );
+        }
+        // BINARY single-op roots driven end-to-end through the real emitter.
+        let binary: &[(Expr, &str)] = &[
+            (input(0) + input(1), "AddElementwise"),
+            (input(0) - input(1), "SubElementwise"),
+            (input(0) * input(1), "MulElementwise"),
+            (input(0) / input(1), "DivElementwise"),
+            (input(0).max(input(1)), "MaximumElementwise"),
+            (input(0).min(input(1)), "MinimumElementwise"),
+            (input(0).pow(input(1)), "PowElementwise"),
+            (input(0).binary(BinaryOp::Rem, input(1)), "RemElementwise"),
+        ];
+        for (body, want) in binary {
+            let op = OpDef::elementwise("b", 2, &[ElementKind::F32], body.clone());
+            let key = key_for(3, OpCategory::BinaryElementwise);
+            let kernel = generate(&op, &key, &Cuda);
+            let c = contract(&op, &key, &kernel, "cuda")
+                .unwrap_or_else(|| panic!("want {want} must emit a contract"));
+            assert!(
+                c.contains(&format!("op_kind: {want}\n")),
+                "want op_kind: {want}, got:\n{c}"
+            );
+        }
+        // Relu: the SEMANTIC honest miss, end-to-end through the real emitter —
+        // the kernel lowers, the contract is withheld (never an op_kind line
+        // whose slot semantics diverge on NaN).
+        let relu = OpDef::elementwise("relu", 1, &[ElementKind::F32], input(0).unary(UnaryOp::Relu));
+        let key = key_for(2, OpCategory::UnaryElementwise);
+        let kernel = generate(&relu, &key, &Cuda);
+        assert!(!kernel.source.is_empty(), "the relu kernel still lowers");
+        assert!(
+            contract(&relu, &key, &kernel, "cuda").is_none(),
+            "relu must be a semantic honest miss (NaN divergence vs Fuel's slot)"
+        );
+    }
+
+    #[test]
+    fn standalone_scalar_param_op_is_an_honest_miss_not_a_poison_line() {
+        // `x + p0` derives a single-op `AddScalar` root (n_ops == 1) — the
+        // pre-fix bug emitted `op_kind: AddScalar`, which Fuel's importer rejects
+        // (UnknownOpKind) and fails the WHOLE bundle. Fuel has no scalar-param
+        // primitive OpKind (it lowers Op::AddScalar/MulScalar onto the `Affine`
+        // kernel, whose scalar routing rides a `pattern:`/`fused_op` block), so
+        // the standalone advert is withheld — the kernel still generates + lowers.
+        let add_p = OpDef::elementwise("add_p", 1, &[ElementKind::F32], input(0) + param(0));
+        let key = key_for(2, OpCategory::UnaryElementwise);
+        let kernel = generate(&add_p, &key, &Cuda);
+        assert!(!kernel.source.is_empty(), "the kernel still lowers");
+        assert!(
+            contract(&add_p, &key, &kernel, "cuda").is_none(),
+            "standalone AddScalar must be an honest miss (no poison op_kind line)"
+        );
+        // Prove the root really IS the unmapped AddScalar (so the miss is the
+        // mapping's doing, not some earlier guard).
+        let root = root_op_name(&crate::derive_pattern(&add_p).unwrap());
+        assert_eq!(root, "AddScalar");
+        assert_eq!(fuel_primitive_op_kind(&root), None);
+
+        let mul_p = OpDef::elementwise("mul_p", 1, &[ElementKind::F32], input(0) * param(0));
+        let km = generate(&mul_p, &key, &Cuda);
+        assert!(contract(&mul_p, &key, &km, "cuda").is_none());
+        assert_eq!(root_op_name(&crate::derive_pattern(&mul_p).unwrap()), "MulScalar");
+    }
+
+    #[test]
+    fn identity_copy_root_never_reaches_the_op_kind_line() {
+        // Item-5 reachability proof: a bare `Input(0)` copy derives a `Bind` root
+        // with n_ops == 0, so it can NEVER hit the `n_ops == 1` primitive branch
+        // — it falls through to the `fused_op` arm. Thus `root_op_name`'s
+        // "Identity" spelling (and any Bind) is unreachable on the op_kind line;
+        // the ONLY spellings that reach it are the single-Op arithmetic roots.
+        let copy = OpDef::elementwise("copy", 1, &[ElementKind::F32], input(0));
+        let key = key_for(2, OpCategory::UnaryElementwise);
+        let kernel = generate(&copy, &key, &Cuda);
+        let c = contract(&copy, &key, &kernel, "cuda").expect("a bare copy still contracts");
+        assert!(!c.contains("op_kind:"), "a Bind/Identity root must not emit op_kind: {c}");
+        assert!(c.contains("fused_op: copy"), "it advertises as fused_op instead: {c}");
+        // And the pattern really is a bare Bind (n_ops == 0).
+        assert!(matches!(
+            crate::derive_pattern(&copy).unwrap(),
+            PatternNode::Bind(0)
         ));
     }
 }

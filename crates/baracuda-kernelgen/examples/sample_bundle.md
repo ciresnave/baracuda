@@ -11,7 +11,7 @@ seam_profiles: [1]
 
 ```fkc
 kernel: add_f32_co_v4
-op_kind: Add
+op_kind: AddElementwise
 blurb: "elementwise add (F32, contiguous layout)."
 backend: cuda
 kernel_source: baracuda
@@ -21,9 +21,9 @@ kernel_revision_hash: "4b5b337c13997f67"
 accept:
   structure_key: "sk1|bin|f32|sm89|i32|grid|r2|co/00/v4/d16/f;co/00/v4/d16/f;co/00/v4/d16/f|-"
   inputs:
-    - dtype: F32
+    - dtypes: [F32]
       layout: contiguous
-    - dtype: F32
+    - dtypes: [F32]
       layout: contiguous
 return:
   outputs:
@@ -58,9 +58,9 @@ kernel_revision_hash: "b6c275409f9d8497"
 accept:
   structure_key: "sk1|bin|f32|sm89|i32|grid|r2|co/00/v4/d16/f;co/00/v4/d16/f;co/00/v4/d16/f|-"
   inputs:
-    - dtype: F32
+    - dtypes: [F32]
       layout: contiguous
-    - dtype: F32
+    - dtypes: [F32]
       layout: contiguous
 return:
   outputs:
@@ -104,7 +104,7 @@ kernel_revision_hash: "78de344453860aed"
 accept:
   structure_key: "sk1|bin|f32|sm89|i32|grid|r2|co/00/v4/d16/f;co/00/v4/d16/f|-"
   inputs:
-    - dtype: F32
+    - dtypes: [F32]
       layout: contiguous
 op_params:
   - name: param0
