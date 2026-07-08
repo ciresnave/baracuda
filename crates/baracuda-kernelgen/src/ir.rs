@@ -768,6 +768,19 @@ pub enum ReduceOp {
     Prod,
 }
 
+/// Sort direction of an [`Access::RowSort`] (increment 8). Ascending places the
+/// smallest key first; descending the largest. The NaN convention is PINNED
+/// (PyTorch): NaN compares GREATER than every non-NaN, so ascending places the
+/// NaN block last and descending places it first. `-0.0`/`+0.0` and NaN-vs-NaN
+/// are key-ties, resolved by the (ascending) original index (stability).
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum SortOrder {
+    /// Smallest key first (NaN block last).
+    Asc,
+    /// Largest key first (NaN block first).
+    Desc,
+}
+
 /// Ergonomic builder handle wrapping a [`ScalarExpr`]. Overloads arithmetic so
 /// op bodies read like math: `input(0) + input(1) * input(2)`.
 #[derive(Clone, Debug)]
@@ -1091,6 +1104,46 @@ pub enum Access {
         /// `ScalarExpr::Reduced(0)`) — the same bridge `Scan`/`RowReduce`/
         /// `Contraction` epilogues use.
         post: ScalarExpr,
+    },
+    /// **Row sort / argsort** along the innermost (contiguous) axis (increment
+    /// 8) — the `sort`/`argsort`/`msort` family. Each output row is a permutation
+    /// of its input row under a total order on `(key, original-index)` pairs
+    /// (index tie-break ⇒ every pair is distinct ⇒ a UNIQUE sorted sequence, so
+    /// the result is deterministic, algorithm-independent, and stable = ascending
+    /// original index within equal keys). NOT a [`View`] (a permutation is
+    /// data-dependent, not a fixed coordinate remap) and NOT a [`Access::Scan`]
+    /// (no running prefix; the whole row is reordered).
+    ///
+    /// Two single-output ops share this variant (a hetero-dtype dual output is
+    /// impossible today — a permutation is not a `ScalarExpr` body):
+    /// [`OpDef::row_sort`] (`argsort = false`, values output, dtype-preserving)
+    /// and [`OpDef::row_argsort`] (`argsort = true`, `I32` index output via the
+    /// single-output `out_dtype` precedent). A caller wanting `(values, indices)`
+    /// launches both; the pair order is identical, so the outputs are mutually
+    /// consistent by construction.
+    ///
+    /// NaN convention (PINNED, PyTorch): NaN compares GREATER than every non-NaN
+    /// (asc ⇒ NaN block last, desc ⇒ NaN block first). NaN-vs-NaN and
+    /// `-0.0`-vs-`+0.0` are key-ties resolved by index. The values writeback is a
+    /// RAW-BIT permutation (it gathers original storage bytes), so NaN payloads
+    /// and `-0.0` sign bits are preserved exactly (`memcmp`-checkable).
+    ///
+    /// v1 scope (`plan::validate_row_sort`): `stable == true` only (the emitter
+    /// always pair-sorts, so stability is free — an unstable network would emit
+    /// byte-identical code under a different symbol, dead keying); the innermost
+    /// axis only; dtypes `F32|F32Strict|F64|F16|Bf16|I32|I64`. `topk`/`sparsemax`,
+    /// hetero dual-output, non-inner axis, and `S8`/`U8` are deferred.
+    RowSort {
+        /// Ascending (smallest first) or descending (largest first). NaN orders
+        /// GREATEST in both (asc ⇒ NaN last, desc ⇒ NaN first).
+        order: SortOrder,
+        /// v1 must be `true` (`plan::validate_row_sort` rejects `false`): the
+        /// emitter always pair-sorts `(key, original-index)`, which is stable by
+        /// construction. The field exists for a future faster unstable network.
+        stable: bool,
+        /// `false` = values output (dtype-preserving raw-bit permutation);
+        /// `true` = index output (the sort permutation, `out_dtype = Some(I32)`).
+        argsort: bool,
     },
 }
 
@@ -1958,6 +2011,59 @@ impl OpDef {
             Expr(ScalarExpr::Input(0)),
             Expr(ScalarExpr::Reduced(0)),
         )
+    }
+
+    /// Build a **row sort** op (increment 8): a values-output sort along the
+    /// innermost axis with direction `order`. The output row is a raw-bit
+    /// permutation of the input row (dtype-preserving; NaN payloads and `-0.0`
+    /// signs preserved). v1 always emits the STABLE pair-sort (`stable: true`
+    /// hardwired), so ties keep input order and NaN orders greatest (PyTorch:
+    /// asc ⇒ NaN last, desc ⇒ NaN first). `body == Input(0)`, mirroring
+    /// [`OpDef::scan`]/[`OpDef::window`], so every body-walker (params/flops/ulp/
+    /// DAG/`derive_pattern`) operates on a well-formed expr unchanged. Validated
+    /// at `plan::validate_row_sort`. See [`Access::RowSort`].
+    #[must_use]
+    pub fn row_sort(name: &str, dtype: ElementKind, order: SortOrder) -> Self {
+        Self {
+            name: name.to_string(),
+            n_inputs: 1,
+            body: ScalarExpr::Input(0),
+            dtypes: vec![dtype],
+            access: Access::RowSort { order, stable: true, argsort: false },
+            views: Vec::new(),
+            read_index: Vec::new(),
+            write_index: WriteIndex::Direct,
+            out_dtype: None,
+            extra_out_bodies: Vec::new(),
+        }
+    }
+
+    /// Build a **row argsort** op (increment 8): a single `I32` index output — the
+    /// sort permutation of the input row along the innermost axis. Rides the
+    /// single-output hetero `out_dtype` precedent (`out_dtype = Some(I32)`, the
+    /// bincount/0b shape); the bespoke layer also pegs indices to `i32`. Otherwise
+    /// identical to [`OpDef::row_sort`] (same total order ⇒ mutually consistent
+    /// with the values-sort of the same `order`). v1 always emits the STABLE
+    /// pair-sort. Validated at `plan::validate_row_sort`. See [`Access::RowSort`].
+    ///
+    /// **Caller precondition:** `k <= 2^31 - 1` — the `I32` index output cannot
+    /// represent a position past it (a runtime launch fact; the structure key
+    /// carries no extents). The VALUES-sort has no such cap: its `long long` tie
+    /// index (review-hardened) is exact at every addressable `k`.
+    #[must_use]
+    pub fn row_argsort(name: &str, dtype: ElementKind, order: SortOrder) -> Self {
+        Self {
+            name: name.to_string(),
+            n_inputs: 1,
+            body: ScalarExpr::Input(0),
+            dtypes: vec![dtype],
+            access: Access::RowSort { order, stable: true, argsort: true },
+            views: Vec::new(),
+            read_index: Vec::new(),
+            write_index: WriteIndex::Direct,
+            out_dtype: Some(ElementKind::I32),
+            extra_out_bodies: Vec::new(),
+        }
     }
 
     /// Attach per-input layout [`View`]s (item 01). `views[i]` applies to

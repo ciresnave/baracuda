@@ -10,7 +10,7 @@ use crate::backend::{
     lower_dag, lower_dag_all, lower_dag_multi, lower_expr, Backend, GeneratedKernel, Lowering,
     Variant, VariantFidelity,
 };
-use crate::ir::{Access, BinaryOp, ExprDag, ReduceOp, ScalarExpr, UnaryOp};
+use crate::ir::{Access, BinaryOp, ExprDag, ReduceOp, ScalarExpr, SortOrder, UnaryOp};
 use crate::plan::{rr_role, KernelPlan, ReduceAxisClass, RrRole, Schedule};
 use baracuda_kernels_types::{Contiguity, ElementKind, OperandKey};
 
@@ -62,6 +62,11 @@ impl Backend for Cuda {
         // deterministic, so selectable only through an honest contract. Declines
         // Max/Min and integer to the serial base (which serves them bit-exact).
         vs.extend(scan_blockscan_variant(plan));
+        // Increment 8 SORT_PERM: the cooperative smem bitonic pair-sort for the
+        // RowSort cell (k <= 1024 launch-note precondition) — BitIdentical to the
+        // rank-sort base (a pair sort is a pure permutation), so selectable
+        // silently; declines a non-RowSort / param'd / non-dense cell to the base.
+        vs.extend(row_sort_bitonic_variant(plan));
         vs
     }
 
@@ -138,6 +143,10 @@ impl Backend for Cuda {
                     exprs.push(pre);
                     exprs.push(post);
                 }
+                // Increment 8 SORT_PERM: `body` is pinned `Input(0)` (already in
+                // `exprs`); an int sort permutes storage bits (no int Div/Const
+                // arithmetic), so nothing extra to gate — the arm keeps the walk total.
+                Access::RowSort { .. } => {}
                 Access::Elementwise => {}
             }
             for e in exprs {
@@ -174,6 +183,10 @@ impl Backend for Cuda {
                     exprs.push(pre);
                     exprs.push(post);
                 }
+                // Increment 8 SORT_PERM: `body` is pinned `Input(0)` (no Coord);
+                // RowSort is non-elementwise, so a Coord would be rejected upstream —
+                // nothing extra to walk here.
+                Access::RowSort { .. } => {}
                 Access::Elementwise => {}
             }
             for e in exprs {
@@ -188,13 +201,20 @@ impl Backend for Cuda {
         // emitter-level backstop keeps a future schedule change from silently
         // routing a hetero output through a vector-typed store (the 0a lesson:
         // gate every layer, not just the first).
+        // Increment 8 SORT_PERM: the ARGSORT index output is a hetero out (I32 !=
+        // key dtype) that the RowSort emitter stores through an out_dtype-aware
+        // `int* out` store — widen the matches! so it is not rejected here. Additive
+        // (existing behavior untouched); pinned by the argsort golden test.
         assert!(
             plan.out_dtype == plan.dtype
                 || matches!(
                     plan.schedule,
-                    Schedule::Scalar | Schedule::Strided | Schedule::Reduction { .. }
+                    Schedule::Scalar
+                        | Schedule::Strided
+                        | Schedule::Reduction { .. }
+                        | Schedule::RowSort { .. }
                 ),
-            "cuda backend: hetero output (out {:?}, key {:?}) lowers scalar/strided/reduction only; got {:?}",
+            "cuda backend: hetero output (out {:?}, key {:?}) lowers scalar/strided/reduction/rowsort only; got {:?}",
             plan.out_dtype,
             plan.dtype,
             plan.schedule
@@ -299,6 +319,10 @@ impl Backend for Cuda {
             // the local pooling window — no variant (each output is an independent
             // fixed-order fold, BitIdentical).
             Schedule::Window { .. } => emit_window(plan, ctype),
+            // Increment 8 SORT_PERM: the per-output RANK-sort base (any k, no smem,
+            // no barriers). The cooperative smem bitonic pair-sort is produced
+            // separately by `row_sort_bitonic_variant`, never routed through `lower()`.
+            Schedule::RowSort { .. } => emit_row_sort(plan, ctype),
         }
     }
 }
@@ -4090,6 +4114,357 @@ fn emit_window(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
 
     s.push_str("    }\n}\n");
     GeneratedKernel { name, source: s }
+}
+
+// ============================================================================
+// Increment 8 SORT_PERM — row sort / argsort along the innermost axis.
+// ============================================================================
+
+/// The **pad sentinel** literal for the bitonic staging — the MAXIMUM of the
+/// pair order, so pad cells sort to `[k, pow2)` and the `k` real elements occupy
+/// `[0, k)`. Header-light bit-cast forms only (never the `INFINITY` macro).
+///
+/// ⚠️ For **ascending FP**, `+inf` is WRONG: under the NaN-greatest ordering a
+/// real NaN sorts AFTER `+inf`, so a `+inf` pad would push pads into `[0, k)`.
+/// The correct asc-FP sentinel is a quiet NaN (the maximum of the NaN-greatest
+/// order); pads then land after real NaNs via the index tie-break (each pad cell
+/// carries lane index `p >= k`, greater than every real index). For descending
+/// the pair order reverses, so the maximum is the type minimum (`-inf` / INT_MIN)
+/// — exactly [`type_extreme_lit`]'s most-negative form. For integers the maximum
+/// under the order is the type extreme (asc → max, desc → min).
+///
+/// Invariant (pinned by the on-device validator): a real element EQUAL to the pad
+/// key (a real NaN asc, a real INT_MAX asc, a real −inf desc) has index `< k` <
+/// every pad index, so it sorts before every pad ⇒ all `k` real elements occupy
+/// `[0, k)`.
+fn sort_pad_lit(dt: ElementKind, order: SortOrder) -> String {
+    match (dt, order) {
+        // Float accumulator (F32/F16/Bf16): asc → qNaN, desc → −inf.
+        (ElementKind::F32 | ElementKind::F16 | ElementKind::Bf16, SortOrder::Asc) => {
+            "__int_as_float(0x7fc00000u)".to_string()
+        }
+        // Double accumulator (F64/F32Strict): asc → qNaN, desc → −inf.
+        (ElementKind::F64 | ElementKind::F32Strict, SortOrder::Asc) => {
+            "__longlong_as_double(0x7ff8000000000000ULL)".to_string()
+        }
+        // Descending FP + every integer: the maximum of the (reversed) pair order
+        // is the type extreme; desc = most-negative, asc-int = most-positive.
+        (dt, SortOrder::Desc) => type_extreme_lit(dt, true),
+        (dt, SortOrder::Asc) => type_extreme_lit(dt, false),
+    }
+}
+
+/// The per-output RANK-sort BASE (`bitonic = false`) —
+/// [`crate::backend::VariantFidelity::BitIdentical`], any `k`, no smem/barriers.
+fn emit_row_sort(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
+    emit_row_sort_impl(plan, ctype, false)
+}
+
+/// Emit a row-sort kernel — the per-output RANK sort (`bitonic = false`) or the
+/// cooperative smem **bitonic** pair-sort (`bitonic = true`). Both compute the
+/// same UNIQUE permutation under a total order on `(key, original-index)` pairs
+/// (index tie-break), so they are byte-identical (`BitIdentical`). See
+/// [`crate::ir::Access::RowSort`] and §4 of the increment-8 brief.
+///
+/// The comparator is emitted per `stem` (base + variant + multiple dtype/order
+/// cells concatenate into one validator TU without `__device__` collision). Both
+/// kernels stage/compare an up-converted `acc` KEY but write the values output as
+/// a RAW-BIT permutation of the original `ctype` storage (no round-trip), so NaN
+/// payloads and `-0.0` signs are preserved bit-exactly.
+fn emit_row_sort_impl(plan: &KernelPlan<'_>, ctype: &str, bitonic: bool) -> GeneratedKernel {
+    let (order, argsort) = match plan.schedule {
+        Schedule::RowSort { order, argsort, .. } => (order, argsort),
+        _ => unreachable!("emit_row_sort on a non-RowSort schedule"),
+    };
+
+    // ---- Independent emitter backstops (belt-and-suspenders; validate_row_sort
+    // validates the same — the 0a lesson: gate every layer). cuda-prefixed
+    // messages distinct from the plan gate's. ----
+    let rank = plan.key.rank;
+    assert!(rank >= 1, "cuda backend: RowSort needs a sorted axis (rank >= 1)");
+    let last = rank - 1;
+    {
+        let o0 = plan.key.operands[0];
+        assert!(
+            rr_role(o0, last) == RrRole::RowStreamed
+                && o0.contig == Contiguity::Contig
+                && !o0.flipped,
+            "cuda backend: RowSort input 0 must be the forward-dense contiguous sorted tensor (idx = base+j)"
+        );
+    }
+    assert!(
+        matches!(
+            plan.dtype,
+            ElementKind::F32
+                | ElementKind::F32Strict
+                | ElementKind::F64
+                | ElementKind::F16
+                | ElementKind::Bf16
+                | ElementKind::I32
+                | ElementKind::I64
+        ),
+        "cuda backend: RowSort dtype {:?} is out of the v1 set",
+        plan.dtype
+    );
+
+    let dbl = matches!(plan.dtype, ElementKind::F64 | ElementKind::F32Strict);
+    let int_acc = crate::plan::is_int_dtype(plan.dtype);
+    let is_fp = !int_acc;
+    // Comparator/staging accumulator: double for f64/f32-strict, native ctype for
+    // integers, float otherwise (f32/f16/bf16 up-convert). Its byte size drives the
+    // dynamic-smem launch contract.
+    let (acc, acc_sz) = if dbl {
+        ("double", 8usize)
+    } else if int_acc {
+        (ctype, if matches!(plan.dtype, ElementKind::I64) { 8 } else { 4 })
+    } else {
+        ("float", 4usize)
+    };
+    // The output element ctype: `int` for argsort (I32 index), the input ctype
+    // otherwise (plan.out_dtype is the resolved out dtype).
+    let octype = scalar_ctype(plan.out_dtype)
+        .expect("RowSort out dtype must have a scalar ctype (I32 for argsort, else the input dtype)");
+
+    let dtag = dtype_tag(plan.dtype);
+    let ord = match order {
+        SortOrder::Asc => "asc",
+        SortOrder::Desc => "desc",
+    };
+    let idx_suf = if argsort { "_idx" } else { "" };
+    let bt_suf = if bitonic { "_bt" } else { "" };
+    // Device-helper stem: base+variant + every dtype/order/argsort cell of one op
+    // get a distinct `__device__` comparator symbol (no collision in the validator TU).
+    let stem = format!("{}_{dtag}_{ord}{idx_suf}{bt_suf}", plan.op_name);
+    let name = format!(
+        "baracuda_gen_{}_{dtag}_rowsort_{ord}_stable{}{}",
+        plan.op_name,
+        if argsort { "_idx" } else { "" },
+        if bitonic { "_bitonic" } else { "" }
+    );
+
+    // Up-convert load of `in0[{idx}]` into the `acc` KEY (f16/bf16/f32-strict widen).
+    let load_at = |idx: &str| -> String {
+        match plan.dtype {
+            ElementKind::F16 => format!("__half2float(in0[{idx}])"),
+            ElementKind::Bf16 => format!("__bfloat162float(in0[{idx}])"),
+            ElementKind::F32Strict => format!("(double)in0[{idx}]"),
+            _ => format!("in0[{idx}]"),
+        }
+    };
+
+    // ---- Preamble + comparator. ----
+    let mut s = format!(
+        "// Generated by baracuda-kernelgen — do not edit.\n// op: {} | cell: {}\n",
+        plan.op_name,
+        plan.key.to_token()
+    );
+    if let Some(inc) = extra_include(plan.dtype) {
+        s.push_str(inc);
+    }
+    s.push('\n');
+
+    // key_lt: strict-less under the NaN-greatest total preorder (NaN > all non-NaN;
+    // NaN ties NaN). The NaN branch is emitted for FP dtypes only. `-0.0 == +0.0`
+    // is a key tie broken by index. pair_lt lifts it to a strict total order on
+    // (key, index): the `order`-adjusted key first, then the ascending index tie
+    // (stable in both directions).
+    s.push_str(&format!(
+        "__device__ __forceinline__ bool {stem}_key_lt({acc} a, {acc} b) {{\n"
+    ));
+    if is_fp {
+        s.push_str("    if (a != a) return false;\n");
+        s.push_str("    if (b != b) return true;\n");
+    }
+    s.push_str("    return a < b;\n}\n");
+    let (fa, fb, sa, sb) = match order {
+        SortOrder::Asc => ("ka", "kb", "kb", "ka"),
+        SortOrder::Desc => ("kb", "ka", "ka", "kb"),
+    };
+    // Tie indices are `long long` so the any-k values-sort base is index-exact at
+    // every k the address arithmetic reaches (review-caught: an `int` tie index
+    // truncated the LOAD address too — an OOB read past 2^31 and a rank collision
+    // past 2^32). The bitonic passes its `int sidx[]` (k <= 1024) — lossless widen.
+    s.push_str(&format!(
+        "__device__ __forceinline__ bool {stem}_pair_lt({acc} ka, long long ia, {acc} kb, long long ib) {{\n\
+         \x20   if ({stem}_key_lt({fa}, {fb})) return true;\n\
+         \x20   if ({stem}_key_lt({sa}, {sb})) return false;\n\
+         \x20   return ia < ib;\n\
+         }}\n\n"
+    ));
+
+    // Value writeback expression (raw ctype bits, no up/down convert); argsort
+    // writes the original index instead — narrowed to the I32 output dtype, so
+    // k <= 2^31 - 1 is an INHERENT argsort precondition (the index cannot be
+    // represented past it; the values-sort has no such cap).
+    let write_base = if argsort { "(int)i".to_string() } else { "in0[base + i]".to_string() };
+
+    s.push_str(&format!("extern \"C\" __global__ void {name}(\n"));
+    s.push_str(&format!("    const {ctype}* __restrict__ in0,\n"));
+    s.push_str(&format!("    {octype}* __restrict__ out,\n"));
+    s.push_str("    long long n_out,\n    long long k)\n{\n");
+    s.push_str("    if (k == 0) return;\n");
+
+    if !bitonic {
+        // -------------------- RANK-SORT BASE (one thread per output element) --------------------
+        // Each thread owns output element `(row, i)`: it scans its row computing the
+        // element's RANK (# of pairs strictly less), then writes element `i` to slot
+        // `base + rank`. Pairs are all distinct ⇒ ranks are a permutation ⇒ every
+        // slot written exactly once (no races), stable by construction, ANY k, no
+        // smem, no __syncthreads. O(k²) reads — correctness base; perf is the variant.
+        s.push_str("    long long total = n_out * k;\n");
+        s.push_str("    long long grid_stride = (long long)blockDim.x * (long long)gridDim.x;\n");
+        s.push_str("    for (long long t = (long long)blockIdx.x * (long long)blockDim.x + (long long)threadIdx.x;\n");
+        s.push_str("         t < total; t += grid_stride) {\n");
+        s.push_str("        long long row = t / k;\n");
+        s.push_str("        long long base = row * k;\n");
+        s.push_str("        long long i = t - base;\n");
+        s.push_str(&format!("        {acc} ki = {};\n", load_at("base + i")));
+        s.push_str("        long long r = 0;\n");
+        s.push_str("        for (long long j = 0; j < k; ++j) {\n");
+        s.push_str(&format!("            {acc} kj = {};\n", load_at("base + j")));
+        s.push_str(&format!(
+            "            if ({stem}_pair_lt(kj, j, ki, i)) r++;\n"
+        ));
+        s.push_str("        }\n");
+        s.push_str(&format!("        out[base + r] = {write_base};\n"));
+        s.push_str("    }\n");
+    } else {
+        // -------------------- BITONIC PAIR-SORT VARIANT (one block per row) --------------------
+        // The whole padded row is staged in dynamic smem as (acc key, int index)
+        // pairs; the network sorts by `pair_lt` (order baked into the comparator);
+        // the values writeback gathers RAW input bits through the final permutation
+        // (raw ctype is never staged / round-tripped). Launch contract (launch_note):
+        // blockDim a multiple of 32, <= 1024; dynamic smem = pow2 * (acc_sz + 4)
+        // bytes; REQUIRES k <= 1024 (no emitted guard beyond k == 0 — the structure
+        // key carries no extents; on-device-validated, per smemrow/blockscan).
+        let pad = sort_pad_lit(plan.dtype, order);
+        s.push_str("    long long pow2 = 1; while (pow2 < k) pow2 <<= 1;\n");
+        s.push_str("    extern __shared__ unsigned char baracuda_sort_smem[];\n");
+        s.push_str(&format!("    {acc}* skey = ({acc}*)baracuda_sort_smem;\n"));
+        s.push_str(&format!(
+            "    int* sidx = (int*)(baracuda_sort_smem + (size_t)pow2 * sizeof({acc}));\n"
+        ));
+        s.push_str("    for (long long row = blockIdx.x; row < n_out; row += (long long)gridDim.x) {\n");
+        s.push_str("        long long base = row * k;\n");
+        // Stage + pad (all threads reach every barrier — the p-loop is uniform).
+        s.push_str("        for (long long p = threadIdx.x; p < pow2; p += blockDim.x) {\n");
+        s.push_str(&format!(
+            "            if (p < k) {{ skey[p] = {}; sidx[p] = (int)p; }}\n",
+            load_at("base + p")
+        ));
+        s.push_str(&format!(
+            "            else       {{ skey[p] = {pad}; sidx[p] = (int)p; }}\n"
+        ));
+        s.push_str("        }\n");
+        s.push_str("        __syncthreads();\n");
+        // Bitonic network. The __syncthreads sits OUTSIDE the p-loop at a uniform
+        // program point (never inside `if (q > p)`); only the `q > p` owner touches
+        // a disjoint pair, so the strided p-loop is race-free within a phase.
+        s.push_str("        for (long long kk = 2; kk <= pow2; kk <<= 1) {\n");
+        s.push_str("            for (long long j = kk >> 1; j > 0; j >>= 1) {\n");
+        s.push_str("                for (long long p = threadIdx.x; p < pow2; p += blockDim.x) {\n");
+        s.push_str("                    long long q = p ^ j;\n");
+        s.push_str("                    if (q > p) {\n");
+        s.push_str("                        bool up = ((p & kk) == 0);\n");
+        s.push_str(&format!(
+            "                        bool q_lt_p = {stem}_pair_lt(skey[q], sidx[q], skey[p], sidx[p]);\n"
+        ));
+        s.push_str("                        if (up == q_lt_p) {\n");
+        s.push_str(&format!(
+            "                            {acc} tk = skey[p]; skey[p] = skey[q]; skey[q] = tk;\n"
+        ));
+        s.push_str("                            int ti = sidx[p]; sidx[p] = sidx[q]; sidx[q] = ti;\n");
+        s.push_str("                        }\n");
+        s.push_str("                    }\n");
+        s.push_str("                }\n");
+        s.push_str("                __syncthreads();\n");
+        s.push_str("            }\n");
+        s.push_str("        }\n");
+        // Writeback: the first k cells are exactly the real elements (pad invariant).
+        s.push_str("        for (long long p = threadIdx.x; p < k; p += blockDim.x) {\n");
+        if argsort {
+            s.push_str("            out[base + p] = sidx[p];\n");
+        } else {
+            s.push_str("            out[base + p] = in0[base + sidx[p]];\n");
+        }
+        s.push_str("        }\n");
+        s.push_str("        __syncthreads();\n"); // before the next row reuses smem
+        s.push_str("    }\n");
+    }
+
+    s.push_str("}\n");
+    let _ = acc_sz;
+    GeneratedKernel { name, source: s }
+}
+
+/// Bitonic-pair-sort schedule VARIANT for the [`Schedule::RowSort`] cell — one
+/// block per row, the whole padded row staged in dynamic smem as `(key, index)`
+/// pairs, sorted by a bitonic network under the `pair_lt` total order. A
+/// [`Variant`] filter (model: [`scan_blockscan_variant`]); `return None` for
+/// every cell it cannot serve.
+///
+/// **Bits:** a pair sort with an index tie-break is a pure PERMUTATION under a
+/// unique total order — no FP arithmetic, no reassociation — so it is byte-for-
+/// byte identical to the rank-sort base:
+/// [`VariantFidelity::BitIdentical`] (unlike `scan_blockscan_variant`, there is
+/// NO FP-only gate — int sorts ride the same network). Selectable silently; the
+/// validator pins the base ≡ variant memcmp.
+///
+/// **Contract (`launch_note`):** blockDim a multiple of 32, `<= 1024`; grid = any
+/// (grid-stride over rows; one block per row is natural); dynamic smem =
+/// `next_pow2(k) * (acc_sz + 4)` bytes; **REQUIRES `k <= 1024`** — an on-device-
+/// validated precondition (the structure key carries no extents), the same trust
+/// model as smemrow/blockscan, with NO emitted guard beyond `k == 0`.
+fn row_sort_bitonic_variant(plan: &KernelPlan<'_>) -> Option<Variant> {
+    let Schedule::RowSort { .. } = plan.schedule else {
+        return None;
+    };
+    // The fixed signature has no `p{i}` slots — a Param body would emit an
+    // undefined identifier (mirror blockscan/split-K). RowSort's body is pinned
+    // Input(0), so this is always empty; the guard is load-bearing house style.
+    if !params_used(plan.body).is_empty() {
+        return None;
+    }
+    let ctype = scalar_ctype(plan.dtype)?;
+    // Re-assert in0 layout (validate_row_sort already gated it; belt-and-suspenders).
+    let last = plan.key.rank.saturating_sub(1);
+    let in0 = plan.key.operands[0];
+    let out = plan.key.operands[plan.key.n_operands.saturating_sub(1) as usize];
+    if rr_role(in0, last) != RrRole::RowStreamed
+        || in0.contig != Contiguity::Contig
+        || in0.flipped
+        || !out.bcast.is_empty()
+        || out.contig != Contiguity::Contig
+        || out.flipped
+    {
+        return None;
+    }
+    let dbl = matches!(plan.dtype, ElementKind::F64 | ElementKind::F32Strict);
+    let acc_sz = if dbl || matches!(plan.dtype, ElementKind::I64) {
+        8
+    } else {
+        4
+    };
+    let k = emit_row_sort_impl(plan, ctype, true);
+    Some(Variant {
+        tag: "bitonic",
+        kernels: vec![k],
+        fidelity: VariantFidelity::BitIdentical,
+        launch_note: format!(
+            "bitonic pair-sort (one block per row, grid-stride over rows; the whole \
+             next_pow2(k)-padded row staged in dynamic shared memory as (key, index) \
+             pairs and sorted by a bitonic network under the (key, original-index) \
+             total order): <<<min(n_out, maxblocks), B, smem>>> with B a multiple of \
+             32 and <= 1024, and dynamic shared memory = next_pow2(k) * {} bytes \
+             (sizeof(acc)={} + sizeof(int)=4). REQUIRES k <= 1024 (the bitonic \
+             network stages the whole padded row in one block); longer rows use the \
+             any-k rank-sort base. BitIdentical to the base (a pair sort is a pure \
+             permutation). Determinism: {}.",
+            acc_sz + 4,
+            acc_sz,
+            VariantFidelity::BitIdentical.determinism_str()
+        ),
+    })
 }
 
 /// `true` if every iteration axis of `o` is a broadcast axis — its offset is
@@ -8609,6 +8984,229 @@ mod window_tests {
         for &(name, dt, op, size, stride, dil, plo, phi, cip) in cases {
             let p = OpDef::window_simple(name, &[dt], op, 1, size, stride, dil, plo, phi, cip);
             write(generate(&p, &window_key(dt, 64, 32), &Cuda));
+        }
+    }
+}
+
+#[cfg(test)]
+mod sort_tests {
+    //! Increment-8 SORT_PERM emitter tests: the per-output RANK-sort BASE + the
+    //! cooperative smem BITONIC pair-sort VARIANT generate valid, structurally-
+    //! correct CUDA. On-device numeric proof is `ondevice/sort_validate.cu`; these
+    //! are source-shape + variant-wiring + no-INFINITY pins.
+    use crate::ir::{OpDef, SortOrder};
+    use crate::{generate, generate_variants, Cuda};
+    use baracuda_kernels_types::{
+        structure_key, ArchSku, ElementKind, OpCategory, OperandDesc, StructureKey,
+    };
+
+    fn sort_key(dt: ElementKind) -> StructureKey {
+        let a = OperandDesc::new(2, &[256, 128], &[128, 1], dt, 256);
+        let o = OperandDesc::new(2, &[256, 128], &[128, 1], dt, 256);
+        structure_key(OpCategory::UnaryElementwise, &[a, o], ArchSku::Sm89)
+    }
+    fn argsort_key(dt: ElementKind) -> StructureKey {
+        let a = OperandDesc::new(2, &[256, 128], &[128, 1], dt, 256);
+        let o = OperandDesc::new(2, &[256, 128], &[128, 1], ElementKind::I32, 256);
+        structure_key(OpCategory::UnaryElementwise, &[a, o], ArchSku::Sm89)
+    }
+
+    #[test]
+    fn base_asc_values_signature_and_rank_loop() {
+        let sc = OpDef::row_sort("sort", ElementKind::F32, SortOrder::Asc);
+        let k = generate(&sc, &sort_key(ElementKind::F32), &Cuda);
+        assert_eq!(k.name, "baracuda_gen_sort_f32_rowsort_asc_stable");
+        // Signature: single input, values output (float), n_out + k launch args.
+        assert!(k.source.contains("const float* __restrict__ in0,"), "{}", k.source);
+        assert!(k.source.contains("float* __restrict__ out,"), "{}", k.source);
+        assert!(k.source.contains("long long n_out,"), "{}", k.source);
+        assert!(k.source.contains("long long k)"), "{}", k.source);
+        // Rank sort: one thread per output element, scans its row, writes the raw value.
+        assert!(k.source.contains("long long total = n_out * k;"), "{}", k.source);
+        assert!(k.source.contains("if (sort_f32_asc_pair_lt(kj, j, ki, i)) r++;"), "{}", k.source);
+        assert!(k.source.contains("out[base + r] = in0[base + i];"), "{}", k.source);
+        // Review-caught: the tie index (also the LOAD address) must be `long long`,
+        // never `int` — an int index OOB-reads past 2^31 on the any-k base.
+        assert!(k.source.contains("long long i = t - base;"), "{}", k.source);
+        assert!(k.source.contains("pair_lt(float ka, long long ia, float kb, long long ib)"), "{}", k.source);
+        assert!(!k.source.contains("int i = (int)(t - base);"), "{}", k.source);
+        // Base has no cooperative primitive.
+        assert!(!k.source.contains("__syncthreads"), "{}", k.source);
+        assert!(!k.source.contains("__shared__"), "{}", k.source);
+        // asc comparator argument order (ka,kb first).
+        assert!(k.source.contains("if (sort_f32_asc_key_lt(ka, kb)) return true;"), "{}", k.source);
+        // FP dtype: the NaN-greatest branch is present.
+        assert!(k.source.contains("if (a != a) return false;"), "{}", k.source);
+    }
+
+    #[test]
+    fn base_desc_argsort_hetero_out_and_comparator_order() {
+        // The hetero-out backstop extension test (§4.1): argsort stores through an
+        // `int* out`, and the desc comparator reverses the key argument order.
+        let sc = OpDef::row_argsort("argsort", ElementKind::F32, SortOrder::Desc);
+        let k = generate(&sc, &argsort_key(ElementKind::F32), &Cuda);
+        assert_eq!(k.name, "baracuda_gen_argsort_f32_rowsort_desc_stable_idx");
+        assert!(k.source.contains("int* __restrict__ out,"), "{}", k.source);
+        // argsort writes the original index, not the value — narrowed to the I32
+        // output (k <= 2^31-1 is an inherent argsort precondition).
+        assert!(k.source.contains("out[base + r] = (int)i;"), "{}", k.source);
+        // desc comparator: key_lt(kb, ka) first (reversed key order).
+        assert!(k.source.contains("if (argsort_f32_desc_idx_key_lt(kb, ka)) return true;"), "{}", k.source);
+    }
+
+    #[test]
+    fn integer_sort_has_no_nan_branch_and_native_key() {
+        // i32: the comparator is a bare `a < b` (no NaN branch), key type = int.
+        let sc = OpDef::row_sort("sort", ElementKind::I32, SortOrder::Asc);
+        let k = generate(&sc, &sort_key(ElementKind::I32), &Cuda);
+        assert!(k.source.contains("bool sort_i32_asc_key_lt(int a, int b)"), "{}", k.source);
+        assert!(!k.source.contains("if (a != a)"), "int sort has no NaN branch:\n{}", k.source);
+    }
+
+    #[test]
+    fn bitonic_asc_smem_pad_and_barriers() {
+        let sc = OpDef::row_sort("sort", ElementKind::F32, SortOrder::Asc);
+        let vs = generate_variants(&sc, &sort_key(ElementKind::F32), &Cuda);
+        let bt = vs.iter().find(|v| v.tag == "bitonic").expect("bitonic variant");
+        let src = &bt.kernels[0].source;
+        assert!(bt.kernels[0].name.ends_with("_bitonic"), "{}", bt.kernels[0].name);
+        // dynamic smem as (key, index) pairs, staged uchar-typed.
+        assert!(src.contains("extern __shared__ unsigned char baracuda_sort_smem[];"), "{}", src);
+        assert!(src.contains("long long pow2 = 1; while (pow2 < k) pow2 <<= 1;"), "{}", src);
+        // asc-FP pad sentinel = qNaN (NOT +inf, NOT the INFINITY macro).
+        assert!(src.contains("skey[p] = __int_as_float(0x7fc00000u);"), "{}", src);
+        // bitonic network with the standard swap predicate.
+        assert!(src.contains("bool up = ((p & kk) == 0);"), "{}", src);
+        assert!(src.contains("if (up == q_lt_p) {"), "{}", src);
+        // at least the stage barrier + one per-phase barrier + the writeback barrier.
+        assert!(src.matches("__syncthreads();").count() >= 3, "{}", src);
+        // launch-note contract: k <= 1024 + the smem byte formula.
+        assert!(bt.launch_note.contains("k <= 1024"), "{}", bt.launch_note);
+        assert!(bt.launch_note.contains("next_pow2(k) * 8 bytes"), "{}", bt.launch_note); // float(4)+int(4)
+        assert_eq!(bt.fidelity, crate::VariantFidelity::BitIdentical);
+    }
+
+    #[test]
+    fn bitonic_f64_desc_and_i64_asc_pad_literals() {
+        // f64 desc pad = -inf (double bit-cast); i64 asc pad = INT64_MAX literal.
+        let scd = OpDef::row_sort("sort", ElementKind::F64, SortOrder::Desc);
+        let vd = generate_variants(&scd, &sort_key(ElementKind::F64), &Cuda);
+        let btd = vd.iter().find(|v| v.tag == "bitonic").unwrap();
+        assert!(
+            btd.kernels[0].source.contains("skey[p] = __longlong_as_double(0xfff0000000000000ULL);"),
+            "{}", btd.kernels[0].source
+        );
+        assert!(btd.launch_note.contains("next_pow2(k) * 12 bytes"), "{}", btd.launch_note); // double(8)+int(4)
+
+        let sci = OpDef::row_sort("sort", ElementKind::I64, SortOrder::Asc);
+        let vi = generate_variants(&sci, &sort_key(ElementKind::I64), &Cuda);
+        let bti = vi.iter().find(|v| v.tag == "bitonic").unwrap();
+        assert!(
+            bti.kernels[0].source.contains("skey[p] = 9223372036854775807LL;"),
+            "{}", bti.kernels[0].source
+        );
+    }
+
+    #[test]
+    fn no_infinity_macro_in_any_sort_source() {
+        // The headerless-nvrtc discipline forbids the <cmath> INFINITY macro; every
+        // sort cell (base + bitonic, every dtype/order/argsort) must be header-light.
+        for dt in [
+            ElementKind::F32, ElementKind::F64, ElementKind::F16, ElementKind::Bf16,
+            ElementKind::F32Strict, ElementKind::I32, ElementKind::I64,
+        ] {
+            for order in [SortOrder::Asc, SortOrder::Desc] {
+                for sc in [
+                    OpDef::row_sort("sort", dt, order),
+                    OpDef::row_argsort("argsort", dt, order),
+                ] {
+                    let key = if sc.out_dtype.is_some() { argsort_key(dt) } else { sort_key(dt) };
+                    for v in generate_variants(&sc, &key, &Cuda) {
+                        for kern in &v.kernels {
+                            assert!(
+                                !kern.source.contains("INFINITY"),
+                                "sort cell {} must not emit INFINITY:\n{}",
+                                kern.name, kern.source
+                            );
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn variants_are_exactly_base_then_bitonic() {
+        let sc = OpDef::row_sort("sort", ElementKind::F32, SortOrder::Asc);
+        let vs = generate_variants(&sc, &sort_key(ElementKind::F32), &Cuda);
+        let tags: Vec<&str> = vs.iter().map(|v| v.tag).collect();
+        assert_eq!(tags, vec!["base", "bitonic"]);
+        assert_eq!(vs[0].fidelity, crate::VariantFidelity::BitIdentical);
+    }
+
+    #[test]
+    fn bitonic_filter_declines_non_rowsort() {
+        // A scan plan must not surface the sort bitonic variant.
+        let sc = OpDef::scan_simple("cum", &[ElementKind::F32], crate::ir::ReduceOp::Sum, 1, false, false);
+        let vs = generate_variants(&sc, &sort_key(ElementKind::F32), &Cuda);
+        assert!(vs.iter().all(|v| v.tag != "bitonic"), "scan must not offer the sort bitonic variant");
+    }
+
+    /// Manual dump tool (not a wired assertion): regenerate the sort `.cu` sources
+    /// the on-device validator `#include`s. Run with:
+    ///   `cargo test -p baracuda-kernelgen dump_sort_sources -- --ignored --nocapture`
+    /// then copy `ondevice/sort_validate.cu` beside the emitted files and `nvcc` it.
+    #[test]
+    #[ignore = "manual regeneration tool for ondevice/sort_validate.cu"]
+    fn dump_sort_sources() {
+        let out = std::env::var("SORT_OUT").unwrap_or_else(|_| ".".to_string());
+        let write = |k: crate::GeneratedKernel| {
+            std::fs::write(format!("{out}/{}.cu", k.name), &k.source).unwrap();
+            println!("wrote {out}/{}.cu", k.name);
+        };
+        // Every base + bitonic cell the validator exercises: {f32,f64,i32} ×
+        // {asc,desc} × {sort,argsort}, plus f16/bf16/i64/f32s asc sort (one each).
+        let full = [ElementKind::F32, ElementKind::F64, ElementKind::I32];
+        for dt in full {
+            for order in [SortOrder::Asc, SortOrder::Desc] {
+                let sv = OpDef::row_sort("sort", dt, order);
+                for v in generate_variants(&sv, &sort_key(dt), &Cuda) {
+                    for kern in v.kernels {
+                        write(kern);
+                    }
+                }
+                let av = OpDef::row_argsort("argsort", dt, order);
+                for v in generate_variants(&av, &argsort_key(dt), &Cuda) {
+                    for kern in v.kernels {
+                        write(kern);
+                    }
+                }
+            }
+        }
+        // i64 asc sort + argsort (base + bitonic each) — the wide-integer cell.
+        {
+            let sv = OpDef::row_sort("sort", ElementKind::I64, SortOrder::Asc);
+            for v in generate_variants(&sv, &sort_key(ElementKind::I64), &Cuda) {
+                for kern in v.kernels {
+                    write(kern);
+                }
+            }
+            let av = OpDef::row_argsort("argsort", ElementKind::I64, SortOrder::Asc);
+            for v in generate_variants(&av, &argsort_key(ElementKind::I64), &Cuda) {
+                for kern in v.kernels {
+                    write(kern);
+                }
+            }
+        }
+        // Half-precision + f32-strict asc sort (base + bitonic each) — the acc/
+        // convert-primitive coverage cells (values sort only).
+        for dt in [ElementKind::F16, ElementKind::Bf16, ElementKind::F32Strict] {
+            let sv = OpDef::row_sort("sort", dt, SortOrder::Asc);
+            for v in generate_variants(&sv, &sort_key(dt), &Cuda) {
+                for kern in v.kernels {
+                    write(kern);
+                }
+            }
         }
     }
 }

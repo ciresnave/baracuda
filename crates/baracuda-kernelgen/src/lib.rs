@@ -44,7 +44,7 @@ pub use cuda::Cuda;
 pub use dispatch_artifact::{emit_dispatch_table, parse_dispatch_table};
 pub use ir::{
     coord, input, konst, param, reduced, Access, AccumSpec, AxisRole, ContractionAxes, DagNode,
-    Expr, ExprDag, NodeId, OpDef, ReduceOp, ReduceStage, ScalarExpr, UnaryOp,
+    Expr, ExprDag, NodeId, OpDef, ReduceOp, ReduceStage, ScalarExpr, SortOrder, UnaryOp,
 };
 pub use jit::{
     synthesize, ArtifactKind, Compiler, JitBudget, JitError, JitRequest, JitResponse, Recipe,

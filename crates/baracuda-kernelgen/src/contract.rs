@@ -995,6 +995,52 @@ mod tests {
     }
 
     #[test]
+    fn sort_is_an_honest_miss_no_contract() {
+        use crate::ir::SortOrder;
+        use crate::pattern::PatternError;
+        // Increment 8 SORT_PERM is an AOT-only honest miss — a STRONGER miss than
+        // scan/window: like pooling↔cuDNN, sort already rides bespoke kernels
+        // (crates/baracuda-kernels/src/sort/*), so there is no Fuel Sort/ArgSort
+        // OpTag and neither contract.rs nor pattern.rs has any sort vocabulary. The
+        // kernel still generates + runs AOT; `derive_pattern` rejects it as
+        // NotElementwise BEFORE any body walk; `contract()` then returns None.
+        let sc = OpDef::row_sort("sort_rows", ElementKind::F32, SortOrder::Asc);
+        let a = OperandDesc::new(2, &[256, 128], &[128, 1], ElementKind::F32, 256);
+        let o = OperandDesc::new(2, &[256, 128], &[128, 1], ElementKind::F32, 256);
+        let key = structure_key(OpCategory::UnaryElementwise, &[a, o], ArchSku::Sm89);
+        let kernel = generate(&sc, &key, &Cuda);
+        assert!(
+            contract(&sc, &key, &kernel, "cuda").is_none(),
+            "a sort must emit NO contract (no Fuel Sort OpTag; AOT-only honest miss)"
+        );
+        assert!(matches!(
+            crate::derive_pattern(&sc),
+            Err(PatternError::NotElementwise)
+        ));
+    }
+
+    #[test]
+    fn argsort_is_an_honest_miss_no_contract() {
+        use crate::ir::SortOrder;
+        use crate::pattern::PatternError;
+        // The argsort (I32 index output) is the same honest miss — generating +
+        // running AOT, but no FKC contract.
+        let sc = OpDef::row_argsort("argsort_rows", ElementKind::F32, SortOrder::Desc);
+        let a = OperandDesc::new(2, &[256, 128], &[128, 1], ElementKind::F32, 256);
+        let o = OperandDesc::new(2, &[256, 128], &[128, 1], ElementKind::I32, 256);
+        let key = structure_key(OpCategory::UnaryElementwise, &[a, o], ArchSku::Sm89);
+        let kernel = generate(&sc, &key, &Cuda);
+        assert!(
+            contract(&sc, &key, &kernel, "cuda").is_none(),
+            "an argsort must emit NO contract (no Fuel ArgSort OpTag; AOT-only honest miss)"
+        );
+        assert!(matches!(
+            crate::derive_pattern(&sc),
+            Err(PatternError::NotElementwise)
+        ));
+    }
+
+    #[test]
     fn viewed_op_is_an_honest_miss_no_contract() {
         use crate::ir::View;
         use crate::pattern::PatternError;

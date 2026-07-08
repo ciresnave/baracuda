@@ -7,7 +7,8 @@
 //! the backend, keeps the decision shared across every backend.
 
 use crate::ir::{
-    Access, OpDef, ReadIndex, ReduceOp, ReduceStage, ScalarExpr, View, WriteCombine, WriteIndex,
+    Access, OpDef, ReadIndex, ReduceOp, ReduceStage, ScalarExpr, SortOrder, View, WriteCombine,
+    WriteIndex,
 };
 use baracuda_kernels_types::{
     AxisMask, Contiguity, ElementKind, OperandKey, StructureKey, VecWidth, MAX_OPERANDS,
@@ -107,6 +108,25 @@ pub enum Schedule {
         pad_hi: u8,
         /// Mean divisor policy: `size` (`true`) vs. valid-tap count (`false`).
         count_include_pad: bool,
+    },
+    /// **Row sort / argsort** along the innermost axis (increment 8). Base
+    /// (`bitonic` produced by the emitter's flag, never keyed) is a per-output
+    /// RANK sort — one thread per output element scans its row and computes the
+    /// element's rank under the total order (O(k²), no smem, no barriers, any
+    /// `k`), [`crate::backend::VariantFidelity::BitIdentical`] and stable by
+    /// construction. The cooperative smem **bitonic** pair-sort is a
+    /// `cuda::row_sort_bitonic_variant` VARIANT (also `BitIdentical` — a pair
+    /// sort is a pure permutation), contract-bounded to `k <= 1024` via
+    /// `launch_note`. The policy (`order`/`stable`/`argsort`) rides here (this
+    /// enum is `Copy`); `build_plan` always derives the base.
+    RowSort {
+        /// Ascending / descending (NaN orders greatest either way).
+        order: crate::ir::SortOrder,
+        /// Always `true` in v1 (`validate_row_sort` enforces the pair-sort).
+        stable: bool,
+        /// `false` = values output (raw-bit permutation); `true` = `I32` index
+        /// output (the sort permutation).
+        argsort: bool,
     },
 }
 
@@ -327,6 +347,15 @@ pub fn build_plan<'a>(op: &'a OpDef, key: &'a StructureKey) -> KernelPlan<'a> {
                 pad_hi,
                 count_include_pad,
             }
+        }
+        // Increment 8 SORT_PERM: validate admissibility (mirrors the Scan/Window
+        // arms), then derive the per-output RANK-sort BASE schedule. The
+        // cooperative smem bitonic pair-sort is produced separately by
+        // `cuda::row_sort_bitonic_variant` (a `lower_variants` filter), never
+        // here. All payload fields are Copy — no `ref` borrow.
+        Access::RowSort { order, stable, argsort } => {
+            validate_row_sort(op, key, order, stable, argsort);
+            Schedule::RowSort { order, stable, argsort }
         }
         Access::Elementwise => {
             let n = key.n_operands as usize;
@@ -721,6 +750,7 @@ fn access_tag(a: &Access) -> &'static str {
         Access::Contraction { .. } => "Contraction",
         Access::Scan { .. } => "Scan",
         Access::Window { .. } => "Window",
+        Access::RowSort { .. } => "RowSort",
     }
 }
 
@@ -1213,6 +1243,10 @@ fn assert_no_half_nextafter(op: &OpDef, dtype: ElementKind) {
             exprs.push(pre);
             exprs.push(post);
         }
+        // Increment 8 SORT_PERM: `body` is pinned `Input(0)` (already in `exprs`)
+        // and RowSort has no pre/post, so there is nothing extra to walk — the arm
+        // is forced only to keep the honest-miss walk exhaustive/total.
+        Access::RowSort { .. } => {}
         // Review-caught gate asymmetry (increment 1): a multi-output op's EXTRA
         // output bodies must be walked too — else a half `Nextafter` hidden in an
         // extra body bypasses this honest-miss gate. Non-elementwise multi-output
@@ -1422,6 +1456,10 @@ fn assert_int_op_admissibility(op: &OpDef, dtype: ElementKind) {
             exprs.push(pre);
             exprs.push(post);
         }
+        // Increment 8 SORT_PERM: `body` is pinned `Input(0)` (already in `exprs`,
+        // trivially int-clean) and RowSort has no pre/post; an int sort just
+        // permutes storage bits (no int arithmetic), so nothing extra to gate.
+        Access::RowSort { .. } => {}
         // Review-caught gate asymmetry (increment 1): walk the EXTRA output bodies
         // too. Without this, an int-only op with a COMPOSED operand hides in a
         // multi-output extra body at U8/S8 and bypasses the 8-bit leaf-operand pin
@@ -1549,6 +1587,10 @@ fn assert_coord_admissibility(op: &OpDef, key: &StructureKey) {
             exprs.push(pre);
             exprs.push(post);
         }
+        // Increment 8 SORT_PERM: `body` is pinned `Input(0)` (no Coord), and
+        // RowSort is non-elementwise (`elementwise == false`), so any Coord that
+        // ever appeared would be rejected by the Coord arm; nothing extra to walk.
+        Access::RowSort { .. } => {}
         Access::Elementwise => {}
     }
     for e in exprs {
@@ -1672,6 +1714,19 @@ fn assert_valid_out_dtype(op: &OpDef) {
             "OpDef '{}': out_dtype = Some({od:?}) is rejected under Window — a \
              pooling reduction is same-dtype as its input (a pool does not change \
              dtype), so there is no hetero store; use out_dtype = None",
+            op.name
+        ),
+        // Increment 8 SORT_PERM: the ONLY hetero output under RowSort is the
+        // ARGSORT index output — `Some(I32)` (the sort permutation, riding the
+        // single-output out_dtype precedent). A values-sort is dtype-preserving
+        // (out_dtype None ⇒ this fn returned early). Reject any other Some(_), and
+        // reject Some(I32) on a values-sort (argsort=false). Double-gated: also
+        // enforced (argsort ⇔ Some(I32)) in `validate_row_sort`.
+        Access::RowSort { argsort, .. } => assert!(
+            *argsort && od == ElementKind::I32,
+            "OpDef '{}': out_dtype Some({od:?}) under RowSort is admitted only as \
+             the argsort index output (argsort=true requires Some(I32)); a \
+             values-sort is dtype-preserving (out_dtype None)",
             op.name
         ),
     }
@@ -2259,6 +2314,144 @@ fn validate_window(
     }
     check(pre, op.n_inputs, false, "pre-map", name);
     check(post, op.n_inputs, true, "post-epilogue", name);
+}
+
+/// Validate an [`Access::RowSort`] op at build time (increment 8; AOT — a sort
+/// never crosses the JIT trust boundary, so a panic here is an author-error
+/// backstop). Mirrors [`validate_scan`]/[`validate_window`]'s operand-role +
+/// layout checks, with the sort-specific gates:
+///
+/// - **`stable == true` only** — v1 ALWAYS emits the stable pair-sort (`(key,
+///   original-index)` with index tie-break), so stability is free; an unstable
+///   network would emit byte-identical code under a different symbol (dead
+///   keying) and admitting-then-ignoring the flag would be dishonest keying.
+///   `stable: false` rejects.
+/// - **dtype** — admit `F32|F32Strict|F64|F16|Bf16|I32|I64`; reject `U32`
+///   (index-only, no value dtype) and `S8|U8` (v1 de-scope; the bespoke argsort
+///   covers small ints; liftable by widening this gate + the validator cells).
+/// - **out_dtype ↔ argsort coupling** — `argsort ⇒ out_dtype == Some(I32)`;
+///   `!argsort ⇒ out_dtype == None`. Double-gated (also `assert_valid_out_dtype`).
+/// - **`body` must be exactly `Input(0)`** — v1 has no pre/post; this single
+///   equality replaces the recursive `check` machinery of validate_scan/window
+///   (it rejects Param/Coord/Reduced/Const/composed bodies in one stroke).
+/// - **`extra_out_bodies` empty** — multi-output does not ride RowSort (also
+///   caught by `assert_valid_multi_output`; double-gated).
+/// - **Input 0 layout** — `RowStreamed` + `Contig` + `!flipped` (the emitters
+///   read `in0[base+j]` stride-free; a flipped/strided input reads mirrored/OOB).
+/// - **Output layout** — empty bcast + `Contig` + `!flipped`.
+///
+/// There is no axis field: RowSort is innermost-axis by definition (matching
+/// Scan/Window's `axis == rank-1` posture). The bitonic variant's `k <= 1024`
+/// bound is NOT checkable here (the structure key carries no numeric extents) —
+/// it is a `launch_note` precondition + on-device-validated contract, the same
+/// trust level as smemrow/blockscan; the base rank sort has no length limit.
+fn validate_row_sort(op: &OpDef, key: &StructureKey, _order: SortOrder, stable: bool, argsort: bool) {
+    let name = &op.name;
+
+    // v1 emits only the stable pair-sort. Reject stable=false before anything else
+    // so the message is unambiguous.
+    assert!(
+        stable,
+        "OpDef '{name}': row_sort v1 emits only the stable pair-sort (stable=true); \
+         unstable declined (an unstable network would emit byte-identical code under \
+         a different symbol — dead keying)"
+    );
+
+    // dtype gate: the v1 comparable value set. U32 is index-only (no value dtype);
+    // S8/U8 are a v1 de-scope (bespoke argsort covers small ints).
+    assert!(
+        matches!(
+            key.dtype,
+            ElementKind::F32
+                | ElementKind::F32Strict
+                | ElementKind::F64
+                | ElementKind::F16
+                | ElementKind::Bf16
+                | ElementKind::I32
+                | ElementKind::I64
+        ),
+        "OpDef '{name}': row_sort dtype {:?} is out of the v1 set \
+         (F32/F32Strict/F64/F16/Bf16/I32/I64) — U32 is index-only and S8/U8 are a \
+         v1 de-scope (miss honestly)",
+        key.dtype
+    );
+
+    // out_dtype ↔ argsort coupling (double-gated with assert_valid_out_dtype).
+    if argsort {
+        assert!(
+            op.out_dtype == Some(ElementKind::I32),
+            "OpDef '{name}': a row argsort produces an I32 index output — out_dtype \
+             must be Some(I32), got {:?}",
+            op.out_dtype
+        );
+    } else {
+        assert!(
+            op.out_dtype.is_none(),
+            "OpDef '{name}': a values-sort is dtype-preserving — out_dtype must be \
+             None, got {:?}",
+            op.out_dtype
+        );
+    }
+
+    // body must be exactly Input(0): v1 has no pre/post, so a single equality check
+    // rejects Param/Coord/Reduced/Const/composed bodies in one stroke.
+    assert!(
+        matches!(op.body, ScalarExpr::Input(0)),
+        "OpDef '{name}': row_sort body must be exactly Input(0) (v1 has no pre/post \
+         map); got {:?}",
+        op.body
+    );
+
+    // Multi-output does not ride RowSort (also caught by assert_valid_multi_output).
+    assert!(
+        op.extra_out_bodies.is_empty(),
+        "OpDef '{name}': row_sort is single-output (a permutation is not a ScalarExpr \
+         body) — extra_out_bodies must be empty"
+    );
+
+    // Operand count + rank.
+    let n = op.n_inputs as usize;
+    assert!(
+        n == 1,
+        "OpDef '{name}': row_sort streams exactly one row operand (n_inputs=1), got {n}"
+    );
+    assert!(
+        key.n_operands as usize == n + 1,
+        "row_sort expects n_inputs+1 operands (input then output); got {}",
+        key.n_operands
+    );
+    let rank = key.rank as usize;
+    assert!(rank >= 1, "row_sort needs a sorted axis (rank >= 1)");
+    let last = (rank - 1) as u8;
+
+    // Input 0 layout: the row-streamed sorted tensor. The emitters read
+    // `in0[base+j]` stride-free, so it must be Contig and NOT flipped (a
+    // flipped/strided operand reads mirrored/OOB).
+    let in0 = key.operands[0];
+    assert!(
+        rr_role(in0, last) == RrRole::RowStreamed,
+        "OpDef '{name}': row_sort Input0 must be the row-streamed sorted tensor, not \
+         a column-broadcast or per-row-scalar operand"
+    );
+    assert!(
+        in0.contig == Contiguity::Contig,
+        "OpDef '{name}': row_sort input must be contiguous (base = row*k assumes a \
+         dense sorted axis)"
+    );
+    assert!(
+        !in0.flipped,
+        "OpDef '{name}': row_sort input must not be reversed along an axis (idx = \
+         base+j reads forward-dense; a flipped view reads mirrored/OOB — use the \
+         Desc order, not a flipped operand)"
+    );
+
+    // Output layout: full-width forward-dense contiguous.
+    let out = key.operands[n];
+    assert!(
+        out.bcast.is_empty() && out.contig == Contiguity::Contig && !out.flipped,
+        "OpDef '{name}': row_sort output must be full-width forward-dense contiguous \
+         (empty bcast, not flipped)"
+    );
 }
 
 /// Vector width in elements for a [`VecWidth`] bucket.
@@ -3541,5 +3734,253 @@ mod window_gate_validate {
         let s = OperandDesc::new(2, &[256, 128], &[-1, 0], ElementKind::F32, 256);
         let (p, key) = two_input_pool(s);
         let _ = build_plan(&p, &key);
+    }
+}
+
+#[cfg(test)]
+mod sort_gate_validate {
+    //! Increment-8 SORT_PERM gate-rejection tests. Per the house rule these call
+    //! `build_plan` DIRECTLY — an emitter panic would mask a gate mutation (the 0c
+    //! lesson). Every `validate_row_sort` (and the argsort `assert_valid_out_dtype`
+    //! coupling + `assert_valid_multi_output`) rejection has a test here; each
+    //! sort-specific gate is mutation-checked both directions by a targeted
+    //! reverse-edit.
+    use super::{access_tag, build_plan, Schedule};
+    use crate::ir::{input, Access, OpDef, ScalarExpr, SortOrder};
+    use baracuda_kernels_types::{
+        structure_key, ArchSku, ElementKind, OpCategory, OperandDesc, StructureKey,
+    };
+
+    // A rank-2 [256,128] sort cell: contiguous input + full-width contiguous output.
+    fn sort_key(dt: ElementKind) -> StructureKey {
+        let a = OperandDesc::new(2, &[256, 128], &[128, 1], dt, 256);
+        let o = OperandDesc::new(2, &[256, 128], &[128, 1], dt, 256);
+        structure_key(OpCategory::UnaryElementwise, &[a, o], ArchSku::Sm89)
+    }
+    // The same cell with an I32 index output (argsort).
+    fn argsort_key(dt: ElementKind) -> StructureKey {
+        let a = OperandDesc::new(2, &[256, 128], &[128, 1], dt, 256);
+        let o = OperandDesc::new(2, &[256, 128], &[128, 1], ElementKind::I32, 256);
+        structure_key(OpCategory::UnaryElementwise, &[a, o], ArchSku::Sm89)
+    }
+
+    // ---- positive gate tests ----
+
+    #[test]
+    fn valid_sort_builds_asc_and_desc_values() {
+        for order in [SortOrder::Asc, SortOrder::Desc] {
+            let sc = OpDef::row_sort("sort", ElementKind::F32, order);
+            let key = sort_key(ElementKind::F32);
+            let plan = build_plan(&sc, &key);
+            assert_eq!(
+                plan.schedule,
+                Schedule::RowSort { order, stable: true, argsort: false }
+            );
+            assert_eq!(access_tag(&sc.access), "RowSort");
+        }
+    }
+
+    #[test]
+    fn valid_argsort_builds_desc_with_i32_out() {
+        let sc = OpDef::row_argsort("argsort", ElementKind::F32, SortOrder::Desc);
+        assert_eq!(sc.out_dtype, Some(ElementKind::I32));
+        let key = argsort_key(ElementKind::F32);
+        let plan = build_plan(&sc, &key);
+        assert_eq!(
+            plan.schedule,
+            Schedule::RowSort { order: SortOrder::Desc, stable: true, argsort: true }
+        );
+    }
+
+    #[test]
+    fn i64_and_f64_sort_build() {
+        for dt in [ElementKind::I64, ElementKind::F64] {
+            let sc = OpDef::row_sort("sort", dt, SortOrder::Asc);
+            let _ = build_plan(&sc, &sort_key(dt));
+        }
+    }
+
+    // ---- validate_row_sort rejections ----
+
+    #[test]
+    #[should_panic(expected = "unstable declined")]
+    fn unstable_rejected() {
+        // v1 emits only the stable pair-sort; stable=false is dead keying.
+        let mut sc = OpDef::row_sort("sort", ElementKind::F32, SortOrder::Asc);
+        sc.access = Access::RowSort { order: SortOrder::Asc, stable: false, argsort: false };
+        let _ = build_plan(&sc, &sort_key(ElementKind::F32));
+    }
+
+    #[test]
+    #[should_panic(expected = "out of the v1 set")]
+    fn s8_dtype_rejected() {
+        // S8 is a v1 de-scope (the bespoke argsort covers small ints).
+        let sc = OpDef::row_sort("sort", ElementKind::S8, SortOrder::Asc);
+        let _ = build_plan(&sc, &sort_key(ElementKind::S8));
+    }
+
+    #[test]
+    #[should_panic(expected = "out of the v1 set")]
+    fn u32_dtype_rejected() {
+        // U32 is index-only (no value dtype).
+        let sc = OpDef::row_sort("sort", ElementKind::U32, SortOrder::Asc);
+        let _ = build_plan(&sc, &sort_key(ElementKind::U32));
+    }
+
+    #[test]
+    #[should_panic(expected = "must be exactly Input(0)")]
+    fn composed_body_rejected() {
+        // v1 has no pre/post — the body must be exactly Input(0); a composed body
+        // (here Input(0)+Input(0)) rejects (replaces the recursive check machinery).
+        let mut sc = OpDef::row_sort("sort", ElementKind::F32, SortOrder::Asc);
+        sc.body = (input(0) + input(0)).0;
+        let _ = build_plan(&sc, &sort_key(ElementKind::F32));
+    }
+
+    #[test]
+    #[should_panic(expected = "must be exactly Input(0)")]
+    fn param_body_rejected() {
+        let mut sc = OpDef::row_sort("sort", ElementKind::F32, SortOrder::Asc);
+        sc.body = ScalarExpr::Param(0);
+        let _ = build_plan(&sc, &sort_key(ElementKind::F32));
+    }
+
+    #[test]
+    #[should_panic(expected = "streams exactly one row operand")]
+    fn multiple_inputs_rejected() {
+        // A sort streams exactly one row operand.
+        let mut sc = OpDef::row_sort("sort", ElementKind::F32, SortOrder::Asc);
+        sc.n_inputs = 2;
+        let a = OperandDesc::new(2, &[256, 128], &[128, 1], ElementKind::F32, 256);
+        let o = OperandDesc::new(2, &[256, 128], &[128, 1], ElementKind::F32, 256);
+        let key = structure_key(OpCategory::BinaryElementwise, &[a, a, o], ArchSku::Sm89);
+        let _ = build_plan(&sc, &key);
+    }
+
+    #[test]
+    #[should_panic(expected = "must be contiguous")]
+    fn non_contig_input_rejected() {
+        // A transposed (column-major) input keys non-Contig on the sorted axis.
+        let a = OperandDesc::new(2, &[256, 128], &[1, 256], ElementKind::F32, 256);
+        let o = OperandDesc::new(2, &[256, 128], &[128, 1], ElementKind::F32, 256);
+        let key = structure_key(OpCategory::UnaryElementwise, &[a, o], ArchSku::Sm89);
+        let sc = OpDef::row_sort("sort", ElementKind::F32, SortOrder::Asc);
+        let _ = build_plan(&sc, &key);
+    }
+
+    #[test]
+    #[should_panic(expected = "must not be reversed")]
+    fn flipped_input_rejected() {
+        // A dense-but-REVERSED input keys |stride|-Contig + flipped; idx = base+j
+        // reads forward, so a flipped operand reads mirrored/OOB (use Desc order).
+        let a = OperandDesc::new(2, &[256, 128], &[128, -1], ElementKind::F32, 256);
+        let o = OperandDesc::new(2, &[256, 128], &[128, 1], ElementKind::F32, 256);
+        let key = structure_key(OpCategory::UnaryElementwise, &[a, o], ArchSku::Sm89);
+        let sc = OpDef::row_sort("sort", ElementKind::F32, SortOrder::Asc);
+        let _ = build_plan(&sc, &key);
+    }
+
+    #[test]
+    #[should_panic(expected = "Input0 must be the row-streamed")]
+    fn broadcast_input_rejected() {
+        // Input0 broadcast along the sorted (last) axis keys as a per-row scalar,
+        // not the row-streamed sorted tensor — there is nothing to sort.
+        let a = OperandDesc::new(2, &[256, 128], &[1, 0], ElementKind::F32, 256);
+        let o = OperandDesc::new(2, &[256, 128], &[128, 1], ElementKind::F32, 256);
+        let key = structure_key(OpCategory::UnaryElementwise, &[a, o], ArchSku::Sm89);
+        let sc = OpDef::row_sort("sort", ElementKind::F32, SortOrder::Asc);
+        let _ = build_plan(&sc, &key);
+    }
+
+    #[test]
+    #[should_panic(expected = "full-width forward-dense")]
+    fn flipped_output_rejected() {
+        // A reversed OUTPUT keys |stride|-Contig + flipped; the store is
+        // forward-dense (out[base+r]) — a flipped output would write mirrored.
+        let a = OperandDesc::new(2, &[256, 128], &[128, 1], ElementKind::F32, 256);
+        let o = OperandDesc::new(2, &[256, 128], &[128, -1], ElementKind::F32, 256);
+        let key = structure_key(OpCategory::UnaryElementwise, &[a, o], ArchSku::Sm89);
+        let sc = OpDef::row_sort("sort", ElementKind::F32, SortOrder::Asc);
+        let _ = build_plan(&sc, &key);
+    }
+
+    // ---- out_dtype ↔ argsort coupling ----
+
+    #[test]
+    #[should_panic(expected = "must be Some(I32)")]
+    fn argsort_with_none_out_dtype_rejected() {
+        // argsort=true but out_dtype None: assert_valid_out_dtype returns early on
+        // None, so validate_row_sort's coupling is the layer that fires.
+        let mut sc = OpDef::row_argsort("argsort", ElementKind::F32, SortOrder::Asc);
+        sc.out_dtype = None;
+        let _ = build_plan(&sc, &argsort_key(ElementKind::F32));
+    }
+
+    #[test]
+    #[should_panic(expected = "admitted only as the argsort index output")]
+    fn argsort_with_i64_out_dtype_rejected() {
+        // argsort with a non-I32 index dtype: I64 indices are a v1 de-scope
+        // (assert_valid_out_dtype fires first).
+        let mut sc = OpDef::row_argsort("argsort", ElementKind::F32, SortOrder::Asc);
+        sc.out_dtype = Some(ElementKind::I64);
+        let _ = build_plan(&sc, &argsort_key(ElementKind::F32));
+    }
+
+    #[test]
+    #[should_panic(expected = "admitted only as the argsort index output")]
+    fn values_sort_with_i32_out_dtype_rejected() {
+        // A values-sort is dtype-preserving — a Some(I32) out_dtype has no exact
+        // store (assert_valid_out_dtype fires on the values-sort branch).
+        let mut sc = OpDef::row_sort("sort", ElementKind::F32, SortOrder::Asc);
+        sc.out_dtype = Some(ElementKind::I32);
+        let _ = build_plan(&sc, &sort_key(ElementKind::F32));
+    }
+
+    #[test]
+    #[should_panic(expected = "Elementwise-only")]
+    fn extra_out_bodies_rejected() {
+        // Multi-output does not ride RowSort (assert_valid_multi_output fires first;
+        // validate_row_sort backstops it).
+        let mut sc = OpDef::row_sort("sort", ElementKind::F32, SortOrder::Asc);
+        sc.extra_out_bodies = vec![input(0).0];
+        let _ = build_plan(&sc, &sort_key(ElementKind::F32));
+    }
+
+    // ---- review-caught coverage (both mutations EMPIRICALLY survived the suite):
+    // the output-layout compound assert had only its `flipped` term tested, and the
+    // n_operands == n_inputs+1 assert was deletable. Pin every term. ----
+
+    #[test]
+    #[should_panic(expected = "full-width forward-dense")]
+    fn non_contig_output_rejected() {
+        // A transposed (column-major) output keys non-Contig — the sorted writeback
+        // out[base + r] assumes a dense inner axis.
+        let a = OperandDesc::new(2, &[256, 128], &[128, 1], ElementKind::F32, 256);
+        let o = OperandDesc::new(2, &[256, 128], &[1, 256], ElementKind::F32, 256);
+        let key = structure_key(OpCategory::UnaryElementwise, &[a, o], ArchSku::Sm89);
+        let sc = OpDef::row_sort("sort", ElementKind::F32, SortOrder::Asc);
+        let _ = build_plan(&sc, &key);
+    }
+
+    #[test]
+    #[should_panic(expected = "full-width forward-dense")]
+    fn broadcast_output_rejected() {
+        // A stride-0 (broadcast) output axis is not a full-width store target.
+        let a = OperandDesc::new(2, &[256, 128], &[128, 1], ElementKind::F32, 256);
+        let o = OperandDesc::new(2, &[256, 128], &[0, 1], ElementKind::F32, 256);
+        let key = structure_key(OpCategory::UnaryElementwise, &[a, o], ArchSku::Sm89);
+        let sc = OpDef::row_sort("sort", ElementKind::F32, SortOrder::Asc);
+        let _ = build_plan(&sc, &key);
+    }
+
+    #[test]
+    #[should_panic(expected = "expects n_inputs+1 operands")]
+    fn wrong_operand_count_rejected() {
+        // n_inputs=1 against a 3-operand key — the signature and the accept
+        // predicate would describe different arities.
+        let a = OperandDesc::new(2, &[256, 128], &[128, 1], ElementKind::F32, 256);
+        let key = structure_key(OpCategory::BinaryElementwise, &[a, a, a], ArchSku::Sm89);
+        let sc = OpDef::row_sort("sort", ElementKind::F32, SortOrder::Asc);
+        let _ = build_plan(&sc, &key);
     }
 }

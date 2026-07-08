@@ -1167,3 +1167,183 @@ window axis. The `in_len → out_len` window arithmetic is a **runtime-launch-ar
 precondition** (the structure key abstracts numeric extents away — the same trust
 level as RowReduce's `k`/`n_out`); the output operand's LAYOUT (forward-dense
 contiguous, downsampled) IS keyed and gate-checked.
+
+## `sort_validate.cu` — row sort / argsort (increment 8, SORT_PERM)
+
+Validates `Access::RowSort` — a row sort / argsort along the innermost (contiguous)
+axis (the `sort` / `argsort` / `msort` family). Each output row is a permutation of
+its input row under a **total order on `(key, original-index)` pairs** (index
+tie-break ⇒ every pair is distinct ⇒ a **unique** sorted sequence, so the result is
+deterministic, algorithm-independent, and **stable** = ascending original index within
+equal keys). Two single-output ops share the variant: `row_sort` (values output,
+dtype-preserving) and `row_argsort` (`I32` index output). Two forms ship:
+
+- **rank-sort BASE** (`_rowsort_{asc,desc}_stable[_idx]`) —
+  `VariantFidelity::BitIdentical`, **one thread per OUTPUT element** (grid-stride):
+  each thread scans its row computing the element's RANK under the total order
+  (O(k²), no smem, no `__syncthreads`, **any k**), then writes it to `out[base+rank]`.
+  Stable by construction; the correctness reference.
+- **bitonic pair-sort VARIANT** (`…_bitonic`) — also `VariantFidelity::BitIdentical`
+  (a pair sort is a pure permutation — no FP arithmetic, so **NO** FP-only gate,
+  unlike the scan blockscan; int sorts ride the same network). One block per row, the
+  whole `next_pow2(k)`-padded row staged in dynamic smem as `(key, index)` pairs,
+  sorted by a bitonic network; the values writeback gathers **raw** input bits through
+  the final permutation. **Launch contract (`launch_note`, k ≤ 1024):** blockDim a
+  multiple of 32, ≤ 1024; dynamic smem = `next_pow2(k) × (sizeof(acc)+4)` bytes.
+
+**NaN convention (PINNED, PyTorch):** NaN compares **greater than every non-NaN** —
+ascending ⇒ NaN block **last**, descending ⇒ NaN block **first**. NaN-vs-NaN and
+`-0.0`-vs-`+0.0` are key-ties resolved by index. The values output is a **raw-bit
+permutation** (it gathers original storage bytes), so NaN payloads and `-0.0` signs
+are preserved exactly (`memcmp`-checkable). The bitonic **pad sentinel** is the
+MAXIMUM of the pair order — a **quiet NaN** for ascending FP (`+inf` would be wrong: a
+real NaN sorts *after* it under NaN-greatest), `-inf` for descending FP, and the type
+extreme for integers — all emitted **header-light** (`__int_as_float(0x7fc00000u)` /
+`__longlong_as_double(…)`, never the `INFINITY` macro).
+
+**Regeneration:** these cells are **not** in the `bin/kernelgen.rs` catalog.
+
+```sh
+SORT_OUT=<outdir> cargo test -p baracuda-kernelgen dump_sort_sources -- --ignored --nocapture
+cp crates/baracuda-kernelgen/ondevice/sort_validate.cu <outdir>/
+nvcc -O3 -arch=sm_89 <outdir>/sort_validate.cu -o <outdir>/sort_validate && <outdir>/sort_validate
+```
+
+The dump tool (`cuda::sort_tests::dump_sort_sources`) writes 34 cells: `{f32,f64,i32}`
+× `{asc,desc}` × `{sort,argsort}` × `{base,bitonic}`, plus i64 asc sort+argsort and
+f16/bf16/f32s asc values-sort (base+bitonic) — the exact `#include` set the harness
+names.
+
+**Sanitizers** (small shapes via the `san` argv — race/sync are **load-bearing** for
+the smem bitonic swaps + per-phase barriers; initcheck covers the global in/out
+buffers — it does **not** see dynamic-shared-memory reads, so the smem pad cells are
+protected by the memcmp oracle + the pad-tie invariant cells below, not by initcheck):
+
+```sh
+compute-sanitizer --tool memcheck  ./sort_validate san
+compute-sanitizer --tool racecheck ./sort_validate san
+compute-sanitizer --tool synccheck ./sort_validate san
+compute-sanitizer --tool initcheck ./sort_validate san
+```
+
+**Last run:** RTX 4070 Laptop (sm_89), CUDA 13.3 / nvcc 13.3 — **RESULT: ALL PASSED**
+(212 device-launched checks + 1 host-side contract assertion, the bitonic k > 1024
+refusal); `compute-sanitizer` **memcheck / racecheck / synccheck / initcheck all 0
+errors** (racecheck: 0 hazards).
+
+**Post-review emitter fix (re-validated on device):** the review caught the base rank
+sort truncating its tie index — which is also the **load address** — to `int` while
+claiming "any k" (an OOB read past 2³¹; a rank collision past 2³²). The tie index is
+now `long long` end-to-end (`pair_lt(acc, long long, acc, long long)`; the bitonic's
+`int sidx[]` widens losslessly), so the **values-sort base is genuinely any-k**;
+**argsort** keeps the inherent `k ≤ 2³¹−1` precondition (its I32 index output cannot
+represent more — documented on the constructor). The results above were re-run against
+the fixed emitter output.
+
+**Mutation-check record (each broken → its test failed → restored → green):** stable
+panic drop → `unstable_rejected`; body-`Input(0)` gate drop → `composed_body` +
+`param_body`; desc comparator flip → desc golden; tie-break `ia<ib`→`ia>ib` →
+**61 on-device memcmp fails**; per-phase `__syncthreads` delete → **54 on-device
+fails and 56 racecheck hazards**; asc pad qNaN→+inf → **4 asc-NaN bitonic fails**;
+(post-review) output-layout assert weakened to `!flipped`-only →
+`non_contig_output_rejected` + `broadcast_output_rejected`; `n_operands` assert
+neutralized → `wrong_operand_count_rejected`.
+
+Every cell below is **device-launched** (memcmp-exact vs a CPU oracle that implements
+`pair_lt` EXACTLY — order-adjusted keys, NaN-greatest, ascending-index tie-break, then
+a raw-byte value gather) unless explicitly labeled *equivalence-covered*:
+
+- **random rows, k = 1000** (non-pow2, near the 1024 cap) — f32 / f64 / i32 × asc+desc
+  × sort+argsort × base+bitonic: **memcmp-oracle**, **base ≡ bitonic** (the D4 unique-
+  permutation claim), **argsort ∘ gather ≡ values-sort** (mutual consistency), and
+  **run-to-run determinism** (memcmp of two launches) — all device-launched.
+- **edge k = 1, 5, 33, and exactly 1024** (pad-heavy small non-pow2; and pow2 == k with
+  zero pads, one full block) — f32 asc+desc, base+bitonic; plus **already-sorted +
+  reverse-sorted** rows (the bitonic worst paths), k = 512.
+- **stability witness** (tie-heavy keys from `{0,1,2}`, k = 257) — the argsort indices
+  are **strictly ascending within every equal-key run**, both directions, f32 + i32
+  (device-checked against the input-order rule).
+- **NaN-planted** (multiple NaNs, distinct payloads, interior positions) — asc ⇒ NaN
+  block last, desc ⇒ NaN block first; **payload bits preserved** (raw memcmp vs the
+  oracle); pins the qNaN-pad-vs-real-NaN tie invariant. f32 + f64, base+bitonic.
+- **mixed −0.0/+0.0** — a key tie broken by index; **sign bits preserved** (memcmp).
+  f32 asc+desc, base+bitonic.
+- **extreme-value rows** containing real `INT_MAX`/`INT_MIN` (i32 asc) and real
+  `−inf`/`+inf` (f32 desc) — pins the **pad-tie invariant** (a real element equal to
+  the pad key has index < k < every pad index ⇒ sorts before all pads ⇒ the k real
+  elements occupy `[0,k)`), device-exercised through the bitonic path.
+- **k = 1500 (> 1024)** — the **base ONLY** is device-launched (proves the any-k rank
+  sort); the harness **refuses** the bitonic variant for k > 1024 — a host-side
+  **contract-reject** mirroring the `launch_note` (labeled, not a silent launch).
+- **dtypes** — i64 asc sort+argsort device-launched. **f16 / bf16 / f32-strict** asc
+  values-sort (base+bitonic) device-launched and oracle-checked (the f16/bf16 key uses
+  the `__half2float`/`__bfloat162float` convert primitive; f32-strict uses the `double`
+  accumulator). Their **descending and argsort variants are *equivalence-covered***:
+  they share the identical acc/convert primitive and the order/argsort logic already
+  device-validated on f32/f64/i32 — not folded into the pass count. **i64 desc
+  (sort+argsort) is likewise equivalence-covered**: the desc comparator inversion is
+  device-validated on i32, the 64-bit key staging on i64 asc, and the `INT64_MIN`/`MAX`
+  extreme literals are the shared type-extreme path — also not in the pass count.
+
+**Extract-the-delta — vs the bespoke stable `msort` (`baracuda_sort.cuh`, STABLE=1).**
+`msort` is the one bespoke sort whose semantics are math-matchable (its `descending`
+flag maps to our `Desc`). Built with `-DWITH_BESPOKE` (`#include`s the bespoke `sort.cu`);
+on **NaN-free** inputs, k = 1000:
+
+| comparison | result |
+| --- | --- |
+| **values** vs msort (ties included, asc+desc f32; asc i32) | **bit-exact** ✓ |
+| **indices** vs msort on **distinct-key** rows (asc+desc f32, asc i32) | **bit-exact** ✓ |
+| **indices** vs msort on **tie** rows (f32 asc+desc) | **differ — 64/64 rows** (delta) |
+
+**Headline finding (a semantics delta, not a bug):** our **values** output matches the
+bespoke `msort` bit-for-bit (ties included, both directions), and our **indices**
+match on distinct-key rows — but on **tie** rows the two argsort permutations differ on
+**every** row. Our `(key, original-index)` pair-sort produces the **input-order-stable**
+permutation (verified bit-exact, for every cell above, against a CPU `std::sort` over
+`(key, original-index)` pairs under the `pair_lt` total order — equivalent to a
+`stable_sort` because the index tie-break makes every pair distinct); the bespoke
+bitonic STABLE tie-break
+(`cmp_swap_needed`: `ascending_block ? a_idx<b_idx : a_idx>b_idx`, `baracuda_sort.cuh`
+:173/180) is stable-by-value but is **not input-order-preserving** for the index
+output. There is exactly one input-order-stable permutation, so this is a real
+convention difference — **ours is the stable one** (matching `torch.sort(stable=True)`).
+NaN rows are a further documented delta: bespoke treats NaN as an equality tie
+(network-position-dependent, NOT PyTorch NaN-last), while ours pins NaN-last(asc)/
+NaN-first(desc) — device-confirmed on a planted-NaN row.
+
+**Performance (f32, 4096 × 1024, sm_89):**
+
+| kernel | technique | ms | Gelem/s | GB/s | vs |
+| --- | --- | --- | --- | --- | --- |
+| gen `rowsort` base | one thread per output, O(k²) rank | 14.56 | 0.29 | 2.3 | — |
+| **gen `rowsort` bitonic** | one block per row, smem bitonic | **1.42** | **2.96** | **23.7** | **10.3× base** |
+| bespoke `msort` | block-bitonic (STABLE) | 2.25 | 1.87 | 14.9 | — |
+
+The generated **bitonic variant WINS**: **1.59× faster than the bespoke `msort`**
+(same algorithm class, one block per row) and **10.3× faster than our own O(k²) rank
+base** (the base is the correctness reference / the any-k long-row path, never the
+perf claim). No losing cell to record.
+
+**Fuel contract (honest miss, AOT-only):** a sort emits **no contract** — neither
+`contract.rs` nor `pattern.rs` has any Sort/ArgSort vocabulary and Fuel exposes no
+Sort/ArgSort `OpTag` (sort already rides the bespoke kernels
+`crates/baracuda-kernels/src/sort/*`, so kernelgen SORT_PERM is AOT-only by
+construction — a *stronger* miss than scan/window, like pooling↔cuDNN). `derive_pattern`
+rejects it as `NotElementwise` before any body walk and `contract()` returns `None`
+(pinned by `contract::tests::{sort,argsort}_is_an_honest_miss_no_contract`). Keying
+stays **additive** (`baracuda-kernels-types` UNTOUCHED — the order/stable/argsort/variant
+tokens ride the `OpDef` + the `_rowsort_{asc,desc}_stable[_idx][_bitonic]` entry_point,
+never the structure-key token).
+
+**De-scoped from v1** (queued follow-ups, documented in `Access::RowSort`): `topk`
+(needs a k-select parameter + truncated writeback; bespoke covers it), single-kernel
+`(values, indices)` dual output (blocked on hetero multi-out — a permutation is not a
+`ScalarExpr` body), `argsort` I64 indices (bespoke pegs i32), a >1024 fast path
+(multi-block merge / CUB — CUB needs headers + a workspace, violating the header-light
++ fixed-ABI envelope; the rank base is the honest any-k answer), `stable=false` (the
+pair-sort makes stability free — an unstable variant would be dead keying), non-inner /
+multi-axis sort, `sparsemax` fusion, and S8/U8 dtypes. The bitonic `k ≤ 1024` bound is
+a **runtime-launch precondition** (the structure key abstracts numeric extents away —
+the same trust level as smemrow/blockscan), harness-enforced + on-device-validated,
+with NO emitted guard beyond `k == 0`.
