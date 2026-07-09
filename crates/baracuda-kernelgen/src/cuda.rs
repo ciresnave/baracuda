@@ -3886,21 +3886,40 @@ fn emit_scan(plan: &KernelPlan<'_>, ctype: &str) -> GeneratedKernel {
 /// Append the inline warp-scan device helper for the block-scan variant (analog of
 /// [`emit_block_reducers`]): a Kogge-Stone warp-inclusive scan via `__shfl_up_sync`
 /// (`log2(warpSize)` rounds, full `0xffffffff` mask — every lane runs the same
-/// loop). FP `Sum`/`Prod` only (the block-scan variant is FP-only; Max/Min ride the
-/// serial base). Named per `stem` so a base+variant pair in one translation unit
-/// never collides on the `__device__` symbol.
-fn emit_block_scanners(s: &mut String, acc: &str, sop: ReduceOp, stem: &str) {
-    let (assign, tag) = match sop {
-        ReduceOp::Sum => ("+=", "sum"),
-        ReduceOp::Prod => ("*=", "prod"),
-        _ => unreachable!("emit_block_scanners: block-scan is FP Sum/Prod only"),
+/// loop). Serves `Sum`/`Prod`/`Max`/`Min` over FP (float/double acc) and integer
+/// (I32/I64 native acc); named per `stem` so a base+variant pair in one translation
+/// unit never collides on the `__device__` symbol.
+///
+/// The up-sweep step combines `t` (the shuffled value from the EARLIER lane =
+/// LEFT = `a`) into `v` (own = LATER = RIGHT = `b`). `Sum`/`Prod` are commutative,
+/// so the shipped `v {assign} t` is UNCHANGED (byte-identical). `Max`/`Min` are
+/// NON-commutative: emit `v = comb(a = t, b = v)` — take RIGHT (`v`) iff it is NaN
+/// or STRICTLY beats LEFT (`t`); writing `comb(v, t)` here would flip the
+/// signed-zero tie sign and let an earlier NaN win a later one. `is_int` drops the
+/// dead `v != v` NaN test for I32/I64 (no integer NaN; ties are bit-equal).
+fn emit_block_scanners(s: &mut String, acc: &str, sop: ReduceOp, stem: &str, is_int: bool) {
+    let tag = match sop {
+        ReduceOp::Sum => "sum",
+        ReduceOp::Prod => "prod",
+        ReduceOp::Max => "max",
+        ReduceOp::Min => "min",
+        ReduceOp::Mean => unreachable!("emit_block_scanners: Scan rejects Mean"),
+    };
+    let step = match sop {
+        ReduceOp::Sum => "v += t;".to_string(),
+        ReduceOp::Prod => "v *= t;".to_string(),
+        ReduceOp::Max if is_int => "v = (v > t) ? v : t;".to_string(),
+        ReduceOp::Min if is_int => "v = (v < t) ? v : t;".to_string(),
+        ReduceOp::Max => "v = (v != v || v > t) ? v : t;".to_string(),
+        ReduceOp::Min => "v = (v != v || v < t) ? v : t;".to_string(),
+        ReduceOp::Mean => unreachable!("emit_block_scanners: Scan rejects Mean"),
     };
     s.push_str(&format!(
         "__device__ __forceinline__ {acc} warpscan_{tag}_{stem}({acc} v) {{\n\
          \x20   int lane = threadIdx.x & (warpSize - 1);\n\
          \x20   for (int off = 1; off < warpSize; off <<= 1) {{\n\
          \x20       {acc} t = __shfl_up_sync(0xffffffffu, v, off);\n\
-         \x20       if (lane >= off) v {assign} t;\n\
+         \x20       if (lane >= off) {step}\n\
          \x20   }}\n\
          \x20   return v;\n\
          }}\n\n"
@@ -3955,14 +3974,21 @@ fn emit_scan_impl(plan: &KernelPlan<'_>, ctype: &str, block: bool) -> GeneratedK
         );
     }
     if block {
-        // The cooperative kernel re-emits the warp scan + cross-warp carry inline;
-        // it serves FP Sum/Prod only (Max/Min + integer ride the serial base). The
-        // warp_buf[32] cross-warp buffer sizes for blockDim <= 1024, a multiple of
-        // 32 — a LAUNCH contract (no generation-time blockDim to assert), carried in
-        // the launch note and pinned by the on-device sanitizer runs.
+        // The cooperative kernel re-emits the warp scan + cross-warp carry inline.
+        // Scope (BLOCKSCAN-VARIANTS): Sum/Prod/Max/Min over FP
+        // {F16,Bf16,F32,F32Strict,F64} + integer {I32,I64}. S8/U8 ride the serial
+        // base (`__shfl_up_sync` has no 8-bit overload; promoting to an int acc
+        // would break the base's native 8-bit modular wrap). These are emitter
+        // backstops — the variant gate is the primary filter, but S8/U8 must still
+        // trip here. The warp_buf[32] cross-warp buffer sizes for blockDim <= 1024,
+        // a multiple of 32 — a LAUNCH contract (no generation-time blockDim to
+        // assert), carried in the launch note and pinned by the on-device runs.
         assert!(
-            matches!(sop, ReduceOp::Sum | ReduceOp::Prod),
-            "cuda backend: the scan block-scan variant serves FP Sum/Prod only"
+            matches!(
+                sop,
+                ReduceOp::Sum | ReduceOp::Prod | ReduceOp::Max | ReduceOp::Min
+            ),
+            "cuda backend: the scan block-scan variant serves Sum/Prod/Max/Min only (Mean rejected upstream)"
         );
         assert!(
             matches!(
@@ -3972,8 +3998,8 @@ fn emit_scan_impl(plan: &KernelPlan<'_>, ctype: &str, block: bool) -> GeneratedK
                     | ElementKind::F32
                     | ElementKind::F32Strict
                     | ElementKind::F64
-            ),
-            "cuda backend: the scan block-scan variant is FP-only (reassociated Sum/Prod); got {:?}",
+            ) || matches!(plan.dtype, ElementKind::I32 | ElementKind::I64),
+            "cuda backend: the scan block-scan variant serves FP {{F16,Bf16,F32,F32Strict,F64}} + integer {{I32,I64}} only (S8/U8 decline to the serial base); got {:?}",
             plan.dtype
         );
     }
@@ -4125,7 +4151,7 @@ fn emit_scan_impl(plan: &KernelPlan<'_>, ctype: &str, block: bool) -> GeneratedK
     }
     s.push('\n');
     if block {
-        emit_block_scanners(&mut s, acc, sop, &stem);
+        emit_block_scanners(&mut s, acc, sop, &stem, int_acc);
     }
     s.push_str(&format!("extern \"C\" __global__ void {name}(\n"));
     for i in 0..plan.n_inputs {
@@ -4222,19 +4248,33 @@ fn emit_scan_impl(plan: &KernelPlan<'_>, ctype: &str, block: bool) -> GeneratedK
         s.push_str("        }\n"); // if threadIdx.x == 0
     } else {
         // -------------------- BLOCK-SCAN VARIANT (chunked, cross-warp carry) --------------------
-        // FP Sum/Prod only. Kogge-Stone warp scan + cross-warp exclusive offset,
-        // chunked so a k > blockDim row threads its running carry across tiles.
+        // Kogge-Stone warp scan + cross-warp exclusive offset, chunked so a
+        // k > blockDim row threads its running carry across tiles. Serves
+        // Sum/Prod/Max/Min over FP + integer {I32,I64} (S8/U8 declined upstream).
+        //
+        // The cross-warp / cross-chunk carry combiner is LEFT-first everywhere
+        // (a = earlier prefix, b = later): every call site passes (earlier, later).
+        // Sum/Prod are UNCHANGED (byte-identical `(a + b)` / `(a * b)`). Max/Min
+        // take b iff b is NaN or STRICTLY beats a — the same rule as the warp step,
+        // fully parenthesized so a nested comb (b = a ternary) stays atomic; int
+        // drops the dead `v != v` NaN test.
         let comb = |a: &str, b: &str| -> String {
             match sop {
                 ReduceOp::Sum => format!("({a} + {b})"),
                 ReduceOp::Prod => format!("({a} * {b})"),
-                _ => unreachable!(),
+                ReduceOp::Max if int_acc => format!("(({b} > {a}) ? {b} : {a})"),
+                ReduceOp::Min if int_acc => format!("(({b} < {a}) ? {b} : {a})"),
+                ReduceOp::Max => format!("(({b} != {b} || {b} > {a}) ? {b} : {a})"),
+                ReduceOp::Min => format!("(({b} != {b} || {b} < {a}) ? {b} : {a})"),
+                ReduceOp::Mean => unreachable!("Scan rejects Mean"),
             }
         };
-        let tag = if matches!(sop, ReduceOp::Sum) {
-            "sum"
-        } else {
-            "prod"
+        let tag = match sop {
+            ReduceOp::Sum => "sum",
+            ReduceOp::Prod => "prod",
+            ReduceOp::Max => "max",
+            ReduceOp::Min => "min",
+            ReduceOp::Mean => unreachable!("Scan rejects Mean"),
         };
         s.push_str(&format!("        __shared__ {acc} warp_buf[32];\n"));
         s.push_str(&format!("        __shared__ {acc} warp_off[32];\n"));
@@ -4311,28 +4351,35 @@ fn emit_scan_impl(plan: &KernelPlan<'_>, ctype: &str, block: bool) -> GeneratedK
     GeneratedKernel { name, source: s }
 }
 
-/// Block-scan schedule VARIANT for the FP `Sum`/`Prod` scan cell — a Kogge-Stone
-/// warp scan + cross-warp exclusive-offset carry (re-emitted inline, headerless),
-/// one block per row, chunked so a `k > blockDim` row threads its running carry
-/// across tiles. A [`Variant`] filter (model: [`reduction_splitk_variant`]) —
-/// `return None` for every cell it cannot serve honestly.
+/// Block-scan schedule VARIANT for the scan cell — a Kogge-Stone warp scan +
+/// cross-warp exclusive-offset carry (re-emitted inline, headerless), one block per
+/// row, chunked so a `k > blockDim` row threads its running carry across tiles. A
+/// [`Variant`] filter (model: [`reduction_splitk_variant`]) — `return None` for
+/// every cell it cannot serve honestly.
 ///
-/// **Scope (v1, stated explicitly):** FP `Sum`/`Prod` only. `Max`/`Min` and integer
-/// scans decline to the serial base (which serves them bit-exact) — a `Max`/`Min`
-/// block scan needs a `(value, has)`-flag warp scan (the exactly-associative,
-/// BitIdentical follow-up).
+/// **Scope (BLOCKSCAN-VARIANTS):** `Sum`/`Prod`/`Max`/`Min` over FP
+/// {`F16`,`Bf16`,`F32`,`F32Strict`,`F64`} and integer {`I32`,`I64`}, forward AND
+/// reverse (`j = k-1-p` remaps the reverse j-scan to a forward p-space scan). `S8`
+/// and `U8` DECLINE to the serial base — `__shfl_up_sync` has no 8-bit overload and
+/// promoting to an int acc would break the base's native 8-bit modular wrap (a
+/// different domain, not bit-identical). This is an explicit allowlist, NOT
+/// [`crate::plan::is_int_dtype`] (which admits S8/U8).
 ///
-/// **Bits:** FP `Sum`/`Prod` reassociate (a two-level warp/cross-warp tree vs the
-/// base's sequential fold), so [`VariantFidelity::ReassociatedDeterministic`]
-/// (`determinism_str() => "same_hardware_bitwise"`) — deterministic for a fixed
-/// launch, selectable only through an honest contract, never silently. Unlike
-/// split-K there is NO bit-identical degenerate config (even a single blockDim-wide
-/// chunk reassociates); the degenerate config is within-ULP of the base.
+/// **Bits (per op):** FP `Sum`/`Prod` reassociate (a two-level warp/cross-warp tree
+/// vs the base's sequential fold), so [`VariantFidelity::ReassociatedDeterministic`]
+/// — no bit-identical degenerate config (even a single blockDim-wide chunk
+/// reassociates), within-ULP of the base. FP `Max`/`Min` (the combiner selects the
+/// same element bit-for-bit, incl. signed-zero sign + NaN payload) and ALL integer
+/// scans (modular `+`/`*` associative; `max`/`min` select, ties bit-equal) are
+/// [`VariantFidelity::BitIdentical`] — device memcmp==0 vs the serial base. The FP
+/// bit-identity requires an IEEE-strict build (no `-ffast-math`; matched FTZ) so the
+/// `v != v` NaN test and signed-zero ties hold — the same requirement Sum/Prod
+/// already relies on.
 ///
 /// **Keying:** identity on the wire is `(structure_key token, entry_point)` — the
 /// `_blockscan` entry_point disambiguates it from the base (never token alone).
 fn scan_blockscan_variant(plan: &KernelPlan<'_>) -> Option<Variant> {
-    let (sop, _axis, reverse, _exclusive) = match plan.schedule {
+    let (sop, _axis, _reverse, _exclusive) = match plan.schedule {
         Schedule::Scan {
             op,
             axis,
@@ -4342,29 +4389,26 @@ fn scan_blockscan_variant(plan: &KernelPlan<'_>) -> Option<Variant> {
         } => (op, axis, reverse, exclusive),
         _ => return None,
     };
-    // FORWARD only in v1. `emit_scan_impl` DOES emit a correct reverse block-scan
-    // (j = k-1-p turns the reverse j-scan into a forward p-space scan — traced
-    // correct), but the on-device validator only exercises forward block cells, and
-    // the scan is an AOT honest miss (no Fuel contract), so the validator is the ONLY
-    // correctness gate — a reassociated path must be device-validated before it
-    // ships. Reverse scans use the BitIdentical serial base (correct, 17x bespoke);
-    // re-enable + validate reverse block-scan as the follow-up. (Review-caught: the
-    // reverse block-scan was emitted but unvalidated.)
-    if reverse {
-        return None;
-    }
-    // FP Sum/Prod only — Max/Min + integer ride the serial base.
-    if !matches!(sop, ReduceOp::Sum | ReduceOp::Prod) {
-        return None;
-    }
+    // Sum/Prod/Max/Min only (Mean is rejected upstream at validate_scan).
     if !matches!(
+        sop,
+        ReduceOp::Sum | ReduceOp::Prod | ReduceOp::Max | ReduceOp::Min
+    ) {
+        return None;
+    }
+    // Explicit dtype allowlist: FP {F16,Bf16,F32,F32Strict,F64} + integer {I32,I64}.
+    // S8/U8 (and any other dtype) DECLINE to the serial base — NOT `is_int_dtype`,
+    // which would admit S8/U8 (whose native 8-bit wrap the promoted int acc breaks).
+    let is_fp = matches!(
         plan.dtype,
         ElementKind::F16
             | ElementKind::Bf16
             | ElementKind::F32
             | ElementKind::F32Strict
             | ElementKind::F64
-    ) {
+    );
+    let is_int = matches!(plan.dtype, ElementKind::I32 | ElementKind::I64);
+    if !(is_fp || is_int) {
         return None;
     }
     // The fixed signature has no `p{i}` slots — a Param pre/post would emit an
@@ -4397,7 +4441,24 @@ fn scan_blockscan_variant(plan: &KernelPlan<'_>) -> Option<Variant> {
     }
     let ctype = scalar_ctype(plan.dtype)?;
     let k = emit_scan_impl(plan, ctype, true);
-    let fidelity = VariantFidelity::ReassociatedDeterministic; // FP Sum/Prod reassociated
+    // Only FP Sum/Prod reassociate (the warp tree rounds differently than the base's
+    // sequential fold). FP Max/Min, integer Sum/Prod, integer Max/Min are all
+    // BitIdentical to the base (max/min select the same element bit-for-bit; modular
+    // +/* is exactly associative — device memcmp==0, §7 probes).
+    let (fidelity, bits_note) = if matches!(sop, ReduceOp::Sum | ReduceOp::Prod) && is_fp {
+        (
+            VariantFidelity::ReassociatedDeterministic,
+            "FP Sum/Prod reassociate (warp tree rounds differently than the \
+             sequential base) — within-ULP, no bit-identical degenerate config",
+        )
+    } else {
+        (
+            VariantFidelity::BitIdentical,
+            "bit-identical to the serial base (FP Max/Min select the same element \
+             incl. signed-zero/NaN; integer +/*/max/min exactly associative), \
+             device memcmp==0",
+        )
+    };
     Some(Variant {
         tag: "blockscan",
         kernels: vec![k],
@@ -4407,11 +4468,14 @@ fn scan_blockscan_variant(plan: &KernelPlan<'_>) -> Option<Variant> {
              exclusive-offset carry, re-emitted inline): one block per row, \
              <<<min(n_out, maxblocks), B>>> with B a multiple of 32 and <= 1024 \
              (static __shared__ warp_buf/warp_off[32]); a k > B row threads its \
-             running carry across ceil(k/B) chunks. FP Sum/Prod only; Max/Min + \
-             integer ride the serial base. Determinism: {}. No bit-identical \
-             degenerate config (the warp tree reassociates even a single chunk); \
-             within-ULP of the serial base.",
-            fidelity.determinism_str()
+             running carry across ceil(k/B) chunks. Scope: Sum/Prod/Max/Min over FP \
+             {{F16,Bf16,F32,F32Strict,F64}} + integer {{I32,I64}}, forward + reverse; \
+             S8/U8 ride the serial base. Fidelity (this cell): {bits_note}. Requires \
+             an IEEE-strict build (no -ffast-math/--use_fast_math; matched FTZ/\
+             denormal) so the FP Max/Min `v != v` NaN test and signed-zero ties hold \
+             — the same requirement the Sum/Prod block-scan already relies on. \
+             Determinism: {det}.",
+            det = fidelity.determinism_str()
         ),
     })
 }
@@ -11691,37 +11755,180 @@ mod scan_tests {
     }
 
     #[test]
-    fn reverse_scan_declines_the_blockscan_variant_to_base() {
-        // v1: the reverse block-scan is correct but not yet device-validated, so the
-        // variant filter declines reverse; a reverse scan ships the BitIdentical base
-        // ONLY (no reassociated blockscan). (Review-caught coverage gap.)
+    fn reverse_scan_offers_the_blockscan_variant() {
+        // BLOCKSCAN-VARIANTS: reverse now OFFERS the block-scan (j = k-1-p remaps the
+        // reverse j-scan to a forward p-space scan; device-validated). FP Sum/Prod
+        // reverse reassociates (same as forward) -> ReassociatedDeterministic.
         for op in [ReduceOp::Sum, ReduceOp::Prod] {
             let sc = OpDef::scan_simple("cumr", &[ElementKind::F32], op, 1, true, false);
             let vs = generate_variants(&sc, &scan_key(ElementKind::F32), &Cuda);
+            let bs = vs
+                .iter()
+                .find(|v| v.tag == "blockscan")
+                .expect("reverse FP Sum/Prod now offers a blockscan variant");
+            assert_eq!(
+                bs.fidelity,
+                crate::VariantFidelity::ReassociatedDeterministic,
+                "reverse FP Sum/Prod block-scan reassociates like forward"
+            );
+            assert!(bs.kernels[0].source.contains("long long j = k - 1 - p;"));
+            assert!(bs.kernels[0].name.ends_with("_rev_blockscan"));
+        }
+    }
+
+    #[test]
+    fn blockscan_variant_offers_maxmin_and_integer_bit_identical() {
+        // BLOCKSCAN-VARIANTS: FP Max/Min AND integer {I32,I64} Sum/Prod/Max/Min now
+        // OFFER a BitIdentical block-scan (combiner selects the same element /
+        // modular +/* is associative — device memcmp==0). S8/U8 STILL decline.
+        for (op, dt) in [
+            (ReduceOp::Max, ElementKind::F32),
+            (ReduceOp::Min, ElementKind::F32),
+            (ReduceOp::Max, ElementKind::F64),
+            (ReduceOp::Min, ElementKind::F16),
+            (ReduceOp::Sum, ElementKind::I32),
+            (ReduceOp::Prod, ElementKind::I32),
+            (ReduceOp::Max, ElementKind::I32),
+            (ReduceOp::Min, ElementKind::I64),
+            (ReduceOp::Sum, ElementKind::I64),
+        ] {
+            let sc = OpDef::scan_simple("cum", &[dt], op, 1, false, false);
+            let vs = generate_variants(&sc, &scan_key(dt), &Cuda);
+            let bs = vs
+                .iter()
+                .find(|v| v.tag == "blockscan")
+                .unwrap_or_else(|| panic!("block-scan must offer {op:?}/{dt:?}"));
+            assert_eq!(
+                bs.fidelity,
+                crate::VariantFidelity::BitIdentical,
+                "FP Max/Min + integer block-scan is bit-identical to the base ({op:?}/{dt:?})"
+            );
+        }
+    }
+
+    #[test]
+    fn blockscan_variant_declines_s8_u8_to_base() {
+        // Honest-scope pin (retained): S8/U8 (any op) ride the serial base — the warp
+        // shuffle has no 8-bit overload and promoting breaks the native 8-bit wrap.
+        // The gate uses an explicit FP+I32/I64 allowlist, NOT is_int_dtype (which
+        // admits S8/U8); a mutation to is_int_dtype must fail this.
+        for (op, dt) in [
+            (ReduceOp::Sum, ElementKind::S8),
+            (ReduceOp::Max, ElementKind::S8),
+            (ReduceOp::Sum, ElementKind::U8),
+            (ReduceOp::Min, ElementKind::U8),
+            (ReduceOp::Prod, ElementKind::U8),
+        ] {
+            let sc = OpDef::scan_simple("cum", &[dt], op, 1, false, false);
+            let vs = generate_variants(&sc, &scan_key(dt), &Cuda);
             assert!(
                 vs.iter().all(|v| v.tag != "blockscan"),
-                "reverse scan must not offer the unvalidated block-scan variant"
+                "block-scan must decline {op:?}/{dt:?} (S8/U8) to the base"
             );
             assert_eq!(vs[0].tag, "base");
         }
     }
 
     #[test]
-    fn blockscan_variant_declines_maxmin_and_integer() {
-        // Max/Min (any dtype) and integer Sum/Prod ride the serial base only.
-        for (op, dt) in [
-            (ReduceOp::Max, ElementKind::F32),
-            (ReduceOp::Min, ElementKind::F32),
-            (ReduceOp::Sum, ElementKind::I32),
-            (ReduceOp::Prod, ElementKind::I32),
-        ] {
+    fn blockscan_fidelity_discriminates_reassoc_from_bit_identical() {
+        // The fidelity discriminator: ONLY FP Sum/Prod reassociates; FP Max/Min and
+        // ALL integer scans are BitIdentical.
+        let blockscan_fidelity = |op: ReduceOp, dt: ElementKind| {
             let sc = OpDef::scan_simple("cum", &[dt], op, 1, false, false);
-            let vs = generate_variants(&sc, &scan_key(dt), &Cuda);
-            assert!(
-                vs.iter().all(|v| v.tag != "blockscan"),
-                "block-scan must decline {op:?}/{dt:?} to the base"
-            );
-        }
+            generate_variants(&sc, &scan_key(dt), &Cuda)
+                .into_iter()
+                .find(|v| v.tag == "blockscan")
+                .map(|v| v.fidelity)
+        };
+        use crate::VariantFidelity::{BitIdentical, ReassociatedDeterministic};
+        // FP Sum/Prod -> reassociated (the ONLY reassociating case).
+        assert_eq!(
+            blockscan_fidelity(ReduceOp::Sum, ElementKind::F32),
+            Some(ReassociatedDeterministic)
+        );
+        assert_eq!(
+            blockscan_fidelity(ReduceOp::Prod, ElementKind::F64),
+            Some(ReassociatedDeterministic)
+        );
+        // FP Max/Min -> BitIdentical.
+        assert_eq!(
+            blockscan_fidelity(ReduceOp::Max, ElementKind::F32),
+            Some(BitIdentical)
+        );
+        assert_eq!(
+            blockscan_fidelity(ReduceOp::Min, ElementKind::Bf16),
+            Some(BitIdentical)
+        );
+        // integer Sum/Prod/Max/Min -> BitIdentical.
+        assert_eq!(
+            blockscan_fidelity(ReduceOp::Sum, ElementKind::I32),
+            Some(BitIdentical)
+        );
+        assert_eq!(
+            blockscan_fidelity(ReduceOp::Max, ElementKind::I64),
+            Some(BitIdentical)
+        );
+    }
+
+    #[test]
+    fn blockscan_maxmin_emission_goldens() {
+        let blockscan_src = |tag: &str, op: ReduceOp, dt: ElementKind, exc: bool| {
+            let sc = OpDef::scan_simple(tag, &[dt], op, 1, false, exc);
+            generate_variants(&sc, &scan_key(dt), &Cuda)
+                .into_iter()
+                .find(|v| v.tag == "blockscan")
+                .expect("blockscan variant")
+                .kernels
+                .remove(0)
+                .source
+        };
+        // F32 forward cummax: the FP Max warp step + the -inf identity via the
+        // headerless bit-cast intrinsic; NEVER fmaxf/fminf.
+        let cmax = blockscan_src("cummax", ReduceOp::Max, ElementKind::F32, false);
+        assert!(cmax.contains("(v != v || v > t) ? v : t"));
+        assert!(cmax.contains("__int_as_float(0xff800000u)"));
+        assert!(!cmax.contains("fmaxf") && !cmax.contains("fminf"));
+        // F32 cummin: the Min warp step (< not >) + the +inf identity.
+        let cmin = blockscan_src("cummin", ReduceOp::Min, ElementKind::F32, false);
+        assert!(cmin.contains("(v != v || v < t) ? v : t"));
+        assert!(cmin.contains("__int_as_float(0x7f800000u)"));
+        assert!(!cmin.contains("v > t"));
+        // I32 cumsum: native int acc + `v += t` (no float acc anywhere).
+        let isum = blockscan_src("cumsum", ReduceOp::Sum, ElementKind::I32, false);
+        assert!(isum.contains("int warp_buf[32]"));
+        assert!(isum.contains("v += t;"));
+        assert!(!isum.contains("float"));
+        // I32 cummax: the INT reduced form (no dead `v != v` NaN test in the int
+        // kernel), native int acc.
+        let imax = blockscan_src("cummax", ReduceOp::Max, ElementKind::I32, false);
+        assert!(imax.contains("v = (v > t) ? v : t;"));
+        assert!(!imax.contains("v != v"));
+        // exclusive cummax: position-0 emits the Max identity (-inf) via `wexc`.
+        let cmax_x = blockscan_src("cummax", ReduceOp::Max, ElementKind::F32, true);
+        assert!(cmax_x.contains("if (lane == 0) wexc = __int_as_float(0xff800000u);"));
+    }
+
+    #[test]
+    fn blockscan_sum_emission_stays_reassoc_free_of_maxmin_arms() {
+        // Byte-identity anchor (companion to the present-test): the Sum block-scan's
+        // warp step + carry combiner are the commutative `+` forms, and NONE of the
+        // Max/Min ternary machinery (a `? v : t` step or a `!= ` NaN test) leaks into
+        // a Sum kernel — adding Max/Min arms must not perturb the Sum arm.
+        let sc = OpDef::scan_simple("cum", &[ElementKind::F32], ReduceOp::Sum, 1, false, false);
+        let src = generate_variants(&sc, &scan_key(ElementKind::F32), &Cuda)
+            .into_iter()
+            .find(|v| v.tag == "blockscan")
+            .expect("blockscan variant")
+            .kernels
+            .remove(0)
+            .source;
+        assert!(src.contains("if (lane >= off) v += t;"));
+        assert!(src.contains("carry = (carry + chunk_tot);"));
+        assert!(
+            !src.contains("? v : t"),
+            "no Max/Min warp step in a Sum kernel"
+        );
+        assert!(!src.contains("!= "), "no NaN test in a Sum kernel");
     }
 
     #[test]
@@ -12014,7 +12221,20 @@ mod scan_tests {
             std::fs::write(format!("{out}/{}.cu", k.name), &k.source).unwrap();
             println!("wrote {out}/{}.cu", k.name);
         };
-        // Every base cell the validator exercises: 4 combines × incl/excl × fwd/rev.
+        // Emit EVERY variant (serial base at [0] + the block-scan variant where the
+        // gate offers it) for a (tag, op, dtype, reverse, exclusive) cell — so the
+        // BitIdentical base-vs-blockscan memcmp always has both kernels present.
+        let emit_all = |tag: &str, op: ReduceOp, dt: ElementKind, rev: bool, exc: bool| {
+            let sc = OpDef::scan_simple(tag, &[dt], op, 1, rev, exc);
+            for v in generate_variants(&sc, &scan_key(dt), &Cuda) {
+                for kern in v.kernels {
+                    write(kern);
+                }
+            }
+        };
+        // f32: 4 combines × fwd/rev × incl/excl. Base cells for the serial matrix,
+        // plus the block-scan variants now offered for ALL of them (Sum/Prod
+        // reassociated, Max/Min BitIdentical, forward AND reverse).
         for (op, tag) in [
             (ReduceOp::Sum, "cumsum"),
             (ReduceOp::Prod, "cumprod"),
@@ -12023,33 +12243,43 @@ mod scan_tests {
         ] {
             for reverse in [false, true] {
                 for exclusive in [false, true] {
-                    let sc =
-                        OpDef::scan_simple(tag, &[ElementKind::F32], op, 1, reverse, exclusive);
-                    write(generate(&sc, &scan_key(ElementKind::F32), &Cuda));
+                    emit_all(tag, op, ElementKind::F32, reverse, exclusive);
                 }
             }
         }
-        // f64 base (oracle-exact) + the block-scan variants (Sum/Prod, incl/excl).
-        for (op, tag) in [(ReduceOp::Sum, "cumsum"), (ReduceOp::Prod, "cumprod")] {
-            for exclusive in [false, true] {
-                let sc = OpDef::scan_simple(tag, &[ElementKind::F32], op, 1, false, exclusive);
-                for v in generate_variants(&sc, &scan_key(ElementKind::F32), &Cuda) {
-                    for kern in v.kernels {
-                        write(kern);
+        // FP Max/Min over the remaining dtypes (base + BitIdentical block-scan):
+        // f16, bf16, f32-strict, f64 — the full FP breadth for the memcmp matrix.
+        for dt in [
+            ElementKind::F16,
+            ElementKind::Bf16,
+            ElementKind::F32Strict,
+            ElementKind::F64,
+        ] {
+            for (op, tag) in [(ReduceOp::Max, "cummax"), (ReduceOp::Min, "cummin")] {
+                for reverse in [false, true] {
+                    for exclusive in [false, true] {
+                        emit_all(tag, op, dt, reverse, exclusive);
+                    }
+                }
+            }
+        }
+        // Integer Sum/Prod/Max/Min over I32/I64 (base + BitIdentical block-scan).
+        for dt in [ElementKind::I32, ElementKind::I64] {
+            for (op, tag) in [
+                (ReduceOp::Sum, "cumsum"),
+                (ReduceOp::Prod, "cumprod"),
+                (ReduceOp::Max, "cummax"),
+                (ReduceOp::Min, "cummin"),
+            ] {
+                for reverse in [false, true] {
+                    for exclusive in [false, true] {
+                        emit_all(tag, op, dt, reverse, exclusive);
                     }
                 }
             }
         }
         // f64 serial base (Sum) for the double-precision bit-exact case.
-        let scd = OpDef::scan_simple(
-            "cumsum",
-            &[ElementKind::F64],
-            ReduceOp::Sum,
-            1,
-            false,
-            false,
-        );
-        write(generate(&scd, &scan_key(ElementKind::F64), &Cuda));
+        emit_all("cumsum", ReduceOp::Sum, ElementKind::F64, false, false);
     }
 }
 

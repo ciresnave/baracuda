@@ -958,11 +958,16 @@ Validates `Access::Scan` — a cumsum/cumprod/cummax/cummin along the innermost
 - **block-scan VARIANT** (`..._blockscan`) — a Kogge-Stone warp scan
   (`__shfl_up_sync`) + cross-warp exclusive-offset carry, re-emitted **inline**
   (`smem_scan` does not exist in kernelgen; the source is headerless), chunked so a
-  `k > blockDim` row threads its running carry across tiles. **FP `Sum`/`Prod` only**
-  (Max/Min + integer ride the base). `ReassociatedDeterministic` — the warp tree
-  reassociates, so it is selectable only through an honest contract, never silently,
-  and there is **no bit-identical degenerate config** (unlike split-K, even a single
-  blockDim-wide chunk reassociates — the degenerate config is within-ULP of the base).
+  `k > blockDim` row threads its running carry across tiles. **Scope (BLOCKSCAN-VARIANTS):**
+  `Sum`/`Prod`/`Max`/`Min` over FP {`f16`,`bf16`,`f32`,`f32-strict`,`f64`} + integer
+  {`i32`,`i64`}, **forward AND reverse** (S8/U8 decline to the base — `__shfl_up_sync`
+  has no 8-bit overload, and promoting would break the base's native 8-bit wrap).
+  Per-op fidelity: **FP `Sum`/`Prod` are `ReassociatedDeterministic`** (the warp tree
+  reassociates — selectable only through an honest contract, never silently; **no
+  bit-identical degenerate config**, within-ULP of the base); **FP `Max`/`Min` and ALL
+  integer scans are `BitIdentical`** (device memcmp==0 vs the serial base — the
+  combiner selects the same element bit-for-bit, and modular `+`/`*` is associative).
+  See the **BLOCKSCAN-VARIANTS** section below for the combiner + probe set.
 
 **Regeneration:** these cells are **not** in the `bin/kernelgen.rs` catalog.
 Regenerate the `.cu` sources with the library dump tool, then copy the harness
@@ -1055,11 +1060,12 @@ optimal, same ~227 the reduce/rowreduce rewrites hit), 43× the bespoke; even th
 deliberately-unparallelized base is 17× the bespoke because it drops the quadratic
 per-cell rescan. No losing cell to record; the winning technique the generator
 already embodies is the cooperative scan (the same lesson as the reduction/softmax
-rewrites). **De-scoped from v1** (queued as follow-ups): the block-scan `Max`/`Min`
-variant (a `(value, has)`-flag warp scan — exactly associative, would be
-`BitIdentical`), integer block-scan, the **reverse** block-scan (traced-correct but
-declined pending device validation — reverse rides the base), and the non-inner scan
-axis.
+rewrites). **Landed by the BLOCKSCAN-VARIANTS increment** (see the section below): the
+block-scan `Max`/`Min` variant (`BitIdentical`), the integer {i32,i64} block-scan
+(`BitIdentical`), and the **reverse** block-scan (now device-validated) — all four
+sub-cases the SCAN increment deferred. **Still de-scoped** (queued follow-ups): S8/U8
+block-scan (declined by design — no 8-bit warp shuffle), the `cummax` index-pair
+(argmax-scan), `LogCumsumExp`, and the non-inner scan axis.
 
 **Fuel contract (honest miss, AOT-only):** a scan emits **no contract** — neither
 `contract.rs` nor `pattern.rs` has any Scan/Cumsum/Prefix vocabulary and Fuel
@@ -1070,6 +1076,90 @@ Scan is a **stronger miss** than those: before this increment it could not even 
 represented; after it, the AOT kernel generates and runs (proven here) but still
 crosses no Fuel wire. Keying stays **additive** (`baracuda-kernels-types` UNTOUCHED —
 the `_blockscan` entry_point disambiguates the variant on the wire, never the token).
+
+### BLOCKSCAN-VARIANTS — reverse, Max/Min, integer block-scans
+
+The BLOCKSCAN-VARIANTS increment extends the ONE cooperative kernel beyond
+forward-FP-Sum/Prod to the three sub-cases increment 6 deferred: **reverse**,
+**`Max`/`Min`**, and **integer** ({i32,i64}). The serial base already serves all of
+these `BitIdentical` (17× bespoke); this gives them the ~2.5×-faster cooperative path.
+The forward-FP-Sum/Prod emission is **byte-for-byte unchanged** (its `v += t` / `v *= t`
+warp step and `(a+b)` / `(a*b)` carry are untouched — verified by regenerating the
+source before/after and `diff`).
+
+**Fidelity matrix (as landed):**
+
+| sub-case | dtypes | fidelity | why |
+| --- | --- | --- | --- |
+| forward FP Sum/Prod (unchanged) | f16,bf16,f32,f32-strict,f64 | ReassociatedDeterministic | tree reassoc rounds differently |
+| **reverse** FP Sum/Prod | f16,bf16,f32,f32-strict,f64 | ReassociatedDeterministic | same reassoc (`j = k-1-p`) |
+| **FP Max/Min** (fwd + rev) | f16,bf16,f32,f32-strict,f64 | **BitIdentical** | max/min don't round; combiner associative + clean identity |
+| **integer Sum/Prod** (fwd + rev) | i32,i64 | **BitIdentical** | modular +/* associative; native wrap |
+| **integer Max/Min** (fwd + rev) | i32,i64 | **BitIdentical** | select; no NaN, ties bit-equal |
+| S8/U8 (any op) | — | *declined to base* | no 8-bit `__shfl_up_sync`; promotion breaks native wrap |
+
+**The Max/Min combiner (why `BitIdentical`).** In the acc type, LEFT = earlier prefix
+`a`, RIGHT = later `b`:
+
+```c
+comb_max(a, b) = (b != b || b > a) ? b : a          // int: (b > a) ? b : a
+comb_min(a, b) = (b != b || b < a) ? b : a          // int: (b < a) ? b : a
+```
+
+Take RIGHT iff it is NaN or **strictly** beats LEFT; else keep LEFT. This reproduces
+the serial base's three rules exactly: (1) a `NaN` in `b` becomes the acc (`b!=b`); (2)
+on a numeric tie `b>a` is false so LEFT is kept — preserving the earlier operand's
+exact bits **including the signed-zero sign**; (3) an earlier `NaN` in `a` survives a
+finite `b`, and a **later** NaN replaces an earlier one (most-recent payload wins). The
+identity is the exact type extremum (−inf for max / +inf for min via the headerless
+`__int_as_float`/`__longlong_as_double` bit-cast) — a clean two-sided identity. The
+warp Kogge-Stone step is **order-critical** (Max/Min is non-commutative): `t` = the
+shuffled EARLIER-lane value (`a`), `v` = own (`b`), so the step is `v = comb(a=t, b=v)`
+— writing `comb(v, t)` would flip the ±0 tie sign and let an earlier NaN win. Integer
+Max/Min emit the reduced form (no dead `v != v` — no integer NaN). The combiner was
+proven associative and identity-clean by an independent design panel (a
+monoid-homomorphism proof, 0/2744 exhaustive triple failures, and 20000+
+regroup-vs-serial matches).
+
+**IEEE-strict caveat.** The FP Max/Min bit-identity requires an IEEE-strict build (no
+`-ffast-math`/`--use_fast_math`; matched FTZ/denormal): fast-math may fold `v != v` to
+false and flush signed zeros, breaking the NaN and signed-zero rules. This is the SAME
+requirement the existing Sum/Prod block-scan already relies on; the forge nvrtc/nvcc
+path is IEEE-strict.
+
+**Validation (raw-bit — `memcmp`, not `==`, since signed zeros compare equal):**
+
+- **Mandatory FP Max/Min probe rows** (f32, raw-bit vs hand-derived expected) that
+  distinguish the correct combiner from the three likely-wrong ones (`fmaxf`
+  NaN-scrub / right-wins-tie / earlier-NaN-wins): **P1** signed-zero tie
+  `[-0,+0]→[-0,-0]`, **P2** NaN absorb, **P3** later-NaN wins, **P4** 8-wide
+  comprehensive, **P5** 7-wide all-three, **exclusive** out[0]=ident even when in[0]=NaN,
+  four **identity** probes, the **MIN** signed-zero + P5 mirror — all forward raw-bit
+  exact, and P4/P5/MIN-mirror **reverse** (block == base raw-bit).
+- **BitIdentical matrix — memcmp==0 vs the serial base**, whole-buffer, seeded with
+  probe-headed adversarial inputs (planted NaN payloads, ±0, ±inf, subnormals for FP;
+  INT_MIN/MAX/ties/wrap for int) at several `k` (< warp, = block, > block multi-chunk,
+  not-mult-of-32) and a rows>gridDim grid-stride case: **FP Max/Min 40 cells and
+  integer 32 cells, each × 3 shapes**, all memcmp==0.
+- **reverse FP Sum/Prod** (ReassociatedDeterministic): within-ULP of an f64 reverse
+  oracle + run-to-run determinism (memcmp of two launches), matching the forward
+  protocol.
+
+`racecheck`/`synccheck` are the load-bearing sanitizers here (the smem `warp_buf`/
+`warp_off` cross-warp carry + the two `__syncthreads` per chunk); `initcheck` is clean
+because the algorithm initializes the smem before reading it (`warp_off[w]` is written
+by thread 0 under the guard, read after a `__syncthreads`), and correctness rides on
+the memcmp-vs-base, not init-attribution.
+
+**Last run:** RTX 4070 Laptop (sm_89), CUDA 13.3 / nvcc 13.3 — **RESULT: ALL PASSED**.
+Cell counts: 33 serial-base cells bit-exact; 16 FP Max/Min combiner probe checks
+(13 forward raw-bit + 3 reverse) all exact; **216 BitIdentical base-vs-blockscan
+memcmp==0 checks** ((40 FP Max/Min + 32 integer) × 3 shapes); 18 reassociated FP
+Sum/Prod (forward + reverse, incl/excl) within-ULP + run-to-run deterministic;
+`compute-sanitizer` **memcheck / racecheck / synccheck / initcheck all 0 errors /
+0 hazards** on the `san` shapes. Bench (`4096×4096`, read+write, vs ~195 GB/s copy
+peak): `cummax f32` base(1thr/row) 76.6 GB/s → **blockscan 200.6 GB/s (2.6×**,
+memory-optimal); `cumsum i32` base 92.4 GB/s → **blockscan 197.9 GB/s (2.1×)**.
 
 ## `window_validate.cu` — sliding-window pooling (increment 7)
 
